@@ -28,6 +28,9 @@ struct PrepSelectionSheet: View {
     @State private var selected: Set<String>
     @State private var pendingClashConfirm = false
     @State private var clashMessage = ""
+    // #3366: the title varies with WHICH kind of clash was found, so it is staged beside the message
+    // rather than being a constant on the sheet.
+    @State private var clashTitle = ""
 
     init(prospects: [Prospect], allItems: [QueueItem] = [],
          onRun: @escaping (Set<String>) -> Void) {
@@ -64,11 +67,20 @@ struct PrepSelectionSheet: View {
                     .keyboardShortcut(.cancelAction)
                 Spacer()
                 Button(PrepSelectionCopy.runButton(selected.count)) {
-                    // #1219: if any selected show sits on a date that already holds a committed pitch,
-                    // confirm past the possible double-booking before launching; otherwise run straight away.
-                    if let message = SelfBookingCopy.prepConfirmMessage(
-                        QueueModel.selfBookingPrepClashes(forKeys: selected, among: allItems)) {
+                    // #1219: a selected show sitting on a date that already holds a committed pitch.
+                    // #3366: and a selected show sitting on a night the CALENDAR has spoken for, which
+                    // used to be held out of the run entirely rather than confirmed. Both reach this one
+                    // sheet: two dialogs over one press is how a confirm becomes something to click past.
+                    let selfBooking = SelfBookingCopy.prepConfirmMessage(
+                        QueueModel.selfBookingPrepClashes(forKeys: selected, among: allItems))
+                    let calendar = PrepLaunchCopy.calendarClashMessage(
+                        QueueModel.calendarClashesForPrep(forKeys: selected, among: allItems))
+                    if let message = PrepLaunchCopy.combinedMessage(selfBooking: selfBooking,
+                                                                    calendar: calendar),
+                       let title = PrepLaunchCopy.confirmTitle(selfBooking: selfBooking != nil,
+                                                               calendar: calendar != nil) {
                         clashMessage = message
+                        clashTitle = title
                         pendingClashConfirm = true
                     } else {
                         onRun(selected)
@@ -83,9 +95,9 @@ struct PrepSelectionSheet: View {
         // #1249: first-party branded confirm (SelfBookingConfirmSheet), not a stock system dialog.
         .sheet(isPresented: $pendingClashConfirm) {
             SelfBookingConfirmSheet(
-                title: SelfBookingCopy.prepConfirmTitle,
+                title: clashTitle,
                 message: clashMessage,
-                proceedLabel: SelfBookingCopy.prepConfirmProceed,
+                proceedLabel: PrepLaunchCopy.proceedLabel,
                 onProceed: { pendingClashConfirm = false; onRun(selected); dismiss() },
                 onCancel: { pendingClashConfirm = false })
         }

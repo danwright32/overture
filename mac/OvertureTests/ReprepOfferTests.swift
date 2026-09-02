@@ -56,24 +56,23 @@ struct ReprepOfferTests {
         #expect(QueueModel.reprepOffer(for: item(status: .dismissed)) == .hidden)
     }
 
-    // The trap this issue's own scope note found. `PrepQueueBuilder.needsPrep` refuses a show with an
-    // uncleared clash BEFORE it consults the re-prep flags, so a run launched here finds no eligible item
-    // and does nothing while the acknowledgement says work started. The offer has to say so instead.
-    @Test func aShowOnABlockedNightSaysNothingWillRun() {
-        let offer = QueueModel.reprepOffer(for: item(conflict: true))
-        guard case let .blocked(reason) = offer else {
-            Issue.record("expected a blocked offer, got \(offer)")
-            return
-        }
-        #expect(!reason.isEmpty)
+    // #3369 DELETED `aShowOnABlockedNightSaysNothingWillRun`. It asserted the offer was BLOCKED with a
+    // reason on a clashed night, because `needsPrep` refused such a show before reading the re-prep flags.
+    // The gate is gone (Dan, 2026-09-01), so it is deleted rather than adjusted (L252).
+
+    // What replaces it: the offer is made, and the clash reaches Dan at the launch confirm.
+    @Test func aShowOnABlockedNightIsOfferedTheRun() {
+        #expect(QueueModel.reprepOffer(for: item(conflict: true)) == .shown)
     }
 }
 
-// The other half: the offer can be right on screen while the action still confirms work that cannot
-// happen. #1679 is this repo's proof that a rule and its enforcement are two claims.
+// #3369 REPLACED the suite that stood here, `ReprepBlockedActionTests`. Its subject was the refusal under
+// the offer: a clashed show launching nothing and saying why. Nothing refuses on a clash any more, so the
+// refusal cases are deleted (L252) and what remains is the half that never depended on them, which is that
+// the action really does launch and really does record its request.
 @MainActor
-@Suite("Re-prep refuses a run that cannot happen (#1828)")
-struct ReprepBlockedActionTests {
+@Suite("Re-prep launches the run it says it will (#1828, #3369)")
+struct ReprepActionTests {
 
     private func container() throws -> ModelContainer {
         try ModelContainer(for: Schema([Prospect.self, Recipient.self]),
@@ -95,9 +94,9 @@ struct ReprepBlockedActionTests {
         return p
     }
 
-    // Acknowledging a run that provably will not run is the fail-silent shape CLAUDE.md names: the flag is
-    // set, a run launches, the queue builder refuses the item, and Dan is told his contacts are being found.
-    @Test func aClashedShowLaunchesNothingAndSaysWhy() async throws {
+    // #3369: a clash does not stop the run, and the request is recorded rather than dropped. The clash
+    // itself is untouched by launching: prepping is not an answer to it, and the send gate still reads it.
+    @Test func aClashedShowLaunchesAndKeepsItsClash() async throws {
         let ctx = ModelContext(try container())
         let p = prospect(ctx, conflict: true)
         #expect(p.hasUnclearedConflict)   // the precondition the whole test rests on
@@ -108,19 +107,13 @@ struct ReprepBlockedActionTests {
                                        feedback: feedback,
                                        startPrep: { _, _, _ in counter.launches += 1 })
 
-        #expect(counter.launches == 0)
-        #expect(p.reprepContactsRequested == false)   // no flag left behind to ride a later run silently
-        #expect(feedback.message?.isEmpty == false)
-        // #2548: neither spelling of the started message, so this cannot pass merely because the naming
-        // rule chose the other word.
-        for isFirstPrep in [true, false] {
-            #expect(feedback.message != ActionAck.reprepStarted(mode: .contactsOnly, draftGranted: false,
-                                                                org: "Aurora Strings",
-                                                                isFirstPrep: isFirstPrep))
-        }
+        #expect(counter.launches == 1)
+        #expect(p.reprepContactsRequested)
+        #expect(p.hasUnclearedConflict, "launching a run is not an answer to the clash")
     }
 
-    // The same action on a show with no clash is untouched: this is a refusal of the impossible case only.
+    // The same action on a show with no clash, so the test above cannot pass by the clash being ignored
+    // everywhere including where it still matters.
     @Test func aShowWithNoClashStillLaunches() async throws {
         let ctx = ModelContext(try container())
         let p = prospect(ctx, conflict: false)
@@ -152,10 +145,7 @@ struct ReprepControlWiringTests {
         #expect(!view.contains("if item.isReprepEligible { reprepMenu }"))
     }
 
-    // The action refuses what the card says it will refuse, so a caller that reaches the mutation another
-    // way (a keyboard path, a future surface) cannot start a run the queue builder will decline.
-    @Test func theActionEnforcesTheBlockedStateItself() {
-        let mutations = SourceGuardHelper.source("Overture/UI/ProspectMutations.swift")
-        #expect(mutations.contains("ActionAck.reprepBlockedByClash"))
-    }
+    // #3369 DELETED `theActionEnforcesTheBlockedStateItself`, which asserted the mutation named the
+    // refusal sentence. There is no refusal, so the guard has nothing to hold. The claim above it, that
+    // every branch draws Re-prep through one shared decision, is untouched and is the one #1828 was about.
 }

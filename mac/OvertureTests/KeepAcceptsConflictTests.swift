@@ -149,37 +149,20 @@ struct KeepAcceptsConflictTests {
         let stage = StageNavigation.stage(containing: p.naturalKey, in: [p], reachedOutKeys: [],
                                           context: .at("2026-08-01"))
 
+        // #3369: `.prep`, not the retired `.prepBlocked`. The claim this test exists for is unchanged
+        // and is the first line: a kept show is rendered SOMEWHERE. What changed is that a clash no longer
+        // moves it to a stage of its own, because it no longer holds the show out of Prep at all.
         #expect(stage != nil, "#1691: a kept show that matches no stage is rendered nowhere in the queue")
-        #expect(stage == .prepBlocked)
+        #expect(stage == .prep)
     }
 
-    // The two Prep focuses are exact complements over the same rule, so a kept show is in one or the
-    // other and never both. Folding the blocked ones into the ordinary Prep count would make that number
-    // include shows the Prep run then refuses to draft, which is the exact mismatch #863 exists to stop.
-    @Test func aBlockedShowIsCountedApartFromTheOnesReadyToPrep() throws {
-        let ctx = try context()
-        let blocked = show(ctx, conflict: vacation)
-        keep(blocked, in: ctx)
-        blocked.setScoutConflict(wedding)
-        let ready = show(ctx, status: .queued)
-        ready.naturalKey = "ready"
+    // #3369 DELETED `aBlockedShowIsCountedApartFromTheOnesReadyToPrep`, which asserted that a clashed show
+    // was counted under `.prepBlocked` and not under `.prep`. That was a guard defending the behaviour this
+    // change reverses, so it is deleted rather than adjusted (L252). What replaces it is
+    // `PrepBlockedStageRetiredTests`, which asserts the focus is gone and that a clashed show is in Prep.
 
-        let counts = StageNavigation.counts(in: [blocked, ready], context: .at("2026-08-01"))
 
-        #expect(counts[.prep] == 1)
-        #expect(counts[.prepBlocked] == 1)
-        #expect(StageNavigation.naturalKeys(for: .prepBlocked, in: [blocked, ready],
-                                            context: .at("2026-08-01")) == [blocked.naturalKey])
-    }
-
-    // The Prep RUN's work list is deliberately unchanged: no contacts are researched and no email written
-    // for a night Dan cannot work. Only stage MEMBERSHIP changed, so the show is visible without being paid for.
-    @Test func theBlockedShowStaysOffThePrepRunsWorkList() throws {
-        let ctx = try context()
-        let p = show(ctx, conflict: vacation)
-        keep(p, in: ctx)
-        p.setScoutConflict(wedding)
-
-        #expect(PrepQueueBuilder.needsPrepEligible(p) == false)
-    }
+    // #3369 DELETED `theBlockedShowStaysOffThePrepRunsWorkList`, for the same reason: it asserted exactly
+    // the gate this change removes. `ConflictWarnsRatherThanBlocksTests` asserts the opposite, which is
+    // now the rule.
 }

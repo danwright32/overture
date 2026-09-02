@@ -188,21 +188,22 @@ struct AgentRosterTests {
     @Test func everyStageWithAPillHasAConceptSentence() {
         // Driven over SEVERAL input shapes, not one, because a pill's FOCUS depends on which branch its
         // builder takes and one fixture only ever reaches one of them. That is not a hypothetical: the
-        // first version of this test set `keptToPrep` and never reached the `prepBlocked` branch, so it
-        // passed while the Prep pill's tooltip was blank for every show held by a date clash.
+        // first version of this test set only one count and left several branches unreached, so it passed
+        // while a pill's tooltip was blank.
+        //
+        // #3369 removed the `prepBlocked` shape this used to drive as its second case. The rule the test
+        // enforces is unchanged and so is the reason for driving more than one shape.
         var ready = calm
         ready.toTriage = 3; ready.keptToPrep = 2; ready.toReview = 1
         ready.sendErrors = 1; ready.followUpsDue = 1; ready.reachedOutDue = 1
-        var blocked = ready
-        blocked.keptToPrep = 0; blocked.prepBlocked = 2
+        var sending = ready
+        sending.keptToPrep = 0; sending.readyToSend = 2
         var idle = calm
         var focuses = Set<StageFocus>()
-        for inputs in [ready, blocked, idle] {
+        for inputs in [ready, sending, idle] {
             focuses.formUnion(AgentRoster.statuses(inputs).map(\.focus))
         }
         _ = idle
-        #expect(focuses.contains(.prepBlocked),
-                "the held-by-a-clash pill was never produced, so its tooltip went unchecked")
         #expect(focuses.count >= 6, "the roster produced almost no pills, so this checked nothing (L98)")
         for focus in focuses {
             let summary = AgentRoster.conceptSummary(for: focus)

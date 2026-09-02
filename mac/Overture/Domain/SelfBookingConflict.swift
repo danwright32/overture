@@ -249,8 +249,10 @@ enum SelfBookingCopy {
 
     // The prep-launch confirm: shown before a Prep run when one or more of the shows being prepped sit on a
     // night that already holds a committed pitch, so Dan confirms past a possible double-booking deliberately.
-    static let prepConfirmTitle = "Prep a show on a date you're already pitching?"
-    static let prepConfirmProceed = "Prep anyway"
+    // #3369: the title and the proceed label moved to `PrepLaunchCopy`, which owns the launch confirm now
+    // that a calendar clash reaches the same sheet. Left here they would be two sentences for one control,
+    // and the title in particular can no longer be stated by this type: it depends on which KINDS of clash
+    // were found, and this one only knows about its own.
     static func prepConfirmMessage(_ clashes: [SelfBookingPrepClash]) -> String? {
         guard !clashes.isEmpty else { return nil }
         let lines = clashes.map { clash -> String in

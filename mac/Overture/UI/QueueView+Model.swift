@@ -1157,14 +1157,10 @@ enum QueueModel {
     static func reprepOffer(for item: QueueItem) -> ReprepOffer {
         // #367: never on a show already emailed or given up on.
         guard item.isReprepEligible else { return .hidden }
-        // The trap #1828's scope note found: PrepQueueBuilder.needsPrep refuses a clashed show BEFORE it
-        // reads the re-prep flags, so a run started here does nothing while the acknowledgement says work
-        // began. Say so instead of confirming work that cannot happen.
-        // The same sentence the action itself uses when it refuses, so the tooltip and the toast can
-        // never say two different things about one state (#843).
-        if item.hasUnclearedConflict {
-            return .blocked(ActionAck.reprepBlockedByClash(org: item.groupName))
-        }
+        // #3369: a clash no longer blocks this. It used to, because `needsPrep` refused a clashed show
+        // before it read the re-prep flags, so a run started here did nothing while the acknowledgement
+        // said work began. Now the run takes it, and the launch confirm names the clash and lets Dan
+        // press through, which is his call of 2026-09-01: "Maybe warn me, but let me do it."
         return .shown
     }
 
@@ -1183,13 +1179,10 @@ enum QueueModel {
         // Keep is the decision that makes a show prep work at all, and a show that already has an email
         // has nothing to prep, whoever wrote that email.
         guard item.status == .queued, !item.hasDraft else { return .hidden }
-        // #1666: the clash half is asked of the eligibility rule, not of the raw flag beside it. This
-        // control's whole promise is that a Prep run's work happens for this show now, so the state it
-        // draws has to come from the same answer the run itself obeys. Given the guard above, a show the
-        // next run will not take up is one a clash is holding, which is exactly the state to say out loud.
-        if !item.isAwaitingPrepRun {
-            return .blocked(ActionAck.manualPrepBlockedByClash(org: item.groupName))
-        }
+        // #1666: the state this control draws comes from the same answer the run itself obeys, never from
+        // a flag beside it. #3369 removed the only thing that could make those disagree here: a clash used
+        // to hold a kept, undrafted show out of the run, and this control correctly said so. It no longer
+        // holds anything, so given the guard above there is nothing left to refuse.
         return .shown
     }
 
@@ -2524,6 +2517,23 @@ enum QueueModel {
         return SelfBookingPrepClash(groupName: item.groupName, conflictNames: names,
                                     clashNight: selfBookingClashNight(for: item, in: index),
                                     performanceDate: item.performanceDate)
+    }
+
+    // #3366: which of the shows ABOUT TO BE PREPPED sit on a night the CALENDAR has spoken for (a booked
+    // shoot, or a day Dan blocked), carrying the sentence the card already shows for that clash.
+    //
+    // The self-booking check above compares two Overture prospects to each other; this one reads the
+    // conflict the scout wrote from Downbeat and Dan's days off. Both reach the same confirm, because both
+    // are the same question about the same night.
+    static func calendarClashesForPrep(forKeys keys: Set<String>,
+                                       among items: [QueueItem]) -> [PrepCalendarClash] {
+        items
+            .filter { keys.contains($0.id) && $0.hasUnclearedConflict }
+            .compactMap { item in
+                // No note means nothing to say. A clash with no readable reason would put an empty line in
+                // front of Dan under a title asking him to confirm it, which is worse than saying nothing.
+                item.conflictNote.map { PrepCalendarClash(groupName: item.groupName, note: $0) }
+            }
     }
 
     static func relatedRunNote(_ item: QueueItem) -> String? {

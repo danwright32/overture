@@ -233,7 +233,7 @@ struct StageOverlapTests {
 
         #expect(Set(StageOverlap.mutuallyExclusiveLifecycle) == Set(lifecycle))
         #expect(Set(StageOverlap.mutuallyExclusiveLifecycle)
-                == Set([.scout, .prep, .prepBlocked, .review]))
+                == Set([.scout, .prep, .review]))
     }
 
     // Every focus says which half of the funnel it is about. This is what carries the rule forward: a

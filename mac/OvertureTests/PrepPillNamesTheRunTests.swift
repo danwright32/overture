@@ -80,14 +80,11 @@ struct PrepPillNamesTheRunTests {
         #expect(prep(i).count == 0)
     }
 
-    // And with nothing kept but shows held by a date clash, the clash still speaks: it is the one of the
-    // two Dan can clear, so it must not be hidden behind a run that will end by itself.
-    @Test func adateClashStillSpeaksWhenNothingIsKept() {
-        var i = calm; i.prepBlocked = 2; i.runInFlight = .reachabilityCheck
-
-        #expect(prep(i).detail == "2 shows held by a date clash")
-        #expect(prep(i).state == .needsAttention)
-    }
+    // #3369 DELETED `adateClashStillSpeaksWhenNothingIsKept`. It asserted the Prep pill reported a
+    // "held by a date clash" backlog outranking a running check, and no show is held by a clash any more,
+    // so it is deleted rather than adjusted (L252). The claim beside it that still holds, that a real
+    // backlog is not hidden behind a run that will end by itself, is `anidleQueueIsUnchanged` below and
+    // the check case above.
 
     // Nothing running at all: untouched.
     @Test func anidleQueueIsUnchanged() {

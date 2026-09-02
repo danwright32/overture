@@ -70,15 +70,17 @@ struct ReprepLeavesReviewTests {
         #expect(lifecycle(p) == [.prep])
     }
 
-    // The `.prepBlocked` shape the issue names: a re-prep queued on a drafted show whose night Dan is
-    // booked on. The Prep run refuses it, so it is not Prep work yet, and Review must not hold it either.
-    @Test func aReprepQueuedShowHeldByADateClashIsCountedByPrepBlockedAndNotByReview() {
+    // A re-prep queued on a drafted show whose night Dan is booked on. #3369: it is ordinary Prep work
+    // now, and Review must still not hold it. The test is kept and its expectation changed, because the
+    // claim it defends (this show is in exactly one lifecycle stage, and it is not Review) is unchanged;
+    // only which stage that is has moved.
+    @Test func aReprepQueuedShowOnAClashedNightIsCountedByPrepAndNotByReview() {
         let ctx = makeContext()
         let p = show(ctx, key: "reprep-clash", status: .drafted)
         p.reprepDraftRequested = true
         p.conflictOpen = true
 
-        #expect(lifecycle(p) == [.prepBlocked])
+        #expect(lifecycle(p) == [.prep])
     }
 
     // The unchanged case, so the rule above cannot be satisfied by emptying Review altogether.
@@ -109,7 +111,7 @@ struct ReprepLeavesReviewTests {
         for p in made {
             let stages = lifecycle(p)
             #expect(!stages.contains(.review), "\(p.naturalKey) is still counted by Review")
-            #expect(stages == [p.conflictOpen ? .prepBlocked : .prep],
+            #expect(stages == [.prep],
                     "\(p.naturalKey) landed in \(stages)")
         }
     }
@@ -136,8 +138,9 @@ struct ReprepLeavesReviewTests {
         }
         #expect(Set(StageNavigation.naturalKeys(for: .review, in: all, context: StageContext(geo: .none, clients: .none)))
                 == Set(["plain-drafted", "plain-approved"]))
-        #expect(Set(StageNavigation.naturalKeys(for: .prep, in: all, context: StageContext(geo: .none, clients: .none))) == Set(["kept", "reprep"]))
-        #expect(StageNavigation.naturalKeys(for: .prepBlocked, in: all, context: StageContext(geo: .none, clients: .none)) == ["reprep-clash"])
+        // #3369: "reprep-clash" joins the other two under Prep rather than sitting in a focus of its own.
+        #expect(Set(StageNavigation.naturalKeys(for: .prep, in: all, context: StageContext(geo: .none, clients: .none)))
+                == Set(["kept", "reprep", "reprep-clash"]))
     }
 
     // The stage a deep link or a search pick lands on is the same predicate, so a re-prepped show opens on

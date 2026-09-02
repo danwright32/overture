@@ -20,7 +20,6 @@ enum StageFocus: String, Equatable, Sendable, CaseIterable {
     // refuses these shows, so counting them under Prep would state a number the run then does not work
     // through, which is the exact mismatch #863 exists to prevent. Before it existed these shows matched no
     // focus at all, and the queue is stage-scoped only, so they were rendered nowhere (#1691).
-    case prepBlocked
     case sendApproved, sendBlocked, sendErrors, sendStuck, sendDegraded
     // #2647: sent, but the real Message-ID Gmail assigned could not be read back, so Overture's NEXT
     // message on that conversation cannot reference it and a standards based client will file it as a
@@ -135,7 +134,7 @@ enum StageNavigation {
     // Every focus that resolves queue keys. `.followUps` is excluded on purpose: it opens FollowUpsView
     // and resolves no keys (matches returns false), so counting it here would only ever add a zero.
     static let countedFocuses: [StageFocus] = [
-        .scout, .prep, .prepBlocked, .review,
+        .scout, .prep, .review,
         .sendApproved, .sendBlocked, .sendErrors, .sendStuck, .sendDegraded, .sendThreadingDegraded
     ]
 
@@ -235,13 +234,6 @@ enum StageNavigation {
             // exists precisely so a new field cannot be forgotten at one of two call sites.
             return PrepQueueBuilder.needsPrepEligible(p)
 
-        case .prepBlocked:
-            // #1583/#1691: the exact complement of `.prep` over ONE rule, so a kept show is in one focus or
-            // the other and never in neither. Spelled out here as "queued and undrafted and conflicted" it
-            // would be a third copy of the eligibility rule, and the copy that forgets the next field added
-            // to it; `needsPrepIgnoringConflict` is the same `needsPrep` with the one gate lifted.
-            return p.hasUnclearedConflict && PrepQueueBuilder.needsPrepIgnoringConflict(p)
-
         case .review:
             // #2050: a show belongs to Review from the moment it has a draft until every contact on it
             // has been emailed (the last send flips it to `.contacted`, which leaves). Approving used to
@@ -257,7 +249,7 @@ enum StageNavigation {
             // draft a queued run is about to rewrite is not one of those (Dan, 2026-08-01), so the show
             // sits under Prep alone until the run ends. #1800 recorded the old overlap as deliberate; this
             // reverses that, and the reversal is safe only because of the two halves under it: the same
-            // flag that takes it out of here puts it in `.prep` or `.prepBlocked` above, so it cannot fall
+            // flag that takes it out of here puts it in `.prep` above, so it cannot fall
             // out of every list, and ReprepRelease returns it here when the run ends without serving it
             // (L45: the filters must cover the whole state space between them).
             return (p.status == .drafted || p.status == .approved) && !p.isReprepQueued

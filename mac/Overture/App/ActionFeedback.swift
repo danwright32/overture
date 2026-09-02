@@ -357,18 +357,10 @@ enum ActionAck {
         "You'll see \(org) again in \(days) days. No email went out"
     }
 
-    // #1828: the show sits on a night Dan is booked or away for. PrepQueueBuilder.needsPrep refuses a
-    // clashed show before it reads the re-prep flags, so a run started here would find nothing to do; the
-    // honest answer is that nothing runs until the clash is cleared, not a confirmation that it started.
-    static func reprepBlockedByClash(org: String) -> String {
-        "\(org) is on a night you're already booked, so nothing will re-prep until you clear the clash"
-    }
+    // #3369: two refusal sentences stood here, one for a re-prep and one for a hand-written pitch, both
+    // saying nothing would happen until Dan cleared the clash. Nothing refuses on a clash at Prep any
+    // more, so both are gone rather than left as copy for a state the app cannot be in (L29, L132).
 
-    // #2007: prepping a show by hand. Its own sentence rather than the re-prep one above, because
-    // nothing is going to run: the refusal is about the email he is writing NOW.
-    static func manualPrepBlockedByClash(org: String) -> String {
-        "\(org) is on a night you're already booked, so it can't be pitched until you clear the clash"
-    }
 
     // #2031: these contacts do not read the same letter, so one email cannot carry both without the app
     // choosing whose words everybody gets. It says what to do about it, since either option is his.

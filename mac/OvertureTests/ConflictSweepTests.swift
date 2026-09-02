@@ -46,7 +46,10 @@ struct ConflictSweepTests {
 
         #expect(p.hasUnclearedConflict)                               // no scout needed
         #expect(p.conflictNote == "You blocked Nov 18 (Vacation).")
-        #expect(PrepQueueBuilder.needsPrepEligible(p) == false)       // and it is off the Prep work-list
+        // #3369: still ON the Prep work-list. The sweep's job is to FLAG the night immediately, which is
+        // what the two lines above assert; what the flag then stops is #3369's question and the answer is
+        // "nothing at Prep". The send gate still reads it.
+        #expect(PrepQueueBuilder.needsPrepEligible(p))
     }
 
     // The other direction, which matters just as much: the trip is cancelled, and the shows he can now
@@ -84,8 +87,7 @@ struct ConflictSweepTests {
                                        export: (bookings: [], blockedDates: [], health: .ok),
                                        context: ctx, feedback: feedback)
 
-        #expect(p.hasUnclearedConflict)                              // blocked, so held back
-        #expect(PrepQueueBuilder.needsPrepEligible(p) == false)
+        #expect(p.hasUnclearedConflict)                              // flagged
         #expect(feedback.action?.label == "Undo")
 
         feedback.action?.perform()
@@ -93,7 +95,6 @@ struct ConflictSweepTests {
         #expect(DayOffEditing.rows(in: ctx).isEmpty)                 // the block is gone
         #expect(p.hasUnclearedConflict == false)                     // and so is the flag it caused
         #expect(p.conflictNote == nil)
-        #expect(PrepQueueBuilder.needsPrepEligible(p) == true)       // draftable again
     }
 
     // A run whose LATER night falls in the blocked week is caught by the sweep too, not just by the scout.

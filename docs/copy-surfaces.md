@@ -190,10 +190,9 @@ A sentence written as a constant is read here at the file that RENDERS it, not o
 `UI/OmniFocusSettingsView.swift`
     OmniFocusFailureSection.heading  "Last failure"
 `UI/PrepSelectionSheet.swift`
+    PrepLaunchCopy.proceedLabel  "Prep anyway"
     PrepSelectionCopy.subtitle  "All of these are included. Uncheck any you would rather not prep in this run."
     PrepSelectionCopy.title  "Which kept shows to prep?"
-    SelfBookingCopy.prepConfirmProceed  "Prep anyway"
-    SelfBookingCopy.prepConfirmTitle  "Prep a show on a date you're already pitching?"
 `UI/ProbeSelectionBar.swift`
     ReachabilityProbeCopy.controlLabel  "Check reachability"
 `UI/ProspectMutations.swift`
@@ -221,6 +220,7 @@ A sentence written as a constant is read here at the file that RENDERS it, not o
     ReachabilityCopy.unconfirmedProfileNote  "Name matches, nothing ties it to this show"
     ReachabilityCopy.unverifiedEmailFoundBadge  "Unverified email found"
 `UI/QueueView.swift`
+    PrepLaunchCopy.proceedLabel  "Prep anyway"
     ProposedConversationCopy.confirm  "Yes, link it"
     ProposedConversationCopy.decline  "Not them"
     ProposedConversationCopy.linked  "Linked. Overture is watching that conversation now."
@@ -228,8 +228,6 @@ A sentence written as a constant is read here at the file that RENDERS it, not o
     ProposedConversationCopy.question  "Is this their reply?"
     ReachabilityProbeCopy.controlLabel  "Check reachability"
     ReachabilityProbeCopy.dateCheckedMarker  "Reachability checked"
-    SelfBookingCopy.prepConfirmProceed  "Prep anyway"
-    SelfBookingCopy.prepConfirmTitle  "Prep a show on a date you're already pitching?"
 `UI/ReplyConversationView.swift`
     ReplyPanelCopy.confirmCopiedSentHelp  "Record this reply as answered. Nothing was recorded when you copied it."
     ReplyPanelCopy.copyHelp  "Copy the draft to paste into Gmail yourself. Nothing is recorded until you say you sent it."
