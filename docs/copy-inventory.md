@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1476 sentences**.
+Every sentence Overture can say to Dan: **1482 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -14,7 +14,7 @@ What is not, and why:
   sentences under tokens nobody reads.
 - **Nothing, if it is written as two literals joined with `+`.** Those ARE joined here, into the
   one sentence the running app says (#3155). What is still only part of what Dan reads is a
-  sentence carrying a VALUE: 533 of the 1476 below hold a
+  sentence carrying a VALUE: 539 of the 1482 below hold a
   `\(...)` where a number or a name goes, so what is printed is the template. They are counted
   here rather than listed again, because the hole is visible in the line itself; what was missing
   was any statement of how much of this document is templates.
@@ -117,7 +117,7 @@ What is not, and why:
 - `UI/DraftSignaturePreview.swift`: renders the outbound email's own HTML (body + Gmail signature), not Overture's voice (#1203)
 - `UI/DraftSignaturePreview.swift`: browser-side measuring script, not a sentence Overture says to Dan (#915)
 
-## The same sentence, said in more than one place (53)
+## The same sentence, said in more than one place (55)
 
 Two copies of a sentence will drift. #843 owns fixing these.
 
@@ -172,6 +172,9 @@ Two copies of a sentence will drift. #843 owns fixing these.
 - "I turned them down"
   - `Domain/ShowOutcome.swift`
   - `Domain/ShowOutcome.swift`
+- "It leaves your queue, filed as \(reason.label)."
+  - `Domain/BulkDismiss.swift`
+  - `Domain/BulkDismiss.swift`
 - "Never heard back"
   - `Domain/ShowOutcome.swift`
   - `UI/QueueView+Model.swift`
@@ -231,6 +234,9 @@ Two copies of a sentence will drift. #843 owns fixing these.
 - "Their events or season page"
   - `UI/SourceFixConfirmActions.swift`
   - `UI/SourcesView.swift`
+- "They all leave your queue, filed as \(reason.label)."
+  - `Domain/BulkDismiss.swift`
+  - `Domain/BulkDismiss.swift`
 - "This show"
   - `Domain/PrepLaunchCopy.swift`
   - `Domain/SelfBookingConflict.swift`
@@ -1017,6 +1023,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "It is not what has shipped, and it is working on your real data."
     `Domain/BuildFreshnessPanel.swift`
 "It leaves your queue, filed as \(reason.label)."
+    `Domain/BulkDismiss.swift`
+"It loses \(dateLabel), filed as \(reason.label), and turns up again under its next night."
     `Domain/BulkDismiss.swift`
 "It reaches them"
     `UI/DraftReviewView.swift`
@@ -2236,10 +2244,20 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/SourceGrade.swift`
 "They all leave your queue, filed as \(reason.label)."
     `Domain/BulkDismiss.swift`
+"They all lose \(dateLabel), filed as \(reason.label), and turn up again under their next night."
+    `Domain/BulkDismiss.swift`
 "They got back to me"
     `Domain/HandMarkedReply.swift`
 "They include \(named.joined(separator: " and ")), and \(others) \(plural)."
     `Domain/SourceReadability.swift`
+"They lose \(dateLabel), filed as \(reason.label). \(list(runs)) play on past \(dateLabel) and turn up again under their next night; the other one leaves your queue."
+    `Domain/BulkDismiss.swift`
+"They lose \(dateLabel), filed as \(reason.label). \(list(runs)) play on past \(dateLabel) and turn up again under their next night; the rest leave your queue."
+    `Domain/BulkDismiss.swift`
+"They lose \(dateLabel), filed as \(reason.label). \(runs[0]) plays on past \(dateLabel) and turns up again under its next night; the other one leaves your queue."
+    `Domain/BulkDismiss.swift`
+"They lose \(dateLabel), filed as \(reason.label). \(runs[0]) plays on past \(dateLabel) and turns up again under its next night; the rest leave your queue."
+    `Domain/BulkDismiss.swift`
 "They replied"
     `Domain/InquiryCopy.swift`
 "They said no"
