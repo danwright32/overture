@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1466 sentences**.
+Every sentence Overture can say to Dan: **1473 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -14,7 +14,7 @@ What is not, and why:
   sentences under tokens nobody reads.
 - **Nothing, if it is written as two literals joined with `+`.** Those ARE joined here, into the
   one sentence the running app says (#3155). What is still only part of what Dan reads is a
-  sentence carrying a VALUE: 528 of the 1466 below hold a
+  sentence carrying a VALUE: 534 of the 1473 below hold a
   `\(...)` where a number or a name goes, so what is printed is the template. They are counted
   here rather than listed again, because the hole is visible in the line itself; what was missing
   was any statement of how much of this document is templates.
@@ -523,13 +523,17 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/WatchlistEditing.swift`
 "Also goes to \(Plural.list(others))"
     `UI/QueueView+Model.swift`
-"Also pitching \($0) on this date"
-    `Domain/SelfBookingConflict.swift`
 "Also pitching \(name) at \(times)"
     `Domain/SelfBookingConflict.swift`
 "Also pitching \(name) at \(times) and \(rest) other\(rest == 1 ? "" : "s")"
     `Domain/SelfBookingConflict.swift`
 "Also pitching \(name) at \(times), \(hours) hour\(plural) \(side) this one"
+    `Domain/SelfBookingConflict.swift`
+"Also pitching \(others) on \(label)"
+    `Domain/SelfBookingConflict.swift`
+"Also pitching \(others) on a later night of this run"
+    `Domain/SelfBookingConflict.swift`
+"Also pitching \(others) on this date"
     `Domain/SelfBookingConflict.swift`
 "Always a returning client"
     `Domain/ClientTagCopy.swift`
@@ -549,6 +553,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/OvertureApp.swift`
 "Another inquiry is already logged for this event. You can still save this one."
     `Domain/InquiryCopy.swift`
+"Another pitch is already in progress on a night one of these runs plays"
+    `Domain/SelfBookingConflict.swift`
 "Another pitch is already in progress on this date"
     `Domain/SelfBookingConflict.swift`
 "Another run is going. This can start once that finishes."
@@ -2485,7 +2491,11 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ReplyConversationMode.swift`
 "You already answered this one. The draft below is kept as a record."
     `Domain/ReplyConversationMode.swift`
-"You already have a pitch in progress for \($0) on this date."
+"You already have a pitch in progress for \(others) on \(label)."
+    `Domain/SelfBookingConflict.swift`
+"You already have a pitch in progress for \(others) on a later night of this run."
+    `Domain/SelfBookingConflict.swift`
+"You already have a pitch in progress for \(others) on this date."
     `Domain/SelfBookingConflict.swift`
 "You already watch \(org) at that address."
     `UI/SourceFixConfirmActions.swift`
@@ -2961,6 +2971,10 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "\(shortMonth(calendar.component(.month, from: d))) \(calendar.component(.day, from: d))"
     `Domain/EasternDate.swift`
 "\(show) is on a date you already have a pitch in progress for \(others)."
+    `Domain/SelfBookingConflict.swift`
+"\(show) plays \(label), when you already have a pitch in progress for \(others)."
+    `Domain/SelfBookingConflict.swift`
+"\(show) plays a later night of its run when you already have a pitch in progress for \(others)."
     `Domain/SelfBookingConflict.swift`
 "\(showCount) shows"
     `UI/SourcesView.swift`

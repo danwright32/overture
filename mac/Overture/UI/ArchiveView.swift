@@ -245,7 +245,7 @@ struct ArchiveView: View {
               var confirmation = SendConfirmation(prospect: model) else { return }
         // #1244: the Archive send path warns on a same-date self double-booking too, using the SAME shared
         // helper as the main queue's requestSend, so the guard doesn't depend on which screen Dan sends from.
-        confirmation.selfBookingWarning = QueueModel.sendSelfBookingWarning(for: item, among: items)
+        confirmation.selfBookingWarning = QueueModel.sendSelfBookingWarning(for: item, in: QueueModel.selfBookingIndex(items))
         pendingConfirm = PendingSend(id: item.id, confirmation: confirmation)
     }
 

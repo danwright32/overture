@@ -119,6 +119,9 @@ enum QueueRenderPass {
         let focusedRows = items.filter { wanted.contains($0.id) }
         return QueueView.RenderData(
             items: items, visible: visible,
+            // #3323: built once for the pass, from the WHOLE item set rather than the focused stage, so a
+            // clash with a show in another stage still counts (#1246).
+            selfBooking: QueueModel.selfBookingIndex(items),
             agentInputs: AgentInputs.from(prospects: i.prospects.all,
                                           // #2968: the Follow-ups number alone is taken over
                                           // everything, because the sheet and the toolbar badge

@@ -964,10 +964,10 @@ struct SelfBookingWiringTests {
         let b = drafted("b", "2026-08-01", "Org B")     // a different show on the SAME date
         let clear = drafted("c", "2026-09-09", "Org C") // alone on its own date
         let all = [a, b, clear]
-        let warning = QueueModel.sendSelfBookingWarning(for: b, among: all)
+        let warning = QueueModel.sendSelfBookingWarning(for: b, in: QueueModel.selfBookingIndex(all))
         #expect(warning != nil)
         #expect(warning?.contains("Org A") == true)     // names the clashing show
-        #expect(QueueModel.sendSelfBookingWarning(for: clear, among: all) == nil)  // clear date, no warning
+        #expect(QueueModel.sendSelfBookingWarning(for: clear, in: QueueModel.selfBookingIndex(all)) == nil)  // clear date, no warning
     }
 
     // A dead-dismissed show does NOT count (even if it still carries an old draft body) - the latent bug in
@@ -987,9 +987,10 @@ struct SelfBookingWiringTests {
     // A committed different show on the same date is a conflict; a non-committed one (kept, no draft) is not.
     @Test func aCommittedOtherShowConflictsANonCommittedDoesNot() {
         let target = item(performanceDate: "2026-08-01", key: "b", groupName: "Org B")
-        #expect(QueueModel.hasSelfBookingConflict(for: target, among: [emailed("a", "2026-08-01", "Org A"), target]))
+        #expect(QueueModel.hasSelfBookingConflict(for: target,
+                                                  in: QueueModel.selfBookingIndex([emailed("a", "2026-08-01", "Org A"), target])))
         let kept = item(performanceDate: "2026-08-01", status: .queued, key: "c", groupName: "Org C")
-        #expect(!QueueModel.hasSelfBookingConflict(for: target, among: [kept, target]))
+        #expect(!QueueModel.hasSelfBookingConflict(for: target, in: QueueModel.selfBookingIndex([kept, target])))
     }
 
     // #1246: the date-header NOTE (not just the underlying conflict) must fire cross-stage. A drafted show
@@ -1000,23 +1001,23 @@ struct SelfBookingWiringTests {
     @Test func theDateHeaderNoteFiresWhenTheClashingShowIsInAnotherStage() {
         let reviewGroup = [drafted("b", "2026-08-01", "Org B")]                 // Review's Aug 1 date group
         let wholeQueue = [emailed("a", "2026-08-01", "Org A")] + reviewGroup    // the clash sits elsewhere
-        #expect(QueueModel.selfBookingNote(reviewGroup, among: wholeQueue) != nil)
+        #expect(QueueModel.selfBookingNote(reviewGroup, on: "2026-08-01", in: QueueModel.selfBookingIndex(wholeQueue)) != nil)
         // With no other same-date commitment anywhere in the queue, no note.
-        #expect(QueueModel.selfBookingNote(reviewGroup, among: reviewGroup) == nil)
+        #expect(QueueModel.selfBookingNote(reviewGroup, on: "2026-08-01", in: QueueModel.selfBookingIndex(reviewGroup)) == nil)
     }
 
     // Two rows sharing a groupName are one production (a run), never a self double-booking.
     @Test func theSameProductionOnTheDateDoesNotConflict() {
         let a = emailed("a", "2026-08-01", "The Run")
         let b = item(performanceDate: "2026-08-01", key: "b", groupName: "The Run")
-        #expect(!QueueModel.hasSelfBookingConflict(for: b, among: [a, b]))
+        #expect(!QueueModel.hasSelfBookingConflict(for: b, in: QueueModel.selfBookingIndex([a, b])))
     }
 
     // The names of the clashing shows are returned so the warning can say WHICH ones (one or many).
     @Test func conflictNamesListEveryClashingShow() {
         let target = item(performanceDate: "2026-08-01", key: "t", groupName: "Target")
         let all = [emailed("a", "2026-08-01", "Orchestra A"), drafted("b", "2026-08-01", "Choir B"), target]
-        #expect(Set(QueueModel.selfBookingConflictNames(for: target, among: all)) == ["Orchestra A", "Choir B"])
+        #expect(Set(QueueModel.selfBookingConflictNames(for: target, in: QueueModel.selfBookingIndex(all))) == ["Orchestra A", "Choir B"])
     }
 
     // #1246 (the whole point): the note is QUEUE-WIDE. The other committed show is NOT in this stage's date
@@ -1024,10 +1025,10 @@ struct SelfBookingWiringTests {
     @Test func theHeaderNoteIsQueueWideNotStageScoped() {
         let inGroup = item(performanceDate: "2026-08-01", status: .queued, key: "b", groupName: "Org B")
         let elsewhere = emailed("a", "2026-08-01", "Org A")   // committed, but in another stage/group
-        #expect(QueueModel.selfBookingNote([inGroup], among: [inGroup, elsewhere])
+        #expect(QueueModel.selfBookingNote([inGroup], on: "2026-08-01", in: QueueModel.selfBookingIndex([inGroup, elsewhere]))
                 == "Another pitch is already in progress on this date")
         // A clear date (no other commitment anywhere) shows nothing.
-        #expect(QueueModel.selfBookingNote([inGroup], among: [inGroup]) == nil)
+        #expect(QueueModel.selfBookingNote([inGroup], on: "2026-08-01", in: QueueModel.selfBookingIndex([inGroup])) == nil)
     }
 
     // The prep-launch clash check finds every prepping (kept) show that sits on a committed date, naming
@@ -1039,7 +1040,8 @@ struct SelfBookingWiringTests {
         let clear = item(performanceDate: "2026-08-02", status: .queued, key: "c", groupName: "Solo C")
         let all = [committed, prepping, clear]
         #expect(QueueModel.selfBookingPrepClashes(forKeys: ["p", "c"], among: all)
-                == [SelfBookingPrepClash(groupName: "Choir P", conflictNames: ["Orchestra A"])])
+                == [SelfBookingPrepClash(groupName: "Choir P", conflictNames: ["Orchestra A"],
+                                         clashNight: "2026-08-01", performanceDate: "2026-08-01")])
         // No selected key clashes -> nothing to confirm.
         #expect(QueueModel.selfBookingPrepClashes(forKeys: ["c"], among: all).isEmpty)
     }
@@ -1049,10 +1051,11 @@ struct SelfBookingWiringTests {
     @Test func selfBookingClashNamesOneRowsConflict() {
         let committed = emailed("a", "2026-08-01", "Orchestra A")
         let target = item(performanceDate: "2026-08-01", key: "t", groupName: "Target")
-        #expect(QueueModel.selfBookingClash(for: target, among: [committed, target])
-                == SelfBookingPrepClash(groupName: "Target", conflictNames: ["Orchestra A"]))
+        #expect(QueueModel.selfBookingClash(for: target, in: QueueModel.selfBookingIndex([committed, target]))
+                == SelfBookingPrepClash(groupName: "Target", conflictNames: ["Orchestra A"],
+                                        clashNight: "2026-08-01", performanceDate: "2026-08-01"))
         let clear = item(performanceDate: "2026-08-02", key: "c", groupName: "Solo")
-        #expect(QueueModel.selfBookingClash(for: clear, among: [committed, clear]) == nil)
+        #expect(QueueModel.selfBookingClash(for: clear, in: QueueModel.selfBookingIndex([committed, clear])) == nil)
     }
 }
 

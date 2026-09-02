@@ -243,6 +243,11 @@ struct QueueView: View {
     struct RenderData {
         let items: [QueueItem]
         let visible: [QueueItem]
+        // #3323: the self-booking comparison set, indexed by night, built ONCE here rather than once per
+        // card and once per date heading. Same reason as agentInputs below (#1771) and the same defect
+        // #1772 already fixed on this exact feature: reading it per row rebuilt the whole queue per card,
+        // and a run-aware check multiplies that by the run's length.
+        let selfBooking: SelfBookingConflict.NightIndex
         // #1771: built ONCE here rather than by each of its two readers (the pill strip and the focused
         // stage heading). One build is roughly four full traversals of every prospect and its recipients,
         // so building it twice cost eight per render pass.
@@ -721,7 +726,7 @@ struct QueueView: View {
                 // Not shown in Scout (untriaged candidates are not commitments Dan is protecting yet).
                 // #1772: `data.items`, not `self.items`. This runs for every date heading the list
                 // draws, and reading the computed property rebuilt the whole queue from the store each time.
-                if focusedStage != .scout, let note = QueueModel.selfBookingNote(group.items, among: data.items) {
+                if focusedStage != .scout, let note = QueueModel.selfBookingNote(group.items, on: group.id, in: data.selfBooking) {
                     HStack(spacing: 4) {
                         Image(systemName: "calendar.badge.exclamationmark")
                         Text(note)
@@ -1420,14 +1425,14 @@ struct QueueView: View {
             // #1772: `data.items`, not `self.items`. This runs for every CARD, so reading the computed
             // property rebuilt the entire 724-row queue once per card on every render pass.
             let selfBookingMarker = focusedStage != .scout
-                ? SelfBookingCopy.rowMarker(QueueModel.selfBookingConflictNames(for: item, among: data.items))
+                ? QueueModel.selfBookingRowMarker(for: item, in: data.selfBooking)
                 : nil
             // #1699 part 3: the same night, when the published curtain times prove Dan can work both.
             // Nothing to decide, so it is not gold and carries no warning icon: gold is reserved for what
             // he can act on, and this line exists only so a doubled-up night does not go silent entirely.
             // Nil whenever the row also has a real clash, so the two lines never stack.
             let workableNote = focusedStage != .scout
-                ? QueueModel.selfBookingWorkableNote(for: item, among: data.items)
+                ? QueueModel.selfBookingWorkableNote(for: item, in: data.selfBooking)
                 : nil
             VStack(alignment: .leading, spacing: 4) {
                 if let marker = selfBookingMarker {
@@ -1503,7 +1508,7 @@ struct QueueView: View {
     // actually commits rather than in an alert before a second screen.
     private func guardSelfBooking(_ item: QueueItem, title: String, proceedLabel: String,
                                   proceed: @escaping () -> Void) {
-        if let clash = QueueModel.selfBookingClash(for: item, among: items),
+        if let clash = QueueModel.selfBookingClash(for: item, in: QueueModel.selfBookingIndex(items)),
            let message = SelfBookingCopy.prepConfirmMessage([clash]) {
             pendingSelfBookingGuard = SelfBookingGuard(key: item.id, title: title,
                                                        proceedLabel: proceedLabel, message: message, proceed: proceed)
@@ -1524,7 +1529,7 @@ struct QueueView: View {
         // #1219: warn at the committing moment when a DIFFERENT committed show shares this date, naming it
         // so Dan remembers which one. Fires on any commitment (booked / emailed / live draft), not just an
         // already-emailed one, and compares against the whole queue so a show in any stage still counts.
-        confirmation.selfBookingWarning = QueueModel.sendSelfBookingWarning(for: item, among: items)
+        confirmation.selfBookingWarning = QueueModel.sendSelfBookingWarning(for: item, in: QueueModel.selfBookingIndex(items))
         // #2017: the sheet redraws for whatever he ticks, so the To line, the preview's greeting and the
         // promise underneath describe the email actually about to leave rather than the default one.
         let warning = confirmation.selfBookingWarning

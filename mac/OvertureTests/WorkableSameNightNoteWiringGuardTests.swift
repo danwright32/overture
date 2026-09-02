@@ -25,7 +25,7 @@ struct WorkableSameNightNoteWiringGuardTests {
 
     @Test func theRowAsksForTheNoteAndDrawsIt() throws {
         let body = try #require(rowBody(), "expected prospectRow's body")
-        #expect(body.contains("QueueModel.selfBookingWorkableNote(for: item, among: data.items)"))
+        #expect(body.contains("QueueModel.selfBookingWorkableNote(for: item, in: data.selfBooking)"))
         #expect(body.contains("Text(workableNote)"))
     }
 

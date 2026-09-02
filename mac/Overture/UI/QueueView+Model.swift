@@ -217,6 +217,11 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     // date-group header must compare this against the group's date rather than assume the two are the same.
     var conflictBlockedDate: String? = nil
     var runEndDate: String? = nil
+    // #3323: every night this run still plays, already with Dan's drops subtracted (`runNights` is
+    // rewritten to the kept list by `RunNightDrop.dropNight`, and rebuilt minus the drops on every scout
+    // through `DroppedNight.keeping`). Empty on rows stored before #1523, which is why every reader has to
+    // say what it does with an empty list rather than treating it as "no nights".
+    var runNights: [String] = []
 
     // #2864: whether the cold pitch names the show's own night, and never a different one. Advisory,
     // and DELIBERATELY not suppressed on a draft Dan edited, which is the one combination this lint did
@@ -2373,8 +2378,7 @@ enum QueueModel {
     // one off it would say nothing about the night in question. The per-night schedule kept for the
     // hover DOES name that night, so that is what is read: the most specific true answer available.
     // When it names nothing for this night, the answer is nothing, never the run's other nights.
-    static func selfBookingStartTimes(_ i: QueueItem) -> [String] {
-        guard let date = i.performanceDate else { return [] }
+    static func selfBookingStartTimes(_ i: QueueItem, on date: String) -> [String] {
         if let night = nightTimes(i.nightStartTimes)[date] { return night }
         // A run whose nights disagree may not lend one night's time to another (the card refuses to
         // state one for exactly this reason), so a run that said nothing about THIS night says nothing.
@@ -2382,74 +2386,144 @@ enum QueueModel {
         return i.performanceStartTimes
     }
 
-    private static func selfBookingShow(_ i: QueueItem) -> SelfBookingConflict.Show {
-        SelfBookingConflict.Show(key: i.id, date: i.performanceDate,
-                                 isCommitment: selfBookingIsCommitment(i),
-                                 engagementKey: i.groupName, name: i.groupName,
-                                 startTimes: selfBookingStartTimes(i))
+    // #3323: every night this row plays, for the self-booking comparison.
+    //
+    // `runNights` is already the KEPT list (`RunNightDrop.dropNight` rewrites it, and a scout rebuilds it
+    // through `DroppedNight.keeping`), so a night Dan dropped is not compared and cannot raise a warning
+    // about a night he is no longer pitching.
+    //
+    // An EMPTY list falls back to `performanceDate` ALONE, never to a span walk. Measured on the live
+    // store 2026-09-01, 22 rows carry a span with no recorded nights, 11 of them live. For those the
+    // nights genuinely are not known, and walking `performanceDate` through `runEndDate` would invent
+    // clashes on the dark nights of a weekly series, which is the one direction of this change that
+    // manufactures a warning rather than finding one. `BlockedCalendar.conflict` falls back the OTHER way
+    // for its own stated reason, and the asymmetry is deliberate: there, clearing a real clash on no
+    // evidence is what loses safety; here, inventing one is.
+    static func selfBookingNights(_ i: QueueItem) -> [String] {
+        let recorded = Set(i.runNights).sorted()
+        if !recorded.isEmpty { return recorded }
+        return i.performanceDate.map { [$0] } ?? []
     }
 
-    // The OTHER committed shows clashing with `item` on its date, across the WHOLE queue (never scoped to
-    // one stage, so the warning never vanishes when a show changes stage, #1246). Empty = the date is clear.
-    static func selfBookingConflicts(for item: QueueItem, among items: [QueueItem]) -> [QueueItem] {
-        let shows = items.map(selfBookingShow)
-        let keys = Set(SelfBookingConflict.conflicts(for: selfBookingShow(item), among: shows).map(\.key))
-        return items.filter { keys.contains($0.id) }
+    static func selfBookingShow(_ i: QueueItem) -> SelfBookingConflict.Show {
+        let nights = selfBookingNights(i)
+        var times: [String: [String]] = [:]
+        for night in nights {
+            let published = selfBookingStartTimes(i, on: night)
+            if !published.isEmpty { times[night] = published }
+        }
+        return SelfBookingConflict.Show(key: i.id, nights: nights,
+                                        isCommitment: selfBookingIsCommitment(i),
+                                        engagementKey: i.groupName, name: i.groupName,
+                                        timesByNight: times)
     }
 
-    static func hasSelfBookingConflict(for item: QueueItem, among items: [QueueItem]) -> Bool {
-        !selfBookingConflicts(for: item, among: items).isEmpty
+    // #3323: the whole comparison set, indexed by night, built ONCE for a render pass. Everything below
+    // takes it rather than an item array, so a per-row call cannot rebuild it (the #1772 defect, which
+    // this change would otherwise multiply by a run's length).
+    static func selfBookingIndex(_ items: [QueueItem]) -> SelfBookingConflict.NightIndex {
+        SelfBookingConflict.NightIndex(items.map(selfBookingShow))
+    }
+
+    // The OTHER committed shows clashing with `item` on any night it plays, across the WHOLE queue (never
+    // scoped to one stage, so the warning never vanishes when a show changes stage, #1246). Empty = every
+    // night is clear.
+    static func selfBookingConflicts(for item: QueueItem,
+                                     in index: SelfBookingConflict.NightIndex) -> [SelfBookingConflict.Overlap] {
+        SelfBookingConflict.conflicts(for: selfBookingShow(item), in: index)
+    }
+
+    static func hasSelfBookingConflict(for item: QueueItem,
+                                       in index: SelfBookingConflict.NightIndex) -> Bool {
+        !selfBookingConflicts(for: item, in: index).isEmpty
     }
 
     // #1699 part 3: the plain, non-warning note for a night that holds another committed show the clock
-    // proves Dan can work alongside this one. Nil when there is none, and nil whenever the night ALSO
+    // proves Dan can work alongside this one. Nil when there is none, and nil whenever the row ALSO
     // holds a real clash: that night needs the warning, and stacking a reassuring line beside an
     // actionable one would bury the thing he has to decide about.
-    static func selfBookingWorkableNote(for item: QueueItem, among items: [QueueItem]) -> String? {
-        guard !hasSelfBookingConflict(for: item, among: items) else { return nil }
-        let shows = items.map(selfBookingShow)
+    static func selfBookingWorkableNote(for item: QueueItem,
+                                        in index: SelfBookingConflict.NightIndex) -> String? {
+        guard !hasSelfBookingConflict(for: item, in: index) else { return nil }
         let target = selfBookingShow(item)
         return SelfBookingCopy.workableRowMarker(target: target,
                                                  others: SelfBookingConflict.workable(for: target,
-                                                                                      among: shows))
+                                                                                      in: index))
     }
 
-    // The names of the OTHER committed shows on this row's date, so a warning can name them. NOTE (#901/
-    // #863): this must never be wired into needsPrep or a stage-pill count; it is confirm-to-proceed, not
-    // a hard gate, so the counts stay honest.
-    static func selfBookingConflictNames(for item: QueueItem, among items: [QueueItem]) -> [String] {
-        selfBookingConflicts(for: item, among: items).map(\.groupName)
+    // The names of the OTHER committed shows on this row's nights, so a warning can name them, each named
+    // ONCE however many nights of the run it collides on. NOTE (#901/#863): this must never be wired into
+    // needsPrep or a stage-pill count; it is confirm-to-proceed, not a hard gate, so the counts stay honest.
+    static func selfBookingConflictNames(for item: QueueItem,
+                                         in index: SelfBookingConflict.NightIndex) -> [String] {
+        var seen = Set<String>()
+        return selfBookingConflicts(for: item, in: index).compactMap { overlap in
+            seen.insert(overlap.other.key).inserted ? overlap.other.name : nil
+        }
+    }
+
+    // #3323: the EARLIEST night any of those clashes falls on, so the copy can name it. Nil when the row
+    // is clear, which is what keeps a caller from rendering a night for a show that has no clash.
+    static func selfBookingClashNight(for item: QueueItem,
+                                      in index: SelfBookingConflict.NightIndex) -> String? {
+        selfBookingConflicts(for: item, in: index).first?.night
+    }
+
+    // #3323: the row marker, assembled here so the view does not have to hold the night and the names
+    // together itself (the #863 rule: a sentence built in a view is invisible to the copy inventory).
+    static func selfBookingRowMarker(for item: QueueItem,
+                                     in index: SelfBookingConflict.NightIndex) -> String? {
+        SelfBookingCopy.rowMarker(selfBookingConflictNames(for: item, in: index),
+                                  clashNight: selfBookingClashNight(for: item, in: index),
+                                  performanceDate: item.performanceDate)
     }
 
     // #1244: the self-booking warning shown at the send-confirm moment, as one shared helper so BOTH send
-    // paths (the main queue's requestSend and Archive's) surface a same-date clash identically and can never
-    // drift on when or how it is named. nil when the date is clear. The comparison set is the WHOLE queue,
-    // so a clash with a show in any stage still counts.
-    static func sendSelfBookingWarning(for item: QueueItem, among items: [QueueItem]) -> String? {
-        SelfBookingCopy.confirmWarning(selfBookingConflictNames(for: item, among: items))
+    // paths (the main queue's requestSend and Archive's) surface a clash identically and can never
+    // drift on when or how it is named. nil when every night is clear. The comparison set is the WHOLE
+    // queue, so a clash with a show in any stage still counts.
+    static func sendSelfBookingWarning(for item: QueueItem,
+                                       in index: SelfBookingConflict.NightIndex) -> String? {
+        SelfBookingCopy.confirmWarning(selfBookingConflictNames(for: item, in: index),
+                                       clashNight: selfBookingClashNight(for: item, in: index),
+                                       performanceDate: item.performanceDate)
     }
 
     // The queue-wide date-header note: shown when any row in this date group faces a self-booking conflict
     // against the WHOLE queue, so it stays visible even after the other show has moved to another stage.
-    static func selfBookingNote(_ group: [QueueItem], among all: [QueueItem]) -> String? {
-        group.contains { hasSelfBookingConflict(for: $0, among: all) } ? SelfBookingCopy.dateHeaderNote : nil
+    // #3323: the note also says WHERE. A run in the group clashing on a later night makes "on this date"
+    // a claim about the header it sits under that the check never measured, so the group is asked whether
+    // every clash it holds really falls on the header's own date.
+    static func selfBookingNote(_ group: [QueueItem], on date: String?,
+                                in index: SelfBookingConflict.NightIndex) -> String? {
+        let clashing = group.filter { hasSelfBookingConflict(for: $0, in: index) }
+        guard !clashing.isEmpty else { return nil }
+        guard let date else { return SelfBookingCopy.dateHeaderNote(allOnThisDate: false) }
+        let onThisDate = SelfBookingConflict.everyClashIsOn(date, for: clashing.map(selfBookingShow),
+                                                           in: index)
+        return SelfBookingCopy.dateHeaderNote(allOnThisDate: onThisDate)
     }
 
-    // #1219: which of the shows ABOUT TO BE PREPPED (by key) sit on a date that already holds a committed
+    // #1219: which of the shows ABOUT TO BE PREPPED (by key) sit on a night that already holds a committed
     // OTHER show, and the names of those clashes, so a prep-launch confirm can name them. Shared by BOTH
     // prep entry points, the "Prep these N" sheet AND the per-row Re-prep (red-team FLAW 1: Re-prep
     // launches a run directly, so gating only the sheet leaves a hole). Empty = no clash, run freely.
     static func selfBookingPrepClashes(forKeys keys: Set<String>, among items: [QueueItem]) -> [SelfBookingPrepClash] {
-        items
+        let index = selfBookingIndex(items)
+        return items
             .filter { keys.contains($0.id) }
-            .compactMap { selfBookingClash(for: $0, among: items) }
+            .compactMap { selfBookingClash(for: $0, in: index) }
     }
 
-    // The single-row clash (this show + the committed OTHER shows on its date), or nil when the date is
-    // clear. Used by the Approve and per-row Re-prep confirms, where one specific row is being committed.
-    static func selfBookingClash(for item: QueueItem, among items: [QueueItem]) -> SelfBookingPrepClash? {
-        let names = selfBookingConflictNames(for: item, among: items)
-        return names.isEmpty ? nil : SelfBookingPrepClash(groupName: item.groupName, conflictNames: names)
+    // The single-row clash (this show + the committed OTHER shows on its nights), or nil when every night
+    // is clear. Used by the Approve and per-row Re-prep confirms, where one specific row is being committed.
+    static func selfBookingClash(for item: QueueItem,
+                                 in index: SelfBookingConflict.NightIndex) -> SelfBookingPrepClash? {
+        let names = selfBookingConflictNames(for: item, in: index)
+        guard !names.isEmpty else { return nil }
+        return SelfBookingPrepClash(groupName: item.groupName, conflictNames: names,
+                                    clashNight: selfBookingClashNight(for: item, in: index),
+                                    performanceDate: item.performanceDate)
     }
 
     static func relatedRunNote(_ item: QueueItem) -> String? {
@@ -2819,6 +2893,7 @@ extension QueueItem {
             conflictNote: p.conflictNote,
             conflictBlockedDate: conflictBlockedDate,
             runEndDate: p.runEndDate,
+            runNights: p.runNights,                           // #3323
             performanceStartTimes: p.performanceStartTimes,   // #1699
             startTimesVary: p.startTimesVary,                 // #1699
             nightStartTimes: p.nightStartTimes,               // #1699
