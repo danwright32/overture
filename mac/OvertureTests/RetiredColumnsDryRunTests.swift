@@ -22,11 +22,16 @@ import SwiftData
 // result and a successful subtraction leave the same green tick (L98). So it asserts the columns ARE on
 // the clone first, and that they hold nothing, and only then drops them.
 //
-// The emptiness assertion is the one that would stop this shipping. `classificationConfidence` and
+// The emptiness assertion is the one that would stop a drop shipping. `classificationConfidence` and
 // `confidenceReviewedByDan` were retired by #1533 and read and written by nothing since;
-// `websiteURL`'s only writer is the literal `nil` in `ProspectAssembler`, measured 2026-08-27. If any of
-// the three turns out to hold a value on Dan's real rows, dropping it destroys data and this says so
-// rather than migrating and reporting a clean row count (L5).
+// `websiteURL`'s only writer was the literal `nil` in `ProspectAssembler`, measured 2026-08-27. If a
+// column pending a drop turns out to hold a value on Dan's real rows, dropping it destroys data and this
+// says so rather than migrating and reporting a clean row count (L5).
+//
+// #3482: `websiteURL`'s drop has since SHIPPED, so it is no longer what this rehearses. It moved to
+// `landedDrops`, where the assertion is inverted, for the reason recorded there. Today the suite has no
+// pending drop, and what it still proves is that the current schema opens a clone of Dan's real store
+// with every row intact, plus that the pair he chose to keep is still there.
 @MainActor
 @Suite("Dropping the retired columns, rehearsed on a clone of the live store (#1665)")
 struct RetiredColumnsDryRunTests {
@@ -48,9 +53,25 @@ struct RetiredColumnsDryRunTests {
     // anybody set it or not, so "is it null" reported all 1018 rows as data about to be destroyed when the
     // truth was 1018 copies of a value nothing ever wrote. `websiteURL` is an optional with no default, so
     // for it any non-null really is somebody's data, and there is none.
-    private static let droppedColumns: [(column: String, declaredDefault: String?)] = [
-        ("ZWEBSITEURL", nil),
-    ]
+    // NOTHING IS PENDING, and the list is kept with its machinery rather than deleted, because the next
+    // subtractive change is rehearsed by adding its column here rather than by writing this file again.
+    private static let droppedColumns: [(column: String, declaredDefault: String?)] = []
+
+    // The drop that has SHIPPED. `websiteURL` is gone from the model, leaving three past-tense comments
+    // behind it, and the migration has run on Dan's store: measured 2026-09-02 on a WAL inclusive copy,
+    // ZWEBSITEURL is not on ZPROSPECT at all.
+    //
+    // It MOVED here rather than being deleted, and #3482 is why. A rehearsal is consumed by the change it
+    // rehearses (L373): step 1 below asserts, deliberately, that the column is still on the clone, so the
+    // rehearsal cannot pass on a store that never carried it. That is a precondition which was true only
+    // until the work was done. Left in the pending list once the drop shipped it failed on every run, in
+    // wording that reads exactly like a real defect, on the one gate that verifies the Mac app at all
+    // since CI does not run the Swift suite, and the still-live half of this suite was unreadable behind
+    // it (L538).
+    //
+    // What survives here is the opposite assertion, and it is worth having: the drop stays landed. A
+    // column coming back means the model regained the property, which is a decision nobody has made.
+    private static let landedDrops = ["ZWEBSITEURL"]
 
     // And the pair that must SURVIVE, so a later change cannot quietly take them with it. They hold real
     // values and their removal is a decision nobody has made.
@@ -78,6 +99,15 @@ struct RetiredColumnsDryRunTests {
             return
         }
 
+        // Both lists empty would leave every loop below iterating over nothing while the suite reported a
+        // confident green having examined no column at all, which is this file's own stated defect one
+        // level up (L98). Named as its own outcome rather than left to the loops' silence.
+        guard !(Self.droppedColumns.isEmpty && Self.landedDrops.isEmpty) else {
+            Issue.record(Comment(rawValue: "no column is pending a drop and none is recorded as already "
+                                 + "dropped, so this run rehearsed nothing and confirmed nothing"))
+            return
+        }
+
         // 1. The clone really carries what is about to be dropped. Without this the whole rehearsal
         //    passes on a store that never had these columns, which is the emptiest possible result
         //    reading as the strongest possible proof (L98).
@@ -90,6 +120,14 @@ struct RetiredColumnsDryRunTests {
             #expect(onDisk.contains(column),
                     Comment(rawValue: "\(column) is not on the clone, so this run rehearsed dropping a "
                             + "column that was already gone"))
+        }
+
+        // 1b. And what has ALREADY been dropped is gone, and stays gone (#3482).
+        for column in Self.landedDrops {
+            #expect(!onDisk.contains(column),
+                    Comment(rawValue: "\(column) is back on the clone. Its drop shipped, so a store "
+                            + "carrying it again means the model regained the property, which is a "
+                            + "decision nobody has made."))
         }
 
         // 2. And they hold NOTHING. This is the assertion that would stop the change shipping: a column
