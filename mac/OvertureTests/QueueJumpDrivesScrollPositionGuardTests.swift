@@ -53,7 +53,11 @@ struct QueueJumpDrivesScrollPositionGuardTests {
             return
         }
         #expect(holder.contains(".onChange(of: jumpTarget)"))
-        #expect(holder.contains("topGroup = target.group"))
+        // #3437: the needle moved when the position did. The holder delegates its state to
+        // `PinnedScrollHolder` and writes through the binding that holder hands down, so the assignment
+        // is spelled differently. The assertion is the same one: a jump DRIVES the position rather than
+        // calling `proxy.scrollTo`, which is the #1573 collision this guard exists to prevent.
+        #expect(holder.contains("pinned.wrappedValue = target.group"))
     }
 
     // #1928: and both jumps LAND the row in the same place, at the top.
