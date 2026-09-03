@@ -43,13 +43,21 @@ struct ArchiveRevealOrderingGuardTests {
         let lines = revealCode
         #expect(!lines.isEmpty, "ArchiveView.content could not be read, so this measured nothing")
 
-        let setsPosition = lines.firstIndex { $0.contains("topKey = key") }
+        // #3437: the needle moved when the position did, from `topKey = key` to the holder's binding.
+        // ONLY the needle: the assertion below is the same comparison it always was, and the reason it
+        // exists is unchanged. Said out loud because this guard was written an hour before the change it
+        // then blocked, and the tempting move at that moment is to weaken a guard rather than re-aim it
+        // (L252 is the neighbouring trap: a test defending a decision that has since been reversed).
+        // What was reversed here is WHERE the position lives, never the order the two writes happen in.
+        let setsPosition = lines.firstIndex { $0.contains("pinned.wrappedValue = key") }
         let scrolls = lines.firstIndex { $0.contains("proxy.scrollTo(key") }
 
         guard let setsPosition, let scrolls else {
             Issue.record(Comment(rawValue: "expected ArchiveView.content to both point the persisted "
                                  + "position at the reveal target and scroll to it. Found the "
-                                 + "assignment: \(setsPosition != nil). Found the scroll: \(scrolls != nil)."))
+                                 + "assignment: \(setsPosition != nil). Found the scroll: \(scrolls != nil). "
+                                 + "If the position moved to another holder again, re-aim this needle and "
+                                 + "keep the ordering comparison, rather than removing the guard."))
             return
         }
         #expect(setsPosition < scrolls,
