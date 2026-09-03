@@ -215,6 +215,17 @@ struct QueueRenderPassWorkUnitCostTests {
     private static let pendingRecipients = 279
     // LIVE-SHAPE: prospectsWithADraftBody
     private static let prospectsWithADraftBody = 39
+    // #3506: the INTERSECTION, and the dimension this fixture was missing. Every figure above matched the
+    // live store exactly and the corpus still exercised five and a half times the real draft lint load,
+    // because the lint scales with PENDING recipients that carry a body and nothing recorded that pairing.
+    // Measured 2026-09-03: 42 recipients sit on the 38 body-carrying rows that have a contact, and only 16
+    // of them are pending. Every one of the store's 26 non-pending recipients is on such a row, which is
+    // what makes the shape consistent: a row gets a body when it is prepped, and its contacts are sent
+    // from there.
+    // LIVE-SHAPE: recipientsOnDraftBodyRows
+    private static let recipientsOnDraftBodyRows = 42
+    // LIVE-SHAPE: pendingRecipientsWithADraftBody
+    private static let pendingRecipientsWithADraftBody = 16
 
     // One card built per row, and not one more. This is the counter #2033 would have moved.
     private static let allowedQueueItems = 1142
@@ -229,15 +240,51 @@ struct QueueRenderPassWorkUnitCostTests {
     // Only a recipient whose `effectiveBody` is non-empty reaches `DraftCheck` at all, because
     // `Recipient.draftLintBlockers` short-circuits on an empty body first, so this is a fact about the
     // SHAPE and not about the row count. It is held separately from the two counters above for that
-    // reason (#3435 2c: a superlinear or shape-driven term goes against its own measure, never folded
-    // into a per-row figure).
+    // reason (#3435 2c: a shape-driven term goes against its own measure, never folded into a per-row
+    // figure).
     //
-    // 78 pending contacts carry a body in this fixture (the first 39 prospects, two contacts each). At
-    // the measured 4 runs per contact that is 312, and the pass really runs it 402 times, so 90 runs
-    // happen OUTSIDE card construction, in the other whole-store derivations the pass makes. That gap is
-    // not explained here and is not this issue's to close: it is filed, and the number is pinned so it
-    // cannot grow while nobody is looking.
-    private static let allowedDraftLintRuns = 402
+    // #3506 re-derived it. This read 402 while the corpus gave every body-carrying row two PENDING
+    // contacts, which no dimension then recorded: the fixture matched the live store on recipients,
+    // contacts, pending count and bodies, and still exercised five and a half times the real lint load,
+    // because the lint scales with the INTERSECTION. At the measured shape it is 82, against the live
+    // store's own reading of 73 taken through `QueueRenderPassLiveStoreCostTests` the same day. The
+    // remaining gap against the live store is the same unattributed term #3498 records. How the 82 splits
+    // between card construction and the rest of the pass is MEASURED by
+    // `theLintRunsAreAttributedBetweenCardBuildAndTheRestOfThePass`, not asserted here.
+    private static let allowedDraftLintRuns = 82
+
+    // MEASURED on this corpus by `theLintRunsAreAttributedBetweenCardBuildAndTheRestOfThePass`, not
+    // derived. The first version of this file asserted the split from arithmetic on a different
+    // fixture's per-contact figure and wrote it down as fact; the arithmetic happened to be right, and
+    // that is luck rather than method (L32, L353). 64 of the 82 are card construction.
+    private static let allowedLintRunsOutsideTheCardBuild = 18
+
+    // WHERE the 82 goes, measured on THIS corpus rather than inferred from the single-row attribution
+    // test below. The first version of this suite carried the split as a comment reading "64 of the 82
+    // are card construction and 18 elsewhere", arrived at by multiplying 16 contacts by the per-contact
+    // figure of 4 measured on a DIFFERENT fixture, and written down as though it had been measured. That
+    // is the habit this milestone has spent a day correcting in other code (L32, L353).
+    @Test func theLintRunsAreAttributedBetweenCardBuildAndTheRestOfThePass() throws {
+        let ctx = ModelContext(try container())
+        let rows = seed(ctx)
+
+        let cardsOnly = QueueRenderPass.WorkTally.measure {
+            for row in rows { _ = QueueItem(row) }
+        }
+        let wholePass = QueueRenderPass.WorkTally.measure {
+            _ = QueueRenderPass.make(inputs(rows))
+        }
+
+        #expect(cardsOnly.draftLintRuns > 0, "building every card ran the lint zero times")
+        #expect(wholePass.draftLintRuns == Self.allowedDraftLintRuns)
+
+        let elsewhere = wholePass.draftLintRuns - cardsOnly.draftLintRuns
+        #expect(elsewhere == Self.allowedLintRunsOutsideTheCardBuild,
+                Comment(rawValue: "building every card ran the lint \(cardsOnly.draftLintRuns) times and "
+                        + "a whole pass ran it \(wholePass.draftLintRuns), so \(elsewhere) happen "
+                        + "OUTSIDE card construction. #3498 is where that term is chased; this pins it so "
+                        + "it cannot grow unnoticed."))
+    }
 
     // The per-contact multiplier, pinned separately so a change that moves work between the send-group
     // build and the card build is visible even when the total holds. Measured, not read off the code.
@@ -258,8 +305,6 @@ struct QueueRenderPassWorkUnitCostTests {
         let venues = ["Weill Recital Hall", "SoHo Playhouse", "The Green Room 42", "Merkin Hall",
                       "Roulette Intermedium", "The Tank", "Bargemusic", "David Geffen Hall"]
         var rows: [Prospect] = []
-        var recipientsMade = 0
-        var pendingMade = 0
         for n in 0..<Self.corpusSize {
             let date = String(format: "2026-%02d-%02d", 8 + (n % 4), 1 + (n % 27))
             let venue = venues[n % venues.count]
@@ -283,29 +328,52 @@ struct QueueRenderPassWorkUnitCostTests {
             ctx.insert(p)
             rows.append(p)
         }
-        // 305 recipients over 198 prospects: the first few carry two, the rest one, so the per-card work
-        // is not uniform. 279 of the 305 are pending, matching the live split.
-        var n = 0
-        while recipientsMade < Self.recipientCount && n < Self.prospectsWithAContact {
-            let howMany = recipientsMade + (Self.prospectsWithAContact - n) < Self.recipientCount ? 2 : 1
-            for k in 0..<howMany where recipientsMade < Self.recipientCount {
-                let pending = pendingMade < Self.pendingRecipients
-                let r = Recipient(id: "contact-\(recipientsMade)",
-                                  email: "contact\(recipientsMade)@example.com",
-                                  name: "Contact \(recipientsMade)",
-                                  role: "programming",
-                                  provenance: .presenter)
-                r.sendState = pending ? SendState.pending : SendState.sent
+        // The recipients, laid out to the measured shape rather than spread evenly, because the shape is
+        // the whole point. 305 over 198 prospects, of which 42 sit on the 38 body-carrying rows that have
+        // a contact, and only 16 of THOSE are pending. Every one of the 26 non-pending recipients is on a
+        // body row, which is what makes it consistent: a row gets a draft when it is prepped and its
+        // contacts are sent from there.
+        var made = 0
+        var pendingMade = 0
+
+        // The body rows first: 38 of the 39 that carry a body also carry a contact, holding 42 between
+        // them, so four of them carry two.
+        let bodyRowsWithAContact = Self.prospectsWithADraftBody - 1
+        for n in 0..<bodyRowsWithAContact {
+            let howMany = n < (Self.recipientsOnDraftBodyRows - bodyRowsWithAContact) ? 2 : 1
+            for _ in 0..<howMany {
+                let pending = pendingMade < Self.pendingRecipientsWithADraftBody
+                addRecipient(ctx, to: rows[n], index: made, pending: pending)
                 if pending { pendingMade += 1 }
-                r.prospect = rows[n]
-                ctx.insert(r)
-                recipientsMade += 1
-                _ = k
+                made += 1
+            }
+        }
+
+        // Everything else with a contact is pending, which is what the remaining totals require.
+        var n = Self.prospectsWithADraftBody
+        while made < Self.recipientCount && n < Self.prospectsWithAContact + 1 {
+            let left = Self.recipientCount - made
+            let rowsLeft = Self.prospectsWithAContact + 1 - n
+            let howMany = left > rowsLeft ? 2 : 1
+            for _ in 0..<howMany where made < Self.recipientCount {
+                addRecipient(ctx, to: rows[n], index: made, pending: true)
+                made += 1
             }
             n += 1
         }
         try? ctx.save()
         return rows
+    }
+
+    private func addRecipient(_ ctx: ModelContext, to prospect: Prospect, index: Int, pending: Bool) {
+        let r = Recipient(id: "contact-\(index)",
+                          email: "contact\(index)@example.com",
+                          name: "Contact \(index)",
+                          role: "programming",
+                          provenance: .presenter)
+        r.sendState = pending ? SendState.pending : SendState.sent
+        r.prospect = prospect
+        ctx.insert(r)
     }
 
     private func inputs(_ rows: [Prospect]) -> QueueRenderPass.Inputs {
@@ -335,6 +403,13 @@ struct QueueRenderPassWorkUnitCostTests {
         #expect(Set(recipients.compactMap { $0.prospect?.naturalKey }).count == Self.prospectsWithAContact)
         #expect(recipients.filter { $0.sendState == .pending }.count == Self.pendingRecipients)
         #expect(rows.filter { ($0.draftBody ?? "").isEmpty == false }.count == Self.prospectsWithADraftBody)
+        // #3506: the INTERSECTION the lint scales with, held here so a seed that drifts back to giving
+        // every body-carrying row two pending contacts is caught by the shape test rather than by
+        // somebody noticing the pinned lint count looks large.
+        let onBodyRows = recipients.filter { ($0.prospect?.draftBody ?? "").isEmpty == false }
+        #expect(onBodyRows.count == Self.recipientsOnDraftBodyRows)
+        #expect(onBodyRows.filter { $0.sendState == .pending }.count
+                    == Self.pendingRecipientsWithADraftBody)
     }
 
     // One card per row, and one send-group build per card. These are the two counters #2033 would have

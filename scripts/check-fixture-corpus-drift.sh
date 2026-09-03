@@ -68,6 +68,14 @@ sql_for_dimension() {
     # lives on the prospect, so this is the dimension the draft-lint counter scales with.
     prospectsWithADraftBody)
                 echo "select count(*) from ZPROSPECT where ZDRAFTBODY is not null and ZDRAFTBODY <> '';" ;;
+    # #3506: the INTERSECTION, which is what the draft lint actually scales with and what no other
+    # dimension here can see. `Recipient.draftLintBlockers` reaches DraftCheck only through a non-empty
+    # effectiveBody, and QueueItem.init asks that of the PENDING recipients, so a fixture matching every
+    # dimension above can still exercise five times the real lint load (L48, L354).
+    pendingRecipientsWithADraftBody)
+                echo "select count(*) from ZRECIPIENT r left join ZPROSPECT p on r.ZPROSPECT = p.Z_PK where r.ZSENDSTATERAW = 'pending' and coalesce(nullif(r.ZOVERRIDEBODY,''), nullif(p.ZDRAFTBODY,'')) is not null;" ;;
+    recipientsOnDraftBodyRows)
+                echo "select count(*) from ZRECIPIENT r join ZPROSPECT p on r.ZPROSPECT = p.Z_PK where p.ZDRAFTBODY is not null and p.ZDRAFTBODY <> '';" ;;
     *)          return 1 ;;
   esac
 }
