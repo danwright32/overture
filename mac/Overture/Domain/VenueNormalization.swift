@@ -107,8 +107,17 @@ enum VenueNormalization {
     // Deciding it here would impose one of those answers on the other caller invisibly.
     // An UNBALANCED bracket matches nothing and is left exactly as it is, rather than eating the rest of
     // the name.
+    // #3432: compiled once, at first use, rather than on every call. These four ran per venue name on a
+    // path the queue exercises constantly, and each string-form call re-parsed its pattern.
+    private enum Patterns {
+        static let parenthetical = CompiledPattern(#"\s*\([^)]*\)"#)
+        static let runOfWhitespace = CompiledPattern(#"\s+"#)
+        static let slashSpacing = CompiledPattern(#"\s*/\s*"#)
+        static let commaSpacing = CompiledPattern(#"\s*,\s*"#)
+    }
+
     static func strippingParentheticals(_ raw: String) -> String {
-        raw.replacingOccurrences(of: #"\s*\([^)]*\)"#, with: "", options: .regularExpression)
+        Patterns.parenthetical.replacingMatches(in: raw, with: "")
             .trimmingCharacters(in: .whitespaces)
     }
 
@@ -145,20 +154,20 @@ enum VenueNormalization {
         s = foldStreetSuffixes(s)
         s = dropCommaBeforeStateCode(s)
         s = normalizeCommaSpacing(s)
-        s = s.replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+        s = Patterns.runOfWhitespace.replacingMatches(in: s, with: " ")
         return s.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     // "a/b", "a /b", "a/ b", "a  /  b" all become "a / b", matching the curated map key spelling
     // ("stern auditorium / perelman stage").
     private static func normalizeSlashSpacing(_ s: String) -> String {
-        s.replacingOccurrences(of: #"\s*/\s*"#, with: " / ", options: .regularExpression)
+        Patterns.slashSpacing.replacingMatches(in: s, with: " / ")
     }
 
     // Canonical comma spacing: exactly one space after each comma, none before. Applied after the
     // state-code fold so a comma it removed is not re-spaced.
     private static func normalizeCommaSpacing(_ s: String) -> String {
-        s.replacingOccurrences(of: #"\s*,\s*"#, with: ", ", options: .regularExpression)
+        Patterns.commaSpacing.replacingMatches(in: s, with: ", ")
     }
 
     // Expand a trailing street-suffix abbreviation to its full word, per comma-clause, but ONLY when the

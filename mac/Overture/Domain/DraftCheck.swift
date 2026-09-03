@@ -275,7 +275,7 @@ enum DraftCheck {
     private static func hasConcession(_ text: String) -> Bool {
         if concession.contains(where: text.contains) { return true }
         // "free" as a standalone word, but not the warm phrase "feel free".
-        return text.range(of: #"(?<!feel )\bfree\b"#, options: .regularExpression) != nil
+        return Patterns.standaloneFree.matches(text)
     }
 
     // #789. The ONLY host a draft may link is Dan's own site: there is no pricing page and no
@@ -303,11 +303,41 @@ enum DraftCheck {
     // it ("tickets@carnegiehall.org") is never read as a link to that site.
     private static let emailPattern = #"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}"#
 
+    // #3432: every pattern in this file, compiled ONCE at first use. The literals above stay where they
+    // are, with the prose explaining each rule; what changed is that they are parsed once rather than on
+    // every call. `DraftCheck.findings` was the single largest symbol in the typing profile at 143
+    // samples, so this is the same fix the venue patterns got, on the path that dominates it.
+    //
+    // `links` and `galleryLinks` are built from constants (`linkPatterns`, `galleryPaths` and
+    // `allowedLinkHost`), so the whole set is knowable up front. The gallery patterns were the least
+    // obvious: each was interpolated from the host and a path INSIDE a `contains` closure, so all five
+    // were rebuilt and recompiled on every call.
+    private enum Patterns {
+        static let email = CompiledPattern(emailPattern)
+        static let standaloneFree = CompiledPattern(#"(?<!feel )\bfree\b"#)
+        static let placeholder = CompiledPattern(#"\[[^\]\n]{1,60}\]"#)
+        static let links: [NSRegularExpression] = linkPatterns.compactMap {
+            try? NSRegularExpression(pattern: $0)
+        }
+        // Optionals rather than CompiledPattern, because each of these reads CAPTURE GROUPS out of its
+        // matches, which is more than CompiledPattern's yes-or-no and replace-all interface offers. Their
+        // call sites already handled a nil regex by declining to judge, and that behaviour is unchanged.
+        static let sentenceBoundary = try? NSRegularExpression(pattern: #"[.!?]["')\]]*\s+(?=[A-Z"(])"#)
+        static let dollarFigure = try? NSRegularExpression(pattern: #"\$\s?(\d[\d,]*)"#)
+        static let commaJoinedConnector = try? NSRegularExpression(
+            pattern: #",\s+("# + clauseConnectors.joined(separator: "|") + #")\s+([a-z']+)"#,
+            options: [.caseInsensitive])
+        static let galleryLinks: [CompiledPattern] = {
+            let host = allowedLinkHost.replacingOccurrences(of: ".", with: "\\.")
+            return galleryPaths.map {
+                CompiledPattern("(?i)(?:https?://)?(?:www\\.)?\(host)/\($0)(?![A-Za-z0-9-])")
+            }
+        }()
+    }
+
     private static func hasForeignLink(_ body: String) -> Bool {
-        let text = body.replacingOccurrences(of: emailPattern, with: " ",
-                                             options: .regularExpression)
-        for pattern in linkPatterns {
-            guard let re = try? NSRegularExpression(pattern: pattern) else { continue }
+        let text = Patterns.email.replacingMatches(in: body, with: " ")
+        for re in Patterns.links {
             let ns = text as NSString
             for m in re.matches(in: text, range: NSRange(location: 0, length: ns.length)) {
                 var host = ns.substring(with: m.range(at: 1)).lowercased()
@@ -324,19 +354,15 @@ enum DraftCheck {
     // path. The path must be the whole first segment, so a hypothetical /music-notes page would not match
     // a rule that is about the five galleries and nothing else.
     private static func hasGalleryPathLink(_ body: String) -> Bool {
-        let text = body.replacingOccurrences(of: emailPattern, with: " ", options: .regularExpression)
-        let host = allowedLinkHost.replacingOccurrences(of: ".", with: "\\.")
-        return galleryPaths.contains { path in
-            let pattern = "(?i)(?:https?://)?(?:www\\.)?\(host)/\(path)(?![A-Za-z0-9-])"
-            return text.range(of: pattern, options: .regularExpression) != nil
-        }
+        let text = Patterns.email.replacingMatches(in: body, with: " ")
+        return Patterns.galleryLinks.contains { $0.matches(text) }
     }
 
     // A template slot the drafter left unfilled ("Hi [NAME]", "at [VENUE]"). Square brackets carry no
     // ordinary meaning in Dan's prose, so their mere presence is the signal; no vocabulary to keep
     // in sync with whatever the drafter happens to name its slots.
     private static func hasPlaceholder(_ body: String) -> Bool {
-        body.range(of: #"\[[^\]\n]{1,60}\]"#, options: .regularExpression) != nil
+        Patterns.placeholder.matches(body)
     }
 
     // #1887: the draft states HOW MANY times Dan has shot this room.
@@ -498,8 +524,7 @@ enum DraftCheck {
             .map { $0.trimmingCharacters(in: .whitespaces) }
             .filter { !$0.isEmpty && !$0.hasSuffix(",") && !$0.hasSuffix(":") }
         let text = lines.joined(separator: " ")
-        guard !text.isEmpty,
-              let re = try? NSRegularExpression(pattern: #"[.!?]["')\]]*\s+(?=[A-Z"(])"#) else {
+        guard !text.isEmpty, let re = Patterns.sentenceBoundary else {
             return text.isEmpty ? [] : [text]
         }
         let ns = text as NSString
@@ -555,9 +580,7 @@ enum DraftCheck {
     // The FIRST comma-joined connector whose trailing text reads as a clause rather than as the last item
     // of a list. Only "and" and "or" need that test: no list is written "x, so y".
     private static func commaJoinedConnector(_ sentence: String) -> String? {
-        let pattern = #",\s+("# + clauseConnectors.joined(separator: "|") + #")\s+([a-z']+)"#
-        guard let re = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive])
-        else { return nil }
+        guard let re = Patterns.commaJoinedConnector else { return nil }
         let ns = sentence as NSString
         for m in re.matches(in: sentence, range: NSRange(location: 0, length: ns.length)) {
             let word = ns.substring(with: m.range(at: 1)).lowercased()
@@ -576,26 +599,35 @@ enum DraftCheck {
         return parts.contains(word)
     }
 
-    private static func hasVenueHistoryCount(_ body: String) -> Bool {
+    // #3432: compiled once. This was the worst instance in the file by some way: the four pattern
+    // strings were rebuilt on every call, and up to three of them were compiled PER SENTENCE inside the
+    // loop below, so a body of eight sentences paid up to twenty four regex compilations.
+    //
+    // The ignore markers travel WITH the literals rather than staying where they were. They are what
+    // keeps these out of docs/copy-inventory.md, and they mark words MATCHED in a draft rather than
+    // anything Overture says to Dan, which is just as true of them here as it was inside the function.
+    private enum VenueHistoryPatterns {
         // copy-inventory:ignore-start  Words MATCHED in a draft, never shown to Dan (#1887)
-        let pastTenseShooting =
-            #"(?i)\bI(?:'ve| have)?\s+(?:have\s+)?(?:shot|photographed|covered|worked)\b"#
-        let numberWord =
+        private static let numberWord =
             #"(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|dozen|dozens|"#
             + #"several|numerous|countless|multiple|many)"#
-        let occasion = #"(?:show|shows|time|times|concert|concerts|performance|performances|"#
+        private static let occasion = #"(?:show|shows|time|times|concert|concerts|performance|performances|"#
             + #"night|nights|gig|gigs|event|events|occasion|occasions)"#
-        // "twice"/"three times" and "a couple of" are counts written as words rather than digits.
-        let standaloneCount = #"(?i)\b(?:twice|thrice|a\s+couple(?:\s+of)?)\b"#
-        // copy-inventory:ignore-end
 
+        static let pastTenseShooting = CompiledPattern(
+            #"(?i)\bI(?:'ve| have)?\s+(?:have\s+)?(?:shot|photographed|covered|worked)\b"#)
+        // "twice"/"three times" and "a couple of" are counts written as words rather than digits.
+        static let standaloneCount = CompiledPattern(#"(?i)\b(?:twice|thrice|a\s+couple(?:\s+of)?)\b"#)
+        static let counted = CompiledPattern(
+            #"(?i)\b"# + numberWord + #"\b(?:\s+\w+){0,2}\s+"# + occasion + #"\b"#)
+        // copy-inventory:ignore-end
+    }
+
+    private static func hasVenueHistoryCount(_ body: String) -> Bool {
         for sentence in body.components(separatedBy: CharacterSet(charactersIn: ".!?\n")) {
-            guard sentence.range(of: pastTenseShooting, options: .regularExpression) != nil else {
-                continue
-            }
-            if sentence.range(of: standaloneCount, options: .regularExpression) != nil { return true }
-            let counted = #"(?i)\b"# + numberWord + #"\b(?:\s+\w+){0,2}\s+"# + occasion + #"\b"#
-            if sentence.range(of: counted, options: .regularExpression) != nil { return true }
+            guard VenueHistoryPatterns.pastTenseShooting.matches(sentence) else { continue }
+            if VenueHistoryPatterns.standaloneCount.matches(sentence) { return true }
+            if VenueHistoryPatterns.counted.matches(sentence) { return true }
         }
         return false
     }
@@ -603,7 +635,7 @@ enum DraftCheck {
     // The canonical rate is "$250 an hour plus tax, one-hour minimum" (#39). Any other dollar
     // figure in the body is a non-canonical rate; stating $250 itself is fine.
     private static func hasNonCanonicalRate(_ text: String) -> Bool {
-        guard let re = try? NSRegularExpression(pattern: #"\$\s?(\d[\d,]*)"#) else { return false }
+        guard let re = Patterns.dollarFigure else { return false }
         let ns = text as NSString
         for m in re.matches(in: text, range: NSRange(location: 0, length: ns.length)) {
             let amount = ns.substring(with: m.range(at: 1)).replacingOccurrences(of: ",", with: "")
