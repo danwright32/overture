@@ -76,3 +76,6 @@ DerivedData/
 .overture-hosted-suite-seen
 # #3386: the main-actor share this machine last measured, for the same reason as the line above.
 .overture-main-actor-share
+
+# #2597: the last measured queue rebuild cost, per machine, written by run-tests-locked.sh
+.overture-queue-cost-measured

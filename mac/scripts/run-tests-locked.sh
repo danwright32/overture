@@ -785,6 +785,29 @@ main() {
     printf '%s\n' "${LIVE_CORPUS_NEXT}" > "${LIVE_CORPUS_RECORD}" 2>/dev/null || true
   fi
 
+  # #2597: how old the measured queue rebuild cost is, said on every run.
+  #
+  # `QueueRebuildCostTests` is opt in, so its figure gets written down and nothing re-runs it while the
+  # store grows every night (L32, L316). This is `check-prep-eval-freshness.sh`'s shape: the expensive
+  # measurement stays opt in, and its AGE rides along so nobody has to remember to wonder.
+  #
+  # The record lives beside the repo, is gitignored and per machine, with the DATE inside the file rather
+  # than as its mtime, all three on `.overture-live-corpus-seen`'s exact precedent and for its reasons: a
+  # clone rewrites every mtime, which would reset the age to zero, and that is the one number this must
+  # never get wrong. OVERRIDABLE for that record's exact reason too, since the fixture drives the real
+  # wrapper and without a seam its runs would write into the actual repository (L2).
+  QUEUE_COST_RECORD="${OVERTURE_QUEUE_COST_RECORD:-${MAC_DIR}/../.overture-queue-cost-measured}"
+  QUEUE_COST_TODAY="$(date +%Y-%m-%d)"
+  QUEUE_COST_SEEN="$(cat "${QUEUE_COST_RECORD}" 2>/dev/null || true)"
+  echo "run-tests-locked.sh: $(queue_cost_report "${QUEUE_COST_TODAY}" "${QUEUE_COST_SEEN}" "${last_output}")" >&2
+  # Written only when this run actually took the measurement. `queue_cost_seen_update` decides that and
+  # returns the whole new contents, so an ordinary run comes back unchanged and the last real measurement
+  # is preserved rather than stamped over.
+  QUEUE_COST_NEXT="$(queue_cost_seen_update "${last_output}" "${QUEUE_COST_TODAY}" "${QUEUE_COST_SEEN}")"
+  if [[ -n "${QUEUE_COST_NEXT}" && "${QUEUE_COST_NEXT}" != "${QUEUE_COST_SEEN}" ]]; then
+    printf '%s\n' "${QUEUE_COST_NEXT}" > "${QUEUE_COST_RECORD}" 2>/dev/null || true
+  fi
+
   # #3166: and this run's cost, appended to a local series, so a climb has something to be seen against.
   #
   # Advisory only and never blocking, in the way `check-branch-backlog.sh` already rides along: the point
