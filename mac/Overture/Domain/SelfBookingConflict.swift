@@ -98,12 +98,24 @@ enum SelfBookingConflict {
     // and the direct comparison cannot return the same collisions in different orders, and a rendered list
     // cannot reshuffle between redraws.
     static func sameNight(for target: Show, among all: [Show]) -> [Overlap] {
-        overlaps(for: target) { night in all.filter { $0.isCommitment && $0.nights.contains(night) } }
+        overlaps(for: target) { night in
+            // #3438: every show in the queue is examined, for every night this target plays. That is the
+            // quadratic term, and counting it here is what lets the indexed reading below be compared
+            // against it as a number rather than as an argument.
+            QueueRenderPass.WorkTally.recordSelfBookingShowsExamined(all.count)
+            return all.filter { $0.isCommitment && $0.nights.contains(night) }
+        }
     }
 
     // The same question against a prebuilt index. Same predicate, same order, same answer.
     static func sameNight(for target: Show, in index: NightIndex) -> [Overlap] {
-        overlaps(for: target) { index.committedByNight[$0] ?? [] }
+        overlaps(for: target) { night in
+            let candidates = index.committedByNight[night] ?? []
+            // #3438: only the shows already ON this night, which is what the index buys. On the live
+            // store's largest measured cluster that is 19, against a whole queue of 1,142.
+            QueueRenderPass.WorkTally.recordSelfBookingShowsExamined(candidates.count)
+            return candidates
+        }
     }
 
     private static func overlaps(for target: Show,

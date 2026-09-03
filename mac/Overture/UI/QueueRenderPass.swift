@@ -88,11 +88,17 @@ enum QueueRenderPass {
         @TaskLocal static var current: WorkTally?
 
         private let lock = NSLock()
-        private var counts = (queueItems: 0, sendGroupBuilds: 0, draftLintRuns: 0)
+        private var counts = (queueItems: 0, sendGroupBuilds: 0, draftLintRuns: 0,
+                              selfBookingShowsExamined: 0)
 
         var queueItems: Int { lock.withLock { counts.queueItems } }
         var sendGroupBuilds: Int { lock.withLock { counts.sendGroupBuilds } }
         var draftLintRuns: Int { lock.withLock { counts.draftLintRuns } }
+        // #3438: how many OTHER shows the self-booking check had to look at. Counted as shows
+        // EXAMINED rather than calls, because the term is quadratic in shows sharing a date and a
+        // call count is the same number whether each call reads one night's bucket or walks the
+        // whole queue (L63).
+        var selfBookingShowsExamined: Int { lock.withLock { counts.selfBookingShowsExamined } }
 
         // Each recorded through the TYPE rather than on an instance, so a call site does not need to know
         // whether anybody is listening, and reads one task local before doing anything else.
@@ -107,6 +113,10 @@ enum QueueRenderPass {
         static func recordDraftLintRun() {
             guard let t = current else { return }
             t.lock.withLock { t.counts.draftLintRuns += 1 }
+        }
+        static func recordSelfBookingShowsExamined(_ n: Int) {
+            guard n > 0, let t = current else { return }
+            t.lock.withLock { t.counts.selfBookingShowsExamined += n }
         }
 
         // Run `body` with a fresh tally bound, and hand back what it spent. The ONLY way to read these

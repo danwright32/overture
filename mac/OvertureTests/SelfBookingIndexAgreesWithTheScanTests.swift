@@ -102,6 +102,36 @@ struct SelfBookingIndexAgreesWithTheScanTests {
         }
     }
 
+    // #3438 asked that the win be a NUMBER rather than a claim, and this is that number. Both readings
+    // are run over the same corpus and the shows each had to EXAMINE are counted, which is the quantity
+    // that scales: the term is quadratic in shows sharing a date, so a call count would be identical for
+    // both and would say nothing at all (L63).
+    @Test func theIndexExaminesFarFewerShowsThanTheScanForTheSameAnswer() {
+        let all = corpus
+        let index = SelfBookingConflict.NightIndex(all)
+
+        let scanning = QueueRenderPass.WorkTally.measure {
+            for target in all { _ = SelfBookingConflict.conflicts(for: target, among: all) }
+        }
+        let indexed = QueueRenderPass.WorkTally.measure {
+            for target in all { _ = SelfBookingConflict.conflicts(for: target, in: index) }
+        }
+
+        // Both really ran, so a zero cannot read as a saving (L98).
+        #expect(scanning.selfBookingShowsExamined > 0)
+        #expect(indexed.selfBookingShowsExamined > 0)
+
+        // The shape of the win, asserted as a RATIO rather than as two pinned numbers, because both move
+        // with the corpus and only their relationship is the claim. Five is well below the measured ratio
+        // and is deliberately not at the edge of it, so an ordinary change to the fixture cannot make this
+        // fire while the index is still working (L172).
+        #expect(indexed.selfBookingShowsExamined * 5 < scanning.selfBookingShowsExamined,
+                Comment(rawValue: "the index examined \(indexed.selfBookingShowsExamined) shows against "
+                        + "the scan's \(scanning.selfBookingShowsExamined) over \(all.count) rows. The "
+                        + "index is supposed to reduce this to the shows already on each night; if the "
+                        + "two are close, it is walking the queue after all."))
+    }
+
     // An uncommitted show is invisible to both readings. Asserted because it is the one input where the
     // index's build loop and the scan's filter apply the same rule in different places, so a change to
     // one could silently keep the other.
