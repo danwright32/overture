@@ -128,17 +128,28 @@ struct QueueRenderPassLiveStoreCostTests {
         let rest = max(0, passSeconds - itemsSeconds)
 
         // Counts and durations only. Nothing here can name a show, a venue, a person or a URL.
+        //
+        // GROUPED so the arithmetic cannot be misread. The first version listed the fetch beside the
+        // pass's own two halves above a line reading `whole pass`, and those three do not add up to it:
+        // the fetch happens BEFORE the pass and is not part of it, so a reader summing the block got
+        // 985 against a stated 813 and had no way to tell which was wrong. Anything printed here is a
+        // figure somebody will quote out of context, so the groups are named and the end to end total is
+        // stated rather than left to be computed (L118, L287).
         print("""
         queue-live-store-cost: one pass over the live store
           rows                        \(prospects.count)
           recipients                  \(recipients)
-          fetch and materialise       \(ms(fetchSeconds)) ms
-          build the cards             \(ms(itemsSeconds)) ms
-          the rest of the pass        \(ms(rest)) ms
-          whole pass                  \(ms(passSeconds)) ms
-          cards built                 \(work.queueItems)
-          send groups built           \(work.sendGroupBuilds)
-          draft lint runs             \(work.draftLintRuns)
+
+          BEFORE the pass, paid once per store change, twice where two queries read the table:
+            fetch and materialise     \(ms(fetchSeconds)) ms
+          THE PASS itself, which these two divide between them:
+            build the cards           \(ms(itemsSeconds)) ms
+            everything else           \(ms(rest)) ms
+            the pass                  \(ms(passSeconds)) ms
+          END TO END, the fetch plus the pass:
+            total                     \(ms(fetchSeconds + passSeconds)) ms
+
+          work units in the pass: \(work.queueItems) cards, \(work.sendGroupBuilds) send groups, \(work.draftLintRuns) draft lint runs
         """)
 
         // The only assertions, and both are about the measurement being REAL rather than about the
