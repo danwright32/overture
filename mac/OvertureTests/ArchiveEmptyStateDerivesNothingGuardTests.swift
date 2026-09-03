@@ -61,8 +61,13 @@ struct ArchiveEmptyStateDerivesNothingGuardTests {
     @Test func theDerivationIsOneToOneWithItsInput() {
         let source = SourceGuardHelper.source("Overture/UI/QueueView+Model.swift")
         #expect(!source.isEmpty)
-        guard let items = SourceGuardHelper.propertyBody("static func items(from prospects: [Prospect],",
-                                                         in: source) else {
+        // Found by NAME through `bodyOfFunction`, never by a `propertyBody` marker on the signature.
+        // `SourceGuardMarkerIntegrityTests` refused the first version for exactly that: `propertyBody`
+        // counts braces from its marker, so a marker stopping mid-signature starts the scan inside the
+        // parameter list and only balances at the end of the whole type. The "body" it returned was
+        // every line of the file below that point, which of course contains the map, so the assertion
+        // agreed with itself whatever the function did (L70). It was hollow and it passed.
+        guard let items = SourceGuardHelper.bodyOfFunction(named: "items", in: source) else {
             Issue.record("expected to find QueueModel.items(from:)")
             return
         }
