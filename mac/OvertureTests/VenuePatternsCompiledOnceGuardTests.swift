@@ -70,10 +70,17 @@ struct VenuePatternsCompiledOnceGuardTests {
                         + "the Patterns store, so they are compiled on every call."))
     }
 
+    // It asks for `CompiledPattern` rather than `NSRegularExpression`, which is what this said first and
+    // why it went red: the shared type arrived after the guard was written, and by then neither file
+    // names the regex type at all. A guard describing an implementation the code does not have is a
+    // second definition of the rule, free to drift from the first.
     @Test func theCompiledPatternsAreStoredStatics() {
         #expect(!source.isEmpty)
-        #expect(source.contains("static let"), "the compiled patterns are held as statics")
-        #expect(source.contains("NSRegularExpression"),
-                "the patterns are compiled once through NSRegularExpression rather than per call")
+        #expect(!draftCheck.isEmpty)
+        for file in [source, draftCheck] {
+            #expect(file.contains("static let"), "the compiled patterns are held as statics")
+            #expect(file.contains("CompiledPattern("),
+                    "the patterns are compiled once through the shared CompiledPattern, not per call")
+        }
     }
 }
