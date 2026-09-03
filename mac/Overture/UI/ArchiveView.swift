@@ -201,7 +201,20 @@ struct ArchiveView: View {
 
     private var emptyState: some View {
         VStack(spacing: OVSpacing.xs) {
-            let empty = EmptyState.archive(hasAnyItems: !items.isEmpty)   // #885
+            // #3479: asked of the @Query array, not of the derivation. `items` is
+            // `prospects.map { ... }`, a one-to-one map, so `items.isEmpty` and `prospects.isEmpty` are
+            // always the same value and this reads no rows at all.
+            //
+            // It was `!items.isEmpty`, and that was a SECOND whole-store derivation: `content` had
+            // already built the corpus to learn `filtered.isEmpty`, then the empty branch built all
+            // 1,139 rows again to choose between two sentences. Measured on the running build against
+            // the live store 2026-09-02, `ArchiveView.emptyState` weighed 1,535 main-thread samples and
+            // 1,530 of them were `ArchiveView.items`, so a search matching nothing paid for the corpus
+            // twice.
+            //
+            // ArchiveEmptyStateDerivesNothingGuardTests pins the one-to-one map this rests on, because
+            // the cheap answer is only the RIGHT answer while that holds (L70).
+            let empty = EmptyState.archive(hasAnyItems: !prospects.isEmpty)   // #885
             Text(empty.title)
                 .font(OVType.dateHeading).foregroundStyle(OVColor.ink)
             Text(empty.detail)
