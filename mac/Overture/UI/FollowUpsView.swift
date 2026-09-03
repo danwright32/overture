@@ -50,7 +50,6 @@ struct FollowUpsView: View {
     private enum ScrollSection: Hashable {
         case afterTheShow, silent, stalledReplyDrafts, conversationsToConfirm
     }
-    @State private var topSection: ScrollSection?
 
     // #948: each pending send now carries the branded SendConfirmation the shared SendConfirmSheet
     // renders (the same sheet the main draft send uses), instead of a preview string for a stock alert.
@@ -110,7 +109,12 @@ struct FollowUpsView: View {
                     .font(OVType.body).foregroundStyle(OVColor.inkSoft).multilineTextAlignment(.center)
                     .frame(maxWidth: .infinity, maxHeight: .infinity).padding(OVSpacing.xl)
             } else {
-                ScrollView {
+                // #3437: the position lives on the holder, for the reason the holder's own header gives.
+                // This sheet has no jump and no reveal, so it ignores both parameters.
+                // The identity is spelled out because this caller uses neither parameter, so nothing else
+                // in the expression says what the position is keyed by. It is the section, which is the
+                // granularity that holds up when a run reshuffles the rows within one.
+                PinnedScrollHolder { (_: ScrollViewProxy, _: Binding<ScrollSection?>) in
                     VStack(alignment: .leading, spacing: OVSpacing.lg) {
                         // #2816: built ONCE for both sections rather than per row (#1121).
                         let sourceCalendars = QueueModel.sourceCalendarIndex(watchedSources)
@@ -164,8 +168,6 @@ struct FollowUpsView: View {
                     .scrollTargetLayout()
                     .padding(OVSpacing.lg)
                 }
-                // #976: hold the scroll on the top visible section across a @Query rebuild (topSection).
-                .scrollPosition(id: $topSection, anchor: .top)
             }
         }
         .frame(width: 500, height: 560)

@@ -47,8 +47,17 @@ struct QueueInvalidationGuardTests {
             Issue.record("expected to find QueueScrollHolder")
             return
         }
-        #expect(holder.contains("@State private var topGroup: String?"))
-        #expect(holder.contains(".scrollPosition(id: $topGroup, anchor: .top)"))
+        // #3437: the needles moved when the position did. `QueueScrollHolder` no longer declares the
+        // state or wears the modifier itself; it delegates both to `PinnedScrollHolder`, which Archive
+        // and Follow-ups use too, so there is one definition of holding a position rather than three.
+        //
+        // The ASSERTION is unchanged and so is its reason: the position must live somewhere that is not
+        // the body which derives, and the holder must be what owns it. Re-aimed rather than relaxed,
+        // because a guard weakened to let a change through stops being a guard (L1, L252).
+        #expect(holder.contains("PinnedScrollHolder"))
+        let shared = SourceGuardHelper.source("Overture/UI/PinnedScrollHolder.swift")
+        #expect(shared.contains("@State private var pinned: ID?"))
+        #expect(shared.contains(".scrollPosition(id: $pinned, anchor: .top)"))
     }
 
     // The content arrives as a closure, NOT as a built view. A built view would be constructed in
