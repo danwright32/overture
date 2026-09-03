@@ -1140,6 +1140,71 @@ SWIFT
 assert_eq "a directory whose files read no source counts zero, promptly" \
   "$(source_guard_declarations_under "${EMPTY_GUARD_DIR}")" "0"
 
+# ---------------------------------------------------------------------------
+# queue_cost_report / queue_cost_seen_update: #2597, how old the measured rebuild cost is
+# ---------------------------------------------------------------------------
+# `QueueRebuildCostTests` is opt in, because it builds a corpus the size of the live store and times it,
+# which is seconds of work and a stopwatch. So the figure it produces is written down somewhere and
+# nothing re-runs it, and the store grows every night: the number quietly stops describing reality while
+# still reading as measured (L32, L316). This is `check-prep-eval-freshness.sh`'s answer, applied here:
+# the expensive thing stays opt in, and its AGE rides along on every push.
+#
+# Advisory and deliberately WITHOUT a staleness threshold. A gate on "this measurement is old" fires on
+# the ordinary case, which is every push that did not opt in, and gets switched off within a day (L93).
+# What the quantities cost is guarded continuously and separately, by #2048's per-card work counters.
+
+QCOST_SEEN="date=2026-08-23
+ms=533.0
+rows=1139"
+
+# The run that TOOK the measurement says so, rather than reporting the state it found on the way in.
+# Without this the one run that actually measured printed "NEVER measured on this clone", which is the
+# most misleading moment available for that sentence: it is the run whose figure is freshest. Caught by
+# running it, not by reading it (L11).
+assert_eq "the run that measured reports its own figure" \
+  "$(queue_cost_report "${TODAY}" "" "queue-rebuild-cost: one rebuild of 1139 rows
+  total                       409.1 ms")" \
+  "Queue rebuild cost: 409.1 ms over 1139 rows, measured by THIS run."
+
+# The state that must never be silent: nothing has ever measured it here. A clone, an agent worktree and
+# a fresh checkout are all in it, and it must not read like a healthy figure (L98).
+assert_eq "never measured on this clone says so" \
+  "$(queue_cost_report "${TODAY}" "")" \
+  "Queue rebuild cost: NEVER measured on this clone. Run TEST_RUNNER_MEASURE_QUEUE_REBUILD=1 to take it."
+
+# The ordinary state: a figure exists and its age is stated, so a reader can judge whether to trust it
+# without opening the file or re-running anything.
+assert_eq "an existing figure is reported with its age" \
+  "$(queue_cost_report "${TODAY}" "${QCOST_SEEN}")" \
+  "Queue rebuild cost: 533.0 ms over 1139 rows, last measured 2026-08-23 (0 days ago)."
+
+# A record this run cannot read is its own state. A half written file and a clean one are not the same
+# thing, and the emptiest possible failure must not read as the cleanest possible answer (L11, L98).
+assert_eq "an unreadable record is not reported as never measured" \
+  "$(queue_cost_report "${TODAY}" "date=2026-08-23")" \
+  "Queue rebuild cost: UNREADABLE record. It carries a date but no figure, so nothing here says what the last measurement was."
+
+# What gets REMEMBERED, pure, so the call site only writes what this returns.
+
+# A run that took a measurement stamps it, figure and all.
+assert_eq "a run that measured stamps the new figure" \
+  "$(queue_cost_seen_update "queue-rebuild-cost: one rebuild of 1142 rows
+  total                       541.2 ms" "${TODAY}" "${QCOST_SEEN}")" \
+  "date=2026-08-23
+ms=541.2
+rows=1142"
+
+# The case the whole thing rests on: an ordinary run did NOT measure, and must change nothing, or the
+# date would be stamped forward on every push and the age would always read zero, which is the defect
+# wearing a date.
+assert_eq "a run that did not measure leaves the record untouched" \
+  "$(queue_cost_seen_update "queue-rebuild-cost: not measured. Set TEST_RUNNER_MEASURE_QUEUE_REBUILD=1 to run it." "${TODAY}" "${QCOST_SEEN}")" \
+  "${QCOST_SEEN}"
+
+assert_eq "a run with no cost line at all leaves the record untouched" \
+  "$(queue_cost_seen_update "" "${TODAY}" "${QCOST_SEEN}")" \
+  "${QCOST_SEEN}"
+
 # Removed here rather than in a trap: this file already has an EXIT trap, and bash keeps exactly one, so
 # a second would silently replace the first and leak what that one was cleaning (#3065's own message
 # says so). Nothing below reads either directory.

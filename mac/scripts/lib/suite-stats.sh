@@ -809,6 +809,86 @@ live_corpus_seen_update() {
 }
 
 # ---------------------------------------------------------------------------
+# #2597: how old the measured queue rebuild cost is
+# ---------------------------------------------------------------------------
+# `QueueRebuildCostTests` is OPT IN, because it builds a corpus the size of the live store and times it,
+# which is seconds of work and a stopwatch, neither of which belongs on the mandatory pre-push gate. The
+# consequence is that its figure gets written down and nothing re-runs it, while the store grows every
+# night, so the number quietly stops describing reality while still reading as measured (L32, L316).
+#
+# This is `check-prep-eval-freshness.sh`'s answer applied here: the expensive thing stays opt in, and its
+# AGE rides along on every push, so nobody has to remember to wonder.
+#
+# ADVISORY, and deliberately with NO staleness threshold. A gate on "this measurement is old" fires on
+# the ordinary case, which is every push that did not opt in, and gets its threshold raised until it
+# catches nothing (L36, L93). What the rebuild COSTS in work units is guarded continuously and
+# separately, by #2048's per-card counters on every run; this covers only the clock figure, which is the
+# half no always-on test can own.
+queue_cost_field() {
+  local key="$1" seen="$2"
+  printf '%s\n' "${seen}" | awk -F= -v k="${key}" '$1 == k { print $2; exit }'
+}
+
+# The line. Four states, kept apart because an unmeasured figure and a fresh one look identical from
+# silence (L11, L98).
+queue_cost_report() {
+  local today="$1" seen="${2:-}" output="${3:-}" date ms rows days fresh
+  # This run's OWN reading wins over the stored one, the way `live_corpus_report` reads the run's output
+  # rather than a record. Without it the single run that actually took the measurement reported "NEVER
+  # measured on this clone", which is the most misleading moment that sentence has.
+  fresh="$(queue_cost_seen_update "${output}" "${today}" "")"
+  if [[ -n "${fresh}" ]]; then
+    echo "Queue rebuild cost: $(queue_cost_field ms "${fresh}") ms over $(queue_cost_field rows "${fresh}") rows, measured by THIS run."
+    return 0
+  fi
+  if [[ -z "${seen}" ]]; then
+    echo "Queue rebuild cost: NEVER measured on this clone. Run TEST_RUNNER_MEASURE_QUEUE_REBUILD=1 to take it."
+    return 0
+  fi
+  date="$(queue_cost_field date "${seen}")"
+  ms="$(queue_cost_field ms "${seen}")"
+  rows="$(queue_cost_field rows "${seen}")"
+  if [[ -z "${date}" || -z "${ms}" || -z "${rows}" ]]; then
+    echo "Queue rebuild cost: UNREADABLE record. It carries a date but no figure, so nothing here says what the last measurement was."
+    return 0
+  fi
+  days="$(days_since "${date}" "${today}")"
+  echo "Queue rebuild cost: ${ms} ms over ${rows} rows, last measured ${date} (${days} days ago)."
+}
+
+# What gets REMEMBERED. Pure, returning the file's whole new contents, so the call site only ever writes
+# what this hands back.
+#
+# The case the whole thing rests on is the LAST one: a run that did not take the measurement must change
+# NOTHING. Stamping every run with today would move the date forward while the figure stayed put, and the
+# age would always read zero, which is the defect wearing a date. That is the same rule, for the same
+# reason, as `live_corpus_seen_update` above.
+queue_cost_seen_update() {
+  local output="$1" today="$2" seen="${3:-}" parsed rows ms
+  # ONE awk over a herestring, with no pipeline at all, which is deliberate rather than tidy. The first
+  # version of this read `printf ... | grep ... | head -1`, and `run-shell-fixtures.sh`'s #3401 guard
+  # refused it: `head` exits on its first line, which kills the producer with SIGPIPE, and under
+  # `set -o pipefail` that 141 becomes the pipeline's status. An EARLY match and NO match are then
+  # indistinguishable, and the failure reads as a clean "nothing was measured" (L183, #3275).
+  #
+  # The rows count and the total live on consecutive lines, so `getline` takes the second while the first
+  # is still in hand, and `exit` stops at the first pairing rather than a consumer stopping it.
+  parsed="$(awk '
+    /queue-rebuild-cost: one rebuild of/ {
+      if (match($0, /of [0-9]+ rows/)) { r = substr($0, RSTART + 3, RLENGTH - 8) }
+      if ((getline) > 0 && match($0, /[0-9]+\.[0-9]+/)) { m = substr($0, RSTART, RLENGTH) }
+      if (r != "" && m != "") { print r " " m; exit }
+    }' <<< "${output}")"
+  [[ -z "${parsed}" ]] && { printf '%s' "${seen}"; return 0; }
+  read -r rows ms <<< "${parsed}"
+  if [[ -z "${rows}" || -z "${ms}" ]]; then
+    printf '%s' "${seen}"
+    return 0
+  fi
+  printf 'date=%s\nms=%s\nrows=%s' "${today}" "${ms}" "${rows}"
+}
+
+# ---------------------------------------------------------------------------
 # Below this line the functions read the repository. Everything above is pure.
 # ---------------------------------------------------------------------------
 
