@@ -26,9 +26,17 @@ final class CompiledPattern: @unchecked Sendable {
     // it would otherwise turn into "this rule silently never matches" (L536). It is caught here, at
     // first use, rather than being reported as an absence of findings.
     init(_ pattern: String, options: NSRegularExpression.Options = []) {
+        // copy-inventory:ignore-start  A developer assertion, never rendered to Dan (#3432)
+        //
+        // It is marked because the cold read caught it landing in docs/copy-inventory.md as one of the
+        // sentences Overture can say to him, which it is not: this is the only preconditionFailure in the
+        // whole app, and the inventory is a list of what he READS. AGENTS.md records the same shape
+        // happening once before, when a fatalError string added to break the app on purpose was written
+        // into that document.
         guard let compiled = try? NSRegularExpression(pattern: pattern, options: options) else {
             preconditionFailure("CompiledPattern could not compile the literal pattern: \(pattern)")
         }
+        // copy-inventory:ignore-end
         regex = compiled
     }
 
