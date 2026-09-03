@@ -86,7 +86,15 @@ struct ArchiveView: View {
                          refusals: ContactRefusal.ledger(from: refusedAddresses))
     }
 
-    private var filtered: [QueueItem] {
+    // #3492: a FUNCTION, not a computed property, and called exactly once. It was
+    // `private var filtered`, and Swift does not memoise a computed property between accesses, so the
+    // two readers in one body pass (`header`'s count and `content`'s empty check) each ran the whole
+    // 1,139 row derivation. Every render of this screen paid for the corpus twice, empty search or
+    // not. #3479 removed a third read on the empty path; these two were on every path.
+    //
+    // Naming it as a call is what makes the quantity assertable: ArchiveDerivesItsListOnceGuardTests
+    // counts the call sites, which a property access cannot be counted by.
+    private func filteredItems() -> [QueueItem] {
         items
             .filter { activeStatuses.contains(ArchiveStatus.of($0)) }
             .filter { ShowSearch.matches($0, query: query) }
@@ -94,8 +102,13 @@ struct ArchiveView: View {
     }
 
     var body: some View {
+        // #3492: derived ONCE per render pass and handed down, the same shape #1774 established for
+        // the queue. A second reason beyond cost: two independent derivations of one query can in
+        // principle disagree, so the count beside the title and the list beneath it were computed
+        // separately. One derivation removes that.
+        let filtered = filteredItems()
         VStack(alignment: .leading, spacing: 0) {
-            header
+            header(filtered: filtered)
             Divider()
             filterBar
             // #1926: the scope is handed over as a closure, so the whole-store map behind `items` is not
@@ -105,7 +118,7 @@ struct ArchiveView: View {
             }
             .padding(.horizontal, OVSpacing.lg).padding(.vertical, OVSpacing.sm)
             Divider()
-            content
+            content(filtered: filtered)
         }
         .frame(minWidth: 640, idealWidth: 780, maxWidth: 960, minHeight: 520, idealHeight: 720, maxHeight: 900)
         .background(OVColor.canvas)
@@ -136,7 +149,7 @@ struct ArchiveView: View {
         highlightedRecipientId = recipientId
     }
 
-    private var header: some View {
+    private func header(filtered: [QueueItem]) -> some View {
         HStack {
             Text("Archive").font(OVType.dateHeading).foregroundStyle(OVColor.ink)
             Text("\(filtered.count)").font(.system(size: 12)).foregroundStyle(OVColor.inkFaint)
@@ -161,7 +174,7 @@ struct ArchiveView: View {
         .padding(.horizontal, OVSpacing.lg).padding(.vertical, OVSpacing.sm)
     }
 
-    @ViewBuilder private var content: some View {
+    @ViewBuilder private func content(filtered: [QueueItem]) -> some View {
         if filtered.isEmpty {
             emptyState
         } else {
