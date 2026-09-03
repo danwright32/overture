@@ -56,6 +56,18 @@ sql_for_dimension() {
     groupNames) echo "select count(distinct ZGROUPNAME) from ZPROSPECT where ZGROUPNAME is not null and ZGROUPNAME <> '';" ;;
     sources)    echo "select count(*) from ZWATCHEDSOURCE;" ;;
     untriaged)  echo "select count(*) from ZPROSPECT where ZSTATUSRAW = 'new';" ;;
+    # #2048: the contact and draft shape, which is what the per-card work scales with. The cost fixture
+    # held 1,139 prospects and NOT ONE recipient before this, so every per-contact path short-circuited
+    # on its first line and a lint counter pinned against it would have read zero (L90, L101).
+    recipients) echo "select count(*) from ZRECIPIENT;" ;;
+    prospectsWithAContact)
+                echo "select count(distinct ZPROSPECT) from ZRECIPIENT where ZPROSPECT is not null;" ;;
+    pendingRecipients)
+                echo "select count(*) from ZRECIPIENT where ZSENDSTATERAW = 'pending';" ;;
+    # The lint's real input: DraftCheck is reached only through a non-empty effectiveBody, and the body
+    # lives on the prospect, so this is the dimension the draft-lint counter scales with.
+    prospectsWithADraftBody)
+                echo "select count(*) from ZPROSPECT where ZDRAFTBODY is not null and ZDRAFTBODY <> '';" ;;
     *)          return 1 ;;
   esac
 }

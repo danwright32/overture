@@ -2766,6 +2766,8 @@ extension QueueItem {
     // ask it again from scratch: every ask filters the recipients through the sendable predicate, which
     // runs the draft lint over each contact's whole letter, for a card being built to be scrolled past.
     init(_ p: Prospect, sendGroups: SendGroup.CardGroups) {
+        // #2048: counted here, the one place every card passes through, whichever initialiser was called.
+        QueueRenderPass.WorkTally.recordQueueItem()
         // #1700: the closure-bearing answers are worked out HERE, one small expression each, rather than
         // inside the memberwise call below.
         //

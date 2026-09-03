@@ -49,6 +49,75 @@ enum QueueRenderPass {
         func recordSweep() { sweeps += 1 }
     }
 
+    // #2048: what one pass spent PER CARD, which the sweep count above cannot see.
+    //
+    // #2033 part 2 tripled the per-card work entirely inside one sweep: three `SendGroup.pendingGroup`
+    // calls, each running the draft lint over every contact. The sweep count did not move, the guard
+    // passed, and the suite stayed green while the quantity it exists to protect grew threefold. A
+    // regression guard must assert the quantity it protects, never a proxy for it, because the pinned
+    // number stays constant for the whole time the defect is growing (L63).
+    //
+    // A TASK LOCAL rather than a parameter, and that is the design decision worth understanding.
+    //
+    // The work is done deep inside value types: `QueueItem.init` builds a card, `SendGroup.CardGroups`
+    // resolves who a send reaches, and `DraftCheck.blockingFindings` runs the lint over a body. None of
+    // them can be handed a tally without threading one through every caller, and `QueueItem(` alone has
+    // 318 construction sites, 314 of them in 93 test files that are not about cost. Making it a parameter
+    // would buy compile-time coverage of FOUR app sites at the price of 314 edits, and every one of those
+    // tests would then carry an argument it never reads.
+    //
+    // What the task local buys instead is the property `Corpus.all` already has and the reason that
+    // counter works: nothing has to opt in. A new call site anywhere is counted whether or not whoever
+    // adds it thinks about the cost, which matters because #2033's three calls were added by someone who
+    // was not thinking about cost. A counter the new code must opt into only ever measures the costs
+    // somebody already knew about.
+    //
+    // It is also the one shared-state shape that cannot collide between tests running at once: a task
+    // local is scoped to the task that bound it, so two suites measuring in parallel each read their own.
+    // A `static var` here would be exactly what scripts/check-test-shared-state.sh exists to report.
+    //
+    // COST WHEN NOBODY IS MEASURING: one task-local read per counted call, which is nil, and then
+    // nothing. `nothingIsCountedWhenNobodyIsMeasuring` pins that the app leaves no tally behind.
+    // NOT @MainActor, and that is forced rather than chosen: `SendGroup.CardGroups(of:)` is a
+    // nonisolated synchronous initialiser, so a main-actor tally cannot be recorded from the very place
+    // the send groups are built. The counters are guarded by a lock instead, which is the honest way to
+    // be reachable from wherever the work happens without reasoning about every caller's isolation.
+    //
+    // The lock costs nothing when nobody is measuring, because `current` is nil and no lock is taken.
+    final class WorkTally: @unchecked Sendable {
+        @TaskLocal static var current: WorkTally?
+
+        private let lock = NSLock()
+        private var counts = (queueItems: 0, sendGroupBuilds: 0, draftLintRuns: 0)
+
+        var queueItems: Int { lock.withLock { counts.queueItems } }
+        var sendGroupBuilds: Int { lock.withLock { counts.sendGroupBuilds } }
+        var draftLintRuns: Int { lock.withLock { counts.draftLintRuns } }
+
+        // Each recorded through the TYPE rather than on an instance, so a call site does not need to know
+        // whether anybody is listening, and reads one task local before doing anything else.
+        static func recordQueueItem() {
+            guard let t = current else { return }
+            t.lock.withLock { t.counts.queueItems += 1 }
+        }
+        static func recordSendGroupBuild() {
+            guard let t = current else { return }
+            t.lock.withLock { t.counts.sendGroupBuilds += 1 }
+        }
+        static func recordDraftLintRun() {
+            guard let t = current else { return }
+            t.lock.withLock { t.counts.draftLintRuns += 1 }
+        }
+
+        // Run `body` with a fresh tally bound, and hand back what it spent. The ONLY way to read these
+        // counters, so a test cannot accidentally report on a pass it did not run.
+        static func measure(_ body: () -> Void) -> WorkTally {
+            let tally = WorkTally()
+            WorkTally.$current.withValue(tally) { body() }
+            return tally
+        }
+    }
+
     // Everything one pass derives FROM. Values only: every file-backed answer (the Gmail connection,
     // whether a detached run is alive) is READ BY THE CALLER and handed in, so the pass itself cannot
     // reach the filesystem. QueueRenderPassCostTests holds it to that.

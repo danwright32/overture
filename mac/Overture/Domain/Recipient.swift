@@ -731,6 +731,10 @@ final class Recipient {
     // migration, and it covers Dan's own edits and a performer's override body for free.
     var draftLintBlockers: [DraftIssue] {
         guard let body = effectiveBody, !body.isEmpty else { return [] }
+        // #2048: counted at the point the lint really runs, AFTER the empty-body guard above, so the
+        // number is the work done rather than the times the question was asked. A recipient with no body
+        // costs nothing here and must not read as if it did.
+        QueueRenderPass.WorkTally.recordDraftLintRun()
         return DraftCheck.blockingFindings(in: body)
     }
 
