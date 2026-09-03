@@ -24,13 +24,15 @@ import SwiftData
 // is a function of the corpus's shape and an invented one measures a store that does not exist (L48).
 // Read with sqlite3 against a COPY of the store, so nothing here or in the reading touched the live one:
 //
-//   893 prospects, 281 distinct presenters, 144 distinct venues, 816 distinct group names
-//   120 recipients in total, spread over 90 prospects (74 have 1, 12 have 2, one each has 4, 5, 6, 7)
-//   18 prospects carry a draft body
-//   73 watched sources, 9 stored organisation answers
+//   1,139 prospects, 399 distinct presenters, 169 distinct venues, 1,049 distinct group names
+//   305 recipients in total, spread over 198 prospects (152 have 1, 26 have 2, 7 have 3, 4 have 4,
+//     3 have 5, one has 6, 2 have 7, 2 have 9, one has 11)
+//   39 prospects carry a draft body
+//   73 watched sources, 60 stored organisation answers
+//   233 distinct performance dates, largest single-date cluster 19
 //
-// The recipient distribution is the part most easily got wrong, and the part that matters most: 803 of
-// the 893 rows have NO contacts at all, so the per-card contact work (the send grouping, the sendable
+// The recipient distribution is the part most easily got wrong, and the part that matters most: 941 of
+// the 1,139 rows have NO contacts at all, so the per-card contact work (the send grouping, the sendable
 // predicate, and with it the draft lint) short circuits on the overwhelming majority. A fixture that
 // gave every row a contact would measure a path the live store does not take, and would argue for a fix
 // aimed at the wrong half (L102).
@@ -38,32 +40,49 @@ import SwiftData
 @Suite("Queue rebuild cost")
 struct QueueRebuildCostTests {
 
-    // LIVE-STORE-CLAIM verified=2026-08-14 measure="prospects, distinct presenters, distinct venues, distinct group names, watched sources, stored organisation answers, and recipients per prospect, all read with sqlite3 from a WAL-checkpointed copy of the live store"
+    // LIVE-STORE-CLAIM verified=2026-09-02 measure="prospects, distinct presenters, distinct venues, distinct group names, watched sources, stored organisation answers, and recipients per prospect, all read with sqlite3 from a WAL-inclusive copy of the live store"
+    //
+    // Each figure carries a LIVE-SHAPE tag, so scripts/check-fixture-corpus-drift.sh compares it against
+    // the real store on every push and names the one that has fallen behind. Before #3426 this block read
+    // 893 prospects measured 2026-08-14 and had been describing a store a fifth smaller than the one that
+    // ships, with nothing reporting it: a cost guard sized below the live store stays GREEN the whole
+    // time, because it is exercising a smaller world rather than failing (L354).
     private enum LiveShape {
-        static let prospects = 893
-        static let presenters = 281
-        static let venues = 144
-        static let groupNames = 816
+        // LIVE-SHAPE: prospects
+        static let prospects = 1139
+        // LIVE-SHAPE: presenters
+        static let presenters = 399
+        // LIVE-SHAPE: venues
+        static let venues = 169
+        // LIVE-SHAPE: groupNames
+        static let groupNames = 1049
+        // LIVE-SHAPE: sources
         static let sources = 73
-        // The store's 9 organisation answers are deliberately NOT built here, and this is the one place
+        // The store's 60 organisation answers are deliberately NOT built here, and this is the one place
         // the fixture departs from the live shape. `inheritedAnswers` returns immediately on an empty
-        // list, so with 9 answers its cost is a rounding error either way, and leaving them out keeps
+        // list, so with 60 answers its cost is a rounding error either way, and leaving them out keeps
         // the remainder below attributable to the per-card construction alone rather than to a mixture.
         // Named here rather than left silent, so the departure is visible instead of looking like an
         // oversight.
         // Prospect index to number of recipients, matching the measured distribution exactly.
+        // Re-measured 2026-09-02: 305 recipients over 198 prospects, so 941 of the 1,139 rows have NO
+        // contacts at all. That share, 83%, is the number the paragraph at the top of this file is about
+        // and it is why the per-card contact work short-circuits on the overwhelming majority.
         static let recipientCounts: [Int] = {
             var counts = Array(repeating: 0, count: prospects)
             var i = 0
-            for _ in 0..<74 { counts[i] = 1; i += 1 }
-            for _ in 0..<12 { counts[i] = 2; i += 1 }
-            counts[i] = 4; i += 1
-            counts[i] = 5; i += 1
+            for _ in 0..<152 { counts[i] = 1; i += 1 }
+            for _ in 0..<26 { counts[i] = 2; i += 1 }
+            for _ in 0..<7 { counts[i] = 3; i += 1 }
+            for _ in 0..<4 { counts[i] = 4; i += 1 }
+            for _ in 0..<3 { counts[i] = 5; i += 1 }
             counts[i] = 6; i += 1
-            counts[i] = 7
+            for _ in 0..<2 { counts[i] = 7; i += 1 }
+            for _ in 0..<2 { counts[i] = 9; i += 1 }
+            counts[i] = 11
             return counts
         }()
-        static let prospectsWithADraft = 18
+        static let prospectsWithADraft = 39
     }
 
     private func container() throws -> ModelContainer {
