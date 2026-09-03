@@ -34,7 +34,12 @@ struct ArchiveScrollDoesNotRebuildTests {
     // Enough rows that the list scrolls at all: a scroll shorter than the content moves nothing, and a
     // list that fits on screen has no top for a row to cross.
     private func seed(_ ctx: ModelContext, rows: Int = 120) {
-        for n in 0..<rows {
+        for n in 0..<rows { insert(ctx, n) }
+        try? ctx.save()
+    }
+
+    private func insert(_ ctx: ModelContext, _ n: Int) {
+        do {
             let p = Prospect(naturalKey: "row-\(n)", groupName: "Ensemble \(n)", discipline: "music",
                              venue: "Weill Recital Hall",
                              performanceDate: String(format: "2027-%02d-%02d", 1 + (n % 12), 1 + (n % 27)),
@@ -44,7 +49,6 @@ struct ArchiveScrollDoesNotRebuildTests {
                              possibleMatchName: nil, status: .new)
             ctx.insert(p)
         }
-        try? ctx.save()
     }
 
     // #3480's rig. AppKit really lays the view out, which is the only way a real wheel event has
@@ -80,6 +84,30 @@ struct ArchiveScrollDoesNotRebuildTests {
             scrollView.scrollWheel(with: event)
         }
     }
+
+    // WHAT THIS SUITE CANNOT SEE, recorded so nobody builds it twice.
+    //
+    // Dan's standing rule is that scroll pins are not stripped from the Queue, the Archive or Follow-ups,
+    // and `aScrollBuildsNoCards` below is SILENT about it: a list that jumps back to the top on every
+    // rebuild also builds no cards, so that test passes just as happily with the pin removed. A guard for
+    // the pin was written here and then deleted, because it could not be made honest.
+    //
+    // Two attempts, both measured 2026-09-03. Appending a row BELOW the viewport and asserting the offset
+    // was still non-zero SURVIVED stripping `.scrollPosition` outright, because appending below moves
+    // nothing either way: it measured the ScrollView's ordinary behaviour and reported it as the feature
+    // working (L1). Inserting twenty rows ABOVE the viewport and asserting the offset MOVED to compensate
+    // failed on the extracted holder, and then failed IDENTICALLY on the pre-extraction code, at the same
+    // offset of 1200.0 in both.
+    //
+    // That second reading is the useful one, and it says two things. The pin's compensating behaviour is
+    // not observable in this harness at all, most likely because the window is never ordered front (it
+    // crashes the shared app host if it is, #3480) so AppKit lays the view out without a real render
+    // pass. And the extraction did not CHANGE it: the same probe gives the same number before and after,
+    // while `aScrollBuildsNoCards` gives 120 before and 0 after.
+    //
+    // So the pin is verified by Dan's eye rather than by this suite, and what this suite proves is that
+    // the change did not move it. An honest gap named beats a green test asserting a behaviour neither
+    // version has (L98, L11).
 
     @Test func aScrollBuildsNoCards() async throws {
         let c = try container()

@@ -2023,20 +2023,31 @@ enum QueueRenderCounter {
 // `jumpTarget` and DRIVE this position, rather than clearing it and asking proxy.scrollTo for a row id.
 // Clearing and scrolling was the bug: the two mechanisms fought over the same ScrollView and the row jump
 // was silently dropped, so a picked search result did nothing at all.
+// #3437: the position itself now lives on the shared `PinnedScrollHolder`, which Archive and Follow-ups
+// use too, so there is ONE definition of holding a scroll position off the body that derives (L263). This
+// keeps its own name and its own shape because what is queue-specific is the JUMP, not the holding.
+//
+// The queue's jump is deliberately different from Archive's and stays that way. #1573: clearing the
+// position and then calling `proxy.scrollTo` was the bug here, because the two mechanisms fought over one
+// ScrollView and the row jump was silently dropped. So this DRIVES the position from `jumpTarget` and
+// never scrolls, where Archive points the position at its target and then scrolls to centre it.
 struct QueueScrollHolder<Content: View>: View {
     // The group a deliberate jump wants on screen. @State on QueueView, so setting it always invalidates
     // and always reaches this view; nil means no jump is pending and the position is Dan's own scrolling.
+    //
+    // #1771: the REQUEST, not the bare group id. Carrying the id alone made a second jump to the same
+    // group a non-change, so `onChange` never fired and the click did nothing: Dan searched a show,
+    // landed on it, scrolled away, searched it again, and nothing happened.
     let jumpTarget: QueueJumpRequest?
     @ViewBuilder let content: () -> Content
 
-    @State private var topGroup: String?
-
     var body: some View {
-        ScrollView { content() }
-            .scrollPosition(id: $topGroup, anchor: .top)
-            .onChange(of: jumpTarget) { _, target in
-                if let target { topGroup = target.group }
-            }
+        PinnedScrollHolder { (_: ScrollViewProxy, pinned: Binding<String?>) in
+            content()
+                .onChange(of: jumpTarget) { _, target in
+                    if let target { pinned.wrappedValue = target.group }
+                }
+        }
     }
 }
 

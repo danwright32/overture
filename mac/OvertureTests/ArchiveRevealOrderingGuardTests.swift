@@ -85,7 +85,10 @@ struct ArchiveRevealOrderingGuardTests {
             return
         }
         let code = SwiftSource.scannableLines(in: holder).map(\.code).joined(separator: "\n")
-        #expect(code.contains("scrollPosition(id: $topGroup"),
+        // #3437: the needle moved when the position did, from this holder's own `@State` to the shared
+        // `PinnedScrollHolder` it now delegates to. The assertion is the same one: this holder still owns
+        // the position rather than handing it back to the body that derives (#1774).
+        #expect(code.contains("PinnedScrollHolder"),
                 "QueueScrollHolder must still own the position it was created to own (#1774)")
         #expect(!code.contains("scrollTo"),
                 Comment(rawValue: "QueueScrollHolder now calls scrollTo. #1573: clearing-and-scrollTo "
