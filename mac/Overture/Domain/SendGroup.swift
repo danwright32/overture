@@ -102,6 +102,9 @@ enum SendGroup {
 
         // The one pass. Both groups come out of a single filter of the recipients.
         init(of prospect: Prospect) {
+            // #2046 collapsed three of these into one per card and nothing pinned that it stayed one.
+            // #2048 counts them, so #2033's shape cannot come back without a number moving.
+            QueueRenderPass.WorkTally.recordSendGroupBuild()
             let preview = SendGroup.previewGroup(of: prospect)
             self.init(preview: preview, pending: SendGroup.pending(from: preview, of: prospect))
         }
