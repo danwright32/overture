@@ -97,11 +97,20 @@ struct RealScrollInvalidationTests {
     private func host(_ view: some View) -> (window: NSWindow, hosting: NSHostingView<AnyView>) {
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 400, height: 300),
                               styleMask: [.borderless], backing: .buffered, defer: false)
+        // AppKit's default is TRUE, which means `close()` RELEASES the window while this test still holds
+        // a reference to it, and the next touch is a use after free. Alone that is survivable; run beside
+        // the other hosted suites it crashed the shared app host, which restarts the test process and
+        // truncates the WHOLE hosted target (measured 2026-09-03: 304 tests passing without this suite,
+        // 111 and a restart with it). The crash names no test, so it reads as an unrelated flake.
+        window.isReleasedWhenClosed = false
         let hosting = NSHostingView(rootView: AnyView(view))
         hosting.frame = window.contentLayoutRect
         hosting.autoresizingMask = [.width, .height]
         window.contentView?.addSubview(hosting)
-        window.orderFrontRegardless()
+        // Deliberately NOT ordered front. This is a MenuBarExtra app (LSUIElement), and the host process
+        // is shared with every other hosted suite; a borderless window brought forward mid-run disturbs
+        // that process, and the app-host crash it produces takes the WHOLE hosted target with it, which
+        // is #1967's original failure wearing a new cause. Layout does not need the window on screen.
         window.layoutIfNeeded()
         hosting.layoutSubtreeIfNeeded()
         return (window, hosting)
