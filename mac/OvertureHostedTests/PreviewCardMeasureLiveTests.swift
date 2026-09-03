@@ -78,6 +78,10 @@ struct PreviewCardMeasureLiveTests {
         // Born at a sliver, exactly as the web view is when SwiftUI has not yet given it a width.
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 90, height: 600),
                               styleMask: [.borderless], backing: .buffered, defer: false)
+        // #3480: AppKit's default is TRUE, so `close()` below RELEASES a window this scope still holds.
+        // It has not bitten here, but it did in RealScrollInvalidationTests, where it crashed the SHARED
+        // app host and truncated the whole hosted target while naming no test at all.
+        window.isReleasedWhenClosed = false
         let web = WKWebView(frame: window.contentLayoutRect, configuration: configuration)
         web.autoresizingMask = [.width, .height]
         window.contentView?.addSubview(web)
