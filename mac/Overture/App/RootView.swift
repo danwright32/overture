@@ -131,8 +131,6 @@ struct RootView: View {
     // keystroke re-derived all 724 prospects. See QueueSearchBar.
     @State private var showPatterns = false
     @State private var showFollowUps = false
-    // #682: the recipient Dan clicked "Send a follow-up" from on the Reached Out row, handed to
-    // FollowUpsView so it opens with that same entry highlighted instead of a plain list.
     @State private var showVoiceGuidance = false
     // #1435/#1436: the "Log an inquiry" intake sheet, opened from the same grouped menu as "Add a lead".
     @State private var showInquiryIntake = false

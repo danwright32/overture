@@ -26,10 +26,6 @@ struct FollowUpsView: View {
     // connection that every other consequential screen has. Defaulted to nothing only so a test can
     // render the sheet without one; RootView passes its own `connectGmail`.
     var onConnectGmail: () -> Void = {}
-    // #682: the recipient Dan clicked "Send a follow-up" from on the Reached Out row, so this
-    // sheet scrolls to and highlights that same entry instead of leaving him to find it again.
-    // Clears RootView's own copy of the target once captured, so a later plain "Follow-ups" pill
-    // click (with no specific recipient) doesn't re-highlight a stale one.
     // #468 (SUP-006): a nudge/closing-note send in flight, keyed by recipient id, same shape as
     // QueueView/ArchiveView's outboundSending/replySending, so this sheet's Send buttons get the
     // same live "Sending…" feedback instead of staying clickable during the send.
@@ -43,9 +39,14 @@ struct FollowUpsView: View {
     // rebuild. `prospects` is a @Query, so a reply-classify or Prep run re-emits it and rebuilds this
     // sheet, and a plain ScrollView drops its offset to the top on each one (the #974 shape). Pinned to
     // the top visible section, which is the granularity that holds up when a run reshuffles the rows
-    // within. The recipient reveal below scrolls by a different identity (the contact's id), so this is
-    // cleared when a reveal starts, letting proxy.scrollTo own that jump. Its own identity, not the
-    // section's display title, so the scroll wiring never becomes a second copy of that copy (#843).
+    // within. Its own identity, not the section's display title, so the scroll wiring never becomes a
+    // second copy of that copy (#843).
+    //
+    // #3437: this is the ONLY writer of the position, and SwiftUI is it. There is no reveal here. This
+    // comment used to say the position was cleared when one started, letting `proxy.scrollTo` own the
+    // jump, and #2138 removed that mechanism in 2026-08-05 because #2130 had taken away its only caller.
+    // The sentence outlived the code by a month and was then read as a live constraint by the plan for
+    // this phase, which budgeted a test for behaviour that cannot happen (L346).
     private enum ScrollSection: Hashable {
         case afterTheShow, silent, stalledReplyDrafts, conversationsToConfirm
     }
@@ -109,64 +110,62 @@ struct FollowUpsView: View {
                     .font(OVType.body).foregroundStyle(OVColor.inkSoft).multilineTextAlignment(.center)
                     .frame(maxWidth: .infinity, maxHeight: .infinity).padding(OVSpacing.xl)
             } else {
-                ScrollViewReader { proxy in
-                    ScrollView {
-                        VStack(alignment: .leading, spacing: OVSpacing.lg) {
-                            // #2816: built ONCE for both sections rather than per row (#1121).
-                            let sourceCalendars = QueueModel.sourceCalendarIndex(watchedSources)
-                            // #2919: one clock for the whole list, on the same rule, rather than each row
-                            // reading `Date()` for itself and dating its own sentence a moment apart.
-                            let now = Date()
-                            // #2878: first, because it is the only one of the three that says something
-                            // has gone WRONG. The other two are work arriving on schedule.
-                            if !listed.stalledReplyDrafts.isEmpty {
-                                section(StalledReplyDraftCopy.section) {
-                                    ForEach(listed.stalledReplyDrafts, id: \.recipient.id) { d in
-                                        stalledReplyDraftRow(d, sourceCalendars: sourceCalendars, now: now)
-                                        Divider()
-                                    }
+                ScrollView {
+                    VStack(alignment: .leading, spacing: OVSpacing.lg) {
+                        // #2816: built ONCE for both sections rather than per row (#1121).
+                        let sourceCalendars = QueueModel.sourceCalendarIndex(watchedSources)
+                        // #2919: one clock for the whole list, on the same rule, rather than each row
+                        // reading `Date()` for itself and dating its own sentence a moment apart.
+                        let now = Date()
+                        // #2878: first, because it is the only one of the three that says something
+                        // has gone WRONG. The other two are work arriving on schedule.
+                        if !listed.stalledReplyDrafts.isEmpty {
+                            section(StalledReplyDraftCopy.section) {
+                                ForEach(listed.stalledReplyDrafts, id: \.recipient.id) { d in
+                                    stalledReplyDraftRow(d, sourceCalendars: sourceCalendars, now: now)
+                                    Divider()
                                 }
-                                .id(ScrollSection.stalledReplyDrafts)   // #976
                             }
-                            // #2967: above "After the show" on purpose. This asks whether somebody
-                            // replied at all, and the answer changes what a post-event prompt on the
-                            // same show should even say, so it is the question to settle first.
-                            if !listed.conversationsToConfirm.isEmpty {
-                                section(ProposedConversationCopy.section) {
-                                    ForEach(listed.conversationsToConfirm, id: \.recipient.id) { d in
-                                        conversationToConfirmRow(d, sourceCalendars: sourceCalendars,
-                                                                 now: now)
-                                        Divider()
-                                    }
-                                }
-                                .id(ScrollSection.conversationsToConfirm)   // #976
-                            }
-                            if !listed.afterTheShow.isEmpty {
-                                section("After the show") {
-                                    ForEach(listed.afterTheShow, id: \.recipient.id) { d in
-                                        postEventRow(d, since: sending[d.recipient.id],
-                                                     sourceCalendars: sourceCalendars, now: now); Divider()
-                                    }
-                                }
-                                // #976: identity for the position modifier, so the top section pins.
-                                .id(ScrollSection.afterTheShow)
-                            }
-                            if !listed.silent.isEmpty {
-                                section("Silent follow-ups") {
-                                    ForEach(Array(listed.silent.enumerated()), id: \.offset) { _, d in
-                                        row(d, since: sending[d.recipient.id],
-                                            sourceCalendars: sourceCalendars); Divider()
-                                    }
-                                }
-                                .id(ScrollSection.silent)   // #976
-                            }
+                            .id(ScrollSection.stalledReplyDrafts)   // #976
                         }
-                        .scrollTargetLayout()
-                        .padding(OVSpacing.lg)
+                        // #2967: above "After the show" on purpose. This asks whether somebody
+                        // replied at all, and the answer changes what a post-event prompt on the
+                        // same show should even say, so it is the question to settle first.
+                        if !listed.conversationsToConfirm.isEmpty {
+                            section(ProposedConversationCopy.section) {
+                                ForEach(listed.conversationsToConfirm, id: \.recipient.id) { d in
+                                    conversationToConfirmRow(d, sourceCalendars: sourceCalendars,
+                                                             now: now)
+                                    Divider()
+                                }
+                            }
+                            .id(ScrollSection.conversationsToConfirm)   // #976
+                        }
+                        if !listed.afterTheShow.isEmpty {
+                            section("After the show") {
+                                ForEach(listed.afterTheShow, id: \.recipient.id) { d in
+                                    postEventRow(d, since: sending[d.recipient.id],
+                                                 sourceCalendars: sourceCalendars, now: now); Divider()
+                                }
+                            }
+                            // #976: identity for the position modifier, so the top section pins.
+                            .id(ScrollSection.afterTheShow)
+                        }
+                        if !listed.silent.isEmpty {
+                            section("Silent follow-ups") {
+                                ForEach(Array(listed.silent.enumerated()), id: \.offset) { _, d in
+                                    row(d, since: sending[d.recipient.id],
+                                        sourceCalendars: sourceCalendars); Divider()
+                                }
+                            }
+                            .id(ScrollSection.silent)   // #976
+                        }
                     }
-                    // #976: hold the scroll on the top visible section across a @Query rebuild (topSection).
-                    .scrollPosition(id: $topSection, anchor: .top)
+                    .scrollTargetLayout()
+                    .padding(OVSpacing.lg)
                 }
+                // #976: hold the scroll on the top visible section across a @Query rebuild (topSection).
+                .scrollPosition(id: $topSection, anchor: .top)
             }
         }
         .frame(width: 500, height: 560)
