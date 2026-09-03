@@ -73,10 +73,16 @@ fi
 # bare file reports a state that was true at the last checkpoint. Copied rather than opened, so nothing
 # here can touch the file Dan's app is using. Measured 2026-09-02 at 0.06 to 0.09s for the copy and the
 # count together, which is what makes it affordable on the mandatory pre-push gate.
-COPY_DIR="$(overture_scratch_dir corpus-drift)" || {
-  echo "UNMEASURED: could not make a scratch directory to copy the store into."
+COPY_DIR="$(overture_scratch_dir corpus-drift)" || COPY_DIR=""
+# Checked for EMPTINESS as well as for a failed status, and the trap is armed only afterwards. `mktemp -d`
+# either prints a path or exits non-zero, so an empty value with a zero status is theoretical rather than
+# something seen; it is guarded because of what it would DO, not because of how likely it is. With
+# COPY_DIR empty the copy below writes to `/live.store`, at the root of the filesystem, and the teardown
+# runs `rm -rf ""`. A blank value must never be what drives a path that copies and deletes (L5).
+if [ -z "${COPY_DIR}" ] || [ ! -d "${COPY_DIR}" ]; then
+  echo "UNMEASURED: could not make a scratch directory to copy the store into, so nothing was measured."
   exit 2
-}
+fi
 trap 'rm -rf "${COPY_DIR}"' EXIT
 for ext in "" "-wal" "-shm"; do
   [ -f "${LIVE_STORE}${ext}" ] && cp "${LIVE_STORE}${ext}" "${COPY_DIR}/live.store${ext}"
