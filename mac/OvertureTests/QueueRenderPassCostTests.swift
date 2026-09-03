@@ -248,10 +248,43 @@ struct QueueRenderPassWorkUnitCostTests {
     // contacts, pending count and bodies, and still exercised five and a half times the real lint load,
     // because the lint scales with the INTERSECTION. At the measured shape it is 82, against the live
     // store's own reading of 73 taken through `QueueRenderPassLiveStoreCostTests` the same day. The
-    // remaining gap is the same unattributed term #3498 records: 16 pending contacts carry a body and the
-    // card build accounts for 4 runs each, so 64 of the 82 are card construction and 18 happen elsewhere
-    // in the pass.
+    // remaining gap against the live store is the same unattributed term #3498 records. How the 82 splits
+    // between card construction and the rest of the pass is MEASURED by
+    // `theLintRunsAreAttributedBetweenCardBuildAndTheRestOfThePass`, not asserted here.
     private static let allowedDraftLintRuns = 82
+
+    // MEASURED on this corpus by `theLintRunsAreAttributedBetweenCardBuildAndTheRestOfThePass`, not
+    // derived. The first version of this file asserted the split from arithmetic on a different
+    // fixture's per-contact figure and wrote it down as fact; the arithmetic happened to be right, and
+    // that is luck rather than method (L32, L353). 64 of the 82 are card construction.
+    private static let allowedLintRunsOutsideTheCardBuild = 18
+
+    // WHERE the 82 goes, measured on THIS corpus rather than inferred from the single-row attribution
+    // test below. The first version of this suite carried the split as a comment reading "64 of the 82
+    // are card construction and 18 elsewhere", arrived at by multiplying 16 contacts by the per-contact
+    // figure of 4 measured on a DIFFERENT fixture, and written down as though it had been measured. That
+    // is the habit this milestone has spent a day correcting in other code (L32, L353).
+    @Test func theLintRunsAreAttributedBetweenCardBuildAndTheRestOfThePass() throws {
+        let ctx = ModelContext(try container())
+        let rows = seed(ctx)
+
+        let cardsOnly = QueueRenderPass.WorkTally.measure {
+            for row in rows { _ = QueueItem(row) }
+        }
+        let wholePass = QueueRenderPass.WorkTally.measure {
+            _ = QueueRenderPass.make(inputs(rows))
+        }
+
+        #expect(cardsOnly.draftLintRuns > 0, "building every card ran the lint zero times")
+        #expect(wholePass.draftLintRuns == Self.allowedDraftLintRuns)
+
+        let elsewhere = wholePass.draftLintRuns - cardsOnly.draftLintRuns
+        #expect(elsewhere == Self.allowedLintRunsOutsideTheCardBuild,
+                Comment(rawValue: "building every card ran the lint \(cardsOnly.draftLintRuns) times and "
+                        + "a whole pass ran it \(wholePass.draftLintRuns), so \(elsewhere) happen "
+                        + "OUTSIDE card construction. #3498 is where that term is chased; this pins it so "
+                        + "it cannot grow unnoticed."))
+    }
 
     // The per-contact multiplier, pinned separately so a change that moves work between the send-group
     // build and the card build is visible even when the total holds. Measured, not read off the code.
