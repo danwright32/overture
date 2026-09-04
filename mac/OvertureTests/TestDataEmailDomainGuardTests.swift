@@ -116,10 +116,14 @@ struct TestDataEmailDomainGuardTests {
         // Through AppSourceWalk, never a private enumerator: a guard that walks a directory itself does
         // not inherit the refusal on an empty walk, and passes silently when the path resolves to
         // nothing (#2311). The extensions argument exists for this caller.
-        for root in ["mac/OvertureTests", "mac/OvertureHostedTests", "mac/TestSupport", "fixtures"] {
-            let dir = RepoRoot.url.appendingPathComponent(root)
-            for file in AppSourceWalk.files(under: dir, floor: 1,
-                                            extensions: ["swift", "json", "txt", "md", "html"]) {
+        // #3113: ONE floor over the total. This used to walk each root at `floor: 1`, which is the
+        // protection switched off, with a separate count assertion elsewhere that nothing connected to
+        // it. The roots differ hugely in size, which is exactly the case `underAll` exists for.
+        do {
+            for file in AppSourceWalk.files(
+                underAll: ["mac/OvertureTests", "mac/OvertureHostedTests", "mac/TestSupport", "fixtures"]
+                    .map(RepoRoot.url.appendingPathComponent),
+                floor: 500, extensions: ["swift", "json", "txt", "md", "html"]) {
                 guard file.name != "test-data-email-domains.txt" else { continue }
                 scanned += 1
                 for m in file.text.matches(of: addressPattern) {
@@ -246,10 +250,11 @@ struct TestDataEmailDomainGuardTests {
         // person through.
         let scanner = ForbiddenTextScanner(needles: forbidden)
         var hits: [String] = []
-        for root in ["mac", "fixtures", "src", "docs"] {
-            let dir = RepoRoot.url.appendingPathComponent(root)
-            for file in AppSourceWalk.files(under: dir, floor: 1,
-                                            extensions: ["swift", "json", "txt", "md", "html", "sh", "ts"]) {
+        // #3113: ONE floor over the total, for the same reason as the scan above.
+        do {
+            for file in AppSourceWalk.files(
+                underAll: ["mac", "fixtures", "src", "docs"].map(RepoRoot.url.appendingPathComponent),
+                floor: 500, extensions: ["swift", "json", "txt", "md", "html", "sh", "ts"]) {
                 guard !file.url.path.contains("Overture.xcodeproj") else { continue }
                 // Its own source has to NAME what it forbids, so it is the one file it cannot police.
                 guard file.name != "TestDataEmailDomainGuardTests.swift" else { continue }

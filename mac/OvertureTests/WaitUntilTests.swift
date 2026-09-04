@@ -155,10 +155,12 @@ struct WaitUntilTests {
         var filesRead = 0
         var offenders: [String] = []
 
-        for root in roots {
-            let files = AppSourceWalk.files(under: RepoRoot.mac.appendingPathComponent(root), floor: 1)
-            filesRead += files.count
-            for file in files where file.name != "WaitUntilTests.swift" {
+        // #3113: one floor over the total rather than `floor: 1` per root, which protected nothing.
+        let allFiles = AppSourceWalk.files(underAll: roots.map(RepoRoot.mac.appendingPathComponent),
+                                           floor: 400)
+        filesRead = allFiles.count
+        do {
+            for file in allFiles where file.name != "WaitUntilTests.swift" {
                 let lines = file.text.components(separatedBy: "\n")
                 for (index, line) in lines.enumerated() where line.contains("Task.yield()") {
                     // A line that only TALKS about it is not one that runs it.

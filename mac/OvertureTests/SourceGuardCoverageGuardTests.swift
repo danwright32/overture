@@ -39,6 +39,98 @@ struct SourceGuardCoverageGuardTests {
         pattern: #"=\s*\[([^\]]*)\]"#, options: [.dotMatchesLineSeparators])
     private static let identifierStringLiteral = try! NSRegularExpression(pattern: #""([A-Za-z_][A-Za-z0-9_]*)""#)
 
+    // #2974: the body between `= [` and its MATCHING `]`, with nesting kept.
+    //
+    // `arrayLiteral`'s pattern is `=\s*\[([^\]]*)\]`, which ends at the FIRST `]`, so an array whose
+    // first element is itself a dictionary (`[["a": 1], ["b": 2]]`) came back as `["a": 1` and the
+    // dictionary test above never saw the closing bracket that would have excused it. That shape appears
+    // nowhere in the suite today, which is why #2953 left it; it is closed here because the extraction is
+    // the same few lines either way and a guard that reads fixture data as function names is what
+    // teaches people to ignore the whole check (L36).
+    //
+    // String contents are skipped, so a bracket inside a literal cannot close the body.
+    static func arrayLiteralBodies(in source: String) -> [String] {
+        var bodies: [String] = []
+        let chars = Array(source)
+        var i = 0
+        while i < chars.count {
+            guard chars[i] == "=" else { i += 1; continue }
+            var j = i + 1
+            while j < chars.count, chars[j] == " " || chars[j] == "\n" || chars[j] == "\t" { j += 1 }
+            guard j < chars.count, chars[j] == "[" else { i += 1; continue }
+            var depth = 0
+            var inString = false
+            var escaped = false
+            var k = j
+            var closed = false
+            while k < chars.count {
+                let c = chars[k]
+                if escaped { escaped = false; k += 1; continue }
+                if inString {
+                    if c == "\\" { escaped = true }
+                    if c == "\"" { inString = false }
+                    k += 1
+                    continue
+                }
+                if c == "\"" { inString = true; k += 1; continue }
+                if c == "[" { depth += 1 }
+                if c == "]" {
+                    depth -= 1
+                    if depth == 0 { closed = true; break }
+                }
+                k += 1
+            }
+            // An UNCLOSED bracket is not an array literal this can read, so it is skipped rather than
+            // read to the end of the file, which would swallow everything after it (L98).
+            if closed { bodies.append(String(chars[(j + 1)..<k])) }
+            i = closed ? k + 1 : j + 1
+        }
+        return bodies
+    }
+
+    // #2974: does this array body hold key/value pairs ANYWHERE, not only at its own top level?
+    //
+    // `isDictionaryLiteral` asks about depth ZERO, which is the right question for `["a": 1]` and the
+    // wrong one for `[["a": 1], ["b": 2]]`: that outer body is an array OF dictionaries, so its colons
+    // sit at depth one and it read as a plain list, handing "a" and "b" to the name sweep as functions
+    // that had gone missing. Now that the bodies come back with their nesting intact, this is the
+    // question worth asking of them.
+    //
+    // A plain list of function names contains no colon outside a string. A Swift selector-style name
+    // does (`"foo(bar:)"`), and it is inside a string, which the scan below skips.
+    static func holdsKeyValuePairs(_ body: String) -> Bool {
+        var inString = false
+        var escaped = false
+        for character in body {
+            if escaped { escaped = false; continue }
+            if inString {
+                if character == "\\" { escaped = true }
+                if character == "\"" { inString = false }
+                continue
+            }
+            if character == "\"" { inString = true; continue }
+            if character == ":" { return true }
+        }
+        return false
+    }
+
+    // #2974: is this path present ONLY in prose?
+    //
+    // Asked at the point of ACCUSATION rather than over the corpus, which is the whole reason it is
+    // affordable. Stripping comments from every one of the 946 test files costs about 2.2 seconds of
+    // every suite run and finds exactly the same 517 path literals (measured 2026-09-04). Asked only of
+    // the paths that are about to be reported missing, it costs nothing at all today, because there are
+    // none.
+    //
+    // A path in BOTH prose and code is judged as CODE: one comment must not excuse a genuinely stale
+    // reference sitting beside it.
+    static func pathIsOnlyInProse(_ path: String, in src: String) -> Bool {
+        let quoted = "\"\(path)\""
+        guard src.contains(quoted) else { return false }
+        let code = SwiftSource.scannableLines(in: src, skipping: []).map(\.code).joined(separator: "\n")
+        return !code.contains(quoted)
+    }
+
     // #2953: is what sits between those brackets a DICTIONARY rather than a list of names?
     //
     // The bracket pattern above cannot tell the two apart, and an equality is an equals sign, so an
@@ -116,7 +208,8 @@ struct SourceGuardCoverageGuardTests {
         let source = code(of: src)
         var names = Set(matches(namedLiteral, in: source))
         if hasMatch(namedNonLiteral, in: source) {
-            for arrayBody in matches(arrayLiteral, in: source) where !isDictionaryLiteral(arrayBody) {
+            for arrayBody in Self.arrayLiteralBodies(in: source)
+                where !isDictionaryLiteral(arrayBody) && !Self.holdsKeyValuePairs(arrayBody) {
                 names.formUnion(matches(identifierStringLiteral, in: arrayBody))
             }
         }
@@ -140,16 +233,35 @@ struct SourceGuardCoverageGuardTests {
         AppSourceWalk.urls(under: testsRoot).filter { $0.lastPathComponent != ownFileName }
     }
 
-    @Test func everyReferencedSourcePathExists() throws {
+    // #2974: the decision, as a pure function over values, so BOTH its branches can be reached.
+    //
+    // The prose exemption below is unreachable on the real tree, because nothing there references a
+    // path that is gone: a mutation removing it left the suite green, which is the wiring being
+    // untested rather than the exemption being wrong (L3). `exists` is injected for the same reason the
+    // files are: a fixture can then say a path is missing without anybody deleting a real file.
+    static func staleReferences(in files: [(name: String, text: String)],
+                                exists: (String) -> Bool) -> [String] {
         var missing: [String] = []
-        for file in try Self.otherTestFiles() {
-            let src = try String(contentsOf: file, encoding: .utf8)
-            for path in Self.referencedPaths(in: src) {
-                let full = Self.macRoot.appendingPathComponent(path)
-                if !FileManager.default.fileExists(atPath: full.path) {
-                    missing.append("\(file.lastPathComponent) references \(path), which does not exist")
-                }
+        for file in files {
+            for path in referencedPaths(in: file.text) where !exists(path) {
+                // A path quoted only in a COMMENT is prose about a file, not a reference to it, so a
+                // deleted file it merely mentions is not a stale reference. Asked HERE, on the paths
+                // about to be accused, rather than over the corpus: stripping comments from all 946 test
+                // files costs about 2.2 seconds of every run and finds the same 517 paths (measured
+                // 2026-09-04), while asking it of the accusations costs nothing on an ordinary run.
+                guard !pathIsOnlyInProse(path, in: file.text) else { continue }
+                missing.append("\(file.name) references \(path), which does not exist")
             }
+        }
+        return missing
+    }
+
+    @Test func everyReferencedSourcePathExists() throws {
+        let files = try Self.otherTestFiles().map {
+            (name: $0.lastPathComponent, text: try String(contentsOf: $0, encoding: .utf8))
+        }
+        let missing = Self.staleReferences(in: files) {
+            FileManager.default.fileExists(atPath: Self.macRoot.appendingPathComponent($0).path)
         }
         #expect(missing.isEmpty, "Stale SourceGuard file-path reference(s):\n\(missing.joined(separator: "\n"))")
     }

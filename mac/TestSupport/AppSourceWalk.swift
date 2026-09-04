@@ -41,6 +41,75 @@ enum AppSourceWalk {
             """
     }
 
+    // #3113: the floor was a parameter, so the caller it protects could set it to 1 and switch the
+    // protection off. Three guards did, and all three for the SAME honest reason: each walks SEVERAL
+    // roots of very different sizes and asserts a total across them, so no single per-root number fits.
+    //
+    // A floor this low on a root inside the REPOSITORY is not a floor. A tree the TEST built is a
+    // different case and is left alone: it knows exactly what it put there, so a floor of one is a real
+    // assertion. Refusing those too would fire on every fixture in `AppSourceWalkTests` and the rule
+    // would be switched off within a day (L93).
+    static let minimumRepoFloor = 5
+
+    static func lowFloorRefusal(root: URL, floor: Int) -> String? {
+        guard floor < minimumRepoFloor else { return nil }
+        guard root.standardizedFileURL.path.hasPrefix(RepoRoot.url.standardizedFileURL.path) else {
+            return nil
+        }
+        return """
+            This guard walks \(root.path), inside the repository, with a floor of \(floor). That is low \
+            enough to pass on a broken path, which is the protection this floor exists to be (#2311, \
+            #1967, #3113). If the reason is that several roots of different sizes share one total, use \
+            `files(underAll:floor:)`, which applies ONE floor to the total rather than forcing the \
+            per-root number down to where it checks nothing.
+            """
+    }
+
+    // #3113: several roots, ONE floor over their TOTAL.
+    //
+    // This is what the three offenders were doing by hand, each with a per-root floor of 0 or 1 and its
+    // own count assertion afterwards. Nothing connected those two halves, so the next caller to meet the
+    // same friction would have copied the disabled floor and not the assertion. Here the pairing is the
+    // API rather than a convention (L274).
+    static func files(underAll roots: [URL], floor: Int, extensions: Set<String> = ["swift"]) -> [File] {
+        // Each root walked WITHOUT its own refusal, since a root legitimately holding two files is not
+        // a broken path; the whole point is that only the total can answer that.
+        // `minimumRepoFloor` rather than 0, so the per-root pass does not accuse ITSELF of the very
+        // thing this API exists to fix. Each root's own refusal is deliberately not what decides here:
+        // a root legitimately holding two files is not a broken path, and only the total can say.
+        let found = roots.flatMap { perRootFiles($0, extensions: extensions) }
+        if let refusal = refusal(found: found.count, floor: floor,
+                                 directory: roots.map(\.lastPathComponent).joined(separator: ", ")) {
+            Issue.record(Comment(rawValue: refusal))
+        }
+        return found
+    }
+
+    static func urls(underAll roots: [URL], floor: Int, extensions: Set<String> = ["swift"]) -> [URL] {
+        let found = roots.flatMap { perRootUrls($0, extensions: extensions) }
+        if let refusal = refusal(found: found.count, floor: floor,
+                                 directory: roots.map(\.lastPathComponent).joined(separator: ", ")) {
+            Issue.record(Comment(rawValue: refusal))
+        }
+        return found
+    }
+
+    // One root of a multi-root walk: the walk itself, with NO refusal of its own. Private, because it
+    // is the one shape that legitimately has no floor, and a public version of it would be the switch
+    // this issue closed.
+    private static func perRootFiles(_ root: URL, extensions: Set<String>) -> [File] {
+        memo.files(root: root, extensions: extensions) {
+            walk(root, extensions: extensions).compactMap { url -> File? in
+                guard let text = try? String(contentsOf: url, encoding: .utf8) else { return nil }
+                return File(url: url, name: url.lastPathComponent, text: text)
+            }
+        }
+    }
+
+    private static func perRootUrls(_ root: URL, extensions: Set<String>) -> [URL] {
+        memo.urls(root: root, extensions: extensions) { walk(root, extensions: extensions) }
+    }
+
     // Every Swift file under `root`, refusing out loud when the walk comes back short.
     //
     // The refusal is recorded as a test issue from in here, so a guard that forgets to assert its own
@@ -53,6 +122,10 @@ enum AppSourceWalk {
         // to walk first would let the other report a clean app (#3235, L98).
         if let refusal = refusal(found: found.count, floor: floor, directory: root.path) {
             Issue.record(Comment(rawValue: refusal))
+        }
+        // #3113: and the floor itself, which a caller could set low enough to protect nothing.
+        if let tooLow = lowFloorRefusal(root: root, floor: floor) {
+            Issue.record(Comment(rawValue: tooLow))
         }
         return found
     }
@@ -69,6 +142,9 @@ enum AppSourceWalk {
         }
         if let refusal = refusal(found: found.count, floor: floor, directory: root.path) {
             Issue.record(Comment(rawValue: refusal))
+        }
+        if let tooLow = lowFloorRefusal(root: root, floor: floor) {
+            Issue.record(Comment(rawValue: tooLow))
         }
         return found
     }

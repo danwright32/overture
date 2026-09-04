@@ -205,18 +205,45 @@ struct ScopedReplyDraftTests {
                 unscopedCallers: []),
     ]
 
-    // The one hop the seam hides. The spy stands in for `launchReplyDrafter`, so nothing in the suite
-    // watches the real one forward the scope it was handed: writing `only: nil` there is the whole of
-    // #2944 again, and it would satisfy both guards above (the spy never runs it, and the guard on the
-    // words sees `only:` written). One line, so the words are what is checked.
+    // #2975: the one hop the seam hides, watched by BEHAVIOUR rather than by spelling.
+    //
+    // Every other guard here stops at the injected launch seam, so nothing watched the REAL
+    // `launchReplyDrafter` forward the scope it was handed. That was covered by a source-text check for
+    // the words `only: target` inside its one-line body, and #2975 filed that as the gap it is: renaming
+    // the parameter leaves it passing while it protects nothing, and what it protects is money.
+    //
+    // This drives the real launcher, with the real `startClassify`, all the way to the QUEUE FILE it
+    // writes, and reads it back. The scope is observable there: one item, the one asked for, instead of
+    // every waiting reply. A rename cannot defeat it, and neither can writing `only: nil` (L103, L1).
     @Test func theLiveLauncherForwardsTheScopeItWasHanded() throws {
-        let source = SourceGuardHelper.source("Overture/UI/ProspectMutations.swift")
-        let body = try SourceGuard.functionBody(named: "launchReplyDrafter", in: source)
-        #expect(body.contains("only: target"),
-                """
-                launchReplyDrafter no longer hands the drafter the target it was given, so every button \
-                that scopes a draft is spending across every waiting conversation again (#2944).
-                """)
+        let ctx = ModelContext(try container())
+        repliedShow(ctx, key: "A", address: "a@x.org")
+        repliedShow(ctx, key: "B", address: "b@x.org")
+
+        let dir = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("scoped-draft-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let queueURL = dir.appendingPathComponent("queue.json")
+
+        ProspectMutations.launchReplyDrafter(
+            ctx, ReplyClassifyService.Target(naturalKey: "B", recipientId: "b@x.org"),
+            queueURL: queueURL,
+            markerURL: dir.appendingPathComponent("marker"),
+            cancelURL: dir.appendingPathComponent("cancel"),
+            // Nothing is actually launched and nothing is announced: this is about what the run was
+            // GIVEN, and a test that spends a paid run to find out would be its own defect (L2).
+            launch: { }, announce: { })
+
+        let written = try #require(try? Data(contentsOf: queueURL),
+                                   "the launcher wrote no queue at all, so it never reached startClassify")
+        let queue = try JSONDecoder().decode(ReplyClassifyQueue.self, from: written)
+        #expect(queue.items.count == 1, """
+            launchReplyDrafter queued \(queue.items.count) conversations for a request scoped to one, so \
+            every button that scopes a draft is spending the paid run across every waiting reply (#2944).
+            """)
+        #expect(queue.items.first?.naturalKey == "B")
+        #expect(queue.items.first?.recipientId == "b@x.org")
     }
 
     // The balanced argument list of a call whose "(" has just been passed.
