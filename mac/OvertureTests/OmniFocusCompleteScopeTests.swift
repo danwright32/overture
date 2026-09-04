@@ -61,7 +61,7 @@ struct OmniFocusCompleteScopeTests {
 
     // MARK: - What apply actually hands the client
 
-    private final class RecordingClient: OmniFocusClient {
+    private final class RecordingClient: OmniFocusClient, @unchecked Sendable {
         let existing: [OmniFocusSync.ExistingTask]
         var completed: [OmniFocusSync.ExistingTask] = []
         init(existing: [OmniFocusSync.ExistingTask]) { self.existing = existing }

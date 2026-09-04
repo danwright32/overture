@@ -53,6 +53,37 @@ enum OmniFocusSyncStatus {
         defaults.bool(forKey: permissionNeededKey)
     }
 
+    // #3420: what the last completed-task read walked. Written ONLY by a read that actually happened,
+    // never by a failed one: zero tasks in no time is a real measurement of a small OmniFocus, and a
+    // read that threw would otherwise record itself as the fastest one ever taken (L98).
+    static let completedReadTasksKey = "omniFocusLastCompletedReadTasks"
+    static let completedReadSecondsKey = "omniFocusLastCompletedReadSeconds"
+    // A separate flag rather than inferring "never measured" from a zero count, because zero is a
+    // legitimate reading: a fresh install has ticked nothing off yet (L67).
+    static let completedReadTakenKey = "omniFocusLastCompletedReadTaken"
+
+    static func recordCompletedRead(_ shape: OmniFocusSync.ReadShape, into defaults: UserDefaults = .standard) {
+        defaults.set(shape.tasks, forKey: completedReadTasksKey)
+        defaults.set(shape.seconds, forKey: completedReadSecondsKey)
+        defaults.set(true, forKey: completedReadTakenKey)
+    }
+
+    // #3420: the sentence that makes the measurement readable by a person rather than a number the code
+    // holds and nobody sees (L357). "Not measured yet" is its own sentence, not a blank or a zero: a
+    // read nobody has taken and a read that found nothing are different facts, and zero completed
+    // reminders is a perfectly ordinary reading on a fresh install (L11, L67).
+    //
+    // Takes the three stored values rather than a UserDefaults, which is the shape every other line on
+    // that sheet already has: the view holds them in @AppStorage so it redraws when a sync lands, and
+    // this decides what they say. A second reader that went to the defaults itself would be one nothing
+    // on screen could ever call (#3154).
+    static func completedReadLine(taken: Bool, tasks: Int, seconds: Double) -> String {
+        guard taken else { return "No sync has read your completed reminders yet." }
+        let formatted = String(format: "%.1f", seconds)
+        let noun = tasks == 1 ? "completed reminder" : "completed reminders"
+        return "Last sync read \(tasks) \(noun) from OmniFocus in \(formatted)s."
+    }
+
     static func recordFailure(_ message: String, at date: Date, into defaults: UserDefaults = .standard) {
         defaults.set(date.timeIntervalSince1970, forKey: failedAtKey)
         defaults.set(message, forKey: errorKey)

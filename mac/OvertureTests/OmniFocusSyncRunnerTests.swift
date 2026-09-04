@@ -6,6 +6,7 @@ import Foundation
 // into the void — and (b) surface a not-granted (or failed) outcome as a notification, exactly once
 // per episode rather than every tick. The native permission probe and the real notifier are thin
 // untestable shims; this exercises the decision between them.
+@MainActor
 @Suite("OmniFocus sync runner (#268)")
 struct OmniFocusSyncRunnerTests {
     private func freshDefaults() -> UserDefaults {
@@ -13,7 +14,7 @@ struct OmniFocusSyncRunnerTests {
         return d
     }
 
-    private final class FakeClient: OmniFocusClient {
+    private final class FakeClient: OmniFocusClient, @unchecked Sendable {
         var existingCalled = false
         var throwOnExisting = false
         func existingOvertureTasks() throws -> [OmniFocusSync.ExistingTask] {
@@ -33,29 +34,29 @@ struct OmniFocusSyncRunnerTests {
         func notifySyncFailed(_ message: String) { failed += 1 }
     }
 
-    @Test func notGrantedSkipsTheClientAndNotifiesOnce() {
+    @Test func notGrantedSkipsTheClientAndNotifiesOnce() async {
         let d = freshDefaults(); let client = FakeClient(); let note = FakeNotifier()
-        OmniFocusSyncRunner.run(desired: [], permission: .notGranted, client: client,
+        await OmniFocusSyncRunner.run(desired: [], permission: .notGranted, client: client,
                                 notifier: note, now: Date(), defaults: d)
         #expect(client.existingCalled == false)                       // never fired the AppleScript
         #expect(OmniFocusSyncStatus.isPermissionNeeded(from: d))
         #expect(note.permissionNeeded == 1)
     }
 
-    @Test func repeatedDenialNotifiesExactlyOnce() {
+    @Test func repeatedDenialNotifiesExactlyOnce() async {
         let d = freshDefaults(); let note = FakeNotifier()
         for _ in 0..<3 {
-            OmniFocusSyncRunner.run(desired: [], permission: .notGranted, client: FakeClient(),
+            await OmniFocusSyncRunner.run(desired: [], permission: .notGranted, client: FakeClient(),
                                     notifier: note, now: Date(), defaults: d)
         }
         #expect(note.permissionNeeded == 1)                           // one per episode, not per tick
     }
 
-    @Test func grantedRunsTheClientAndClearsState() {
+    @Test func grantedRunsTheClientAndClearsState() async {
         let d = freshDefaults(); let client = FakeClient(); let note = FakeNotifier()
-        OmniFocusSyncRunner.run(desired: [], permission: .notGranted, client: FakeClient(),
+        await OmniFocusSyncRunner.run(desired: [], permission: .notGranted, client: FakeClient(),
                                 notifier: note, now: Date(), defaults: d)   // get into denied episode first
-        OmniFocusSyncRunner.run(desired: [], permission: .granted, client: client,
+        await OmniFocusSyncRunner.run(desired: [], permission: .granted, client: client,
                                 notifier: note, now: Date(), defaults: d)
         #expect(client.existingCalled)
         #expect(OmniFocusSyncStatus.isPermissionNeeded(from: d) == false)
@@ -63,10 +64,10 @@ struct OmniFocusSyncRunnerTests {
         #expect(note.failed == 0)
     }
 
-    @Test func grantedButFailingRecordsAndNotifies() {
+    @Test func grantedButFailingRecordsAndNotifies() async {
         let d = freshDefaults(); let client = FakeClient(); client.throwOnExisting = true
         let note = FakeNotifier()
-        OmniFocusSyncRunner.run(desired: [], permission: .granted, client: client,
+        await OmniFocusSyncRunner.run(desired: [], permission: .granted, client: client,
                                 notifier: note, now: Date(), defaults: d)
         #expect(OmniFocusSyncStatus.lastFailure(from: d) != nil)
         #expect(note.failed == 1)

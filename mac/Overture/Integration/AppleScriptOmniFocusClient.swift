@@ -11,12 +11,18 @@ struct AppleScriptOmniFocusClient: OmniFocusClient {
     // Dan's existing "Outreach" project, targeted by id so a rename can't break it.
     private let projectId = "bAdQ9GQXfWn"
     private let tagNames = ["Overture", "1Important", "B. Medium Time Commitment"]
-    private let ownerTag = "Overture"
+    // Static for the same reason the separators are: the script generator below is static.
+    static let ownerTagName = "Overture"
+    private let ownerTag = Self.ownerTagName
     private let notePrefix = OmniFocusSync.notePrefix          // "Overture lead: "     (paragraph 1)
     private let contactPrefix = OmniFocusSync.contactNotePrefix // "Overture contact: "  (paragraph 2, #653)
     private let duePrefix = OmniFocusSync.dueNotePrefix         // "Due: "               (paragraph 3)
-    private let fieldSep = "|||"
-    private let recordSep = "@@@"
+    // Static, because `overtureTasksScript` is: an instance copy beside a static one is two definitions
+    // of the same separator that can drift, and the parser reads these too (L26).
+    static let fieldSeparator = "|||"
+    static let recordSeparator = "@@@"
+    private let fieldSep = Self.fieldSeparator
+    private let recordSep = Self.recordSeparator
     // #653: a pre-existing task written before this shipped has no contact line at all (the old
     // 2-paragraph format). Tag it with a recipientId that can never match a real desired task, so
     // reconcile always treats it as stale -- the one-time transition: it completes and the correct
@@ -47,27 +53,44 @@ struct AppleScriptOmniFocusClient: OmniFocusClient {
     }
 
     private func overtureTasks(completed: Bool) throws -> [OmniFocusSync.ExistingTask] {
-        let src = """
+        let raw = try run(Self.overtureTasksScript(completed: completed))
+        return Self.parseExistingTasks(raw, notePrefix: notePrefix, contactPrefix: contactPrefix, duePrefix: duePrefix,
+                                       fieldSep: fieldSep, recordSep: recordSep)
+    }
+
+    // #3420: the notes come back in ONE Apple event, and the loop that picks them apart runs over
+    // LOCAL strings.
+    //
+    // It used to be `repeat with t in (tasks of ovt whose completed is true)` with `note of t` inside,
+    // which is a remote property read per turn: one round trip per task, over a population that only
+    // ever grows, since nothing prunes a completed Overture task and there is no horizon. That is what
+    // #3419's sample was parked in. `note of (every task ... whose ...)` asks once and gets a list of
+    // plain strings back, so `count of paragraphs` and `paragraph 1 of` below cost nothing at all: they
+    // are string operations on a value AppleScript already holds.
+    //
+    // Static so it has a test. The Apple event boundary cannot have one, which is exactly why the
+    // decisions either side of it (this, the completion clause, the error mapping, the parse) are all
+    // pure functions here rather than inline in the calls.
+    static func overtureTasksScript(completed: Bool) -> String {
+        """
         tell application "OmniFocus" to tell default document
-          set ovt to first flattened tag whose name is "\(ownerTag)"
+          set ovt to first flattened tag whose name is "\(esc(ownerTagName))"
+          set allNotes to note of (every task of ovt whose completed is \(completed))
           set out to ""
-          repeat with t in (tasks of ovt whose completed is \(completed))
-            set nt to note of t
+          repeat with rawNote in allNotes
+            set nt to rawNote as text
             set pCount to count of paragraphs of nt
-            if pCount >= 2 and (paragraph 1 of nt) starts with "\(esc(notePrefix))" then
+            if pCount >= 2 and (paragraph 1 of nt) starts with "\(esc(OmniFocusSync.notePrefix))" then
               if pCount >= 3 then
-                set out to out & (paragraph 1 of nt) & "\(fieldSep)" & (paragraph 2 of nt) & "\(fieldSep)" & (paragraph 3 of nt) & "\(recordSep)"
+                set out to out & (paragraph 1 of nt) & "\(fieldSeparator)" & (paragraph 2 of nt) & "\(fieldSeparator)" & (paragraph 3 of nt) & "\(recordSeparator)"
               else
-                set out to out & (paragraph 1 of nt) & "\(fieldSep)" & "\(Self.legacyRecipientId)" & "\(fieldSep)" & (paragraph 2 of nt) & "\(recordSep)"
+                set out to out & (paragraph 1 of nt) & "\(fieldSeparator)" & "\(legacyRecipientId)" & "\(fieldSeparator)" & (paragraph 2 of nt) & "\(recordSeparator)"
               end if
             end if
           end repeat
           return out
         end tell
         """
-        let raw = try run(src)
-        return Self.parseExistingTasks(raw, notePrefix: notePrefix, contactPrefix: contactPrefix, duePrefix: duePrefix,
-                                       fieldSep: fieldSep, recordSep: recordSep)
     }
 
     // Pure parsing, unit-testable without any AppleScript/live-OmniFocus dependency: decodes the raw

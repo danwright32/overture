@@ -48,7 +48,7 @@ struct ReconcileSchedulerTests {
         #expect(ReconcileScheduler.hasNewReply(p))
     }
 
-    @Test func tickCreatesAnOmniFocusTaskForAReminderDueLead() throws {
+    @Test func tickCreatesAnOmniFocusTaskForAReminderDueLead() async throws {
         let ctx = ModelContext(try container())
         // A confirmed active conversation state set 30 days ago is due for a reminder now.
         let now = Date(timeIntervalSince1970: 40 * 86_400)
@@ -74,19 +74,19 @@ struct ReconcileSchedulerTests {
         let scheduler = ReconcileScheduler(context: ctx, replyRunAlive: { _ in false })
         // #268: inject granted permission so this exercises the apply path (the real silent probe would
         // skip under the test host); the gating decision itself is covered by OmniFocusSyncRunnerTests.
-        scheduler.syncOmniFocus(now: now, client: fake, horizonDays: 14,
+        await scheduler.syncOmniFocus(now: now, client: fake, horizonDays: 14,
                                 permission: .granted, notifier: NoopNotifier(), statusDefaults: freshDefaults())
 
         #expect(fake.created.contains { $0.naturalKey == "warm-lead" })
     }
 
-    @Test func tickRecordsSyncSuccessSoTheFailureWarningClears() throws {
+    @Test func tickRecordsSyncSuccessSoTheFailureWarningClears() async throws {
         let ctx = ModelContext(try container())
         let defaults = freshDefaults()
         OmniFocusSyncStatus.recordFailure("stale", at: Date(timeIntervalSince1970: 1), into: defaults)
 
         let scheduler = ReconcileScheduler(context: ctx, replyRunAlive: { _ in false })
-        scheduler.syncOmniFocus(now: Date(timeIntervalSince1970: 100),
+        await scheduler.syncOmniFocus(now: Date(timeIntervalSince1970: 100),
                                 client: CapturingOmniFocusClient(), horizonDays: 14,
                                 permission: .granted, notifier: NoopNotifier(), statusDefaults: defaults)
 

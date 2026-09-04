@@ -42,7 +42,7 @@ struct CompletingAnOmniFocusTaskTests {
     }
 
     // A client holding whatever OmniFocus is said to hold, open and completed kept apart.
-    private final class FakeClient: OmniFocusClient {
+    private final class FakeClient: OmniFocusClient, @unchecked Sendable {
         var open: [OmniFocusSync.ExistingTask]
         var done: [OmniFocusSync.ExistingTask]
         var created: [OmniFocusSync.DesiredTask] = []
