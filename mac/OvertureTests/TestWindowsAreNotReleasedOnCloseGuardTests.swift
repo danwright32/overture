@@ -41,13 +41,11 @@ struct TestWindowsAreNotReleasedOnCloseGuardTests {
     private static let floor = 100
 
     @Test func everyFileThatBuildsAWindowKeepsItAliveOnClose() {
-        let files = Self.roots.flatMap {
-            AppSourceWalk.files(under: RepoRoot.mac.appendingPathComponent($0), floor: 0)
-        }
-        #expect(files.count >= Self.floor,
-                Comment(rawValue: "walked \(files.count) Swift files across \(Self.roots.count) roots, "
-                        + "fewer than the \(Self.floor) this needs to be checking anything at all. That "
-                        + "is a broken path, not a clean tree (#2311)."))
+        // #3113: ONE floor over the total, applied by the walk. This used to pass `floor: 0` per root
+        // and check the total by hand afterwards, which is the floor switched off with a separate
+        // assertion beside it that nothing connected: the next caller copies the zero, not the check.
+        let files = AppSourceWalk.files(underAll: Self.roots.map(RepoRoot.mac.appendingPathComponent),
+                                        floor: Self.floor)
 
         var builders: [String] = []
         var missing: [String] = []

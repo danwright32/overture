@@ -188,7 +188,10 @@ enum ReplyClassifyService {
         return queue.items.count
     }
 
-    private static func launchRunner() throws {
+    // #2975: internal rather than private, so `ProspectMutations.launchReplyDrafter` can name it as its
+    // OWN default. Its seam has to have one call path, not a test path and a shipping path: a branch a
+    // test never takes is the branch that ships (L101).
+    static func launchRunner() throws {
         // #2838: see ScoutExtractService.launchRunner. One rule for all three runs.
         let script: URL
         switch DetachedRunner.resolveRunner(.replyClassify) {

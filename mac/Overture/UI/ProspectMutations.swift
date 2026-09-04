@@ -448,8 +448,29 @@ enum ProspectMutations {
     // conversation (L3).
     typealias ReplyDraftLaunch = @MainActor (ModelContext, ReplyClassifyService.Target?) -> Void
 
-    static func launchReplyDrafter(_ context: ModelContext, _ target: ReplyClassifyService.Target?) {
-        _ = try? ReplyClassifyService.startClassify(from: context, now: Date(), only: target)
+    // #2975: the seams are here so a test can watch the REAL launcher forward the scope it was handed.
+    //
+    // The only thing watching this line was a source-text check for the words `only: target` in its
+    // body, and #2975 filed that as the gap it is: renaming the parameter leaves that check passing
+    // while it protects nothing, and what it protects is money. Without the scope, one press of Draft a
+    // reply spends the paid drafting run across every waiting conversation (#2944, #2129).
+    //
+    // Every seam is defaulted to the real thing, so the shipping call site is unchanged and the app
+    // cannot accidentally run against a test path. What the test drives is the whole path down to the
+    // QUEUE FILE, and then reads it: the scope reaching `startClassify` is observable as the queue
+    // holding one item rather than every waiting reply. A rename cannot defeat that (L103).
+    static func launchReplyDrafter(_ context: ModelContext, _ target: ReplyClassifyService.Target?,
+                                   queueURL: URL = ReplyClassifyQueueBuilder.defaultURL,
+                                   markerURL: URL = ReplyClassifyService.defaultMarkerURL,
+                                   cancelURL: URL = ReplyClassifyService.defaultCancelURL,
+                                   launch: @MainActor () throws -> Void = ReplyClassifyService.launchRunner,
+                                   announce: @MainActor () -> Void = {
+                                       DetachedRunActivity.replyClassify.runStarted()
+                                   }) {
+        _ = try? ReplyClassifyService.startClassify(from: context, now: Date(), only: target,
+                                                    queueURL: queueURL, markerURL: markerURL,
+                                                    cancelURL: cancelURL, launch: launch,
+                                                    announce: announce)
     }
 
     // #2129 and #2944: draft THIS reply, not every reply waiting. Same run, scoped to one conversation,
@@ -461,7 +482,9 @@ enum ProspectMutations {
     // scope is built here from the arguments naming the conversation, not asked of the caller.
     static func draftReply(_ naturalKey: String, _ recipientId: String, prospects: [Prospect],
                            context: ModelContext, feedback: ActionFeedback,
-                           start: ReplyDraftLaunch = launchReplyDrafter) {
+                           // #2975: wrapped rather than named directly, because `launchReplyDrafter`
+                           // now carries its own defaulted seams and no longer has this narrower shape.
+                           start: ReplyDraftLaunch = { launchReplyDrafter($0, $1) }) {
         guard let model = prospects.first(where: { $0.naturalKey == naturalKey }) else { return }
         model.updateRecipient(id: recipientId) { $0.replyDraftRequestedAt = Date() }
         context.saveOrWarn(org: model.groupName, feedback: feedback)
