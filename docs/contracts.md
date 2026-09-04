@@ -55,6 +55,25 @@ the workflow's runbook is its spec.
 | `shipped-commit.json` | `scripts/record-shipped-commit.sh` **only**, called by both merge scripts, `scripts/hooks/post-merge`, and `mac/build-install.sh` | App (`BuildFreshness.shippedRecord`) | 1 | none (two fields, pinned on both sides) | `BuildFreshnessTests.swift`, `scripts/record-shipped-commit.test.sh` |
 | `update-result.json` | `mac/scripts/lib/update-result.sh`, called by `mac/scripts/update-overture.sh` (#2188: `running` before it decides anything, the refusal reason if it refuses, REMOVED on success) | App (`UpdateAttempt.record`) | 1 | none (four fields, pinned on both sides) | `UpdateAttemptTests.swift`, `UpdateAttemptStateTests.swift`, `mac/scripts/update-overture.test.sh` |
 
+| `feed-movement.log` (in `~/Library/Logs/Overture`) | App (`FeedMovementLog`, one line per source per successful scout; the default-file write is suppressed under tests so a run cannot inject fake movement into the evidence) | **NOBODY YET.** Written for #913, to retune `minReBaselineFraction` against real movement rather than the reasoned 0.9 guess. #913 is open and deferred, so this is a writer with no reader today, which is the whole reason these rows exist (L46) | n/a (one `key=value` line per source, ISO timestamp first so it sorts and greps by time) | none | `FeedMovementLogTests.swift` |
+| `gmail-connect-debug.log` (in `~/Library/Logs/Overture`) | App (`GmailAuthManager`, tracing the connect flow; the path is named once in `AgentLogLocation` rather than assembled at the writer, #2096) | By hand, when a connect fails. The app runs resident, so there is no console to watch it on | n/a (a plain trace log) | none | `AgentLogLocationTests.swift` (the name and the directory) |
+| `queue-derivations.log` (in the DATA directory, not Logs) | App (`QueueRenderCounter`, **Debug builds only**; the suite is kept out of the file entirely by its own `underTests` seam, because the unit suite hosts itself in the full app and its renders were landing in the same file a real observation is read from) | By hand, plus the `derived N · <reason>` line the Debug queue draws above itself | n/a (one line per derivation, capped on write) | none | `QueueDerivationCounterTests.swift`, `QueueDerivationReasonTests.swift` |
+
+#3465: the three rows above are LOGS the app itself writes, and they were absent from this catalog
+until they were catalogued here. They carry no version and no fixture, which is the honest shape for a
+plain log, but they do carry a writer and a reader, and that is what they were missing: a file nobody
+catalogued has no stated reader, which is how a writer with no reader survives unnoticed (L46).
+Asking the question found one immediately. `feed-movement.log` has been accumulating a line per source
+per scout since #1114 and nothing has ever read it, because its only intended reader is #913, which is
+open and deferred. That is not an argument for deleting it (the evidence is exactly what #913 needs and
+cannot be reconstructed later), but it is worth being written down rather than discovered again.
+
+One correction to #3465's own text, which said `backup.log` was already listed: it is not, and neither
+are the two resident-agent logs (`overture-agent.out.log`, `overture-agent.err.log`) or
+`overture-agent.problems.log`. Those four are still uncatalogued. They are left for their own pass
+rather than swept in here, because each needs its reader checked the way these three did, and a row
+asserting a reader nobody verified is worse than no row (#3525).
+
 #1678: the results files carry **run metadata written by the runner script, not by the workflow**. On
 `overture-prep-results.json` that is `model` (#1533, which model actually ran), `runCost` (#1593, dollars and
 wall clock) and `webCalls` (#1864, how many web calls the run made against its allowance). `model` alone is

@@ -139,6 +139,17 @@ enum LiveStoreClone {
     /// than falling back to a torn copy.
     static let busyTimeoutMilliseconds = 30_000
 
+    /// The arguments that make the clone self-contained, built here for the same reason
+    /// `backupArguments` is: so the pragma the shipped path actually runs is a value a test can read
+    /// rather than a claim about the code (L3, L107).
+    ///
+    /// #3072: `WalCloneNeedsItsSidecarsTests` first re-typed this pragma into its own fixture, which
+    /// measured SQLite correctly and guarded nothing here: a mutation replacing it with
+    /// `PRAGMA user_version=1` left the suite green.
+    static func selfContainedArguments(clone: URL) -> [String] {
+        ["\(clone.path)", "PRAGMA journal_mode=DELETE;"]
+    }
+
     /// The arguments for the online backup, built here rather than inline so the timeout the shipped
     /// path asks for is a value a test can read rather than a claim about the code (L3).
     static func backupArguments(source: URL, clone: URL, timeoutMilliseconds: Int) -> [String] {
@@ -176,7 +187,18 @@ enum LiveStoreClone {
         //
         // That is also what makes "no sidecars" a real property rather than a trap: a snapshot missing the
         // files it depends on is worse than one that never needed them.
-        try run(["\(clone.path)", "PRAGMA journal_mode=DELETE;"],
+        //
+        // #3072: MEASURED, and it holds. `WalCloneNeedsItsSidecarsTests` drives all four steps through the
+        // readers' own `sqlite3_open_v2(SQLITE_OPEN_READONLY)` call: the clone comes out `wal`, it carries
+        // no sidecars, it is refused read-only in that state, and after this line it reads with nothing
+        // beside it. The sentence above is therefore evidence rather than reasoning.
+        //
+        // Worth knowing WHY it once looked refuted: the overnight review of 2026-08-20 tried the direct
+        // version three times and it read fine. Asking a clone `PRAGMA journal_mode` opens it READ-WRITE,
+        // which CREATES the `-shm` and `-wal`, so any probe that checks the mode before attempting the
+        // read has already repaired the condition it is about to measure (L70). The first version of the
+        // test above reproduced that result for exactly that reason.
+        try run(selfContainedArguments(clone: clone),
                 failing: "could not make the clone self-contained")
     }
 
