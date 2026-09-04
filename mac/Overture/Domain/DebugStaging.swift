@@ -62,7 +62,12 @@ enum DebugStaging {
         recipient.sendState = .sent
         recipient.sentAt = p.sentAt
         recipient.gmailMessageId = "debug-\(recipient.id)-\(Int(now.timeIntervalSince1970))"
-        recipient.replied = true
+        // #3422: through `reopenOnReply`, which is what every production writer of `replied` goes
+        // through, so this fixture stamps an arrival instant the way a real reply does. Setting
+        // `replied` alone left `replyArrivedAt` nil, so the triage due fell back to `sentAt` and
+        // the test lead's task was dated from when DAN SENT rather than from anything arriving.
+        // The rule would have been working and reading as broken on the one lead used to check it.
+        recipient.reopenOnReply(at: now.addingTimeInterval(-3_600))
         p.setRecipients([recipient])
         context.insert(p)
         return p

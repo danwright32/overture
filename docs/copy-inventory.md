@@ -46,6 +46,7 @@ What is not, and why:
 - `Domain/LaunchMigrations.swift`: developer diagnostic log, not the app's own voice (#915)
 - `Domain/ListingOrganiser.swift`: parser tokens matched against ticketing pages, never Overture's voice
 - `Domain/NaturalKeyVenueMigration.swift`: developer diagnostic log, not the app's own voice (#915)
+- `Domain/OmniFocusDueToken.swift`: a token written into an OmniFocus note, read by this parser, never by Dan
 - `Domain/OmniFocusFailureKind.swift`: the enum case's own name, as `"\(error)"` renders it. Read, never said.
 - `Domain/OmniFocusFailureKind.swift`: AppleScript's own wordings, kept only for failures RECORDED BEFORE
 - `Domain/OrgReachabilityAnswer.swift`: a diagnostic log line, not a sentence Overture says on screen

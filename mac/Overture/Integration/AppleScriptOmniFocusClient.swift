@@ -116,8 +116,9 @@ struct AppleScriptOmniFocusClient: OmniFocusClient {
             } else {
                 return nil   // unrecognized shape: skip rather than guess
             }
-            let ymd = line3.dropFirst(duePrefix.count).split(separator: "-").compactMap { Int($0) }
-            guard ymd.count == 3, let due = easternDue(year: ymd[0], month: ymd[1], day: ymd[2]) else { return nil }
+            // #3422: through the one token type the writer uses, so the round trip cannot disagree with
+            // itself. It reads the legacy day-only shape too, which is what Dan's OmniFocus holds now.
+            guard let due = OmniFocusDueToken.date(from: String(line3.dropFirst(duePrefix.count))) else { return nil }
             return OmniFocusSync.ExistingTask(naturalKey: key, recipientId: recipientId, dueDate: due)
         }
     }
@@ -158,10 +159,13 @@ struct AppleScriptOmniFocusClient: OmniFocusClient {
         let contactClause = recipientId == Self.legacyRecipientId
             ? "note does not contain \"\(esc(OmniFocusSync.contactNotePrefix))\""
             : "note contains \"\(esc(OmniFocusSync.contactNotePrefix + recipientId))\""
-        let dueDay = EasternDate.dayString(from: dueDate)
+        // #3422: the same token the note carries. Matching on the DAY alone would name every task for
+        // this contact due at any hour that day, a family where the decision named one member
+        // (L166), which is the exact defect #2885 closed for the contact.
+        let dueToken = OmniFocusDueToken.string(from: dueDate)
         return "completed is false"
             + " and note contains \"\(esc(OmniFocusSync.notePrefix + naturalKey))\""
-            + " and note contains \"\(esc(OmniFocusSync.dueNotePrefix + dueDay))\""
+            + " and note contains \"\(esc(OmniFocusSync.dueNotePrefix + dueToken))\""
             + " and \(contactClause)"
     }
 
@@ -247,11 +251,5 @@ struct AppleScriptOmniFocusClient: OmniFocusClient {
         """
     }
 
-    private static func easternDue(year: Int, month: Int, day: Int) -> Date? {
-        var comps = DateComponents()
-        comps.year = year; comps.month = month; comps.day = day
-        comps.hour = OmniFocusSync.dueHour; comps.minute = 0; comps.second = 0
-        return EasternDate.calendar.date(from: comps)
-    }
 }
 // copy-inventory:ignore-end

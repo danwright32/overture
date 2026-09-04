@@ -169,40 +169,75 @@ enum OmniFocusSync {
                 // an otherwise-closed contact still deserves a task, #424).
                 guard standing.isInPlay || unhandledReply else { continue }
 
-                // The post-event prompt, on its own date, if that falls within the horizon.
+                // #2663: both candidates are BUILT, then one is chosen, rather than the post-event
+                // branch taking this contact's single slot by running first and `continue`ing.
                 //
-                // #2646: `nextPromptDate` now names a date that has not arrived yet instead of staying
-                // silent until it does, so this site asks the DUE question explicitly rather than reading
-                // nil as "not yet". Behaviour here is deliberately unchanged, and that reveals something
-                // worth naming: the branch only ever fired on an already-due prompt, so `due <= cutoff`
-                // has never once excluded anything (a past date is always inside a future cutoff), and
-                // the horizon this comment describes has never applied. Left in place rather than quietly
-                // dropped, because making it real is a change with a consequence: a prompt coming due next
-                // week would take this contact's single task slot away from a reply needing triage today,
-                // via the `continue` below. That is its own issue (#2663), not a side effect of this one.
-                if let due = PostEventPrompt.nextPromptDate(for: r, of: p),
-                   PostEventPrompt.prompt(for: r, of: p, now: now) != nil, due <= cutoff {
+                // Two rules, and they do not conflict, which is why this is additive rather than a
+                // reversal. #2397 decided that once a show is OVER the thing Dan owes is an ending
+                // rather than an answer, so a prompt already due outranks triage; that is kept exactly.
+                // #2663 is about work not yet owed, which could not arise before: the branch also
+                // required the prompt to be already due, so `due <= cutoff` was unreachable (a past date
+                // is always inside a future cutoff) and the horizon its comment described had never once
+                // applied. Dropping that gate makes the horizon real, and among work that is not yet
+                // owed the soonest deadline wins.
+                //
+                // The horizon becoming real is what the OmniFocus sheet already promises Dan in his own
+                // words, that the sync only fires while Overture is open so it looks ahead by N days: a
+                // prompt falling due while the app was shut would otherwise wait for the next launch.
+                var postEventTask: DesiredTask?
+                // The moment the prompt starts being OWED, which is Eastern midnight the day after the
+                // show. Deliberately not the task's own 6:00 PM due derived from it: `PostEventPrompt`
+                // answers "is it owed yet" against this instant, and asking the derived one instead
+                // would move the answer by eighteen hours and quietly change #2397's rule while looking
+                // like it preserved it (L70).
+                var postEventOwedFrom: Date?
+                var triageTask: DesiredTask?
+
+                if let due = PostEventPrompt.nextPromptDate(for: r, of: p), due <= cutoff {
                     let dueDate = easternTime(hour: dueHour, onDayOf: due)
-                    earned.append((r, DesiredTask(kind: .postEventPrompt, naturalKey: p.naturalKey, recipientId: r.id, title: title(for: p, r),
-                                                  note: note(for: p, r, kind: .postEventPrompt, dueDate: dueDate),
-                                                  deferDate: easternTime(hour: deferHour, onDayOf: due),
-                                                  dueDate: dueDate)))
-                    continue
+                    postEventOwedFrom = due
+                    postEventTask = DesiredTask(kind: .postEventPrompt, naturalKey: p.naturalKey, recipientId: r.id, title: title(for: p, r),
+                                                note: note(for: p, r, kind: .postEventPrompt, dueDate: dueDate),
+                                                deferDate: easternTime(hour: deferHour, onDayOf: due),
+                                                dueDate: dueDate)
                 }
 
-                // #271: a reply Dan has not answered. Emit a triage task, keyed by the SAME
-                // (naturalKey, recipientId) so reconcile dedupes it against the prompt above.
+                // #271: a reply Dan has not answered. Keyed by the SAME (naturalKey, recipientId) as the
+                // prompt above so reconcile dedupes them.
                 if unhandledReply {
-                    // Anchored to a STABLE date on the recipient (when the reply arrived, else when Dan
-                    // first reached out), NOT `now`; otherwise the day-token diff would complete and
-                    // recreate the task on every new calendar day until he answers.
+                    // Anchored to a STABLE instant on the recipient, NOT `now`: otherwise the due would
+                    // move every tick and reconcile would complete and recreate the task for ever.
+                    //
+                    // #3422: `sentAt` measures the deadline from when DAN SENT rather than from anything
+                    // arriving, which is a deadline about the wrong event. It is unreachable on real
+                    // data, because `hasUnhandledReply` needs `replied` and every production writer of
+                    // `replied` goes through `reopenOnReply`, which stamps `repliedAt`. Kept rather than
+                    // removed because the alternative on a corrupt row is no reminder at all, and a
+                    // missing reminder is invisible (L47). `DebugStaging` used to reach it and now does
+                    // not, so a correct rule no longer reads as broken on the one lead used to check it.
                     let anchor = r.replyArrivedAt ?? r.sentAt ?? now
-                    let dueDate = easternTime(hour: dueHour, onDayOf: anchor)
-                    earned.append((r, DesiredTask(kind: .replyTriage, naturalKey: p.naturalKey, recipientId: r.id, title: triageTitle(for: p, r),
-                                                  note: note(for: p, r, kind: .replyTriage, dueDate: dueDate),
-                                                  deferDate: easternTime(hour: deferHour, onDayOf: anchor),
-                                                  dueDate: dueDate)))
+                    // #3422: the due follows the ARRIVAL TIME, not the arrival day. A fixed 6:00 PM meant
+                    // every reply landing after 6:00 PM produced a task already overdue when it was
+                    // created, and evening is when Dan reads OmniFocus rather than the app.
+                    let dueDate = ReplyTriageDue.due(replyArrivedAt: anchor)
+                    triageTask = DesiredTask(kind: .replyTriage, naturalKey: p.naturalKey, recipientId: r.id, title: triageTitle(for: p, r),
+                                             note: note(for: p, r, kind: .replyTriage, dueDate: dueDate),
+                                             deferDate: ReplyTriageDue.surfacesAt(due: dueDate),
+                                             dueDate: dueDate)
                 }
+
+                let chosen: DesiredTask?
+                if let postEventTask, let postEventOwedFrom, now >= postEventOwedFrom {
+                    chosen = postEventTask                                   // #2397, unchanged
+                } else {
+                    // On an exact tie the post-event prompt keeps the slot, because it is first in the
+                    // array: a tie is the same instant, so nothing is deferred by choosing either, and
+                    // picking deterministically beats picking by whatever order a sort left them in
+                    // (L343).
+                    chosen = [postEventTask, triageTask].compactMap { $0 }
+                        .min { $0.dueDate < $1.dueDate }                     // #2663
+                }
+                if let chosen { earned.append((r, chosen)) }
             }
             tasks.append(contentsOf: SendGroup.oneRowPerGroup(earned) { $0.recipient }.map(\.task))
         }
@@ -363,7 +398,10 @@ enum OmniFocusSync {
         // The first three are LOAD BEARING: the client reads them back verbatim to match a task to its
         // contact, so nothing goes above or between them.
         var parts = ["\(notePrefix)\(p.naturalKey)", "\(contactNotePrefix)\(r.id)",
-                     "\(dueNotePrefix)\(EasternDate.dayString(from: dueDate))"]
+                     // #3422: the full instant, not the day. A day-only token cannot compare equal to a
+                     // due that varies by the hour the reply arrived, so reconcile would call every task
+                     // stale on every pass and churn OmniFocus for ever with nothing reporting it.
+                     "\(dueNotePrefix)\(OmniFocusDueToken.string(from: dueDate))"]
         parts.append(kind.whatClearsIt)
         // #2952: on a follow-up, say that a conversation already happened.
         //
