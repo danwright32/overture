@@ -2825,10 +2825,6 @@ extension QueueItem {
         let draftLintBlocked = pendingRecipients.contains {
             $0.isBlockedByDraftLint(lintBlockers: lintBlockers($0))
         }
-        // #3498: counted here from the shared findings rather than read off the model, which would run
-        // the lint again for every recipient. The RULE is still `Recipient.isBlockedAwaitingReview`.
-        let blockedContactCount = p.recipients
-            .filter { $0.isBlockedAwaitingReview(lintBlockers: lintBlockers($0)) }.count
 
         self.init(
             id: p.naturalKey,
@@ -2892,7 +2888,7 @@ extension QueueItem {
             // #1311: any recipient with a real address at all, so the Send surface can tell "no email to
             // send to" apart from "an email exists but is held for a review".
             hasAnyEmailContact: hasAnyEmailContact,
-            blockedContactCount: blockedContactCount,
+            blockedContactCount: p.blockedContactCount(lintBlockers: lintBlockers),
             hasEnteredSendHalf: p.hasEnteredSendHalf,   // #1797
             sendError: p.sendError,
             lostReason: p.lostReason,
