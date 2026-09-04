@@ -21,6 +21,10 @@ enum BuildFreshnessPanel {
         // #2553: and a branch build is shown for a stronger version of the same reason. It is the state
         // that used to render as "up to date", and the copy saying it is running against the real store.
         case .behind, .cannotTell, .builtFromABranch: return true
+        // #2077: nothing to say. A build run from source is not behind anything, and a panel on every
+        // debug launch teaches whoever is testing to dismiss this one unread, which is the reflex that
+        // makes it useless on the Release copy where it is telling the truth (L36).
+        case .runFromSource: return false
         }
     }
 
@@ -82,10 +86,18 @@ final class BuildFreshnessState {
 
     // The directory is passed in rather than resolved here, so a test can never read Dan's real
     // Application Support folder (L2).
+    //
+    // #2077: and so is `isRunFromSource`, defaulting to the real answer. The suite BUILDS IN DEBUG, so a
+    // hardcoded `StoreLocation.isDebugBuild` here made every test that goes through this initialiser
+    // answer `runFromSource` and nothing could exercise the installed path at all: ten of them went red
+    // at once, which is a component that constructs its own dependency being beyond every refusal a
+    // test could offer (L196).
     convenience init(directory: URL,
+                     isRunFromSource: Bool = StoreLocation.isDebugBuild,
                      sleep: @escaping @MainActor (TimeInterval) async -> Void = { try? await Task.sleep(for: .seconds($0)) },
                      now: @escaping @MainActor () -> Date = { Date() }) {
-        self.init(reader: { (BuildFreshness.verdict(in: directory), BuildFreshnessPanel.repoPath(in: directory)) },
+        self.init(reader: { (BuildFreshness.verdict(in: directory, isRunFromSource: isRunFromSource),
+                             BuildFreshnessPanel.repoPath(in: directory)) },
                   sleep: sleep, now: now)
     }
 
@@ -171,6 +183,11 @@ enum BuildFreshnessCopy {
             return "The installer could not reach GitHub to check whether this build's code had been merged."
         case .builtFromABranch:
             return "It is not what has shipped, and it is working on your real data."
+        case .runFromSource:
+            // Empty for the same reason `upToDate` is: `shouldShow` refuses this case, so a sentence
+            // here would land in `docs/copy-inventory.md` as something Overture can say while being
+            // unreachable by construction (L29, L132).
+            return ""
         }
     }
 
@@ -183,7 +200,8 @@ enum BuildFreshnessCopy {
         // `upToDate` never reaches a panel, since `shouldShow` refuses it, and it is not given a
         // cheerful title of its own for the same reason `body` gives it no sentence: it would land in
         // `docs/copy-inventory.md` as something Overture can say while being unreachable.
-        case .behind, .upToDate: return title
+        // `runFromSource` joins them for the same reason: no panel, so no title.
+        case .behind, .upToDate, .runFromSource: return title
         }
     }
 

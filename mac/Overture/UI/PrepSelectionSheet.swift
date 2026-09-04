@@ -36,7 +36,9 @@ struct PrepSelectionSheet: View {
          onRun: @escaping (Set<String>) -> Void) {
         self.onRun = onRun
         self.allItems = allItems
-        self.rows = prospects.map { p in
+        // #3375: ordered before it is mapped, through the rule in PrepQueueBuilder rather than one
+        // spelled here, so the sheet holds no ordering of its own to drift.
+        self.rows = PrepQueueBuilder.prepSelectionOrder(prospects: prospects).map { p in
             Row(id: p.naturalKey, groupName: p.groupName,
                 detail: PrepSelectionCopy.rowDetail(venue: p.venue, performanceDate: p.performanceDate))
         }
