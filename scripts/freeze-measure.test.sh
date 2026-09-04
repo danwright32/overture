@@ -19,10 +19,14 @@
 # an ELEVATED run still writes its record, because an observation nobody can re-examine is worse than
 # one carrying its own caveat (#3442).
 set -uo pipefail
-cd "$(dirname "$0")/.." || exit 1
+# #3481/L372: captured BEFORE the cd. `$0` and `BASH_SOURCE[0]` are the path the script was
+# INVOKED by, so re-deriving a directory from either after a cd resolves against the NEW working
+# directory: it works for one invocation and silently misses for another.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "${SCRIPT_DIR}/.." || exit 1
 
 # shellcheck source=./lib/shell-assertions.sh
-. "$(dirname "$0")/lib/shell-assertions.sh"
+. "${SCRIPT_DIR}/lib/shell-assertions.sh"
 
 FAILURES=0
 SCRIPT="$(pwd)/scripts/freeze-measure.sh"

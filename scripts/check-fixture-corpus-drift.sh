@@ -30,9 +30,12 @@
 #      worktree, so it can never be a refusal; kept apart from 0 because a run that measured nothing
 #      must not read as one that measured and was happy.
 set -uo pipefail
-cd "$(dirname "$0")/.." || exit 1
-
+# #3481/L372: captured BEFORE the cd. `$0` and `BASH_SOURCE[0]` are the path the script was
+# INVOKED by, so re-deriving a directory from either after a cd resolves against the NEW working
+# directory: it works for one invocation and silently misses for another.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "${SCRIPT_DIR}/.." || exit 1
+
 # shellcheck source=./lib/scratch.sh
 . "${SCRIPT_DIR}/lib/scratch.sh"
 

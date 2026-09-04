@@ -24,9 +24,12 @@
 # failure as the cleanest possible pass (L98). The proof that tests ran therefore comes from the run's own
 # output, never from the difference.
 set -uo pipefail
-cd "$(dirname "$0")/.." || exit 1
-
+# #3481/L372: captured BEFORE the cd. `$0` and `BASH_SOURCE[0]` are the path the script was
+# INVOKED by, so re-deriving a directory from either after a cd resolves against the NEW working
+# directory: it works for one invocation and silently misses for another.
 LEAKS_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "${LEAKS_SCRIPT_DIR}/.." || exit 1
+
 # #3258: scratch that honours TMPDIR, so a leak is visible to the checks that look there. This script
 # in particular: its whole subject is scratch nobody reclaims, and it was making its own where it
 # could not see it.

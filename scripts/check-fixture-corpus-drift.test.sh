@@ -5,10 +5,14 @@
 # the tree it scans for declarations. Left real, this fixture would assert about whatever Dan's store
 # happens to hold on the day somebody runs it (L2, L224).
 set -uo pipefail
-cd "$(dirname "$0")/.." || exit 1
+# #3481/L372: captured BEFORE the cd. `$0` and `BASH_SOURCE[0]` are the path the script was
+# INVOKED by, so re-deriving a directory from either after a cd resolves against the NEW working
+# directory: it works for one invocation and silently misses for another.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "${SCRIPT_DIR}/.." || exit 1
 
 # shellcheck source=./lib/shell-assertions.sh
-. "$(dirname "$0")/lib/shell-assertions.sh"
+. "${SCRIPT_DIR}/lib/shell-assertions.sh"
 
 FAILURES=0
 SCRIPT="$(pwd)/scripts/check-fixture-corpus-drift.sh"

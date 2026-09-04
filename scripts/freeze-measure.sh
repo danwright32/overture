@@ -41,9 +41,12 @@
 # measurement date, never hardcoded here: another Mac, or this one after Dan changes what he runs, would
 # otherwise read as permanently ELEVATED and the tool would be useless there (L96, L153).
 set -uo pipefail
-cd "$(dirname "$0")/.." || exit 1
-
+# #3481/L372: captured BEFORE the cd. `$0` and `BASH_SOURCE[0]` are the path the script was
+# INVOKED by, so re-deriving a directory from either after a cd resolves against the NEW working
+# directory: it works for one invocation and silently misses for another.
 MEASURE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "${MEASURE_DIR}/.." || exit 1
+
 # shellcheck source=./lib/scratch.sh
 . "${MEASURE_DIR}/lib/scratch.sh"
 
