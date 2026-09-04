@@ -345,6 +345,18 @@ struct QueueView: View {
     var body: some View {
         let data = makeRenderData()
         return mainContent(data)
+            // #3474: the Dock tile and the menu bar glyph read a PUBLISHED number, because neither can
+            // hold a SwiftData query. Until now the only writer was the 30 minute reconcile, so both
+            // stated a count up to half an hour old: measured on the live store 2026-09-02, Dan recorded
+            // an ending at 11:31:15 and the menu bar still read 1 at 11:31:41, while the Follow-ups pill
+            // beside it read zero, because that pill derives live from the store.
+            //
+            // Published from `data.agentInputs.followUpsDue`, which IS the pill's number, so the badge is
+            // a reader of one derivation rather than a second sweep that happens to agree (L16). Keyed on
+            // the value, so it writes when the number changes rather than on every redraw.
+            .task(id: data.agentInputs.followUpsDue) {
+                DueBadge.publish(data.agentInputs.followUpsDue)
+            }
             .sendConfirmAndReconnectAlerts(
                 pendingConfirm: $pendingConfirm,
                 showReconnect: $showReconnect,

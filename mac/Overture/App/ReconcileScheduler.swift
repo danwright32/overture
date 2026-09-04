@@ -14,6 +14,8 @@ final class ReconcileScheduler {
     private let context: ModelContext
     private var timerTask: Task<Void, Never>?
     private var watcherTask: Task<Void, Never>?
+    // #3474: the one-shot republish armed for the next moment the due count changes on the clock.
+    private var badgeTask: Task<Void, Never>?
 
     // When the last reconcile finished: surfaced in the menu-bar status line (#266). Mirrored to
     // UserDefaults so the menu can read it reactively without holding the scheduler instance.
@@ -201,6 +203,11 @@ final class ReconcileScheduler {
         DueBadge.publish(DueWork.counts(prospects: after, now: now,
                                         replyRunAlive: replyRunAlive(now)).total,
                          into: defaults)
+        // #3474: and again at the moment the count next changes, rather than only at the next tick.
+        // Work comes due on the clock (a post-event prompt at Eastern midnight), and with the window
+        // closed nothing re-renders, so these two surfaces were blind to newly due work for up to half
+        // an hour on exactly the state they exist for.
+        armBadgeRepublish(prospects: after, now: now, defaults: defaults)
         // #2091: the watch heartbeat, carrying the observed sleep alongside the wall clock so the next
         // tick can tell a sleeping Mac (nothing missed) from a dead process (everything missed).
         WatchHeartbeatStore.stamp(now: now, readings: readings, into: defaults)
@@ -393,6 +400,44 @@ final class ReconcileScheduler {
             })
         if changed.stamped > 0 { try? context.save() }
         return changed.tasks
+    }
+
+    // #3474: recompute the badge from the store and publish it, then arm the next one. Separate from
+    // the reconcile tick because it is a fraction of its work: one fetch and one derivation, no Gmail,
+    // no OmniFocus, no AI. Returns the count so a test can assert what it published without going
+    // through UserDefaults.
+    @discardableResult
+    func republishDueBadge(now: Date, defaults: UserDefaults = .standard) -> Int {
+        let all = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
+        let total = DueWork.counts(prospects: all, now: now, replyRunAlive: replyRunAlive(now)).total
+        DueBadge.publish(total, into: defaults)
+        armBadgeRepublish(prospects: all, now: now, defaults: defaults)
+        return total
+    }
+
+    // A ONE-SHOT timer for the next known change, re-armed each time it fires, rather than a poll: the
+    // count is a function of the store and the clock, and `DueWork.nextChange` names the next instant
+    // the clock alone moves it. A poll would take a whole-store sweep on a cadence for a number that
+    // usually has not moved (L59, L62).
+    //
+    // The previous one is cancelled first, so a reconcile arriving before the timer fires replaces it
+    // rather than leaving two racing to write the same key.
+    //
+    // Nothing coming due means NO timer at all, not one armed far out: a timer for a change that cannot
+    // happen is a promise nothing can keep, and the reconcile tick remains the backstop for every change
+    // this cannot see (a store edit, an eligibility that turns over on the clock).
+    func armBadgeRepublish(prospects: [Prospect], now: Date, defaults: UserDefaults = .standard) {
+        badgeTask?.cancel()
+        badgeTask = nil
+        guard let next = DueWork.nextChange(prospects: prospects, now: now,
+                                            replyRunAlive: replyRunAlive(now)) else { return }
+        let delay = next.timeIntervalSince(now)
+        guard delay > 0 else { return }
+        badgeTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+            guard !Task.isCancelled, let self else { return }
+            self.republishDueBadge(now: Date(), defaults: defaults)
+        }
     }
 
     // Last-modified time of the Downbeat export, to gate the live re-reconcile (#197) so a spurious
