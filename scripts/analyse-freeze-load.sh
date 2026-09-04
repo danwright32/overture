@@ -23,9 +23,12 @@
 #                      because an empty pile and a pile with nothing unusual in it leave the same empty
 #                      result (L98, L11).
 set -uo pipefail
-cd "$(dirname "$0")/.." || exit 1
-
+# #3481/L372: captured BEFORE the cd. `$0` and `BASH_SOURCE[0]` are the path the script was
+# INVOKED by, so re-deriving a directory from either after a cd resolves against the NEW working
+# directory: it works for one invocation and silently misses for another.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "${SCRIPT_DIR}/.." || exit 1
+
 
 OUT_DIR="${OVERTURE_MEASURE_OUT:-${HOME}/.overture-mac-test-diagnostics}"
 BASELINE_FILE="${OVERTURE_MEASURE_BASELINE_FILE:-${SCRIPT_DIR}/../fixtures/resting-baseline.txt}"
