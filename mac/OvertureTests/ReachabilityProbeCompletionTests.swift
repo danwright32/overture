@@ -292,6 +292,70 @@ struct ReachabilityProbeCompletionTests {
         #expect(after?.recipients.first?.email == "boxoffice@carnegiehall.org")
     }
 
+    // #2533: the LAST of the four outcomes `reachabilityResultFromRecipients` can return, and the one
+    // #1611 named as a sibling and deliberately left uncovered. It has unit coverage of the derivation
+    // and, until this, nothing that ran the real settle path and asserted the value left in the store.
+    //
+    // It matters for the same reason `weakContactOnly` did. `markProbed` writes the "no email found"
+    // floor BEFORE the ingest, so `contactFormOnly` exists only because `PrepImporter`'s probe branch
+    // overwrites that floor after `usableContactFormURLs` has been filtered by `VenueContactGuard`
+    // (#1629) and `PressContactGuard` (#1636). A reorder, an early return, or a fourth writer would
+    // leave this show reading "No email found" while carrying a live form on the act's own site, which
+    // is a way through Dan would have used.
+    @Test func aProbeThatFoundOnlyAFormOnTheActsOwnSiteRecordsContactFormOnly() throws {
+        let ctx = ModelContext(try container())
+        let a = newProspect(ctx, group: "Aurora Strings")
+        let d = dir()
+        let markerURL = d.appendingPathComponent("probe-run.json")
+        let resultsURL = d.appendingPathComponent("results.json")
+        let now = Date(timeIntervalSince1970: 1_780_000_000)
+        try ReachabilityProbeMarker.write(ReachabilityProbeMarker(keys: [a], startedAt: "s"), to: markerURL)
+        // No address anywhere, and a form on the ACT's own domain, which is the one #1626 is about.
+        try writeResults(resultsURL, PrepResults(version: 2, generatedAt: "now", results: [
+            PrepResult(naturalKey: a, contacts: [PrepContact(name: "Contact", role: "General",
+                                                             email: nil,
+                                                             method: "contact_form",
+                                                             confidence: "high",
+                                                             formUrl: "https://aurorastrings.example/contact",
+                                                             provenance: "act")], draft: nil)
+        ]))
+
+        _ = PrepQueueService.settleReachabilityProbe(slot: .check,
+            markerURL: markerURL, resultsURL: resultsURL, into: ctx, now: now, defaults: freshDefaults())
+
+        let after = try ctx.fetch(FetchDescriptor<Prospect>(predicate: #Predicate { $0.naturalKey == a })).first
+        #expect(after?.reachabilityResult == .contactFormOnly)
+    }
+
+    // The other half #2533 asks for, and the reason the filter exists at all: the same run coming home
+    // with the ROOM's own form must fall THROUGH to `noEmailFound`. Without this, the test above passes
+    // just as well against an importer that accepts any form at all, which is the guard removed rather
+    // than satisfied (L159).
+    @Test func aFormOnTheRoomsOwnSiteFallsThroughToNoEmailFound() throws {
+        let ctx = ModelContext(try container())
+        let a = newProspect(ctx, group: "Aurora Strings")
+        let d = dir()
+        let markerURL = d.appendingPathComponent("probe-run.json")
+        let resultsURL = d.appendingPathComponent("results.json")
+        let now = Date(timeIntervalSince1970: 1_780_000_000)
+        try ReachabilityProbeMarker.write(ReachabilityProbeMarker(keys: [a], startedAt: "s"), to: markerURL)
+        // Weill Recital Hall resolves to Carnegie Hall, which is what VenueContactGuard holds.
+        try writeResults(resultsURL, PrepResults(version: 2, generatedAt: "now", results: [
+            PrepResult(naturalKey: a, contacts: [PrepContact(name: "Box office", role: "Front desk",
+                                                             email: nil,
+                                                             method: "contact_form",
+                                                             confidence: "high",
+                                                             formUrl: "https://www.carnegiehall.org/contact",
+                                                             provenance: "act")], draft: nil)
+        ]))
+
+        _ = PrepQueueService.settleReachabilityProbe(slot: .check,
+            markerURL: markerURL, resultsURL: resultsURL, into: ctx, now: now, defaults: freshDefaults())
+
+        let after = try ctx.fetch(FetchDescriptor<Prospect>(predicate: #Predicate { $0.naturalKey == a })).first
+        #expect(after?.reachabilityResult == .noEmailFound)
+    }
+
     private func freshDefaults() -> UserDefaults {
         let d = UserDefaults(suiteName: "probe-\(UUID().uuidString)")!
         return d
