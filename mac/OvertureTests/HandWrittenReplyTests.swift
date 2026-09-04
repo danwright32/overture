@@ -148,6 +148,38 @@ struct HandWrittenReplyTests {
     }
 
     // An empty box gains no line either: there is no author to name.
+    // #2845: the line WITHDRAWS as he types, asserted as far as this harness can reach, with the part
+    // it cannot reach named rather than left as a passing test.
+    //
+    // #2845 filed this as "nothing asserts it disappears once Dan edits". By the time it was picked up
+    // that was true of one case only: `aneditedDraftGainsNoLineOnScreen` above covers the STORED flag,
+    // and `HandWrittenReplyTests.typingOverTheDraftWithdrawsTheLine` covers the rule for `typed != seeded`.
+    // What is left is that rule REACHING THE SCREEN while he types, which is a separate claim from the
+    // rule being right (L3) and is the sequence he is actually in: an AI draft in the box, no flag
+    // written yet, and him typing over it.
+    //
+    // MEASURED 2026-09-04: ViewInspector's `setInput` does NOT take on this view. After calling it, the
+    // editor's own `input()` still reads the original draft, so nothing typed reaches `body_` and the
+    // panel is rendering the state it started in. A test written that way would have been asserting
+    // about a case it never produced (L159), so it is not written that way.
+    //
+    // What CAN be asserted is that the sheet feeds the LIVE typed text into the rule rather than the
+    // stored draft, which is the whole of the wiring: `body_` is what the editor binds to, and the unit
+    // test above owns what the rule does with it. Drawing the typed state itself needs a harness that
+    // can drive input, which is #3511.
+    @Test func theSheetJudgesTheLineFromWhatIsInTheBoxNowRatherThanTheStoredDraft() throws {
+        let source = SourceGuardHelper.source("Overture/UI/ReplySheet.swift")
+        // A computed PROPERTY rather than a function, so it is read by its marker: `functionBody`
+        // answers `.functionNotFound` for it, which is the check refusing rather than passing (L98).
+        let body = try #require(SourceGuardHelper.propertyBody("var draftAuthorLine: some View {", in: source))
+        #expect(body.contains("typed: body_"), """
+            ReplySheet no longer judges the author line from the text in the box, so "Written by AI"             can sit above sentences Dan typed himself (#2177, #2845).
+            """)
+        #expect(body.contains("seeded: seeded"), """
+            ReplySheet no longer compares against what the box was GIVEN, which is the only thing that             can tell his words from words it handed him and he left alone (#2845).
+            """)
+    }
+
     @Test func anEmptyBoxGainsNoLine() {
         #expect(ReplyPanel.draftAuthorNote(typed: "", seeded: "",
                                            writtenByDan: false, editedByDan: false) == nil)
