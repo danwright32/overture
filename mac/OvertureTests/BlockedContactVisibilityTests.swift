@@ -259,7 +259,11 @@ struct BlockedContactRowGuardTests {
 
     // And it has to reach the row at all: the count is carried on the QueueItem, not recomputed in a
     // view that a future refactor could quietly drop.
+    // #3498: the needle keeps the same MEANING and gains the parameter the count now takes, which hands
+    // it the lint findings the card build already holds rather than making it derive them again. What is
+    // asserted is unchanged: the count is carried on the QueueItem, from the show's own definition of it,
+    // rather than recomputed in a view. Re-aimed rather than relaxed.
     @Test func theCountReachesTheRow() {
-        #expect(queueModel.contains("blockedContactCount: p.blockedContactCount"))
+        #expect(queueModel.contains("blockedContactCount: p.blockedContactCount(lintBlockers:"))
     }
 }

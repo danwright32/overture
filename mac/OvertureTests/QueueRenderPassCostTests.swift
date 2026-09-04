@@ -243,20 +243,31 @@ struct QueueRenderPassWorkUnitCostTests {
     // reason (#3435 2c: a shape-driven term goes against its own measure, never folded into a per-row
     // figure).
     //
-    // #3506 re-derived it. This read 402 while the corpus gave every body-carrying row two PENDING
+    // #3498 brought it down. Every reader on a card now shares ONE pass of the lint per pending
+    // contact carrying a body, so the card build runs it 16 times over this corpus, one per such contact,
+    // where it ran 64. What remains is the 18 outside card construction, which this change does not touch
+    // and which is now the larger share.
+    //
+    // #3506 re-derived it before that. This read 402 while the corpus gave every body-carrying row two PENDING
     // contacts, which no dimension then recorded: the fixture matched the live store on recipients,
     // contacts, pending count and bodies, and still exercised five and a half times the real lint load,
     // because the lint scales with the INTERSECTION. At the measured shape it is 82, against the live
-    // store's own reading of 73 taken through `QueueRenderPassLiveStoreCostTests` the same day. The
+    // store's own reading of 73 taken through `QueueRenderPassLiveStoreCostTests` the same day, both
+    // BEFORE #3498. The
     // remaining gap against the live store is the same unattributed term #3498 records. How the 82 splits
     // between card construction and the rest of the pass is MEASURED by
     // `theLintRunsAreAttributedBetweenCardBuildAndTheRestOfThePass`, not asserted here.
-    private static let allowedDraftLintRuns = 82
+    private static let allowedDraftLintRuns = 34
 
     // MEASURED on this corpus by `theLintRunsAreAttributedBetweenCardBuildAndTheRestOfThePass`, not
-    // derived. The first version of this file asserted the split from arithmetic on a different
+    // derived. An earlier version of this file asserted the split from arithmetic on a different
     // fixture's per-contact figure and wrote it down as fact; the arithmetic happened to be right, and
-    // that is luck rather than method (L32, L353). 64 of the 82 are card construction.
+    // that is luck rather than method (L32, L353).
+    //
+    // Unchanged by #3498, which is the point of holding it separately: that change removed the repeated
+    // linting inside card construction and this term is somewhere else in the pass, so it is now the
+    // MAJORITY of what the lint costs. It is what #3498's own text called the unattributed 90 at the
+    // original shape, and it still has no owner.
     private static let allowedLintRunsOutsideTheCardBuild = 18
 
     // WHERE the 82 goes, measured on THIS corpus rather than inferred from the single-row attribution
@@ -288,7 +299,7 @@ struct QueueRenderPassWorkUnitCostTests {
 
     // The per-contact multiplier, pinned separately so a change that moves work between the send-group
     // build and the card build is visible even when the total holds. Measured, not read off the code.
-    private static let allowedLintRunsPerContactInCardBuild = 4
+    private static let allowedLintRunsPerContactInCardBuild = 1
     private static let allowedLintRunsPerContactInSendGroupBuild = 0
 
     private func container() throws -> ModelContainer {

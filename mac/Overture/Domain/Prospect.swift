@@ -845,8 +845,14 @@ final class Prospect {
     // #792: contacts on this show held back by a review guard and waiting on Dan. A show can be
     // genuinely contacted (somebody was emailed) AND still have somebody waiting, and both facts have to
     // survive at once: the bug was that the first silently erased the second.
-    var blockedContactCount: Int {
-        recipients.filter(\.isBlockedAwaitingReview).count
+    var blockedContactCount: Int { blockedContactCount { $0.draftLintBlockers } }
+
+    // #3498: the same count, given a way to look up each contact's lint findings rather than deriving
+    // them. `Recipient.draftLintBlockers` runs a whole pass of DraftCheck and memoises nothing, and a
+    // card build already holds the answer for its pending contacts. ONE definition of what counts as
+    // blocked, two spellings, so a change to the rule cannot leave the two disagreeing (L263).
+    func blockedContactCount(lintBlockers: (Recipient) -> [DraftIssue]) -> Int {
+        recipients.filter { $0.isBlockedAwaitingReview(lintBlockers: lintBlockers($0)) }.count
     }
 
     // #1797: whether this show has reached the half of the funnel a send belongs to, which is what decides
