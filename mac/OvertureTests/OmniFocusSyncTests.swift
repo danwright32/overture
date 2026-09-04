@@ -59,7 +59,7 @@ struct OmniFocusSyncTests {
 
     // The note layout is load-bearing: the AppleScript client reads paragraph 1 (lead key), paragraph
     // 2 (recipient id, #653), and paragraph 3 (due day) back. Lock that order/format.
-    @Test func desiredNoteCarriesLeadKeyThenRecipientThenDueDayInFirstThreeLines() throws {
+    @Test func desiredNoteCarriesLeadKeyThenRecipientThenDueInFirstThreeLines() throws {
         let ctx = ModelContext(try container())
         let now = Date(timeIntervalSince1970: 10_000_000)
         lead(ctx, key: "warm-lead")
@@ -68,7 +68,10 @@ struct OmniFocusSyncTests {
         let lines = t.note.components(separatedBy: "\n")
         #expect(lines[0] == "Overture lead: warm-lead")
         #expect(lines[1] == "Overture contact: warm-lead@e.com")
-        #expect(lines[2] == "Due: " + EasternDate.dayString(from: t.dueDate))
+        // #3422: the token carries the TIME now, not just the day, because a reply triage due varies
+        // with the hour the reply arrived. A day-only token could not compare equal to it, so reconcile
+        // would call every task stale on every pass and churn OmniFocus for ever.
+        #expect(lines[2] == "Due: " + OmniFocusDueToken.string(from: t.dueDate))
     }
 
     // #653 (Dan's requirement): every task title includes both the show name and the contact.
