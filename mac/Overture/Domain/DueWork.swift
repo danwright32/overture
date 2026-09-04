@@ -96,3 +96,53 @@ enum DueWork {
 extension DueWork {
     static func badgeTitle(count: Int) -> String { count == 0 ? "Due" : "Due (\(count))" }
 }
+
+extension DueWork {
+    // #3474: the next instant at which this count could GROW, so the two surfaces outside the app can
+    // be republished when it does rather than up to half an hour later.
+    //
+    // The badge lives on the Dock tile and beside the menu bar glyph, which exist precisely for when
+    // the window is closed. With the window closed nothing re-renders, so a clock is the only thing
+    // that can republish, and the only clock was the 30 minute reconcile. A post-event prompt comes due
+    // at Eastern midnight, so newly due work was invisible on both of them until the next tick.
+    //
+    // Three of the four rules are time driven and each already knows its own moment, so this asks them
+    // rather than restating any of their arithmetic (L107). `conversationsToConfirm` is not here because
+    // it is not time driven: a proposal appears when a mailbox sweep stores one, which is a store change
+    // and already republishes through the render.
+    //
+    // What it CLAIMS, exactly, because a name like this invites more (L11): the earliest future moment
+    // at which a rule ALREADY IN PLAY comes due, judged on the eligibility that holds right now.
+    // Eligibility can itself change with the clock, so this is a lower bound on the next change and not
+    // a promise to catch every one. The periodic reconcile stays as the backstop that covers the rest;
+    // this makes the common case immediate instead of making the backstop unnecessary.
+    static func nextChange(prospects: [Prospect], now: Date, replyRunAlive: Bool,
+                           followUp: FollowUpConfig = .init()) -> Date? {
+        var soonest: Date?
+        func consider(_ moment: Date?) {
+            guard let moment, moment > now else { return }   // already passed is already counted
+            if let best = soonest, best <= moment { return }
+            soonest = moment
+        }
+        for p in prospects {
+            // The same two stoppers `FollowUp.dueRecipients` applies to a whole show, so this cannot
+            // arm a republish for a show whose follow-ups have stopped.
+            let followUpsStopped = p.outcomeSourceRaw == OutcomeSource.manual.rawValue || p.outcome == .booked
+            for r in p.recipients {
+                consider(PostEventPrompt.nextPromptDate(for: r, of: p))
+                if !followUpsStopped {
+                    consider(FollowUp.nextDue(eligible: FollowUp.isAwaitingNudge(r, in: p, now: now),
+                                              sentAt: r.sentAt, lastFollowUpAt: r.lastFollowUpAt,
+                                              followUpCount: r.followUpCount,
+                                              remindedAt: r.nudgeRemindedAt, config: followUp))
+                }
+                // A draft still being written is not stalled however long it has taken (#471), so a live
+                // run has no pending moment at all rather than one further out.
+                if !replyRunAlive, let requested = r.awaitedReplyDraftRequestedAt {
+                    consider(requested.addingTimeInterval(Recipient.replyDraftStallTimeout))
+                }
+            }
+        }
+        return soonest
+    }
+}
