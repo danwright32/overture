@@ -2789,11 +2789,29 @@ extension QueueItem {
         let draftGreetedName = p.recipients
             .first { $0.sendState == .pending && $0.greetingNamesSomeoneElse }
             .flatMap { DraftGreeting.greetedName($0.effectiveBody) }
+        // #3498: the lint runs ONCE per pending contact for this card, and every reader below shares the
+        // answer. `Recipient.draftLintBlockers` derives live and memoises nothing, so each reader used to
+        // pay a whole pass of `DraftCheck` over the letter: measured 2026-09-03, four runs per pending
+        // contact carrying a body, per card, per render.
+        //
+        // The same shape #1774 and #3492 established one level up: compute once, hand the value down.
+        // PENDING only. Every reader below either asks about a pending contact or refuses a non-pending
+        // one before it consults the lint, so linting the rest would be work nobody uses: measured, that
+        // was 24 extra runs per render on this store's shape.
+        let pendingRecipients = p.recipients.filter { $0.sendState == .pending }
+        let lintBlockersByRecipient = Dictionary(uniqueKeysWithValues:
+            pendingRecipients.map { ($0.id, $0.draftLintBlockers) })
+        // Falls back to the real derivation for a contact the map does not hold, so this can never answer
+        // "no findings" for a body nobody checked. The readers take it as an @autoclosure, so a
+        // non-pending contact never reaches this at all.
+        func lintBlockers(_ r: Recipient) -> [DraftIssue] {
+            lintBlockersByRecipient[r.id] ?? r.draftLintBlockers
+        }
         let draftLintBlockers = DraftIssue.orderedBlockers(
-            Set(p.recipients.filter { $0.sendState == .pending }.flatMap(\.draftLintBlockers)))
+            Set(pendingRecipients.flatMap { lintBlockers($0) }))
         let contacts = p.recipients
             .sorted { $0.sendOrderRank != $1.sendOrderRank ? $0.sendOrderRank < $1.sendOrderRank : $0.id < $1.id }
-            .map(RecipientSnapshot.init)
+            .map { RecipientSnapshot($0, lintBlockers: lintBlockers($0)) }
         let offersSendModeChoice = p.recipients.filter { $0.email?.isEmpty == false }.count > 1
         let hasWeakContactEmail = p.recipients.contains(where: \.isHeldByAGuard)
         let hasAnyEmailContact = p.recipients.contains { $0.email?.isEmpty == false }
@@ -2801,7 +2819,16 @@ extension QueueItem {
         let draftGreetingMisaddressed = p.recipients.contains { $0.sendState == .pending && $0.greetingMisaddressed }
         let draftGreetingNamesSomeoneElse = p.recipients.contains { $0.sendState == .pending && $0.greetingNamesSomeoneElse }
         let greetingOverridden = !p.recipients.contains { $0.sendState == .pending && $0.isBlockedByGreeting }
-        let draftLintBlocked = p.recipients.contains { $0.sendState == .pending && $0.isBlockedByDraftLint }
+        // #3498: read from the shared answer above rather than asking the lint again. The override half
+        // is kept exactly as `Recipient.isBlockedByDraftLint` states it, because a body Dan has overridden
+        // is not blocked however many findings it carries.
+        let draftLintBlocked = pendingRecipients.contains {
+            $0.isBlockedByDraftLint(lintBlockers: lintBlockers($0))
+        }
+        // #3498: counted here from the shared findings rather than read off the model, which would run
+        // the lint again for every recipient. The RULE is still `Recipient.isBlockedAwaitingReview`.
+        let blockedContactCount = p.recipients
+            .filter { $0.isBlockedAwaitingReview(lintBlockers: lintBlockers($0)) }.count
 
         self.init(
             id: p.naturalKey,
@@ -2865,7 +2892,7 @@ extension QueueItem {
             // #1311: any recipient with a real address at all, so the Send surface can tell "no email to
             // send to" apart from "an email exists but is held for a review".
             hasAnyEmailContact: hasAnyEmailContact,
-            blockedContactCount: p.blockedContactCount,
+            blockedContactCount: blockedContactCount,
             hasEnteredSendHalf: p.hasEnteredSendHalf,   // #1797
             sendError: p.sendError,
             lostReason: p.lostReason,
@@ -2921,13 +2948,23 @@ extension QueueItem {
 }
 
 extension RecipientSnapshot {
-    init(_ r: Recipient) {
+    // The ordinary spelling, which derives the lint findings itself.
+    init(_ r: Recipient) { self.init(r, lintBlockers: r.draftLintBlockers) }
+
+    // #3498: given the findings instead. `draftLintBlockers` runs a whole pass of `DraftCheck` over the
+    // letter and memoises nothing, and a card build asks three lint-derived questions of its contacts, so
+    // a caller that already holds the answer passes it rather than paying again.
+    // `@autoclosure` for the same reason `Recipient.isBlockedAwaitingReview` takes one: that rule refuses
+    // a contact that is not pending before it consults the lint, and an eagerly evaluated argument would
+    // run a whole pass of DraftCheck for every already-sent contact anyway. Measured 2026-09-03, that was
+    // 26 wasted runs per render on this store's shape (L62).
+    init(_ r: Recipient, lintBlockers: @autoclosure () -> [DraftIssue]) {
         self.init(id: r.id, name: r.name, email: r.email, role: r.role,
                   provenance: r.provenance, sendState: r.sendState, replied: r.replied,
                   lastReplyText: r.lastReplyText, resolution: r.resolution,
                   bounced: r.bounced, outcomeSource: r.outcomeSource,
                   suppressionReason: r.suppressionReason,
-                  isHeldFromSending: r.isBlockedAwaitingReview,
+                  isHeldFromSending: r.isBlockedAwaitingReview(lintBlockers: lintBlockers()),
                   replyDraftSubject: r.replyDraftSubject, replyDraftBody: r.replyDraftBody,
                   replyDraftRequestedAt: r.replyDraftRequestedAt,
                   replyCopiedAt: r.replyCopiedAt,

@@ -744,7 +744,15 @@ final class Recipient {
         lintOverriddenBody != nil && lintOverriddenBody == effectiveBody
     }
 
-    var isBlockedByDraftLint: Bool { !draftLintBlockers.isEmpty && !isLintOverridden }
+    var isBlockedByDraftLint: Bool { isBlockedByDraftLint(lintBlockers: draftLintBlockers) }
+
+    // #3498: the same rule, given the findings rather than deriving them. `draftLintBlockers` runs a whole
+    // pass of `DraftCheck` over the letter and memoises nothing, so a card build that asks three readers
+    // the same question pays for it three times. A caller holding the findings already passes them here;
+    // the property above is the ordinary spelling and stays the only definition of the RULE (L263).
+    func isBlockedByDraftLint(lintBlockers: @autoclosure () -> [DraftIssue]) -> Bool {
+        !lintBlockers().isEmpty && !isLintOverridden
+    }
 
     // #2545: the body must open with a greeting, because nothing composes one above it any more. Judged
     // on `effectiveBody` for the same reason the lint above is: a performer's own letter is judged by
@@ -879,7 +887,17 @@ final class Recipient {
     // A contact paused because the org REPLIED is deliberately not counted. Nothing is blocking it; Dan
     // is choosing not to email again while a conversation is live, and nagging him about that would be
     // nagging him about a thing that is working.
-    var isBlockedAwaitingReview: Bool {
+    var isBlockedAwaitingReview: Bool { isBlockedAwaitingReview(lintBlockers: draftLintBlockers) }
+
+    // #3498: as above, the same rule given the findings. One body of rules, two spellings, and the
+    // property is the ordinary one.
+    // `@autoclosure` is load bearing, not decoration. The guard below returns false for a contact that
+    // is not pending WITHOUT consulting the lint, and Swift evaluates arguments eagerly, so a plain
+    // `[DraftIssue]` parameter would run a whole pass of `DraftCheck` for every already-sent contact
+    // before the guard could refuse it. Measured 2026-09-03: that cost 24 extra lint runs per render,
+    // making a change meant to remove work add it (L62: a guard on a function's first line cannot
+    // protect against the cost of building its arguments).
+    func isBlockedAwaitingReview(lintBlockers: @autoclosure () -> [DraftIssue]) -> Bool {
         guard sendState == .pending, email?.isEmpty == false, !pausedByReply else { return false }
         // #2545: the greeting hold takes the place of #407's, which policed the same thing from the
         // other side. It belongs HERE and not only in `isSendablePending` for the reason above: a body
@@ -890,7 +908,7 @@ final class Recipient {
             || (looksLikePressContact && !looksLikePressContactDismissed)
             || (looksLikeDuplicateContact && !looksLikeDuplicateContactDismissed)
             || isLooksLikeAnotherPersons
-            || isBlockedByDraftLint
+            || isBlockedByDraftLint(lintBlockers: lintBlockers())
     }
 
     // Deterministic send order. SwiftData to-many relationships are UNORDERED, so the send queue and
