@@ -22,6 +22,11 @@ struct OmniFocusSettingsView: View {
     // a diagnosis needs and what used to require reading the app's preferences from a terminal.
     @AppStorage(OmniFocusSyncStatus.failedAtKey) private var omniFocusFailedAt: Double = 0
     @AppStorage(OmniFocusSyncStatus.errorKey) private var omniFocusLastError: String = ""
+    // #3420: what the last sync's completed-task read walked. Read reactively, so it is current the
+    // moment a sync lands rather than as of when this sheet was built.
+    @AppStorage(OmniFocusSyncStatus.completedReadTakenKey) private var readTaken = false
+    @AppStorage(OmniFocusSyncStatus.completedReadTasksKey) private var readTasks = 0
+    @AppStorage(OmniFocusSyncStatus.completedReadSecondsKey) private var readSeconds: Double = 0
 
     var body: some View {
         VStack(alignment: .leading, spacing: OVSpacing.md) {
@@ -31,6 +36,14 @@ struct OmniFocusSettingsView: View {
                     .font(OVType.meta).foregroundStyle(OVColor.inkSoft)
                     .fixedSize(horizontal: false, vertical: true)
                 row("Look-ahead window", value: $omniFocusHorizon, range: 1...60)
+                // #3420: the one cost in this sync with no upper bound. A completed Overture task keeps
+                // its tag for ever, so this set only grows, and until now nothing anywhere could say how
+                // big it had got or what reading it cost. Shown rather than logged, because a number the
+                // code holds and nobody sees is not a measurement anybody acts on (L357).
+                Text(OmniFocusSyncStatus.completedReadLine(taken: readTaken, tasks: readTasks,
+                                                           seconds: readSeconds))
+                    .font(OVType.meta).foregroundStyle(OVColor.inkSoft)
+                    .fixedSize(horizontal: false, vertical: true)
             } else {
                 // An honest empty state rather than a stepper that changes nothing: with sync off there is
                 // no window to look ahead through, and the control that turns it on is not on this sheet.

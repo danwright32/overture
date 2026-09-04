@@ -2544,12 +2544,18 @@ struct RootView: View {
         let all = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
         let desired = OmniFocusSync.desired(from: all, now: Date(), horizonDays: config.horizonDays)
         omniFocusSyncStartedAt = Date()   // #469: drives the live "Syncing…" state on the toolbar item
-        // NSAppleScript must run on the main thread. Use a (non-awaited) main-actor task so this
-        // doesn't block the launch sequence, but still runs where AppleScript works. The work is a
-        // handful of Apple events, so the brief main-actor occupancy is acceptable.
+        // #3419/#3433: the Apple events run OFF this actor, on the one shared worker both sync paths
+        // use, under a deadline. This block used to say "NSAppleScript must run on the main thread" and
+        // then hold the main actor for the whole round trip; the claim was measured and is false
+        // (`BlockingWorkThreadTests.appleScriptRunsOffTheMainThread`), and "a handful of Apple events"
+        // was one per completed task, without bound (#3420). The task is still not awaited, so launch
+        // is not held up; what changed is that the window keeps drawing while it runs.
         Task { @MainActor in
             do {
-                let result = try OmniFocusSync.apply(desired: desired, client: AppleScriptOmniFocusClient())
+                let result = try await BlockingWorkThread.omniFocus.run(
+                    deadlineSeconds: OmniFocusSyncRunner.deadlineSeconds) {
+                        try OmniFocusSync.apply(desired: desired, client: AppleScriptOmniFocusClient())
+                    }
                 // #2899: carry back what Dan ticked off over there. On the main actor, where the model is.
                 if OmniFocusSync.recordCompletions(result.handled, in: all, now: Date()) > 0 {
                     try? context.save()
@@ -2571,8 +2577,10 @@ struct RootView: View {
                 // slot is a failure, handled below.
             } catch {
                 // #239: record even the swallowed automatic failure so it stays visible in the masthead.
-                OmniFocusSyncStatus.recordFailure("\(error)", at: Date())
-                if force { reportError(OmniFocusSync.failureMessage(reason: "\(error)")) }
+                // #3419: through the same mapping the scheduled path uses, so a sync that gave up
+                // waiting reads the same whichever site ran it (L263).
+                OmniFocusSyncStatus.recordFailure(OmniFocusFailureKind.storedMessage(for: error), at: Date())
+                if force { reportError(OmniFocusFailureKind.reportedSentence(for: error)) }
             }
             omniFocusSyncStartedAt = nil
         }

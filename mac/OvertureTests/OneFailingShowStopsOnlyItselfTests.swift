@@ -10,6 +10,7 @@ import Foundation
 // the run stopped there. Independent per-show work sharing one failure boundary makes every show's
 // reliability depend on every other show's worst case (L73). The point of this sync is a reminder that
 // reaches Dan away from his desk, so a missing one is invisible until the show has passed.
+@MainActor
 @Suite("One failing show stops only itself")
 struct OneFailingShowStopsOnlyItselfTests {
     private func desired(_ key: String, _ recipient: String = "a@example.invalid",
@@ -20,7 +21,7 @@ struct OneFailingShowStopsOnlyItselfTests {
 
     // Refuses whatever key it is told to refuse, and records everything it was asked to do, so a test
     // can assert the run kept going rather than merely that it did not throw.
-    private final class RefusingClient: OmniFocusClient {
+    private final class RefusingClient: OmniFocusClient, @unchecked Sendable {
         let refuse: String
         let open: [OmniFocusSync.ExistingTask]
         var created: [String] = []
@@ -150,9 +151,10 @@ struct OneFailingShowStopsOnlyItselfTests {
 // A partly failed run has to stay visible. It is not a success (a reminder is missing and Dan cannot
 // see an absence) and not a total failure (most of the run landed), and recording it as either loses
 // one of those two facts.
+@MainActor
 @Suite("A partly failed OmniFocus run stays on the masthead")
 struct PartlyFailedOmniFocusRunTests {
-    private final class RefusingClient: OmniFocusClient {
+    private final class RefusingClient: OmniFocusClient, @unchecked Sendable {
         struct Refused: Error {}
         func existingOvertureTasks() throws -> [OmniFocusSync.ExistingTask] { [] }
         func completedOvertureTasks() throws -> [OmniFocusSync.ExistingTask] { [] }
@@ -172,7 +174,7 @@ struct PartlyFailedOmniFocusRunTests {
         return d
     }
 
-    @Test func aPartlyFailedRunIsRecordedAsAFailureNamingTheShow() throws {
+    @Test func aPartlyFailedRunIsRecordedAsAFailureNamingTheShow() async throws {
         let defaults = try scratchDefaults("omnifocus-partial-\(UUID().uuidString)")
         let now = Date(timeIntervalSince1970: 1_780_000_000)
         let task = OmniFocusSync.DesiredTask(kind: .replyTriage, naturalKey: "the singalong|2026-10-25|a park",
@@ -180,7 +182,7 @@ struct PartlyFailedOmniFocusRunTests {
                                              deferDate: now, dueDate: now)
         let notifier = CountingNotifier()
 
-        _ = OmniFocusSyncRunner.run(desired: [task], permission: .granted, client: RefusingClient(),
+        _ = await OmniFocusSyncRunner.run(desired: [task], permission: .granted, client: RefusingClient(),
                                     notifier: notifier, now: now, defaults: defaults)
 
         let failure = try #require(OmniFocusSyncStatus.lastFailure(from: defaults))
@@ -189,24 +191,24 @@ struct PartlyFailedOmniFocusRunTests {
         #expect(notifier.failed == 1)
     }
 
-    private final class WillingClient: OmniFocusClient {
+    private final class WillingClient: OmniFocusClient, @unchecked Sendable {
         func existingOvertureTasks() throws -> [OmniFocusSync.ExistingTask] { [] }
         func completedOvertureTasks() throws -> [OmniFocusSync.ExistingTask] { [] }
         func create(_ task: OmniFocusSync.DesiredTask) throws {}
         func complete(_ task: OmniFocusSync.ExistingTask) throws {}
     }
 
-    @Test func aCleanRunAfterOneStillRecordsSuccessAndClearsTheWarning() throws {
+    @Test func aCleanRunAfterOneStillRecordsSuccessAndClearsTheWarning() async throws {
         let defaults = try scratchDefaults("omnifocus-clean-\(UUID().uuidString)")
         let now = Date(timeIntervalSince1970: 1_780_000_000)
         let task = OmniFocusSync.DesiredTask(kind: .replyTriage, naturalKey: "a show|2026-10-25|a park",
                                              recipientId: "a@example.invalid", title: "t", note: "n",
                                              deferDate: now, dueDate: now)
-        _ = OmniFocusSyncRunner.run(desired: [task], permission: .granted, client: RefusingClient(),
+        _ = await OmniFocusSyncRunner.run(desired: [task], permission: .granted, client: RefusingClient(),
                                     notifier: CountingNotifier(), now: now, defaults: defaults)
         #expect(OmniFocusSyncStatus.lastFailure(from: defaults) != nil)
 
-        _ = OmniFocusSyncRunner.run(desired: [task], permission: .granted, client: WillingClient(),
+        _ = await OmniFocusSyncRunner.run(desired: [task], permission: .granted, client: WillingClient(),
                                     notifier: CountingNotifier(), now: now, defaults: defaults)
 
         #expect(OmniFocusSyncStatus.lastFailure(from: defaults) == nil)

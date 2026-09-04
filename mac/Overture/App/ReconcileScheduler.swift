@@ -179,7 +179,8 @@ final class ReconcileScheduler {
         var omniFocusChanged = 0
         let config = OmniFocusSyncConfig.loaded()
         if config.enabled {
-            omniFocusChanged = syncOmniFocus(now: now, client: AppleScriptOmniFocusClient(), horizonDays: config.horizonDays)
+            omniFocusChanged = await syncOmniFocus(now: now, client: AppleScriptOmniFocusClient(),
+                                                   horizonDays: config.horizonDays)
         }
 
         let after = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
@@ -369,22 +370,27 @@ final class ReconcileScheduler {
     func syncOmniFocus(now: Date, client: OmniFocusClient, horizonDays: Int,
                        permission: AutomationAuthorization = OmniFocusAutomationPermission.current(),
                        notifier: OmniFocusNotifier = OmniFocusUserNotifier(),
-                       statusDefaults: UserDefaults = .standard) -> Int {
+                       statusDefaults: UserDefaults = .standard) async -> Int {
         // #268: gate on a SILENT Automation pre-check. If OmniFocus isn't already grantable, the runner
         // skips the AppleScript (so this windowless process can't post a TCC modal into the void) and
-        // notifies once; otherwise it applies and records success/failure. AppleScript stays synchronous
-        // on this main actor, awaited by the caller, so the write completes before the tick returns.
+        // notifies once; otherwise it applies and records success/failure.
         // Returns the number of OmniFocus tasks changed, for the manual-reconcile acknowledgment (#285).
+        //
+        // #3419: the AppleScript no longer runs on this actor. It used to, and the claim that it had to
+        // ("NSAppleScript requires the main thread") stood here unmeasured until it was measured and
+        // found false: `BlockingWorkThreadTests.appleScriptRunsOffTheMainThread` executes a script on a
+        // background queue and gets its answer (L82, L316). The tick still AWAITS the result, so the
+        // write completes before it returns; what changed is that the main actor is free meanwhile.
         let all = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
         let desired = OmniFocusSync.desired(from: all, now: now, horizonDays: horizonDays)
-        let changed = OmniFocusSyncRunner.run(desired: desired, permission: permission, client: client,
-                                              notifier: notifier, now: now, defaults: statusDefaults,
-                                              // #2899: carry back what Dan ticked off in OmniFocus. Passed
-                                              // as a closure because the runner is pure over value types
-                                              // and the model lives here, on the main actor.
-                                              recordCompletions: { handled in
-                                                  OmniFocusSync.recordCompletions(handled, in: all, now: now)
-                                              })
+        let changed = await OmniFocusSyncRunner.run(
+            desired: desired, permission: permission, client: client,
+            notifier: notifier, now: now, defaults: statusDefaults,
+            // #2899: carry back what Dan ticked off in OmniFocus. Passed as a closure because the
+            // runner is pure over value types and the model lives here, on the main actor.
+            recordCompletions: { handled in
+                OmniFocusSync.recordCompletions(handled, in: all, now: now)
+            })
         if changed.stamped > 0 { try? context.save() }
         return changed.tasks
     }

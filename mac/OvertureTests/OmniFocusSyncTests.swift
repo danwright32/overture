@@ -195,7 +195,7 @@ struct OmniFocusSyncTests {
     }
 
     // A fake client records what the orchestrator asked OmniFocus to do, with a preset existing set.
-    final class FakeClient: OmniFocusClient {
+    final class FakeClient: OmniFocusClient, @unchecked Sendable {
         var existing: [OmniFocusSync.ExistingTask]
         var created: [OmniFocusSync.DesiredTask] = []
         var completed: [OmniFocusSync.ExistingTask] = []

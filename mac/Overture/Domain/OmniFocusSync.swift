@@ -32,7 +32,10 @@ struct OmniFocusSyncConfig: Sendable {
 // The side-effecting boundary to OmniFocus, injected so the orchestrator is testable with a fake.
 // The real implementation (AppleScriptOmniFocusClient) talks to OmniFocus; it is the one piece that
 // can only be verified live, not unit-tested.
-protocol OmniFocusClient {
+// #3419: Sendable because the whole client is now handed to a serial background queue. It was always
+// a value type in practice (AppleScriptOmniFocusClient holds nothing but strings); the compiler simply
+// had no reason to check until the I/O moved off the main actor.
+protocol OmniFocusClient: Sendable {
     func existingOvertureTasks() throws -> [OmniFocusSync.ExistingTask]   // incomplete Overture-marked tasks
     // #2899: and the COMPLETED ones. A task Dan ticked off and a task that was never created are the same
     // state to a sync that reads only what is open, and it resolved that ambiguity by creating, every
@@ -236,11 +239,39 @@ enum OmniFocusSync {
     // The two READS still throw, and that difference is deliberate. Not knowing what OmniFocus holds
     // makes every later decision guesswork, so a plan built on a failed read would complete and create
     // against a picture of nothing: that is a failure of the whole run and says so.
+    // #3419: a named value rather than a tuple, because it is now RETURNED ACROSS a thread boundary
+    // and a tuple of Sendable parts is not itself something the compiler will carry. Field names are
+    // unchanged, so every existing `result.created` reads the same.
+    struct ApplyResult: Sendable {
+        let existing: Int
+        let created: Int
+        let completed: Int
+        let handled: [DesiredTask]
+        let failures: [TaskFailure]
+        // #3420: what the completed-task read walked, and what OmniFocus took over it.
+        let completedRead: ReadShape
+    }
+
+    // #3420: the shape of the read that has no upper bound. Before this, a read that took four minutes
+    // and one that took forty milliseconds left the same trace, which was none (L98). Only the COMPLETED
+    // read is recorded: the incomplete one is bounded by what is currently desired, while the completed
+    // set grows for the life of the OmniFocus database because nothing prunes or ages a ticked-off
+    // Overture task.
+    struct ReadShape: Sendable, Equatable {
+        let tasks: Int
+        let seconds: Double
+    }
+
     @discardableResult
-    static func apply(desired: [DesiredTask], client: OmniFocusClient) throws
-        -> (existing: Int, created: Int, completed: Int, handled: [DesiredTask], failures: [TaskFailure]) {
+    static func apply(desired: [DesiredTask], client: OmniFocusClient,
+                      now: () -> Date = Date.init) throws -> ApplyResult {
         let existing = try client.existingOvertureTasks()
+        // #3420: timed with an INJECTED clock, so the test for it asserts the duration reported rather
+        // than what else the machine was running (L224, L524).
+        let readStarted = now()
         let completed = try client.completedOvertureTasks()
+        let completedRead = ReadShape(tasks: completed.count,
+                                      seconds: now().timeIntervalSince(readStarted))
         let plan = reconcile(desired: desired, existing: existing, completed: completed)
         var failures: [TaskFailure] = []
         var created = 0
@@ -263,7 +294,8 @@ enum OmniFocusSync {
                                             recipientId: task.recipientId, reason: "\(error)"))
             }
         }
-        return (existing.count, created, completedCount, plan.handled, failures)
+        return ApplyResult(existing: existing.count, created: created, completed: completedCount,
+                           handled: plan.handled, failures: failures, completedRead: completedRead)
     }
 
     // Diff the desired set against what OmniFocus currently holds (by naturalKey + recipientId, #653:
