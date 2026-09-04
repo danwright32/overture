@@ -4,11 +4,16 @@ import SwiftData
 
 // #3422 and #2663: what task a contact earns, and when it is due.
 //
-// #3422 is the due itself, wired through `OmniFocusSync.desired` and the note it writes.
-// #2663 is which task a contact's single slot goes to. `SendGroup.oneRowPerGroup` gives one task per
-// contact, and the post-event branch ran first and `continue`d, so it took the slot by being written
-// first rather than by being owed first. Before #2646 that could not bite, because the branch also
-// required the prompt to be already due, so the horizon its comment describes had never once applied.
+// #3422 is the due itself, wired through `OmniFocusSync.desired` and the note it writes: a reply
+// triage task is dated from when the reply ARRIVED rather than from a fixed 6:00 PM on its day.
+//
+// #2663 asked whether a contact's single slot should go to whatever is owed SOONEST rather than to
+// whichever branch is written first. That only becomes a real question if a post-event prompt not yet
+// owed can earn a task at all, which needs the look-ahead horizon to be live. It was built and then
+// REVERSED (Dan, 2026-09-04, in session): earning early would put close-out reminders into OmniFocus up
+// to a fortnight before they are due. So #2397's rule stands unchanged, an owed prompt takes the slot,
+// and a prompt not yet owed earns nothing, which the last two tests here pin so it cannot come back
+// without somebody meeting them (L252).
 //
 // Every fixture pins BOTH the data and the clock, so real time cannot walk a case into a different
 // band or a different side of the horizon (L130).
@@ -75,12 +80,12 @@ struct ContactSlotAndTriageDueTests {
         #expect(task.note.contains("09:00"))
     }
 
-    // #2663's guard. A contact owing triage TODAY and a post-event prompt due later inside the
-    // horizon gets the one owed soonest, not whichever branch happens to be written first.
-    @Test func theSlotGoesToTheWorkOwedSoonestNotTheBranchWrittenFirst() throws {
+    // A contact owing triage today, on a show that has NOT happened yet, earns the triage task. Its
+    // post-event prompt is not owed until the day after the show, and a prompt that is not owed earns
+    // nothing at all, so there is no competition for the slot.
+    @Test func aContactOwingTriageOnAShowStillAheadEarnsTheTriageTask() throws {
         let arrival = eastern(2026, 8, 31, 9, 0)          // triage due 1:00 PM the same day
         let now = eastern(2026, 8, 31, 10, 0)
-        // Show is five days out, so its post-event prompt is due after that: later than the triage.
         let p = lead(showOn: "2026-09-05", repliedAt: arrival, sentAt: eastern(2026, 8, 20, 10, 0))
         let tasks = OmniFocusSync.desired(from: [p], now: now, horizonDays: 14)
         #expect(tasks.count == 1, "one task per contact")
@@ -116,25 +121,28 @@ struct ContactSlotAndTriageDueTests {
         #expect(r.hasUnhandledReply, "and it must still be the case the triage task exists for")
     }
 
-    // #2663: the horizon becomes real. A prompt coming due inside the window earns its task now,
-    // deferred until the day, which is the whole point of a setting that says it looks ahead: the
-    // sync only fires while Overture is open, so a prompt that came due while it was shut would
-    // otherwise wait for the next launch.
-    @Test func aPromptComingDueInsideTheHorizonEarnsItsTaskAlready() throws {
+    // #2663 REVERSED, and pinned so it cannot be reintroduced without somebody meeting this test.
+    //
+    // A close-out prompt coming due next week earns NOTHING today, even though it is inside the
+    // look-ahead window. Making it earn early was built and then reversed: Dan's call, 2026-09-04, in
+    // this session, on being shown that it would put close-out reminders into OmniFocus up to a
+    // fortnight before they are due. The look-ahead horizon therefore still has never applied to this
+    // branch, which is a decision rather than an oversight (L346).
+    @Test func aPromptNotYetOwedEarnsNothingEvenInsideTheHorizon() throws {
         let now = eastern(2026, 8, 31, 10, 0)
         let p = lead(showOn: "2026-09-05", repliedAt: eastern(2026, 8, 20, 9, 0), sentAt: eastern(2026, 8, 10, 10, 0))
-        // Answered, so no triage competes for the slot and this is about the post-event branch alone.
-        p.recipients.first?.replyHandledAt = eastern(2026, 8, 21, 9, 0)
-        let tasks = OmniFocusSync.desired(from: [p], now: now, horizonDays: 14)
-        #expect(tasks.first?.kind == .postEventPrompt)
-    }
-
-    // And the horizon EXCLUDES, which is what it never did. Without this the test above would pass
-    // just as well against a branch that ignores the cutoff entirely (L159).
-    @Test func aPromptComingDueBeyondTheHorizonEarnsNothingYet() throws {
-        let now = eastern(2026, 8, 31, 10, 0)
-        let p = lead(showOn: "2026-11-05", repliedAt: eastern(2026, 8, 20, 9, 0), sentAt: eastern(2026, 8, 10, 10, 0))
+        // Answered, so no triage competes and this is about the post-event branch alone.
         p.recipients.first?.replyHandledAt = eastern(2026, 8, 21, 9, 0)
         #expect(OmniFocusSync.desired(from: [p], now: now, horizonDays: 14).isEmpty)
+    }
+
+    // The positive control for the test above: the SAME lead, once the show has passed, does earn its
+    // prompt. Without it, "earns nothing" is equally true of a lead that could never earn anything and
+    // the test would pass against a branch that is simply broken (L159).
+    @Test func theSameLeadDoesEarnItsPromptOnceTheShowHasPassed() throws {
+        let p = lead(showOn: "2026-09-05", repliedAt: eastern(2026, 8, 20, 9, 0), sentAt: eastern(2026, 8, 10, 10, 0))
+        p.recipients.first?.replyHandledAt = eastern(2026, 8, 21, 9, 0)
+        let tasks = OmniFocusSync.desired(from: [p], now: eastern(2026, 9, 6, 10, 0), horizonDays: 14)
+        #expect(tasks.first?.kind == .postEventPrompt)
     }
 }
