@@ -37,6 +37,10 @@ the workflow's runbook is its spec.
 | `check-running`, `check-cancel`, `check-chunks/`, `check-run.log`, `check-run-events.jsonl` | The same for the marker, the cancel sentinel, the per-chunk working directory and the two logs: `RunSlot`'s `check` spellings of the `prep-*` names elsewhere in this table. None carries a version; the marker and the sentinel are presence-only, exactly as `prep-cancel` above. | | | | |
 | `prep-cancel` | App (`PrepQueueService.requestCancel`) writes it to ask a running Prep run to stop; App (`startPrep`) clears any stale one before a fresh run | `prep-run.sh` (`lib/scout-cancel.sh`'s `cancel_requested`, on each heartbeat tick; `clear_cancel` on exit) | n/a (empty sentinel; presence IS the request, contents never read) | none | `PrepReplyCancelServiceTests.swift`, `lib/scout-cancel.test.sh`, `PrepReplyRunnerWiringGuardTests.swift` |
 | `reachability-probe-run.json` | App (`PrepQueueService.startReachabilityProbe`, via `ReachabilityProbeMarker.write`), rewritten by `settleReachabilityProbe` when a settle could not save, removed when it settles | App (`ReachabilityProbeMarker.read`, from `settleReachabilityProbe` / `settleOrphanedProbe` / `isProbeRunning`); `prep-run.sh` reads its PRESENCE only, and since #2980 only when the run NAMES no slot (a build older than #2763, the one case that could put a check in the prep slot); a run that names its slot takes its kind from the slot alone | none (two fields; `settleAttempts` added additively and optionally in #1809) | `fixtures/reachability-probe-run/` | `ReachabilityProbeMarkerContractTests.swift`, `UnfinishedCheckTests.swift`, `RunKindGuardTests.swift`, `prep-run-chunking.test.sh` |
+| `<slot>-claude-pid` | `prep-run.sh` (`lib/run-slot.sh`'s `SLOT_CLAUDE_PID`): the pid of the `claude` process, or the space separated pids of every chunk's, written after launch and removed by the EXIT trap | `prep-run.sh` itself, and only it: `heartbeat_guard_exit` refuses to keep a heartbeat alive for a dead run, `heartbeat_touch_or_stop` stops when it has gone, and cancel kills what it names | n/a (pids, whitespace separated; presence means a run believes it has a live claude) | none | `lib/run-slot.test.sh`, `lib/run-heartbeat.test.sh` |
+| `<slot>-stall-state` | `prep-run.sh` (`lib/run-slot.sh`'s `SLOT_STALL_STATE`, through `stall_tick`): how long the results file has gone without growing | `prep-run.sh` (`stall_tick` decides whether to stop, `stall_stalled_seconds` says how long for the message) | n/a (bookkeeping for one run; removed by the EXIT trap) | none | `lib/run-slot.test.sh`, `lib/stall-guard.test.sh` |
+| `<slot>-run-events.fifo` | `prep-run.sh` (`lib/run-slot.sh`'s `SLOT_EVENTS_FIFO`): the named pipe `run_one_claude` streams the run's events through, so they can be tee'd live rather than read after the fact | The same run's own tee, into `<slot>-run-events.jsonl`. NOTHING outside the run reads the pipe: it exists so the events file is written as the run goes rather than at the end | n/a (a FIFO, not a file with contents to read later) | none | `lib/run-slot.test.sh` |
+| `<slot>-run.chunk-N.log`, `<slot>-run-events.chunk-N.jsonl`, `<slot>-events-chunk-N.fifo` | `prep-run.sh` per CHUNK when a run fans out (`slot_chunk_log`, `slot_chunk_events`, `slot_chunk_fifo`) | The run itself: the per-chunk events files are what `record_run_cost` sums into the results file's `runCost`. The logs are read by hand | n/a (`N` is the chunk index from 0; these are FAMILIES rather than single files, which is why the catalogue names the shape) | none | `prep-run-chunking.test.sh`, `lib/models.test.sh` |
 | `run-boundary-violation.log` | `prep-run.sh` (`lib/run-slot.sh`'s `slot_check_foreign_results`, #2764: appends one entry when a run's EXIT trap finds another slot's results file changed while it ran) | App (`RunBoundaryViolations.newlyReported`, #2760: counted at launch and at each settle, and said out loud once per violation as a `.warning`) | n/a (a plain log; the app counts lines carrying `BOUNDARY VIOLATION` and stores the count under `runBoundaryViolationsReported`) | none | `RunBoundaryViolationTests.swift`, `lib/run-slot.test.sh` |
 | `overture-reply-classify-queue.json` | App (`ReplyClassifyQueueBuilder.encode`) | Classify+drafter run (workflow) | 1, 2, 3 | `fixtures/reply-classify/` | `ReplyClassifyContractTests.swift` |
 | `overture-reply-classify-results.json` | Classify+drafter run (workflow, rewrites it after every item, not only once at the end; #1081) | App (`ReplyClassifyResultsDecoder`) | 1, 2, 3 | `fixtures/reply-classify/` | `ReplyClassifyContractTests.swift` |
@@ -498,6 +502,11 @@ both) to each item, set only when Dan asked to re-prep a prospect that already h
 run knows to skip the corresponding half instead of redoing everything. Additive; `v1.json`/
 `v2.json` stay byte-identical and still decode with it absent (nil).
 
+Queue version 4 (#1122) adds two optional fields to each item for a MULTI-NIGHT run: the run's closing
+night, nil for a single-night show, and whether the run is still live with its opening night already
+past. Both are on the wire so a draft can pitch a run by the night that is still ahead rather than by
+one that has been and gone.
+
 Queue version 5 (#5) adds an optional `experimentArmInstruction` to each item: the opener archetype
 this item MUST use (one of the live tokens `reason-first` / `direct-intent`), copied from the
 app-assigned `Prospect.assignedArm` when the prospect belongs to an active A/B experiment.
@@ -510,6 +519,11 @@ normal #362 opener rotation. The runbook (`docs/prep-runbook.md` §2) gives this
 that rotation, so an experiment item genuinely randomizes what is produced. Additive; `v1.json`
 through `v4.json` stay byte-identical and still decode with it absent (nil). (Version 4, #1122, added
 `runEndDate` + `openingNightPassed`; it had no paragraph here before this one.)
+
+Queue version 6 (#1597) adds an optional `alsoAnswersFor` to each item: the OTHER shows this one item
+answers for. Set only on a reachability CHECK, where one paid lookup against an organisation settles
+every show that organisation presents, so the run reports once and the app fans the answer out. A Prep
+run never sets it.
 
 Queue version 7 (#1720, milestone 34 Phase 3) adds an optional RUN-LEVEL `houses`, beside `items`
 rather than inside them: the organisations the app has already judged to be the BUILDING rather than
@@ -606,6 +620,13 @@ the runbook is a prompt, and a silent gap is not evidence a page became unreadab
 reader's tolerant gate (1 through 8) still accepts `v1.json` through `v7.json` unchanged, `v8.json` is the
 show-summary spec.
 
+Queue version 9 (#1856) adds an optional `onlyTheActIsNamed` to each item: nobody but the ACT is
+named on this show, so there is no producing organisation to research and the act itself is the only
+party to try. Measured on the live store 2026-07-31, 93 open rows were in that state, 63 of them at one
+cabaret room: every venue in that list rents itself out and books a different act a night, so the
+listing names the room and the act and never says who is producing. Overture refuses to treat the room
+as the producer (#1787), which left the check with no target at all and a run that found nothing.
+
 Queue version 10 (#1887) adds an optional `venueHistory` to each item: how well Dan already knows
 THIS room, as one of `shot_before` / `a_few` / `regularly`. It is a BAND and never a count, and the
 count itself never leaves the app (`VenueShootHistory`). Dan's rule is that a pitch never claims an
@@ -619,6 +640,37 @@ history imported at all, and, deliberately, a show at Carnegie Hall, where the r
 requires the "nearly ten years at Carnegie Hall" tenure credential and a venue band beside it would
 be one fact stated twice (Dan's call, 2026-07-31). Additive; the reader's tolerant gate (1 through
 10) still accepts `v1.json` through `v9.json` unchanged, and `v10.json` is the venue-history spec.
+
+Queue version 11 (#2259) adds an optional `listingCreditedOrg` to each item: the producing company this
+show's OWN listing page credits, read by the app out of `showListing.text` (version 8 above). It exists
+because `onlyTheActIsNamed` says one thing (the stored presenter field is empty) and the runbook restated
+it as a much bigger one ("this listing named no producing organisation at all"). On one show the bigger
+claim was false, the page's title line named the company twice, and the run was told there was nothing
+to find: eleven web calls on two individuals, and a card reading "No email found".
+
+Queue version 12 (#2392) adds an optional `struckAddresses` to each item: addresses Dan has STRUCK on
+this show. Do not research them, do not write to them, do not report them back as contacts. They are on
+the wire rather than filtered on the way home because the point is to stop the run SPENDING on an
+address he already knew was wrong. His report was a card reading "10 found, 4 reachable" over three
+personal accounts and the act's own domain, with the only control anywhere sitting in the draft-review
+panel, after the run had been paid for.
+
+Queue version 13 (#2983) adds an optional `presenterName` to each item: the producing organisation the
+APP already holds for this show, by name, straight from the stored `presenter`. Until this field the
+only thing either builder derived from `presenter` was `onlyTheActIsNamed`, a boolean ABOUT the fact, so
+a show credited to a real company handed the run "a producing organisation IS named here" and withheld
+WHICH one. On one such show, credited on Dan's own card since 2026-07-22, the check spent 22 web calls
+and never searched that name once.
+
+#3310: six of these paragraphs were backfilled on 2026-09-04, having been missing since each version
+shipped. The document read as complete, because every version it DID describe was described well, and on
+2026-08-30 a planning brief was written from it stating the contract was at v7 and the change in hand
+would be v8. It was wrong by six versions and three agents reading the source had to correct it. A
+confidently incomplete reference is worse than an obviously incomplete one. `PrepQueueVersionsAreDocumentedTests`
+is what stops the next bump shipping undocumented, and it found two more gaps than the issue named on
+its first run: #3310 listed 9, 11, 12 and 13, and 4 and 6 were missing too. That is the guard working
+rather than the issue having been careless, and it is the reason the class was closed rather than the
+six instances.
 
 Results version 11 (#2895) adds an optional `performanceCorroborated` to each contact: does the page named
 in `sourceUrl` tie THAT PERSON to THIS performance. Only meaningful for a `performer` contact at `high`,

@@ -39,27 +39,39 @@ struct RunSlotFilesAreCataloguedTests {
         return String(rest[..<end.lowerBound])
     }
 
-    // Names built by asking RunSlot, against a neutral base, exactly as RunSlot's own `queueFileName`
-    // does. Nothing here restates a filename pattern.
-    private static func fileNames(for slot: RunSlot) -> [String] {
-        let base = URL(fileURLWithPath: "/")
+    // #3018: DERIVED from `RunSlot.allPaths`, which is the whole point of that property existing.
+    //
+    // This used to be a hand-written subset of nine, while `allPaths` produced fifteen, so twelve of the
+    // thirty names the two slots make were exempt from the check meant to catch them and the guard
+    // passed anyway (measured 2026-08-20). That is the defect this file's own header warns about, one
+    // function further down (L96, L41): the second hand-written list only ever checks what somebody
+    // remembered, and #3010's covers file had to be added to BOTH by hand to be seen at all.
+    //
+    // The chunk paths are FAMILIES sampled at index 0 in `allPaths`, so what the catalogue names is the
+    // shape (`<slot>-run.chunk-N.log`) and what this looks for is that shape rather than the sampled
+    // member. Looking for `chunk-0` would tie the document to an index nothing else means.
+    // Every path this slot owns, each as the spellings the catalogue is allowed to use for it.
+    static func catalogueEntries(for slot: RunSlot) -> [(label: String, spellings: [String])] {
+        slot.allPaths(in: URL(fileURLWithPath: "/"))
+            .map { (label: $0.key, spellings: acceptedSpellings(of: $0.value.lastPathComponent, slot: slot)) }
+            .sorted { $0.label < $1.label }
+    }
+
+    // The concrete name, and the two FAMILY forms the document may name instead.
+    //
+    // A row may name the file itself (`overture-prep-queue.json`, and the catalogue names both slots'
+    // spellings of that one separately, because they are two different contracts). Or it may name the
+    // family, which is what a file that differs only by slot or only by chunk index deserves: writing
+    // `check-claude-pid` and `prep-claude-pid` as two rows would be one fact stated twice, and the chunk
+    // paths are sampled at index 0 in `allPaths` so a row naming `chunk-0` would tie the document to an
+    // index nothing else means.
+    static func acceptedSpellings(of name: String, slot: RunSlot) -> [String] {
+        let byChunk = name.replacingOccurrences(of: "chunk-0", with: "chunk-N")
         return [
-            slot.queueURL(in: base),
-            slot.resultsURL(in: base),
-            slot.progressURL(in: base),
-            slot.markerURL(in: base),
-            slot.cancelURL(in: base),
-            slot.chunkDirectoryURL(in: base),
-            slot.runLogURL(in: base),
-            slot.eventsURL(in: base),
-            slot.archivesDirectory(in: base),
-            // #3010. Added here as well as to `allPaths`, because this list is a HAND-WRITTEN subset and
-            // omits 12 of the 30 names `allPaths` produces (the pid file, the stall state, the FIFOs and
-            // the chunk families), so a path added only to `allPaths` is exempt from the very check meant
-            // to catch it (L96). Widening it to be derived needs those 12 documented first, which is its
-            // own change: filed as #3018.
-            slot.coversURL(in: base),
-        ].map(\.lastPathComponent)
+            name,
+            byChunk,
+            byChunk.replacingOccurrences(of: "\(slot.rawValue)-", with: "<slot>-"),
+        ]
     }
 
     @Test func theCatalogueNamesEveryFileEverySlotProduces() {
@@ -72,12 +84,13 @@ struct RunSlotFilesAreCataloguedTests {
                 "the Catalog section no longer looks like the table this reads; the heading may have moved")
 
         for slot in RunSlot.allCases {
-            for name in Self.fileNames(for: slot) {
-                #expect(text.contains(name),
+            for entry in Self.catalogueEntries(for: slot) {
+                #expect(entry.spellings.contains(where: { text.contains($0) }),
                         """
-                        docs/contracts.md does not name \(name), which RunSlot.\(slot.rawValue) writes. \
-                        That catalogue is what somebody reads before changing a cross-boundary file \
-                        shape, so a file missing from it is a change aimed at the wrong place (#2805).
+                        docs/contracts.md names none of \(entry.spellings) for \
+                        RunSlot.\(slot.rawValue).\(entry.label), which it writes. That catalogue is \
+                        what somebody reads before changing a cross-boundary file shape, so a file \
+                        missing from it is a change aimed at the wrong place (#2805, #3018).
                         """)
             }
         }
