@@ -169,37 +169,29 @@ enum OmniFocusSync {
                 // an otherwise-closed contact still deserves a task, #424).
                 guard standing.isInPlay || unhandledReply else { continue }
 
-                // #2663: both candidates are BUILT, then one is chosen, rather than the post-event
-                // branch taking this contact's single slot by running first and `continue`ing.
+                // The post-event prompt takes this contact's single slot when it is OWED, which is
+                // #2397's decision: once the show is over, what Dan owes is an ending rather than an
+                // answer. `PostEventPrompt.prompt` is what asks whether it is owed YET.
                 //
-                // Two rules, and they do not conflict, which is why this is additive rather than a
-                // reversal. #2397 decided that once a show is OVER the thing Dan owes is an ending
-                // rather than an answer, so a prompt already due outranks triage; that is kept exactly.
-                // #2663 is about work not yet owed, which could not arise before: the branch also
-                // required the prompt to be already due, so `due <= cutoff` was unreachable (a past date
-                // is always inside a future cutoff) and the horizon its comment described had never once
-                // applied. Dropping that gate makes the horizon real, and among work that is not yet
-                // owed the soonest deadline wins.
+                // #2663 asked whether the slot should go instead to whatever is due SOONEST, which only
+                // becomes a real question if a prompt not yet owed can earn a task at all. Making the
+                // horizon real is what would allow that, and it was built and then REVERSED: Dan's call,
+                // 2026-09-04, in this session, on being shown that it would put close-out reminders into
+                // OmniFocus up to a fortnight before they are due. So the due gate stays, `due <= cutoff`
+                // stays unreachable behind it, and the horizon this branch's comment used to describe has
+                // still never applied.
                 //
-                // The horizon becoming real is what the OmniFocus sheet already promises Dan in his own
-                // words, that the sync only fires while Overture is open so it looks ahead by N days: a
-                // prompt falling due while the app was shut would otherwise wait for the next launch.
-                var postEventTask: DesiredTask?
-                // The moment the prompt starts being OWED, which is Eastern midnight the day after the
-                // show. Deliberately not the task's own 6:00 PM due derived from it: `PostEventPrompt`
-                // answers "is it owed yet" against this instant, and asking the derived one instead
-                // would move the answer by eighteen hours and quietly change #2397's rule while looking
-                // like it preserved it (L70).
-                var postEventOwedFrom: Date?
-                var triageTask: DesiredTask?
-
-                if let due = PostEventPrompt.nextPromptDate(for: r, of: p), due <= cutoff {
+                // Left as a gate rather than deleted, and said plainly here rather than left to be
+                // rediscovered: the next reader to notice that `due <= cutoff` can never exclude anything
+                // is looking at a decision, not an oversight (L346, L542).
+                if let due = PostEventPrompt.nextPromptDate(for: r, of: p),
+                   PostEventPrompt.prompt(for: r, of: p, now: now) != nil, due <= cutoff {
                     let dueDate = easternTime(hour: dueHour, onDayOf: due)
-                    postEventOwedFrom = due
-                    postEventTask = DesiredTask(kind: .postEventPrompt, naturalKey: p.naturalKey, recipientId: r.id, title: title(for: p, r),
-                                                note: note(for: p, r, kind: .postEventPrompt, dueDate: dueDate),
-                                                deferDate: easternTime(hour: deferHour, onDayOf: due),
-                                                dueDate: dueDate)
+                    earned.append((r, DesiredTask(kind: .postEventPrompt, naturalKey: p.naturalKey, recipientId: r.id, title: title(for: p, r),
+                                                  note: note(for: p, r, kind: .postEventPrompt, dueDate: dueDate),
+                                                  deferDate: easternTime(hour: deferHour, onDayOf: due),
+                                                  dueDate: dueDate)))
+                    continue
                 }
 
                 // #271: a reply Dan has not answered. Keyed by the SAME (naturalKey, recipientId) as the
@@ -220,24 +212,11 @@ enum OmniFocusSync {
                     // every reply landing after 6:00 PM produced a task already overdue when it was
                     // created, and evening is when Dan reads OmniFocus rather than the app.
                     let dueDate = ReplyTriageDue.due(replyArrivedAt: anchor)
-                    triageTask = DesiredTask(kind: .replyTriage, naturalKey: p.naturalKey, recipientId: r.id, title: triageTitle(for: p, r),
-                                             note: note(for: p, r, kind: .replyTriage, dueDate: dueDate),
-                                             deferDate: ReplyTriageDue.surfacesAt(due: dueDate),
-                                             dueDate: dueDate)
+                    earned.append((r, DesiredTask(kind: .replyTriage, naturalKey: p.naturalKey, recipientId: r.id, title: triageTitle(for: p, r),
+                                                  note: note(for: p, r, kind: .replyTriage, dueDate: dueDate),
+                                                  deferDate: ReplyTriageDue.surfacesAt(due: dueDate),
+                                                  dueDate: dueDate)))
                 }
-
-                let chosen: DesiredTask?
-                if let postEventTask, let postEventOwedFrom, now >= postEventOwedFrom {
-                    chosen = postEventTask                                   // #2397, unchanged
-                } else {
-                    // On an exact tie the post-event prompt keeps the slot, because it is first in the
-                    // array: a tie is the same instant, so nothing is deferred by choosing either, and
-                    // picking deterministically beats picking by whatever order a sort left them in
-                    // (L343).
-                    chosen = [postEventTask, triageTask].compactMap { $0 }
-                        .min { $0.dueDate < $1.dueDate }                     // #2663
-                }
-                if let chosen { earned.append((r, chosen)) }
             }
             tasks.append(contentsOf: SendGroup.oneRowPerGroup(earned) { $0.recipient }.map(\.task))
         }
