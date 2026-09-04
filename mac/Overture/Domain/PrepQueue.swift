@@ -342,6 +342,47 @@ enum PrepQueueBuilder {
         Set(prospects.map(\.naturalKey))
     }
 
+    // #3375: the order the "Which kept shows to prep?" sheet lists shows in.
+    //
+    // Dan, 2026-08-30: "this list should be in chronological order". It was in no order at all, because
+    // `toPrep` is a `@Query` with no sort descriptor and the sheet rendered the array as handed. An
+    // undeclared order is not merely untidy, it is UNSTABLE: the same sheet can present the same shows
+    // differently twice, and nothing anywhere would notice (L343).
+    //
+    // Here rather than in the sheet, so it is testable without rendering anything and cannot drift from
+    // what is drawn. It sorts the PROSPECTS rather than the sheet's Rows because the Row throws away
+    // the date, keeping only the rendered detail string, and sorting on rendered text would order by
+    // how a date is written rather than by when it is (L50).
+    //
+    // Every key is declared, including the ones that only break ties. A second show on one day, and a
+    // second undated show, each need an answer or the order is stable by luck of what the store
+    // returned, which is the same defect one level down.
+    static func prepSelectionOrder(prospects: [Prospect]) -> [Prospect] {
+        prospects.sorted { a, b in
+            // An undated show goes LAST rather than wherever it lands: the list is read soonest first
+            // and a show with no date answers no part of that question. Not treated as a far-future
+            // date, which would be a date nobody published (L67).
+            let aDay = a.performanceDate?.isEmpty == false ? a.performanceDate! : nil
+            let bDay = b.performanceDate?.isEmpty == false ? b.performanceDate! : nil
+            switch (aDay, bDay) {
+            case let (x?, y?) where x != y: return x < y   // ISO day strings sort chronologically
+            case (nil, _?): return false
+            case (_?, nil): return true
+            default: break
+            }
+            // `venue` is optional, and a missing one is compared as empty so it sorts before a named
+            // room rather than being skipped, which would drop back to the next key and leave two
+            // shows with no declared order between them.
+            let aVenue = a.venue ?? ""
+            let bVenue = b.venue ?? ""
+            if aVenue != bVenue { return aVenue < bVenue }
+            if a.groupName != b.groupName { return a.groupName < b.groupName }
+            // The last resort, so two shows alike in every key above still have ONE order rather than
+            // whichever the sort happened to leave first.
+            return a.naturalKey < b.naturalKey
+        }
+    }
+
     // The #Predicate mirror of needsPrep above, for the one call site (RootView's toPrep @Query)
     // that needs a compiled SwiftData predicate rather than a plain Swift function. Kept as a
     // single named, shared value so there is exactly one place this expression lives, not one

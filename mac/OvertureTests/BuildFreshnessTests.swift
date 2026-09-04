@@ -403,7 +403,7 @@ struct BuildFreshnessStateTests {
     @Test func aRecordThatLandsAfterLaunchIsSeenWhenThePanelShows() throws {
         let dir = try tempDir()
         defer { try? FileManager.default.removeItem(at: dir) }
-        let state = BuildFreshnessState(directory: dir)
+        let state = BuildFreshnessState(directory: dir, isRunFromSource: false)
 
         // The install race: the app is up, the installer has not finished writing.
         state.refreshIfStale(now: date("2026-08-04T10:00:09Z"))
@@ -424,7 +424,7 @@ struct BuildFreshnessStateTests {
     @Test func nothingIsShownBeforeTheFirstRead() throws {
         let dir = try tempDir()
         defer { try? FileManager.default.removeItem(at: dir) }
-        let state = BuildFreshnessState(directory: dir)
+        let state = BuildFreshnessState(directory: dir, isRunFromSource: false)
 
         #expect(state.verdict == nil)
         #expect(state.shouldShow == false)
@@ -435,7 +435,7 @@ struct BuildFreshnessStateTests {
     @Test func aGenuinelyRecordLessCopyStillSaysItCannotTell() throws {
         let dir = try tempDir()
         defer { try? FileManager.default.removeItem(at: dir) }
-        let state = BuildFreshnessState(directory: dir)
+        let state = BuildFreshnessState(directory: dir, isRunFromSource: false)
 
         state.refreshIfStale(now: date("2026-08-04T10:00:09Z"))
         state.refreshIfStale(now: date("2026-08-04T18:00:00Z"))
@@ -467,7 +467,7 @@ struct BuildFreshnessStateTests {
             }
             if wait == 3 { box.task?.cancel() }
         }
-        let state = BuildFreshnessState(directory: dir, sleep: sleeper.sleep, now: { clock })
+        let state = BuildFreshnessState(directory: dir, isRunFromSource: false, sleep: sleeper.sleep, now: { clock })
         state.refreshIfStale(now: clock)
         #expect(state.verdict == .upToDate)
 
@@ -508,7 +508,7 @@ struct BuildFreshnessStateTests {
     @Test func aDismissalHoldsWhileTheNewsIsUnchanged() throws {
         let dir = try tempDir()
         defer { try? FileManager.default.removeItem(at: dir) }
-        let state = BuildFreshnessState(directory: dir)
+        let state = BuildFreshnessState(directory: dir, isRunFromSource: false)
 
         state.refreshIfStale(now: date("2026-08-04T10:00:09Z"))
         #expect(state.shouldShow)
@@ -528,7 +528,7 @@ struct BuildFreshnessStateTests {
             .write(to: dir.appendingPathComponent("installed-build.json"), atomically: true, encoding: .utf8)
         try #"{"version":1,"commit":"def456","commitDate":"2026-08-04T12:06:00Z"}"#
             .write(to: dir.appendingPathComponent("shipped-commit.json"), atomically: true, encoding: .utf8)
-        let state = BuildFreshnessState(directory: dir)
+        let state = BuildFreshnessState(directory: dir, isRunFromSource: false)
 
         state.refreshIfStale(now: date("2026-08-04T12:10:00Z"))
         #expect(state.shouldShow)
@@ -552,7 +552,7 @@ struct BuildFreshnessStateTests {
             .write(to: dir.appendingPathComponent("installed-build.json"), atomically: true, encoding: .utf8)
         try #"{"version":1,"commit":"def456","commitDate":"2026-08-04T12:06:00Z"}"#
             .write(to: dir.appendingPathComponent("shipped-commit.json"), atomically: true, encoding: .utf8)
-        let state = BuildFreshnessState(directory: dir)
+        let state = BuildFreshnessState(directory: dir, isRunFromSource: false)
         state.refreshIfStale(now: date("2026-08-04T12:10:00Z"))
         #expect(state.shouldShow)
 

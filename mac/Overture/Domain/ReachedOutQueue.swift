@@ -207,11 +207,27 @@ enum ReachedOutQueue {
     static let decisionLabel = "Say what happened"
     static let endingLabel = "Say how it ended"
 
+    // #3475: counted in whole EASTERN CALENDAR DAYS, which is the unit the date heading above the row
+    // buckets by (`reachOutDateGroups`), so the two cannot name different days.
+    //
+    // It used to be `ceil(next.timeIntervalSince(now) / 86_400)`, which is a different question: how
+    // many 24 hour blocks fit in the gap. A show due tomorrow at 6:00 PM is 30.5 hours from 11:31 this
+    // morning, so it read "in 2 days" under a heading saying tomorrow. Reported from a screenshot taken
+    // 2026-09-02 at 11:31 EDT, where two rows showed exactly that, and true for twelve of that day's
+    // twenty four hours (L16, L118).
+    //
+    // The same counting `formNightLabel` below already does, for the reason its own comment gives: on
+    // the two clock-change days a day is 23 or 25 hours long, so raw division is a day out twice a year
+    // in the one line whose whole job is saying when (L39).
     static func timingLabel(next: Date, now: Date, awaitingDecision: Bool = false,
                             decisionLabel: String = decisionLabel) -> String {
-        let seconds = next.timeIntervalSince(now)
-        if seconds <= 0 { return awaitingDecision ? decisionLabel : "Reach out now" }
-        return daysAhead(Int((seconds / 86_400).rounded(.up)))
+        if next <= now { return awaitingDecision ? decisionLabel : "Reach out now" }
+        let days = EasternDate.daysUntil(from: EasternDate.dayString(from: now),
+                                         to: EasternDate.dayString(from: next)) ?? 0
+        // Still to come, but on today's own date. Neither "now", which would claim it is due, nor "in 1
+        // day", which names tomorrow's heading over a row sitting under today's.
+        guard days > 0 else { return "today" }
+        return daysAhead(days)
     }
 
     // #2169: a form row's timing slot names the NIGHT, because that is what its clock is now set to.

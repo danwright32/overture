@@ -89,12 +89,28 @@ enum BuildFreshness {
         // `behind`, because it is not merely old: it is not what shipped at all, and it is running
         // against the real store.
         case builtFromABranch
+        // #2077: this copy was BUILT FROM SOURCE and never installed, so no question about an installed
+        // copy applies to it. Its own answer rather than suppressing the panel, because suppressing
+        // would leave the verdict still saying something false: a Debug build reads its own data folder,
+        // which never holds the installer's records, so it answered `cannotTell(.noInstalledRecord)` on
+        // every single launch. It is not a copy that failed to come from the installer, it is one that
+        // was never meant to (L11).
+        case runFromSource
         // Never "assume fresh". A silent up-to-date is indistinguishable from no check at all, which is
         // exactly the state #1808 exists to end (L11: a message may only claim what its check measured).
         case cannotTell(Unknown)
     }
 
-    static func verdict(installed: InstalledBuild?, shipped: ShippedCommit?) -> Verdict {
+    // `isRunFromSource` is passed in rather than read here, so this stays a pure function over values
+    // and so there is ONE definition of "is this the Debug build": `StoreLocation.isDebugBuild`, the same
+    // constant that decides which data folder this copy reads. Two definitions is how the panel and the
+    // store could come to disagree about which copy is running (L263).
+    static func verdict(installed: InstalledBuild?, shipped: ShippedCommit?,
+                        isRunFromSource: Bool = false) -> Verdict {
+        // #2077: asked FIRST, because every answer below is a claim about an installed copy and there is
+        // not one. It outranks even `upToDate`, which a build from source could otherwise reach by
+        // holding the same commit as the last merge while being an entirely different bundle.
+        if isRunFromSource { return .runFromSource }
         guard let installed else { return .cannotTell(.noInstalledRecord) }
         guard let shipped else { return .cannotTell(.noShippedRecord) }
         // The same commit is the exact answer and never goes through the clock: two records OF one commit
@@ -128,8 +144,9 @@ enum BuildFreshness {
 
     // The same question against a directory. The directory is passed in rather than resolved here, so a
     // test can never read or write Dan's real Application Support folder (L2).
-    static func verdict(in directory: URL) -> Verdict {
-        verdict(installed: installedRecord(in: directory), shipped: shippedRecord(in: directory))
+    static func verdict(in directory: URL, isRunFromSource: Bool = false) -> Verdict {
+        verdict(installed: installedRecord(in: directory), shipped: shippedRecord(in: directory),
+                isRunFromSource: isRunFromSource)
     }
 
     static func installedRecord(in directory: URL) -> InstalledBuild? {
