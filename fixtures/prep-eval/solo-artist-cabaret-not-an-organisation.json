@@ -58,13 +58,12 @@
             "email": "alex@alexexample.example",
             "method": "named_contact",
             "confidence": "high",
-            "sourceUrl": "https://alexexample.example/contact",
-            "overrideBody": "My name is Dan and I'm a professional arts photographer here in NYC. I'm writing in regard to your August 3 show at The Example Room. I shoot documentary coverage without flash, staying out of the way, so the performance isn't disturbed and the audience doesn't notice anyone working. I've photographed at Carnegie Hall for nearly ten years, along with work at Lincoln Center and Radio City Music Hall, and you can see my portfolio at danwrightphotography.com. If you don't have someone on it already, I'd be glad to talk about your photography plans for the night. I look forward to hearing from you!"
+            "sourceUrl": "https://alexexample.example/contact"
           }
         ],
         "draft": {
           "subject": "Photographing Alex Example's Don't Be So Hard on Yourself at The Example Room",
-          "body": "My name is Dan and I'm a professional arts photographer here in NYC. I'm writing in regard to Alex Example's August 3 show at The Example Room. I shoot documentary coverage without flash, staying out of the way, so the performance isn't disturbed and the audience doesn't notice anyone working. I've photographed at Carnegie Hall for nearly ten years, along with work at Lincoln Center and Radio City Music Hall, and you can see my portfolio at danwrightphotography.com. If there isn't someone on it already, I'd be glad to talk about the photography plans for the night. I look forward to hearing from you!",
+          "body": "My name is Dan and I'm a professional arts photographer here in NYC. I'm writing in regard to your August 3 show at The Example Room. I shoot documentary coverage without flash, staying out of the way, so the performance isn't disturbed and the audience doesn't notice anyone working. I've photographed at Carnegie Hall for nearly ten years, along with work at Lincoln Center and Radio City Music Hall, and you can see my portfolio at danwrightphotography.com. If you don't have someone on it already, I'd be glad to talk about your photography plans for the night. I look forward to hearing from you!",
           "variant": "reason-first"
         }
       }

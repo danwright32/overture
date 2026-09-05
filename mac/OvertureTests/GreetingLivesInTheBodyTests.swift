@@ -92,31 +92,6 @@ struct GreetingLivesInTheBodyTests {
     // Carried over from #2010's suite, which #2545 replaces: these two assert behaviour that SURVIVES the
     // change, so deleting that file without them would have quietly dropped the coverage.
 
-    // A group whose members would not read the same words has no single email to compose, so there is
-    // nothing to return rather than a guess at whose letter wins.
-    @Test func agroupWithDifferentLettersHasNoJointEmail() throws {
-        let ctx = try context()
-        let p = prospect(ctx, body: "Hello,\n\nI photograph performing arts in New York.")
-        let emma = contact(ctx, on: p, id: "emma@aurora.example", name: "Emma Chen")
-        let virgile = contact(ctx, on: p, id: "virgile@aurora.example", name: "Virgile Roche")
-        virgile.provenance = .performer
-        virgile.overrideBody = "Hi Virgile,\n\nI photograph performing arts in New York."
-
-        #expect(OutgoingPitch.text(forGroup: [emma, virgile], of: p) == nil)
-    }
-
-    // The copy path and the send path must never differ, which is what OutgoingPitch exists for. A
-    // performer's own second-person draft still wins over the shared body.
-    @Test func aperformersOwnDraftStillWinsOverTheSharedBody() throws {
-        let ctx = try context()
-        let p = prospect(ctx, body: "Hello,\n\nI photograph performing arts in New York.")
-        let virgile = contact(ctx, on: p, id: "virgile@aurora.example", name: "Virgile Roche")
-        virgile.provenance = .performer
-        virgile.overrideBody = "Hi Virgile,\n\nYour recital caught my eye."
-
-        #expect(OutgoingPitch.text(for: virgile, of: p) == "Hi Virgile,\n\nYour recital caught my eye.")
-    }
-
     // MARK: what counts as opening with a greeting
 
     @Test(arguments: [
@@ -280,20 +255,6 @@ struct GreetingLivesInTheBodyTests {
         contact(ctx, on: p, id: "tom@aurora.example", name: "Tom Reyes")
 
         #expect(!emma.greetingMisaddressed)
-    }
-
-    // A performer's own second-person letter (#634) goes to them alone, so it names them whatever else
-    // is on the show.
-    @Test func aperformersOwnLetterMayNameThemOnAMultiContactShow() throws {
-        let ctx = try context()
-        let p = prospect(ctx, body: "Hello,\n\nI photograph performing arts in New York.")
-        p.status = .approved
-        let virgile = contact(ctx, on: p, id: "virgile@example.com", name: "Virgile Roche")
-        virgile.provenance = .performer
-        virgile.overrideBody = "Hi Virgile,\n\nI photograph performing arts in New York."
-        contact(ctx, on: p, id: "info@presenter.example", name: nil, method: .genericInbox)
-
-        #expect(!virgile.greetingMisaddressed)
     }
 
     // MARK: the hold is a WAIT, not a finish

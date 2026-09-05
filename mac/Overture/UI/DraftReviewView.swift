@@ -109,7 +109,6 @@ struct DraftReviewView: View {
             confidenceHeldDownWarnings
             addressInAnotherNameWarnings
             draftBlock
-            performerOverridePreviews
             actionRow
             conversationContactsSection
             if item.isLost { lostReasonField }
@@ -365,21 +364,6 @@ struct DraftReviewView: View {
                                            // asks for nothing by this rule and is right not to.
                                            isColdPitch: item.priorRelationship == "none")
                 .filter { !$0.isBlocking })
-        }
-    }
-
-    // #642 (#634 Phase D): a directly-addressed performer's own draft, shown BEFORE Dan approves or
-    // sends, not just after (the per-recipient conversationContactsSection below only appears once
-    // isSent). Read-only for now; editing an override is deferred to a later phase.
-    @ViewBuilder private var performerOverridePreviews: some View {
-        ForEach(item.contacts.filter { $0.overrideBody?.isEmpty == false }) { c in
-            VStack(alignment: .leading, spacing: 2) {
-                Text(DraftReviewNotes.willInsteadReceive(name: c.displayName))
-                    .font(.system(size: 11)).foregroundStyle(OVColor.inkFaint)
-                Text(c.overrideBody ?? "")
-                    .font(OVType.body).foregroundStyle(OVColor.inkSoft)
-                    .lineLimit(4).fixedSize(horizontal: false, vertical: true)
-            }
         }
     }
 
@@ -788,15 +772,6 @@ struct DraftReviewView: View {
                 Text(c.statusLabel).font(OVType.meta).foregroundStyle(contactStatusColor(c))
             }
             .font(.system(size: 12))
-            // #642 (#634 Phase D): a performer's direct-address draft, shown read-only so Dan can see
-            // exactly what THIS contact will receive instead of the shared (third-person) draft above.
-            // Editing this override is not built yet (deferred to a later phase).
-            if let overrideBody = c.overrideBody, !overrideBody.isEmpty {
-                Text(DraftReviewNotes.willReceive(body: overrideBody))
-                    .font(OVType.meta).foregroundStyle(OVColor.inkSoft)
-                    .lineLimit(3).fixedSize(horizontal: false, vertical: true)
-                    .padding(.leading, 20)
-            }
             if let reply = c.lastReplyText, !reply.isEmpty {
                 Text(reply)
                     .font(OVType.body).foregroundStyle(OVColor.inkSoft)

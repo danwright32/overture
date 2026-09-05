@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1490 sentences**.
+Every sentence Overture can say to Dan: **1487 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -14,7 +14,7 @@ What is not, and why:
   sentences under tokens nobody reads.
 - **Nothing, if it is written as two literals joined with `+`.** Those ARE joined here, into the
   one sentence the running app says (#3155). What is still only part of what Dan reads is a
-  sentence carrying a VALUE: 540 of the 1490 below hold a
+  sentence carrying a VALUE: 538 of the 1487 below hold a
   `\(...)` where a number or a name goes, so what is printed is the template. They are counted
   here rather than listed again, because the hole is visible in the line itself; what was missing
   was any statement of how much of this document is templates.
@@ -2248,8 +2248,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/DetachConversation.swift`
 "These are files written by something outside the app, a detached run or an install script, and they're still on disk in Overture's own folder. Nothing here can repair one. A line clears as soon as its file reads cleanly again."
     `Domain/AppNotice.swift`
-"These contacts have different drafts, so one shared email would send one of them to everyone. Send them separately, or make the drafts match"
-    `App/ActionFeedback.swift`
 "These leads are no longer in your queue."
     `UI/QueueView.swift`
 "These organizations asked not to be contacted. Overture no longer watches them, and will not draft to them."
@@ -2499,8 +2497,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/DayOffRangeFields.swift`
 "Why lost? (optional note)"
     `UI/DraftReviewView.swift`
-"Will receive: \(body)"
-    `Domain/DraftReviewNotes.swift`
 "Without naming a client"
     `Domain/ClientTagCopy.swift`
 "Won't learn from \(org)'s email"
@@ -2864,8 +2860,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/DraftReviewNotes.swift`
 "\(name) overlaps a room's name, so Overture reads it as the building, not the presenter."
     `Domain/OrganisationListing.swift`
-"\(name) will instead receive:"
-    `Domain/DraftReviewNotes.swift`
 "\(name) won't hold that night any more"
     `Domain/CancelledShootCopy.swift`
 "\(names.count) new booking\(names.count == 1 ? "" : "s") (\(names.joined(separator: ", ")))"

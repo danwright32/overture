@@ -85,41 +85,9 @@ struct DraftLintSendGateTests {
         #expect(!act.isSendablePending)                             // stale override no longer applies
     }
 
-    // The hole a lint that only read `draftBody` would leave: SendService sends a PERFORMER their own
-    // `overrideBody` when one exists, so that text (AI-written too) is what reaches them. The block is
-    // per recipient, over the text THAT recipient would actually receive, so a bad override body stops
-    // the performer without stopping the presenter who receives the clean shared body.
-    @MainActor
-    @Test func aPerformerOverrideBodyIsLintedInsteadOfTheSharedBody() throws {
-        let ctx = try context()
-        let p = makeProspect(ctx, body: clean)
-        let performer = Recipient(id: "p@perf.example", email: "p@perf.example", provenance: .performer)
-        performer.overrideBody = "Hi [NAME], I photograph performing arts."
-        let presenter = Recipient(id: "b@present.example", email: "b@present.example", provenance: .presenter)
-        p.setRecipients([performer, presenter])
-
-        #expect(performer.effectiveBody == performer.overrideBody)
-        #expect(!performer.isSendablePending)
-        #expect(performer.draftLintBlockers == [.placeholder])
-
-        #expect(presenter.effectiveBody == clean)
-        #expect(presenter.isSendablePending)
-    }
-
-    // An overrideBody only applies to a .performer (#640). A non-performer carrying stale override
-    // text must be linted on the SHARED body, exactly as SendService will send it.
-    @MainActor
-    @Test func aNonPerformerOverrideBodyIsIgnoredByTheLintJustAsItIsBySendService() throws {
-        let ctx = try context()
-        let p = makeProspect(ctx, body: clean)
-        let presenter = Recipient(id: "b@present.example", email: "b@present.example", provenance: .presenter)
-        presenter.overrideBody = "Hi [NAME], stale text nobody will ever receive."
-        p.setRecipients([presenter])
-
-        #expect(presenter.effectiveBody == clean)
-        #expect(presenter.isSendablePending)
-    }
-
+    // #3549 deleted the two tests that stood here. Both asserted that a performer's own second copy of
+    // the pitch was linted instead of the show's body, and a show has one letter now, so the rule they
+    // guarded no longer exists to be broken (L252).
     // A bare Recipient with no prospect wired (the pattern most tests in RecipientTests use) has no
     // text to lint and must stay governed by its own state alone, never blocked by a body it can't see.
     @Test func aRecipientWithNoProspectIsUnaffected() {

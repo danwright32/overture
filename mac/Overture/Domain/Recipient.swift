@@ -106,11 +106,21 @@ final class Recipient {
     // than shown as a false citation. Distinct from contactFormURL, which stays the form_or_dm
     // contact's own submission link.
     var contactSourceURL: String?
-    // v4 (#640, #634 Phase B): only ever meaningful when provenance == .performer, a direct,
-    // second-person draft for THIS recipient, preferred over the shared Prospect.draftBody at send.
-    // PrepImporter clears this whenever a re-ingested contact's provenance is no longer .performer.
-    var overrideBody: String?
 
+    // RETAINED STORAGE, read and written by nothing (#3549). This held a directly addressed performer's
+    // own second copy of the pitch, which the send preferred over the show's body while the card edited
+    // the show's body, so an edit was reported as applied and reached nobody. `effectiveBody` no longer
+    // consults it, `PrepImporter` no longer writes it, and the runbook no longer asks for it.
+    //
+    // Left on the model deliberately rather than deleted, by the same convention as Prospect's own
+    // retained columns: every schema change this app has made was ADDITIVE and it carries no
+    // MigrationPlan or VersionedSchema (see AppSchema), so dropping a stored property would be its first
+    // subtractive migration against a live store whose only net is the launch backup. That gets its own
+    // change with a rehearsal against a store clone first, not a line in a behaviour fix.
+    //
+    // Measured 2026-09-05: 9 rows carried a value, 5 already sent. The one time migration that empties
+    // them is separate from this code change, so the column is left holding whatever it holds.
+    var overrideBody: String? = nil
     // #789: the EXACT text Dan explicitly confirmed is fine to send despite a blocking lint finding.
     // A copy of the text rather than a bare boolean, so a later edit to DIFFERENT text silently
     // invalidates the override with no migration bookkeeping (isLintOverridden below); the same
@@ -718,12 +728,20 @@ final class Recipient {
             && !isBlockedByGreeting
     }
 
-    // #789 / #641: the text THIS recipient actually receives. A directly-addressed performer's own
-    // second-person draft (#634 Phase C) wins over the shared third-person body; for everyone else
-    // it IS the shared body. SendService.deliver reads this to compose the mail, and the lint below
-    // reads the same property to judge it, so what is CHECKED can never drift from what is SENT.
+    // #789 / #641 / #3549: the text THIS recipient actually receives, which is the show's one letter.
+    //
+    // It used to prefer a second copy stored on a directly-addressed performer (#634 Phase C), so one
+    // show could carry two letters. Only the send path read that copy; the card previewed, edited and
+    // badged the shared body, so an edit was reported as applied and reached nobody. Dan, 2026-09-05:
+    // "we should just always only have 1 version." The address form (second person to a performer,
+    // third person to a presenter) is now written into the one body, by whoever writes it, since Prep
+    // knows the show's contacts when it drafts.
+    //
+    // Kept as a named property rather than inlined at each call site: it is the ONE definition of the
+    // outgoing text, and every reader of outgoing content goes through it, so what is CHECKED cannot
+    // drift from what is SENT (#3551, L402).
     var effectiveBody: String? {
-        (provenance == .performer ? overrideBody : nil) ?? prospect?.draftBody
+        prospect?.draftBody
     }
 
     // #789: the blocking lint findings in that text. Derived live rather than stored at ingest on
@@ -776,9 +794,11 @@ final class Recipient {
     // inbox it is the correct opening, with the `Attn:` block above it naming the desk.
     var greetingMisaddressed: Bool {
         guard let prospect else { return false }
-        // A performer's own second-person letter (#634) goes to them alone, whatever else is on the
-        // show, so a name in it is right by construction.
-        if provenance == .performer, overrideBody?.isEmpty == false { return false }
+        // #3549 removed the performer carve-out that used to sit here. It stood on a performer having
+        // a letter of their OWN, which went to them alone, making a name in it right by construction.
+        // With one letter per show that premise is gone: a body naming the performer, on a show that
+        // also emails a presenter, is misaddressed for exactly the reason this guard exists. A single
+        // contact show is unaffected, since the audience is then one and the size test is false.
         return prospect.greetingAudienceSize > 1 && DraftGreeting.namesSomeone(effectiveBody)
     }
 

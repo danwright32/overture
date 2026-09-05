@@ -16,7 +16,7 @@ struct ARouteNamedButNotSuppliedTests {
     private func contact(method: String?, email: String? = nil, formUrl: String? = nil) -> PrepContact {
         PrepContact(name: "A Person", role: nil, tier: nil, email: email, method: method,
                     confidence: "low", formUrl: formUrl, provenance: "performer",
-                    overrideBody: nil, sourceUrl: nil)
+                    sourceUrl: nil)
     }
 
     // MARK: - The contradiction itself, per method

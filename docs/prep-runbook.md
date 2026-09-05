@@ -114,12 +114,11 @@ destroy the drafts it has already paid for.
   in `sourceUrl` ties that PERSON to THIS performance, see "Say whether the page you cited
   corroborates the performance" in §1. Emit either
   the act OR its named lead performer(s), never both, see §1 below, plus at most one
-  real presenting org; the app sends one separate email per contact. A `provenance:
-  "performer"` contact MAY also carry its own `overrideBody`, a direct second-person
-  draft for that specific contact (see §2's "Drafting for a performer contact directly"),
-  used instead of the shared `draft.body` when the app sends to them. (The legacy v1
-  shape carried a single `contact` object; the app still reads it, but new runs MUST
-  write `contacts[]`.)
+  real presenting org. A show has ONE letter, `draft.body`, addressed to whoever its
+  contacts turn out to be (see §2's "Address the one letter to the people it reaches").
+  #3549 retired the per-contact `overrideBody`: a contact carrying a second copy of the
+  pitch is now a defect, and the app ignores the key. (The legacy v1 shape carried a
+  single `contact` object; the app still reads it, but new runs MUST write `contacts[]`.)
 - **Read (optional, #119 voice learning):** the VOICE FEEDBACK file the prompt names (`VoiceFeedback`:
   `pairs[]`, each the AI draft vs. what Dan actually sent). Absent or empty on a fresh
   setup. Skip the learning step when so. See "Once per run" below.
@@ -254,9 +253,9 @@ item's `production` field first:
   - If it does, pursue EACH named performer directly: run the SAME waterfall below once
     per performer, emitting one `contacts[]` entry per performer actually found, with
     `provenance: "performer"` and `name` set to that person. Never emit `act` for this
-    show. Each performer entry ALSO gets its own `overrideBody` (see §2's "Drafting for a
-    performer contact directly"), since you are emailing them directly, not describing
-    them to a third party. A performer NAMED on the authoritative listing is ALWAYS
+    show. The show still has ONE letter, and §2's "Address the one letter to the people it
+    reaches" says how to word it once you know how many contacts came back. A performer
+    NAMED on the authoritative listing is ALWAYS
     surfaced as her own `provenance: "performer"` entry, even when you cannot corroborate
     her against this performance or find a contact for her: in that case still emit a
     contact for her, `provenance: "performer"`, her `name` and `confidence: "low"`, leaving
@@ -321,7 +320,7 @@ item's `production` field first:
     performer or ensemble names from that text.
   - Pursue EVERY performer the listing names, however many that is, exactly as the
     `production == "self"` route above does: `provenance: "performer"`, one entry per person,
-    each with its own `overrideBody`, and each named performer surfaced even where you found no
+    and each named performer surfaced even where you found no
     contact for her (at `confidence: "low"` with a `method`, per that route's own rule). **There
     is NO headcount ceiling here**, unlike the `self` route above, and the difference is
     deliberate (Dan's call, 2026-07-31): a self-produced show has a real act name in `groupName`
@@ -1088,30 +1087,41 @@ overrides the block:
 - **An unfilled placeholder**, like `[VENUE]` or `[NAME]`. Fill every slot from the work-list, or
   rewrite the sentence without it. Square brackets never appear in a finished draft.
 
-This lint reads the text that will ACTUALLY be mailed, which for a `provenance: "performer"` contact
-is that contact's own `overrideBody` (below), not the shared `draft.body`. Both are held to it.
+This lint reads the text that will ACTUALLY be mailed, which is the show's one `draft.body`. Since
+#3549 there is nothing else it could be, so what is CHECKED cannot differ from what is SENT.
 
-**Drafting for a performer contact directly (#634, #639-643).** The shared `draft.body`
-above is written in the third person because it was designed for a third party being
-told about the act (the act's own marketing contact, a presenter), and it still serves
-that audience unchanged. A `provenance: "performer"` contact is different: the email
-goes directly to the person the draft would otherwise be describing, so writing about
-them in the third person ("I saw Virgile Roche and Nora Calder are making their
-debut...") reads like a mail-merge mistake to the one person reading it. For every
-`provenance: "performer"` contact, ALSO write that contact's own `overrideBody`,
-addressing them directly in second person ("you"/"your") instead: "I saw you and Anna
-Pierre are making your U.S. debut..." not "I saw Virgile Roche and Nora Calder are
-making their debut...". Everything else about it follows the SAME rules as the shared
-body above, INCLUDING the greeting rule (#2545): this contact receives their own email, so
-its `overrideBody` opens with its own greeting naming them, "Hi Virgile," then a blank line
-then the first sentence. It is a one-person email whatever else is on the show, so the
-two-or-more "Hello," case never applies to it. Everything else follows the shared body too:
-no performative enthusiasm, no em dashes, no price and no turnaround (the Offer rule
-above), the same portfolio link, and the same "never ask for a known
-fact" rule. The subject line stays shared and unchanged, third-person subjects read
-fine regardless of recipient. When two named performers are pursued for the same
-show (§1), each gets their OWN `overrideBody` naming their co-performer correctly,
-never a copy-pasted version naming the wrong person.
+**Address the one letter to the people it reaches (#634, #639-643, #3549).** A show has ONE
+`draft.body`. You know its `contacts[]` by the time you write it, so address it to them
+rather than writing a generic third-person body and a second copy beside it.
+
+The rule has two cases, and it is the CONTACT COUNT that picks between them, matching the
+greeting rule (#2545) exactly:
+
+- **ONE contact.** The letter goes to that person alone, so write it to them. Open with a
+  greeting naming them, "Hi Corin," then a blank line then the first sentence. Where that
+  contact is a `provenance: "performer"`, they are the person the pitch is about, so address
+  them in the second person: "I saw you and Corin Hale are making your U.S. debut..." and
+  NEVER "I saw Wren Halloway and Corin Hale are making their debut...", which reads like a
+  mail-merge mistake to the one person reading it. Where that contact is a presenter or an
+  act's marketing desk, they are a third party being told about the act, so the third person
+  is correct and the performers are NAMED.
+- **TWO OR MORE contacts.** They all receive the SAME email, so no one of them can be "you".
+  Open with a plain "Hello," naming nobody (#2545), and write about the performers in the
+  third person, naming each of them correctly. This is the case for a show with several
+  named performers, and for a show carrying both a performer and a presenter.
+
+#3549 retired the alternative, which was a second copy of the pitch per performer
+(`overrideBody`). Do not write one: the app ignores the key, and the eval FAILS a run that
+emits it. What it cost was measured before it went: of 199 shows carrying any contact, 30 held
+more than one performer and NOT ONE had ever had a per-performer letter written, so the
+personalisation it described had never actually happened. What it cost while it existed was
+real, on the other hand: the app's own Edit button wrote the shared body while the send
+composed from the copy, so an edit was reported as applied and reached nobody.
+
+Everything else follows the body rules above: no performative enthusiasm, no em dashes, no
+price and no turnaround (the Offer rule above), the same portfolio link, and the same "never
+ask for a known fact" rule. The subject line is third person in both cases, which reads fine
+whoever receives it.
 
 **Answering "what do you charge": Dan's own two paragraphs, VERBATIM (#2874).** This governs a
 REPLY to someone who asked, and nothing else. A cold pitch still carries no rate and no turnaround
@@ -1141,7 +1151,7 @@ a thin answer, it reproduced the thin answer it was given, faithfully. The same 
 
 ### 3. Validate before writing (deterministic guard, Phase C / #39)
 
-Applies to the shared `draft.body` AND every contact's `overrideBody`, if any. Reject or
+Applies to the show's one `draft.body`. Reject or
 fix a draft body that:
 - contains "discount", "flexible", "free", or "complimentary" (no concession language
   in a cold email);

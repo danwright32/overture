@@ -313,27 +313,18 @@ describe("evaluatePrepResult - self-produced duo surfaces BOTH performers (#366)
     description: "both named performers",
     requiredPerformers: ["Virgile Roche", "Nora Calder"],
     forbidActProvenance: true,
-    performerOverrideBodyRequired: true,
   };
 
-  const performer = (name: string, coName: string) => ({
+  const performer = (name: string, _coName: string) => ({
     name,
     email: `${name.split(" ")[0].toLowerCase()}@duo.example`,
     method: "named_decision_maker",
     confidence: "high",
     provenance: "performer",
     sourceUrl: "https://duo.example/bio",
-    overrideBody:
-      // #2545: a performer's own letter greets them by name. It goes to one person by definition, so the
-      // named form is the right one here even though the shared body on a two-contact show would not be.
-      `Hi ${name.split(" ")[0]},\n\n` +
-      "My name is Dan Wright and I'm an arts photographer here in New York City. I'm writing about your " +
-      `March 10 date at Carnegie Hall with ${coName}. I shoot unobtrusive, no-flash documentary coverage ` +
-      "and it would suit your program. Recent work is at danwrightphotography.com. I'd be glad to talk about your " +
-      "photography plans for the night. I look forward to hearing from you.",
   });
 
-  it("passes when both performers appear as performer contacts with second-person overrideBody", () => {
+  it("passes when both performers appear as performer contacts", () => {
     const r = evaluatePrepResult(
       results([performer("Virgile Roche", "Nora Calder"), performer("Nora Calder", "Virgile Roche")]),
       expected,
@@ -353,12 +344,19 @@ describe("evaluatePrepResult - self-produced duo surfaces BOTH performers (#366)
     expect(r.failures.join(" ")).toMatch(/act/i);
   });
 
-  it("flags a performer contact whose mailed overrideBody is written in the third person (#634)", () => {
-    const thirdPerson = performer("Virgile Roche", "Nora Calder");
-    thirdPerson.overrideBody = thirdPerson.overrideBody.replace("about your March 10 date", "about Virgile Roche's March 10 date");
-    const r = evaluatePrepResult(results([thirdPerson, performer("Nora Calder", "Virgile Roche")]), expected);
+  // #3549 reversed the rule that used to be tested here. A performer carrying their own second copy of
+  // the pitch was REQUIRED, and is now the defect: the show has one letter, so that text reaches nobody.
+  it("flags a contact carrying its own second copy of the pitch (#3549)", () => {
+    const withSecondCopy = {
+      ...performer("Virgile Roche", "Nora Calder"),
+      overrideBody: "Hi Virgile,\n\nI'm writing about your March 10 date at Carnegie Hall.",
+    };
+    const r = evaluatePrepResult(
+      results([withSecondCopy, performer("Nora Calder", "Virgile Roche")]),
+      expected,
+    );
     expect(r.pass).toBe(false);
-    expect(r.failures.join(" ")).toMatch(/second person|overrideBody/i);
+    expect(r.failures.join(" ")).toMatch(/one letter|reaches nobody|second copy/i);
   });
 });
 

@@ -50,7 +50,6 @@
       "Theo Branch",
       "Nell Adair"
     ],
-    "performerOverrideBodyRequired": true,
     "requireSomeContact": true,
     "forbiddenEmails": [
       "tickets@theexampleroom.example",
@@ -89,8 +88,7 @@
             "method": "form_or_dm",
             "confidence": "low",
             "tier": "secondary",
-            "formUrl": "https://theobranch.example",
-            "overrideBody": "My name is Dan and I'm a professional arts photographer here in New York City. I'm writing in regard to Ten Years of Tuesdays at The Example Room on August 17. I shoot unobtrusive, no-flash documentary coverage, so the audience doesn't notice me and the performance isn't disturbed. I've been photographing at Carnegie Hall for close to ten years, and you can see my portfolio at danwrightphotography.com. If you don't have someone on it already, I'd be glad to talk about your photography plans for the night. I look forward to hearing from you."
+            "formUrl": "https://theobranch.example"
           },
           {
             "provenance": "performer",
@@ -99,8 +97,7 @@
             "method": "form_or_dm",
             "confidence": "low",
             "tier": "secondary",
-            "formUrl": "https://social.example/nelladairsings",
-            "overrideBody": "My name is Dan, I'm an arts photographer based in New York City. I'm writing about Ten Years of Tuesdays at The Example Room on August 17. I work in a documentary style, no flash and nothing intrusive, so the room stays as it is and the performance isn't interrupted. I've been shooting at Carnegie Hall for nearly ten years, and my portfolio is at danwrightphotography.com. If you don't have someone on it already, I'd be glad to talk about your photography plans for that night. I look forward to hearing from you."
+            "formUrl": "https://social.example/nelladairsings"
           }
         ],
         "draft": {

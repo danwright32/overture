@@ -40,7 +40,6 @@
       "Delaney Brown",
       "Miggie Snyder"
     ],
-    "performerOverrideBodyRequired": true,
     "forbidPresenterProvenance": true,
     "requireSomeContact": true,
     "forbiddenEmails": [
@@ -69,8 +68,7 @@
             "email": "delaney@delaneybrown.example",
             "method": "named_direct",
             "confidence": "high",
-            "sourceUrl": "https://delaneybrown.example/contact",
-            "overrideBody": "My name is Dan and I'm a professional arts photographer here in NYC. I'm writing in regard to Broadway's Bad Guys!, which you're hosting with Miggie Snyder at The Example Room on August 14. I shoot unobtrusive, no-flash documentary coverage, so the audience doesn't notice me and the performance isn't disturbed. I've been photographing at Carnegie Hall for close to ten years, and you can see my portfolio at danwrightphotography.com. If you don't have someone on it already, I'd be glad to talk about your photography plans for the night. I look forward to hearing from you."
+            "sourceUrl": "https://delaneybrown.example/contact"
           },
           {
             "provenance": "performer",
@@ -78,8 +76,7 @@
             "email": "miggie@miggiesnyder.example",
             "method": "named_direct",
             "confidence": "high",
-            "sourceUrl": "https://miggiesnyder.example/about",
-            "overrideBody": "My name is Dan, I'm an arts photographer based in New York City. I'm writing about Broadway's Bad Guys!, which you're doing with Delaney Brown at The Example Room on August 14. I work in a documentary style, no flash and nothing intrusive, so the room stays as it is and the performance isn't interrupted. I've been shooting at Carnegie Hall for nearly ten years, and my portfolio is at danwrightphotography.com. If you don't have someone on it already, I'd be glad to talk about your photography plans for that night. I look forward to hearing from you."
+            "sourceUrl": "https://miggiesnyder.example/about"
           }
         ],
         "draft": {
