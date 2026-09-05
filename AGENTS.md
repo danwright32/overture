@@ -938,6 +938,23 @@ already drifting from the Swift version it mirrored.
   finds the next one. Two shapes are matched, `: bad substitution` and
   `: syntax error near unexpected token`, each carrying its leading colon so a fixture that merely
   QUOTES the words still passes.
+- **When a decision is recorded on an issue, edit the BODY in the same action (#3077).** Say which of
+  its open questions are now settled, what the answer was, and point at the comment. The thread stays
+  untouched: it is the record of HOW a decision was reached and must not be rewritten. The body is what
+  anybody triaging actually reads, and nothing carries the outcome back to it.
+  Measured on #2915, 2026-08-21. Its body listed five things that had to be settled. Dan settled three
+  of them in a comment on 2026-08-18. The overnight review of 2026-08-20 read the body, reported the
+  issue as needing "five product decisions", and set it aside as blocked on him. It was one decision
+  away from buildable, and a whole session's triage went at a stale sentence.
+  `scripts/check-issue-open-questions.sh` is the advisory half, because a rule living only in prose is
+  a hope (L27). It lists open issues whose body names open questions AND that carry a comment, for a
+  person to reconcile. Deliberately NOT a gate and deliberately not clever: a comment on such an issue
+  is usually not a decision, so anything that judged would be wrong in the direction that hides the
+  real ones (L93). Measured before it was built: 16 open bodies name open questions under its
+  phrasings and 4 of those carry a comment, which is a list somebody reads. It is OPT IN rather than in
+  `scripts/test-all.sh`, since it needs the network and answers about the backlog rather than the code;
+  its judging half rides along on every push through `scripts/check-issue-open-questions.test.sh`.
+
 - **A store-wide COUNT quoted in prose either carries its date or is not quoted at all (#3487).** Two
   readings were quoted across the tree as if current: `724` (measured 2026-08-01) in roughly 20 places
   and `702` (2026-07-29) in about 8. The store held 1,142 rows when this was written, so the
