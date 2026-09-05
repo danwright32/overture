@@ -28,8 +28,8 @@ PrepResults.swift:capPerItem
 Prospect.swift:classificationConfidence
 Prospect.swift:draftNeedsSalutationReview
 Prospect.swift:draftSalutationReviewOverriddenBody
-Prospect.swift:jointOpeningOverride
-Recipient.swift:openingOverride
+Prospect.swift:jointOpeningOverride  # RETAINED STORAGE (#2545, swept #3551). The opening for a JOINT email, from when the app composed one above the body. Nothing writes or reads it; 0 rows carry a value. Kept because dropping a stored property is this app's first subtractive migration (see AppSchema, #3558).
+Recipient.swift:openingOverride  # RETAINED STORAGE (#2545, swept #3551). A contact's own chosen opening, from when the app composed one above the body. Nothing writes or reads it; 3 rows carry a greeting fragment, all on shows already contacted. Kept for the reason above.
 Recipient.swift:overrideBody  # RETAINED STORAGE (#3549). Nothing reads or writes it: the send composes from the show's one letter now. The column stays because dropping a stored property is this app's first subtractive migration (see AppSchema), which gets its own rehearsed change.
 Recipient.swift:resumeClosingNote
 Recipient.swift:standDownClosingNote
