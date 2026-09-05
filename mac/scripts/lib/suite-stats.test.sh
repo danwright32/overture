@@ -15,6 +15,10 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../../../scripts/lib/shell
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# #3191: the shared per-machine stamp rules, sourced BEFORE the library that uses them.
+# shellcheck source=../../../scripts/lib/machine-stamp.sh
+source "${SCRIPT_DIR}/../../../scripts/lib/machine-stamp.sh"
+
 # shellcheck source=./suite-stats.sh
 source "${SCRIPT_DIR}/suite-stats.sh"
 set +e

@@ -26,6 +26,10 @@
 # the file rather than being its mtime, because a clone rewrites every mtime and would reset the age to
 # zero, which is the one number this must never get wrong.
 
+# #3191: `machine_stamp_days_since` comes from `scripts/lib/machine-stamp.sh`, which every caller of
+# this file sources FIRST. Not resolved here, because this file is SOURCED and `$0` is therefore the
+# caller's path, not this one, which is the defect #3481 fixed in eight other scripts.
+
 # hosted_suite_names <dir>: the display name of every `@Suite("...")` under dir, one per line.
 #
 # The DISPLAY name, not the type name, because that is what the test output prints
@@ -182,15 +186,11 @@ hosted_stamp_date() {
 
 # hosted_stamp_age_days <recorded> <today>: whole days between two yyyy-mm-dd dates, or nothing.
 #
-# Through `date -j`, which is what this Mac has, and silent rather than wrong when it cannot parse: a
-# missing age costs a clause, and a wrong one is a number somebody would act on.
+# #3191: through the shared helper. This and `days_since` in `suite-stats.sh` were the same function
+# under two names, including the refusal that matters (nothing, never zero, when a date cannot be read),
+# and a third copy in `check-live-store-claims.sh` had lost that refusal.
 hosted_stamp_age_days() {
-  recorded="$1"
-  today="$2"
-  a="$(date -j -f '%Y-%m-%d' "${recorded}" '+%s' 2>/dev/null)" || return 0
-  b="$(date -j -f '%Y-%m-%d' "${today}" '+%s' 2>/dev/null)" || return 0
-  [ -n "${a}" ] && [ -n "${b}" ] || return 0
-  printf '%s\n' "$(( (b - a) / 86400 ))"
+  machine_stamp_days_since "$1" "$2"
 }
 
 # hosted_freshness_line <verified> <recorded-date> <today> <names-found>
