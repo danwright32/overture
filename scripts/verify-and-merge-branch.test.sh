@@ -36,7 +36,7 @@ trap 'rm -f "${TRIAL_MERGE_LOG}"; rm -rf "${SCRATCH_REPO_ROOT:-}"' EXIT
 # The completeness enumeration AGENTS.md demands and the merge now refuses to skip. Stubbed here for
 # every existing case, so those cases keep testing what they were written to test (the merge decision)
 # rather than becoming tests of the new guard.
-COMPLETE_PR_BODY='Writers: none new. Readers: none new. Siblings: swept. Guards seen to fail: yes.'
+COMPLETE_PR_BODY='Writers: none new. Readers: none new. Siblings: swept. Guards seen to fail: yes. Premise re-checked: held.'
 
 # A missing helper is not a failing test, it is a line that does nothing while the summary reports
 # every fixture passing. Three assertions were written against this name before it existed and did

@@ -55,7 +55,7 @@ run_batch() {
 # The completeness enumeration AGENTS.md demands, which the merge path refuses to skip. Stubbed for
 # every case that is testing something else, so those cases keep testing the batch decision rather than
 # becoming tests of that guard.
-COMPLETE_PR_BODY='Writers: none new. Readers: none new. Siblings: swept. Guards seen to fail: yes.'
+COMPLETE_PR_BODY='Writers: none new. Readers: none new. Siblings: swept. Guards seen to fail: yes. Premise re-checked: held.'
 
 reset_stubs() {
   SUITE_RUNS=0

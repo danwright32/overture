@@ -128,7 +128,7 @@ STUB
         # The completeness enumeration the merge now refuses to skip. Matched BEFORE the general
         # "pr view" arm, which answers everything with "main" and would otherwise be read as a
         # body that answers nothing, refusing every merge these fixtures exist to assert.
-        *"--json body"*) echo "Writers: none. Readers: none. Siblings: swept. Guards seen to fail: yes." ;;
+        *"--json body"*) echo "Writers: none. Readers: none. Siblings: swept. Guards seen to fail: yes. Premise re-checked: held." ;;
         *"pr view"*)   echo "main" ;;
         *"run list"*)  echo "${base_conclusion}" ;;
         *"pr merge"*)  touch "${tmp}/MERGED" ;;
@@ -210,7 +210,7 @@ STUB
         # The completeness enumeration the merge now refuses to skip. Matched BEFORE the general
         # "pr view" arm, which answers everything with "main" and would otherwise be read as a
         # body that answers nothing, refusing every merge these fixtures exist to assert.
-        *"--json body"*) echo "Writers: none. Readers: none. Siblings: swept. Guards seen to fail: yes." ;;
+        *"--json body"*) echo "Writers: none. Readers: none. Siblings: swept. Guards seen to fail: yes. Premise re-checked: held." ;;
         *"--json files"*) echo "mac/Overture/UI/NewView.swift" ;;
         *"pr view"*)      echo "main" ;;
         *"run list"*)     echo "success" ;;

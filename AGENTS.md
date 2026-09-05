@@ -33,7 +33,7 @@ already drifting from the Swift version it mirrored.
 
 ## Working here
 
-- **Before opening any PR, enumerate these four in the PR body. Not "checked": the actual list.**
+- **Before opening any PR, enumerate these five in the PR body. Not "checked": the actual list.**
   This exists because on 2026-08-10 two defects shipped from this repo and were filed as new issues
   within hours of the change that introduced them, both catchable in that same change. The rules were
   already written down; what was missing was being made to list the answers before the PR opened.
@@ -53,6 +53,24 @@ already drifting from the Swift version it mirrored.
      somebody remembered (L30, L96).
   4. **Every guard was seen to fail.** Per guard: the exact mutation made, the exact failure text seen,
      and confirmation it was reverted (L1).
+  5. **PREMISE RE-CHECKED.** State what the issue's write-up claimed about the code, and what that code
+     says TODAY. "The premise held" is a fine answer; naming what had changed is a better one. An
+     absent answer is the defect, exactly as it is for the four above.
+     An issue's premise is true as of the day it was filed, and nothing else asked anybody to check
+     (L61). Overnight into 2026-08-14, three issues in a row had a stale one: #2657 said a ranking left
+     the contact tier out when it already weighted it, so building to the write-up would have weighted
+     it twice; #2675 named a field that does not exist, and the real gap was larger than the one
+     described; #2656's calibration said a page had "room to spare" at 1,994 characters, and that venue
+     now runs to 3,836, which is 96% of the budget. All three were caught by somebody happening to look.
+     The matched phrase is `premise re-checked`, and it is a PHRASE because the bare word was measured
+     and rejected: "premise" appears in 11 of the last 40 merged PR bodies (2026-09-04), none of them
+     answering this question, so a guard on it would pass a body that re-checked nothing. That is the
+     same trap the paragraph below describes for the other four.
+     What this cannot do, stated so nobody expects it to: it checks the question was ANSWERED, never
+     that the answer is any good, and somebody can type "premise: held" without looking. So can they
+     for the other four, and those still surface real gaps, because the realistic failure is omission
+     rather than fabrication. Its value is narrower: it puts the question in front of whoever is about
+     to build, while checking is still cheap.
 
   A gap named in the PR body is fine. An unnamed one is the defect.
 
@@ -64,8 +82,8 @@ already drifting from the Swift version it mirrored.
   exemption ANNOUNCES itself in the output naming why, rather than passing silently, so a mis-scoped rule
   is visible. An empty file list is never exempt: empty is what a failed `gh` call returns.
 
-  The check that enforces this matches four WORDS literally, `writer`, `reader`, `sibling` and `seen`,
-  so write the enumeration using them. It cannot read an answer, only find a word: PR #2526 answered
+  The check that enforces this matches five short phrases literally, `writer`, `reader`, `sibling`,
+  `seen` and `premise re-checked`, so write the enumeration using them. It cannot read an answer, only find a word: PR #2526 answered
   the first question in full under the heading "the code path that WRITES it" and was refused for
   never saying "writer". Kept strict on purpose rather than accepting stems, because a looser match
   would let an incidental mention anywhere in the body count as an answer.
