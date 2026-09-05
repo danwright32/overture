@@ -299,8 +299,14 @@ struct RootView: View {
 
     private var nonDismissedProspects: [Prospect] { allProspects.filter { $0.status != .dismissed } }
 
-    private var reachedOutKeys: Set<String> {
-        Set(ReachedOutQueue.active(from: nonDismissedProspects, now: Date()).map(\.prospect.naturalKey))
+    // #3493: TAKES the rows rather than reading `nonDismissedProspects` itself.
+    //
+    // It used to be a computed property that read that one, and both of its callers read that one too, so
+    // a single evaluation filtered the whole store TWICE. A computed property is re-run by every reader
+    // and a call site reads as a free field access, which says nothing about what it costs (L383). As a
+    // function taking the list, the caller binds one walk and hands it to both.
+    private func reachedOutKeys(in rows: [Prospect]) -> Set<String> {
+        Set(ReachedOutQueue.active(from: rows, now: Date()).map(\.prospect.naturalKey))
     }
 
     // Every show Overture has ever tracked. Not what the search bar above the Queue offers (see
@@ -315,7 +321,9 @@ struct RootView: View {
     // Scoped by StageNavigation.stagedKeys, the same predicate the stage lists render from, so a pick
     // can only ever land on a row he can see.
     private var searchableItems: [QueueItem] {
-        let scope = StageNavigation.stagedKeys(in: nonDismissedProspects, reachedOutKeys: reachedOutKeys,
+        // #3493: ONE walk of the store, shared by the scope and the reached-out set it is judged with.
+        let kept = nonDismissedProspects
+        let scope = StageNavigation.stagedKeys(in: kept, reachedOutKeys: reachedOutKeys(in: kept),
                                                context: StageContext(geo: geo, clients: clientWindow))
         return allItems.filter { scope.contains($0.id) }
     }
@@ -332,8 +340,10 @@ struct RootView: View {
     // #1580: one copy, not two. A search pick is now always in scope and so always takes the Queue
     // branch, but the Archive branch stays for the follow-up taps, which can name a closed show.
     private func routeDeepLink(toKey key: String) {
-        if StageNavigation.opensInQueue(key: key, in: nonDismissedProspects,
-                                        reachedOutKeys: reachedOutKeys,
+        // #3493: bound once, for the same reason searchableItems binds it.
+        let kept = nonDismissedProspects
+        if StageNavigation.opensInQueue(key: key, in: kept,
+                                        reachedOutKeys: reachedOutKeys(in: kept),
                                         context: StageContext(geo: geo, clients: clientWindow)) {
             deepLinkedKey = LeadDeepLink(key: key)
         } else {
@@ -1128,8 +1138,10 @@ struct RootView: View {
             .sheet(isPresented: $showPrepSelection) {
                 // #2365: no sources and no client list any more. The sheet applies no date rule, so it
                 // needs neither, and this call no longer reads the export off disk to present a sheet.
+                // #3493: `allItems`, not a second `allProspects.map(QueueItem.init)` written inline. Two
+                // definitions of one question can each be changed without the other (L263, L370).
                 PrepSelectionSheet(prospects: toPrep,
-                                   allItems: allProspects.map(QueueItem.init)) { includedKeys in startPrep(includedKeys: includedKeys) }
+                                   allItems: allItems) { includedKeys in startPrep(includedKeys: includedKeys) }
             }
             // #1130: the Prep run's takeover, mirroring the scout's (#1034). A detached Prep run takes
             // minutes, so it gets the same prominent working/still-alive/stalled screen instead of only a
