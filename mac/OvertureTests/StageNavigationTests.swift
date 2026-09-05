@@ -146,11 +146,14 @@ struct PastShowsLeaveTheScoutQueueTests {
 
     @Test func aShowThatAlreadyHappenedIsNotWaitingToBeTriaged() {
         let gone = show("june", date: "2026-06-27")
-        let upcoming = show("september", date: "2026-09-19")
+        // Named and dated for what it IS, a show inside the window, rather than for a month (#3423).
+        // As "september" at a literal 69 days it was inside 90 and outside nine weeks, so this test
+        // would have gone on running with an empty Scout stage.
+        let upcoming = show("upcoming", date: ScoutTestClock.day(today, plus: QueueModel.leadTimeWindowDays / 2))
 
         let keys = StageNavigation.naturalKeys(for: .scout, in: [gone, upcoming], context: .at(today))
 
-        #expect(keys == ["september"])
+        #expect(keys == ["upcoming"])
     }
 
     // #1540, REVERSING what this test used to assert: a run that opened on an earlier day is no longer

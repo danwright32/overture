@@ -161,7 +161,13 @@ struct ProspectStageReachabilityGuardTests {
     // whole suite quietly starts asserting about an empty Scout stage instead of about reachability.
     @Test("the fixture show is inside the ordinary lead time window, which every case here needs")
     func theFixtureSitsInsideTheWindow() {
-        let daysOut = EasternDate.daysUntil(from: today, to: showDate)
+        // A nil is RECORDED rather than left to skip the two checks below. `daysUntil` answers nil for a
+        // date it cannot read, and an `if let` around the assertions would turn that into a silent pass,
+        // which is the premise going unmeasured while reading as measured (L98).
+        guard let daysOut = EasternDate.daysUntil(from: today, to: showDate) else {
+            Issue.record("the fixture date \(showDate) could not be measured against the anchor \(today), so the premise this suite rests on was not checked at all")
+            return
+        }
         #expect(daysOut > 0, "the fixture show must be ahead of the anchor, not \(daysOut) days from it")
         #expect(daysOut < QueueModel.leadTimeWindowDays,
                 "the fixture show is \(daysOut) days out and the ordinary window is now \(QueueModel.leadTimeWindowDays); move the fixture in, or this suite is about an empty Scout stage")

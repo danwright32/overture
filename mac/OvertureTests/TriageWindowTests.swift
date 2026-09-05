@@ -35,10 +35,7 @@ struct TriageWindowTests {
     // Dan ever moves the window instead of pinning a number that silently stops being the edge. The one
     // literal below keeps that arithmetic honest.
     private func day(_ offset: Int) -> String {
-        var cal = Calendar(identifier: .gregorian)
-        cal.timeZone = TimeZone(identifier: "America/New_York") ?? .gmt
-        let start = cal.date(from: DateComponents(year: 2026, month: 7, day: 12))!
-        return EasternDate.dayString(from: cal.date(byAdding: .day, value: offset, to: start)!)
+        ScoutTestClock.day(today, plus: offset)
     }
 
     @discardableResult

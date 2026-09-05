@@ -104,7 +104,10 @@ struct QueueShowableIsOneFilterTests {
     // Scout list renders must open in the Queue when Dan searches for it, never in Archive.
     @Test func anUntriagedShowTheScoutListRendersOpensInTheQueue() throws {
         let ctx = try context()
-        show(ctx, "in-window", date: "2026-10-10")   // the ninetieth day after 2026-07-12
+        // The window's LAST day, derived from the window (#3423). As a literal it was the ninetieth day
+        // after the anchor, which stopped being the edge, and stopped being in the window at all, the
+        // moment Dan moved it to nine weeks.
+        show(ctx, "in-window", date: ScoutTestClock.day(today, plus: QueueModel.leadTimeWindowDays))
 
         let ps = try all(ctx)
         #expect(scoutRows(ps) == ["in-window"])
