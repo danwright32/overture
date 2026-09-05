@@ -6,7 +6,7 @@ import Foundation
 // The typed query was @State on RootView, the view that also builds the Queue, and @State invalidates the
 // view that declares it. So every keystroke re-ran RootView's body, rebuilt QueueView (whose five closure
 // arguments are not Equatable, so SwiftUI cannot skip it) and re-ran QueueView's body, whose first line
-// derives the entire store. Ten characters typed swept 724 prospects roughly twenty times to filter a
+// derives the entire store. Ten characters typed swept every prospect in the store roughly twenty times to filter a
 // list of at most eight rows.
 //
 // As with #1774, none of that has an observable output a unit test can assert on: RootView's body cannot

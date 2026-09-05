@@ -5,7 +5,7 @@ import SwiftUI
 // The text lived on RootView, the same view that builds the Queue. @State invalidates the view that
 // declares it, so every keystroke re-ran RootView's body, rebuilt QueueView (five non-Equatable closure
 // arguments, so SwiftUI cannot skip it) and re-ran QueueView's body, whose first line derives the whole
-// store: QueueModel.items over 724 prospects, AgentInputs.from, the StageNavigation sweeps, the fan-out
+// store: QueueModel.items over every prospect in the store, AgentInputs.from, the StageNavigation sweeps, the fan-out
 // scan and the grouping. Typing a ten character show name dragged every prospect through the CPU roughly
 // twenty times, to filter a list of at most eight rows.
 //

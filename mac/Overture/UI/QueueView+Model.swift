@@ -1655,7 +1655,7 @@ enum QueueModel {
 
     // #1922: the same fold, applied to groups ALREADY BUILT rather than to the rows going into the
     // derivation. That is the whole point: setting and clearing a departing snapshot used to happen
-    // inside the whole-store derivation, so each send dragged all 724 prospects through the CPU twice
+    // inside the whole-store derivation, so each send dragged every prospects through the CPU twice
     // more to animate one card. Over finished groups, the send animates its own card instead.
     //
     // Sending the only show on a night is the case that makes this more than a move: that night's group

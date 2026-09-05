@@ -7,7 +7,7 @@ import Observation
 // @Observable's generated setter notifies on every assignment, not on every CHANGE, so
 // `isConnected = load()` announces a mutation even when the answer is the same true it was a moment ago.
 // Every surface reading it then re-renders, and one of those surfaces is the queue, whose body derives all
-// 724 prospects on its first line. The reply check re-reads the token on every reconcile tick and a send
+// every prospect in the store on its first line. The reply check re-reads the token on every reconcile tick and a send
 // re-reads it on every failure, so this fires on a schedule, for no change and no user action.
 //
 // Writing only on a real change is the whole fix. It is observable for real (Observation reports it), so

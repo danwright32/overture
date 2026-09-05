@@ -3,7 +3,7 @@ import Foundation
 import SwiftUI
 
 // #1774: the ticked reachability dates move off QueueView's @State onto a shared object, so that ticking
-// a date invalidates the checkbox and the selection bar instead of re-deriving the entire 724-row queue.
+// a date invalidates the checkbox and the selection bar instead of re-deriving the entire queue.
 //
 // The whole point of the extraction is that these two views read the LIVE selection. A version that copied
 // the ticked dates into the view value at construction would look right in every screenshot, pass every

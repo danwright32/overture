@@ -5,7 +5,7 @@ import Foundation
 //
 // `.scrollPosition(id:)` is a READ-WRITE binding, so SwiftUI writes it every time a date heading crosses
 // the top of the queue. While it was bound to @State on QueueView, each of those writes invalidated the
-// whole body, whose first line derives the entire store: QueueModel.items over 724 prospects,
+// whole body, whose first line derives the entire store: QueueModel.items over every prospect in the store,
 // AgentInputs.from, StageNavigation.queueKeys and focusedKeys, ReachedOutQueue.activeWithDates,
 // PossibleMatchFanOut.findings and groupByDate. Scrolling past ten dates paid all of it ten times.
 //
@@ -74,7 +74,7 @@ struct QueueInvalidationGuardTests {
 
     // The ticked reachability dates are not QueueView's state either (#1774 phase 2), and nothing in this
     // file reads one. A single read anywhere on the body path puts the dependency straight back and one
-    // checkbox re-derives all 724 rows again, which is why this is asserted over the file rather than
+    // checkbox re-derives every row again, which is why this is asserted over the file rather than
     // over the handful of functions that happen to be involved today.
     @Test func theQueueNeverReadsATickedDate() {
         #expect(!queueView.contains("@State private var selectedProbeDates"))
@@ -122,7 +122,7 @@ struct QueueInvalidationGuardTests {
     // #1922: nor does a send. The four values a send moves through (the outbound timestamp, the reply
     // timestamp, the departing snapshot, the highlighted key) are on SendProgressState, and QueueView
     // reads none of them. File-scoped for the same reason as the ticked date above: a single read
-    // anywhere on the body path puts all 724 rows back on every "Sending…".
+    // anywhere on the body path puts every row back on every "Sending…".
     @Test func theQueueNeverReadsWhatASendIsDoing() {
         #expect(!queueView.contains("@State private var outboundSending"))
         #expect(!queueView.contains("@State private var replySending"))
@@ -233,7 +233,7 @@ struct QueueInvalidationGuardTests {
 
     // #1923: nor does a reply-classify run starting or ending. The line that shows it is its own view, so
     // the observation lands there; read anywhere on this file's body path, `isRunning` would put the whole
-    // 724-prospect derivation behind every run, twice, which is the cost the two issues above removed.
+    // whole-store derivation behind every run, twice, which is the cost the two issues above removed.
     // The activity is CONSTRUCTED here (the line has to be given it) and that is all: naming the type in
     // an argument is not a read, so this asserts against the reads specifically.
     @Test func theQueueNeverReadsWhetherAReplyRunIsLive() {

@@ -3,7 +3,7 @@ import Foundation
 
 // #1916: `probeSelection` refuses on its first two lines unless Dan is on Scout with dates ticked, which
 // is almost never. That guard reads like it makes the call cheap. It does not: the rows handed to it are
-// an ARGUMENT, and arguments are evaluated before the call, so the queue swept every one of its 724 shows
+// an ARGUMENT, and arguments are evaluated before the call, so the queue swept every one of its shows
 // to feed a function that returned nil immediately, on every render pass and every stage.
 //
 // The rule stays in one place (inside this function, where it is tested) and the laziness is structural:

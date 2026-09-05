@@ -920,6 +920,26 @@ already drifting from the Swift version it mirrored.
   finds the next one. Two shapes are matched, `: bad substitution` and
   `: syntax error near unexpected token`, each carrying its leading colon so a fixture that merely
   QUOTES the words still passes.
+- **A store-wide COUNT quoted in prose either carries its date or is not quoted at all (#3487).** Two
+  readings were quoted across the tree as if current: `724` (measured 2026-08-01) in roughly 20 places
+  and `702` (2026-07-29) in about 8. The store held 1,142 rows when this was written, so the
+  explanations were wrong by more than half, and a figure with a date on it reads as MORE trustworthy
+  the older it gets (L316, L210).
+  The distinction that decides what to do with one, applied to all 28: a figure standing in for "the
+  whole store" (`re-derives all 724 prospects`) says nothing the sentence does not already say and rots,
+  so it is written as `every prospect in the store` and can never be wrong again. A figure that IS a
+  dated measurement (`0 of 724 shows inheriting on 2026-07-29`) is evidence and stays exactly as it is,
+  because rewriting it would destroy the record.
+  #3426's `LIVE-SHAPE` tag and `scripts/check-fixture-corpus-drift.sh` cover the DECLARATIONS, the
+  numbers a program can compare. A sentence cannot carry that tag, so this half is a convention rather
+  than a check, and it is written here rather than left as a habit. The TAGGED figures, the ones
+  carrying a `verified=` stamp that `scripts/check-live-store-claims.sh` reads, are a third case again:
+  they carry a date AND a re-derivable measure, and re-verifying rather than restamping them is #2517.
+  (The tag itself is deliberately not spelled out in this paragraph. That scanner reads every tracked
+  Markdown file, so writing it here makes this sentence a malformed claim and fails the check, which is
+  the scanner working: it cannot tell a line USING the tag from a line ABOUT it, exactly as the style
+  gate cannot for an em dash.)
+
 - **Quoting a character the style gate forbids: write it as an escape, never override the gate.**
   The pre-push style gate blocks any new line holding an em dash, en dash or emoji, and it cannot
   tell a line that USES one from a line that must QUOTE one, which is the gate working correctly.
