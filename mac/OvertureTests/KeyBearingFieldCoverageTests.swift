@@ -32,6 +32,14 @@ struct KeyBearingFieldCoverageTests {
 
     // The three folds whose output is written down. `OrgKey.stored` is `OrgKey.of` plus the namespace,
     // and it is named separately because it is what call sites actually use.
+    // #2499: SIX folds, not three. The original list was the three #2451 changed, which is the shape
+    // this file's own header warns about: a registry only ever checks what it remembers. Enumerated from
+    // the source rather than remembered, the other three were `VenueNormalization.normalizeForKey`
+    // (builds `Prospect.naturalKey` and the inquiry keys), `Recipient.makeId` (builds `Recipient.id` and
+    // the handle inside `RefusedContactAddress.handleKey`) and `ExcludedTownEditing.normalize` (builds
+    // the two town tables). The first two had a SHIPPED pass and no entry in the coverage list, so they
+    // were covered in fact and not by the guard, which is the same thing the day somebody changes one
+    // and reads the list.
     static let keyFunctions = ["OrgKey.of", "OrgKey.stored", "ProducerGate.key",
                               "VenuePlaces.canonicalKey"]
 

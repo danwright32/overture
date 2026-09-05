@@ -31,6 +31,16 @@ import SwiftData
 // already folded, and a deferred conflict still has two history rows, so a second pass changes nothing
 // and deletes nothing.
 enum NaturalKeyVenueMigration {
+
+    // #2499: the field this pass moves, declared HERE so `KeyRealignment.coverage` is assembled from
+    // each pass's own statement rather than restating it. It shipped before that guard existed, so it
+    // was covered in FACT and not by the check, which is the same as being uncovered the day somebody
+    // changes the fold and looks at the list.
+    static let realigns: [KeyRealignment.Field] = [
+        KeyRealignment.Field(model: "Prospect", property: "naturalKey",
+                             pass: "NaturalKeyVenueMigration", tableClass: .answer)
+    ]
+
     struct Summary: Equatable {
         var rekeyed = 0            // rows given a new folded key (no merge)
         var duplicatesDeleted = 0  // provably-empty duplicate rows removed by a safe merge

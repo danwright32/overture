@@ -20,6 +20,8 @@ import SwiftData
 //     page row did not (L5: a blank must never beat real data in a merge).
 enum DuplicateContactMerge {
 
+
+
     // How many rows were merged away. Reported rather than silent so a launch that reconciled something
     // can say so, and so a test can tell "nothing to do" from "did nothing".
     @discardableResult
