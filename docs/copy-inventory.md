@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1487 sentences**.
+Every sentence Overture can say to Dan: **1489 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -14,7 +14,7 @@ What is not, and why:
   sentences under tokens nobody reads.
 - **Nothing, if it is written as two literals joined with `+`.** Those ARE joined here, into the
   one sentence the running app says (#3155). What is still only part of what Dan reads is a
-  sentence carrying a VALUE: 538 of the 1487 below hold a
+  sentence carrying a VALUE: 539 of the 1489 below hold a
   `\(...)` where a number or a name goes, so what is printed is the template. They are counted
   here rather than listed again, because the hole is visible in the line itself; what was missing
   was any statement of how much of this document is templates.
@@ -2109,6 +2109,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/WatchedSource.swift`
 "That show had already moved on, so there was nothing to undo"
     `App/ActionFeedback.swift`
+"That show is no longer in the queue, so nothing was changed. The row you pressed is out of date"
+    `App/ActionFeedback.swift`
 "That site answered, but its secure connection was broken, so the page couldn't be read. A re-check won't clear this."
     `Integration/SourceFetcher.swift`
 "That was \(named[0])."
@@ -2914,6 +2916,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/ActionFeedback.swift`
 "\(org) is in a town you asked not to see."
     `Domain/ShowOutcome.swift`
+"\(org) is no longer in the queue, so nothing was changed. The row you pressed is out of date"
+    `App/ActionFeedback.swift`
 "\(org) is open again. \"\(outcome.label)\" is no longer recorded against it."
     `Domain/ShowOutcome.swift`
 "\(org) recorded as booked."

@@ -518,6 +518,7 @@
 		3E136B585F9F582AA53F8195 /* OutcomePatternsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 07962FBB80CEC48C06592086 /* OutcomePatternsView.swift */; };
 		3E1CACF954E7F290CDE5E40C /* ListingOrganiser.swift in Sources */ = {isa = PBXBuildFile; fileRef = F01EFA3F199148932B8C5CD6 /* ListingOrganiser.swift */; };
 		3E343375CAF568E9C5719DAC /* RunSlotTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8774B5142CE0F8A243D95320 /* RunSlotTests.swift */; };
+		3E508ACABD1B3A9D04E142F6 /* AControlThatFindsNothingSaysSoTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0C11249611421C09FE8E9C6A /* AControlThatFindsNothingSaysSoTests.swift */; };
 		3E77E3AFE540566529229E20 /* RunProgressViewStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB3A67BA0DD14CC45DB4C707 /* RunProgressViewStateTests.swift */; };
 		3E8AB5472C1105A3EFAEB575 /* SourceReadStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09C48829D65269F3AEC2601C /* SourceReadStateTests.swift */; };
 		3EC829188F9DF5627325B041 /* QueueItemVoiceLearningTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9762A5CFBB99DBC1CC75B811 /* QueueItemVoiceLearningTests.swift */; };
@@ -2088,6 +2089,7 @@
 		0ACE884CD7428E918C0764DC /* LeadMonthsReadTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LeadMonthsReadTests.swift; sourceTree = "<group>"; };
 		0AE80712417BBF34FEA73430 /* AppEnvironment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppEnvironment.swift; sourceTree = "<group>"; };
 		0B2B0E85E32C12304DBD600B /* GreetingNamesTheRightPersonTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GreetingNamesTheRightPersonTests.swift; sourceTree = "<group>"; };
+		0C11249611421C09FE8E9C6A /* AControlThatFindsNothingSaysSoTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AControlThatFindsNothingSaysSoTests.swift; sourceTree = "<group>"; };
 		0C2C98CFD9750B9764A04847 /* SourceGuardCoverageGuardTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourceGuardCoverageGuardTests.swift; sourceTree = "<group>"; };
 		0CA149E1EF787330DE7174AB /* SendGroup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SendGroup.swift; sourceTree = "<group>"; };
 		0CA9EBB5447C9A70DAF4D8E2 /* SalutationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SalutationTests.swift; sourceTree = "<group>"; };
@@ -3697,6 +3699,7 @@
 			children = (
 				3BBCB8F0BBF69035E1AFF6FA /* ABookingReachesEverythingTests.swift */,
 				3F183A6C1B3566D6E13CFA56 /* AcknowledgeOnlyWhenSavedTests.swift */,
+				0C11249611421C09FE8E9C6A /* AControlThatFindsNothingSaysSoTests.swift */,
 				2CB4AC8F291F4746594A2676 /* ActionFeedbackTests.swift */,
 				C7A0570016EB9F51FFBE5F62 /* ActIsThePartyRealignmentTests.swift */,
 				45545A63D5E8894586D4F3DC /* AddContactAddressRuleTests.swift */,
@@ -5855,6 +5858,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				F1CA6A0D75726D30B8EE8DFD /* ABookingReachesEverythingTests.swift in Sources */,
+				3E508ACABD1B3A9D04E142F6 /* AControlThatFindsNothingSaysSoTests.swift in Sources */,
 				4E2D3CC86E39707AE4E34E72 /* ADeadRunWritesOffNothingTests.swift in Sources */,
 				AE90AB67D000E86355F8DF40 /* ADismissalAnswersOneAccusationTests.swift in Sources */,
 				4D41C80F37EF505797BB4BC5 /* ANoticeCarriesItsActionTests.swift in Sources */,
