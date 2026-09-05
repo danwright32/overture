@@ -52,7 +52,7 @@ struct UnconfirmedProfileIsAGuessTests {
                          confidence: String = "low", sourceUrl: String? = nil) -> PrepContact {
         PrepContact(name: name, role: nil, tier: nil, email: nil, method: "form_or_dm",
                     confidence: confidence, formUrl: url, provenance: "performer",
-                    overrideBody: nil, sourceUrl: sourceUrl, nameMatchOnly: nameMatchOnly)
+                    sourceUrl: sourceUrl, nameMatchOnly: nameMatchOnly)
     }
 
     private func ingest(_ contacts: [PrepContact], into p: Prospect, _ ctx: ModelContext) {

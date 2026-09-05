@@ -467,9 +467,6 @@ enum PrepImporter {
                                                            performanceCorroborated: c.performanceCorroborated)
                 recipient.heldDownToUnverified = hold != nil
                 recipient.heldDownReasonRaw = hold?.rawValue
-                // overrideBody is only ever meaningful for a .performer recipient (#640); see apply()'s
-                // matching guard for why a non-performer contact never carries one.
-                recipient.overrideBody = provenance == .performer ? c.overrideBody : nil
                 // #388: never second-guess a manually-added contact; Dan typed it in himself.
                 if provenance != .manual {
                     recipient.looksLikeVenue = VenueContactGuard.looksLikeVenue(email: email, venue: p.venue)
@@ -613,11 +610,6 @@ enum PrepImporter {
         if r.email != priorEmail || priorReason != hold { r.heldDownToUnverifiedDismissed = false }
         r.heldDownToUnverified = heldDown
         r.heldDownReasonRaw = hold?.rawValue
-        // overrideBody is only ever meaningful for a .performer recipient (#640): unlike the fields
-        // above, a reclassification AWAY from .performer must CLEAR it rather than preserve it, or a
-        // recipient now treated as a generic act/presenter contact would keep stale second-person
-        // text addressed to them personally.
-        r.overrideBody = provenance == .performer ? (c.overrideBody ?? r.overrideBody) : nil
         // #388: re-derive the venue-match guess fresh on EVERY ingest (never a one-way latch), but
         // only reset Dan's dismissal of it when the address itself actually changed; a re-run that
         // reports the SAME still-flagged address must not silently un-dismiss a guess he already

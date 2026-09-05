@@ -93,3 +93,53 @@ struct ForbiddenTextScannerTests {
         }
     }
 }
+
+// #3549: a name split across a LINE BREAK was invisible to this guard, and that was not hypothetical.
+// One of the real people #2839 scrubbed sat in `docs/prep-runbook.md` in this PUBLIC repository from
+// commit 4e0cfef3 until 2026-09-05, wrapped across two lines by ordinary prose
+// reflow. Nothing was wrong with the scanner: it was asked for a needle with a SPACE in it and the
+// file held a newline, so the two never met. It surfaced only because an unrelated edit reflowed the
+// paragraph and put the name back on one line, where the guard then caught it immediately.
+//
+// The remedy is to normalise the HAYSTACK before scanning rather than to scan it twice: a run of
+// whitespace becomes one space, so a wrapped name reads as the name it is. Once, not twice, because
+// this guard is already the most expensive test in the suite (#3235 measured 216s of 705s), and a
+// second full pass over every file in the tree would undo that work.
+@Suite("A scrubbed name wrapped across lines is still that name (#3549)")
+struct WrappedForbiddenNameTests {
+
+    // Invented people, so this suite can state the problem without putting a real name in the tree.
+    private let needles = ["corin hale", "wren halloway"]
+
+    @Test func aNameBrokenByALineWrapIsFound() {
+        let scanner = ForbiddenTextScanner(needles: needles)
+        let wrapped = "addressing them directly: \"I saw you and Corin\nHale are making your debut\""
+
+        #expect(scanner.matches(in: wrapped).isEmpty,
+                "the raw text is exactly what USED to be scanned, and it finds nothing")
+        #expect(scanner.matches(in: PrivacyScanText.flattened(wrapped)) == ["corin hale"])
+    }
+
+    // Every shape a reflow can leave behind, not just the newline that happened to be found.
+    @Test func everyRunOfWhitespaceReadsAsOneSpace() {
+        let scanner = ForbiddenTextScanner(needles: needles)
+        // The last four are CONTINUATION markers, which is how a wrapped comment or a quoted block
+        // puts something between the two halves of a name. Found by this very test on its first run:
+        // collapsing whitespace alone left "Wren // Halloway", which is not the name.
+        for separator in ["\n", "\r\n", "\n    ", " \n ", "\t", "  ",
+                          "\n// ", "\n    /// ", "\n # ", "\n> "] {
+            let text = "before Wren\(separator)Halloway after"
+            #expect(scanner.matches(in: PrivacyScanText.flattened(text)) == ["wren halloway"],
+                    "separator \(separator.debugDescription) hid the name")
+        }
+    }
+
+    // The normalisation must not INVENT a name that is not there: flattening joins words, so a guard
+    // built on it has to be shown not to fire on text where the two halves are genuinely unrelated
+    // and nothing but the collapse could have put them together.
+    @Test func flatteningDoesNotChangeWhatTheTextSays() {
+        #expect(PrivacyScanText.flattened("a\n\nb") == "a b")
+        #expect(PrivacyScanText.flattened("  leading and trailing  ") == "leading and trailing")
+        #expect(PrivacyScanText.flattened("no change needed") == "no change needed")
+    }
+}

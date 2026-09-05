@@ -64,7 +64,6 @@ struct OutreachFieldClassificationTests {
 
         // Drafted, not sent. A body exists on a contact nobody has written to yet, which is exactly the
         // state the merge is for.
-        "overrideBody": "a draft written for this contact, which is not a send",
         "lintOverriddenBody": "a draft the lint was waved off on, still not a send",
         "greetingOverriddenBody": "a draft the greeting hold was waved off on, still not a send",
         "openingOverride": "Dan's chosen opening for a draft, still not a send",

@@ -66,7 +66,6 @@
     "requiredEmails": [
       "jamie@jamieexampleburke.example"
     ],
-    "performerOverrideBodyRequired": true,
     "requireSomeContact": true,
     "forbidPresenterProvenance": true,
     "forbiddenEmails": [
@@ -98,16 +97,14 @@
             "email": "jamie@jamieexampleburke.example",
             "method": "direct_email",
             "confidence": "high",
-            "sourceUrl": "https://jamieexampleburke.example/contact-me",
-            "overrideBody": "My name is Dan and I'm a professional arts photographer here in NYC. I'm writing in regard to your August 12 show at The Basement Room. I shoot unobtrusive, no-flash documentary coverage, so the audience doesn't notice me and the performance isn't disturbed. I've been photographing at Carnegie Hall for nearly ten years, with work at Lincoln Center and Radio City Music Hall as well, and you can see my portfolio at danwrightphotography.com. I'd be glad to talk about your photography plans for the night, if you don't have someone on it already. I look forward to hearing from you."
+            "sourceUrl": "https://jamieexampleburke.example/contact-me"
           },
           {
             "provenance": "performer",
             "name": "Erin Example Grant",
             "method": "form_or_dm",
             "confidence": "low",
-            "formUrl": "https://www.instagram.example/erinexamplegrant/",
-            "overrideBody": "I'm Dan Wright, a documentary photographer here in New York City. I'm writing in regard to your August 12 show at The Basement Room. My coverage is unobtrusive and shot without flash, so the audience stays with the performance rather than noticing a photographer working. Nearly ten years of that has been at Carnegie Hall, along with Lincoln Center and Radio City Music Hall, and you can see my portfolio at danwrightphotography.com. I'd be glad to talk through your photography plans for the show, if you don't have someone on it already. I look forward to hearing from you."
+            "formUrl": "https://www.instagram.example/erinexamplegrant/"
           }
         ],
         "draft": {

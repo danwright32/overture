@@ -186,10 +186,10 @@ struct PrepContact: Codable, Equatable, Sendable {
     var confidence: String?   // high | medium | low
     var formUrl: String?
     var provenance: String?   // v2 (#392): act | presenter (never the host venue); v3 (#587) adds performer
-    // v4 (#639, #634 Phase A): only meaningful when provenance == "performer", a direct, second-person
-    // draft body for THIS contact, used instead of the shared (third-person) PrepResult.draft.body when
-    // emailing a named performer directly rather than a third party describing them.
-    var overrideBody: String?
+    // v11 (#3549) RETIRED `overrideBody`, a second copy of the pitch carried by a performer contact.
+    // A show has one letter now, and the address form belongs in it. A payload still carrying the old
+    // key decodes fine and the value is ignored, which is the point of decoding by named key: an older
+    // Prep run is not an error.
     // v6 (#363): the page this contact was actually read from, so the app's confidence badge can
     // link Dan through to verify it himself. Only ever meaningful when confidence == "high" (the
     // runbook's STRICT verification bar); distinct from formUrl, which stays the form_or_dm

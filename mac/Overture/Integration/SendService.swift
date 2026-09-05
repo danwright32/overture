@@ -389,16 +389,13 @@ enum SendService {
         }
     }
 
-    // #2031: why these contacts cannot share one email, in the words Dan reads, or nil when they can.
+    // #2031's joint-send refusal stood here, and #3549 deleted it rather than leaving it as decoration.
+    // Its one reason was that the members would not receive the same words, which could only happen while
+    // a performer carried a second copy of the pitch. A show has one letter now, so every member of a
+    // group reads the same text by construction and the refusal could never fire again (L29, L281).
     //
-    // Only one reason exists, and it is the one the app must never decide on his behalf: the members would
-    // not receive the same words. A directly-addressed performer carries their own second-person letter
-    // (#641/#789), so putting them on one message with somebody reading a different letter means one of
-    // the two gets text written for the other, greeted by the other's name.
-    nonisolated static func jointSendRefusal(_ recipients: [Recipient], of prospect: Prospect) -> String? {
-        guard Set(recipients.map { $0.effectiveBody ?? "" }).count > 1 else { return nil }
-        return ActionAck.jointSendMixedLetters
-    }
+    // Worth knowing if it is ever wanted back: its message was never rendered anywhere. Nothing read the
+    // returned string, so the refusal was silent and Dan met it as a Send that did nothing (L109).
 
     // #2031: ONE email to several contacts of a performance, and every one of them recorded as having
     // received THAT email.
@@ -415,9 +412,11 @@ enum SendService {
         // draft naming contacts it was about to email.
         guard prospect.status == .approved else { return false }
         let group = sendOrdered(recipients.filter(\.isSendablePending))
-        guard !group.isEmpty, jointSendRefusal(group, of: prospect) == nil,
+        guard !group.isEmpty,
               let pitch = OutgoingPitch.text(forGroup: group, of: prospect),
-              let sharedBody = group.first?.effectiveBody,
+              // #3549: the show's one letter, read from the show rather than from whichever contact
+              // happened to sort first, which is the same text every member receives.
+              let sharedBody = prospect.draftBody,
               let mail = OutgoingMail(to: group.compactMap(\.email),
                                       subject: prospect.draftSubject ?? "", body: pitch)
         else { return false }

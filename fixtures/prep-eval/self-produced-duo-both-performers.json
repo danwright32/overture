@@ -1,6 +1,6 @@
 {
   "name": "self-produced-duo-both-performers",
-  "rule": "A self-produced show with 1-2 named leads pursues EACH performer directly (#366), never the act. Each gets a second-person overrideBody naming the co-performer correctly (#634).",
+  "rule": "A self-produced show with 1-2 named leads pursues EACH performer directly (#366), never the act. The show has one letter (#3549), so where both leads are emailed together it names them rather than addressing one of them as you.",
   "input": {
     "naturalKey": "roche-pierre-duo|2026-03-10|carnegie-hall",
     "groupName": "Roche and Pierre Duo",
@@ -30,13 +30,12 @@
     }
   ],
   "expected": {
-    "description": "Both named performers surfaced as performer contacts, no act contact, each with a second-person overrideBody.",
+    "description": "Both named performers surfaced as performer contacts, no act contact, and one letter for the show naming both.",
     "requiredPerformers": [
       "Virgile Roche",
       "Nora Calder"
     ],
     "forbidActProvenance": true,
-    "performerOverrideBodyRequired": true,
     "requirePortfolioLink": true
   },
   "sampleCompliantOutput": {
@@ -53,8 +52,7 @@
             "method": "named_decision_maker",
             "confidence": "high",
             "sourceUrl": "https://virgileroche.example/contact",
-            "provenance": "performer",
-            "overrideBody": "My name is Dan and I'm a professional arts photographer here in NYC. I'm writing in regard to your March 10 recital with Nora Calder at Carnegie Hall. I work in an unobtrusive documentary style, no flash, so the audience doesn't notice me and nothing on stage is disturbed. I've been photographing at Carnegie Hall for nearly ten years, and you can see my portfolio at danwrightphotography.com. If you don't have someone on it already, I'd be glad to talk about your photography plans for the recital. I look forward to hearing from you."
+            "provenance": "performer"
           },
           {
             "name": "Nora Calder",
@@ -63,8 +61,7 @@
             "method": "named_decision_maker",
             "confidence": "high",
             "sourceUrl": "https://noracalder.example/contact",
-            "provenance": "performer",
-            "overrideBody": "My name is Dan and I'm a professional arts photographer here in NYC. I'm writing in regard to your March 10 recital with Virgile Roche at Carnegie Hall. I work in an unobtrusive documentary style, no flash, so the audience doesn't notice me and nothing on stage is disturbed. I've been photographing at Carnegie Hall for nearly ten years, and you can see my portfolio at danwrightphotography.com. If you don't have someone on it already, I'd be glad to talk about your photography plans for the recital. I look forward to hearing from you."
+            "provenance": "performer"
           }
         ],
         "draft": {

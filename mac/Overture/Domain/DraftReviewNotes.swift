@@ -160,12 +160,6 @@ extension DraftReviewNotes {
     // in the app whose label must never be able to name the wrong org.
     static func neverContactOrg(groupName: String) -> String { "Never contact \(groupName) again" }
 
-    // A performer with their own directly-addressed draft gets a DIFFERENT email from the shared one
-    // above it. Saying whose, and what, is the entire point.
-    static func willInsteadReceive(name: String) -> String { "\(name) will instead receive:" }
-
-    static func willReceive(body: String) -> String { "Will receive: \(body)" }
-
     // The two-step confirm behind an override: it repeats WHAT is blocking before asking him to send
     // anyway, so the confirm is never a bare "are you sure" about a fact he has forgotten.
     static func lintOverrideConfirm(blockers: [DraftIssue]) -> String {

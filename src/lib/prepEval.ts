@@ -51,8 +51,11 @@ export interface PrepEvalExpectation {
    * two answers is WHICH address came back, so that is what this asks.
    */
   requiredEmails?: string[];
-  /** Every performer contact must carry a second-person overrideBody (#634). */
-  performerOverrideBodyRequired?: boolean;
+  /**
+   * #3549 RETIRED `performerOverrideBodyRequired`. A show has one letter now, so a performer contact
+   * carrying a second copy of the pitch is the defect rather than the requirement, and the check below
+   * flips accordingly: any run still writing one is FAILED, whatever a fixture asks for.
+   */
   /**
    * #1832: every drafted body present must carry the portfolio link. It is always the same one, so this
    * is a boolean rather than which gallery: a body that links a gallery PATH fails the universal check
@@ -160,6 +163,7 @@ interface Contact {
   provenance?: string;
   formUrl?: string;
   sourceUrl?: string;
+  /** Retired by #3549. Read only so a run that still writes one can be failed, never to be consumed. */
   overrideBody?: string;
 }
 
@@ -377,9 +381,6 @@ function collectBodies(entries: ResultEntry[]): { label: string; body: string }[
   const bodies: { label: string; body: string }[] = [];
   entries.forEach((e, i) => {
     if (e.draft?.body) bodies.push({ label: `results[${i}].draft.body`, body: e.draft.body });
-    (e.contacts ?? []).forEach((c, j) => {
-      if (c.overrideBody) bodies.push({ label: `results[${i}].contacts[${j}].overrideBody`, body: c.overrideBody });
-    });
   });
   return bodies;
 }
@@ -479,7 +480,7 @@ function checkUniversal(entries: ResultEntry[], failures: string[], coldRegister
   for (const [i, e] of entries.entries()) {
     const summary = e.showSummary;
     if (!summary) continue;
-    for (const body of [e.draft?.body, ...(e.contacts ?? []).map((c) => c.overrideBody)]) {
+    for (const body of [e.draft?.body]) {
       if (!body) continue;
       const run = longestSharedWordRun(summary, body);
       if (run >= LIFTED_SUMMARY_WORD_RUN) {
@@ -535,17 +536,13 @@ function checkExpectation(entry: ResultEntry, allContacts: Contact[], exp: PrepE
     }
   }
 
-  if (exp.performerOverrideBodyRequired) {
-    for (const c of performerContacts(allContacts)) {
-      if (!c.overrideBody || c.overrideBody.trim().length === 0) {
-        failures.push(`performer contact needs its own overrideBody (#634): ${c.name ?? "unnamed"}`);
-        continue;
-      }
-      const second = /\byou\b|\byour\b/i.test(c.overrideBody);
-      const namesSelf = c.name ? new RegExp(`\\b${c.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i").test(c.overrideBody) : false;
-      if (!second || namesSelf) {
-        failures.push(`performer overrideBody must address them in the second person, not describe them in the third (#634): ${c.name ?? "unnamed"}`);
-      }
+  // #3549: the reverse of the rule that stood here. A show has one letter, so a run that gives a
+  // contact a second copy of the pitch is writing text the app will ignore and nobody will receive.
+  // Unconditional, and not gated on a fixture expectation, because the rule is now about every run
+  // rather than about the shows somebody remembered to mark (L96).
+  for (const c of allContacts) {
+    if (c.overrideBody && c.overrideBody.trim().length > 0) {
+      failures.push(`a contact carries its own second copy of the pitch, which #3549 retired: the show has one letter and this text reaches nobody: ${c.name ?? "unnamed"}`);
     }
   }
 

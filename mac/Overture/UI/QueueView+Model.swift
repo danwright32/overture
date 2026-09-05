@@ -805,10 +805,6 @@ struct RecipientSnapshot: Identifiable, Equatable, Sendable {
     var replyAudience: [String] = []
     // #846: which model wrote this reply (Recipient.replyDraftModel). Read via replyDraftTraceLabel.
     var replyDraftModel: String? = nil
-    // #642 (#634 Phase D): a performer's direct-address draft, so the review screen can show Dan
-    // exactly what this specific contact will receive instead of the shared draft body. Only ever
-    // set when provenance == .performer; defaulted so existing call sites don't need updating.
-    var overrideBody: String? = nil
     var conversationRemindedAt: Date? = nil
     // #1740: Dan stood this contact's outreach down, and when. Carried so the card can SAY so rather than
     // just quietly showing no follow-up activity, which reads the same as a contact nobody got to.
@@ -2974,7 +2970,6 @@ extension RecipientSnapshot {
                   replyDraftWrittenByDan: r.replyDraftWrittenByDan,
                   replyAudience: SendGroup.replyAudience(of: r),
                   replyDraftModel: r.replyDraftModel,
-                  overrideBody: r.overrideBody,
                   conversationRemindedAt: r.conversationRemindedAt,
             outreachStoodDownAt: r.outreachStoodDownAt,
                   contactConfidence: r.contactConfidence,

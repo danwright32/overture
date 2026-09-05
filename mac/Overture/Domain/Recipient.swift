@@ -106,11 +106,6 @@ final class Recipient {
     // than shown as a false citation. Distinct from contactFormURL, which stays the form_or_dm
     // contact's own submission link.
     var contactSourceURL: String?
-    // v4 (#640, #634 Phase B): only ever meaningful when provenance == .performer, a direct,
-    // second-person draft for THIS recipient, preferred over the shared Prospect.draftBody at send.
-    // PrepImporter clears this whenever a re-ingested contact's provenance is no longer .performer.
-    var overrideBody: String?
-
     // #789: the EXACT text Dan explicitly confirmed is fine to send despite a blocking lint finding.
     // A copy of the text rather than a bare boolean, so a later edit to DIFFERENT text silently
     // invalidates the override with no migration bookkeeping (isLintOverridden below); the same
@@ -718,12 +713,20 @@ final class Recipient {
             && !isBlockedByGreeting
     }
 
-    // #789 / #641: the text THIS recipient actually receives. A directly-addressed performer's own
-    // second-person draft (#634 Phase C) wins over the shared third-person body; for everyone else
-    // it IS the shared body. SendService.deliver reads this to compose the mail, and the lint below
-    // reads the same property to judge it, so what is CHECKED can never drift from what is SENT.
+    // #789 / #641 / #3549: the text THIS recipient actually receives, which is the show's one letter.
+    //
+    // It used to prefer a second copy stored on a directly-addressed performer (#634 Phase C), so one
+    // show could carry two letters. Only the send path read that copy; the card previewed, edited and
+    // badged the shared body, so an edit was reported as applied and reached nobody. Dan, 2026-09-05:
+    // "we should just always only have 1 version." The address form (second person to a performer,
+    // third person to a presenter) is now written into the one body, by whoever writes it, since Prep
+    // knows the show's contacts when it drafts.
+    //
+    // Kept as a named property rather than inlined at each call site: it is the ONE definition of the
+    // outgoing text, and every reader of outgoing content goes through it, so what is CHECKED cannot
+    // drift from what is SENT (#3551, L402).
     var effectiveBody: String? {
-        (provenance == .performer ? overrideBody : nil) ?? prospect?.draftBody
+        prospect?.draftBody
     }
 
     // #789: the blocking lint findings in that text. Derived live rather than stored at ingest on
@@ -776,9 +779,11 @@ final class Recipient {
     // inbox it is the correct opening, with the `Attn:` block above it naming the desk.
     var greetingMisaddressed: Bool {
         guard let prospect else { return false }
-        // A performer's own second-person letter (#634) goes to them alone, whatever else is on the
-        // show, so a name in it is right by construction.
-        if provenance == .performer, overrideBody?.isEmpty == false { return false }
+        // #3549 removed the performer carve-out that used to sit here. It stood on a performer having
+        // a letter of their OWN, which went to them alone, making a name in it right by construction.
+        // With one letter per show that premise is gone: a body naming the performer, on a show that
+        // also emails a presenter, is misaddressed for exactly the reason this guard exists. A single
+        // contact show is unaffected, since the audience is then one and the size test is false.
         return prospect.greetingAudienceSize > 1 && DraftGreeting.namesSomeone(effectiveBody)
     }
 

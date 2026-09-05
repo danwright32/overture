@@ -575,13 +575,23 @@ act are mutually exclusive per performance (never both used at once) and tie for
 Purely additive to the `provenance` string; the reader's tolerant gate (1 through 3) still accepts
 `v1.json`/`v2.json` unchanged, `v3.json` is the performer-contact spec.
 
-Version 4 (#639, #634 Phase A) adds an optional `overrideBody` to a `contacts[]` entry: a direct,
+Version 4 (#639, #634 Phase A) added an optional `overrideBody` to a `contacts[]` entry: a direct,
 second-person draft for that specific contact, meaningful only when its `provenance` is `performer`.
-The shared `draft.body` stays third-person and keeps serving any act/presenter contact on the same
-performance; a performer contact's own `overrideBody` is what actually gets sent to them instead
-(`SendService`), so a named performer is addressed directly rather than described in the third person
-they'd otherwise read about themselves in. Purely additive; the reader's tolerant gate (1 through 4)
-still accepts `v1.json`/`v2.json`/`v3.json` unchanged, `v4.json` is the override-body spec.
+It was what actually got sent to that contact, in place of the shared third-person `draft.body`.
+
+**#3549 RETIRED it, and the reader now ignores the key.** A show has ONE letter, `draft.body`,
+addressed to whoever its contacts are (`docs/prep-runbook.md` §2, "Address the one letter to the
+people it reaches"). The retirement is a WRITER-side change: no version was bumped, because an older
+payload still carrying the key decodes exactly as before and the value is dropped, so nothing that
+ever wrote this file became invalid. `v4.json` keeps its `overrideBody` entries as the record of what
+version 4 looked like. What enforces the new rule is `src/lib/prepEval.ts`, which FAILS any run that
+still emits one, and `OneLetterPerShowTests`, which fails if a second copy reappears in the app.
+
+Why it went: only the send path read it, while the card previewed, edited and badged the shared body,
+so an edit Dan made was reported as applied and could never reach the recipient (`LESSONS` L402).
+Measured on the live store 2026-09-05 before removing it: 9 contacts held one, 8 of those shows had a
+single contact so the body on screen reached nobody, and 30 shows carrying more than one performer had
+never had a per-performer letter written at all.
 
 Version 5 (#611) adds an optional `alreadyCoveredNote` on the result itself (a sibling of
 `contacts`/`draft`, not per-contact): a fit-risk Prep's own research found, e.g. the org's site

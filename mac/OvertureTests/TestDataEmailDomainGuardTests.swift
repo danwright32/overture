@@ -258,7 +258,9 @@ struct TestDataEmailDomainGuardTests {
                 guard !file.url.path.contains("Overture.xcodeproj") else { continue }
                 // Its own source has to NAME what it forbids, so it is the one file it cannot police.
                 guard file.name != "TestDataEmailDomainGuardTests.swift" else { continue }
-                for name in scanner.matches(in: file.text) {
+                // #3549: FLATTENED, so a name broken across a line wrap is still that name. See
+                // PrivacyScanText for the real case this missed for months in a public repository.
+                for name in scanner.matches(in: PrivacyScanText.flattened(file.text)) {
                     hits.append("\(name) in \(file.name)")
                 }
             }

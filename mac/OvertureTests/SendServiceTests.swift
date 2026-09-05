@@ -524,26 +524,6 @@ struct SendServiceTests {
         #expect(p.status == .approved)
     }
 
-    // The refusal that has to exist before this can be offered at all. A performer carries their OWN
-    // second-person letter; putting them on one message with somebody reading a different letter means
-    // one of the two receives text written for the other, greeted by the other's name.
-    @Test func agroupWhoseContactsWouldReadDifferentLettersIsRefused() async throws {
-        let ctx = ModelContext(try container())
-        let (p, a, b) = showWithTwoContacts(ctx)
-        b.provenance = .performer
-        b.overrideBody = "Hi Noah,\n\nI document dance."
-        let sender = CapturingSender()
-
-        #expect(await SendService.sendJointly(p, to: [a, b], now: Date(timeIntervalSince1970: 10),
-                                              sender: sender) == false)
-
-        #expect(sender.last == nil, "nothing may go out when the app would have to choose whose letter")
-        #expect(a.sendState == .pending && b.sendState == .pending)
-        #expect(SendService.jointSendRefusal([a, b], of: p) != nil)
-        // And the ordinary case is not refused by the same rule.
-        #expect(SendService.jointSendRefusal([a], of: p) == nil)
-    }
-
     // One show in the live store already has one contact written to and one waiting. The person who
     // already had their email must never receive it twice.
     @Test func acontactWhoAlreadyHadTheEmailIsNotInTheGroup() async throws {
@@ -773,56 +753,12 @@ struct SendServiceTests {
         #expect(p.sentBody == afterFirst)            // the second recipient did not re-freeze
     }
 
-    // MARK: - #641 (#634 Phase C): a performer's overrideBody wins over the shared draft, everywhere
+    // MARK: - #3549: one letter per show, whoever the contact is
 
-    // A performance where the ONLY recipient is a directly-addressed named performer, carrying their
-    // own overrideBody distinct from the shared (third-person) draftBody.
-    private func performerWithOverride(_ ctx: ModelContext, overrideBody: String,
-                                       sharedBody: String, ingested: Date) -> Prospect {
-        let key = Prospect.makeNaturalKey(groupName: "Midnight Quartet", performanceDate: "2026-08-15", venue: "Weill Recital Hall")
-        let p = Prospect(naturalKey: key, groupName: "Midnight Quartet", discipline: "choral", venue: "Weill Recital Hall",
-                         performanceDate: "2026-08-15", sourceListingURL: nil,
-                         priorRelationship: "none", production: "self", profile: "strong", coverage: "likely_uncovered",
-                         fitScore: 7, tier: "high", fitReason: "r", matchedClientName: nil,
-                         possibleMatchSource: nil, possibleMatchName: nil, status: .approved, ingestedAt: ingested)
-        p.draftSubject = "S"; p.draftBody = sharedBody
-        ctx.insert(p)
-        let performer = Recipient(id: "maya@performer.example", email: "maya@performer.example",
-                                  name: "Maya Chen", provenance: .performer)
-        performer.overrideBody = overrideBody
-        p.setRecipients([performer])
-        try? ctx.save()
-        return p
-    }
-
-    @Test func sendOneUsesThePerformersOverrideBodyInsteadOfTheSharedDraft() async throws {
-        let ctx = ModelContext(try container())
-        let p = performerWithOverride(ctx, overrideBody: "Hi Maya,\n\nI saw you're self-presenting Midnight Quartet.",
-                                      sharedBody: "Hello,\n\nI saw Midnight Quartet is self-presenting.",
-                                      ingested: Date(timeIntervalSince1970: 1))
-        let sender = CapturingSender()
-
-        #expect(await SendService.sendOne(p, now: Date(timeIntervalSince1970: 10), sender: sender) == true)
-
-        #expect(sender.last?.body == "Hi Maya,\n\nI saw you're self-presenting Midnight Quartet.")
-    }
-
-    // The bug the red-team caught: the voice-learning snapshot (#119) must freeze what was ACTUALLY
-    // sent, not the shared draft the override replaced, or a later run learns from text nobody read.
-    @Test func sendOneFreezesTheOverrideBodyForVoiceLearningNotTheSharedDraft() async throws {
-        let ctx = ModelContext(try container())
-        let p = performerWithOverride(ctx, overrideBody: "Hi Maya,\n\nI saw you're self-presenting Midnight Quartet.",
-                                      sharedBody: "Hello,\n\nI saw Midnight Quartet is self-presenting.",
-                                      ingested: Date(timeIntervalSince1970: 1))
-
-        _ = await SendService.sendOne(p, now: Date(timeIntervalSince1970: 10), sender: CapturingSender())
-
-        #expect(p.sentBody == "Hi Maya,\n\nI saw you're self-presenting Midnight Quartet.")
-    }
-
-    // Defense in depth: even a .performer recipient with NO overrideBody set falls back to the
-    // shared draft, exactly like an act/presenter recipient always has.
-    @Test func aPerformerWithNoOverrideBodyStillGetsTheSharedDraft() async throws {
+    // A performer used to be the one provenance that could carry a second copy of the pitch, which the
+    // send preferred and the card could not edit. There is one letter now, so the performer case is
+    // simply the ordinary case, and this says so on the provenance that used to differ.
+    @Test func aPerformerReceivesTheShowsOwnLetter() async throws {
         let ctx = ModelContext(try container())
         let key = Prospect.makeNaturalKey(groupName: "Solo Act", performanceDate: "2026-08-15", venue: "Weill Recital Hall")
         let p = Prospect(naturalKey: key, groupName: "Solo Act", discipline: "choral", venue: "Weill Recital Hall",
