@@ -1394,20 +1394,41 @@ enum QueueModel {
     // #1571: THIS IS THE ONE PLACE the queue window and the scout horizon are related, because they
     // are two numbers in two units in two files and nothing used to connect them.
     //
-    //   DEMAND  this constant, 90 days, is how far ahead Dan wants to look.
+    //   DEMAND  this constant, 63 days (nine weeks), is how far ahead Dan wants to look at a show
+    //           that is not a past client's.
     //   SUPPLY  [[CalendarMonthIndex.defaultHorizon]], 4 whole calendar months, is how far ahead an
     //           ordinary watched source is read. [[ClientHorizon.clientMonths]], 12 months, is the
     //           wider supply for a known client's own calendar.
     //
-    // Dan's call, 2026-08-09: 90 days stays, and the scout keeps reading further on purpose, so a show
-    // is already in the store by the time it rolls into the window. The gap between the two is the
-    // buffer, not an oversight.
+    // NINE WEEKS. Dan's call, 2026-08-31, in session: "I think I want to do nine weeks for the
+    // non-clients that currently get 90 days. No change to the past client look ahead that goes
+    // further." That supersedes his 2026-08-11 rule ("90 days for anything that isn't a past client")
+    // for THIS arm alone. The client arm below is untouched, and [[ClientWindow]] still records those
+    // earlier words as the rule for it, which is why they are not deleted there.
     //
-    // The one place the buffer runs out, recorded here so it is not rediscovered as a bug: four whole
-    // months is 122 days ahead at its furthest and 89 at its shortest, and the short case is 31 January
-    // of a year that is not a leap year (February plus March plus April). Asked on that one date the
-    // queue's ninetieth day is 1 May and only April has been read, so a show that far out is picked up
-    // the following night instead. One day late, one date a year.
+    // The scout still reads further on purpose, so a show is already in the store by the time it rolls
+    // into the window. That gap is the buffer rather than an oversight, and narrowing the demand side
+    // WIDENED it rather than closing it.
+    //
+    // WHAT THIS RETIRED, recorded because the cost it names was written down here as live for as long
+    // as the window was 90. Four whole months reaches 122 days ahead at its furthest and 89 at its
+    // shortest, the short case being 31 January of a year that is not a leap year (February plus March
+    // plus April). A 90 day window asked on that one date named 1 May when only April had been read, so
+    // a show that far out arrived a night late: one day late, one date a year. At 63 the window sits
+    // inside the horizon's floor on EVERY date, so that case cannot arise at all.
+    //
+    // MEASURED on a WAL consistent clone of the live store, 2026-08-31, before the change. The store
+    // held 1,140 prospects: 633 inside the then 90 days, 155 in the client extension between 90 days
+    // and a year, 352 already past. In the band nine weeks drops (2026-11-03 to 2026-11-29): 137 shows,
+    // of which 134 carry no client match and 136 are still `new`. That 134 is an UPPER BOUND on what
+    // leaves Scout, because it counts the SHOW route only: a show can also be a past client's because
+    // the CALENDAR it came from is a client's ([[ClientHorizon]]), which cannot be computed in SQL, so a
+    // few of the 134 stay. Dan was shown 134 before choosing.
+    //
+    // NOT A PERFORMANCE CHANGE, and it must not be justified as one (#3423). It came up while
+    // diagnosing the app's freezes and the measurement there was explicit: the expensive rebuild runs
+    // over the WHOLE store rather than over what is displayed, and the archive deliberately holds the
+    // past shows, so a narrower Scout window does not shrink what gets rebuilt.
     //
     // `QueueWindowAndScoutHorizonTests` measures all of this from the constants themselves and fails if
     // either moves, so changing one is a deliberate act rather than a silent drift.
@@ -1417,16 +1438,20 @@ enum QueueModel {
     // it: a show Dan has already kept, prepped, drafted, approved or pitched keeps its place on its stage
     // whatever its date, and an inquiry ignores the window entirely because somebody is waiting on a reply.
     //
-    // It reads this constant from the one shared predicate rather than restating 90 anywhere, which is
+    // It reads this constant from the one shared predicate rather than restating the number anywhere,
+    // which is
     // what #1567 and #1575 are about. Between #2348 and #2359 nothing applied it at all: the last caller
     // was `queueOrder`, a second filter unreachable from the app since #1567 and deleted in #2348, and
     // for that gap this comment described a window that did not run. Measured on the live store on
     // 2026-08-09, 119 of the 585 untriaged shows ahead of Dan were past this edge, out to June 2027.
-    static let leadTimeWindowDays = 90
+    static let leadTimeWindowDays = 63
 
     // #2365: the same window for a PAST CLIENT'S show, and the whole of Dan's rule is these two numbers.
     // His words, 2026-08-11: "90 days for anything that isn't a past client. and then the extended check
     // for past clients. we should show everything in scout from those two groups, don't hide anything."
+    // The 90 in that sentence became nine weeks on 2026-08-31 (#3423) and THIS number did not move: he
+    // was explicit that the past client look ahead is unchanged. His words are kept as he said them,
+    // because they are the record of the rule's shape rather than of either number.
     //
     // ELEVEN, not twelve, and the difference is load-bearing rather than cautious. The supply side reads a
     // client's calendar for the current month plus eleven ([[ClientHorizon.clientMonths]] is 12 counting
@@ -1457,7 +1482,8 @@ enum QueueModel {
     // #2524: is this show in Scout ONLY because it is a returning client's?
     //
     // Since #2365 a past client's show is offered up to 11 months ahead while everything else is held to
-    // 90 days, so a date ten months out sits beside next week's with nothing saying why. Without a word on
+    // [[QueueModel.leadTimeWindowDays]] (nine weeks since #3423), so a date ten months out sits beside
+    // next week's with nothing saying why. Without a word on
     // the card it reads as a mistake rather than a deliberate reach, and it hides the fact that makes it
     // worth acting on: Dan has worked with these people before, which is the warmest opener the product
     // has.

@@ -20,9 +20,12 @@ struct OfferedEarlyAsAClientTests {
     // silently changes which case it stands for as real time walks past it (L130), and every date here
     // means something only against `today`.
     private let today = "2026-08-16"
-    private let nextWeek = "2026-08-23"          // well inside the ordinary 90 days
-    private let justInside = "2026-11-13"        // 89 days: the last ordinary day
-    private let justPast = "2026-11-15"          // 91 days: the first day only a client reaches
+    private let nextWeek = "2026-08-23"          // a week out: well inside the ordinary window
+    // These two mean "the last ordinary day" and "the first day only a client reaches", so they are
+    // DERIVED from the window rather than written down (#3423). Written as literals they were the 89th
+    // and 91st day, which stopped meaning that the moment Dan moved the window to nine weeks.
+    private var justInside: String { ScoutTestClock.day(today, plus: QueueModel.leadTimeWindowDays - 1) }
+    private var justPast: String { ScoutTestClock.day(today, plus: QueueModel.leadTimeWindowDays + 1) }
     private let tenMonthsOut = "2027-06-13"      // the furthest show the live store held, 2026-08-11
     private let pastTheClientEdge = "2027-08-20" // past 11 months: nothing reaches this
 

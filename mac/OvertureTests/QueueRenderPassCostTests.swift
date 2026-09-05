@@ -257,7 +257,18 @@ struct QueueRenderPassWorkUnitCostTests {
     // remaining gap against the live store is the same unattributed term #3498 records. How the 82 splits
     // between card construction and the rest of the pass is MEASURED by
     // `theLintRunsAreAttributedBetweenCardBuildAndTheRestOfThePass`, not asserted here.
-    private static let allowedDraftLintRuns = 34
+    // 35 since #3423, re-MEASURED rather than reasoned about. Narrowing the ordinary lead time window
+    // from 90 days to nine weeks moved this by one, and the direction is the opposite of the obvious
+    // guess: fewer rows are inside the window, and the lint runs one more time rather than one fewer.
+    //
+    // WHERE the extra run is, and this correction is worth keeping. The first attempt at this comment
+    // said it was inside card construction, inferred from `allowedLintRunsOutsideTheCardBuild` not
+    // having appeared in one run's failure list. That was reading absence as a measurement: the term
+    // had moved too, and the next run said so. Both numbers went up by one, so `cardsOnly` is
+    // UNCHANGED and the extra run is OUTSIDE card construction, in the term #3498 is chasing and that
+    // still has no owner. Nothing beyond that is asserted, because nothing beyond that was measured
+    // (L107, L353, L11).
+    private static let allowedDraftLintRuns = 35
 
     // MEASURED on this corpus by `theLintRunsAreAttributedBetweenCardBuildAndTheRestOfThePass`, not
     // derived. An earlier version of this file asserted the split from arithmetic on a different
@@ -268,7 +279,10 @@ struct QueueRenderPassWorkUnitCostTests {
     // linting inside card construction and this term is somewhere else in the pass, so it is now the
     // MAJORITY of what the lint costs. It is what #3498's own text called the unattributed 90 at the
     // original shape, and it still has no owner.
-    private static let allowedLintRunsOutsideTheCardBuild = 18
+    //
+    // 19 since #3423: narrowing the ordinary lead time window moved this term by one, and the whole-pass
+    // total by the same one, which is what locates the extra run out here rather than in card building.
+    private static let allowedLintRunsOutsideTheCardBuild = 19
 
     // WHERE the 82 goes, measured on THIS corpus rather than inferred from the single-row attribution
     // test below. The first version of this suite carried the split as a comment reading "64 of the 82
