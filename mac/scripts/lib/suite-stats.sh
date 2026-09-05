@@ -678,12 +678,10 @@ live_corpus_counts() {
 
 # Whole days between two yyyy-mm-dd dates, or NOTHING when either cannot be read. Never a zero standing
 # in for an unreadable date: zero days is a measurement and an unreadable date is not one (L11).
+# #3191: through the shared helper. This and `hosted_stamp_age_days` were the same function under two
+# names, down to the refusal that matters most, and a third copy elsewhere had lost it.
 days_since() {
-  local from="$1" to="$2" a b
-  a="$(date -j -f "%Y-%m-%d" "${from}" +%s 2>/dev/null)" || return 0
-  b="$(date -j -f "%Y-%m-%d" "${to}" +%s 2>/dev/null)" || return 0
-  [[ "${a}" =~ ^[0-9]+$ && "${b}" =~ ^[0-9]+$ ]] || return 0
-  echo $(( (b - a) / 86400 ))
+  machine_stamp_days_since "$1" "$2"
 }
 
 # The date recorded against one invariant, from the record's text, or nothing.

@@ -199,6 +199,10 @@ assert_eq "a file list that simply holds no claim is not an error" "0" "$?"
 SWEEP_REPO="$(fixture_scratch_dir)"
 mkdir -p "${SWEEP_REPO}/scripts"
 cp "${REPO_ROOT}/scripts/check-live-store-claims.sh" "${SWEEP_REPO}/scripts/"
+# #3191: and the library it sources. Staging the script without it would make the fixture
+# exercise a fallback path nothing else takes, which is the branch that ships going untested.
+mkdir -p "${SWEEP_REPO}/scripts/lib"
+cp "${REPO_ROOT}/scripts/lib/machine-stamp.sh" "${SWEEP_REPO}/scripts/lib/"
 printf 'let x = 1\n' > "${SWEEP_REPO}/nothing.swift"
 ( cd "${SWEEP_REPO}" && git init -q . && git add -A && git -c user.email=t@t -c user.name=t commit -qm t ) >/dev/null 2>&1
 SWEEP_OUT="$( cd "${SWEEP_REPO}" && ./scripts/check-live-store-claims.sh 2>&1 )"

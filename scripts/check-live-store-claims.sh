@@ -45,6 +45,10 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
+# #3191: the shared per-machine stamp rules.
+# shellcheck source=./lib/machine-stamp.sh
+. "${SCRIPT_DIR}/lib/machine-stamp.sh"
+
 # A verified date older than this many days is reported as stale (advisory, never a failure): the store
 # has grown fast enough in this project (26 -> 66 distinct venues in about two weeks around #970/#1030)
 # that a much longer threshold would let real drift sit for a long time before anyone is nudged to look.
@@ -152,15 +156,14 @@ claim_candidates() {
   return 0
 }
 
-# Whole days between two YYYY-MM-DD dates (today minus the given date). Uses BSD date -j -f, matching
-# this repo's macOS-only tooling (xcodebuild, flock-based locks) elsewhere in scripts/.
+# #3191: through the shared helper. This was the THIRD copy of the arithmetic and the only one that had
+# lost its refusal: it neither suppressed `date`'s error nor returned early, so an unreadable date
+# reached the subtraction and the caller got a number nobody measured (L11). It answers nothing now, the
+# way the other two always did.
 days_since() {
-  local date_str="$1" today_str="$2"
-  local d_epoch today_epoch
-  d_epoch="$(date -j -f "%Y-%m-%d" "${date_str}" "+%s")"
-  today_epoch="$(date -j -f "%Y-%m-%d" "${today_str}" "+%s")"
-  echo $(( (today_epoch - d_epoch) / 86400 ))
+  machine_stamp_days_since "$1" "$2"
 }
+
 
 # Given a checked-in fixture's text ($1), a grep -E pattern ($2), and the count the claim asserts ($3),
 # recomputes the real count and reports "OK" when it matches or "MISMATCH<TAB><actual>" when it doesn't.

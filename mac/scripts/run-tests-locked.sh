@@ -49,6 +49,10 @@ source "${SCRIPT_DIR}/lib/suite-stats.sh"
 # shellcheck source=./lib/test-progress-watch.sh
 source "${SCRIPT_DIR}/lib/test-progress-watch.sh"
 
+# #3191: the shared per-machine stamp rules, sourced BEFORE the library that uses them.
+# shellcheck source=../../scripts/lib/machine-stamp.sh
+source "${SCRIPT_DIR}/../../scripts/lib/machine-stamp.sh"
+
 # shellcheck source=./lib/hosted-suite-stamp.sh
 source "${SCRIPT_DIR}/lib/hosted-suite-stamp.sh"
 
