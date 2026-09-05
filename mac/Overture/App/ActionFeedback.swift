@@ -362,6 +362,19 @@ enum ActionAck {
     // more, so both are gone rather than left as copy for a state the app cannot be in (L29, L132).
 
 
+    // #1778: the row's own show is not in the queue any more, so the control Dan just pressed had
+    // nothing to act on. Said rather than swallowed: fifty row actions used to return silently here,
+    // and a press that changes nothing and explains nothing reads exactly like a broken control (L11).
+    //
+    // It names the show where the caller knows it, because a message about "that show" on a screen of
+    // shows is a message he cannot act on (L80).
+    static func showNoLongerInTheQueue(org: String?) -> String {
+        guard let org, !org.isEmpty else {
+            return "That show is no longer in the queue, so nothing was changed. Reopen the queue and try again"
+        }
+        return "\(org) is no longer in the queue, so nothing was changed. Reopen the queue and try again"
+    }
+
     // #2544: each of these refusals exists in TWO renderings, and what separates them is a clause that is
     // only true once there has been a press. The reason is what Save draft is refusing, shown beside the
     // button while it is grey; the acknowledgement is that same reason plus what became of the press, and
