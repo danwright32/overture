@@ -136,7 +136,9 @@ struct GeoRefusalsRenderPassWiringTests {
         }
         // #2365: the resolve happens through the CONTEXT, so the pass carries one value through its
         // sweeps rather than unpacking the gate and passing the pieces separately.
-        #expect(body.contains("let context = i.context.resolvingPlaces(of: i.prospects.all)"))
+        // #3507: `inQueue` rather than `i.prospects`, since the queue's scope is now derived from the one
+        // whole-table corpus inside this function rather than arriving as a second @Query.
+        #expect(body.contains("let context = i.context.resolvingPlaces(of: inQueue.all)"))
     }
 
     // And carries it, so the surfaces built from the same pass answer from the same table rather than
