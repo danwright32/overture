@@ -22,12 +22,15 @@ struct QueueView: View {
     // feed and was never acted on (#133) is drawn struck-through by ProspectRowView rather than hidden:
     // the hiding copy of that rule lived in QueueModel.queueOrder, unreachable from the app since #1567
     // and deleted in #2348.
-    @Query(
-        filter: #Predicate<Prospect> { $0.statusRaw != "dismissed" },
-        sort: [SortDescriptor(\Prospect.performanceDate, order: .forward),
-               SortDescriptor(\Prospect.fitScore, order: .reverse)]
-    )
-    private var prospects: [Prospect]
+    // #3507: DERIVED, not queried. This was a second `@Query` over `Prospect`, differing from
+    // `allProspects` below only in scope, and SwiftData satisfies each independently: measured against the
+    // live store on 2026-09-05, a repeat of the identical descriptor cost 96% of the cold one over 1153
+    // rows, so the table was materialised twice on every store notification for a saving of nothing.
+    //
+    // Read from HERE only by the action handlers, which run on a press rather than during a render. The
+    // render path takes `data.queueScope`, which the pass derives once (`QueueRenderPass.make`), because
+    // this property walks the whole store on every access and one of its call sites is per row.
+    private var prospects: [Prospect] { QueueModel.queueScope(allProspects) }
 
     // #1598 Phase 5: the organisation answer ledger, and EVERY prospect including the dismissed ones the
     // query above filters out. Both are @Query on the #990/#991 excluded-towns precedent, so a check
@@ -243,6 +246,11 @@ struct QueueView: View {
     struct RenderData {
         let items: [QueueItem]
         let visible: [QueueItem]
+        // #3507: the queue's own scope of Prospect models, derived once by the pass from the single
+        // whole-table query. Everything on the RENDER path that needs a model row reads it from here, so
+        // a per-row call site cannot re-derive it; a user ACTION, which runs outside a pass, uses
+        // QueueView's own `prospects` instead.
+        let queueScope: [Prospect]
         // #3323: the self-booking comparison set, indexed by night, built ONCE here rather than once per
         // card and once per date heading. Same reason as agentInputs below (#1771) and the same defect
         // #1772 already fixed on this exact feature: reading it per row rebuilt the whole queue per card,
@@ -292,7 +300,6 @@ struct QueueView: View {
         // Asked ONCE: three of the inputs below are decided from it, and it reads marker files.
         let inFlight = PrepQueueService.runInFlight(now: now)
         return QueueRenderPass.make(QueueRenderPass.Inputs(
-            prospects: QueueRenderPass.Corpus(prospects),
             allProspects: QueueRenderPass.Corpus(allProspects),
             inquiries: inquiries,
             orgAnswers: orgAnswers,
@@ -322,7 +329,9 @@ struct QueueView: View {
     // dependency that issue removed.
     private var renderTrace: [String: String] {
         [
-            "prospects": "\(prospects.count)",
+            // #3507: counted without deriving the scope, which is a whole-store walk this diagnostic
+            // must not pay for (the rule this dictionary's own header states).
+            "prospects": "\(allProspects.count { $0.statusRaw != "dismissed" })",
             "allProspects": "\(allProspects.count)",
             "orgAnswers": "\(orgAnswers.count)",
             "inquiries": "\(inquiries.count)",
@@ -431,7 +440,8 @@ struct QueueView: View {
     // so a ticked date means exactly the shows under that heading and nothing else.
     private func scoutRows(_ data: RenderData) -> [QueueItem] {
         let wanted = Set(StageNavigation.focusedKeys(stage: .scout, leadKeys: [],
-                                                     in: prospects, context: StageContext(geo: geo, clients: clientWindow)))
+                                                     in: data.queueScope,
+                                                     context: StageContext(geo: geo, clients: clientWindow)))
         return data.items.filter { wanted.contains($0.id) }
     }
 
@@ -829,7 +839,7 @@ struct QueueView: View {
     private func stageEmptyState(for stage: StageFocus, data: RenderData) -> some View {
         // #1962: the pass's resolved geography, not a fresh unresolved one, so an empty stage does
         // not re-resolve every show's place to count the others.
-        let counts = StageNavigation.counts(in: prospects, context: StageContext(geo: data.geo, clients: clientWindow))
+        let counts = StageNavigation.counts(in: data.queueScope, context: StageContext(geo: data.geo, clients: clientWindow))
         // #1194: the reached-out pointer counts SHOWS (StageEmptyState labels it "N shows you've pitched"),
         // so it matches the pill; data.reachedOut is per-recipient, so collapse to distinct shows here.
         let reachedOutShows = Set(data.reachedOut.map(\.prospect.naturalKey)).count
@@ -909,12 +919,15 @@ struct QueueView: View {
     // gone), so the row is actually on screen, then scroll to it and briefly highlight it.
     // #1927: it no longer clears the request afterwards, and must not start again. See LeadDeepLink.
     private func navigateToLead(_ key: String, proxy: ScrollViewProxy) {
+        // #3507: bound ONCE. `prospects` derives the queue's scope from the whole-store query on every
+        // access, and the two readers below wanted the same answer.
+        let inQueue = prospects
         // #1121: computed inline (this is a rare deep-link tap, not the render path) now that the queue's
         // reached-out keys live in the per-render RenderData snapshot rather than a standing computed prop.
-        let reachedOutKeys = Set(ReachedOutQueue.activeWithDates(from: prospects, now: Date()).map(\.prospect.naturalKey))
+        let reachedOutKeys = Set(ReachedOutQueue.activeWithDates(from: inQueue, now: Date()).map(\.prospect.naturalKey))
         // #1134: focus the stage that contains this lead so its row renders; fall back to Scout if the
         // lead is in no stage (RootView routes truly unreachable leads to Archive, so this is a safety net).
-        focusedStage = StageNavigation.stage(containing: key, in: prospects,
+        focusedStage = StageNavigation.stage(containing: key, in: inQueue,
                                              reachedOutKeys: reachedOutKeys,
                                              context: StageContext(geo: geo, clients: clientWindow)) ?? StageNavigation.openingStage
         focusedKeys = nil   // #1140: stage mode re-derives its own membership; no frozen key set
@@ -1472,7 +1485,7 @@ struct QueueView: View {
                 // call site it would be read during QueueView's body, and every "Sending…" would re-derive
                 // the whole store; read there, a send redraws the cards on screen and nothing else.
                 QueueSendAwareRow(key: item.id, sendState: sendState) { highlightedKey, sendingSince, replySince in
-                    ProspectRowFactory.row(item, today: today, prospects: prospects, context: context, feedback: feedback,
+                    ProspectRowFactory.row(item, today: today, prospects: data.queueScope, context: context, feedback: feedback,
                                           dayOffOffer: dayOffOffer,
                                           gmailConnected: data.gmailConnected,
                                           // #2267: the row's own "Check again" spends money, so it goes
