@@ -828,6 +828,33 @@ already drifting from the Swift version it mirrored.
   is kept apart from `0` because a run that measured nothing must not read as one that measured and was
   happy. Widen the tolerance for one run with `OVERTURE_CORPUS_DRIFT_TOLERANCE=<percent>`.
 
+- **Asking what freezes macOS has already recorded: `scripts/check-overture-hangs.sh` (#3425).** macOS
+  writes a `.hang` report when an app stops answering the window server, and nothing here read them.
+  Measured 2026-08-31: `/Library/Logs/DiagnosticReports/` held two for Overture, both from 2026-08-30,
+  one of 6.6 seconds and one of 58 SECONDS, and neither was known to anybody until they were looked for
+  while diagnosing a different freeze. The 58 second one is the longest freeze on record for this app and
+  it left no other trace.
+  Worth having beside an in-app detector rather than instead of one: this source is FREE, the OS writes it
+  whether or not our own instrumentation is running or correct, and it works BACKWARDS over what is
+  already on disk, where a detector can only see forward from the day it ships.
+  It reads the Overture PROCESS BLOCK, never the whole file: a hang report is a system-wide stackshot, so
+  every other running process is in it, and reading across the block boundary attributes somebody else's
+  stack to this app. Per report it prints when, the duration, the unresponsive line, the app PATH (so a
+  Debug hang is never read as a Release one), what the main thread was blocked in, and the app's own
+  frames. Each report is COPIED to `~/.overture-mac-test-diagnostics/`, because these rotate, and a copy
+  already there is left alone.
+  Read its answer correctly. FOUR states across three exit codes, and the third code is the one that
+  matters. `1` means reports are on record. `0` means the directories it COULD READ hold none, and it
+  names them, so the clean bill states its own scope rather than standing for the whole Mac. `2` is
+  UNMEASURED, because a Mac that recorded no hang and a reader that cannot see the folder leave the same
+  empty list (L98, L11). Present-but-unreadable and not-there-at-all get different words, since only the
+  first is a permissions problem somebody can fix. A partial read still answers and names the half it
+  could not see.
+  It is OPT IN and not in `scripts/test-all.sh`: it reads a directory that exists only on a real Mac and
+  its findings are about the past rather than about the code. Its judging half rides along on every push
+  through `scripts/check-overture-hangs.test.sh`, which builds reports in the real shape rather than
+  reading this machine's.
+
 - **Asking where the freeze tool's busy threshold actually lands: `scripts/analyse-freeze-load.sh`
   (#3464).** `scripts/freeze-measure.sh` calls a process unusually busy at 25% CPU. That number was
   CHOSEN when it was written and said so, because there was no distribution of this Mac's idle CPU to set
