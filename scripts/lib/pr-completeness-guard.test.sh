@@ -54,27 +54,43 @@ assert_status() {
 # shellcheck source=/dev/null
 source "${GUARD}"
 
-COMPLETE_BODY='## The four items
+COMPLETE_BODY='## The five items
 1. Writers: no new stored values.
 2. Readers: the rule is read by every author opening a PR here.
 3. Siblings: swept the other adapters, none affected.
-4. Guards seen to fail: broke the parser, saw "expected 3 got 0", reverted.'
+4. Guards seen to fail: broke the parser, saw "expected 3 got 0", reverted.
+5. Premise re-checked: the issue said the parser took two arguments; it still does.'
 
-assert_empty "a body answering all four is accepted" \
+assert_empty "a body answering all five is accepted" \
   "$(pr_completeness_missing "${COMPLETE_BODY}")"
 
 # The failure that actually happened. #2453 named an activating issue for two of three unwritten
 # cases: a body can look thorough and still be missing exactly one item.
-ONE_MISSING="$(pr_completeness_missing 'Writers listed. Readers listed. Guards were seen to fail with the exact text.')"
+ONE_MISSING="$(pr_completeness_missing 'Writers listed. Readers listed. Guards were seen to fail with the exact text. Premise re-checked and it held.')"
 assert_contains "the one missing item is named" "${ONE_MISSING}" "siblings"
 assert_status "and only that one" "1" "$(printf '%s\n' "${ONE_MISSING}" | grep -c .)"
 
+# #2708: the fifth item, missing on its own. The other four are answered in full, which is what makes
+# this the case that matters: a body can be thorough about everything it built and say nothing about
+# whether the thing it was built FROM was still true.
+PREMISE_MISSING="$(pr_completeness_missing 'Writers listed. Readers listed. Siblings swept. Guards were seen to fail.')"
+assert_contains "a body that re-checked no premise is refused" "${PREMISE_MISSING}" "premise"
+assert_status "and that is the only thing missing" "1" "$(printf '%s\n' "${PREMISE_MISSING}" | grep -c .)"
+
+# The word this matches was CHOSEN by measurement, not by guessing (#2708). "premise" alone appears in
+# 11 of the last 40 merged PR bodies, none of them answering this question, so a guard on the bare word
+# would pass a body that re-checked nothing, which is the failure AGENTS.md already warns about. The
+# phrase appears in none of them.
+assert_contains "the bare word alone does not answer it" \
+  "$(pr_completeness_missing 'Writers, readers, siblings, guards seen to fail. The premise of the design is sound.')" \
+  "premise"
+
 ALL_MISSING="$(pr_completeness_missing 'Fixes the thing. Tests pass.')"
-assert_status "a body answering none reports all four" "4" "$(printf '%s\n' "${ALL_MISSING}" | grep -c .)"
+assert_status "a body answering none reports all five" "5" "$(printf '%s\n' "${ALL_MISSING}" | grep -c .)"
 
 # An empty body has answered nothing. If this were waved through, "write no body" would be the way
 # around the guard, which is the hole rather than the exemption.
-assert_status "an empty body reports all four rather than passing" "4" \
+assert_status "an empty body reports all five rather than passing" "5" \
   "$(pr_completeness_missing '' | grep -c .)"
 
 # Answering the question is the bar, not spelling it a particular way.
@@ -82,7 +98,8 @@ assert_empty "headings in other cases and plurals still count" \
   "$(pr_completeness_missing '## WRITERS
 ## Readers
 ## Siblings swept
-## Every guard was SEEN to fail')"
+## Every guard was SEEN to fail
+## PREMISE RE-CHECKED against the code as it stands')"
 
 # End to end: the refusal must exit non-zero and say what is missing, or the merge scripts that call
 # it would carry on regardless and this would be decoration.

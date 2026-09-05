@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# Refuses a merge whose PR body does not answer the four completeness items AGENTS.md demands.
+# Refuses a merge whose PR body does not answer the five completeness items AGENTS.md demands.
 #
 # WHY THIS EXISTS. On 2026-08-10 two defects shipped from this repo and were filed as new issues
 # within hours of the changes that introduced them: #2490 (a provenance case with no writer and no
@@ -25,7 +25,7 @@
 #
 # THE ONE EXEMPTION (#2822), and why it is not that flag. A bot-authored PR can never answer the
 # enumeration, so dependabot's bumps accumulated unmerged and the dependencies went stale: measured
-# 2026-08-16, #2752 and #2753 were both refused with all four items named, and the only workaround was a
+# 2026-08-16, #2752 and #2753 were both refused with all four items named (there were four then), and the only workaround was a
 # person answering completeness questions on a bot's behalf for a change with no new values in it. That
 # is the shape of a gate people learn to route around, and this gate is worth keeping sharp.
 #
@@ -34,21 +34,28 @@
 # still needs the enumeration. It ANNOUNCES itself rather than passing silently, so a mis-scoped rule is
 # visible in the output instead of quietly waving PRs through.
 
-# The four items, matched on the short phrase AGENTS.md uses for each. Kept deliberately short so
+# The five items, matched on the short phrase AGENTS.md uses for each. Kept deliberately short so
 # ordinary rewording of the surrounding sentence does not trip this, while deleting the item does.
 PR_COMPLETENESS_ITEMS=(
   "writer"
   "reader"
   "sibling"
   "seen"
+  # #2708: a PHRASE rather than a word, and that is measured rather than chosen. The bare word
+  # "premise" appears in 11 of the last 40 merged PR bodies (measured 2026-09-04), none of them
+  # answering this question, so a guard on it would pass a body that re-checked nothing, which is the
+  # failure this file's own comments already warn about. The phrase appears in none of them. The match
+  # below is a substring `case`, so a phrase costs nothing.
+  "premise re-checked"
 )
 
-# Human names for the same four, index-aligned, for the refusal message.
+# Human names for the same five, index-aligned, for the refusal message.
 PR_COMPLETENESS_NAMES=(
   "a writer for every new value"
   "a reader for every new value"
   "the siblings of what was fixed"
   "the failure text for every guard"
+  "the issue's premise re-checked against the code as it stands"
 )
 
 # The bot authors this repo actually receives PRs from, named rather than matched on "bot" anywhere in
@@ -149,7 +156,7 @@ require_pr_completeness() {
     [ -n "${item}" ] && echo "  ${item}" >&2
   done <<< "${missing}"
   echo "" >&2
-  echo "AGENTS.md requires all four in the PR body before it opens. This checks only that each was" >&2
+  echo "AGENTS.md requires all five in the PR body before it opens. This checks only that each was" >&2
   echo "ANSWERED, never whether the answer is any good, so passing it is not evidence the change is" >&2
   echo "complete. A gap named in the body is fine; an unnamed one is the defect this exists to catch." >&2
   echo "" >&2
