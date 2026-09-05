@@ -109,7 +109,7 @@ struct ClientLeadTimeWindowTests {
     func demandStaysInsideSupply() {
         #expect(QueueModel.clientLeadTimeWindowMonths < ClientHorizon.clientMonths,
                 "a client's display window must end before the last month its calendar is read to")
-        #expect(QueueModel.leadTimeWindowDays == 90)
+        #expect(QueueModel.leadTimeWindowDays == 63)
     }
 
     // MARK: - Nothing else applies a window

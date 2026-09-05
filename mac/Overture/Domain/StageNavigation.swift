@@ -193,8 +193,10 @@ enum StageNavigation {
         // #2524: expressed as the ordinary window OR the client reach, rather than as a client branch that
         // restates the whole rule, because the card now SAYS which of the two kept a row. Written the old
         // way the sentence would be a second predicate agreeing with this one by inspection, and the two
-        // could drift silently (L16). Same verdicts, in the same order: a client's show inside 90 days is
-        // ordinary rather than early, which is exactly what the card must not claim.
+        // could drift silently (L16). Same verdicts, in the same order: a client's show inside the
+        // ordinary window is ordinary rather than early, which is exactly what the card must not claim.
+        // The number is deliberately not restated here; #3423 moved it from 90 to 63 and this line was
+        // one of the places that would have gone quietly stale had it named it.
         if QueueModel.isWithinOrdinaryLeadTime(performanceDate: p.performanceDate, today: context.today) {
             return true
         }

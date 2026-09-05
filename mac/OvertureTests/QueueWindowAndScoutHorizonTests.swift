@@ -4,11 +4,12 @@ import Foundation
 // #1571: the queue window and the scout horizon are two numbers, in two units, in two files, and
 // nothing related them.
 //
-// `QueueModel.leadTimeWindowDays` (90) is DEMAND: how far ahead Dan wants to look at shows.
+// `QueueModel.leadTimeWindowDays` (63) is DEMAND: how far ahead Dan wants to look at shows.
 // `CalendarMonthIndex.defaultHorizon` (4) is SUPPLY: how many whole calendar months a watched source
 // is read to. `ClientHorizon.clientMonths` (12) is the wider supply for a known client's own calendar.
 //
-// Dan's call, 2026-08-09: the 90 day window stays. The scout deliberately reads further so a show is
+// Dan's call, 2026-08-31: nine weeks for the ordinary arm, replacing the 90 days he set on 2026-08-09,
+// with the past client arm untouched (#3423). The scout still deliberately reads further so a show is
 // already found by the time it rolls into the window. This suite is what stops the two drifting apart
 // silently, by measuring the supply in the unit the demand is written in.
 //
@@ -74,7 +75,7 @@ struct QueueWindowAndScoutHorizonTests {
                 "the floor is expected on the last day of January, not \(worstDays)")
     }
 
-    @Test("The queue asks for one day more than the scout's worst case, and no more than that")
+    @Test("The queue window sits inside the scout's worst case on every date of the year")
     func theQueueWindowSitsAgainstTheScoutsFloor() {
         let reaches = everyStartDay()
             .map { daysOfCalendarRead(from: $0, horizon: CalendarMonthIndex.defaultHorizon) }
@@ -82,16 +83,22 @@ struct QueueWindowAndScoutHorizonTests {
         let ceiling = reaches.max()!
         let window = QueueModel.leadTimeWindowDays
 
-        // The window is deliberately narrower than the horizon's typical reach, so the store holds
-        // shows that have not rolled into view yet. That buffer is the point of the two numbers
-        // differing at all.
+        // The window is deliberately narrower than the horizon's reach, so the store holds shows that
+        // have not rolled into view yet. That buffer is the point of the two numbers differing at all.
         //
-        // On exactly one date a year the floor sits one day BELOW the window: asked on 31 January of a
-        // non leap year, the queue's ninetieth day is 1 May, and only April has been read. A show that
-        // far out is picked up the next night, when the window becomes February to May, so the cost is
-        // one day of lateness on one date. It is recorded here rather than left to be rediscovered.
-        #expect(window - floor == 1,
-                "the queue window (\(window)) and the scout's floor (\(floor)) moved apart; decide the new relationship and say so here")
+        // WHAT THIS ASSERTION USED TO SAY, and why it changed rather than being re-tuned. At 90 days it
+        // read `window - floor == 1`, because the floor is 89 and the window sat one day PAST it: asked
+        // on 31 January of a non leap year the queue's ninetieth day was 1 May with only April read, so
+        // a show that far out arrived a night late. One day, one date a year, and it was recorded here
+        // rather than left to be rediscovered.
+        //
+        // #3423 took the window to 63, so the window is now inside the floor on every date of the year
+        // and that lateness cannot happen at all. The relationship being asserted is therefore the
+        // stronger one, and it is stated as an inequality rather than as a new exact difference: the
+        // claim worth defending is that the scout always reaches past what the queue promises, not that
+        // it reaches past it by any particular number of days.
+        #expect(window < floor,
+                "the queue window (\(window)) must stay inside the scout's worst-case reach (\(floor)), or on the dates where the horizon is shortest the queue names days the scout never read")
         #expect(window < ceiling,
                 "the queue window (\(window)) must stay inside the horizon's furthest reach (\(ceiling)), or the queue promises a window the scout never fills")
     }
@@ -131,6 +138,12 @@ struct QueueWindowAndScoutHorizonTests {
         // Thirty days, which is the same family as the month-index sources' typical 32 day margin and
         // is stated as a floor rather than an exact number so the fetch may be widened without editing
         // this test. Narrowing it below a month is the thing that has to be a deliberate act.
+        //
+        // #3423 widened the actual margin to 57 by narrowing the DEMAND side rather than by touching
+        // the fetch, and the fetch was deliberately left at 120: it is supply, Dan's call was about
+        // what he is shown rather than about what is collected, and a wider buffer is the direction
+        // #2521 argued for in the first place. The floor stays at thirty so that a later narrowing of
+        // the fetch still has to be argued.
         #expect(fetch - window >= 30,
                 "the buffer is \(fetch - window) days; a month is the margin this pair was set with, and shrinking it means deciding a new one and saying so here")
     }

@@ -26,6 +26,14 @@ import SwiftData
 @Suite("A show may only be placed in a navigable stage (#2050)")
 struct ProspectStageReachabilityGuardTests {
     private let today = ScoutTestClock.stageNavigationAnchor
+
+    // #3423: the show below has to sit INSIDE the ordinary lead time window, or a `.new` show is not
+    // offered for triage at all and this guard would be asserting about an empty Scout stage rather
+    // than about pill reachability. 40 days from the anchor, which had margin under the old 90 day
+    // window and still has margin under nine weeks. The relationship is ASSERTED below rather than
+    // assumed, because a fixture whose meaning is its distance from a clock silently changes what it
+    // stands for when either end moves (L130, L134).
+    private let showDate = "2026-08-21"
     private let now = Date(timeIntervalSince1970: 1_768_000_000)
     private let earlier = Date(timeIntervalSince1970: 1_767_000_000)
 
@@ -36,7 +44,7 @@ struct ProspectStageReachabilityGuardTests {
 
     private func show(_ ctx: ModelContext, status: ReviewStatus, drafted: Bool, sentAt: Date? = nil) -> Prospect {
         let p = Prospect(naturalKey: "show-1", groupName: "Quartet", discipline: "music",
-                         venue: "Merkin Hall", performanceDate: "2026-09-19", sourceListingURL: nil, priorRelationship: "none", production: "self",
+                         venue: "Merkin Hall", performanceDate: showDate, sourceListingURL: nil, priorRelationship: "none", production: "self",
                          profile: "strong", coverage: "likely_uncovered", fitScore: 5, tier: "mid",
                          fitReason: "r", matchedClientName: nil, possibleMatchSource: nil,
                          possibleMatchName: nil, status: status)
@@ -146,6 +154,17 @@ struct ProspectStageReachabilityGuardTests {
         let inputs = AgentInputs.from(prospects: all, allProspects: all, context: .at(today, now: now), gmailConnected: true,
                                       runInFlight: nil, replyRunAlive: false)
         return (stage, AgentRoster.statuses(inputs))
+    }
+
+    // The premise every case below rests on, asserted rather than assumed (#3423). If the fixture ever
+    // falls outside the ordinary lead time window, a `.new` show is not offered for triage and this
+    // whole suite quietly starts asserting about an empty Scout stage instead of about reachability.
+    @Test("the fixture show is inside the ordinary lead time window, which every case here needs")
+    func theFixtureSitsInsideTheWindow() {
+        let daysOut = EasternDate.daysUntil(from: today, to: showDate)
+        #expect(daysOut > 0, "the fixture show must be ahead of the anchor, not \(daysOut) days from it")
+        #expect(daysOut < QueueModel.leadTimeWindowDays,
+                "the fixture show is \(daysOut) days out and the ordinary window is now \(QueueModel.leadTimeWindowDays); move the fixture in, or this suite is about an empty Scout stage")
     }
 
     @Test("every stage a show can be placed in has a pill that navigates to it")

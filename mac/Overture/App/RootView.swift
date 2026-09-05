@@ -979,7 +979,7 @@ struct RootView: View {
             // #2365: load Dan's client list at launch, and again whenever the reconcile tick observes the
             // Downbeat export changing. WITHOUT THIS the roster is empty until the Sources sheet is
             // opened, and an empty roster is not a neutral state: it answers "nobody is a client", which
-            // holds every one of his clients' far-out shows to the ordinary 90 day window. So the feature
+            // holds every one of his clients' far-out shows to the ordinary window. So the feature
             // would have done nothing on any launch where he never opened that sheet, while every test
             // passed, because a test hands the client list in directly (L3: built is not wired).
             //

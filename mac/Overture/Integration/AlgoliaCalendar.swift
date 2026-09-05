@@ -14,9 +14,16 @@ enum AlgoliaCalendar {
 
     // How far ahead the scout looks. Past performances and anything beyond this are not worth pitching.
     //
-    // #2521: 120, and the thirty days over the queue's display window ([[QueueModel.leadTimeWindowDays]],
-    // 90) are the POINT rather than slack. This is the SUPPLY side of the pair #1571 wrote down: supply
-    // must exceed demand so a show is already in the store by the time it rolls into Dan's triage window.
+    // #2521: 120, and the days over the queue's display window ([[QueueModel.leadTimeWindowDays]]) are
+    // the POINT rather than slack. This is the SUPPLY side of the pair #1571 wrote down: supply must
+    // exceed demand so a show is already in the store by the time it rolls into Dan's triage window.
+    //
+    // #3423 took the display window from 90 to 63, so the margin here is now 57 days rather than 30.
+    // The fetch was deliberately NOT narrowed to follow it. It is supply, Dan's call was about how far
+    // ahead he is SHOWN a show rather than about how far ahead one is collected, and #2521's whole
+    // argument was for a wider margin than this source had. Narrowing it back toward the window is the
+    // thing that would need deciding, and `QueueWindowAndScoutHorizonTests` still holds the floor at a
+    // month so that decision cannot be made silently.
     //
     // It used to be 90, exactly the display window, so it "mirrored" it. That is the one arrangement the
     // pair must not have: a Carnegie show became fetchable and became pitchable on the same day, so
@@ -25,9 +32,9 @@ enum AlgoliaCalendar {
     // deferred, or a feed that was briefly unreadable.
     //
     // Every other source has that margin without anyone choosing it, because a whole calendar month is a
-    // coarser unit than a day: [[CalendarMonthIndex.defaultHorizon]]'s four months reach 89 to 122 days
-    // against the same 90 day window. Counted in days, the margin has to be picked, and thirty puts this
-    // source in the same family as the other two.
+    // coarser unit than a day: [[CalendarMonthIndex.defaultHorizon]]'s four months reach 89 to 122 days,
+    // which now clears the window on every date of the year. Counted in days, the margin has to be
+    // picked, and thirty put this source in the same family as the other two.
     //
     // Carnegie is why it is worth the fetch: 122 of 322 shoots in Dan's history, 38% of everything he has
     // photographed, and it is the store's only `algolia` source.
