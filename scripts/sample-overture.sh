@@ -107,7 +107,11 @@ fi
 echo "  Overture's own frames (${FRAME_COUNT} line(s)):"
 echo
 if [ "${FRAME_COUNT}" -gt "${MAX_FRAMES}" ]; then
-  printf '%s\n' "${FRAMES}" | head -n "${MAX_FRAMES}"
+  # A herestring, never `printf ... | head` (#3401). `head` closes the pipe at its Nth line, which
+  # kills the producer with SIGPIPE, and a BUILTIN producer is bash itself, so bash prints
+  # "write error: Broken pipe" and the run reads that as a fixture breaking a pipe. Whether it happens
+  # at all depends on how much was left to write, so it fails at random rather than every time.
+  head -n "${MAX_FRAMES}" <<< "${FRAMES}"
   echo
   echo "  ... showing ${MAX_FRAMES} of ${FRAME_COUNT}. The rest are in the file above."
 else
