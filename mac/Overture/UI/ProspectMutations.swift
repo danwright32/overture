@@ -31,7 +31,7 @@ enum ProspectMutations {
     static func model(forKey naturalKey: String, org: String?, in prospects: [Prospect],
                       feedback: ActionFeedback) -> Prospect? {
         guard let found = prospects.first(where: { $0.naturalKey == naturalKey }) else {
-            feedback.acknowledge(ActionAck.showNoLongerInTheQueue(org: org), tone: .warning)
+            feedback.acknowledge(ActionAck.couldNotFindShow(org: org), tone: .warning)
             return nil
         }
         return found
