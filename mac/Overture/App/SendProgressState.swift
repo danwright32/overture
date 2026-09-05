@@ -6,7 +6,7 @@ import Observation
 // Four pieces of state that change only how one card looks: the show whose email is going out, the
 // recipient whose reply is going out, the show playing its leaving delight, and the show a jump is
 // briefly marking. All four were @State on QueueView, whose body derives the entire store on its first
-// line, so a single send re-derived all 724 prospects four times over (mark, clear, depart, and clear
+// line, so a single send re-derived every prospect in the store four times over (mark, clear, depart, and clear
 // again) to animate one card, and every search pick or deep link re-derived it twice more.
 //
 // Held here, each write notifies only the views that actually read it. QueueView itself reads none of

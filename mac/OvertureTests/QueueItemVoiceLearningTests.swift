@@ -2,7 +2,7 @@ import Testing
 import Foundation
 
 // #1773: whether a row is a voice-learning candidate is a fact about that ONE show, and it is the only
-// reason the row factory ever held the whole prospect array. It answered by scanning all 724 prospects
+// reason the row factory ever held the whole prospect array. It answered by scanning every prospect in the store
 // for the one matching this card, per card, on every render pass.
 //
 // It belongs on the snapshot instead, resolved once when the queue is built, which is the rule every

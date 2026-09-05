@@ -3,7 +3,7 @@ import SwiftUI
 // #1922: the two views that READ what a send is doing, so QueueView does not.
 //
 // QueueView's body derives the entire store on its first line, so any read of the send's transient state
-// from there means a send re-derives all 724 prospects to animate one card. Both views below exist purely
+// from there means a send re-derives every prospect in the store to animate one card. Both views below exist purely
 // to move that read below the derivation: each takes the state object (never a value read at the call
 // site, which would be the same dependency by another route, #1916) and hands finished values into a
 // content closure it runs itself.

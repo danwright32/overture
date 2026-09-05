@@ -128,7 +128,7 @@ struct RootView: View {
     @State private var archiveOpeningQuery: String = ""
     // #1926: what Dan has typed into the search bar is NOT state here. It lives on QueueSearchBar, because
     // @State invalidates the view that declares it and this view builds the Queue: as state here, every
-    // keystroke re-derived all 724 prospects. See QueueSearchBar.
+    // keystroke re-derived every prospect in the store. See QueueSearchBar.
     @State private var showPatterns = false
     @State private var showFollowUps = false
     @State private var showVoiceGuidance = false

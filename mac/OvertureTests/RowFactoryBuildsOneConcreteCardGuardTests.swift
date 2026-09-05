@@ -32,7 +32,7 @@ struct RowFactoryBuildsOneConcreteCardGuardTests {
         #expect(!factory.contains("-> AnyView"))
     }
 
-    // The whole-store scan. `prospects` is the queue's @Query array, 724 rows on the live store, and
+    // The whole-store scan. `prospects` is the queue's @Query array, every row in the live store, and
     // this ran once per card per render pass to answer one question about the card's own show.
     @Test func theFactoryDoesNotSearchTheStoreForTheCardItIsBuilding() {
         #expect(!factory.contains("prospects.first(where:"))

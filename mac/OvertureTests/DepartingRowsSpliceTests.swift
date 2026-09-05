@@ -15,7 +15,7 @@ private func item(_ id: String, date: String?) -> QueueItem {
 //
 // A fully sent show leaves the queue the instant the send lands, so the card that plays the leaving
 // delight is a SNAPSHOT of a row the store no longer offers. That splice used to happen inside the
-// whole-store derivation, which is why setting and clearing it re-derived all 724 prospects twice per
+// whole-store derivation, which is why setting and clearing it re-derived every prospect twice per
 // send. It happens here instead, over groups already built, so the send animates its own card.
 //
 // The case that makes this more than a move: sending the ONLY show on a night removes that night's group

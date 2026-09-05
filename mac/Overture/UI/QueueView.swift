@@ -100,7 +100,7 @@ struct QueueView: View {
     // #436: in-flight sends, so a tapped Send shows a live "Sending…" state instead of a dead button.
     // Outbound keyed by prospect natural key; replies keyed by recipient id. Cleared when the await ends.
     // #1922: they live on SendProgressState now, an object, so a send animates its own card instead of
-    // re-deriving all 724 prospects four times over. QueueView never reads it; see that type, and
+    // re-deriving every prospect in the store four times over. QueueView never reads it; see that type, and
     // QueueInvalidationGuardTests for the assertion that this stays true.
     @State private var sendState = SendProgressState()
     // #361: shows that have just been fully sent and are playing their leaving delight (gold seal +
@@ -1441,7 +1441,7 @@ struct QueueView: View {
             // the show and never vanishes when the OTHER show changes stage. Names the clashing show(s).
             // Not in Scout (untriaged candidates are not commitments Dan is protecting yet).
             // #1772: `data.items`, not `self.items`. This runs for every CARD, so reading the computed
-            // property rebuilt the entire 724-row queue once per card on every render pass.
+            // property rebuilt the entire queue once per card on every render pass.
             let selfBookingMarker = focusedStage != .scout
                 ? QueueModel.selfBookingRowMarker(for: item, in: data.selfBooking)
                 : nil
@@ -2017,7 +2017,7 @@ enum QueueRenderCounter {
 //
 // `.scrollPosition(id:)` is a read-write binding: SwiftUI writes it every time a date heading crosses the
 // top. Bound to @State on QueueView, each of those writes invalidated a body whose first line derives the
-// entire store, so scrolling past ten dates dragged all 724 prospects through the CPU ten times. @State
+// entire store, so scrolling past ten dates dragged every prospect in the store through the CPU ten times. @State
 // belongs to the view that declares it and cannot invalidate a parent, so holding the position here means
 // a scroll re-runs `content` and nothing above it.
 //

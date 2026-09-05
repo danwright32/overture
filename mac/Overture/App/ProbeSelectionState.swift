@@ -6,7 +6,7 @@ import Observation
 // relaunch would be a spending decision made days ago and forgotten.
 //
 // #1774: an object rather than @State on QueueView. As @State, one tick invalidated the entire queue body,
-// which re-derived all 724 prospects (QueueModel.items, AgentInputs.from, three StageNavigation sweeps) to
+// which re-derived every prospect in the store (QueueModel.items, AgentInputs.from, three StageNavigation sweeps) to
 // draw a checkmark. Held here, a tick notifies only the two views that actually read it: the checkbox on
 // the date heading and the selection bar. QueueView itself never reads it, which is what makes the tick
 // free, and QueueInvalidationGuardTests pins that it stays that way.
