@@ -39,6 +39,21 @@ enum QueueRenderPass {
         // Free: an array's count reads no rows. Here so a caller that only needs the size is not pushed
         // into taking a sweep it does not need.
         var count: Int { rows.count }
+
+        // #3507: a NARROWER corpus derived from this one, rather than fetched by a second `@Query` over
+        // the same table.
+        //
+        // `QueueView` used to hold two of those, differing only in scope. Measured against the live store
+        // on 2026-09-05, a repeat of the identical descriptor cost 96% of the cold one over 1153 rows, so
+        // nothing was shared between them and the second table read was paid in full
+        // (`QueueRenderPassLiveStoreCostTests`).
+        //
+        // It goes through `all`, so the walk is COUNTED like every other. That is the point: deriving the
+        // narrower list in the view instead would have moved a whole-store walk to where the sweep
+        // counter cannot see it, which is how a pass gets cheaper on paper and not in the app.
+        func narrowed(_ transform: ([Prospect]) -> [Prospect]) -> Corpus {
+            Corpus(transform(all), tally: tally)
+        }
     }
 
     // What one pass spent. A class so the corpus values handed around a single pass all report to one
@@ -133,7 +148,10 @@ enum QueueRenderPass {
     // reach the filesystem. QueueRenderPassCostTests holds it to that.
     @MainActor
     struct Inputs {
-        var prospects: Corpus
+        // #3507: ONE corpus, the whole table. The queue's own scope (every show but the dismissed ones,
+        // date then fit) is derived from it inside `make` rather than arriving as a second `@Query`,
+        // which is what makes "the table is read once per store change" true by construction rather than
+        // by everyone remembering.
         var allProspects: Corpus
         var inquiries: [Inquiry]
         var orgAnswers: [OrgReachabilityAnswer]
@@ -165,17 +183,19 @@ enum QueueRenderPass {
 
     @MainActor
     static func make(_ i: Inputs) -> QueueView.RenderData {
-        // #1962: every show's place worked out once for this pass and shared by the three sweeps below.
-        let context = i.context.resolvingPlaces(of: i.prospects.all)
-        let geo = context.geo
-        // #2968: the whole store, INCLUDING the dismissed shows `i.prospects` drops, taken once and read
-        // twice. `QueueModel.items` already needed it as its corpus; the Follow-ups count is a second
-        // READER of that same list rather than a second reason to walk the store, and taking it again
-        // would spend one of the eight sweeps `QueueRenderPassCostTests` pins (#1913).
+        // #2968: the whole store, INCLUDING the dismissed shows the queue's own scope drops, taken once
+        // and read several times. `QueueModel.items` already needed it as its corpus; the Follow-ups
+        // count is a second READER of that same list rather than a second reason to walk the store, and
+        // taking it again would spend one of the sweeps `QueueRenderPassCostTests` pins (#1913).
         let everyProspect = i.allProspects.all
+        // #3507: the queue's own scope, derived from that corpus rather than fetched by a second @Query.
+        let inQueue = i.allProspects.narrowed(QueueModel.queueScope)
+        // #1962: every show's place worked out once for this pass and shared by the sweeps below.
+        let context = i.context.resolvingPlaces(of: inQueue.all)
+        let geo = context.geo
         // #1121/#1774: the whole-store derivation, paid ONCE here and threaded down, rather than by each
         // computed property that wants a row.
-        let items = QueueModel.items(from: i.prospects.all, answers: i.orgAnswers,
+        let items = QueueModel.items(from: inQueue.all, answers: i.orgAnswers,
                                      corpus: everyProspect, overrides: i.overrides,
                                      sources: i.sources, refusals: i.refusals,
                                      // #2524: the same window the stage rule applies, so the card's
@@ -184,24 +204,28 @@ enum QueueRenderPass {
         #if DEBUG
         QueueRenderCounter.recordDerivation(inputs: i.trace, rows: items)
         #endif
-        let reachedOut = ReachedOutQueue.activeWithDates(from: i.prospects.all, now: context.now)
+        let reachedOut = ReachedOutQueue.activeWithDates(from: inQueue.all, now: context.now)
         let reachedOutKeys = Set(reachedOut.map(\.prospect.naturalKey))
         // #1567: counted through StageNavigation, the same predicate as the pills beneath it, so the
         // masthead can no longer state a smaller backlog than the pills it sits above.
-        let inAStage = StageNavigation.queueKeys(in: i.prospects.all, reachedOutKeys: reachedOutKeys,
+        let inAStage = StageNavigation.queueKeys(in: inQueue.all, reachedOutKeys: reachedOutKeys,
                                                  context: context)
         let visible = items.filter { inAStage.contains($0.id) }
         // #1774/#1140: in stage mode membership is re-derived live (a sent draft drops out); in leads mode
         // the frozen key set stands. The dispatch lives in StageNavigation so it is tested.
         let wanted = Set(StageNavigation.focusedKeys(stage: i.focusedStage, leadKeys: i.focusedKeys ?? [],
-                                                     in: i.prospects.all, context: context))
+                                                     in: inQueue.all, context: context))
         let focusedRows = items.filter { wanted.contains($0.id) }
         return QueueView.RenderData(
             items: items, visible: visible,
+            // #3507: the scope itself, so the render path reads the list this pass already derived rather
+            // than deriving it again per row. Every caller that needs it during a render takes it from
+            // here; only a user ACTION, which happens outside a pass, derives its own.
+            queueScope: inQueue.all,
             // #3323: built once for the pass, from the WHOLE item set rather than the focused stage, so a
             // clash with a show in another stage still counts (#1246).
             selfBooking: QueueModel.selfBookingIndex(items),
-            agentInputs: AgentInputs.from(prospects: i.prospects.all,
+            agentInputs: AgentInputs.from(prospects: inQueue.all,
                                           // #2968: the Follow-ups number alone is taken over
                                           // everything, because the sheet and the toolbar badge
                                           // behind that pill query everything, and this list
@@ -217,7 +241,7 @@ enum QueueRenderPass {
             reachedOut: reachedOut,
             reachedOutKeys: reachedOutKeys,
             pendingBookings: QueueModel.pendingBookingCount(items),
-            fanOutLine: fanOutWarning(i.prospects.all),
+            fanOutLine: fanOutWarning(inQueue.all),
             focusedRows: focusedRows,
             dateGroups: QueueModel.groupByDate(focusedRows),
             inquiryRows: inquiryRows(i.inquiries, stage: i.focusedStage, now: context.now),

@@ -34,18 +34,33 @@ struct QueueRenderPassCostTests {
     // LIVE-SHAPE: untriaged
     private static let untriaged = 587
 
-    // Eight sweeps of the store, once each, and every one of them named. If this number moves, one of
+    // Ten sweeps of the store, once each, and every one of them named. If this number moves, one of
     // these lines has changed or a new one has appeared, and either is a decision rather than an accident:
     //
-    //   1. resolving each show's place for the pass (#1962)
-    //   2. building the queue's rows
-    //   3. the whole-store corpus those rows are judged against (venue brands, inherited answers)
-    //   4. the shows already reached out to
-    //   5. which shows are in a stage at all
-    //   6. which of those the focused stage renders
-    //   7. the agent strip's inputs
-    //   8. the possible-match fan-out scan
-    private static let allowedSweeps = 8
+    //   1. the whole-store corpus the rows are judged against (venue brands, inherited answers)
+    //   2. deriving the queue's own scope from it (#3507)
+    //   3. resolving each show's place for the pass (#1962)
+    //   4. building the queue's rows
+    //   5. the shows already reached out to
+    //   6. which shows are in a stage at all
+    //   7. which of those the focused stage renders
+    //   8. the agent strip's inputs
+    //   9. the possible-match fan-out scan
+    //  10. handing the scope to the render path, which walks it per row (#3507)
+    //
+    // WAS EIGHT UNTIL #3507, AND THE RISE IS THE PASS GETTING CHEAPER, which is the one reading of this
+    // number that has to be written down rather than left to be worked out. `QueueView` used to hold TWO
+    // `@Query` properties over `Prospect`, and SwiftData satisfies each independently: measured against
+    // the live store on 2026-09-05, a repeat of the identical descriptor cost 143.3 ms against a cold
+    // 148.5 ms over 1153 rows, so the whole table was read and materialised twice on every store
+    // notification (`QueueRenderPassLiveStoreCostTests`). #3507 removed the second query and derives the
+    // scope from the first instead. Lines 2 and 10 are what that costs: two in-memory walks, in place of
+    // an 85 ms database read this counter never could see, because it counts walks over rows the pass was
+    // HANDED and the fetch happens before the pass begins.
+    //
+    // So this counter is not a cost measure on its own and must not be read as one (L63). The figure that
+    // moved in the direction anybody cares about is in `QueueRenderPassLiveStoreCostTests`.
+    private static let allowedSweeps = 10
 
     private func container() throws -> ModelContainer {
         try ModelContainer(
@@ -85,7 +100,6 @@ struct QueueRenderPassCostTests {
 
     private func inputs(_ rows: [Prospect], tally: QueueRenderPass.CostTally) -> QueueRenderPass.Inputs {
         QueueRenderPass.Inputs(
-            prospects: QueueRenderPass.Corpus(rows, tally: tally),
             allProspects: QueueRenderPass.Corpus(rows, tally: tally),
             inquiries: [], orgAnswers: [],
             context: .at("2026-08-02", now: Date(timeIntervalSince1970: 1_785_000_000)),
@@ -389,7 +403,6 @@ struct QueueRenderPassWorkUnitCostTests {
 
     private func inputs(_ rows: [Prospect]) -> QueueRenderPass.Inputs {
         QueueRenderPass.Inputs(
-            prospects: QueueRenderPass.Corpus(rows),
             allProspects: QueueRenderPass.Corpus(rows),
             inquiries: [], orgAnswers: [],
             context: .at("2026-08-02", now: Date(timeIntervalSince1970: 1_785_000_000)),

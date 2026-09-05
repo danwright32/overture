@@ -108,7 +108,6 @@ struct QueueRenderPassLiveStoreCostTests {
         // 3. The whole pass, so the remainder is everything else QueueRenderPass.make does.
         let work = QueueRenderPass.WorkTally.measure {
             _ = QueueRenderPass.make(QueueRenderPass.Inputs(
-                prospects: QueueRenderPass.Corpus(prospects),
                 allProspects: QueueRenderPass.Corpus(prospects),
                 inquiries: [], orgAnswers: answers, sources: sources,
                 context: .at(QueueModel.easternToday(), now: Date()),
@@ -116,7 +115,6 @@ struct QueueRenderPassLiveStoreCostTests {
         }
         let passSeconds = seconds {
             _ = QueueRenderPass.make(QueueRenderPass.Inputs(
-                prospects: QueueRenderPass.Corpus(prospects),
                 allProspects: QueueRenderPass.Corpus(prospects),
                 inquiries: [], orgAnswers: answers, sources: sources,
                 context: .at(QueueModel.easternToday(), now: Date()),
@@ -156,5 +154,112 @@ struct QueueRenderPassLiveStoreCostTests {
         // numbers, which move with whatever else this Mac is running (L224).
         #expect(!prospects.isEmpty, "the clone held no prospects, so this timed an empty store")
         #expect(passSeconds > 0, "a whole pass took no measurable time, so it never ran")
+    }
+
+    // #3507: does the SECOND prospect query cost anything, or does SwiftData share the row cache?
+    //
+    // `QueueView` holds two `@Query` properties over `Prospect` (`QueueView.swift:26` and `:38`),
+    // differing only in scope: one drops dismissed shows and sorts, the other is the whole-store corpus
+    // the producer gate and inherited answers are judged against. The reading above times a fetch of the
+    // table ONCE and calls it `fetch and materialise`, so the claim that a store notification pays that
+    // term TWICE is arithmetic performed on one measurement rather than a measurement (L107).
+    //
+    // #3507's own direction says so and says what to do about it: "whether SwiftData actually
+    // materialises twice or shares the row cache between two descriptors over one entity is an
+    // assumption here, not a measurement", and "the first step is to time the two fetches separately and
+    // confirm the second is not nearly free. If it is nearly free, this issue closes with that recorded."
+    //
+    // THREE fetches, not two, because two cannot tell the answers apart. A cheap second fetch could mean
+    // either that this particular descriptor is cheap or that ANY repeat is cheap once the objects are
+    // resident, and those imply different fixes. So: the corpus descriptor, then the queue's own filtered
+    // and sorted one, then the corpus descriptor AGAIN.
+    //
+    // Each fetch is timed in TWO PARTS, the query and then a property touch over every row it returned,
+    // because folding them into one number cannot answer the question. A `fetch` hands back objects whose
+    // values may not have been read yet, so timing the call alone measures the query and not the
+    // materialisation; timing them together cannot say which of the two a repeat actually re-pays, and
+    // those imply different fixes. One query plus an in-memory filter removes the QUERY half and nothing
+    // of the touch half, so the split is the whole decision.
+    @Test(.enabled(if: liveStoreExists, "no live store on this machine"))
+    func measureTheSecondProspectFetchOverTheSameTable() throws {
+        guard ProcessInfo.processInfo.environment["MEASURE_QUEUE_LIVE_STORE"] != nil else {
+            print("queue-live-store-second-fetch: not measured. Set TEST_RUNNER_MEASURE_QUEUE_LIVE_STORE=1 to run it.")
+            return
+        }
+
+        let clone = try cloneLiveStore()
+        let ctx = ModelContext(try openContainer(at: clone))
+
+        // The app's own two descriptors, spelled the way `QueueView` spells them, so this measures the
+        // queries that actually run rather than a pair written beside them (L107).
+        let corpus = FetchDescriptor<Prospect>()
+        let queueScope = FetchDescriptor<Prospect>(
+            predicate: #Predicate<Prospect> { $0.statusRaw != "dismissed" },
+            sortBy: [SortDescriptor(\Prospect.performanceDate, order: .forward),
+                     SortDescriptor(\Prospect.fitScore, order: .reverse)])
+
+        struct Reading { var rows = 0; var query = 0.0; var touch = 0.0
+                         var total: Double { query + touch } }
+
+        func fetchThenTouch(_ descriptor: FetchDescriptor<Prospect>) -> Reading {
+            var r = Reading()
+            var rows: [Prospect] = []
+            r.query = seconds { rows = (try? ctx.fetch(descriptor)) ?? [] }
+            var touched = 0
+            r.touch = seconds {
+                for row in rows where row.statusRaw.isEmpty == false { touched += 1 }
+            }
+            r.rows = touched
+            return r
+        }
+
+        // #3507 asks whether the other views holding a prospect query share this cost. `RootView`'s
+        // second one is the same SHAPE (a filtered descriptor beside an unfiltered one) and is measured
+        // here rather than reasoned about from the two above, because it returns a far smaller set and
+        // whether that matters is the whole question (L107).
+        let keptToPrep = FetchDescriptor<Prospect>(predicate: PrepQueueBuilder.needsPrepPredicate)
+
+        let first = fetchThenTouch(corpus)
+        let second = fetchThenTouch(queueScope)
+        let third = fetchThenTouch(corpus)
+        let fourth = fetchThenTouch(keptToPrep)
+
+        let ms = { (s: Double) in String(format: "%.1f", s * 1000) }
+        let perRow = { (r: Reading) -> String in
+            guard r.rows > 0 else { return "n/a" }
+            return String(format: "%.3f", r.total / Double(r.rows) * 1000)
+        }
+
+        print("""
+        queue-live-store-second-fetch: two @Query descriptors over one table (#3507)
+                                     rows      query      touch      total   per row
+          1. whole corpus, cold      \(first.rows)   \(ms(first.query)) ms   \(ms(first.touch)) ms   \(ms(first.total)) ms   \(perRow(first)) ms
+          2. queue scope, filtered   \(second.rows)   \(ms(second.query)) ms   \(ms(second.touch)) ms   \(ms(second.total)) ms   \(perRow(second)) ms
+          3. whole corpus, repeated  \(third.rows)   \(ms(third.query)) ms   \(ms(third.touch)) ms   \(ms(third.total)) ms   \(perRow(third)) ms
+          4. RootView kept-to-prep    \(fourth.rows)   \(ms(fourth.query)) ms   \(ms(fourth.touch)) ms   \(ms(fourth.total)) ms   \(perRow(fourth)) ms
+
+          Reading 3 against 1 is the answer to #3507. A repeat of the IDENTICAL descriptor, over objects
+          the context already holds, is what one query plus an in-memory filter would remove. If it is
+          near the cold figure the second query is paid in full; if it is near zero the row cache is
+          shared and the change buys nothing.
+
+          Read 2 against 3 as well, so a cheap second reading cannot be credited to the wrong cause: a
+          filtered descriptor returning fewer rows is cheaper for that reason alone, and per-row is the
+          column that separates the two.
+
+          Row 4 is the sibling question. `RootView` holds the same two-query shape, so if the cost is
+          per row returned rather than per query, its second one is cheap for a reason `QueueView`'s was
+          not, and the two do not want the same fix.
+        """)
+
+        // The assertions are about the measurement being REAL, never about the numbers, which move with
+        // whatever else this Mac is running (L224). A run where a fetch returned no rows would report a
+        // reassuring near-zero for the emptiest possible reason (L98).
+        #expect(first.rows > 0, "the corpus fetch touched no rows, so nothing was materialised")
+        #expect(second.rows > 0, "the queue-scope fetch touched no rows, so its timing means nothing")
+        #expect(third.rows == first.rows, "the repeated corpus fetch saw a different table than the first")
+        #expect(second.rows < first.rows, "the queue scope returned the whole table, so its predicate did nothing")
+        #expect(first.query > 0, "the first query took no measurable time, so it never ran")
+        #expect(fourth.rows >= 0, "the kept-to-prep descriptor could not be run at all")
     }
 }

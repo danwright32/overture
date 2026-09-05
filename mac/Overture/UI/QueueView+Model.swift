@@ -973,6 +973,61 @@ struct RecipientSnapshot: Identifiable, Equatable, Sendable {
 
 enum QueueModel {
 
+    // MARK: - The queue's own scope, derived rather than fetched a second time (#3507)
+
+    // `QueueView` used to hold TWO `@Query` properties over `Prospect`, differing only in scope: one
+    // dropping dismissed shows and sorting, one the whole-store corpus the producer gate and inherited
+    // answers are judged against. SwiftData satisfies each independently, so a store notification paid
+    // the table read twice.
+    //
+    // MEASURED before this was built, because #3507's own direction said the cheap answer was possible
+    // and that a null result would close the issue: `QueueRenderPassLiveStoreCostTests`, live store,
+    // 2026-09-05, 1153 rows. A repeat of the IDENTICAL descriptor over objects the context already held
+    // cost 143.3 ms against the cold 148.5 ms, which is 96%, and the property TOUCH over every row that
+    // came back was 0.7 ms of that. So nothing is shared between two descriptors over one entity: the
+    // second query is paid in full, and what it is paid for is the query rather than the materialisation.
+    //
+    // THE ORDER COMES FROM THE SAME DESCRIPTORS THE QUERY USED, never from a comparator written beside
+    // them, because two spellings of one ordering drift with nothing reporting it (L263). `sorted(using:)`
+    // takes exactly the values `@Query(sort:)` took.
+    static let queueScopeOrder: [SortDescriptor<Prospect>] = [
+        SortDescriptor(\Prospect.performanceDate, order: .forward),
+        SortDescriptor(\Prospect.fitScore, order: .reverse),
+    ]
+
+    // Dismissed shows drop out; the rest sort date ascending, fit descending. Membership beyond that is
+    // StageNavigation's, never a second predicate here (#1567).
+    //
+    // A STABLE sort, and that is not a refinement: it is what the removed query did and Swift's own
+    // `sorted(using:)` does not. Written the obvious way this suite went red on the first corpus large
+    // enough to contain a full tie, two dateless shows on the same fit, which the query returned in store
+    // order and `sorted(using:)` returned the other way round. Neither descriptor discriminates there, so
+    // the tie is broken by whatever the sort happens to do, and an unstable answer is worse than a
+    // different one: the two tied cards can swap places between one render and the next with nothing in
+    // the data having moved (`QueueScopeMatchesTheQueryTests`).
+    //
+    // Falling back to the row's position in `all` is what reproduces it, because `all` arrives from the
+    // UNSORTED whole-store query, which is the same store order the sorted query fell back to on a tie.
+    // That correspondence is measured rather than promised: SQLite documents no order for equal sort
+    // keys, so the guard is the comparison against a real fetch in that suite rather than this sentence.
+    // The STABILITY half is guaranteed by the code and asserted separately, so it holds whatever SQLite
+    // decides to do later.
+    static func queueScope(_ all: [Prospect]) -> [Prospect] {
+        all.enumerated()
+            .filter { $0.element.statusRaw != "dismissed" }
+            .sorted { lhs, rhs in
+                for descriptor in queueScopeOrder {
+                    switch descriptor.compare(lhs.element, rhs.element) {
+                    case .orderedAscending: return true
+                    case .orderedDescending: return false
+                    case .orderedSame: continue
+                    }
+                }
+                return lhs.offset < rhs.offset
+            }
+            .map(\.element)
+    }
+
     // MARK: - Copy and filtering the queue used to do in its own body (#885)
 
     // The three-clause filter that feeds the "To send (N)" pill. It was written in the view body, so the
