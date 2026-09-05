@@ -30,6 +30,7 @@ Prospect.swift:draftNeedsSalutationReview
 Prospect.swift:draftSalutationReviewOverriddenBody
 Prospect.swift:jointOpeningOverride
 Recipient.swift:openingOverride
+Recipient.swift:overrideBody  # RETAINED STORAGE (#3549). Nothing reads or writes it: the send composes from the show's one letter now. The column stays because dropping a stored property is this app's first subtractive migration (see AppSchema), which gets its own rehearsed change.
 Recipient.swift:resumeClosingNote
 Recipient.swift:standDownClosingNote
 ReconcileSummary.swift:deepLinkKey

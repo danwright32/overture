@@ -73,18 +73,36 @@ struct OneLetterPerShowTests {
         // CODE only, through the shared tokenizer, so a comment recording that this was retired is not
         // itself reported as the thing being retired. A guard that cannot tell a line USING a construct
         // from a line ABOUT it forces its own documentation out of the tree (L103).
+        // The one line that may name it is its own RETAINED declaration on the persisted model. The
+        // column stays because dropping a stored property would be this app's first subtractive
+        // migration against Dan's live store, which the schema convention says gets its own rehearsed
+        // change (see AppSchema, and Prospect's retained columns). What must not come back is any READ
+        // or WRITE of it, which is the whole defect: the value landing somewhere nothing consults.
         var found: [String] = []
+        var retainedDeclaration: String?
         for file in files {
             for (line, code) in SwiftSource.scannableLines(in: file.text)
             where code.contains("overrideBody") {
-                found.append("\(file.name):\(line)  \(code.trimmingCharacters(in: .whitespaces))")
+                let trimmed = code.trimmingCharacters(in: .whitespaces)
+                if file.name == "Recipient.swift", trimmed.hasPrefix("var overrideBody") {
+                    retainedDeclaration = "\(file.name):\(line)"
+                    continue
+                }
+                found.append("\(file.name):\(line)  \(trimmed)")
             }
         }
         #expect(found.isEmpty, """
-            A per contact copy of the outgoing letter is back. A show has one letter (#3549), and a \
-            second copy beside it is the defect this retired: the card edits one and the send composes \
-            from the other, so an edit reports as applied and reaches nobody.
+            A per contact copy of the outgoing letter is read or written again. A show has one letter \
+            (#3549), and a second copy beside it is the defect this retired: the card edits one and the \
+            send composes from the other, so an edit reports as applied and reaches nobody.
             \(found.joined(separator: "\n"))
+            """)
+        // Asserted rather than assumed: its ABSENCE would mean somebody dropped the column, which is
+        // the risky half of this and must not happen as a side effect of a behaviour change (L5).
+        #expect(retainedDeclaration != nil, """
+            Recipient.overrideBody's retained declaration is gone. Dropping a stored property is this \
+            app's first subtractive migration against a live store whose only net is the launch backup, \
+            so it gets its own change with a rehearsal against a store clone, never a quiet deletion.
             """)
     }
 

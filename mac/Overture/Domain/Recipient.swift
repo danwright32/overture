@@ -106,6 +106,21 @@ final class Recipient {
     // than shown as a false citation. Distinct from contactFormURL, which stays the form_or_dm
     // contact's own submission link.
     var contactSourceURL: String?
+
+    // RETAINED STORAGE, read and written by nothing (#3549). This held a directly addressed performer's
+    // own second copy of the pitch, which the send preferred over the show's body while the card edited
+    // the show's body, so an edit was reported as applied and reached nobody. `effectiveBody` no longer
+    // consults it, `PrepImporter` no longer writes it, and the runbook no longer asks for it.
+    //
+    // Left on the model deliberately rather than deleted, by the same convention as Prospect's own
+    // retained columns: every schema change this app has made was ADDITIVE and it carries no
+    // MigrationPlan or VersionedSchema (see AppSchema), so dropping a stored property would be its first
+    // subtractive migration against a live store whose only net is the launch backup. That gets its own
+    // change with a rehearsal against a store clone first, not a line in a behaviour fix.
+    //
+    // Measured 2026-09-05: 9 rows carried a value, 5 already sent. The one time migration that empties
+    // them is separate from this code change, so the column is left holding whatever it holds.
+    var overrideBody: String? = nil
     // #789: the EXACT text Dan explicitly confirmed is fine to send despite a blocking lint finding.
     // A copy of the text rather than a bare boolean, so a later edit to DIFFERENT text silently
     // invalidates the override with no migration bookkeeping (isLintOverridden below); the same
