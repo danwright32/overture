@@ -828,12 +828,20 @@ enum ReachabilityProbeCopy {
     //
     // A date it cannot read leaves the sentence EXACTLY as it has always been, so this can never turn a
     // working marker into a broken one (L138: an absent value must not render as an empty one).
-    static func dateCheckedMarker(checkedOn date: Date? = nil) -> String {
-        let base = "Reachability checked"
+    // The SENTENCE is kept as its own constant and the date composed onto it, rather than built inside
+    // the function from a local. Both generated documents read the source, so a literal that only exists
+    // inside a function disappears from them: regenerated with it inline, `docs/copy-inventory.md` listed
+    // the template "\(base) \(day)", which tells a reader nothing, and `docs/copy-surfaces.md` lost the
+    // line saying QueueView renders this sentence at all. The cold read those two exist for is the only
+    // thing that catches a placement or wording defect (#843, #915, #2210), so a change that hides a
+    // sentence from them is worse than the wording change it was making.
+    static let dateCheckedMarker = "Reachability checked"
+
+    static func dateCheckedMarker(checkedOn date: Date?) -> String {
         guard let date, let day = EasternDate.dayLabel(EasternDate.dayString(from: date)) else {
-            return base
+            return dateCheckedMarker
         }
-        return "\(base) \(day)"
+        return "\(dateCheckedMarker) \(day)"
     }
     // #2268's "Check again" link on the heading, and its help, are GONE with #2371: the tick box beside
     // the date now stays on a finished date and carries that job, so the words that duplicated it have no
