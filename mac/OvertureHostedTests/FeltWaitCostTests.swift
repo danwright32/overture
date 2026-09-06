@@ -204,21 +204,77 @@ struct FeltWaitCostTests {
         #expect(gone == .dismissed, "the mutation did not land, so no rebuild was provoked")
 
         // HOW MANY whole-store passes one press provokes, which is the finding this suite turned up and
-        // the reason it counts cards rather than only timing. Measured 2026-09-05 at the live shape: a
-        // press built 2,280 cards over a corpus of 1,142, which is TWO passes, so half the wait Dan feels
-        // after a press is a duplicate of the other half.
+        // the reason it counts cards rather than only timing.
         //
-        // Pinned HERE, on the cheap forty row corpus, rather than in the opt-in measurement, because a
-        // number nobody runs is a number nobody notices moving. Named as passes rather than cards so the
-        // assertion says what it means (L63).
+        // It was TWO when #2727 first measured it: a press built 2,280 cards over a corpus of 1,142, and
+        // half the wait Dan felt after every press was a duplicate of the other half. #2598 found the
+        // second one and removed it. `QueueView.missedByACheckKeys` was a computed property reading
+        // `items`, which derives the whole store, and the masthead read it while ALREADY HOLDING those
+        // rows as a parameter, for a count of how many shows a check had missed.
+        //
+        // Nothing reported that, and nothing could: the sweep counter lives INSIDE the pass and this
+        // derivation was outside it, so the guard that exists to catch exactly this shape was blind to it
+        // (L63). This assertion is what is not blind to it, which is why it is pinned HERE, on the cheap
+        // forty row corpus that rides along on every push, rather than in the opt-in measurement: a
+        // number nobody runs is a number nobody notices moving.
+        //
+        // Named as PASSES rather than cards so the assertion says what it means, and bounded on BOTH
+        // sides: below one would mean the list stopped rebuilding at all, above one that a second
+        // derivation has come back.
         let passes = Double(cardsAfterThePress) / Double(38)
         #expect(cardsAfterThePress > 0, "the press built no cards, so no pass was counted")
-        #expect(passes >= 1.8 && passes <= 2.2, Comment(rawValue:
+        #expect(passes >= 0.9 && passes <= 1.1, Comment(rawValue:
                 "one press provoked \(String(format: "%.1f", passes)) whole-store passes "
-                + "(\(cardsAfterThePress) cards over 38 rows in scope). Two is what this has been since "
-                + "#2727 measured it; ONE would mean the duplicate is gone, which is a real improvement "
-                + "and wants recording rather than a quietly passing test; more than two is a regression "
-                + "in the wait Dan feels after every press."))
+                + "(\(cardsAfterThePress) cards over 38 rows in scope). ONE is what a press is supposed "
+                + "to cost. TWO is what it cost before #2598, and the way back is a computed property "
+                + "that derives the store being read from the render path while the pass already holds "
+                + "the rows. Less than one means the list stopped rebuilding at all, which would make "
+                + "every timing in this suite a timeout rather than a cost."))
+    }
+
+    // THE CLASS, not the instance. #2598 found ONE render-path derivation and removed it; what stops the
+    // next one is this, because it is about presses rather than about `missedByACheckKeys`.
+    //
+    // A bare field write is deliberately not a queue mutation at all: it goes through no app control, so
+    // nothing here can be satisfied by whatever `dismissAll` happens to do. Any whole-store derivation
+    // read from the render path shows up as a second pass however it is spelled and whoever adds it,
+    // which is the property `QueueRenderPass.Corpus` has inside the pass and could not have outside it
+    // (L63, L247).
+    @Test func anyWriteAtAllCostsExactlyOnePass() async throws {
+        let c = try container()
+        let ctx = ModelContext(c)
+        let keys = seed(ctx, rows: 40)
+        let (window, hosting) = host(queueView(c))
+        defer { window.close() }
+
+        var cardsAfterTheWrite = 0
+        var warmed = false
+        _ = QueueRenderPass.WorkTally.measure {
+            warmed = warmTheList(ctx, keys: keys, rows: 40, in: hosting)
+            let settled = QueueRenderPass.WorkTally.current?.queueItems ?? 0
+
+            let rows = (try? ctx.fetch(FetchDescriptor<Prospect>())) ?? []
+            rows.first { $0.naturalKey == keys[0] }?.fitScore = 9
+            try? ctx.save()
+
+            _ = pumpUntilCardsBuilt(39, from: settled, in: hosting, seconds: 20)
+            let settle = Date().addingTimeInterval(1)
+            while Date() < settle {
+                hosting.layoutSubtreeIfNeeded()
+                hosting.displayIfNeeded()
+                RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.01))
+            }
+            cardsAfterTheWrite = (QueueRenderPass.WorkTally.current?.queueItems ?? 0) - settled
+        }
+
+        #expect(warmed, "the list never drew, so there was nothing to write against")
+        // 39 rows in scope: the warm-up dismissed one of the forty and this write dismisses none.
+        let passes = Double(cardsAfterTheWrite) / Double(39)
+        #expect(cardsAfterTheWrite > 0, "the write provoked no rebuild at all")
+        #expect(passes >= 0.9 && passes <= 1.1, Comment(rawValue:
+                "one field write provoked \(String(format: "%.1f", passes)) whole-store passes "
+                + "(\(cardsAfterTheWrite) cards over 39 rows in scope). Any write is one pass; more than "
+                + "one means something on the render path derives the store a second time (#2598)."))
     }
 
     @Test func measureWhatAPressCosts() throws {
@@ -275,10 +331,10 @@ struct FeltWaitCostTests {
 
           cards built after the press       \(cardsInTheRebuild), which is \(String(format: "%.1f", Double(cardsInTheRebuild) / Double(Self.corpusSize - 2))) whole-store passes
 
-          READ THAT SECOND LINE FIRST. One press provokes TWO passes, not one, so roughly half of the
-          wait above is a duplicate of the other half. Two whole-store passes and one are the same number
-          of milliseconds to anybody reading only the clock, which is why the count is printed beside it
-          (L98). `aPressReallyRebuildsTheQueue` pins it so it cannot move unnoticed.
+          READ THAT SECOND LINE BESIDE THE TIMING. It was 2.0 when this suite was written, and #2598
+          removed the duplicate. Two whole-store passes and one slow one are the same number of
+          milliseconds to anybody reading only the clock, which is why the count is printed here (L98).
+          `aPressReallyRebuildsTheQueue` pins it so it cannot move unnoticed.
 
           Read this against QueueRebuildCostTests, which times step 2's REBUILD alone. The difference is
           what #2727 exists to name: the wait Dan feels is wider than the derivation inside it.
@@ -295,4 +351,5 @@ struct FeltWaitCostTests {
         #expect(writeSeconds > 0, "the write took no measurable time, so it never ran")
         #expect(afterSeconds > 0, "nothing happened after the write, so there was no wait to measure")
     }
+
 }
