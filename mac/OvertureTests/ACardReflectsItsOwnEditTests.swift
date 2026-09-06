@@ -124,21 +124,46 @@ struct ACardReflectsItsOwnEditWiringTests {
 
     // THE ORDER IS THE FIX, not either half of it: marking after the write would put the line's
     // disappearance behind the rebuild it exists to hide.
-    @Test("both ways of striking an address mark it BEFORE the write")
-    func bothStrikePathsMarkBeforeTheWrite() throws {
-        let body = try #require(SourceGuardHelper.bodyOfFunction(named: "row", in: factory))
-
-        for path in ["onRemoveRecipient", "onRemoveContactAddress"] {
-            let handler = try #require(SourceGuardHelper.propertyBody("\(path): { ", in: body),
-                                       Comment(rawValue: "\(path) is gone from the row factory"))
-            let marked = try #require(handler.range(of: "markAddressStruck("),
-                                      Comment(rawValue: "\(path) does not mark the address struck, so "
-                                              + "the line stays on the card until the rebuild lands (#2598)"))
-            let written = try #require(handler.range(of: "ProspectMutations."))
-            #expect(marked.lowerBound < written.lowerBound,
-                    Comment(rawValue: "\(path) marks the strike AFTER its write, so the screen still "
-                            + "waits for the rebuild (#2417's order, one control over)"))
+    //
+    // Each handler is named with a LITERAL marker rather than an interpolated one, and that is
+    // `SourceGuardMarkerIntegrityTests`'s requirement rather than a style choice: it checks every
+    // `propertyBody` marker in the suite against the source that guard reads, and a marker assembled at
+    // run time matches nothing it can see, so the check meant to catch a marker that has stopped matching
+    // would itself stop working (#2192, L1).
+    private func markedBeforeTheWrite(_ handler: String, named name: String,
+                                      sourceLocation: SourceLocation = #_sourceLocation) {
+        guard let marked = handler.range(of: "markAddressStruck("),
+              let written = handler.range(of: "ProspectMutations.") else {
+            Issue.record(Comment(rawValue: "\(name) no longer both marks the address struck and writes. "
+                                 + "Without the mark the line stays on the card until the rebuild lands "
+                                 + "(#2598); without the write nothing happens at all."),
+                         sourceLocation: sourceLocation)
+            return
         }
+        #expect(marked.lowerBound < written.lowerBound,
+                Comment(rawValue: "\(name) marks the strike AFTER its write, so the screen still waits "
+                        + "for the rebuild (#2417's order, one control over)"),
+                sourceLocation: sourceLocation)
+    }
+
+    @Test("striking a researched contact marks it BEFORE the write")
+    func removingARecipientMarksBeforeTheWrite() throws {
+        let body = try #require(SourceGuardHelper.bodyOfFunction(named: "row", in: factory))
+        let handler = try #require(SourceGuardHelper.propertyBody("onRemoveRecipient: {", in: body))
+        markedBeforeTheWrite(handler, named: "onRemoveRecipient")
+    }
+
+    @Test("striking any address on the card marks it BEFORE the write")
+    func removingAContactAddressMarksBeforeTheWrite() throws {
+        let body = try #require(SourceGuardHelper.bodyOfFunction(named: "row", in: factory))
+        let handler = try #require(SourceGuardHelper.propertyBody("onRemoveContactAddress: {", in: body))
+        markedBeforeTheWrite(handler, named: "onRemoveContactAddress")
+        // The mark sits AHEAD of the branch, so a researched contact and an inherited one cannot answer
+        // differently about what the screen does (L16).
+        let marked = try #require(handler.range(of: "markAddressStruck("))
+        let branched = try #require(handler.range(of: "if let rid = address.recipientId"))
+        #expect(marked.lowerBound < branched.lowerBound,
+                "the mark is inside one arm of the branch, so one kind of address strikes and the other does not")
     }
 
     // ONE mechanism rather than an optimistic path per control, which is what the issue asks for by name:
