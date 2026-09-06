@@ -1547,7 +1547,7 @@ struct QueueView: View {
                 // #1922: the send's own state is read INSIDE QueueSendAwareRow, not here. Read at this
                 // call site it would be read during QueueView's body, and every "Sending…" would re-derive
                 // the whole store; read there, a send redraws the cards on screen and nothing else.
-                QueueSendAwareRow(key: item.id, sendState: sendState) { highlightedKey, sendingSince, replySince in
+                QueueSendAwareRow(key: item.id, sendState: sendState) { highlightedKey, sendingSince, replySince, isAddressStruck in
                     ProspectRowFactory.row(item, today: today, prospects: data.queueScope, context: context, feedback: feedback,
                                           dayOffOffer: dayOffOffer,
                                           gmailConnected: data.gmailConnected,
@@ -1560,6 +1560,20 @@ struct QueueView: View {
                                           checkRunSince: data.checkRunSince,
                                           checkLookups: data.checkLookups,
                                           undoStack: undoStack,
+                                          // #2598: the card reflects a struck address on the PRESS.
+                                          // `isAddressStruck` is read inside the address's own row, so
+                                          // striking one redraws that address; `markAddressStruck` is
+                                          // called by the factory BEFORE its write, for #2417's reason
+                                          // exactly: SendProgressState's writes notify only the views
+                                          // that read it, so the cheap visible thing costs one line
+                                          // while the mutation behind it rebuilds every card.
+                                          isAddressStruck: isAddressStruck,
+                                          markAddressStruck: { email in
+                                              withAnimation(.easeOut(duration: 0.15)) {
+                                                  sendState.strike(SendProgressState.strikeKey(
+                                                      show: item.id, email: email))
+                                              }
+                                          },
                                           highlightedKey: highlightedKey, outboundSendSince: sendingSince,
                                           replySendSince: replySince,
                                           onSend: { requestSend(item) }, onSendReply: { rid in sendReply(item, rid) },

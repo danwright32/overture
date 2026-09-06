@@ -31,6 +31,14 @@ enum ProspectRowFactory {
                     // #1414: optional so a surface that does not offer undo (and any future caller)
                     // simply passes nothing rather than every call site growing a parameter it ignores.
                     undoStack: QueueUndoStack? = nil,
+                    // #2598: whether an address has just been struck, and how to say one has been.
+                    //
+                    // BOTH defaulted, so a surface with no transient state (Archive, the previews) draws
+                    // exactly what the store says and marks nothing. The defaults are the SAFE
+                    // directions: one can only ever show what is really there, and the other does
+                    // nothing at all.
+                    isAddressStruck: @escaping (String) -> Bool = { _ in false },
+                    markAddressStruck: @escaping (String) -> Void = { _ in },
                     highlightedKey: String?, highlightedRecipientId: String? = nil, outboundSendSince: Date?,
                     replySendSince: @escaping (String) -> Date?,
                     onSend: @escaping () -> Void, onSendReply: @escaping (String) -> Void,
@@ -112,6 +120,11 @@ enum ProspectRowFactory {
             },
             onRemoveRecipient: { rid in
                 let name = item.contacts.first(where: { $0.id == rid })?.displayName
+                // #2598: marked BEFORE the write, so the line goes on the press rather than when the
+                // rebuild lands. The order is the fix, not either half of it (#2417).
+                if let email = item.contacts.first(where: { $0.id == rid })?.email {
+                    markAddressStruck(email)
+                }
                 ProspectMutations.removeRecipientManually(item, rid, name,
                                                           prospects: prospects, context: context, feedback: feedback)
             },
@@ -119,6 +132,10 @@ enum ProspectRowFactory {
             // path the draft-review panel's Remove uses, so the two are one implementation; an inherited
             // one has no row here and is refused for the ORGANISATION instead (Dan's call, 2026-08-09).
             onRemoveContactAddress: { address in
+                // #2598: ONE mark for BOTH ways of striking an address, ahead of the branch, so a
+                // researched contact and an inherited one cannot answer differently about what the
+                // screen does (L16).
+                markAddressStruck(address.email)
                 if let rid = address.recipientId {
                     let name = item.contacts.first(where: { $0.id == rid })?.displayName
                     ProspectMutations.removeRecipientManually(item, rid, name,
@@ -130,6 +147,9 @@ enum ProspectRowFactory {
                                                              feedback: feedback)
                 }
             },
+            // #2598: handed down so the address's own row answers it, which is what makes striking one
+            // address redraw that address rather than the card.
+            isAddressStruck: isAddressStruck,
             onDismissContactReply: { rid in ProspectMutations.dismissContactReply(item, rid, prospects: prospects, context: context, feedback: feedback) },
             onDismissContactBounce: { rid in ProspectMutations.dismissContactBounce(item, rid, prospects: prospects, context: context, feedback: feedback) },
             onDismissVenueMatch: { rid in ProspectMutations.dismissVenueMatch(item, rid, prospects: prospects, context: context, feedback: feedback) },
