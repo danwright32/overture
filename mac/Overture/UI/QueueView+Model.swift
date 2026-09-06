@@ -710,7 +710,27 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     // the old lead-level mirror fields. Mirrors PrepImporter's own selection rule exactly: act or
     // performer preferred (mutually exclusive per performance, #587), else the first contact.
     var primaryContact: RecipientSnapshot? {
-        contacts.first(where: { $0.provenance == .act || $0.provenance == .performer }) ?? contacts.first
+        // #3284: somebody the draft is actually GOING to, before anything about role.
+        //
+        // Contacts reach the snapshot sorted by `sendOrderRank` with the id as the tie-break, and on a
+        // self-produced show every performer shares rank 0, so the id alone decides. `Recipient.makeId`
+        // mints the address when there is one and the literal `"form:" + url` otherwise, and "form:"
+        // precedes any address from g to z, so a contact with no way of receiving the email
+        // systematically took this slot. Measured on the live store 2026-08-30: four performer contacts,
+        // three ids beginning `form:` and one address beginning `s`, and the card named a form.
+        //
+        // `nextRecipientIds` is `sendGroups.pending.map(\.id)`, which IS the set the send is built from,
+        // so the line above the draft and the send cannot disagree about who is being written to (L16).
+        let beingWrittenTo = Set(nextRecipientIds)
+        let receiving = contacts.filter { beingWrittenTo.contains($0.id) }
+        if let byRole = receiving.first(where: { $0.provenance == .act || $0.provenance == .performer }) {
+            return byRole
+        }
+        if let anyReceiving = receiving.first { return anyReceiving }
+        // Nobody can receive it, which is an ordinary state rather than a failure: a show whose only
+        // routes are a form or a profile has no addressee, and going blank would be worse than the old
+        // answer, because the card still has to say who the show is about (L98).
+        return contacts.first(where: { $0.provenance == .act || $0.provenance == .performer }) ?? contacts.first
     }
 
     // #846: "Drafted by opus", or nothing at all when this draft carries no trace. Decided here rather
