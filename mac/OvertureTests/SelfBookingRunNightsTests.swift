@@ -23,7 +23,7 @@ struct SelfBookingRunNightsTests {
     @Test func aLaterNightOfARunCollidesWithACommitment() {
         let target = show("run", ["2026-10-28", "2026-10-29"])
         let other = show("committed", ["2026-10-29"], commitment: true, name: "Orchestra A")
-        let clashes = SelfBookingConflict.conflicts(for: target, among: [other, target])
+        let clashes = BothSelfBookingReadings.conflicts(for: target, among: [other, target])
         #expect(clashes.map(\.other.name) == ["Orchestra A"])
     }
 
@@ -33,7 +33,7 @@ struct SelfBookingRunNightsTests {
     @Test func theOverlapNamesTheNightItWasFoundOn() {
         let target = show("run", ["2026-10-28", "2026-10-29"])
         let other = show("committed", ["2026-10-29"], commitment: true)
-        #expect(SelfBookingConflict.conflicts(for: target, among: [other, target]).map(\.night)
+        #expect(BothSelfBookingReadings.conflicts(for: target, among: [other, target]).map(\.night)
                 == ["2026-10-29"])
     }
 
@@ -42,7 +42,7 @@ struct SelfBookingRunNightsTests {
     @Test func aCommittedRunCollidesOnItsOwnLaterNight() {
         let target = show("candidate", ["2026-10-29"])
         let other = show("committed-run", ["2026-10-27", "2026-10-29"], commitment: true, name: "Choir B")
-        let clashes = SelfBookingConflict.conflicts(for: target, among: [other, target])
+        let clashes = BothSelfBookingReadings.conflicts(for: target, among: [other, target])
         #expect(clashes.map(\.other.name) == ["Choir B"])
         #expect(clashes.map(\.night) == ["2026-10-29"])
     }
@@ -54,8 +54,8 @@ struct SelfBookingRunNightsTests {
     @Test func aShowWithNoNightsNeverCollides() {
         let target = show("nightless", [])
         let other = show("committed", ["2026-10-29"], commitment: true)
-        #expect(SelfBookingConflict.conflicts(for: target, among: [other, target]).isEmpty)
-        #expect(SelfBookingConflict.conflicts(for: other, among: [other, target]).isEmpty)
+        #expect(BothSelfBookingReadings.conflicts(for: target, among: [other, target]).isEmpty)
+        #expect(BothSelfBookingReadings.conflicts(for: other, among: [other, target]).isEmpty)
     }
 
     // Nights are compared as a SET: a run holding the same night twice (15 rows in the live store do,
@@ -63,7 +63,7 @@ struct SelfBookingRunNightsTests {
     @Test func aRepeatedNightRaisesOneOverlapNotTwo() {
         let target = show("run", ["2026-10-29", "2026-10-29"])
         let other = show("committed", ["2026-10-29"], commitment: true)
-        #expect(SelfBookingConflict.conflicts(for: target, among: [other, target]).count == 1)
+        #expect(BothSelfBookingReadings.conflicts(for: target, among: [other, target]).count == 1)
     }
 
     // A pair sharing SEVERAL nights reports each of them, earliest first, so the copy can name the first
@@ -71,7 +71,7 @@ struct SelfBookingRunNightsTests {
     @Test func severalSharedNightsComeBackEarliestFirst() {
         let target = show("run", ["2026-10-29", "2026-10-27", "2026-10-28"])
         let other = show("committed", ["2026-10-28", "2026-10-29"], commitment: true)
-        #expect(SelfBookingConflict.conflicts(for: target, among: [other, target]).map(\.night)
+        #expect(BothSelfBookingReadings.conflicts(for: target, among: [other, target]).map(\.night)
                 == ["2026-10-28", "2026-10-29"])
     }
 
@@ -83,9 +83,9 @@ struct SelfBookingRunNightsTests {
                           times: ["2026-10-27": ["19:30"], "2026-10-31": ["14:00"]])
         let other = show("committed", ["2026-10-27", "2026-10-31"], commitment: true, name: "Orchestra A",
                          times: ["2026-10-27": ["19:45"], "2026-10-31": ["22:00"]])
-        let clashes = SelfBookingConflict.conflicts(for: target, among: [other, target])
+        let clashes = BothSelfBookingReadings.conflicts(for: target, among: [other, target])
         #expect(clashes.map(\.night) == ["2026-10-27"])
-        let workable = SelfBookingConflict.workable(for: target, among: [other, target])
+        let workable = BothSelfBookingReadings.workable(for: target, among: [other, target])
         #expect(workable.map(\.night) == ["2026-10-31"])
     }
 
@@ -95,7 +95,7 @@ struct SelfBookingRunNightsTests {
         let target = show("run", ["2026-10-27", "2026-10-31"], times: ["2026-10-27": ["19:30"]])
         let other = show("committed", ["2026-10-31"], commitment: true,
                          times: ["2026-10-27": ["09:00"]])
-        #expect(SelfBookingConflict.conflicts(for: target, among: [other, target]).map(\.night)
+        #expect(BothSelfBookingReadings.conflicts(for: target, among: [other, target]).map(\.night)
                 == ["2026-10-31"])
     }
 
@@ -107,7 +107,7 @@ struct SelfBookingRunNightsTests {
         let target = show("a", ["2026-10-28", "2026-10-29"], engagement: "The Winter Songbook")
         let other = show("b", ["2026-10-28", "2026-10-29"], commitment: true,
                          engagement: "the winter songbook.")
-        #expect(SelfBookingConflict.conflicts(for: target, among: [other, target]).isEmpty)
+        #expect(BothSelfBookingReadings.conflicts(for: target, among: [other, target]).isEmpty)
     }
 
     // Two genuinely different shows on one night are still a clash: the normalisation must not fold names
@@ -116,14 +116,14 @@ struct SelfBookingRunNightsTests {
         let target = show("a", ["2026-10-29"], engagement: "The Winter Songbook")
         let other = show("b", ["2026-10-29"], commitment: true, engagement: "Autumn Variations",
                          name: "Autumn Variations")
-        #expect(SelfBookingConflict.conflicts(for: target, among: [other, target]).map(\.other.name)
+        #expect(BothSelfBookingReadings.conflicts(for: target, among: [other, target]).map(\.other.name)
                 == ["Autumn Variations"])
     }
 
     // A show never clashes with itself however many nights it plays.
     @Test func aRunDoesNotClashWithItself() {
         let target = show("a", ["2026-10-28", "2026-10-29"], commitment: true)
-        #expect(SelfBookingConflict.conflicts(for: target, among: [target]).isEmpty)
+        #expect(BothSelfBookingReadings.conflicts(for: target, among: [target]).isEmpty)
     }
 
     // The queue-wide note asks the same question of the whole group: it may say "on this date" only when
@@ -147,9 +147,9 @@ struct SelfBookingRunNightsTests {
         let all = [other, target]
         let index = SelfBookingConflict.NightIndex(all)
         #expect(SelfBookingConflict.conflicts(for: target, in: index)
-                == SelfBookingConflict.conflicts(for: target, among: all))
+                == BothSelfBookingReadings.conflicts(for: target, among: all))
         #expect(SelfBookingConflict.workable(for: target, in: index)
-                == SelfBookingConflict.workable(for: target, among: all))
+                == BothSelfBookingReadings.workable(for: target, among: all))
     }
 
     // #3323 section 1.5: the index is the SOLE comparison input, which is what lets a render pass build it
