@@ -880,6 +880,34 @@ already drifting from the Swift version it mirrored.
   refusal and all three outcomes through named seams, so nothing in the suite posts a real event or
   needs an app on screen.
 
+- **Asking whether the app itself froze: it records that now, and says so (#3435 Phase 2e, #3442).**
+  `MainThreadWatchdog` posts a sequenced ping to the main queue every 250 ms from its own Dispatch queue
+  and records how late it runs. The record is written by the WATCHDOG and never by the main thread, or it
+  could not be written during the freeze it records, and it lands in `freeze-log.ndjson` beside the store
+  (catalogued in `docs/contracts.md`). `RootView` reads it at launch and says once, in the app's own
+  voice, what the last session found.
+  Four things about it are load bearing before changing it. The SURFACE is a closed enum with no
+  associated values, so a case that could carry a show's name is impossible to write rather than
+  forbidden: the natural spelling of "the surface on screen" is the sheet plus the row that raised it,
+  which carries a `groupName`, and it would land in a durable file no repository scanner inspects (L230,
+  L222). The main thread STAMPS it and the watchdog only READS it, because asking the main actor at write
+  time makes the field unavailable at exactly the moment a record is being written (L345). The retention
+  keeps a per-session HIGH WATER entry that is never evicted, because the single reading this exists to
+  support is the worst stall of a session and a count cap discards precisely that: an evening of small
+  stalls flushes the one long entry out and the eviction count cannot say the largest was among them
+  (L191, L63). And a session with NO WATCHDOG says something different from a session with no freezes,
+  because an empty file is both (L98, L11).
+  It is on a Dispatch queue and never the cooperative pool: it blocks by design, waiting on the main
+  thread, and Swift's pool is bounded and does not grow (L241).
+  What it costs is MEASURED on every run rather than written down here, for this document's own standing
+  reason (#2532, L32): `WatchdogCostTests` prints a `watchdog-cost:` line giving the per-ping share of one
+  interval, and `anIdleAppPostsNoMoreThanOnePingPerInterval` bounds how many pings there can be. Read
+  those rather than any number in prose.
+  #3442's half is the load: each record carries a class (baseline, elevated, unmeasured) AND the one
+  minute load average as a number, so a later reader can re-judge the line without the classification
+  being the only thing kept (L316). It cannot say WHAT was busy; `scripts/freeze-measure.sh` reads the
+  process table and remains what says that.
+
 - **Judging whether a script succeeded: capture its status directly, never through a pipe.**
   `some-script.sh | tail -5` reports `tail`'s exit status, not the script's, so a script that died
   instantly on an unbound variable and printed nothing at all reads as a clean pass. That happened
