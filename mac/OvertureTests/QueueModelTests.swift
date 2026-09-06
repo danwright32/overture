@@ -194,6 +194,54 @@ struct QueueItemPrimaryContactTests {
         q.contacts = [recipient("presenter", provenance: .presenter), recipient("manual", provenance: .manual)]
         #expect(q.primaryContact?.id == "presenter")
     }
+
+    // #3284. The four tests above all leave the send list empty, so they exercise the fallback and are
+    // unchanged by this. What follows is the case they cannot reach: a show where somebody IS being
+    // written to.
+    //
+    // Measured on the live store 2026-08-30. All four contacts on the show carried provenance
+    // `performer`, so every one shared `sendOrderRank` 0 and the id tie-break alone decided the order.
+    // Three ids began `form:` (the shape `Recipient.makeId` mints when there is no address) and one was
+    // an address beginning `s`, so the three contacts that CANNOT receive an email sorted ahead of the
+    // one that can, purely because "form:" precedes "s" alphabetically. The card then named one of them
+    // above a draft going to somebody else.
+    private func formOnly(_ id: String) -> RecipientSnapshot {
+        RecipientSnapshot(id: "form:\(id)", name: id, email: nil, role: nil,
+                          provenance: .performer, sendState: .pending, replied: false,
+                          lastReplyText: nil, resolution: nil, bounced: false, outcomeSource: nil)
+    }
+
+    @Test func namesSomebodyTheDraftIsActuallyGoingTo() {
+        var q = item()
+        q.contacts = [formOnly("a"), formOnly("b"), formOnly("c"),
+                      recipient("someone@example.com", provenance: .performer)]
+        // The set the SEND is built from, so the line above the draft and the send cannot disagree
+        // about who is being written to (L16).
+        q.nextRecipientIds = ["someone@example.com"]
+        #expect(q.primaryContact?.id == "someone@example.com",
+                Comment(rawValue: "the card named a contact that cannot receive the draft, so its "
+                    + "account of who it is writing to is wrong while the send is right"))
+    }
+
+    // Role still decides, but only among the people who can actually receive it. Without this the fix
+    // would trade one wrong answer for another, naming whoever happens to be first in the send list.
+    @Test func prefersTheActAmongTheContactsBeingWrittenTo() {
+        var q = item()
+        q.contacts = [recipient("presenter@example.com", provenance: .presenter),
+                      recipient("act@example.com", provenance: .act)]
+        q.nextRecipientIds = ["presenter@example.com", "act@example.com"]
+        #expect(q.primaryContact?.id == "act@example.com")
+    }
+
+    // A show whose only routes are forms has nobody to name by this rule, and going blank would be
+    // worse than the old answer: the card still has to say who the show is about. So the fallback is
+    // the rule the four tests above pin, unchanged (L98: nothing to choose from is its own case).
+    @Test func aShowNobodyCanBeEmailedOnStillNamesItsContact() {
+        var q = item()
+        q.contacts = [formOnly("a"), formOnly("b")]
+        q.nextRecipientIds = []
+        #expect(q.primaryContact?.id == "form:a")
+    }
 }
 
 @Suite("Queue label helpers")
