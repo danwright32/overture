@@ -2401,6 +2401,36 @@ enum QueueModel {
                                  && hasFreshReachabilityAnswer($0, now: now) }
     }
 
+    // #2374: WHEN this date was answered, for the heading that says it was.
+    //
+    // The OLDEST answer on the night, deliberately. A heading covers several shows and they can be
+    // answered on different days, so which date it names is a real question: the oldest is the one
+    // closest to the 90 day expiry, which is the thing the date exists to make visible, and it can never
+    // overstate how fresh the night is. "Checked Nov 2" then means nothing here is older than that.
+    //
+    // Asked of exactly the rows `dateReachabilityIsFullyChecked` makes its claim about, never all of
+    // them, or the heading would take its date from a show it says nothing about (L287).
+    //
+    // Nil when nothing datable is left, which the copy renders as the sentence it always showed.
+    static func dateReachabilityCheckedOn(_ items: [QueueItem], now: Date = Date(),
+                                          today: String = QueueModel.easternToday(),
+                                          geo: GeoRefusals = .none) -> Date? {
+        items
+            .filter { probeIsWorthOffering($0, today: today, geo: geo)
+                       && hasFreshReachabilityAnswer($0, now: now) }
+            .compactMap(reachabilityAnswerDate)
+            .min()
+    }
+
+    // The date of the answer actually IN FORCE, in the same order `hasFreshReachabilityAnswer` accepts
+    // them, so the date always describes the answer that satisfied the freshness rule rather than a
+    // second opinion about which answer counts (L16, L70). An inherited answer carries its own
+    // `probedAt`, so a show held by a sibling's paid check is datable too.
+    private static func reachabilityAnswerDate(_ i: QueueItem) -> Date? {
+        if let inherited = i.inheritedReachability { return inherited.probedAt }
+        return i.reachabilityProbedAt
+    }
+
     // #1595, then Dan's walk (2026-07-27): `usesStaleRecheckHeadline` (formerly isLoneStaleRecheck) is
     // GONE along with both callout headlines. It chose between two sentences the control no longer shows.
     // A stale result still announces itself where it belongs, on the ROW, via Reachability.Badge.staleProbe.

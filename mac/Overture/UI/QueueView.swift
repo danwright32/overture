@@ -2202,7 +2202,8 @@ struct ReachabilityProbeControl: View {
             // shows were really answered, so it stays rare rather than joining the 169.
             HStack(spacing: OVSpacing.xs) {
                 Spacer(minLength: OVSpacing.sm)
-                Text(ReachabilityProbeCopy.dateCheckedMarker)
+                Text(ReachabilityProbeCopy.dateCheckedMarker(
+                    checkedOn: QueueModel.dateReachabilityCheckedOn(items, geo: geo)))
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(OVColor.inkFaint)
                 // #2268 put a "Check again" link here, answering Dan's "is there a way to re-check an

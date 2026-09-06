@@ -813,7 +813,36 @@ enum ReachabilityProbeCopy {
     // #1617: what a date says once every open show on it has an answer. It takes the button's own slot,
     // so Dan reads it exactly where he went looking for the control, and it names reachability rather
     // than saying a bare "Checked" that leaves the date line claiming nothing in particular.
+    // #2374: and WHEN. The three words alone read the same for a night answered yesterday and one
+    // answered 89 days ago, and the freshness window is 90, so the heading could not tell a settled night
+    // from one about to expire. The individual cards already carry their own staleness line; this is the
+    // heading's share of the same fact.
+    //
+    // Dan's call, 2026-09-06, on being shown the live store: add the DATE and nothing louder. Of 771
+    // future shows that day, 670 had never been checked, 100 were inside 30 days, one sat between 30 and
+    // 59, and ZERO were in the 60 to 89 band, so the state a warning would serve does not exist yet.
+    //
+    // NO YEAR, unlike `EasternDate.dayLabelWithYear`, and the reason is a property of where this renders:
+    // the marker only appears while every answer on the night is INSIDE the 90 day window, so a bare
+    // "Dec 20" can only mean the most recent one. That keeps it as quiet as #1595 and #1617 made it.
+    //
+    // A date it cannot read leaves the sentence EXACTLY as it has always been, so this can never turn a
+    // working marker into a broken one (L138: an absent value must not render as an empty one).
+    // The SENTENCE is kept as its own constant and the date composed onto it, rather than built inside
+    // the function from a local. Both generated documents read the source, so a literal that only exists
+    // inside a function disappears from them: regenerated with it inline, `docs/copy-inventory.md` listed
+    // the template "\(base) \(day)", which tells a reader nothing, and `docs/copy-surfaces.md` lost the
+    // line saying QueueView renders this sentence at all. The cold read those two exist for is the only
+    // thing that catches a placement or wording defect (#843, #915, #2210), so a change that hides a
+    // sentence from them is worse than the wording change it was making.
     static let dateCheckedMarker = "Reachability checked"
+
+    static func dateCheckedMarker(checkedOn date: Date?) -> String {
+        guard let date, let day = EasternDate.dayLabel(EasternDate.dayString(from: date)) else {
+            return dateCheckedMarker
+        }
+        return "\(dateCheckedMarker) \(day)"
+    }
     // #2268's "Check again" link on the heading, and its help, are GONE with #2371: the tick box beside
     // the date now stays on a finished date and carries that job, so the words that duplicated it have no
     // reader left. The per-CARD "Check again" (ReachabilityCopy.checkAgain) is untouched.
