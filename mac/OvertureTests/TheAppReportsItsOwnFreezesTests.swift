@@ -231,6 +231,92 @@ struct TheAppReportsItsOwnFreezesTests {
         #expect(FreezeNoticeCopy.writesFailed(3).contains("3 times"))
     }
 
+    // THE ONE THE REAL DATA FOUND, and it is the defect that would have silently ended this whole
+    // feature after one launch.
+    //
+    // `sequence` restarts at 1 in every process: it is a counter on the watchdog instance, and a new
+    // instance is made each launch. A reader that remembers "reported through sequence N" therefore
+    // matches NOTHING in the next session, because that session's numbers all start below N again. The
+    // app would say nothing about every freeze it ever recorded after the first session, and saying
+    // nothing is exactly what a healthy session looks like (L98).
+    //
+    // Found on 2026-09-06 by looking at Dan's real log after ten minutes of use: one session, sequences
+    // 1 to 3412. The next launch would have started again at 1.
+    @Test("a freeze in a LATER session is reported, even though its sequence starts again at 1")
+    func freezesAreReportedAcrossLaunches() {
+        let d = defaults("relaunch")
+        let firstSession = FreezeLog.Read(records: [
+            stall(1.0, sequence: 1, at: Date(timeIntervalSince1970: 1_785_000_000)),
+            stall(2.0, sequence: 2, at: Date(timeIntervalSince1970: 1_785_000_001)),
+        ])
+        _ = FreezeReport.newlyReported(in: URL(fileURLWithPath: "/tmp"), watchdogRan: true,
+                                       defaults: d, read: { _ in firstSession })
+
+        // A NEW launch. Its own sequence starts at 1 again, and its records are LATER in time.
+        var afterRelaunch = firstSession
+        afterRelaunch.records.append(StallRecord(session: "second", sequence: 1,
+                                                 at: Date(timeIntervalSince1970: 1_785_009_999),
+                                                 seconds: 3.0, surface: .queue, load: .baseline,
+                                                 loadAverage: 1))
+        let said = FreezeReport.newlyReported(in: URL(fileURLWithPath: "/tmp"), watchdogRan: true,
+                                              defaults: d, read: { _ in afterRelaunch })
+
+        #expect(said != nil,
+                Comment(rawValue: "a freeze from a later session was not reported, because its sequence "
+                        + "number is lower than the previous session's. Every freeze after the first "
+                        + "session goes unsaid, and silence is what a clean session looks like."))
+        #expect(said?.contains("3.0 seconds") == true)
+    }
+
+    // THE FIRST LAUNCH AFTER THE FIX, on an install that carries the broken version's key.
+    //
+    // Its file holds a backlog nothing could ever report, and it is SAID, once. This asserts a DECISION
+    // rather than a mechanism, which is why it sets a key nothing reads any more: it goes red the moment
+    // anybody reintroduces a branch treating the upgrade as a special case, and silence there is
+    // indistinguishable from the defect that silenced this in the first place (L98).
+    //
+    // Dan's call, 2026-09-06, in this session, reversing the suppression the first version of this fix
+    // shipped with. The test asserting THAT is deleted rather than adjusted, because its whole content
+    // was the rejected behaviour (L252).
+    @Test("the backlog the broken version could never report is said once, then not again")
+    func theBacklogFromTheBrokenVersionIsSaidOnce() {
+        let d = defaults("upgrade")
+        d.set(3412, forKey: "freezesReportedThroughSequence")
+        let read = FreezeLog.Read(records: [stall(9.0, sequence: 1), stall(4.0, sequence: 2)])
+
+        let said = FreezeReport.newlyReported(in: URL(fileURLWithPath: "/tmp"), watchdogRan: true,
+                                              defaults: d, read: { _ in read })
+        #expect(said?.contains("2 times") == true,
+                Comment(rawValue: "the backlog from the broken version was not reported, so the first "
+                        + "build able to speak says nothing, which is what the defect looked like"))
+        #expect(said?.contains("9.0 seconds") == true)
+
+        // Once. The upgrade is a backlog like any other, never a notice that repeats.
+        #expect(FreezeReport.newlyReported(in: URL(fileURLWithPath: "/tmp"), watchdogRan: true,
+                                           defaults: d, read: { _ in read }) == nil)
+    }
+
+    // The OTHER wrong answer, and the reason the identity is not simply the timestamp: two stalls can
+    // share an instant, so a reader remembering "said everything up to time T" drops the second one for
+    // good. It has to be the SECOND call, because a filter over a set can never collapse two records
+    // inside one call however they are keyed: the first version of this test reported both on a single
+    // call and could not fail (L1).
+    @Test("a freeze at the same instant as one already reported is still reported")
+    func aFreezeSharingAnInstantWithAReportedOneIsStillReported() {
+        let d = defaults("sameinstant")
+        let at = Date(timeIntervalSince1970: 1_785_000_000)
+        var read = FreezeLog.Read(records: [stall(1.0, sequence: 1, at: at)])
+        _ = FreezeReport.newlyReported(in: URL(fileURLWithPath: "/tmp"), watchdogRan: true,
+                                       defaults: d, read: { _ in read })
+
+        read.records.append(stall(4.0, sequence: 2, at: at))
+        let said = FreezeReport.newlyReported(in: URL(fileURLWithPath: "/tmp"), watchdogRan: true,
+                                              defaults: d, read: { _ in read })
+        #expect(said?.contains("4.0 seconds") == true,
+                Comment(rawValue: "a stall sharing its instant with an already reported one was never "
+                        + "said, so whatever identifies a record is the clock rather than the record"))
+    }
+
     // #3439's reader, which is the SECOND one this phase requires: the floor, asked for rather than
     // waited for.
     @Test("the longest stall can be asked for")

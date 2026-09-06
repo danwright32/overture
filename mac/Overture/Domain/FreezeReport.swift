@@ -43,11 +43,25 @@ enum FreezeReport {
             return FreezeNoticeCopy.watchdogDidNotRun
         }
 
-        let seen = defaults.object(forKey: FreezeLog.reportedThroughKey) as? Int ?? 0
-        let fresh = found.records.filter { $0.sequence > seen }
-        guard let worst = fresh.max(by: { $0.seconds < $1.seconds }) else { return nil }
+        // WHAT HAS ALREADY BEEN SAID, by the record's whole identity. See `FreezeLog.reportedIdsKey`: the
+        // sequence alone is not one, and keying on it made the notice go permanently silent after the
+        // first session.
+        //
+        // The set written back is the identities of every record the file STILL HOLDS, so it is bounded
+        // by the file's own cap rather than growing forever, and a record compaction has dropped can
+        // never be reported again anyway because it is not there to read.
+        let alreadySaid = Set(defaults.stringArray(forKey: FreezeLog.reportedIdsKey) ?? [])
 
-        defaults.set(found.records.map(\.sequence).max() ?? seen, forKey: FreezeLog.reportedThroughKey)
+        // An install upgrading FROM the version keyed on the sequence carries a backlog nothing could
+        // ever report, and it is reported, once, exactly like any other backlog a crash or an unread
+        // session leaves behind. There is no special case for it and that is deliberate: the first build
+        // that could speak saying NOTHING is indistinguishable from the defect that silenced it, which is
+        // the state this whole change exists to end (L98). Dan's call, 2026-09-06, in this session,
+        // reversing the suppression this shipped with.
+        let fresh = found.records.filter { !alreadySaid.contains($0.identity) }
+        defaults.set(found.records.map(\.identity), forKey: FreezeLog.reportedIdsKey)
+
+        guard let worst = fresh.max(by: { $0.seconds < $1.seconds }) else { return nil }
         return FreezeNoticeCopy.report(count: fresh.count,
                                        longestSeconds: worst.seconds,
                                        surface: worst.surface,
