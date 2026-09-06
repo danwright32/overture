@@ -21,7 +21,16 @@ enum FreezeLog {
     // What the reader has told Dan about already. Session-independent, on `RunBoundaryViolations`'s
     // precedent and for its reason: a freeze recorded in a session that then crashed still has to be said
     // the next time Overture opens.
-    static let reportedThroughKey = "freezesReportedThroughSequence"
+    //
+    // It holds the IDENTITIES of the records already said, and identity here is the session AND the
+    // sequence, which is what `StallRecord` has said its identity was since it was written. Keying on the
+    // sequence ALONE, which is what shipped first, is a durable value compared against a key that is only
+    // as durable as the process (L186): the watchdog counts from 1 in every launch, so the moment this
+    // held any number at all, the next session's records were all below it and NONE of them could ever be
+    // reported again. The app would have gone silent about every freeze after the first session, and
+    // silence is what a healthy session looks like (L98). Found 2026-09-06 in Dan's real log: one session,
+    // 154 records, sequences 1 to 3412.
+    static let reportedIdsKey = "freezesReportedIdentities"
 
     // One line. Encoded with a pinned date strategy, because a file read by a later version of the app
     // has to decode what an earlier one wrote (L26).

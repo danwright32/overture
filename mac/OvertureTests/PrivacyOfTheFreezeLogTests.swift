@@ -60,13 +60,60 @@ struct PrivacyOfTheFreezeLogTests {
                     Comment(rawValue: "StallRecord names \(forbidden). A field that can hold a model can "
                             + "hold a person's name, and this record is written to a durable file (#3435)."))
         }
-        // `session` is the only String on it and it is a UUID minted by the watchdog, never anything read
-        // off the screen. Asserted because a second String field is exactly how free text arrives.
-        let stringFields = body.components(separatedBy: "\n")
-            .filter { $0.contains(": String") }
-        #expect(stringFields.count == 1,
-                Comment(rawValue: "StallRecord now has \(stringFields.count) String fields. The one that "
-                        + "is allowed is `session`, a UUID; anything else is free text in a durable file."))
+        // `session` is the only String STORED on it and it is a UUID minted by the watchdog, never
+        // anything read off the screen. Asserted because a second String field is exactly how free text
+        // arrives.
+        //
+        // STORED is the word that matters, and it is narrower than this used to be. A computed property
+        // holds nothing: it can only restate what the stored fields already carry, so counting it as a
+        // field reported `identity` (a session and a sequence number) as free text in a durable file,
+        // which is a finding about the guard rather than about the record. What makes that narrowing
+        // safe is asserted below rather than assumed, because a computed property in Swift may call
+        // anything at all, including something that reads the store (L324).
+        let declarations = body.components(separatedBy: "\n")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { $0.hasPrefix("let ") || $0.hasPrefix("var ") }
+        let stored = declarations.filter { !$0.contains("{") }
+        let storedStrings = stored.filter { $0.contains(": String") }
+        #expect(storedStrings.count == 1,
+                Comment(rawValue: "StallRecord now stores \(storedStrings.count) String fields. The one "
+                        + "that is allowed is `session`, a UUID; anything else is free text in a durable "
+                        + "file."))
+
+        // THE OTHER HALF. Every computed property on the record may name only the record's own stored
+        // fields, and may reach through nothing (no `.`), so it cannot pull in a model, a store, a
+        // default or a screen. Without this the narrowing above would be an exemption rather than a
+        // rule, and the field that escapes is always the one added last (L360).
+        let storedNames = Set(stored.compactMap { line -> String? in
+            let afterKeyword = line.dropFirst(4)
+            guard let colon = afterKeyword.firstIndex(of: ":") else { return nil }
+            return String(afterKeyword[..<colon]).trimmingCharacters(in: .whitespaces)
+        })
+        #expect(storedNames.count == stored.count,
+                Comment(rawValue: "could not read a name for every stored field (\(storedNames.count) of "
+                        + "\(stored.count)), so the rule below is judging against a short list"))
+        let computed = declarations.filter { $0.contains("{") }
+        #expect(computed.contains(where: { $0.contains("identity") }),
+                Comment(rawValue: "no computed `identity` was found on StallRecord, so this rule measured "
+                        + "nothing; the reporter keys what it has already said on that value (L98)"))
+        for line in computed {
+            guard let open = line.firstIndex(of: "{"), let close = line.lastIndex(of: "}") else {
+                Issue.record("computed property spans more than one line, which this rule cannot read: \(line)")
+                continue
+            }
+            let expression = String(line[line.index(after: open)..<close])
+            #expect(!expression.contains("."),
+                    Comment(rawValue: "`\(line)` reaches through a dot, so it can call out to anything, "
+                            + "including something that reads the store, and whatever it returns is "
+                            + "written to a durable file (#3435, L222)"))
+            let names = expression.components(separatedBy: CharacterSet.alphanumerics.inverted)
+                .filter { !$0.isEmpty && !$0.allSatisfy(\.isNumber) }
+            for name in names {
+                #expect(storedNames.contains(name),
+                        Comment(rawValue: "`\(line)` names `\(name)`, which is not a stored field of "
+                                + "StallRecord, so this record can carry something nobody declared"))
+            }
+        }
     }
 
     // The watchdog reads the surface from a BOX the main thread stamps, and never asks the main actor for

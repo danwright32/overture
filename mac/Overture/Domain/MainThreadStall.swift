@@ -75,6 +75,10 @@ struct StallRecord: Codable, Equatable, Sendable {
     // "elevated" cannot be re-examined against a different line, which is the shape #3464 had to go back
     // and fix for the freeze tool's own threshold (L316, L107).
     let loadAverage: Double?
+
+    // The whole identity, as one string, because a reader that remembers what it has said has to remember
+    // BOTH halves: the sequence restarts at 1 in every process, so it is not an identity on its own.
+    var identity: String { "\(session)#\(sequence)" }
 }
 
 // The retention rule, which is the half #3435 names as its own defect.
