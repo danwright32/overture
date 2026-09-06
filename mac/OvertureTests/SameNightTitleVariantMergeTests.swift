@@ -450,4 +450,111 @@ struct SameNightTitleVariantMergeTests {
             ["frigid   nightcap", "FRIGID Nightcap: FUTURE TENSE"]) == "FRIGID Nightcap: FUTURE TENSE")
     }
 
+
+    // #3582. Carnegie changed its own URL slug, so the scout minted a second row for a show it no longer
+    // recognised, and this pass then deleted the row the feed IS listing and kept the one it is not.
+    // Measured on the live store 2026-09-06 across five launch backups: the fresh row is re-minted by
+    // every scout and destroyed by every launch, the survivor's miss count climbs by one each sweep and
+    // nothing can ever reset it, and 9 future shows were carrying a false "may be cancelled" warning
+    // because of it, the worst at 59 consecutive misses.
+    //
+    // The ladder chooses a survivor for what it HOLDS, which is right and is not what changes here: 8 of
+    // those 9 held nothing at all, so they were winning on the LAST rung, age. Being in the feed is
+    // evidence about IDENTITY rather than about worth, so it goes in above age and below every rung that
+    // protects something a delete would destroy.
+    @Test func theRowTheFeedStillListsSurvivesOverAnOlderRowItHasStoppedMatching() throws {
+        let ctx = try context()
+        insert(ctx, "Jinhyung Park", date: "2026-10-22", venue: "Weill Recital Hall", ingestedAt: 1_000) {
+            $0.missedScoutCount = 28
+            $0.sourceListingURL = "https://www.carnegiehall.org/calendar/2026/10/22/jinhyung-park-0700pm"
+        }
+        insert(ctx, "Jinhyung Park, Piano", date: "2026-10-22", venue: "Weill Recital Hall",
+               ingestedAt: 2_000) {
+            $0.missedScoutCount = 0
+            $0.sourceListingURL =
+                "https://www.carnegiehall.org/calendar/2026/10/22/jinhyung-park-piano-0700pm"
+        }
+
+        let summary = SameNightTitleVariantMerge.run(in: ctx)
+        try? ctx.save()
+
+        #expect(summary.duplicatesDeleted == 1)
+        let survivor = try #require(all(ctx).first)
+        #expect(survivor.naturalKey.hasPrefix("Jinhyung Park, Piano|"),
+                Comment(rawValue: "the merge kept the row the feed has stopped listing, so the scout "
+                    + "re-mints the live one on the next sweep and this launch destroys it again"))
+        #expect(survivor.missedScoutCount == 0)
+    }
+
+    // #3379, the other half. Where the older row holds something a delete would destroy (a paid
+    // reachability answer, found addresses, an outreach record) it MUST survive, and its key is then the
+    // one the feed has stopped publishing. Left alone, that row is re-twinned by every scout and the loop
+    // continues on precisely the rows carrying something worth keeping.
+    //
+    // So the survivor ADOPTS the identity the feed is publishing: the key, the listing URL, the run URLs
+    // and the source ids, taken from the row still being listed before it is deleted.
+    //
+    // The KEY is assigned AFTER the delete, which is the whole of what makes it safe. `naturalKey` is
+    // `@Attribute(.unique)`, and `NaturalKeyVenueMigration` established this ordering for exactly that
+    // reason: nothing may hold the new key, even transiently. DriftedRunMerge's note that "rewriting a
+    // key here is the only step that could throw against the unique index" is about doing it in place,
+    // and this does not (L542: find the decision behind each side before making two rules agree).
+    @Test func aSurvivorKeptForWhatItHoldsAdoptsTheIdentityTheFeedIsPublishing() throws {
+        let ctx = try context()
+        insert(ctx, "New York Percussion Series (Featuring Percussion People)", date: "2026-09-08",
+               venue: "The Players Theatre", ingestedAt: 1_000) {
+            $0.missedScoutCount = 20
+            $0.sourceListingURL = "https://www.theplayerstheatre.com/show-schedule.html"
+            $0.runSourceURLs = ["https://www.theplayerstheatre.com/show-schedule.html"]
+            $0.sourceIds = ["theplayerstheatre-com"]
+            $0.reachabilityProbedAt = Date(timeIntervalSince1970: 1_500)
+        }
+        insert(ctx, "New York Percussion Series", date: "2026-09-08", venue: "The Players Theatre",
+               ingestedAt: 2_000) {
+            $0.missedScoutCount = 0
+            $0.sourceListingURL = "https://ci.ovationtix.com/277/production/1194477"
+            $0.runSourceURLs = ["https://ci.ovationtix.com/277/production/1194477"]
+            $0.sourceIds = ["theplayerstheatre-com"]
+        }
+
+        let summary = SameNightTitleVariantMerge.run(in: ctx)
+        try? ctx.save()
+
+        #expect(summary.duplicatesDeleted == 1)
+        let survivor = try #require(all(ctx).first)
+        // The paid answer survives, which is the existing rule and is deliberately unchanged.
+        #expect(survivor.reachabilityProbedAt != nil, "the paid answer was destroyed")
+        // ... and it now answers to the identity the feed publishes, so the next scout matches it
+        // instead of minting a twin.
+        #expect(survivor.naturalKey.hasPrefix("New York Percussion Series|"),
+                Comment(rawValue: "the survivor kept a key the feed can never produce again, so the next "
+                    + "scout mints the twin and the next launch destroys it, forever"))
+        #expect(survivor.sourceListingURL == "https://ci.ovationtix.com/277/production/1194477",
+                "the card's Source listing still opens the URL the source has stopped using")
+        #expect(survivor.runSourceURLs == ["https://ci.ovationtix.com/277/production/1194477"])
+        #expect(survivor.missedScoutCount == 0,
+                "the survivor kept a miss count earned by a key the feed no longer publishes")
+    }
+
+    // The re-key must not fire when there is nothing to adopt. A cluster where every row is equally out
+    // of the feed has no live identity to take, and inventing one would rewrite a unique key for no
+    // reason inside the launch save (L98: nothing to do and done are different outcomes).
+    @Test func aClusterWithNoRowInTheFeedKeepsItsOwnKey() throws {
+        let ctx = try context()
+        insert(ctx, "Gone Show", date: "2026-10-01", venue: "Somewhere", ingestedAt: 1_000) {
+            $0.missedScoutCount = 9
+        }
+        insert(ctx, "Gone Show: The Return", date: "2026-10-01", venue: "Somewhere", ingestedAt: 2_000) {
+            $0.missedScoutCount = 7
+        }
+
+        let summary = SameNightTitleVariantMerge.run(in: ctx)
+        try? ctx.save()
+
+        #expect(summary.duplicatesDeleted == 1)
+        let survivor = try #require(all(ctx).first)
+        #expect(survivor.naturalKey.hasPrefix("Gone Show|"), "a key was invented from a row that is also gone")
+        #expect(survivor.missedScoutCount == 9, "a cluster with nothing in the feed was told it is listed")
+    }
+
 }

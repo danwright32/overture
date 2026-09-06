@@ -202,6 +202,44 @@ enum NaturalKeyVenueMigration {
     // Every field here is one of `ProspectFieldClassificationTests.danDecisionsTheRuleCannotSee`, and a
     // guard there fails if that list grows a field this function does not name, so a new decision cannot
     // arrive without a carry rule (L96).
+    // #3582/#3379: the row the source is STILL listing, meaning the last sweep matched it. Named here,
+    // beside the other rungs the three deleting passes share, so "is this row in the feed" has one
+    // definition rather than one per pass (L263).
+    //
+    // `members` is ordered oldest first by every caller, so where several are live this keeps each
+    // ladder's existing age tie-break instead of introducing a second one.
+    static func stillInTheFeed(_ members: [Prospect]) -> Prospect? {
+        members.first { $0.missedScoutCount == 0 }
+    }
+
+    // #3379: whatever only the LIVE row knew, carried onto the survivor before that row is deleted, so a
+    // survivor kept for what it HOLDS still answers to the identity the feed publishes.
+    //
+    // Without this the loop has no end: the survivor's key is one the source can never produce again, so
+    // the next scout cannot match it, mints a twin, and the next launch deletes the twin. Measured across
+    // five launch backups on 2026-09-06, that cycle had already run twice in two days.
+    //
+    // Returns the key to ADOPT rather than assigning it, and the ordering is the whole of what makes this
+    // safe: `naturalKey` is `@Attribute(.unique)`, so the caller must assign it only AFTER deleting the
+    // row that currently holds it, exactly as this file's own pass does. Everything else is assigned here,
+    // because nothing else is unique and none of it can collide.
+    //
+    // Answers nil when there is nothing to adopt, which is a real state and not a failure: a cluster
+    // where every row has fallen out of the feed has no live identity to take, and inventing one would
+    // rewrite a unique key for no reason inside the launch save (L98).
+    static func carryTheFeedIdentity(onto survivor: Prospect, from members: [Prospect]) -> String? {
+        guard let live = stillInTheFeed(members) else { return nil }
+        // The survivor is about to stand for a show the feed IS listing, so it must not keep a miss count
+        // earned by a key the feed stopped matching, or it goes on rendering as "may be cancelled" on a
+        // live show. The same write DriftedRunMerge makes, for the reason its own comment gives.
+        survivor.missedScoutCount = 0
+        guard live !== survivor else { return nil }
+        survivor.sourceListingURL = live.sourceListingURL
+        survivor.runSourceURLs = live.runSourceURLs
+        survivor.sourceIds = live.sourceIds
+        return live.naturalKey
+    }
+
     static func carryDansDecisions(onto survivor: Prospect, from members: [Prospect]) {
         let losers = members.filter { $0 !== survivor }
 
