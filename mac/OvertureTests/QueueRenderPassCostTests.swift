@@ -307,7 +307,16 @@ struct QueueRenderPassWorkUnitCostTests {
     // Unchanged by #3498, which is the point of holding it separately: that change removed the repeated
     // linting inside card construction and this term is somewhere else in the pass, so it is now the
     // MAJORITY of what the lint costs. It is what #3498's own text called the unattributed 90 at the
-    // original shape, and it still has no owner.
+    // original shape.
+    //
+    // #3518 GAVE IT AN OWNER, and decided from the number rather than fixing it. All sixteen belong to
+    // `StageNavigation.counts`, reached through `AgentInputs.from`, and every other whole-store
+    // derivation in the pass runs the lint zero times. They are an exact duplicate of the sixteen the
+    // card build already ran, over the same sixteen pending contacts, so they COULD be removed. They
+    // cost 3.5 ms against a pass of 584.3 ms, which is 0.595%, and this file has watched two caches be
+    // built and reverted on #1930 for larger savings than that. So the term is attributed and priced
+    // rather than removed, which is a real result and stops it being investigated again (L248).
+    // `LintRunsOutsideTheCardBuildTests` holds both the attribution and the price.
     private static let allowedLintRunsOutsideTheCardBuild = 16
 
     // WHERE the 82 goes, measured on THIS corpus rather than inferred from the single-row attribution
