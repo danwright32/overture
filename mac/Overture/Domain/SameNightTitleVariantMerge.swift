@@ -66,6 +66,10 @@ enum SameNightTitleVariantMerge {
         let stored = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
         let watched = watchedRoomNames(in: context)
         var summary = Summary()
+        // #3379: every key this pass rewrites, so a paid answer recorded against the old key can still be
+        // matched afterwards. Written through the same ledger NaturalKeyVenueMigration uses, because a
+        // rename recorded in two places is two vocabularies (L263).
+        var renames: [(from: String, to: String)] = []
 
         // #1761: the venue no longer takes part. It used to bucket the rows, which meant one room spelled
         // two ways ("Jalopy Theatre" against "Jalopy Theater") produced two buckets and the pass could
@@ -122,7 +126,7 @@ enum SameNightTitleVariantMerge {
                     // holds, so it may not outrank a rung that protects something a delete would destroy.
                     // Above age because age is not evidence of anything at all: it is the tie-break this
                     // ladder falls to when nothing else separates the rows.
-                    ?? stillInTheFeed(candidates)
+                    ?? NaturalKeyVenueMigration.stillInTheFeed(candidates)
                     ?? candidates[0]
                 // #1761: the survivor is chosen for what it HOLDS (Dan's decision, a paid answer, its
                 // age), which is a different question from which row names the room best. Since the room
@@ -166,16 +170,29 @@ enum SameNightTitleVariantMerge {
                 // launch save whose failure is discarded. Where the survivor is the live row (the rung
                 // above, and 8 of those 9) its key is already the current one and nothing needs rewriting.
                 // Where it is not, the key stays stale and #3379 owns that half.
-                if stillInTheFeed(cluster) != nil {
-                    survivor.missedScoutCount = 0
-                }
+                // #3379: whatever only the LIVE row knew, before that row goes. Same place and same
+                // reason as the room name and the title above: what only a loser holds is gone the
+                // moment it is deleted (L5).
+                let keyToAdopt = NaturalKeyVenueMigration.carryTheFeedIdentity(onto: survivor,
+                                                                               from: cluster)
                 for loser in cluster where loser.persistentModelID != survivor.persistentModelID {
                     context.delete(loser)
                     summary.duplicatesDeleted += 1
                 }
+                // AFTER the delete, never before. `naturalKey` is unique, so the row holding this key
+                // must be gone before the survivor takes it. That ordering is the reason DriftedRunMerge's
+                // caution about throwing against the unique index does not apply here.
+                if let key = keyToAdopt, survivor.naturalKey != key {
+                    renames.append((from: survivor.naturalKey, to: key))
+                    survivor.naturalKey = key
+                }
             }
         }
 
+        // Recorded after the pass, so a run that threw partway leaves no claim that a rename happened.
+        // A failure to record is not a reason to fail the merge: the rows are already correct, and the
+        // cost this protects against is a paid answer that cannot be matched, not corruption.
+        try? NaturalKeyRemap.record(renames, at: Date())
         return summary
     }
 
@@ -187,12 +204,6 @@ enum SameNightTitleVariantMerge {
         cluster.first { $0.reachabilityProbedAt != nil }
     }
 
-    // #3582: the row the source is still listing, meaning it matched the most recent sweep. `cluster` is
-    // ordered oldest first, so where several are live this keeps the ladder's existing age tie-break
-    // rather than introducing a second one.
-    private static func stillInTheFeed(_ cluster: [Prospect]) -> Prospect? {
-        cluster.first { $0.missedScoutCount == 0 }
-    }
 
     // #1846: the name DAN gave a room when he started watching it, keyed by the room's own fold so a copy
     // carrying the street or the town still finds it. `venueName` first (the field that exists to hold an
