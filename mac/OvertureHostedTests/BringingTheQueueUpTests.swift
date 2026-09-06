@@ -132,6 +132,35 @@ struct BringingTheQueueUpTests {
         }
     }
 
+
+    // Wait until the derivation count has GONE QUIET, rather than for a fixed time.
+    //
+    // The thing being established is an ABSENCE: that no further derivation arrives once the first has.
+    // A fixed settle asserts about how fast the machine is, and it is slowest exactly when the machine is
+    // loaded, which is when it is judged (L290). This exits as soon as the count has been unchanged for
+    // `quietPolls` consecutive reads, so the ordinary case is fast and only a count that keeps climbing
+    // runs out the deadline.
+    //
+    // The layout and display are driven on every poll because this window is never ordered front, so
+    // AppKit runs no display cycle of its own for it (#3480).
+    @discardableResult
+    private func waitUntilDerivationsGoQuiet(in hosting: NSView, quietPolls: Int = 25,
+                                             timeout: Duration = .seconds(20)) async -> Bool {
+        var last = QueueRenderCounter.derivations
+        var quiet = 0
+        let deadline = ContinuousClock.now + timeout
+        while ContinuousClock.now < deadline {
+            hosting.layoutSubtreeIfNeeded()
+            hosting.displayIfNeeded()
+            let now = QueueRenderCounter.derivations
+            quiet = (now == last) ? quiet + 1 : 0
+            last = now
+            if quiet >= quietPolls { return true }
+            try? await Task.sleep(for: .milliseconds(10))
+        }
+        return false
+    }
+
     @Test func bringingTheWholeAppUpDerivesTheStoreOnce() async throws {
         let c = try container()
         let ctx = ModelContext(c)
@@ -158,10 +187,7 @@ struct BringingTheQueueUpTests {
             sample()
             return QueueRenderCounter.derivations > before
         }
-        for _ in 0..<60 {
-            sample()
-            try? await Task.sleep(for: .milliseconds(10))
-        }
+        let settled = await waitUntilDerivationsGoQuiet(in: hosting)
 
         let derivations = QueueRenderCounter.derivations - before
         print("""
@@ -176,6 +202,7 @@ struct BringingTheQueueUpTests {
           a real launch, where the app's own first derivation is genuinely first.
         """)
 
+        #expect(settled, "the count never went quiet, so this is a reading taken mid-flight")
         #expect(derivations > 0,
                 Comment(rawValue: "the app never derived at all, so this counted a screen that never "
                         + "appeared rather than the cost of it appearing"))
@@ -204,13 +231,10 @@ struct BringingTheQueueUpTests {
             hosting.displayIfNeeded()
             return QueueRenderCounter.derivations > before
         }
-        // And then keep turning, so a SECOND derivation arriving late is counted rather than missed. This
-        // is the half that matters: the defect #1930 describes is extra derivations after the first.
-        for _ in 0..<40 {
-            hosting.layoutSubtreeIfNeeded()
-            hosting.displayIfNeeded()
-            try? await Task.sleep(for: .milliseconds(10))
-        }
+        // And then wait for the count to GO QUIET, so a second derivation arriving late is counted rather
+        // than missed. That is the half that matters: the defect #1930 describes is extra derivations
+        // after the first.
+        let settled = await waitUntilDerivationsGoQuiet(in: hosting)
 
         let derivations = QueueRenderCounter.derivations - before
         print("""
@@ -225,6 +249,7 @@ struct BringingTheQueueUpTests {
 
         // The measurement is real before anything is concluded from it: a harness that rendered nothing
         // reports zero, which is the emptiest possible result reading as the cheapest possible one (L98).
+        #expect(settled, "the count never went quiet, so this is a reading taken mid-flight")
         #expect(derivations > 0,
                 Comment(rawValue: "the queue never derived at all, so this counted a view that never "
                         + "appeared rather than the cost of it appearing"))
