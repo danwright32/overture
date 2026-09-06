@@ -115,7 +115,16 @@ struct DateCheckedMarkerTests {
 
         let texts = try view.inspect().findAll(ViewType.Text.self)
             .map { try $0.string() }.filter { !$0.isEmpty }
-        #expect(texts == [ReachabilityProbeCopy.dateCheckedMarker])
+        // #2374: the marker now carries WHEN, so this asserts both halves. The prefix is the sentence
+        // Dan already knows, and the day label proves the date actually reached the view rather than
+        // being computed and dropped (#863: the helper being right is a separate claim from the view
+        // showing it).
+        let probedAt = try #require(answered.reachabilityProbedAt)
+        let day = try #require(EasternDate.dayLabel(EasternDate.dayString(from: probedAt)))
+        #expect(texts.count == 1)
+        let rendered = try #require(texts.first)
+        #expect(rendered.hasPrefix("Reachability checked"))
+        #expect(rendered.contains(day), "the heading rendered no date, so a night on old answers reads as fresh")
         #expect(throws: (any Error).self) {
             try view.inspect().find(button: ReachabilityProbeCopy.controlLabel)
         }
