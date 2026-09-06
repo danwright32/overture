@@ -33,6 +33,8 @@ import Foundation
 // design here (L48, and the privacy rule both fixtures state in their own headers).
 enum LiveDateClustering {
 
+    // LIVE-STORE-CLAIM verified=2026-09-05 measure="the performance-date size histogram: how many dates hold one show, two shows and so on, read with sqlite3 from a WAL-inclusive copy of the live store"
+    //
     // (how many shows fall on a date, how many dates hold that many), as the live store holds it.
     static let histogram: [(size: Int, dates: Int)] = [
         (1, 66), (2, 21), (3, 21), (4, 16), (5, 14), (6, 21), (7, 19), (8, 15),

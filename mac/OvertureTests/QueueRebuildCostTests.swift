@@ -41,7 +41,7 @@ import SwiftData
 @Suite("Queue rebuild cost")
 struct QueueRebuildCostTests {
 
-    // LIVE-STORE-CLAIM verified=2026-09-02 measure="prospects, distinct presenters, distinct venues, distinct group names, watched sources, stored organisation answers, and recipients per prospect, all read with sqlite3 from a WAL-inclusive copy of the live store"
+    // LIVE-STORE-CLAIM verified=2026-09-05 measure="prospects, distinct presenters, distinct venues, distinct group names, watched sources, stored organisation answers, recipients per prospect, and the performance-date size histogram, all read with sqlite3 from a WAL-inclusive copy of the live store"
     //
     // Each figure carries a LIVE-SHAPE tag, so scripts/check-fixture-corpus-drift.sh compares it against
     // the real store on every push and names the one that has fallen behind. Before #3426 this block read
@@ -84,7 +84,7 @@ struct QueueRebuildCostTests {
             return counts
         }()
         static let prospectsWithADraft = 39
-        // #3516: the DATE clustering, which this file's own LIVE-STORE-CLAIM already recorded in prose
+        // #3516: the DATE clustering, which this file's own claim block already recorded in prose
         // ("233 distinct performance dates, largest single-date cluster 19") and nothing checked. The
         // corpus laid its dates out as `(i % 28) + 1` over `(i % 12) + 1`, which is 84 distinct dates for
         // 1,139 rows: a largest cluster of 14 against the store's 19, and a comparison load half again
