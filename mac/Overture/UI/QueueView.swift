@@ -587,10 +587,54 @@ struct QueueView: View {
             }
     }
 
+    // #2724: a night dismiss removes every row on a date, and until this nothing marked them leaving, so
+    // they sat on screen through the write and the rebuild behind it. That is #2417's defect on the same
+    // screen, and #2417's own fix did not reach it because the departure machinery is keyed PER ROW.
+    //
+    // THE DECISION #2417 DID NOT HAVE TO MAKE, taken here rather than left implicit: N rows each play
+    // their OWN exit, the same quiet dimmed one a single close-out plays, and the date heading leaves when
+    // the last of them does. The alternative, treating the group as one departing thing, needs a second
+    // kind of departure and a second row to draw it, and the one-row case is exactly #2417's, which is the
+    // case the issue says to reuse rather than grow a second path beside (L263).
+    //
+    // WHAT THAT COSTS AND WHY IT IS RIGHT ANYWAY. The rows stay on screen for `holdBeforeExit` whatever
+    // the rebuild does, which on a night of one show is indistinguishable from a close-out and on a night
+    // of nineteen is nineteen rows fading together. The scroll position is `PinnedScrollHolder`'s and is
+    // untouched: the section collapses when the departures clear rather than when the write lands, which
+    // is later than today and never earlier, so nothing can vanish from under the pointer sooner than it
+    // does now.
+    //
+    // UNDO: `dismissAll` is undoable through `undoStack`, and an undo during the exit restores the rows to
+    // the queue's answer while their departures are still marked, so a restored row draws dimmed for the
+    // remainder of the hold and then normally. That is a worse frame than a clean restore and a better one
+    // than the row reappearing with no explanation, and it settles within `SendDelightTiming`'s own
+    // window rather than persisting: nothing here can outlive `departureCeiling` (#2729).
     private func dismissNight(_ pending: NightDismiss, keys: [String]) {
+        // Marked BEFORE the write, for #2417's reason exactly: SendProgressState's writes notify only the
+        // views that read it, so this costs one card each, while the mutation that follows saves and makes
+        // SwiftData rebuild every card. Doing the cheap visible thing first is what makes the control
+        // answer on the press.
+        //
+        // The snapshots come from the pass's own rows, taken before the write, because once the dismissals
+        // land these shows are gone from the queue's answer and the cards playing the exit cannot come
+        // from it.
+        let departing = keys.compactMap { key in prospects.first { $0.naturalKey == key } }
+            .map(QueueItem.init)
+        withAnimation(.easeOut(duration: 0.15)) {
+            for item in departing { sendState.depart(item.id, as: item, because: .closedOut) }
+        }
         ProspectMutations.dismissAll(keys, reason: pending.reason, dateLabel: pending.dateLabel,
                                      prospects: prospects, context: context, feedback: feedback,
                                      undo: undoStack)
+        // Cleared after the exit plays, never before the rebuild lands: clearing early would drop the
+        // snapshots while the real rows are still in the queue's answer, and the whole night would flash
+        // back onto the screen.
+        let t = SendDelightTiming.plan(reduceMotion: reduceMotion)
+        DispatchQueue.main.asyncAfter(deadline: .now() + t.holdBeforeExit) {
+            withAnimation(.easeOut(duration: t.exit)) {
+                for item in departing { sendState.finishDeparting(item.id) }
+            }
+        }
     }
 
     private func queueScroll(_ data: RenderData) -> some View {
