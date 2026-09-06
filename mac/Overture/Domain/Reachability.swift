@@ -575,6 +575,44 @@ enum ReachabilityCopy {
         }
     }
 
+    // #3341: does this card's own advice ask Dan to add a contact by hand?
+    //
+    // The triage card tells him to, on most of these states, and until now there was nowhere on that card
+    // to put one: the field lives in DraftReviewView, which the row only draws under `if item.hasDraft`,
+    // so following the card's advice cost a Prep run on a show it had just called a long shot. A control
+    // that looks willing to be followed and cannot be is the shape #2629 fixed one layer down (L109).
+    //
+    // WHICH states offer it is derived from what the card SAYS rather than chosen. Five of the eight
+    // (and the default sentence) tell him to add a contact by hand or to search by name. The other three
+    // point him at another check, and `routeNamedButNotSupplied` says so outright: "another check is
+    // worth more here than a search by hand". A field inviting one there would contradict the line
+    // directly above it, and a control on a card that did not ask for it is the noise #1595 cut back.
+    //
+    // `unconfirmedSocialProfile` is deliberately in the NO group even though it asks him to act: what it
+    // asks for is a DM he sends himself, which is #2937's question about recording that, not an address
+    // to store. Answering it with this field would record a contact he never wrote to.
+    //
+    // Written as an exhaustive switch with no `default`, so a state added later cannot silently take a
+    // fallback, which is indistinguishable from a deliberate choice (L113).
+    // #3341: the button beside the triage card's route field. The field's own placeholder is a LITERAL
+    // there and in DraftReviewView, deliberately, and it is worth knowing why before anybody tidies it
+    // into a shared constant. `ReturnReachesTheDefaultButtonTests` finds a TextField by its first
+    // argument read as literal source text, and it exists because a field with no submit handler let
+    // Return press a distant default button (#2308). Sharing one constant between the two fields made
+    // BOTH invisible to that scan, which is a real loss of coverage traded for a duplicate the copy
+    // inventory already tracks under #843. Two literals, both seen by the guard, is the better trade.
+    static let addContactAction = "Add"
+
+    static func adviceAsksForAHandAddedContact(_ reason: Reachability.EmptyReason?) -> Bool {
+        guard let reason else { return true }   // the default "add a contact by hand" sentence
+        switch reason {
+        case .onlyVenueContact, .onlyPressContact, .noOneIdentified, .namedButNoRoute, .nothingPublished:
+            return true
+        case .onlySocialProfile, .unconfirmedSocialProfile, .routeNamedButNotSupplied:
+            return false
+        }
+    }
+
     static func emptyAnswerHelp(_ reason: Reachability.EmptyReason?) -> String {
         switch reason {
         case .onlyVenueContact:
