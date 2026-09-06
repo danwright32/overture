@@ -97,15 +97,24 @@ struct WatchdogCostTests {
         _ = await waitUntil("the watchdog to complete \(expectedPings) pings",
                             timeout: .seconds(20)) { clockReads.value >= expectedPings * 2 }
         watchdog.stop()
-        // A moment for anything already in flight, so a ping posted before the stop is counted rather
-        // than making the ceiling look tighter than it is.
-        try? await Task.sleep(for: .milliseconds(200))
+        // Anything already in flight is allowed to land, and that wait is on a CONDITION rather than a
+        // clock: a second watchdog nobody stops is the control, and waiting for IT to tick is what says
+        // enough time has passed for a stopped one to have ticked too (L290).
+        let control = Counter()
+        let stillRunning = MainThreadWatchdog(session: "control", interval: interval,
+                                              now: { control.bump(); return Date() },
+                                              loadReading: { (.baseline, 0) },
+                                              record: { _ in })
+        stillRunning.start()
+        _ = await waitUntil("a control watchdog to tick, which is how long a stopped one had to",
+                            timeout: .seconds(20)) { control.value >= 4 }
+        stillRunning.stop()
         let reads = clockReads.value
 
-        // The CEILING is derived from the interval and the time actually spent, with headroom, because a
-        // timer fires when the machine lets it and this must not go red on a loaded Mac. What it catches
-        // is an interval that has changed or a second timer that has been added.
-        let ceiling = (expectedPings * 2) + Int((0.2 / interval) * 2) + 8
+        // The CEILING is derived from the interval, with headroom, because a timer fires when the machine
+        // lets it and this must not go red on a loaded Mac. What it catches is an interval that has
+        // changed or a second timer that has been added.
+        let ceiling = (expectedPings * 2) + 12
         #expect(reads >= expectedPings * 2,
                 Comment(rawValue: "the watchdog read its clock \(reads) times, fewer than the "
                         + "\(expectedPings * 2) that \(expectedPings) pings need, so it did not run at "
@@ -124,17 +133,46 @@ struct WatchdogCostTests {
                                           now: { clockReads.bump(); return Date() },
                                           loadReading: { (.baseline, 0) },
                                           record: { _ in })
+        // A CONTROL watchdog, started with the stopped one and never stopped. Waiting for IT is what
+        // turns "long enough for the stopped one to have ticked" into a condition rather than a sleep,
+        // and it is strictly stronger: a fixed wait asserts about the machine's speed, while this cannot
+        // pass until a running watchdog at the same interval really has ticked many times (L290).
+        let controlReads = Counter()
+        let control = MainThreadWatchdog(session: "control", interval: 0.02,
+                                         now: { controlReads.bump(); return Date() },
+                                         loadReading: { (.baseline, 0) },
+                                         record: { _ in })
         watchdog.start()
+        control.start()
         _ = await waitUntil("the watchdog to ping at least once") { clockReads.value > 0 }
         watchdog.stop()
-        try? await Task.sleep(for: .milliseconds(200))
-        let afterStop = clockReads.value
-        try? await Task.sleep(for: .milliseconds(400))
+        let atStop = clockReads.value
 
-        #expect(afterStop > 0, "the watchdog never ran, so stopping it proves nothing")
-        #expect(clockReads.value == afterStop,
-                Comment(rawValue: "the watchdog read its clock \(clockReads.value - afterStop) more times "
-                        + "after being stopped, at an interval that would have given it 20 chances. A "
-                        + "watchdog that cannot be stood down costs an idle app for the whole session."))
+        // ONE PING MAY STILL BE IN FLIGHT, and that is correct rather than a leak: `stop` cancels the
+        // timer, and a ping already posted still runs its main-queue closure and reads the clock a second
+        // time. Measured while writing this, which is how the distinction was found: the first version
+        // asserted no read at all after `stop` and went red with exactly one. So the in-flight work is
+        // allowed to land, and what is asserted is that NOTHING FURTHER happens after it.
+        var controlAt = controlReads.value
+        _ = await waitUntil("the control to tick, letting any in-flight ping land",
+                            timeout: .seconds(20)) { controlReads.value >= controlAt + 8 }
+        let settled = clockReads.value
+
+        controlAt = controlReads.value
+        _ = await waitUntil("the control to tick twenty more times, which a running watchdog would have",
+                            timeout: .seconds(20)) { controlReads.value >= controlAt + 40 }
+        control.stop()
+
+        #expect(atStop > 0, "the watchdog never ran, so stopping it proves nothing")
+        #expect(settled - atStop <= 2,
+                Comment(rawValue: "\(settled - atStop) clock reads landed after the stop, which is more "
+                        + "than the one ping that can be in flight."))
+        #expect(controlReads.value >= controlAt + 40,
+                "the control never ticked, so nothing here waited long enough to prove an absence")
+        #expect(clockReads.value == settled,
+                Comment(rawValue: "the watchdog read its clock \(clockReads.value - settled) more times "
+                        + "after the in-flight ping had landed, over a window in which a running one "
+                        + "ticked twenty times. A watchdog that cannot be stood down costs an idle app "
+                        + "for the whole session."))
     }
 }

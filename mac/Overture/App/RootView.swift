@@ -1822,7 +1822,8 @@ struct RootView: View {
     // A message that reappears on every launch is what teaches somebody to skim the whole panel (#884).
     private func reportAnyFreezes() {
         guard let message = FreezeReport.newlyReported(in: StoreLocation.handoffDirectory,
-                                                       watchdogRan: freezeWatch.isWatching) else {
+                                                       watchdogRan: freezeWatch.isWatching,
+                                                       writesThatFailed: freezeWatch.writesThatFailed) else {
             return
         }
         status.set(message, priority: .warning)

@@ -27,9 +27,15 @@ enum FreezeReport {
     // OR that nothing was watching, and those are the two most different answers available (L98).
     static func newlyReported(in support: URL,
                               watchdogRan: Bool,
+                              writesThatFailed: Int = 0,
                               defaults: UserDefaults = .standard,
                               read: (URL) -> FreezeLog.Read = FreezeLog.read(at:)) -> String? {
         let found = read(FreezeLog.url(in: support))
+
+        // A record the app could not WRITE is the one state worse than a freeze, because it means the
+        // file is not the evidence anybody thinks it is. Said first and on its own: folding it into a
+        // count would make an unwritable file read as a quiet session (L11, L13).
+        if writesThatFailed > 0 { return FreezeNoticeCopy.writesFailed(writesThatFailed) }
 
         guard watchdogRan else {
             // Said once per session, and never alongside a count: a count taken with no watchdog is a
@@ -95,6 +101,13 @@ enum FreezeNoticeCopy {
             sentence += unreadableSentence(unreadableLines)
         }
         return sentence
+    }
+
+    static func writesFailed(_ count: Int) -> String {
+        if count == 1 {
+            return "Overture stopped responding at least once and could not write the record of it, so nothing here can say how long for."
+        }
+        return "Overture stopped responding \(count) times and could not write the records of them, so nothing here can say how long for."
     }
 
     static func unreadableSentence(_ lines: Int) -> String {

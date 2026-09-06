@@ -200,6 +200,38 @@ struct TheAppReportsItsOwnFreezesTests {
         #expect(said.contains("3 earlier records could not be read"))
     }
 
+    // A record the app could not WRITE is the one state worse than a freeze, because the file is then not
+    // the evidence anybody thinks it is. Said FIRST and on its own, or an unwritable file reads as a quiet
+    // session (L11, L13, L95). The push gate's own lessons check is what asked for this: `FreezeLog.append`
+    // answers false when it cannot write and the first version of `FreezeWatch` discarded that answer.
+    @Test("a freeze the app could not write down says so, ahead of anything else")
+    func aFailedWriteIsSaidFirst() {
+        let said = FreezeReport.newlyReported(in: URL(fileURLWithPath: "/tmp"), watchdogRan: true,
+                                              writesThatFailed: 2, defaults: defaults("failed"),
+                                              read: { _ in FreezeLog.Read() })
+        #expect(said == FreezeNoticeCopy.writesFailed(2))
+        #expect(said?.contains("could not write") == true)
+    }
+
+    // And it outranks a report of freezes that WERE written, because a partial file is the misleading
+    // case: a count taken from it is a count of what survived rather than of what happened.
+    @Test("a failed write outranks the ordinary report")
+    func aFailedWriteOutranksTheReport() {
+        var read = FreezeLog.Read()
+        read.records = [stall(1.0, sequence: 1)]
+        let said = FreezeReport.newlyReported(in: URL(fileURLWithPath: "/tmp"), watchdogRan: true,
+                                              writesThatFailed: 1, defaults: defaults("outranks"),
+                                              read: { _ in read })
+        #expect(said?.contains("could not write") == true)
+        #expect(said?.contains("1.0 seconds") == false)
+    }
+
+    @Test("one failed write and several read differently")
+    func theFailedWriteCountIsSingularOrPlural() {
+        #expect(FreezeNoticeCopy.writesFailed(1).contains("at least once"))
+        #expect(FreezeNoticeCopy.writesFailed(3).contains("3 times"))
+    }
+
     // #3439's reader, which is the SECOND one this phase requires: the floor, asked for rather than
     // waited for.
     @Test("the longest stall can be asked for")

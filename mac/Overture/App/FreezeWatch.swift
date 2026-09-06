@@ -14,6 +14,24 @@ final class FreezeWatch {
     // the file is empty in both cases.
     private(set) var isWatching = false
 
+    // #3435, and the push gate's lessons check was right to ask: a write that FAILS must not be
+    // invisible. `FreezeLog.append` answers false when it cannot write, and discarding that answer would
+    // make an unwritable file indistinguishable from a session with no freezes, which is the exact fold
+    // this whole design exists to avoid one level up (L11, L13, L95).
+    //
+    // Counted rather than thrown, because there is nobody to throw to: this runs on the watchdog's queue
+    // during a freeze. The count is read by the reader and said in the notice.
+    @ObservationIgnored private let failures = FailureCount()
+
+    var writesThatFailed: Int { failures.value }
+
+    final class FailureCount: @unchecked Sendable {
+        private let lock = NSLock()
+        private var count = 0
+        func bump() { lock.withLock { count += 1 } }
+        var value: Int { lock.withLock { count } }
+    }
+
     @ObservationIgnored private var watchdog: MainThreadWatchdog?
 
     // Idempotent, because the launch task it is called from can run again when the window scene is torn
@@ -21,10 +39,11 @@ final class FreezeWatch {
     func start(support: URL) {
         guard watchdog == nil else { return }
         let url = FreezeLog.url(in: support)
+        let failures = self.failures
         let watchdog = MainThreadWatchdog(record: { record in
             // Written from the watchdog's own queue. Nothing here touches the main thread, or the record
             // could not be written during the freeze it records.
-            FreezeLog.append(record, to: url)
+            if !FreezeLog.append(record, to: url) { failures.bump() }
         })
         self.watchdog = watchdog
         watchdog.start()

@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1506 sentences**.
+Every sentence Overture can say to Dan: **1508 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -14,7 +14,7 @@ What is not, and why:
   sentences under tokens nobody reads.
 - **Nothing, if it is written as two literals joined with `+`.** Those ARE joined here, into the
   one sentence the running app says (#3155). What is still only part of what Dan reads is a
-  sentence carrying a VALUE: 542 of the 1506 below hold a
+  sentence carrying a VALUE: 543 of the 1508 below hold a
   `\(...)` where a number or a name goes, so what is printed is the template. They are counted
   here rather than listed again, because the hole is visible in the line itself; what was missing
   was any statement of how much of this document is templates.
@@ -1599,7 +1599,11 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ProposedConversation.swift`
 "Overture recorded those before it kept their dates, so it can't say which have already happened. What it can say is that a new shoot came through as recently as \(arrived), and the export now holds none at all. Re-export it from Downbeat, then re-read it here."
     `Domain/AppNotice.swift`
+"Overture stopped responding \(count) times and could not write the records of them, so nothing here can say how long for."
+    `Domain/FreezeReport.swift`
 "Overture stopped responding \(count) times. The longest was \(seconds) seconds."
+    `Domain/FreezeReport.swift`
+"Overture stopped responding at least once and could not write the record of it, so nothing here can say how long for."
     `Domain/FreezeReport.swift`
 "Overture stopped responding for \(seconds) seconds."
     `Domain/FreezeReport.swift`
