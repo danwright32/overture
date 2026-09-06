@@ -61,6 +61,7 @@ the workflow's runbook is its spec.
 
 | `feed-movement.log` (in `~/Library/Logs/Overture`) | App (`FeedMovementLog`, one line per source per successful scout; the default-file write is suppressed under tests so a run cannot inject fake movement into the evidence) | **NOBODY YET.** Written for #913, to retune `minReBaselineFraction` against real movement rather than the reasoned 0.9 guess. #913 is open and deferred, so this is a writer with no reader today, which is the whole reason these rows exist (L46) | n/a (one `key=value` line per source, ISO timestamp first so it sorts and greps by time) | none | `FeedMovementLogTests.swift` |
 | `gmail-connect-debug.log` (in `~/Library/Logs/Overture`) | App (`GmailAuthManager`, tracing the connect flow; the path is named once in `AgentLogLocation` rather than assembled at the writer, #2096) | By hand, when a connect fails. The app runs resident, so there is no console to watch it on | n/a (a plain trace log) | none | `AgentLogLocationTests.swift` (the name and the directory) |
+| `freeze-log.ndjson` (in the DATA directory, beside the store) | App (`MainThreadWatchdog`, #3435 Phase 2e: one line per main-thread stall, appended from the watchdog's OWN Dispatch queue and never from the main thread, or it could not be written during the freeze it records) | App (`FreezeReport.newlyReported`, read at launch by `RootView.reportAnyFreezes` and said once per freeze as a `.warning`; `FreezeReport.floor` is #3439's second reader, which asks for the longest stall rather than opening the file) | none (one JSON object per line: session, sequence, at, seconds, surface, load, loadAverage. The DATE strategy is pinned to ISO8601 in `FreezeLog.encoder`, because a file written by one version is read by the next) | none | `TheAppReportsItsOwnFreezesTests.swift`, `PrivacyOfTheFreezeLogTests.swift`, `WatchdogCostTests.swift` |
 | `queue-derivations.log` (in the DATA directory, not Logs) | App (`QueueRenderCounter`, **Debug builds only**; the suite is kept out of the file entirely by its own `underTests` seam, because the unit suite hosts itself in the full app and its renders were landing in the same file a real observation is read from) | By hand, plus the `derived N · <reason>` line the Debug queue draws above itself | n/a (one line per derivation, capped on write) | none | `QueueDerivationCounterTests.swift`, `QueueDerivationReasonTests.swift` |
 
 #3465: the three rows above are LOGS the app itself writes, and they were absent from this catalog
@@ -71,6 +72,11 @@ Asking the question found one immediately. `feed-movement.log` has been accumula
 per scout since #1114 and nothing has ever read it, because its only intended reader is #913, which is
 open and deferred. That is not an argument for deleting it (the evidence is exactly what #913 needs and
 cannot be reconstructed later), but it is worth being written down rather than discovered again.
+
+#3435 Phase 2e added `freeze-log.ndjson` above. Its own text said this would be "the first with a blank
+reader column"; that was already untrue when it was written, and the row is here on the honest reason
+instead. It carries a reader named in the same change, because a field only ever written looks alive to
+every is-this-used check while the purpose it was added for silently never happens (L46).
 
 One correction to #3465's own text, which said `backup.log` was already listed: it is not, and neither
 are the two resident-agent logs (`overture-agent.out.log`, `overture-agent.err.log`) or

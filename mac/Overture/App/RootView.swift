@@ -118,6 +118,10 @@ struct RootView: View {
     private var clientWindow: ClientWindow {
         clientRoster?.window(for: watchedSources) ?? .none
     }
+    // #3435 Phase 2e: the app watches its own main thread and writes what it finds. Held here because
+    // this is the view that outlives every sheet, so the watch spans a session rather than a screen.
+    @State private var freezeWatch = FreezeWatch()
+
     @State private var showArchive = false
     @State private var archiveJumpKey: String?
     // #685: which contact on the jumped-to show to highlight (nil when the jump only identifies
@@ -295,6 +299,19 @@ struct RootView: View {
                 .foregroundStyle(Color.primary)
         }
         .help(DaysOffAttention.help(reason))
+    }
+
+    // #3435 Phase 2e: which surface is on screen, as a closed enum case and never a name.
+    //
+    // Ordered so the TOPMOST thing wins, which is what "the surface on screen" means to somebody who has
+    // just watched the app stop answering. A sheet this does not know about leaves the answer as whatever
+    // is underneath it, which is a true statement about a real surface rather than a wrong one.
+    private var presentedSurface: StallSurface {
+        if showSources { return .sourcesSheet }
+        if showOrganisations { return .organisations }
+        if showFollowUps { return .followUps }
+        if showArchive { return .archive }
+        return .queue
     }
 
     private var nonDismissedProspects: [Prospect] { allProspects.filter { $0.status != .dismissed } }
@@ -977,6 +994,12 @@ struct RootView: View {
                 // be on disk at once, so a file nobody surfaces is the account of one run destroying
                 // another's paid work with no reason for Dan ever to open it (L46, L142).
                 reportAnyBoundaryViolation()
+                // #3435 Phase 2e: start watching the main thread, and say what the LAST session found.
+                // Started here rather than at app launch so it begins when there is a window to freeze,
+                // and reported here because this is the one place that already tells Dan what happened
+                // while he was not looking.
+                freezeWatch.start(support: StoreLocation.handoffDirectory)
+                reportAnyFreezes()
                 // #1035: the same reattach, for the scout's detached read. A scout-extract run outlives
                 // the app, so one can still be going at launch (a relaunch over a live run, or the window
                 // scene torn down and rebuilt mid-read). Reopen the takeover and follow it to completion
@@ -1184,6 +1207,17 @@ struct RootView: View {
     private func withOutermostWrappers<Content: View>(_ content: Content) -> some View {
         content
             .onAppear { modals.closesSheetsWith { closeEveryPresentedSheet() } }
+            // #3435 Phase 2e: the MAIN THREAD commits which surface is on screen, and the watchdog only
+            // ever reads it. Asking the main actor for it at write time would make the field unavailable
+            // at exactly the moment a record is being written, so the guard would fall silent on
+            // precisely the input it exists to judge (L345).
+            //
+            // Derived from the sheet flags rather than stamped by each surface for itself: one writer
+            // cannot drift from another, and a sheet added later that nobody remembers to stamp reports
+            // the surface underneath it rather than a stale one.
+            .onChange(of: presentedSurface, initial: true) { _, surface in
+                freezeWatch.stamp(surface)
+            }
             .actionFeedbackBanner()
             // Injected outermost so the sheets above inherit it too (#285).
             .environment(feedback)
@@ -1774,6 +1808,21 @@ struct RootView: View {
     // work having been destroyed.
     private func reportAnyBoundaryViolation() {
         guard let message = RunBoundaryViolations.newlyReported(in: StoreLocation.handoffDirectory) else {
+            return
+        }
+        status.set(message, priority: .warning)
+    }
+
+    // #3435 Phase 2e: THE READER, which is what makes the detector more than a field nobody looks at.
+    //
+    // `.warning` for the same reason the boundary violation notice is: an `.info` write can be silently
+    // overwritten by a later routine receipt, and this is the record of the app having stopped answering.
+    //
+    // Said ONCE per freeze, through `FreezeReport`, which remembers in defaults what it has already said.
+    // A message that reappears on every launch is what teaches somebody to skim the whole panel (#884).
+    private func reportAnyFreezes() {
+        guard let message = FreezeReport.newlyReported(in: StoreLocation.handoffDirectory,
+                                                       watchdogRan: freezeWatch.isWatching) else {
             return
         }
         status.set(message, priority: .warning)

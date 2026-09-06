@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1489 sentences**.
+Every sentence Overture can say to Dan: **1506 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -14,7 +14,7 @@ What is not, and why:
   sentences under tokens nobody reads.
 - **Nothing, if it is written as two literals joined with `+`.** Those ARE joined here, into the
   one sentence the running app says (#3155). What is still only part of what Dan reads is a
-  sentence carrying a VALUE: 539 of the 1489 below hold a
+  sentence carrying a VALUE: 542 of the 1506 below hold a
   `\(...)` where a number or a name goes, so what is printed is the template. They are counted
   here rather than listed again, because the hole is visible in the line itself; what was missing
   was any statement of how much of this document is templates.
@@ -43,6 +43,7 @@ What is not, and why:
 - `Domain/EventPlace.swift`: A location VALUE written into a data field, never a sentence Dan reads (#2378)
 - `Domain/FeedMovementLog.swift`: a machine-parsed diagnostic log line for #913, never shown to Dan
 - `Domain/FollowUp.swift`: outbound-email: a recipient reads this, not Dan (#915, #2650)
+- `Domain/FreezeLog.swift`: a filename, not a sentence Overture says
 - `Domain/LaunchMigrations.swift`: developer diagnostic log, not the app's own voice (#915)
 - `Domain/ListingOrganiser.swift`: parser tokens matched against ticketing pages, never Overture's voice
 - `Domain/NaturalKeyVenueMigration.swift`: developer diagnostic log, not the app's own voice (#915)
@@ -313,6 +314,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/ActionFeedback.swift`
 " Confirm you've checked it and it's fine to send as-is."
     `Domain/DraftReviewNotes.swift`
+" How busy this Mac was at the time could not be read, so a busy Mac cannot be ruled out as the cause."
+    `Domain/FreezeReport.swift`
 " It has about \(PrepStatus.duration(seconds: remaining)) left. Press Run scout again once it finishes."
     `Domain/ScoutStartGate.swift`
 " Left \(handWrittenSpared) emails you wrote yourself alone; re-prep those shows on their own cards if you want them replaced."
@@ -325,6 +328,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ScoutStartGate.swift`
 " Their email matches the address on file."
     `Domain/HistoryMatch.swift`
+" This Mac was busy with something else at the time, so it may say more about the machine than about Overture."
+    `Domain/FreezeReport.swift`
 " \(others) other matches are flagged the same way."
     `Domain/PossibleMatchFanOut.swift`
 " a one-off hunt."
@@ -356,6 +361,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ClientCoverage.swift`
 "1 contact named a way in and gave none, and the run never once said it found no route"
     `Domain/RunInstructionCompliance.swift`
+"1 earlier record could not be read, which is what force quitting Overture while it is frozen leaves behind."
+    `Domain/FreezeReport.swift`
 "1 later night"
     `App/ActionFeedback.swift`
 "1 more show stored a reason like these, but its own answer says it can be reached, so its card never says it."
@@ -412,6 +419,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/Reachability.swift`
 "A contact on this show is held back by a check (a venue guess, a press address, a duplicate, the salutation, or the draft lint). Look at it below: dismissing the check releases the email."
     `UI/DraftReviewView.swift`
+"A draft was being reviewed at the time."
+    `Domain/FreezeReport.swift`
 "A hard bounce means the mail was rejected outright, so the show has stopped being chased and nobody has seen the pitch. Open the show to fix the address and pitch again. If the address is fine and the bounce was wrong, Not really bounced on the contact clears it."
     `Domain/AppNotice.swift`
 "A later night of this run is out: you blocked \(day) (\(name))."
@@ -444,6 +453,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/StalledReplyDraft.swift`
 "A reply drafting run finished, but Overture couldn't read what it wrote, so no draft was saved (\(reason)). The file it wrote is still on disk, as overture-reply-classify-results.json."
     `Domain/ReplyClassifyRunSummary.swift`
+"A reply was being answered at the time."
+    `Domain/FreezeReport.swift`
 "A reply-classify run is already in progress. Wait for it to finish."
     `Integration/ReplyClassifyService.swift`
 "A run wrote into another run's results file, so answers you already paid for may have been overwritten."
@@ -875,6 +886,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/OutcomePatterns.swift`
 "Follow up"
     `UI/InquiryRowView.swift`
+"Follow ups was on screen."
+    `Domain/FreezeReport.swift`
 "Follow-up sent to \(org)"
     `App/ActionFeedback.swift`
 "Follow-up tasks aren't being created. Open Overture and allow it to control OmniFocus."
@@ -1271,6 +1284,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/OutcomePatterns.swift`
 "No way to reach them"
     `Domain/ShowOutcome.swift`
+"No window was open at the time."
+    `Domain/FreezeReport.swift`
 "Nobody found to write to"
     `Domain/Reachability.swift`
 "Nobody on this show publishes an address"
@@ -1366,6 +1381,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/DraftReviewNotes.swift`
 "Nothing recorded which page \(name)'s address was read off, so it isn't counted as verified."
     `Domain/DraftReviewNotes.swift`
+"Nothing recorded which screen was open."
+    `Domain/FreezeReport.swift`
 "Nothing scouted yet"
     `Domain/EmptyState.swift`
 "Nothing to act on. Shows you've pitched appear here for a gentle follow-up, again once the date has passed so you can close them out, and whenever a conversation turns up that might be their reply; they drop off the moment you act on one."
@@ -1496,6 +1513,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Integration/PrepQueueService.swift`
 "Overture contact: "
     `Domain/OmniFocusSync.swift`
+"Overture could not check whether it stopped responding this session, so nothing here can say whether it did."
+    `Domain/FreezeReport.swift`
 "Overture could not open its backup folder, so there is nothing to compare against. Nothing has been changed. Check that folder before working."
     `App/StoreShrinkCheck.swift`
 "Overture could not open its data file to check it at \(path). Nothing has been opened or changed. The file may be in use by another program, or its permissions may have changed. Check that file before reopening Overture."
@@ -1580,6 +1599,10 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ProposedConversation.swift`
 "Overture recorded those before it kept their dates, so it can't say which have already happened. What it can say is that a new shoot came through as recently as \(arrived), and the export now holds none at all. Re-export it from Downbeat, then re-read it here."
     `Domain/AppNotice.swift`
+"Overture stopped responding \(count) times. The longest was \(seconds) seconds."
+    `Domain/FreezeReport.swift`
+"Overture stopped responding for \(seconds) seconds."
+    `Domain/FreezeReport.swift`
 "Overture was not checking for replies or bookings for \(PrepStatus.duration(seconds: seconds)), and resumed \(PrepStatus.relative(from: endedAt, to: now))"
     `Domain/WatchGap.swift`
 "Overture was not running for \(PrepStatus.duration(seconds: seconds)), and started again \(PrepStatus.relative(from: endedAt, to: now))"
@@ -1961,6 +1984,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/OnboardingView.swift`
 "Set up Overture…"
     `App/MenuBarContent.swift`
+"Settings was on screen."
+    `Domain/FreezeReport.swift`
 "Shoots leave the export one at a time, as their dates pass, and the furthest of these was not until \(furthest), so all of them going together reads as a broken export rather than an empty diary. Re-export it from Downbeat, then re-read it here."
     `Domain/AppNotice.swift`
 "Show date to be confirmed"
@@ -2125,6 +2150,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/Reachability.swift`
 "The address found here is in a different name from the contact on this show, and no page was recorded showing it reaches them. A pitch would greet one person and arrive with another, so Overture is holding it. If it does reach them, clear the flag on the contact and it is sendable again."
     `Domain/Reachability.swift`
+"The archive was on screen."
+    `Domain/FreezeReport.swift`
 "The calendar reader ran but produced nothing this run."
     `Domain/ScoutWarnings.swift`
 "The calendars Overture re-checks on every scout, and how each one is doing"
@@ -2167,6 +2194,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/Reachability.swift`
 "The only listing for this one is a social page, which sits behind a login, so there's no way in from there. You can still keep it and add a contact by hand. This is a heads up so you don't dismiss a reachable show in its place."
     `Domain/Reachability.swift`
+"The organisations list was on screen."
+    `Domain/FreezeReport.swift`
 "The other \(missed) had"
     `App/ActionFeedback.swift`
 "The other one had"
@@ -2181,6 +2210,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Integration/ScoutService.swift`
 "The pitch to \(first.email) for \(first.show) bounced, so nobody ever read it."
     `Domain/AppNotice.swift`
+"The queue was on screen."
+    `Domain/FreezeReport.swift`
 "The reader came back with nothing for that page. Try again, or paste the org's events page."
     `UI/LeadIntakeModel.swift`
 "The reader didn't finish in time. It may still be running; try again in a minute."
@@ -2227,6 +2258,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/ActionFeedback.swift`
 "The show's status, read from its contacts. Mark a contact below to change it."
     `UI/DraftReviewView.swift`
+"The sources sheet was on screen."
+    `Domain/FreezeReport.swift`
 "The update never started. Ask Claude to look."
     `Domain/UpdateAttempt.swift`
 "The update stopped without saying why. Ask Claude to look."
@@ -2813,6 +2846,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/RunProgress.swift`
 "\(lead) It has happened \(howMany). \(evidence)"
     `Domain/RunBoundaryViolations.swift`
+"\(lines) earlier records could not be read, which is what force quitting Overture while it is frozen leaves behind."
+    `Domain/FreezeReport.swift`
 "\(list(runs)) run past \(dateLabel), so dismissing them takes their later nights too."
     `Domain/BulkDismiss.swift`
 "\(list) has listed shows before and came back with nothing this run. Its page format may have changed."
