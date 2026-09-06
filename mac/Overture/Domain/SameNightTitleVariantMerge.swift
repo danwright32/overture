@@ -117,6 +117,12 @@ enum SameNightTitleVariantMerge {
                     })
                     ?? NaturalKeyVenueMigration.richestContactList(candidates)
                     ?? probed(candidates)
+                    // #3582: and BELOW those three, above age. Being in the feed is evidence about which
+                    // row the source still recognises, which is a different question from what a row
+                    // holds, so it may not outrank a rung that protects something a delete would destroy.
+                    // Above age because age is not evidence of anything at all: it is the tie-break this
+                    // ladder falls to when nothing else separates the rows.
+                    ?? stillInTheFeed(candidates)
                     ?? candidates[0]
                 // #1761: the survivor is chosen for what it HOLDS (Dan's decision, a paid answer, its
                 // age), which is a different question from which row names the room best. Since the room
@@ -148,6 +154,21 @@ enum SameNightTitleVariantMerge {
                    let title = moreInformativeTitle(cluster.map(\.groupName)) {
                     survivor.groupName = title
                 }
+                // #3582: the survivor is about to stand for a show the feed IS listing, so it must not
+                // keep a miss count earned by a key the feed stopped matching. Without this the row goes
+                // on rendering struck through as "No longer in the feed, may be cancelled" on a live
+                // show. Measured on the live store 2026-09-06: 9 future shows were carrying that warning
+                // falsely, the worst at 59 consecutive misses.
+                //
+                // The same write DriftedRunMerge makes for the same reason, and deliberately the same
+                // scope: nothing else is touched. The KEY is left exactly as it is, because rewriting one
+                // here is the only step that can throw against `naturalKey`'s unique index inside a
+                // launch save whose failure is discarded. Where the survivor is the live row (the rung
+                // above, and 8 of those 9) its key is already the current one and nothing needs rewriting.
+                // Where it is not, the key stays stale and #3379 owns that half.
+                if stillInTheFeed(cluster) != nil {
+                    survivor.missedScoutCount = 0
+                }
                 for loser in cluster where loser.persistentModelID != survivor.persistentModelID {
                     context.delete(loser)
                     summary.duplicatesDeleted += 1
@@ -164,6 +185,13 @@ enum SameNightTitleVariantMerge {
     // answer away and re-offers the same check. A probed row outranks an unprobed one.
     private static func probed(_ cluster: [Prospect]) -> Prospect? {
         cluster.first { $0.reachabilityProbedAt != nil }
+    }
+
+    // #3582: the row the source is still listing, meaning it matched the most recent sweep. `cluster` is
+    // ordered oldest first, so where several are live this keeps the ladder's existing age tie-break
+    // rather than introducing a second one.
+    private static func stillInTheFeed(_ cluster: [Prospect]) -> Prospect? {
+        cluster.first { $0.missedScoutCount == 0 }
     }
 
     // #1846: the name DAN gave a room when he started watching it, keyed by the room's own fold so a copy

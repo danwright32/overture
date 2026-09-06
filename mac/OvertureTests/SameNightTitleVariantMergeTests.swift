@@ -450,4 +450,85 @@ struct SameNightTitleVariantMergeTests {
             ["frigid   nightcap", "FRIGID Nightcap: FUTURE TENSE"]) == "FRIGID Nightcap: FUTURE TENSE")
     }
 
+
+    // #3582. Carnegie changed its own URL slug, so the scout minted a second row for a show it no longer
+    // recognised, and this pass then deleted the row the feed IS listing and kept the one it is not.
+    // Measured on the live store 2026-09-06 across five launch backups: the fresh row is re-minted by
+    // every scout and destroyed by every launch, the survivor's miss count climbs by one each sweep and
+    // nothing can ever reset it, and 9 future shows were carrying a false "may be cancelled" warning
+    // because of it, the worst at 59 consecutive misses.
+    //
+    // The ladder chooses a survivor for what it HOLDS, which is right and is not what changes here: 8 of
+    // those 9 held nothing at all, so they were winning on the LAST rung, age. Being in the feed is
+    // evidence about IDENTITY rather than about worth, so it goes in above age and below every rung that
+    // protects something a delete would destroy.
+    @Test func theRowTheFeedStillListsSurvivesOverAnOlderRowItHasStoppedMatching() throws {
+        let ctx = try context()
+        insert(ctx, "Jinhyung Park", date: "2026-10-22", venue: "Weill Recital Hall", ingestedAt: 1_000) {
+            $0.missedScoutCount = 28
+            $0.sourceListingURL = "https://www.carnegiehall.org/calendar/2026/10/22/jinhyung-park-0700pm"
+        }
+        insert(ctx, "Jinhyung Park, Piano", date: "2026-10-22", venue: "Weill Recital Hall",
+               ingestedAt: 2_000) {
+            $0.missedScoutCount = 0
+            $0.sourceListingURL =
+                "https://www.carnegiehall.org/calendar/2026/10/22/jinhyung-park-piano-0700pm"
+        }
+
+        let summary = SameNightTitleVariantMerge.run(in: ctx)
+        try? ctx.save()
+
+        #expect(summary.duplicatesDeleted == 1)
+        let survivor = try #require(all(ctx).first)
+        #expect(survivor.naturalKey.hasPrefix("Jinhyung Park, Piano|"),
+                Comment(rawValue: "the merge kept the row the feed has stopped listing, so the scout "
+                    + "re-mints the live one on the next sweep and this launch destroys it again"))
+        #expect(survivor.missedScoutCount == 0)
+    }
+
+    // The other half, and the boundary of this fix. Where the older row holds something a delete would
+    // destroy (a paid reachability answer, found addresses, an outreach record) it MUST survive, and its
+    // key then stays the one the feed has stopped publishing.
+    //
+    // The key is deliberately NOT rewritten, and that is a decision this pass inherits rather than makes.
+    // DriftedRunMerge faced exactly this and recorded why: "rewriting a key here is the only step that
+    // could throw against the unique index, inside a launch save shared with every other migration whose
+    // failure is currently discarded". `Prospect.naturalKey` is `@Attribute(.unique)`, so copying a
+    // loser's key onto a survivor in the same unsaved context is the one write here that can fail the
+    // whole launch save. Making two rules agree without finding the decision behind each is L542.
+    //
+    // So what this asserts is the boundary: the paid answer survives, the false "may be cancelled" goes
+    // away now, and the KEY is left alone. #3379 owns the rewrite, and until it ships this row will
+    // re-accrue misses on the next sweeps, which is stated here rather than left for somebody to
+    // discover. One of the nine measured on 2026-09-06 was this shape (New York Percussion Series, 20
+    // misses, holding a contact and a probe).
+    @Test func aSurvivorKeptForWhatItHoldsStopsBeingFlaggedGoneButKeepsItsKey() throws {
+        let ctx = try context()
+        insert(ctx, "New York Percussion Series", date: "2026-09-08", venue: "The Players Theatre",
+               ingestedAt: 1_000) {
+            $0.missedScoutCount = 20
+            $0.sourceListingURL = "https://theplayerstheatre.com/show-schedule.html"
+            $0.reachabilityProbedAt = Date(timeIntervalSince1970: 1_500)
+        }
+        insert(ctx, "New York Percussion Series (Featuring Percussion People)", date: "2026-09-08",
+               venue: "The Players Theatre", ingestedAt: 2_000) {
+            $0.missedScoutCount = 0
+            $0.sourceListingURL = "https://ci.ovationtix.com/277/production/1265775"
+        }
+
+        let summary = SameNightTitleVariantMerge.run(in: ctx)
+        try? ctx.save()
+
+        #expect(summary.duplicatesDeleted == 1)
+        let survivor = try #require(all(ctx).first)
+        // The probed row survives, which is the existing rule and is deliberately unchanged.
+        #expect(survivor.reachabilityProbedAt != nil, "the paid answer was destroyed")
+        #expect(survivor.missedScoutCount == 0,
+                Comment(rawValue: "the survivor kept a miss count earned by a key the feed no longer "
+                    + "publishes, so it still renders as may be cancelled on a live show"))
+        // Pinned, not incidental: see the note above and #3379.
+        #expect(survivor.naturalKey.hasPrefix("New York Percussion Series|"),
+                "the key was rewritten here, which is the one write that can throw the launch save")
+    }
+
 }
