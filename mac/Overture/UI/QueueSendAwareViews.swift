@@ -91,11 +91,17 @@ struct QueueSendAwareRow<Content: View>: View {
     let sendState: SendProgressState
     @ViewBuilder let content: (_ highlightedKey: String?,
                                _ sendingSince: Date?,
-                               _ replySince: @escaping (String) -> Date?) -> Content
+                               _ replySince: @escaping (String) -> Date?,
+                               _ isAddressStruck: @escaping (String) -> Bool) -> Content
 
     var body: some View {
         content(sendState.highlighted,
                 sendState.sendingSince(key),
-                { recipientId in sendState.replySendingSince(recipientId) })
+                { recipientId in sendState.replySendingSince(recipientId) },
+                // #2598: a CLOSURE for the same reason the reply lookup above is one. It is read inside
+                // the address's own row, so striking one address redraws that address rather than the
+                // card, and reading it here rather than at the call site keeps the dependency below
+                // QueueView's derivation (#1922, #1916).
+                { email in sendState.isStruck(SendProgressState.strikeKey(show: key, email: email)) })
     }
 }

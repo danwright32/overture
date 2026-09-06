@@ -52,6 +52,12 @@ struct ProspectRowView: View {
     // address rather than a recipient id because the two kinds are removed by different routes: one has a
     // Recipient row on this show, the other is printed from the organisation's own answer and has none.
     var onRemoveContactAddress: (_ address: QueueItem.DisplayedAddress) -> Void = { _ in }
+    // #2598: whether Dan has just struck this address, answered per address rather than for the card.
+    //
+    // Defaulted to false so every surface that draws this row without the queue's transient state (the
+    // Archive, the previews) is unaffected. A default that HID something would be the dangerous
+    // direction; this one can only ever show what the store says.
+    var isAddressStruck: (_ email: String) -> Bool = { _ in false }
     var onDismissContactReply: (_ recipientId: String) -> Void = { _ in }
     var onDismissContactBounce: (_ recipientId: String) -> Void = { _ in }
     var onDismissVenueMatch: (_ recipientId: String) -> Void = { _ in }
@@ -742,7 +748,11 @@ struct ProspectRowView: View {
             // column three times was a second thing competing for its WIDTH; a second line costs height
             // instead, which this row has, and it keeps the address on a line of its own to wrap into.
             VStack(alignment: .trailing, spacing: 3) {
-                ForEach(item.displayedContactAddresses) { address in
+                // #2598: struck addresses are gone from this list on the PRESS, rather than when the
+                // rebuild lands 860 ms later. Filtered here rather than in the derivation deliberately:
+                // the derivation is what takes the 860 ms, so anything that waits for it cannot be the
+                // answer to waiting for it.
+                ForEach(item.displayedContactAddresses.filter { !isAddressStruck($0.email) }) { address in
                     VStack(alignment: .trailing, spacing: 0) {
                         // Who the address belongs to, when the check named them. Quieter than the address:
                         // the address is the thing Dan acts on, this is the fact that tells him what it is
