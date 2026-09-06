@@ -850,6 +850,36 @@ already drifting from the Swift version it mirrored.
   judging half rides along on every push through `scripts/analyse-freeze-load.test.sh`, which builds its
   own recordings with a known distribution rather than reading the real ones.
 
+- **Scrolling the running app from a script: `scripts/scroll-wheel.sh` (#3503).** `cliclick` on this Mac
+  has move, click and wait and no wheel at all, so until this the measurement scripts could not scroll
+  anything: `scripts/freeze-measure.sh` samples a live process and had no way to make it scroll, which
+  left #3439's decision gate able to measure a keystroke and a render pass and not the third thing it is
+  specified to compare. `RealScrollInvalidationTests` could already drive a wheel event, but only into an
+  `NSScrollView` its own process owns, which settles the SwiftUI mechanism question and nothing else.
+  **It DRIVES DAN'S MACHINE, so it refuses without `--yes`** and says what it would do first. It is a
+  Dan-at-the-machine job rather than an agent one.
+  Two things it does are the two #3480 learned the hard way, and both are the reason to use it rather
+  than a fresh `CGEvent` one-liner. It CONFIRMS the scroll landed, by reading the target's vertical
+  scroll bar through the accessibility API before and after, because a scroll that did nothing and a
+  surface that does not rebuild on scroll produce identical readings and the second is the thing being
+  measured (L159). And it posts to the PROCESS by pid rather than to the session tap, so it does not
+  need the app to be frontmost, which is what defeated the accessibility route before: Overture is
+  `LSUIElement` and never becomes frontmost.
+  It targets by EXECUTABLE PATH and refuses when the lookup finds more than one, which is this
+  repository's standing rule after a Release app was quit in place of a Debug one (L70); the other
+  build being up is a note naming both pids rather than a refusal.
+  Read its answer correctly: three outcomes, and the third is the one that matters. `0` LANDED (or SENT,
+  under `--no-confirm`, which says so rather than claiming a landing), `1` DID NOT MOVE, which is a real
+  finding about the surface and is also what a list already scrolled to its end looks like, and `2`
+  UNMEASURED, which is no app, two candidates, an unreadable window tree, or the refusal. UNMEASURED is
+  never folded into either of the others, because a scroll that did nothing and a tree that could not be
+  read call for opposite next steps (L98, L11).
+  The event construction is Swift, in `mac/scripts/lib/post-scroll-wheel.swift`, compiled by `swift` on
+  each run rather than built: a tool that needs building before it can be used is a tool nobody uses.
+  Its judging half rides along on every push through `scripts/scroll-wheel.test.sh`, which drives every
+  refusal and all three outcomes through named seams, so nothing in the suite posts a real event or
+  needs an app on screen.
+
 - **Judging whether a script succeeded: capture its status directly, never through a pipe.**
   `some-script.sh | tail -5` reports `tail`'s exit status, not the script's, so a script that died
   instantly on an unbound variable and printed nothing at all reads as a clean pass. That happened
