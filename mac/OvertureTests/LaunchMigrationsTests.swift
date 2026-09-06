@@ -297,4 +297,35 @@ struct LaunchMigrationsTests {
             throw error
         }
     }
+
+    // #3598: WIRED, not merely built, for the same reason as the test above. `EmptyReasonSupersededRepair`
+    // is a pass nothing else calls, so dropping its line here would leave its own suite entirely green
+    // while the repair never ran on Dan's Mac (L3). Proven by deleting that line and watching this go red.
+    //
+    // In memory rather than disk backed: the claim is that the call happens, and the save behaviour is
+    // already what the first test in this suite proves. The handoff directory is an explicit path that
+    // does not exist, so nothing here can read this Mac's real one (L2).
+    @Test func launchClearsAnEmptyReasonTheRowsOwnContactsContradict() throws {
+        let context = ModelContext(try ModelContainer(
+            for: Schema([Prospect.self, Recipient.self]),
+            configurations: [ModelConfiguration(isStoredInMemoryOnly: true)]))
+        let p = makeProspect("superseded-reason|2027-04-18|rowan hall")
+        context.insert(p)
+        p.reachabilityEmptyReason = .namedButNoRoute
+        p.addRecipient(Recipient(id: "form:https://kestrelquartet.example/contact", email: nil,
+                                 name: "Kestrel Quartet", role: nil, provenance: .performer,
+                                 contactMethodRaw: "form_or_dm", contactConfidenceRaw: "medium",
+                                 contactFormURL: "https://kestrelquartet.example/contact",
+                                 contactSourceURL: nil))
+        try context.save()
+
+        LaunchMigrations.run(
+            in: context,
+            defaults: UserDefaults(suiteName: "launch-3598-\(UUID().uuidString)")!,
+            handoffDirectory: URL(fileURLWithPath: "/nonexistent-3598-handoff"))
+
+        #expect(p.reachabilityEmptyReason == nil, Comment(rawValue:
+            "the row holds a form, so the sentence saying it has no way in is superseded and the "
+            + "launch pass that clears it is not wired in"))
+    }
 }

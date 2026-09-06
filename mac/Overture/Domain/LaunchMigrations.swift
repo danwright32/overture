@@ -84,6 +84,15 @@ enum LaunchMigrations {
         // not a rule. `markProbed` and `PrepImporter.ingest` already refuse to create this state again.
         DeadRunWriteOffRepair.run(in: context, handoffDirectory: handoffDirectory,
                                   defaults: defaults, now: now)
+        // #3598: clear a stored empty reason the row's own contacts contradict. Deliberately LAST of the
+        // four reachability passes, because all three above can move a row into that state: the two
+        // repairs rewrite verdicts, and ContactFormResultMigration upgrades one off `.noEmailFound` and
+        // leaves the reason behind. Running it first would leave rows the same launch had just created.
+        //
+        // EVERY LAUNCH, unlike the two repairs above it, and the difference is on the pass itself: it
+        // changes nothing any surface renders, so it cannot reverse a decision Dan made, and the
+        // contradiction can be created again after it by a contact added by hand (L332).
+        EmptyReasonSupersededRepair.run(in: context)
         // LIVE-STORE-CLAIM verified=2026-07-26 measure="rows carrying the classifier catch-all fit reason when Phase 7 shipped the clearing migration"
         // #1600: clear the classifier's retired catch-all fit reason from the rows that already carry it
         // (499 on the live store). Idempotent: guarded by "still carries the retired string". Without it

@@ -128,9 +128,8 @@ enum SendGroup {
     // INCLUDED and marked, rather than dropped: a list that silently omits somebody on the show under-reports
     // who is on it, which is the same defect #2015 fixed on the draft card.
     static func candidates(of prospect: Prospect) -> [SendCandidate] {
-        prospect.recipients
-            .filter { $0.isSendablePending || $0.isBlockedAwaitingReview }
-            .sorted { $0.sendOrderRank != $1.sendOrderRank ? $0.sendOrderRank < $1.sendOrderRank : $0.id < $1.id }
+        Recipient.inSendOrder(
+            prospect.recipients.filter { $0.isSendablePending || $0.isBlockedAwaitingReview })
             .compactMap { r in
                 guard let email = r.email, !email.isEmpty else { return nil }
                 return SendCandidate(id: r.id, name: r.name ?? email, email: email,
@@ -144,9 +143,8 @@ enum SendGroup {
     // reads and what leaves cannot differ.
     static func sendableFor(_ prospect: Prospect, ids: [String]) -> [Recipient] {
         let wanted = Set(ids)
-        return prospect.recipients
-            .filter { wanted.contains($0.id) && $0.isSendablePending }
-            .sorted { $0.sendOrderRank != $1.sendOrderRank ? $0.sendOrderRank < $1.sendOrderRank : $0.id < $1.id }
+        return Recipient.inSendOrder(
+            prospect.recipients.filter { wanted.contains($0.id) && $0.isSendablePending })
     }
 
     // #2049: the same group WITHOUT the approval gate, for showing what the email will look like rather
@@ -162,9 +160,7 @@ enum SendGroup {
     // Same body as before, so the two cannot bucket contacts differently: `pendingGroup` is now this plus
     // its gate.
     static func previewGroup(of prospect: Prospect) -> [Recipient] {
-        let sendable = prospect.recipients
-            .filter(\.isSendablePending)
-            .sorted { $0.sendOrderRank != $1.sendOrderRank ? $0.sendOrderRank < $1.sendOrderRank : $0.id < $1.id }
+        let sendable = Recipient.inSendOrder(prospect.recipients.filter(\.isSendablePending))
         guard prospect.sendsTogether else { return Array(sendable.prefix(1)) }
         return sendable
     }
