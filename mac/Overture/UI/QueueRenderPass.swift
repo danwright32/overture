@@ -92,7 +92,16 @@ enum QueueRenderPass {
     // A `static var` here would be exactly what scripts/check-test-shared-state.sh exists to report.
     //
     // COST WHEN NOBODY IS MEASURING: one task-local read per counted call, which is nil, and then
-    // nothing. `nothingIsCountedWhenNobodyIsMeasuring` pins that the app leaves no tally behind.
+    // nothing. `nothingIsCountedWhenNobodyIsMeasuring` pins that the app leaves no tally behind, which is
+    // a DIFFERENT claim: it proves no counting happened, never that asking was free.
+    //
+    // #3500 MEASURED it rather than leaving that sentence to be trusted, because a task-local read walks
+    // the task's local storage rather than reading a plain global, and the call volume scales with the
+    // row count, which grows every night (L353). On the 1,142 row fixture, 2026-09-05: one pass makes
+    // 2,284 counted calls, and making that many with no tally bound costs 0.289 ms against a pass of
+    // 559.3 ms, which is 0.052%. Binding a tally, which only a test does, costs nothing measurable
+    // either. So the sentence above is true, and `WorkTallyCostTests` re-takes the reading on every push
+    // rather than this comment being the record (L32, L316).
     // NOT @MainActor, and that is forced rather than chosen: `SendGroup.CardGroups(of:)` is a
     // nonisolated synchronous initialiser, so a main-actor tally cannot be recorded from the very place
     // the send groups are built. The counters are guarded by a lock instead, which is the honest way to

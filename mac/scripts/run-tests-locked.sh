@@ -812,6 +812,18 @@ main() {
     printf '%s\n' "${QUEUE_COST_NEXT}" > "${QUEUE_COST_RECORD}" 2>/dev/null || true
   fi
 
+  # #3508: the same, for the LIVE STORE reading. It is the richer and more trustworthy of the two figures,
+  # since it reads Dan's actual data rather than a corpus matching its shape, it is the reference the
+  # fixture figure is judged against, and until now nothing anywhere said when it last ran. Its own record
+  # rather than a second key in the one above, so a run that measured only one cannot erase the other.
+  LIVE_COST_RECORD="${OVERTURE_LIVE_STORE_COST_RECORD:-${MAC_DIR}/../.overture-live-store-cost-measured}"
+  LIVE_COST_SEEN="$(cat "${LIVE_COST_RECORD}" 2>/dev/null || true)"
+  echo "run-tests-locked.sh: $(live_store_cost_report "${QUEUE_COST_TODAY}" "${LIVE_COST_SEEN}" "${last_output}")" >&2
+  LIVE_COST_NEXT="$(live_store_cost_seen_update "${last_output}" "${QUEUE_COST_TODAY}" "${LIVE_COST_SEEN}")"
+  if [[ -n "${LIVE_COST_NEXT}" && "${LIVE_COST_NEXT}" != "${LIVE_COST_SEEN}" ]]; then
+    printf '%s\n' "${LIVE_COST_NEXT}" > "${LIVE_COST_RECORD}" 2>/dev/null || true
+  fi
+
   # #3166: and this run's cost, appended to a local series, so a climb has something to be seen against.
   #
   # Advisory only and never blocking, in the way `check-branch-backlog.sh` already rides along: the point
