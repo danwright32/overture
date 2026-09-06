@@ -120,7 +120,7 @@ What is not, and why:
 - `UI/DraftSignaturePreview.swift`: renders the outbound email's own HTML (body + Gmail signature), not Overture's voice (#1203)
 - `UI/DraftSignaturePreview.swift`: browser-side measuring script, not a sentence Overture says to Dan (#915)
 
-## The same sentence, said in more than one place (55)
+## The same sentence, said in more than one place (56)
 
 Two copies of a sentence will drift. #843 owns fixing these.
 
@@ -166,6 +166,9 @@ Two copies of a sentence will drift. #843 owns fixing these.
 - "Delivery delayed"
   - `UI/DraftReviewView.swift`
   - `UI/QueueView.swift`
+- "Email or link"
+  - `UI/DraftReviewView.swift`
+  - `UI/ProspectRowView.swift`
 - "Find contacts only"
   - `App/RootView.swift`
   - `UI/DraftReviewView.swift`
@@ -835,6 +838,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/Reachability.swift`
 "Email or link"
     `UI/DraftReviewView.swift`
+    `UI/ProspectRowView.swift`
 "Emails are held at send unless the body opens with a greeting"
     `App/ActionFeedback.swift`
 "End this experiment"
