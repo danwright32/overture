@@ -1209,6 +1209,119 @@ assert_eq "a run with no cost line at all leaves the record untouched" \
   "$(queue_cost_seen_update "" "${TODAY}" "${QCOST_SEEN}")" \
   "${QCOST_SEEN}"
 
+# ---------------------------------------------------------------------------
+# live_store_cost_report / live_store_cost_seen_update: #3508
+# ---------------------------------------------------------------------------
+# `QueueRenderPassLiveStoreCostTests` arrived in the same change as the rebuild freshness record above
+# and got none of it, which is #2597's defect one instrument over, introduced by the change that fixed
+# it. It matters more here: this figure is the reference the fixture is judged against, and that
+# comparison is only meaningful while the live reading is recent.
+
+LIVECOST_SEEN="date=2026-08-30
+ms=883.4
+rows=1153"
+
+# The readout as the test really prints it, END TO END heading and all, so this fixture is driven by the
+# shape the parser will actually meet rather than by a line written to suit it (L48).
+LIVECOST_OUTPUT="queue-live-store-cost: one pass over the live store
+  rows                        1153
+  recipients                  306
+
+  BEFORE the pass, paid once per store change, twice where two queries read the table:
+    fetch and materialise     156.4 ms
+  THE PASS itself, which these two divide between them:
+    build the cards           438.4 ms
+    everything else           288.6 ms
+    the pass                  727.0 ms
+  END TO END, the fetch plus the pass:
+    total                     883.4 ms
+
+  work units in the pass: 1153 cards, 1153 send groups, 43 draft lint runs"
+
+assert_eq "the run that measured the live store reports its own figure" \
+  "$(live_store_cost_report "${TODAY}" "" "${LIVECOST_OUTPUT}")" \
+  "Live store pass cost: 883.4 ms over 1153 rows, measured by THIS run."
+
+# It reads the END TO END total, never the pass alone, which is the one figure in that readout a reader
+# cannot mistake for a part. Asserted directly, because both are plausible numbers and picking the wrong
+# one would produce a perfectly believable record of the wrong quantity (L118).
+assert_eq "the figure taken is the end to end total, not the pass alone" \
+  "$(live_store_cost_seen_update "${LIVECOST_OUTPUT}" "${TODAY}" "")" \
+  "date=${TODAY}
+ms=883.4
+rows=1153"
+
+# A REAL run prints BOTH cost blocks, and the rebuild one carries a `total` line of its own. Without the
+# END TO END anchor the live parser walks straight past its own block into that one and records the wrong
+# instrument's figure under the live store's name, which is a perfectly believable number for a quantity
+# nobody measured (L118). Found by mutation: the single-block case above cannot discriminate, because it
+# holds exactly one `total` line, so removing the anchor left the fixture green.
+LIVECOST_BOTH_BLOCKS="${LIVECOST_OUTPUT}
+
+queue-rebuild-cost: one rebuild of 1139 rows
+  total                       378.3 ms
+  engagement grouping          20.2 ms
+  presenter and venue walk     20.6 ms"
+
+assert_eq "the live store figure is taken from its own block, not the rebuild one below it" \
+  "$(live_store_cost_seen_update "${LIVECOST_BOTH_BLOCKS}" "${TODAY}" "")" \
+  "date=${TODAY}
+ms=883.4
+rows=1153"
+
+# And the other way round, so neither parser can be satisfied by the other's block: the rebuild parser
+# reads the rebuild figure out of the same combined output.
+assert_eq "the rebuild figure is taken from its own block too" \
+  "$(queue_cost_seen_update "${LIVECOST_BOTH_BLOCKS}" "${TODAY}" "")" \
+  "date=${TODAY}
+ms=378.3
+rows=1139"
+
+# The anchor is REQUIRED, not preferred, and this is the case that makes it so. A readout whose END TO END
+# heading has been reworded still carries `total` lines that are PARTS of the pass, and recording one of
+# those under the whole pass's name is a perfectly believable number for a quantity nobody measured
+# (L118). So a block with no END TO END heading records NOTHING, and the age then reads as stale, which is
+# a state somebody acts on, rather than as a fresh figure that is wrong.
+LIVECOST_NO_HEADING="queue-live-store-cost: one pass over the live store
+  rows                        1153
+  recipients                  306
+
+  THE PASS itself:
+    build the cards           438.4 ms
+    total                     727.0 ms"
+
+assert_eq "a readout with no END TO END heading records nothing at all" \
+  "$(live_store_cost_seen_update "${LIVECOST_NO_HEADING}" "${TODAY}" "${LIVECOST_SEEN}")" \
+  "${LIVECOST_SEEN}"
+
+assert_eq "never measured on this clone says so" \
+  "$(live_store_cost_report "${TODAY}" "")" \
+  "Live store pass cost: NEVER measured on this clone. Run TEST_RUNNER_MEASURE_QUEUE_LIVE_STORE=1 to take it."
+
+assert_eq "an existing live store figure is reported with its age" \
+  "$(live_store_cost_report "2026-09-05" "${LIVECOST_SEEN}")" \
+  "Live store pass cost: 883.4 ms over 1153 rows, last measured 2026-08-30 (6 days ago)."
+
+assert_eq "an unreadable live store record is not reported as never measured" \
+  "$(live_store_cost_report "${TODAY}" "date=2026-08-30")" \
+  "Live store pass cost: UNREADABLE record. It carries a date but no figure, so nothing here says what the last measurement was."
+
+# The case the whole thing rests on: an ordinary run did NOT measure, and must change nothing, or the
+# date is stamped forward on every push and the age always reads zero.
+assert_eq "a run that did not measure the live store leaves the record untouched" \
+  "$(live_store_cost_seen_update "queue-live-store-cost: not measured. Set TEST_RUNNER_MEASURE_QUEUE_LIVE_STORE=1 to run it." "${TODAY}" "${LIVECOST_SEEN}")" \
+  "${LIVECOST_SEEN}"
+
+assert_eq "a run with no live store line at all leaves the record untouched" \
+  "$(live_store_cost_seen_update "" "${TODAY}" "${LIVECOST_SEEN}")" \
+  "${LIVECOST_SEEN}"
+
+# A run that SKIPPED the measurement because there is no live store here, which is the ordinary state on
+# a clone and in an agent worktree. It prints its own line, and that line must not be parsed as a figure.
+assert_eq "a skipped run leaves the record untouched" \
+  "$(live_store_cost_seen_update "◇ Test measureOnePassAgainstTheLiveStore() skipped: no live store on this machine" "${TODAY}" "${LIVECOST_SEEN}")" \
+  "${LIVECOST_SEEN}"
+
 # Removed here rather than in a trap: this file already has an EXIT trap, and bash keeps exactly one, so
 # a second would silently replace the first and leak what that one was cleaning (#3065's own message
 # says so). Nothing below reads either directory.

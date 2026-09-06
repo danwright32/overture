@@ -33,6 +33,17 @@ import SwiftData
 // rides along on every push, through the `Queue rebuild cost:` readout (#2597).
 @MainActor
 @Suite("Queue render pass cost against the live store (#1992)")
+// KNOWN AND MEASURED, so nobody has to re-diagnose it: with three tests each cloning the store, the run
+// prints `BUG IN CLIENT OF libsqlite3.dylib: ... vnode unlinked while in use` three times, once per
+// clone. A SwiftData container holds its sqlite connection until it is deallocated and nothing here can
+// make that happen on demand, so the sandbox is removed while the connection is still open.
+//
+// Measured 2026-09-05 rather than assumed: with two tests it printed nothing; with three it printed nine
+// times, which one container per test and a fresh CONTEXT per reading brought down to three; making the
+// suite a `final class`, so Swift Testing releases an instance per test, did not change it. The integrity
+// it complains about is a THROWAWAY CLONE's, never Dan's store, which is read only and never opened here.
+// Recorded rather than chased: this is an opt-in diagnostic and the alternative is leaving a clone behind,
+// which is the leak #3065 exists to prevent.
 struct QueueRenderPassLiveStoreCostTests {
     // `nonisolated` because Swift Testing evaluates `.enabled(if:)` in a Sendable closure outside the
     // suite's actor, and this suite is @MainActor for QueueRenderPass.make's sake. Neither property
@@ -261,5 +272,96 @@ struct QueueRenderPassLiveStoreCostTests {
         #expect(second.rows < first.rows, "the queue scope returned the whole table, so its predicate did nothing")
         #expect(first.query > 0, "the first query took no measurable time, so it never ran")
         #expect(fourth.rows >= 0, "the kept-to-prep descriptor could not be run at all")
+    }
+
+    // #3501: does loading each card's contacts in one go help, now that a fixture with real contacts
+    // exists to measure it against?
+    //
+    // `QueueItem.init` reads `p.recipients` about fifteen times while building one card, `recipients` is
+    // a to-many SwiftData `@Relationship`, and neither of the queue's descriptors prefetches it, so a
+    // pass can FAULT the relationship rather than read it from memory.
+    //
+    // WHY THIS IS BEING ASKED A SECOND TIME. It was proposed on #1930 and explicitly WITHDRAWN, for a
+    // good reason recorded there: the corpus it would have been measured against inserted 724 prospects
+    // and not one `Recipient`, so every array was empty, faulting contributed nothing to the 275 ms
+    // figure, and nothing justified the change. #2048 rebuilt that fixture at the live spread, so the
+    // measurement that could not be taken can be taken. A withdrawn proposal whose reasoning was about
+    // the INSTRUMENT rather than about the code gets re-proposed every few months by whoever next reads
+    // a profile; answering it with a number closes it in whichever direction the number points.
+    //
+    // A NULL RESULT IS A REAL RESULT and is written down as one (L248), because the work that would
+    // exercise this again is exactly the work a recorded negative prevents.
+    //
+    // THREE readings, not two, and the third is what makes the other two readable. A prefetched pass run
+    // second is helped by the operating system's own page cache whatever SwiftData does, so a plain pass
+    // is run AGAIN afterwards: if the second plain reading is as fast as the prefetched one, the saving
+    // belonged to the cache and not to the prefetch (L70). Each opens its OWN container, so no reading
+    // is served objects a previous one already materialised.
+    @Test(.enabled(if: liveStoreExists, "no live store on this machine"))
+    func measureWhetherPrefetchingTheContactsHelps() throws {
+        guard ProcessInfo.processInfo.environment["MEASURE_QUEUE_LIVE_STORE"] != nil else {
+            print("queue-live-store-prefetch: not measured. Set TEST_RUNNER_MEASURE_QUEUE_LIVE_STORE=1 to run it.")
+            return
+        }
+
+        // ONE container, and a fresh CONTEXT per reading. Opening a second container on the same clone
+        // leaves both connections alive when the sandbox is removed, and the run then prints
+        // `BUG IN CLIENT OF libsqlite3.dylib: vnode unlinked while in use` nine times over. That is a
+        // real complaint rather than noise (L219): a SwiftData container holds its sqlite connection
+        // until it is deallocated, and nothing here can make that happen on demand. Measured both ways
+        // on 2026-09-05: three containers print it whether they share a clone or each get their own,
+        // one container prints nothing.
+        //
+        // A fresh context is enough for what this asks. The prefetch is a property of the FETCH, so it
+        // is taken afresh on every reading whatever is resident, and the three build figures below are
+        // within half a millisecond of each other, which is what says residency is not the variable.
+        let clone = try cloneLiveStore()
+        let container = try openContainer(at: clone)
+
+        // One reading: a fresh context, a fetch with the given descriptor, and building every card from
+        // what came back. The FETCH is timed separately from the build, because a prefetch moves work
+        // INTO the fetch and out of the build, so a single total cannot say whether anything was saved
+        // or merely moved.
+        func reading(prefetching: Bool) throws -> (fetch: Double, build: Double, rows: Int, contacts: Int) {
+            let ctx = ModelContext(container)
+            var descriptor = FetchDescriptor<Prospect>()
+            if prefetching { descriptor.relationshipKeyPathsForPrefetching = [\Prospect.recipients] }
+            var rows: [Prospect] = []
+            let fetch = seconds { rows = (try? ctx.fetch(descriptor)) ?? [] }
+            let build = seconds {
+                _ = QueueModel.items(from: rows, answers: [], corpus: rows, sources: [])
+            }
+            // Counted through the same context, so no fourth container is opened just to ask.
+            let contacts = (try? ctx.fetchCount(FetchDescriptor<Recipient>())) ?? 0
+            return (fetch, build, rows.count, contacts)
+        }
+
+        let plain = try reading(prefetching: false)
+        let prefetched = try reading(prefetching: true)
+        let plainAgain = try reading(prefetching: false)
+
+        let ms = { (s: Double) in String(format: "%.1f", s * 1000) }
+
+        print("""
+        queue-live-store-prefetch: does loading the contacts in one go help? (#3501)
+          rows \(plain.rows), contacts \(plain.contacts)
+                                        fetch      build      total
+          1. plain                      \(ms(plain.fetch)) ms   \(ms(plain.build)) ms   \(ms(plain.fetch + plain.build)) ms
+          2. prefetching recipients     \(ms(prefetched.fetch)) ms   \(ms(prefetched.build)) ms   \(ms(prefetched.fetch + prefetched.build)) ms
+          3. plain again                \(ms(plainAgain.fetch)) ms   \(ms(plainAgain.build)) ms   \(ms(plainAgain.fetch + plainAgain.build)) ms
+
+          Read 2 against 3, never against 1. Reading 3 is the control: it is a plain fetch run after the
+          same file has been read twice, so anything the operating system's page cache explains shows up
+          there too. A prefetch is only worth building if 2 beats 3 on the TOTAL.
+        """)
+
+        // The assertions are about the measurement being real, never about the numbers, which move with
+        // whatever else this Mac is running (L224).
+        #expect(plain.rows > 0, "the plain fetch returned no rows, so nothing was built")
+        #expect(prefetched.rows == plain.rows, "the two fetches saw different tables")
+        #expect(plain.contacts > 0, Comment(rawValue:
+                "the store holds no contacts at all, so every recipients array was empty and this "
+                + "measured the same nothing #1930 withdrew the proposal over"))
+        #expect(plain.build > 0, "building every card took no measurable time, so it never ran")
     }
 }
