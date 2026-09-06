@@ -19,7 +19,7 @@ struct SelfBookingConflictTests {
     @Test func aCommittedShowOnTheSameDateIsAConflict() {
         let target = show("b", "2026-08-01")
         let other = show("a", "2026-08-01", commitment: true, name: "Orchestra A")
-        let conflicts = SelfBookingConflict.conflicts(for: target, among: [other, target])
+        let conflicts = BothSelfBookingReadings.conflicts(for: target, among: [other, target])
         #expect(conflicts.map(\.other.name) == ["Orchestra A"])
     }
 
@@ -27,7 +27,7 @@ struct SelfBookingConflictTests {
     @Test func aNonCommittedShowOnTheSameDateIsNotAConflict() {
         let target = show("b", "2026-08-01")
         let other = show("a", "2026-08-01", commitment: false)
-        #expect(SelfBookingConflict.conflicts(for: target, among: [other, target]).isEmpty)
+        #expect(BothSelfBookingReadings.conflicts(for: target, among: [other, target]).isEmpty)
     }
 
     // The TARGET need not itself be a commitment: a kept show being prepped still sees another committed
@@ -35,7 +35,7 @@ struct SelfBookingConflictTests {
     @Test func aNonCommittedTargetStillSeesCommittedOthers() {
         let target = show("b", "2026-08-01", commitment: false)
         let other = show("a", "2026-08-01", commitment: true, name: "Orchestra A")
-        #expect(SelfBookingConflict.conflicts(for: target, among: [other, target]).map(\.other.name) == ["Orchestra A"])
+        #expect(BothSelfBookingReadings.conflicts(for: target, among: [other, target]).map(\.other.name) == ["Orchestra A"])
     }
 
     // Every committed different show on the date is returned, so the warning can count/name them all.
@@ -43,14 +43,14 @@ struct SelfBookingConflictTests {
         let target = show("c", "2026-08-01")
         let a = show("a", "2026-08-01", commitment: true, name: "Orchestra A")
         let b = show("b", "2026-08-01", commitment: true, name: "Choir B")
-        let names = Set(SelfBookingConflict.conflicts(for: target, among: [a, b, target]).map(\.other.name))
+        let names = Set(BothSelfBookingReadings.conflicts(for: target, among: [a, b, target]).map(\.other.name))
         #expect(names == ["Orchestra A", "Choir B"])
     }
 
     // A show never conflicts with itself, even once it is a commitment.
     @Test func aShowDoesNotConflictWithItself() {
         let target = show("a", "2026-08-01", commitment: true)
-        #expect(SelfBookingConflict.conflicts(for: target, among: [target]).isEmpty)
+        #expect(BothSelfBookingReadings.conflicts(for: target, among: [target]).isEmpty)
     }
 
     // A show a day apart does not conflict. #3323 expanded the check to every night a run PLAYS, which is
@@ -58,7 +58,7 @@ struct SelfBookingConflictTests {
     @Test func aDifferentDateDoesNotConflict() {
         let target = show("b", "2026-08-01")
         let other = show("a", "2026-08-02", commitment: true)
-        #expect(SelfBookingConflict.conflicts(for: target, among: [other, target]).isEmpty)
+        #expect(BothSelfBookingReadings.conflicts(for: target, among: [other, target]).isEmpty)
     }
 
     // Two rows of the SAME linked production (a run touring venues) are one show, not a double-booking,
@@ -66,14 +66,14 @@ struct SelfBookingConflictTests {
     @Test func theSameLinkedProductionIsNotADoubleBooking() {
         let target = show("b", "2026-08-01", engagement: "run-1")
         let other = show("a", "2026-08-01", commitment: true, engagement: "run-1")
-        #expect(SelfBookingConflict.conflicts(for: target, among: [other, target]).isEmpty)
+        #expect(BothSelfBookingReadings.conflicts(for: target, among: [other, target]).isEmpty)
     }
 
     // A show with no date can't collide with anything.
     @Test func aShowWithNoDateNeverConflicts() {
         let target = show("b", nil)
         let other = show("a", "2026-08-01", commitment: true)
-        #expect(SelfBookingConflict.conflicts(for: target, among: [other, target]).isEmpty)
+        #expect(BothSelfBookingReadings.conflicts(for: target, among: [other, target]).isEmpty)
     }
 }
 

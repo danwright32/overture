@@ -79,6 +79,18 @@ sql_for_dimension() {
                 echo "select count(*) from ZRECIPIENT r left join ZPROSPECT p on r.ZPROSPECT = p.Z_PK where r.ZSENDSTATERAW = 'pending' and coalesce(nullif(r.ZOVERRIDEBODY,''), nullif(p.ZDRAFTBODY,'')) is not null;" ;;
     recipientsOnDraftBodyRows)
                 echo "select count(*) from ZRECIPIENT r join ZPROSPECT p on r.ZPROSPECT = p.Z_PK where p.ZDRAFTBODY is not null and p.ZDRAFTBODY <> '';" ;;
+    # #3516: the DATE dimension. SelfBookingConflict.NightIndex buckets by night, so the self-booking
+    # check is quadratic in shows sharing a DATE and flat in row count, and nothing here could see that.
+    #
+    # BOTH, because neither describes the load on its own. The largest cluster bounds the worst single
+    # row. What the pass actually pays is the sum of each date's squared size, and those move
+    # independently: measured 2026-09-05, an even spread of 1,142 rows over 108 dates has a SMALLER
+    # largest cluster than the live store (11 against 19) and a LARGER load (12,102 against 9,037),
+    # because packing more rows into fewer dates raises the total while lowering the maximum (L391).
+    largestSingleDateCluster)
+                echo "select max(c) from (select count(*) c from ZPROSPECT where ZPERFORMANCEDATE is not null and ZPERFORMANCEDATE <> '' group by ZPERFORMANCEDATE);" ;;
+    sameNightComparisonLoad)
+                echo "select sum(c*c) from (select count(*) c from ZPROSPECT where ZPERFORMANCEDATE is not null and ZPERFORMANCEDATE <> '' group by ZPERFORMANCEDATE);" ;;
     *)          return 1 ;;
   esac
 }

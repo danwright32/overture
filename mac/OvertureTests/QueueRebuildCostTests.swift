@@ -29,7 +29,8 @@ import SwiftData
 //     3 have 5, one has 6, 2 have 7, 2 have 9, one has 11)
 //   39 prospects carry a draft body
 //   73 watched sources, 60 stored organisation answers
-//   233 distinct performance dates, largest single-date cluster 19
+//   235 distinct performance dates, largest single-date cluster 19, and a same-night comparison load
+//     (the sum of each date's squared size, which is what SelfBookingConflict pays) of 9,037
 //
 // The recipient distribution is the part most easily got wrong, and the part that matters most: 941 of
 // the 1,139 rows have NO contacts at all, so the per-card contact work (the send grouping, the sendable
@@ -40,7 +41,7 @@ import SwiftData
 @Suite("Queue rebuild cost")
 struct QueueRebuildCostTests {
 
-    // LIVE-STORE-CLAIM verified=2026-09-02 measure="prospects, distinct presenters, distinct venues, distinct group names, watched sources, stored organisation answers, and recipients per prospect, all read with sqlite3 from a WAL-inclusive copy of the live store"
+    // LIVE-STORE-CLAIM verified=2026-09-05 measure="prospects, distinct presenters, distinct venues, distinct group names, watched sources, stored organisation answers, recipients per prospect, and the performance-date size histogram, all read with sqlite3 from a WAL-inclusive copy of the live store"
     //
     // Each figure carries a LIVE-SHAPE tag, so scripts/check-fixture-corpus-drift.sh compares it against
     // the real store on every push and names the one that has fallen behind. Before #3426 this block read
@@ -83,6 +84,16 @@ struct QueueRebuildCostTests {
             return counts
         }()
         static let prospectsWithADraft = 39
+        // #3516: the DATE clustering, which this file's own claim block already recorded in prose
+        // ("233 distinct performance dates, largest single-date cluster 19") and nothing checked. The
+        // corpus laid its dates out as `(i % 28) + 1` over `(i % 12) + 1`, which is 84 distinct dates for
+        // 1,139 rows: a largest cluster of 14 against the store's 19, and a comparison load half again
+        // over the real one. Both come from LiveDateClustering now, so the shape is recorded in one place
+        // and compared against the store on every push.
+        // LIVE-SHAPE: largestSingleDateCluster
+        static let largestSingleDateCluster = 19
+        // LIVE-SHAPE: sameNightComparisonLoad
+        static let sameNightComparisonLoad = 8937
     }
 
     private func container() throws -> ModelContainer {
@@ -95,15 +106,15 @@ struct QueueRebuildCostTests {
         var prospects: [Prospect] = []
         prospects.reserveCapacity(LiveShape.prospects)
 
+        // #3516: the live store's own date clustering, from the one place that records it.
+        let dates = LiveDateClustering.dates(forRows: LiveShape.prospects)
         for i in 0..<LiveShape.prospects {
             let presenter = "Presenter \(i % LiveShape.presenters) Ensemble"
             let venue = "Venue \(i % LiveShape.venues) Hall"
             let group = "Group \(i % LiveShape.groupNames)"
-            let day = (i % 28) + 1
-            let month = (i % 12) + 1
             let p = Prospect(naturalKey: "key-\(i)", groupName: group, discipline: "music",
                              venue: venue,
-                             performanceDate: String(format: "2026-%02d-%02d", month, day),
+                             performanceDate: dates[i],
                              sourceListingURL: nil,
                              priorRelationship: "none", production: "self", profile: "strong",
                              coverage: "likely_uncovered", fitScore: 6, tier: "mid", fitReason: "r",
@@ -143,6 +154,24 @@ struct QueueRebuildCostTests {
         let start = Date()
         work()
         return Date().timeIntervalSince(start)
+    }
+
+    // #3516: the corpus really carries the clustering it claims. It rides along on every push, unlike the
+    // timing test below, because it costs a corpus build and no stopwatch, and because a fixture whose
+    // shape has drifted is what makes the timing meaningless.
+    //
+    // Both numbers, because neither describes the load on its own: the largest cluster bounds the worst
+    // single row and the comparison load is what the self-booking check pays (L391).
+    @Test func theCorpusCarriesTheLiveDateClustering() throws {
+        let ctx = ModelContext(try container())
+        let rows = buildCorpus(ctx)
+        var perDate: [String: Int] = [:]
+        for row in rows { perDate[row.performanceDate ?? "", default: 0] += 1 }
+
+        #expect(rows.count == LiveShape.prospects)
+        #expect(perDate[""] == nil, "a row carries no date, so the clustering below is over the wrong set")
+        #expect(perDate.values.max() == LiveShape.largestSingleDateCluster)
+        #expect(perDate.values.reduce(0) { $0 + $1 * $1 } == LiveShape.sameNightComparisonLoad)
     }
 
     @Test func measureOneQueueRebuild() throws {

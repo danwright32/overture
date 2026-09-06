@@ -241,6 +241,27 @@ struct QueueRenderPassWorkUnitCostTests {
     // LIVE-SHAPE: pendingRecipientsWithADraftBody
     private static let pendingRecipientsWithADraftBody = 16
 
+    // #3516: the DATE dimension, which is what the self-booking check scales with and what nothing here
+    // recorded. `SelfBookingConflict.NightIndex` buckets by night and the work per row is the size of the
+    // bucket its nights fall in, so the term is quadratic in shows sharing a DATE and flat in row count.
+    //
+    // The fixture used to spread its dates as `1 + (n % 27)` over four months, giving 108 distinct dates
+    // and a largest cluster of 11 against the live store's 19. #3516 read that as the term being
+    // exercised at half intensity. MEASURED, it was the opposite, and this is worth knowing before anyone
+    // reaches for the largest cluster again as the thing to match: an even spread of 1,142 rows over 108
+    // dates carries a nightly comparison load of 12,102 against the live store's 9,037, because packing
+    // MORE rows into FEWER dates raises the total even while lowering the maximum. The largest cluster
+    // bounds the worst single row; it does not describe the load (L391).
+    //
+    // So BOTH are recorded, and the seed is built from the live store's own size histogram rather than
+    // from a spread chosen to hit one number. Measured 2026-09-05 on a WAL-inclusive copy: 1,153 rows
+    // over 235 dates, none undated, largest cluster 19, and 9,037 as the sum of each date's squared size,
+    // which is the quantity the check actually pays.
+    // LIVE-SHAPE: largestSingleDateCluster
+    private static let largestSingleDateCluster = 19
+    // LIVE-SHAPE: sameNightComparisonLoad
+    private static let sameNightComparisonLoad = 8952
+
     // One card built per row, and not one more. This is the counter #2033 would have moved.
     private static let allowedQueueItems = 1142
 
@@ -271,7 +292,12 @@ struct QueueRenderPassWorkUnitCostTests {
     // remaining gap against the live store is the same unattributed term #3498 records. How the 82 splits
     // between card construction and the rest of the pass is MEASURED by
     // `theLintRunsAreAttributedBetweenCardBuildAndTheRestOfThePass`, not asserted here.
-    private static let allowedDraftLintRuns = 34
+    // #3516 moved it from 34 to 32, and the reason is the fixture's DATE SPREAD rather than anything in
+    // the code. This corpus used to lay 1,142 rows across 108 dates in four months; it now lays them
+    // across 224 dates at the live store's own clustering, which spans about eight. The live store spans
+    // 2026-06-22 to 2027-07-08, so the old window held far more of the corpus inside the scout horizon
+    // than the real one does, and both lint terms were measured against that.
+    private static let allowedDraftLintRuns = 32
 
     // MEASURED on this corpus by `theLintRunsAreAttributedBetweenCardBuildAndTheRestOfThePass`, not
     // derived. An earlier version of this file asserted the split from arithmetic on a different
@@ -282,7 +308,7 @@ struct QueueRenderPassWorkUnitCostTests {
     // linting inside card construction and this term is somewhere else in the pass, so it is now the
     // MAJORITY of what the lint costs. It is what #3498's own text called the unattributed 90 at the
     // original shape, and it still has no owner.
-    private static let allowedLintRunsOutsideTheCardBuild = 18
+    private static let allowedLintRunsOutsideTheCardBuild = 16
 
     // WHERE the 82 goes, measured on THIS corpus rather than inferred from the single-row attribution
     // test below. The first version of this suite carried the split as a comment reading "64 of the 82
@@ -311,6 +337,26 @@ struct QueueRenderPassWorkUnitCostTests {
                         + "it cannot grow unnoticed."))
     }
 
+    // #3516: the self-booking term, pinned at last, and BOTH numbers are the finding.
+    //
+    // A render PASS examines ZERO shows, on any stage. `QueueRenderPass.make` BUILDS the night index and
+    // never asks it a question; every question is asked by the view, per rendered row and per date
+    // heading. So pinning "per pass" as #3516 proposed would have pinned zero, and a counter whose only
+    // input is a value nothing produces reports zero indistinguishably from a real measurement (L90).
+    // It is pinned anyway, as its own assertion, because zero here is a FACT about where the work lives
+    // and the next person to look should not have to rediscover it.
+    private static let allowedSelfBookingShowsExaminedInThePass = 0
+
+    // What the SCREEN costs, which is the number this issue was really after: a pass on a stage that
+    // shows the marker, plus the three questions the view asks of the index while drawing the result.
+    // Measured on the corpus at the live clustering.
+    private static let allowedSelfBookingShowsExaminedOnScreen = 145
+
+    // And zero again on Scout, because the view asks nothing there (`focusedStage != .scout` gates both
+    // the row marker and the date-heading note). Held separately so a change that starts asking on Scout
+    // is visible rather than absorbed into the number above.
+    private static let allowedSelfBookingShowsExaminedOnScout = 0
+
     // The per-contact multiplier, pinned separately so a change that moves work between the send-group
     // build and the card build is visible even when the total holds. Measured, not read off the code.
     private static let allowedLintRunsPerContactInCardBuild = 1
@@ -330,8 +376,10 @@ struct QueueRenderPassWorkUnitCostTests {
         let venues = ["Weill Recital Hall", "SoHo Playhouse", "The Green Room 42", "Merkin Hall",
                       "Roulette Intermedium", "The Tank", "Bargemusic", "David Geffen Hall"]
         var rows: [Prospect] = []
+        // #3516: the live store's own date clustering, from the one place that records it.
+        let dates = LiveDateClustering.dates(forRows: Self.corpusSize)
         for n in 0..<Self.corpusSize {
-            let date = String(format: "2026-%02d-%02d", 8 + (n % 4), 1 + (n % 27))
+            let date = dates[n]
             let venue = venues[n % venues.count]
             let p = Prospect(naturalKey: "row-\(n)", groupName: "Ensemble \(n % 90)", discipline: "music",
                              venue: venue, performanceDate: date, sourceListingURL: nil,
@@ -401,12 +449,12 @@ struct QueueRenderPassWorkUnitCostTests {
         ctx.insert(r)
     }
 
-    private func inputs(_ rows: [Prospect]) -> QueueRenderPass.Inputs {
+    private func inputs(_ rows: [Prospect], stage: StageFocus = .scout) -> QueueRenderPass.Inputs {
         QueueRenderPass.Inputs(
             allProspects: QueueRenderPass.Corpus(rows),
             inquiries: [], orgAnswers: [],
             context: .at("2026-08-02", now: Date(timeIntervalSince1970: 1_785_000_000)),
-            focusedStage: .scout, focusedKeys: nil)
+            focusedStage: stage, focusedKeys: nil)
     }
 
     // The fixture really does carry the shape it claims, because every count below is only meaningful if
@@ -434,6 +482,15 @@ struct QueueRenderPassWorkUnitCostTests {
         #expect(onBodyRows.count == Self.recipientsOnDraftBodyRows)
         #expect(onBodyRows.filter { $0.sendState == .pending }.count
                     == Self.pendingRecipientsWithADraftBody)
+
+        // #3516: the DATE clustering, which is the dimension the self-booking check scales with. Both
+        // numbers, because neither describes the load on its own: the largest cluster bounds the worst
+        // single row and the comparison load is what the pass pays (L391).
+        var perDate: [String: Int] = [:]
+        for row in rows { perDate[row.performanceDate ?? "", default: 0] += 1 }
+        #expect(perDate[""] == nil, "a row carries no date, so the clustering below is over the wrong set")
+        #expect(perDate.values.max() == Self.largestSingleDateCluster)
+        #expect(perDate.values.reduce(0) { $0 + $1 * $1 } == Self.sameNightComparisonLoad)
     }
 
     // One card per row, and one send-group build per card. These are the two counters #2033 would have
@@ -448,6 +505,54 @@ struct QueueRenderPassWorkUnitCostTests {
 
         #expect(work.queueItems == Self.allowedQueueItems)
         #expect(work.sendGroupBuilds == Self.allowedSendGroupBuilds)
+    }
+
+    // #3516. Read the three numbers together: the pass alone, the screen on a stage that draws the
+    // marker, and the screen on Scout.
+    //
+    // WHAT THE MIRROR IS AND IS NOT. A SwiftUI body cannot be evaluated in a unit test, which is the whole
+    // reason `QueueRenderPass` exists, so the three questions the view asks of the night index are asked
+    // here in the same order and with the same arguments. That is a second expression of what the view
+    // does, and the danger is that it drifts (L263), so `SelfBookingScreenWorkMirrorTests` asserts the
+    // view's render path asks exactly these three and no others.
+    static func askTheScreensSelfBookingQuestions(_ data: QueueView.RenderData, stage: StageFocus) {
+        guard stage != .scout else { return }
+        for group in data.dateGroups {
+            _ = QueueModel.selfBookingNote(group.items, on: group.id, in: data.selfBooking)
+        }
+        for item in data.focusedRows {
+            _ = QueueModel.selfBookingRowMarker(for: item, in: data.selfBooking)
+            _ = QueueModel.selfBookingWorkableNote(for: item, in: data.selfBooking)
+        }
+    }
+
+    @Test func aRenderPassAsksTheNightIndexNothingAtAll() throws {
+        let ctx = ModelContext(try container())
+        let rows = seed(ctx)
+        let work = QueueRenderPass.WorkTally.measure {
+            _ = QueueRenderPass.make(inputs(rows))
+        }
+        #expect(work.selfBookingShowsExamined == Self.allowedSelfBookingShowsExaminedInThePass,
+                Comment(rawValue: "the pass examined \(work.selfBookingShowsExamined) shows. It BUILDS "
+                        + "the index and asks it nothing; if that has changed, the screen figures below "
+                        + "are now double counting."))
+    }
+
+    @Test func drawingTheScreenExaminesAPinnedNumberOfShows() throws {
+        let ctx = ModelContext(try container())
+        let rows = seed(ctx)
+
+        let onReview = QueueRenderPass.WorkTally.measure {
+            let data = QueueRenderPass.make(inputs(rows, stage: .review))
+            Self.askTheScreensSelfBookingQuestions(data, stage: .review)
+        }
+        let onScout = QueueRenderPass.WorkTally.measure {
+            let data = QueueRenderPass.make(inputs(rows, stage: .scout))
+            Self.askTheScreensSelfBookingQuestions(data, stage: .scout)
+        }
+
+        #expect(onReview.selfBookingShowsExamined == Self.allowedSelfBookingShowsExaminedOnScreen)
+        #expect(onScout.selfBookingShowsExamined == Self.allowedSelfBookingShowsExaminedOnScout)
     }
 
     // The draft lint, counted where it actually runs. Only a recipient carrying a non-empty body reaches
