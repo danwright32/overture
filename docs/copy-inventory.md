@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1508 sentences**.
+Every sentence Overture can say to Dan: **1505 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -14,7 +14,7 @@ What is not, and why:
   sentences under tokens nobody reads.
 - **Nothing, if it is written as two literals joined with `+`.** Those ARE joined here, into the
   one sentence the running app says (#3155). What is still only part of what Dan reads is a
-  sentence carrying a VALUE: 543 of the 1508 below hold a
+  sentence carrying a VALUE: 543 of the 1505 below hold a
   `\(...)` where a number or a name goes, so what is printed is the template. They are counted
   here rather than listed again, because the hole is visible in the line itself; what was missing
   was any statement of how much of this document is templates.
@@ -419,8 +419,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/Reachability.swift`
 "A contact on this show is held back by a check (a venue guess, a press address, a duplicate, the salutation, or the draft lint). Look at it below: dismissing the check releases the email."
     `UI/DraftReviewView.swift`
-"A draft was being reviewed at the time."
-    `Domain/FreezeReport.swift`
 "A hard bounce means the mail was rejected outright, so the show has stopped being chased and nobody has seen the pitch. Open the show to fix the address and pitch again. If the address is fine and the bounce was wrong, Not really bounced on the contact clears it."
     `Domain/AppNotice.swift`
 "A later night of this run is out: you blocked \(day) (\(name))."
@@ -453,8 +451,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/StalledReplyDraft.swift`
 "A reply drafting run finished, but Overture couldn't read what it wrote, so no draft was saved (\(reason)). The file it wrote is still on disk, as overture-reply-classify-results.json."
     `Domain/ReplyClassifyRunSummary.swift`
-"A reply was being answered at the time."
-    `Domain/FreezeReport.swift`
 "A reply-classify run is already in progress. Wait for it to finish."
     `Integration/ReplyClassifyService.swift`
 "A run wrote into another run's results file, so answers you already paid for may have been overwritten."
@@ -1284,8 +1280,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/OutcomePatterns.swift`
 "No way to reach them"
     `Domain/ShowOutcome.swift`
-"No window was open at the time."
-    `Domain/FreezeReport.swift`
 "Nobody found to write to"
     `Domain/Reachability.swift`
 "Nobody on this show publishes an address"

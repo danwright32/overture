@@ -18,9 +18,14 @@ import Foundation
 // two `Date`s. `WatchdogCostTests` prices it and `anIdleAppPostsNoMoreThanOnePingPerInterval` bounds how
 // many there can be.
 //
-// AND IT STANDS DOWN. `pause()` is called when the app has no window on screen, which for a menu bar app
-// is most of the day, so an idle Overture posts nothing at all. That is the bound: the watchdog's total
-// contribution is one ping per interval WHILE A WINDOW IS OPEN and zero otherwise.
+// AND IT STANDS DOWN when the scene goes to the background, which for a menu bar app is most of the day,
+// so an idle Overture posts nothing at all. That is the bound: the watchdog's total contribution is one
+// ping per interval WHILE A WINDOW IS ON SCREEN and zero otherwise. `RootView` drives it off `scenePhase`
+// and `TheWatchdogStandsDownTests` holds that something really does.
+//
+// The first version of this note claimed a `pause()` that did not exist and that nothing called, and the
+// watchdog pinged for the life of the process. A constraint recorded only as a comment is enforced by
+// nothing, and sitting there it reads as binding (L407).
 final class MainThreadWatchdog: @unchecked Sendable {
 
     // Every 250ms. Fast enough that a stall Dan can perceive is caught by several pings and slow enough

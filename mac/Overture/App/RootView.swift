@@ -121,6 +121,10 @@ struct RootView: View {
     // #3435 Phase 2e: the app watches its own main thread and writes what it finds. Held here because
     // this is the view that outlives every sheet, so the watch spans a session rather than a screen.
     @State private var freezeWatch = FreezeWatch()
+    // And STOOD DOWN when this window goes away. Overture is a menu bar app that sits with no window most
+    // of the day, and an idle surface must pay nothing (Dan's standing rule, and L353). The first version
+    // of the watchdog claimed to stand down and nothing called anything.
+    @Environment(\.scenePhase) private var scenePhase
 
     @State private var showArchive = false
     @State private var archiveJumpKey: String?
@@ -307,6 +311,7 @@ struct RootView: View {
     // just watched the app stop answering. A sheet this does not know about leaves the answer as whatever
     // is underneath it, which is a true statement about a real surface rather than a wrong one.
     private var presentedSurface: StallSurface {
+        if showOmniFocusSettings { return .settings }
         if showSources { return .sourcesSheet }
         if showOrganisations { return .organisations }
         if showFollowUps { return .followUps }
@@ -999,6 +1004,10 @@ struct RootView: View {
                 // and reported here because this is the one place that already tells Dan what happened
                 // while he was not looking.
                 freezeWatch.start(support: StoreLocation.handoffDirectory)
+                // #3435: bounded HERE rather than on the freeze path, which stays a pure append. An
+                // append is safe to do while the main thread is wedged and a read, modify, write is not
+                // (L105). The file only grows when the app really freezes, so once per launch is plenty.
+                FreezeLog.compact(at: FreezeLog.url(in: StoreLocation.handoffDirectory))
                 reportAnyFreezes()
                 // #1035: the same reattach, for the scout's detached read. A scout-extract run outlives
                 // the app, so one can still be going at launch (a relaunch over a live run, or the window
@@ -1217,6 +1226,16 @@ struct RootView: View {
             // the surface underneath it rather than a stale one.
             .onChange(of: presentedSurface, initial: true) { _, surface in
                 freezeWatch.stamp(surface)
+            }
+            // #3435: the watch follows the window. `.inactive` keeps it running deliberately, because a
+            // window that has merely lost focus is still on screen and still drawing, and a freeze there
+            // is one Dan can see. Only `.background`, which for this scene means the window is gone,
+            // stands it down.
+            .onChange(of: scenePhase) { _, phase in
+                switch phase {
+                case .background: freezeWatch.stop()
+                default: freezeWatch.start(support: StoreLocation.handoffDirectory)
+                }
             }
             .actionFeedbackBanner()
             // Injected outermost so the sheets above inherit it too (#285).

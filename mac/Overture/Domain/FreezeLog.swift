@@ -81,6 +81,61 @@ enum FreezeLog {
         return read(text)
     }
 
+    // How many records the FILE keeps.
+    //
+    // The in-memory `StallLog.cap` bounds what one session holds; this bounds what accumulates across
+    // every session for the life of the install. They are different numbers for different reasons and
+    // this one is larger, because the file is the only thing that survives a relaunch and #3439 reads its
+    // floor from a working session rather than the current one.
+    static let fileCap = 500
+
+    // What survives compaction, and how many were dropped. PURE, so the rule can be exercised rather
+    // than watched not to happen.
+    //
+    // THE LONGEST STALL IS KEPT HOWEVER OLD IT IS, which is the same rule #3435 wrote for the in-memory
+    // store one layer down and for the same reason: a cap by count over a file where a 250 ms blip and a
+    // 58 second freeze are one line each lets cheap writers evict expensive observations, and the single
+    // reading this file exists to support is the MAXIMUM (L191, L63).
+    struct Compacted: Equatable, Sendable {
+        var records: [StallRecord]
+        var dropped: Int
+    }
+
+    static func compacted(_ records: [StallRecord], cap: Int = fileCap) -> Compacted {
+        guard records.count > cap else { return Compacted(records: records, dropped: 0) }
+        let newest = Array(records.suffix(cap))
+        guard let worst = records.max(by: { $0.seconds < $1.seconds }) else {
+            return Compacted(records: newest, dropped: records.count - cap)
+        }
+        // ONLY a stall STRICTLY longer than everything already kept earns the slot. Written as "keep the
+        // maximum" it shuffled ties: with every record the same length the oldest one is a maximum, so it
+        // was promoted over a newer one for no reason. What this exists to save is a genuinely
+        // exceptional freeze, not an arbitrary member of a tie.
+        let longestKept = newest.map(\.seconds).max() ?? 0
+        guard worst.seconds > longestKept else {
+            return Compacted(records: newest, dropped: records.count - cap)
+        }
+        // Keeping the worst must not grow the file past its cap, so it takes the oldest slot rather than
+        // being added to the end: it IS the oldest thing worth keeping.
+        var kept = Array(newest.dropFirst())
+        kept.insert(worst, at: 0)
+        return Compacted(records: kept, dropped: records.count - cap)
+    }
+
+    // Run at LAUNCH and never on the freeze path. An append is safe to do while the main thread is
+    // wedged; a read, modify, write is not, and one whose read fails erases the record at exactly the
+    // moment it is worth having (L105).
+    @discardableResult
+    static func compact(at url: URL, cap: Int = fileCap) -> Int {
+        let read = read(at: url)
+        guard !read.fileWasAbsent else { return 0 }
+        let result = compacted(read.records, cap: cap)
+        guard result.dropped > 0 else { return 0 }
+        let text = result.records.compactMap(line(for:)).joined(separator: "\n") + "\n"
+        guard (try? text.write(to: url, atomically: true, encoding: .utf8)) != nil else { return 0 }
+        return result.dropped
+    }
+
     // Appended rather than rewritten, so a write during a freeze cannot lose what is already there and
     // cannot be a read-modify-write whose read failing erases the record (L105).
     @discardableResult
