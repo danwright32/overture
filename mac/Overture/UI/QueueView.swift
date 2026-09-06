@@ -447,7 +447,22 @@ struct QueueView: View {
 
     // #1805: the shows the last check was given and never reached. Read from the same rule the report's
     // offer is gated on, so the control and the run can never disagree about the set.
-    private var missedByACheckKeys: [String] {
+    //
+    // #2598: it TAKES the rows rather than reading `items` itself, and that is the whole of a defect
+    // worth naming. It was a computed property reading `items`, which is a computed property that derives
+    // the WHOLE store, and the masthead reads it while ALREADY HOLDING those rows as a parameter. So every
+    // press built the cards twice: once in the render pass and once here, for a count of how many of them
+    // a check had missed.
+    //
+    // Measured on a hosted QueueView, 2026-09-05: one press built 2,280 cards over a corpus of 1,142,
+    // which is two whole-store passes, and the wait Dan felt was 1,305 ms. Nothing reported it, because
+    // the sweep counter lives INSIDE the pass and this derivation is outside it, and a second pass and a
+    // slow one are the same number of milliseconds to anybody reading only a clock (#2727, L63).
+    //
+    // This is #1121's and #1774's defect exactly, one call site further out: a computed property is
+    // re-run by every reader, and a call site reads as a free field access with nothing at the point of
+    // use saying what it costs (L383).
+    private func missedByACheckKeys(in items: [QueueItem]) -> [String] {
         QueueModel.keysMissedByACheck(items, today: today, geo: geo)
     }
 
@@ -455,7 +470,9 @@ struct QueueView: View {
     // from a report costs what the sheet says it costs. No re-selection by hand, which is the whole point:
     // the app was holding the list while Dan reconstructed it.
     private func finishShowsACheckMissed() {
-        let keys = missedByACheckKeys
+        // An ACTION, so it derives its own: this runs on a press rather than during a render, and there
+        // is no pass in hand to take the rows from.
+        let keys = missedByACheckKeys(in: items)
         guard !keys.isEmpty else { return }
         // #1616: the same learned pace the selection bar quotes, so two ways into one run cannot name two
         // different waits.
@@ -1053,7 +1070,9 @@ struct QueueView: View {
             // CAN serve is served here, where the rows are. Everything else goes up to RootView.
             AppNoticeLines(
                 notices: AppNotices.servable(notices,
-                                             canFinishMissedShows: !missedByACheckKeys.isEmpty),
+                                             // #2598: the rows this masthead was ALREADY handed, not a
+                                             // second derivation of the whole store for a count.
+                                             canFinishMissedShows: !missedByACheckKeys(in: items).isEmpty),
                 perform: { action in
                     if action == .finishShowsACheckMissed { finishShowsACheckMissed() }
                     else { onNoticeAction(action) }
