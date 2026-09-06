@@ -126,11 +126,8 @@ enum FreezeNoticeCopy {
         case .archive: return "The archive was on screen."
         case .followUps: return "Follow ups was on screen."
         case .sourcesSheet: return "The sources sheet was on screen."
-        case .replySheet: return "A reply was being answered at the time."
-        case .draftReview: return "A draft was being reviewed at the time."
         case .organisations: return "The organisations list was on screen."
         case .settings: return "Settings was on screen."
-        case .noWindow: return "No window was open at the time."
         case .notRecorded: return "Nothing recorded which screen was open."
         }
     }

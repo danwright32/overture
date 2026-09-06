@@ -21,17 +21,20 @@ import Foundation
 //
 // So a case that could carry a show's name is impossible to write rather than forbidden. `PrivacyOfTheFreezeLogTests`
 // asserts the enum has no payload and that the record type takes no `Prospect`, `Recipient` or `QueueItem`.
+//
+// EVERY CASE HAS A WRITER, and `TheWatchdogStandsDownTests` checks that against the code that writes
+// them rather than a list here. Four did not when this shipped, and one of them mattered: with nothing
+// able to record "no window open", a freeze in that state reported the QUEUE, which is wrong rather than
+// merely incomplete (L90). Three were deleted and `settings` was wired. There is deliberately no case for
+// a windowless app any more, because the watchdog now stands down when the window goes away, so a stall
+// there cannot be recorded and a case for it would read zero forever.
 enum StallSurface: String, Codable, CaseIterable, Sendable {
     case queue
     case archive
     case followUps
     case sourcesSheet
-    case replySheet
-    case draftReview
     case organisations
     case settings
-    // No window at all, which is the ordinary state of a menu bar app and NOT the same as not knowing.
-    case noWindow
     // #3435: the fourth state, and it has its own wording wherever it is reported. The surface is stamped
     // by the MAIN thread and read by the watchdog, so a stall recorded before anything ever stamped it,
     // or by a build where the stamping was removed, has no surface rather than a wrong one (L11, L98).

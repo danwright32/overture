@@ -173,9 +173,8 @@ struct TheAppReportsItsOwnFreezesTests {
                                                             watchdogRan: true, defaults: defaults("nosurface"),
                                                             read: { _ in read }))
         #expect(said.contains("Nothing recorded which screen was open."))
-        // And it is NOT the same sentence as a freeze with no window open, which is ordinary for a menu
-        // bar app rather than a gap (L11).
-        #expect(FreezeNoticeCopy.surfaceSentence(.notRecorded) != FreezeNoticeCopy.surfaceSentence(.noWindow))
+        // And it is NOT the same sentence as any surface that IS known, which is the fold L11 forbids.
+        #expect(FreezeNoticeCopy.surfaceSentence(.notRecorded) != FreezeNoticeCopy.surfaceSentence(.queue))
     }
 
     // #3442: the caveat is carried into the sentence, because work done to fix a freeze that was really a

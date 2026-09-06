@@ -27,7 +27,7 @@ struct PrivacyOfTheFreezeLogTests {
         // Every case, and none of them takes anything. A payload is spelled `case x(String)`, so a `(`
         // anywhere on a case line is the finding.
         let cases = body.components(separatedBy: "\n").filter { $0.trimmingCharacters(in: .whitespaces).hasPrefix("case ") }
-        #expect(cases.count >= 8, "read only \(cases.count) cases, so this checked almost nothing")
+        #expect(cases.count >= 6, "read only \(cases.count) cases, so this checked almost nothing")
         for line in cases {
             #expect(!line.contains("("),
                     Comment(rawValue: "`\(line.trimmingCharacters(in: .whitespaces))` carries an associated "
