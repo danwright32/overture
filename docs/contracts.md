@@ -683,6 +683,27 @@ address he already knew was wrong. His report was a card reading "10 found, 4 re
 personal accounts and the act's own domain, with the only control anywhere sitting in the draft-review
 panel, after the run had been paid for.
 
+Results version 12 (#3078) adds an optional `roleQuoted` to each contact: whether `role` is a phrase the
+page named in `sourceUrl` actually carries, or the run's own summary of what it says.
+
+`role` is unbounded free text the app derives nothing from, and nothing asked whether the word the run
+chose is on the page it cited, so a paraphrase reached the card with the same authority as a quote.
+Measured 2026-08-17: `role: "Playwright"` for a performer whose cited page says "an actor and writer" and
+carries the word once, inside the NAME OF A THEATRE in an unrelated regional credit.
+
+DECLARED rather than measured, which is the question #3078 left open and #2269 closed: every `WebFetch`
+result a run receives is PROSE written by a small model against the page, so the run never holds the page
+in bytes or markdown and there is nothing at ingest to check a role against. Measuring it needs a fetch
+this app performs itself, which #2269 records as its own proposal with its own cost.
+
+TRUE is the unremarkable value and ABSENT means nobody said, which is every contact written before this
+and every run with nothing to declare. Absence may never read as a characterisation: that would mark 270
+of the 447 contacts in the archives at once (L98, L128). Adoption is measured per run by
+`RunInstructionCompliance`, over the population the rule is ABOUT (a role resting on a cited page), so a
+run with no such contact is not accused. Written by `PrepImporter` onto `Recipient.roleIsACharacterisation`
+through `ContactRoleClaim`, re-derived on every ingest rather than latched; read by the review card, which
+keeps the role and adds "Overture's words, not the page's". Additive, so every v11 producer stays valid.
+
 Queue version 14 (#2990) adds an optional `alreadyFoundEmails` to each item: the addresses the show
 ALREADY HOLDS, so a contact re-run does not pay to rediscover and re-report people it was handed a
 moment ago. It only arises where Dan explicitly asks for one, because `PrepQueueBuilder.probedWithContact`

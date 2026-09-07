@@ -86,6 +86,7 @@ describe("prep-runbook judgment rules are present (#591)", () => {
       "reason-first-names-the-date",
       "representative-only-when-the-target-names-a-person",
       "returning-client-register",
+      "say-whose-words-the-role-is",
       "search-the-bare-name-first",
       "search-the-platform-for-a-profile",
       "sentence-one-introduces-dan",

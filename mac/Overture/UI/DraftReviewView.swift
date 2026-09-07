@@ -139,14 +139,23 @@ struct DraftReviewView: View {
     @ViewBuilder private var contactLine: some View {
         let primary = item.primaryContact
         let display = ContactDisplay.from(name: primary?.name, role: primary?.role,
-                                          email: primary?.email, formURL: primary?.contactFormURL)
+                                          email: primary?.email, formURL: primary?.contactFormURL,
+                                          // #3078: false when nobody has said, which is the same answer
+                                          // a run that quoted the page gives, so the note appears only on
+                                          // an explicit declaration.
+                                          roleQuoted: primary?.roleIsACharacterisation == true ? false : nil)
         HStack(spacing: OVSpacing.xs) {
             Image(systemName: "person.crop.circle")
                 .foregroundStyle(OVColor.inkFaint)
             switch display {
-            case let .person(name, role, _):
+            case let .person(name, role, roleIsACharacterisation, _):
                 Text(name).fontWeight(.medium).foregroundStyle(OVColor.ink)
                 if let role { Text(role).foregroundStyle(OVColor.inkFaint) }
+                // #3078: whose words the role is, said only when the run declared them its own. A role
+                // quoted from the page, and one nobody has spoken about, both read as they always did.
+                if roleIsACharacterisation {
+                    Text(ContactRoleCopy.characterisationNote).foregroundStyle(OVColor.inkFaint)
+                }
             // #2560: NOT the address. A contact with no name falls back to its address as its identity, and
             // the Contacts block below prints that same address again, as it must (#2015: "It should show
             // me every email it's going to send to"). Counting a rendered card on 2026-08-12 found it twice
