@@ -29,15 +29,21 @@ final class OneVenueIdentityLiveStoreTests {
             StoreLocation.storeURL(appSupport: StoreLocation.appSupport, isDebugBuild: false).path)
     }
 
-    private func liveProspects() throws -> [Prospect] {
+    // #3615: the CONTEXT as well as the rows, because one of the symptoms below is an invariant a launch
+    // repair restores and has to be measured after that repair has run (L385). It is a copy, so running
+    // one against it writes nothing anywhere near the live store (L2).
+    private func liveContext() throws -> ModelContext {
         let dir = try sandboxes.make(named: "venue-identity")
         guard let url = try LiveStoreClone.makeClone(in: dir) else {
             throw LiveStoreClone.Refusal.backupFailed("no live store on this machine")
         }
         let schema = Schema([Prospect.self, Recipient.self])
-        let context = ModelContext(try ModelContainer(
+        return ModelContext(try ModelContainer(
             for: schema, configurations: [ModelConfiguration(schema: schema, url: url, cloudKitDatabase: .none)]))
-        return try context.fetch(FetchDescriptor<Prospect>())
+    }
+
+    private func liveProspects() throws -> [Prospect] {
+        try liveContext().fetch(FetchDescriptor<Prospect>())
     }
 
     // LIVE-STORE-CLAIM verified=2026-08-07 measure="the seven venue-identity symptoms, re-counted together on the real store"
@@ -51,7 +57,8 @@ final class OneVenueIdentityLiveStoreTests {
         // never ran (#2195).
         do {
 
-            let all = try liveProspects()
+            let ctx = try liveContext()
+            let all = try ctx.fetch(FetchDescriptor<Prospect>())
             #expect(all.count > 100, "the live store still holds a real queue to measure")
             let live = all.filter { $0.status != .dismissed }
 
@@ -78,8 +85,22 @@ final class OneVenueIdentityLiveStoreTests {
             // #1761 / #1764: one room spelled two ways, minting a second card for the same night. Judged
             // through the SHARED identity (`VenuePlaces.canonicalKey`), which is the whole point of the issue:
             // two rows that are one show must collide on it.
+            //
+            // #3615: measured AFTER the launch repair, on the same copy, which is what the two symptoms
+            // above already assume of their own sweeps ("runs every launch and is idempotent, so a row in
+            // this state can only be one written since the last launch"). Without it this asserts an
+            // invariant a SCHEDULED repair restores, so between two launches the violated state is the
+            // store's normal one and the check reports the interval rather than a defect (L385). It went
+            // red exactly that way on 2026-09-07, on two shows the pass now collapses.
+            //
+            // What survives the repair is what this is for, and it is the population that matters: a
+            // deferred conflict (two rows each carrying a decision of Dan's) is one the pass refuses to
+            // resolve blind, so it stays and is still reported here.
+            _ = NaturalKeyVenueMigration.run(in: ctx)
+            try ctx.save()
+            let repaired = (try ctx.fetch(FetchDescriptor<Prospect>())).filter { $0.status != .dismissed }
             var seen: [String: [Prospect]] = [:]
-            for p in live {
+            for p in repaired {
                 guard let date = p.performanceDate, !date.isEmpty else { continue }
                 let venueKey = VenuePlaces.canonicalKey(for: p.venue) ?? "unplaced"
                 let titleKey = TitleNormalization.normalizeForKey(p.groupName)

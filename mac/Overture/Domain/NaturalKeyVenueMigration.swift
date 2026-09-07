@@ -64,10 +64,9 @@ enum NaturalKeyVenueMigration {
         // that rewrite a display field precisely so the key can stay put (#1274's rename, #1846's merged
         // room name): the row came back holding Dan's spelling, and the next scout, arriving with the
         // listing's spelling, computed a key that matched nothing and inserted a second card.
-        var groups: [String: [Prospect]] = [:]
-        for p in prospects {
-            groups[p.scoutAnchoredNaturalKey, default: []].append(p)
-        }
+        // #3615: and then the groups that are ONE SHOW under two anchored keys, which the anchor alone
+        // cannot see. See `groupsOfOneShow`.
+        let groups = Self.groupsOfOneShow(prospects)
 
         for (newKey, members) in groups {
             if members.count == 1 {
@@ -162,6 +161,59 @@ enum NaturalKeyVenueMigration {
         // cost is the one this protects against (a paid answer that cannot be matched), not corruption.
         try? NaturalKeyRemap.record(renames, at: Date())
         return summary
+    }
+
+    // #3615: the rows that are ONE SHOW, which is not the same question as the rows that fold to one key.
+    //
+    // The anchored key reads `scoutGroupName ?? groupName`, and that pin is right and stays: a show Dan
+    // RENAMES must keep the key the scout can still find it by (#1886/#1274). What the pin does not
+    // survive is the SOURCE renaming its own show. The pin then holds a name the source no longer
+    // publishes, the next scout computes a key from the new one, matches nothing, and inserts a second
+    // row, which no future scout can ever reach either. Measured on the live store 2026-09-07: two
+    // Carnegie shows stored twice, all four rows pristine, one pair reading `bar harbor music festival`
+    // and `bar harbor music festival 60th anniversary gala` under one display name.
+    //
+    // So rows are grouped by the anchored key FIRST, exactly as before, and any groups that share a
+    // DISPLAY IDENTITY (the same show name, night and room as they appear on screen) are then combined.
+    // Two rows agreeing on all three are one show by the natural key's own definition.
+    //
+    // THE COMBINED GROUP TAKES AN ANCHORED KEY, never one computed from the display fields, and that
+    // distinction is #1886's whole warning: a key built from what the card shows undoes every feature
+    // that rewrites a display field precisely so the key can stay put. The key taken is the freshest
+    // member's own anchored key, because the freshest row is the one the scout saw most recently, so its
+    // anchor is the name the source publishes today and is the key the next scout will compute.
+    //
+    // Nothing about the MERGE changes: `mustDefer`, the survivor ladder and the refusal to reconcile two
+    // histories blind all run on the combined group exactly as they ran on the old one.
+    static func groupsOfOneShow(_ prospects: [Prospect]) -> [(key: String, members: [Prospect])] {
+        var byAnchor: [String: [Prospect]] = [:]
+        for p in prospects { byAnchor[p.scoutAnchoredNaturalKey, default: []].append(p) }
+
+        // Which anchored groups share one display identity. Only groups, never individual rows, so a
+        // group the anchor already found stays intact.
+        var byDisplay: [String: [String]] = [:]
+        for (anchor, members) in byAnchor {
+            guard let first = members.first else { continue }
+            let display = Prospect.makeNaturalKey(groupName: first.groupName,
+                                                  performanceDate: first.performanceDate,
+                                                  venue: first.venue)
+            byDisplay[display, default: []].append(anchor)
+        }
+
+        var out: [(key: String, members: [Prospect])] = []
+        var taken: Set<String> = []
+        for (_, anchors) in byDisplay where anchors.count > 1 {
+            let members = anchors.flatMap { byAnchor[$0] ?? [] }
+            // The freshest row's OWN anchored key. `ingestedAt` is rewritten on every re-scout, so it
+            // means LAST SEEN, which is exactly the question being asked here.
+            guard let freshest = members.max(by: { $0.ingestedAt < $1.ingestedAt }) else { continue }
+            out.append((key: freshest.scoutAnchoredNaturalKey, members: members))
+            taken.formUnion(anchors)
+        }
+        for (anchor, members) in byAnchor where !taken.contains(anchor) {
+            out.append((key: anchor, members: members))
+        }
+        return out
     }
 
     // #1780: the deferral decision, named once. Anything that predicts what this pass will do (the
