@@ -96,6 +96,27 @@ struct OneFreezeIsOneRecordTests {
                 Comment(rawValue: "an idle main queue wrote \(beforeTheFreeze) records before the freeze, "
                         + "so the count below is not a measurement of the freeze."))
         #expect(sawTheFreeze, "the freeze was never recorded, so nothing here was measured (L98)")
+        // POSITIVE CONTROL for the count below, and the reason it is here is worth stating. Without the
+        // fix this freeze wrote 10 records, one per interval it lasted. On a machine loaded enough that
+        // the watchdog's timer fired only ONCE inside the freeze, no fan-out could occur at all, and
+        // `forTheFreeze == 1` would pass while proving nothing about the code (L171). The RECORDED
+        // duration is what says the freeze really spanned several intervals, so a fan-out had the
+        // opportunity to happen and did not.
+        //
+        // The threshold is DERIVED from the two constants that decide how many records a fan-out can
+        // write, never a multiple of the interval alone. A record is written only when the delay clears
+        // `StallLog.floorSeconds`, so a SECOND record needs the freeze to run one whole interval past
+        // that floor. Written as `4 * interval` (0.20s) it sat BELOW the 0.25s floor, so every freeze
+        // that got recorded at all already satisfied it and the check could never fail: a guard that
+        // cannot fail is not a guard (L1). Caught by mutating this fixture's own freeze length.
+        let recorded = written.last?.seconds ?? 0
+        let enoughToFanOut = StallLog.floorSeconds + Self.interval
+        #expect(recorded >= enoughToFanOut,
+                Comment(rawValue: "the freeze was recorded as \(String(format: "%.2f", recorded))s, "
+                        + "under the \(String(format: "%.2f", enoughToFanOut))s a SECOND record would "
+                        + "need (the \(StallLog.floorSeconds)s floor plus one \(Self.interval)s "
+                        + "interval). So no fan-out was possible here whatever the code does, and the "
+                        + "count below would pass with the fix reverted (L171)."))
         #expect(forTheFreeze == 1,
                 Comment(rawValue: "one freeze wrote \(forTheFreeze) records. A ping posted while another "
                         + "is still outstanding queues behind the freeze and records its own lateness "
