@@ -187,6 +187,16 @@ export const RUNBOOK_RULES: RunbookRule[] = [
   // built out of Dan's own identity line and applied to a reader who does not fit it.
   { name: "use-the-listing-handed-over",
     pattern: /Before\s+you\s+draft,\s+read\s+what\s+the\s+show\s+IS/i },
+  // #2258: where a listing separates who is in charge from a cast list, the leads ARE the target and
+  // the cast is a fallback. Dan's call, 2026-08-07, on a run that pursued 17 people as one flat pool and
+  // surfaced two cast members.
+  { name: "the-billed-hierarchy-decides-the-target",
+    pattern: /Read\s+the\s+BILLED\s+HIERARCHY\s+off\s+the\s+page\s+first/i },
+  // #3347: and the RANK comes from how this show bills them, not from what their own site says they do
+  // in general. The app drops an unsupported `primary` at ingest; this is the instruction that stops it
+  // being produced.
+  { name: "rank-from-how-this-show-bills-them",
+    pattern: /Rank\s+from\s+how\s+THIS\s+SHOW\s+bills\s+them,\s+never\s+from\s+what\s+their\s+own\s+site\s+says/i },
   { name: "no-description-is-a-complete-answer",
     pattern: /"No description published"\s+is a correct and complete answer/i },
   // #2698: a page that was CUT cannot support a finished negative. `truncated` used to say only that the

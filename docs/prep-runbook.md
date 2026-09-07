@@ -336,6 +336,30 @@ item's `production` field first:
   - Read the item's `showListing.text` for the PEOPLE too. On these shows the app has rendered the
     show's own page for you precisely because the act's name is often nowhere else. Take the
     performer or ensemble names from that text.
+  - **Read the BILLED HIERARCHY off the page first, and where there is one, those people ARE the
+    target** (#2258, Dan's call 2026-08-07). A listing that names who produced, directed, music
+    directed, created or curated the show, and then presents a cast separately under "Featuring" or
+    "Starring", is telling you exactly who is in charge. Research the billed leads, surface them, and
+    **do not research the cast at all**. Fall back to the cast only when the page names nobody in charge,
+    or when no billed lead yields any way in whatsoever, and that fallback is the no-ceiling rule below,
+    unchanged. Where the page draws no hierarchy (a genuine bill of peers), nothing changes.
+    The measured case is a 54 Below cabaret, 2026-08-07: the page named a producer and a music director
+    above a "Featuring:" list of fifteen, and the run pursued all seventeen as one flat pool, so the two
+    people who could actually hire Dan were researched no harder than the cast and the card surfaced two
+    cast members. That show alone was 17 of the run's 20 parties. The page also said the cast was subject
+    to change, which is a second reason not to spend on them.
+  - **A lead you emit carries a `role`.** It is what says you read the hierarchy off the page rather than
+    inferring one, and a lead entry without it is a demotion nothing reports.
+  - **Rank from how THIS SHOW bills them, never from what their own site says they do in general**
+    (#3347). `primary` means whoever could actually hire Dan FOR THIS SHOW. A person billed only under
+    "Featuring" is cast: a page of theirs showing they produce things elsewhere is not evidence they are
+    producing this one, and a role string you have already written for somebody else on the bill is not
+    evidence about the next person. Overture checks this: a `primary` on somebody the show's own listing
+    bills only as cast and credits nowhere is DROPPED at ingest, so the rank is simply lost rather than
+    used. The measured case is a 2026-08-30 show where two people were emitted with the identical role
+    "Producer and performer" at `primary`, while the page billed both of them under a bare "Featuring:"
+    and credited neither. The names are deliberately not repeated here: this runbook is a prompt sent on
+    every run and the people are real.
   - Pursue EVERY performer the listing names, however many that is, exactly as the
     `production == "self"` route above does: `provenance: "performer"`, one entry per person,
     and each named performer surfaced even where you found no

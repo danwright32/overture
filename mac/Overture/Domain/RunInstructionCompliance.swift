@@ -33,6 +33,11 @@ enum RunInstructionCompliance {
         // run and must not read as an ignored instruction (L98).
         var citedAtHigh: Int
         var citedAtHighSayingWhetherItCorroborates: Int
+        // #3347/#2258: contacts the run ranked `primary` on a show whose own listing bills them only as
+        // cast and credits them nowhere. Its own field rather than folded into the two above, because it
+        // is a different fault with a different remedy: the tier instruction was FOLLOWED, and the answer
+        // it produced is contradicted by the page the run was handed.
+        var primaryContradictedByTheListing: Int
 
         // Not "fewer than all", deliberately. A partial run is a different thing from an ignored
         // instruction, and accusing on a partial would fire on the ordinary case.
@@ -61,6 +66,9 @@ enum RunInstructionCompliance {
         // remedies, and a sentence about both would name neither (L11).
         var notes: [String] {
             var out: [String] = []
+            if primaryContradictedByTheListing > 0 {
+                out.append(RunComplianceCopy.primaryTheListingContradicts(primaryContradictedByTheListing))
+            }
             if tierInstructionIgnored { out.append(RunComplianceCopy.noTierAtAll(contacts)) }
             if refusalFiringWithoutAdoption {
                 out.append(RunComplianceCopy.routesNamedNeverFound(routeNamedButNotSupplied))
@@ -72,13 +80,34 @@ enum RunInstructionCompliance {
         }
     }
 
-    static func measure(contacts: [PrepContact]) -> Measurement {
+    // #3347: measured for ONE SHOW at a time, and `listing` is the page the app handed the run for that
+    // show, so the tier it declared can be judged against how that page bills the person. Per show rather
+    // than over a run's whole pool of contacts, because a contact and a listing belong together only when
+    // they came from the same item and pairing them after the fact is how a confident number about
+    // nothing gets produced (L420). nil holds nothing down: a caller with no work-list must not report a
+    // run as contradicted by a page nobody read (L98).
+    // #3347: the identity for the per-show sum, and every field is zero, so summing an empty run's shows
+    // gives the same answer as measuring an empty pool did before.
+    static let empty = Measurement(contacts: 0, withATier: 0, declaredNoRouteFound: 0,
+                                   routeNamedButNotSupplied: 0, citedAtHigh: 0,
+                                   citedAtHighSayingWhetherItCorroborates: 0,
+                                   primaryContradictedByTheListing: 0)
+
+    static func measure(contacts: [PrepContact], listing: ShowListing? = nil) -> Measurement {
         var withATier = 0
         var noRouteFound = 0
         var routeMissing = 0
         var cited = 0
         var citedAndAnswered = 0
+        var contradicted = 0
         for c in contacts {
+            // #3347: through the SAME predicate the ingest holds the tier down with, never a second one
+            // written beside it, so the count and the row can never disagree about one contact (L16).
+            if c.tier == ContactTier.primary.rawValue,
+               BilledHierarchy.billedAsCastOnly(name: c.name, inListingText: listing?.text,
+                                                truncated: listing?.truncated == true) {
+                contradicted += 1
+            }
             // #3376: the population the corroboration rule is ABOUT, which is a high confidence claim
             // resting on a named page. A contact with no `sourceUrl` is already refused by
             // `holdDown`'s `namedNoPage` arm and has no page to corroborate against, so counting it
@@ -99,7 +128,25 @@ enum RunInstructionCompliance {
         return Measurement(contacts: contacts.count, withATier: withATier,
                            declaredNoRouteFound: noRouteFound, routeNamedButNotSupplied: routeMissing,
                            citedAtHigh: cited,
-                           citedAtHighSayingWhetherItCorroborates: citedAndAnswered)
+                           citedAtHighSayingWhetherItCorroborates: citedAndAnswered,
+                           primaryContradictedByTheListing: contradicted)
+    }
+}
+
+extension RunInstructionCompliance.Measurement {
+    // Field by field, and exhaustively: every count in this type is a per-show number summed over the
+    // run, so a field added later has to be added here or its run total silently stays at the first
+    // show's value.
+    static func + (a: Self, b: Self) -> Self {
+        Self(contacts: a.contacts + b.contacts,
+             withATier: a.withATier + b.withATier,
+             declaredNoRouteFound: a.declaredNoRouteFound + b.declaredNoRouteFound,
+             routeNamedButNotSupplied: a.routeNamedButNotSupplied + b.routeNamedButNotSupplied,
+             citedAtHigh: a.citedAtHigh + b.citedAtHigh,
+             citedAtHighSayingWhetherItCorroborates:
+                a.citedAtHighSayingWhetherItCorroborates + b.citedAtHighSayingWhetherItCorroborates,
+             primaryContradictedByTheListing:
+                a.primaryContradictedByTheListing + b.primaryContradictedByTheListing)
     }
 }
 
@@ -117,6 +164,15 @@ enum RunComplianceCopy {
         count == 1
             ? "1 contact named a way in and gave none, and the run never once said it found no route"
             : "\(count) contacts named a way in and gave none, and the run never once said it found no route"
+    }
+
+    // #3347/#2258: what the wrong rank COSTS, in the terms the sentences above use. The cost is not that
+    // a field disagrees with a page, it is that a show moves up into what Dan looks at first on the
+    // strength of somebody who cannot commission the work.
+    static func primaryTheListingContradicts(_ count: Int) -> String {
+        count == 1
+            ? "1 contact was ranked as a decision maker while its own listing bills them only as cast, so Overture is not using that rank"
+            : "\(count) contacts were ranked as decision makers while their own listings bill them only as cast, so Overture is not using those ranks"
     }
 
     // #3376: what the silence COSTS, in the terms the other two sentences use. The cost is not that a
