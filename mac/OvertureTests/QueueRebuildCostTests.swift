@@ -50,13 +50,13 @@ struct QueueRebuildCostTests {
     // time, because it is exercising a smaller world rather than failing (L354).
     private enum LiveShape {
         // LIVE-SHAPE: prospects
-        static let prospects = 1139
+        static let prospects = 1224
         // LIVE-SHAPE: presenters
-        static let presenters = 399
+        static let presenters = 449
         // LIVE-SHAPE: venues
-        static let venues = 169
+        static let venues = 177
         // LIVE-SHAPE: groupNames
-        static let groupNames = 1049
+        static let groupNames = 1134
         // LIVE-SHAPE: sources
         static let sources = 73
         // The store's 60 organisation answers are deliberately NOT built here, and this is the one place
@@ -93,7 +93,7 @@ struct QueueRebuildCostTests {
         // LIVE-SHAPE: largestSingleDateCluster
         static let largestSingleDateCluster = 19
         // LIVE-SHAPE: sameNightComparisonLoad
-        static let sameNightComparisonLoad = 8937
+        static let sameNightComparisonLoad = 10086
     }
 
     private func container() throws -> ModelContainer {
