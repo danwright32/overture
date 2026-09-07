@@ -452,6 +452,25 @@ enum ProspectMutations {
         context.saveOrWarn(org: item.groupName, feedback: feedback)
     }
 
+    // #2937: Dan says the profile the check guessed by name IS the person. Since #2912 the card shows
+    // such a handle and says nobody established whose it is, and he is the one who can tell in seconds.
+    //
+    // The same shape as the four guard dismissals around it, and for the reason #2937 names: the run's
+    // own doubt (`nameMatchOnly`) is re-derived on every ingest by design, so his answer has to live on
+    // a field of its own or the next check takes it with the doubt.
+    //
+    // Everything else follows from the one write, because four readers ask one list: the profile rejoins
+    // `Prospect.socialRouteURLs`, the verdict becomes `socialOnly`, the pill says so, and the
+    // record-a-DM path opens. Nothing here loosens #2147: the app still never CLAIMS a route nobody tied
+    // to the show, it now knows when somebody did.
+    static func confirmGuessedProfile(_ item: QueueItem, _ recipientId: String,
+                                      prospects: [Prospect], context: ModelContext,
+                                      feedback: ActionFeedback) {
+        guard let model = model(for: item, in: prospects, feedback: feedback) else { return }
+        model.updateRecipient(id: recipientId) { $0.nameMatchOnlyDismissed = true }
+        context.saveOrWarn(org: item.groupName, feedback: feedback)
+    }
+
     // #722: same shape as dismissVenueMatch above, for a suspected press/media contact.
     static func dismissPressContactMatch(_ item: QueueItem, _ recipientId: String,
                                          prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {

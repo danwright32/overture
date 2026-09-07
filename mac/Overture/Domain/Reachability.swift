@@ -703,6 +703,12 @@ enum ReachabilityCopy {
     // announcing doubt: "not confirmed" alone leaves him guessing whether the doubt is about the person,
     // the address or the show.
     static let unconfirmedProfileNote = "Name matches, nothing ties it to this show"
+    // #2937: the control beside that sentence. Dan is the one who can tell in seconds whether the handle
+    // is the person, and until now there was nowhere to say so. Short, because it sits at the end of a
+    // route line that already carries a caveat and a link, and it answers the sentence directly above it.
+    static let confirmProfileControl = "This is them"
+    static let confirmProfileHelp =
+        "Say this account really is the person on this show. Overture will treat it as a way in, so you can record the DM you send."
 
     // #1626: no email, but the act takes messages through a form on its own site. A way through that
     // costs Dan a few minutes rather than a send, so it says what he would have to do.

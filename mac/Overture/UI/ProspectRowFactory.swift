@@ -153,6 +153,9 @@ enum ProspectRowFactory {
             onDismissContactReply: { rid in ProspectMutations.dismissContactReply(item, rid, prospects: prospects, context: context, feedback: feedback) },
             onDismissContactBounce: { rid in ProspectMutations.dismissContactBounce(item, rid, prospects: prospects, context: context, feedback: feedback) },
             onDismissVenueMatch: { rid in ProspectMutations.dismissVenueMatch(item, rid, prospects: prospects, context: context, feedback: feedback) },
+            // #2937: wired here with the other per-contact answers, so the control on the route line
+            // reaches the same mutation path every guard dismissal does.
+            onConfirmGuessedProfile: { rid in ProspectMutations.confirmGuessedProfile(item, rid, prospects: prospects, context: context, feedback: feedback) },
             onDismissPressContactMatch: { rid in ProspectMutations.dismissPressContactMatch(item, rid, prospects: prospects, context: context, feedback: feedback) },
             onDismissDuplicateContactMatch: { rid in ProspectMutations.dismissDuplicateContactMatch(item, rid, prospects: prospects, context: context, feedback: feedback) },
             onDismissConfidenceHeldDown: { rid in ProspectMutations.dismissConfidenceHeldDown(item, rid, prospects: prospects, context: context, feedback: feedback) },

@@ -212,6 +212,24 @@ final class Recipient {
     // they saw when such a profile was refused outright (#2147, L75): the app still never CLAIMS a route
     // it cannot tie to anybody. The card shows the handle and says what could not be confirmed.
     var nameMatchOnly: Bool = false
+    // #2937: DAN'S ANSWER to that doubt, which is a different fact from the doubt itself and has to be
+    // stored separately for the reason the field above states: `nameMatchOnly` is re-derived on EVERY
+    // ingest rather than latched, so a later run that still cannot tie the account to the show would put
+    // the doubt back and take his answer with it. The four contact guards beside it already solve exactly
+    // this with a paired `...Dismissed`, and this is that shape.
+    //
+    // It is HIS, so nothing but him clears it: no run writes it, and the ingest leaves it alone.
+    //
+    // FALSE means he has not answered, which is every row written before this. It never means "he said
+    // no": there is nothing to say no to, because an unconfirmed guess is already excluded from every
+    // route list and refusing it again would change nothing.
+    var nameMatchOnlyDismissed: Bool = false
+
+    // #2937: whether the app may still treat this route as a guess. ONE predicate, because four readers
+    // ask it (the social route list, the stored verdict, the card's own line, and whether a DM can be
+    // recorded), and four spellings of one question is how they come to disagree about a single row
+    // (L16).
+    var isUnconfirmedNameMatch: Bool { nameMatchOnly && !nameMatchOnlyDismissed }
 
     // #2622: WHO this contact is to the show (primary, secondary, tertiary), as the check judged it from
     // the page it read. Raw, like the confidence and method beside it, so a value this build does not know

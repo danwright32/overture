@@ -465,8 +465,16 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     // can never come from two readings of the same row (L16).
     struct DisplayedRoute: Identifiable, Equatable, Sendable {
         let url: URL
-        // The run said only the NAME matched, so nobody established who is on the end of this link.
+        // The run said only the NAME matched AND Dan has not answered, so nobody has established who is
+        // on the end of this link. It clears when he confirms, because the doubt is settled, and a doubt
+        // that stays on screen after it is answered teaches him to ignore the whole line (L269).
         let isNameMatchOnly: Bool
+        // #2937: which contact this route belongs to, so the control can name the row it acts on. Nil on
+        // a route with nothing to confirm.
+        let recipientId: String?
+        // Whether to offer "this is them". Only on a guess: a control that changes nothing on every other
+        // handle reads as a decision he has to make about all of them.
+        var offersConfirmation: Bool { isNameMatchOnly && recipientId != nil }
         // Whether the LINE says so. False when the badge above is already saying it for every link on the
         // row, which is the common case (one handle, one sentence), because a second line telling Dan
         // nothing the first did not is the #843 shape.
@@ -477,8 +485,8 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     func displayedContactRoutes(now: Date = Date()) -> [DisplayedRoute] {
         let routes = contacts
             .filter { ($0.email ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
-            .compactMap { c -> (URL, Bool)? in
-                usableContactFormURL(c).map { ($0, c.nameMatchOnly) }
+            .compactMap { c -> (URL, Bool, String)? in
+                usableContactFormURL(c).map { ($0, c.isUnconfirmedNameMatch, c.id) }
             }
         // The badge can only speak for the row when it is actually carrying that sentence AND every link
         // under it is one of these. Read from the same badge and the same stored reason the card renders,
@@ -487,8 +495,8 @@ struct QueueItem: Identifiable, Equatable, Sendable {
         // lines rather than leaving a bare handle reading as a found contact (L42).
         let badgeSaysIt = reachabilityBadge(now: now) == .noEmailFound
             && reachabilityEmptyReason == .unconfirmedSocialProfile
-            && !routes.isEmpty && routes.allSatisfy(\.1)
-        return routes.map { DisplayedRoute(url: $0.0, isNameMatchOnly: $0.1,
+            && !routes.isEmpty && routes.allSatisfy { $0.1 }
+        return routes.map { DisplayedRoute(url: $0.0, isNameMatchOnly: $0.1, recipientId: $0.2,
                                            marksUnconfirmed: $0.1 && !badgeSaysIt) }
     }
 
@@ -539,7 +547,7 @@ struct QueueItem: Identifiable, Equatable, Sendable {
             let address = (c.email ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
             if !address.isEmpty { return true }
             guard let form = usableContactFormURL(c) else { return false }
-            return !(c.nameMatchOnly && Reachability.isSocialOnly(form.absoluteString))
+            return !(c.isUnconfirmedNameMatch && Reachability.isSocialOnly(form.absoluteString))
         }.count
     }
 
@@ -844,6 +852,13 @@ struct RecipientSnapshot: Identifiable, Equatable, Sendable {
     // #2912: the run said the only thing matching was the NAME, so the card can mark the link as a guess.
     // False on every contact written before this shipped, which means nobody has said it is one.
     var nameMatchOnly: Bool = false
+    // #2937: Dan's answer, carried onto the snapshot so the card reads the same pair the store holds.
+    // Defaulted false, matching the stored default, so every existing call site is unchanged.
+    var nameMatchOnlyDismissed: Bool = false
+
+    // #2937: the same one predicate the row uses, so the card and the store cannot disagree about
+    // whether a handle is still a guess (L16).
+    var isUnconfirmedNameMatch: Bool { nameMatchOnly && !nameMatchOnlyDismissed }
     // #363: mirrors Recipient.contactSourceURL. See contactSourceLinkURL below for the display
     // gate (only ever a link at confidence == .high).
     var contactSourceURL: String? = nil
@@ -3083,6 +3098,7 @@ extension RecipientSnapshot {
                   contactMethod: r.contactMethod,
                   contactFormURL: r.contactFormURL,
                   nameMatchOnly: r.nameMatchOnly,
+                  nameMatchOnlyDismissed: r.nameMatchOnlyDismissed,
                   contactSourceURL: r.contactSourceURL,
                   delayNoticeAt: r.delayNoticeAt,
                   looksLikeVenue: r.looksLikeVenue,

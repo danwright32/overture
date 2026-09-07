@@ -63,6 +63,9 @@ struct ProspectRowView: View {
     var onDismissContactReply: (_ recipientId: String) -> Void = { _ in }
     var onDismissContactBounce: (_ recipientId: String) -> Void = { _ in }
     var onDismissVenueMatch: (_ recipientId: String) -> Void = { _ in }
+    // #2937: Dan's answer to a profile the check guessed by name. Defaulted to a no-op like every
+    // callback beside it, so a preview or a test that does not offer it is unaffected.
+    var onConfirmGuessedProfile: (_ recipientId: String) -> Void = { _ in }
     var onDismissPressContactMatch: (_ recipientId: String) -> Void = { _ in }
     var onDismissDuplicateContactMatch: (_ recipientId: String) -> Void = { _ in }
     // #1866: Dan overruling the guard that held a confident find down to unverified.
@@ -873,6 +876,17 @@ struct ProspectRowView: View {
                     .font(OVType.meta)
                     .foregroundStyle(OVColor.forestText)
                     .multilineTextAlignment(.trailing)
+                    // #2937: his answer, offered only on a handle that is still a guess. A control on
+                    // every route would read as a decision he has to make about all of them, and it
+                    // disappears once he has answered, because a doubt that stays on screen after it is
+                    // settled teaches him to ignore the line (L269).
+                    if route.offersConfirmation, let id = route.recipientId {
+                        Button(ReachabilityCopy.confirmProfileControl) { onConfirmGuessedProfile(id) }
+                            .buttonStyle(.plain)
+                            .font(OVType.meta)
+                            .foregroundStyle(OVColor.forestText)
+                            .help(ReachabilityCopy.confirmProfileHelp)
+                    }
                 }
             }
         }
