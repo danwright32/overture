@@ -27,26 +27,66 @@ struct AgentsDocSuiteCountsTests {
         }
     }
 
+    // #3640: AGENTS.md was split into an index plus topic files under docs/agents/, because it had
+    // passed the character limit for a file loaded into every session. The paragraph this suite was
+    // written about, the one describing the `Suite shape:` readout, is now in docs/agents/testing.md,
+    // so a guard still reading only AGENTS.md would keep passing while no longer covering the text
+    // most likely to sprout a hand-written figure. An exemption that is correct still leaves its
+    // content with no reviewer unless one is named in the same change (L129).
+    //
+    // Enumerated from DISK, never listed here, so a seventh topic file joins the check the day it is
+    // written (L41, L96).
+    private var steeringDocs: [(name: String, text: String)] {
+        get throws {
+            let topicsDir = RepoRoot.url.appendingPathComponent("docs/agents")
+            let entries = try FileManager.default.contentsOfDirectory(
+                at: topicsDir, includingPropertiesForKeys: nil)
+            let topics = entries.filter { $0.pathExtension == "md" }.sorted { $0.path < $1.path }
+            // An empty directory and a directory that could not be read must not both read as "the
+            // index is the whole of it", which is the passing answer (L98).
+            guard !topics.isEmpty else {
+                throw DocScanFailure.noTopicFiles(topicsDir.path)
+            }
+            return try [(name: "AGENTS.md", text: agentsDoc)] + topics.map {
+                (name: "docs/agents/" + $0.lastPathComponent,
+                 text: try String(contentsOf: $0, encoding: .utf8))
+            }
+        }
+    }
+
+    enum DocScanFailure: Error { case noTopicFiles(String) }
+
+    @Test func theScanReadsTheTopicFilesAndNotTheIndexAlone() throws {
+        let names = try steeringDocs.map(\.name)
+        #expect(names.contains("AGENTS.md"))
+        #expect(names.filter { $0.hasPrefix("docs/agents/") }.count > 1, """
+            This suite is reading \(names), which is the index alone or close to it. Every rule body \
+            lives under docs/agents/ since #3640, so a scan that misses them checks almost nothing \
+            while reporting a clean pass.
+            """)
+    }
+
     // The measurement from 2026-08-02 is the one number allowed to stay, because it is a record of
     // an experiment on a stated date rather than a claim about the suite now (L37). Everything else
     // of the shape "N tests" or "N,NNN tests" is a live claim that will drift.
     private let datedMeasurement = "4802"
 
     @Test func noLineClaimsATestCountAsCurrentFact() throws {
-        let doc = try agentsDoc
         let pattern = try NSRegularExpression(pattern: #"[\d,]{3,}\s+tests"#)
-        let range = NSRange(doc.startIndex..., in: doc)
 
         var offenders: [String] = []
-        pattern.enumerateMatches(in: doc, range: range) { match, _, _ in
-            guard let match, let r = Range(match.range, in: doc) else { return }
-            let text = String(doc[r])
-            guard !text.replacingOccurrences(of: ",", with: "").hasPrefix(datedMeasurement) else { return }
-            offenders.append(text)
+        for (name, doc) in try steeringDocs {
+            let range = NSRange(doc.startIndex..., in: doc)
+            pattern.enumerateMatches(in: doc, range: range) { match, _, _ in
+                guard let match, let r = Range(match.range, in: doc) else { return }
+                let text = String(doc[r])
+                guard !text.replacingOccurrences(of: ",", with: "").hasPrefix(datedMeasurement) else { return }
+                offenders.append("\(name): \(text)")
+            }
         }
 
         #expect(offenders.isEmpty, """
-            AGENTS.md states a test count as a current fact: \(offenders).
+            A steering doc states a test count as a current fact: \(offenders).
             Measured numbers are generated or omitted, never hand-written (L32). The suite reports \
             its own size on every run of mac/scripts/run-tests-locked.sh ("Suite shape: ..."), so \
             point at that instead of writing the figure down here.
@@ -70,13 +110,13 @@ struct AgentsDocSuiteCountsTests {
     // warning it exists to support. The `Suite shape:` line already reports the wall clock of the run
     // in front of you, which cannot drift because the run produces it.
     @Test func noLineClaimsHowLongASuiteRunTakes() throws {
-        let doc = try agentsDoc
         // Both spellings, because the one that was wrong was written in words rather than digits and a
         // guard that only caught "90 seconds" would have passed on it the whole time.
         let patterns = [#"\b[\d,]+\s*(second|minute|hour)s?\b"#,
                         #"\b(a|one|two|three|four|five|half)\b[\w\s]{0,14}\b(minute|hour)s?\b"#]
         var offenders: [String] = []
-        for line in doc.components(separatedBy: "\n") {
+        for (docName, doc) in try steeringDocs {
+          for line in doc.components(separatedBy: "\n") {
             // Only lines making a claim about a RUN. A duration elsewhere (a timeout, a cooldown, a
             // retention window) is a fact about the product, not a measurement of this machine.
             let lower = line.lowercased()
@@ -92,13 +132,15 @@ struct AgentsDocSuiteCountsTests {
                 else { continue }
                 let range = NSRange(line.startIndex..., in: line)
                 if let match = regex.firstMatch(in: line, range: range), let r = Range(match.range, in: line) {
-                    offenders.append("\(line.trimmingCharacters(in: .whitespaces)) [matched: \(line[r])]")
+                    offenders.append("\(docName): \(line.trimmingCharacters(in: .whitespaces)) [matched: \(line[r])]")
                     break
                 }
             }
+          }
         }
+
         #expect(offenders.isEmpty, """
-            AGENTS.md states how long a run takes: \(offenders).
+            A steering doc states how long a run takes: \(offenders).
             Measured numbers are generated or omitted, never hand-written (L32). Every run of \
             mac/scripts/run-tests-locked.sh ends with a "Suite shape:" line carrying its own wall \
             clock, so point at that instead of writing a figure down here.

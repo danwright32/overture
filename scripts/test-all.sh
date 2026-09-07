@@ -279,6 +279,25 @@ echo "==> mac/scripts/prune-stale-registrations.sh"
 # Here rather than in a script somebody has to remember, because the failure mode IS that nobody
 # counts: the 496 that #2234 cleared accumulated because nothing ever did, and the merge scripts it
 # fixed cover only the paths that are a merge script.
+# #3640: is a file that steers every session close to the size at which it stops being loaded?
+# AGENTS.md crossed the limit on 2026-09-06 and the only thing that reported it was a warning Dan
+# happened to have on screen. It measures the whole import graph rather than one named file, because
+# this repo's CLAUDE.md is one line long and measuring it would pass forever (L429).
+#
+# ADVISORY on exit 1, on the same footing as check-branch-backlog.sh below: what to do about a doc
+# getting large is a judgement, and a gate on a judgement has its threshold raised until it catches
+# nothing (L93). Exit 2 is UNMEASURED and IS folded into the failures, because a tree with no
+# CLAUDE.md and one whose docs are all small leave the same empty result (L98).
+echo "==> scripts/check-steering-doc-size.sh"
+STEERING_SIZE_STATUS=0
+"${REPO_ROOT}/scripts/check-steering-doc-size.sh" || STEERING_SIZE_STATUS=$?
+if [ "${STEERING_SIZE_STATUS}" = "2" ]; then
+  TEST_ALL_CHEAP_FAILURES+=("scripts/check-steering-doc-size.sh")
+  echo "FAILED - scripts/check-steering-doc-size.sh could not measure anything (exit 2)"
+elif [ "${STEERING_SIZE_STATUS}" = "1" ]; then
+  echo "  Advisory, so this does NOT fail the run."
+fi
+
 echo "==> scripts/check-branch-backlog.sh"
 "${REPO_ROOT}/scripts/check-branch-backlog.sh" || true
 
