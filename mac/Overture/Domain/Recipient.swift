@@ -230,6 +230,14 @@ final class Recipient {
     // recorded), and four spellings of one question is how they come to disagree about a single row
     // (L16).
     var isUnconfirmedNameMatch: Bool { nameMatchOnly && !nameMatchOnlyDismissed }
+    // #3078: the run's declaration that `role` is its OWN summary rather than a phrase the cited page
+    // carries. Stored, because the card reads it and the ingest is the only writer, and re-derived on
+    // every ingest rather than latched, exactly like `nameMatchOnly` above: a later run that quotes the
+    // page has stopped characterising, and latching would keep the note on a role that is now a quote.
+    //
+    // FALSE is the unremarkable default, matching absence: a run that says nothing is not characterising
+    // anything, and every recipient written before this reads that way (L98, L128).
+    var roleIsACharacterisation: Bool = false
 
     // #2622: WHO this contact is to the show (primary, secondary, tertiary), as the check judged it from
     // the page it read. Raw, like the confidence and method beside it, so a value this build does not know

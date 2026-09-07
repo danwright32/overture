@@ -789,6 +789,10 @@ struct RecipientSnapshot: Identifiable, Equatable, Sendable {
     let name: String?
     let email: String?
     let role: String?
+    // #3078: the run declared the role its OWN summary rather than a phrase the cited page carries.
+    // Defaulted false, matching the stored default and matching absence, so every existing call site is
+    // unchanged and a snapshot nobody has spoken about reads exactly as it always did.
+    var roleIsACharacterisation: Bool = false
     let provenance: RecipientProvenance
     let sendState: SendState
     let replied: Bool
@@ -3073,6 +3077,7 @@ extension RecipientSnapshot {
     // 26 wasted runs per render on this store's shape (L62).
     init(_ r: Recipient, lintBlockers: @autoclosure () -> [DraftIssue]) {
         self.init(id: r.id, name: r.name, email: r.email, role: r.role,
+                  roleIsACharacterisation: r.roleIsACharacterisation,
                   provenance: r.provenance, sendState: r.sendState, replied: r.replied,
                   lastReplyText: r.lastReplyText, resolution: r.resolution,
                   bounced: r.bounced, outcomeSource: r.outcomeSource,

@@ -42,6 +42,12 @@ enum RunInstructionCompliance {
         // the same reason as the one above: a different fault with a different remedy, and the tier
         // instruction was followed, it was just answered about an address with nobody behind it.
         var tieredWithNoName: Int
+        // #3078: contacts carrying a role AND a cited page, which is the population the declaration is
+        // about, and how many of those say whose words the role is. Its own pair for the same reason as
+        // `citedAtHigh` above: "no role on a cited page at all" is a legitimate run and must not read as
+        // an ignored instruction (L98).
+        var roleOnACitedPage: Int
+        var roleSayingWhoseWordsItIs: Int
 
         // Not "fewer than all", deliberately. A partial run is a different thing from an ignored
         // instruction, and accusing on a partial would fire on the ordinary case.
@@ -62,6 +68,13 @@ enum RunInstructionCompliance {
         // Not "fewer than all", for the same reason as `tierInstructionIgnored` directly above: a run
         // that answered the question on some of its citations has adopted the instruction, and accusing
         // on a partial would fire on the ordinary case.
+        // #3078: not "fewer than all", for the reason every rule here follows: a run that answered on
+        // some of its roles has adopted the instruction, and accusing on a partial fires on the ordinary
+        // case.
+        var roleClaimInstructionIgnored: Bool {
+            roleOnACitedPage > 0 && roleSayingWhoseWordsItIs == 0
+        }
+
         var corroborationInstructionIgnored: Bool {
             citedAtHigh > 0 && citedAtHighSayingWhetherItCorroborates == 0
         }
@@ -79,6 +92,9 @@ enum RunInstructionCompliance {
             if tierInstructionIgnored { out.append(RunComplianceCopy.noTierAtAll(contacts)) }
             if refusalFiringWithoutAdoption {
                 out.append(RunComplianceCopy.routesNamedNeverFound(routeNamedButNotSupplied))
+            }
+            if roleClaimInstructionIgnored {
+                out.append(RunComplianceCopy.noRoleClaimAtAll(roleOnACitedPage))
             }
             if corroborationInstructionIgnored {
                 out.append(RunComplianceCopy.noCorroborationAtAll(citedAtHigh))
@@ -98,7 +114,8 @@ enum RunInstructionCompliance {
     static let empty = Measurement(contacts: 0, withATier: 0, declaredNoRouteFound: 0,
                                    routeNamedButNotSupplied: 0, citedAtHigh: 0,
                                    citedAtHighSayingWhetherItCorroborates: 0,
-                                   primaryContradictedByTheListing: 0, tieredWithNoName: 0)
+                                   primaryContradictedByTheListing: 0, tieredWithNoName: 0,
+                                   roleOnACitedPage: 0, roleSayingWhoseWordsItIs: 0)
 
     static func measure(contacts: [PrepContact], listing: ShowListing? = nil) -> Measurement {
         var withATier = 0
@@ -108,7 +125,17 @@ enum RunInstructionCompliance {
         var citedAndAnswered = 0
         var contradicted = 0
         var namelessTiers = 0
+        var rolesOnAPage = 0
+        var rolesClaimed = 0
         for c in contacts {
+            // #3078: the population the declaration is about is a role RESTING ON A CITED PAGE. A role
+            // with no page has nothing to be quoted from, so counting it would put the ordinary case in
+            // the denominator and make adoption look worse than it is (L139).
+            if !(c.role ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+               !(c.sourceUrl ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                rolesOnAPage += 1
+                if c.roleQuoted != nil { rolesClaimed += 1 }
+            }
             // #2625: a tier declared about an address with nobody behind it. Through the SAME predicate
             // the ingest refuses it with, so the count and the row cannot disagree (L16).
             if c.tier != nil, !BilledHierarchy.tierIsAnswerable(name: c.name) { namelessTiers += 1 }
@@ -141,7 +168,9 @@ enum RunInstructionCompliance {
                            citedAtHigh: cited,
                            citedAtHighSayingWhetherItCorroborates: citedAndAnswered,
                            primaryContradictedByTheListing: contradicted,
-                           tieredWithNoName: namelessTiers)
+                           tieredWithNoName: namelessTiers,
+                           roleOnACitedPage: rolesOnAPage,
+                           roleSayingWhoseWordsItIs: rolesClaimed)
     }
 }
 
@@ -159,7 +188,9 @@ extension RunInstructionCompliance.Measurement {
                 a.citedAtHighSayingWhetherItCorroborates + b.citedAtHighSayingWhetherItCorroborates,
              primaryContradictedByTheListing:
                 a.primaryContradictedByTheListing + b.primaryContradictedByTheListing,
-             tieredWithNoName: a.tieredWithNoName + b.tieredWithNoName)
+             tieredWithNoName: a.tieredWithNoName + b.tieredWithNoName,
+             roleOnACitedPage: a.roleOnACitedPage + b.roleOnACitedPage,
+             roleSayingWhoseWordsItIs: a.roleSayingWhoseWordsItIs + b.roleSayingWhoseWordsItIs)
     }
 }
 
@@ -177,6 +208,14 @@ enum RunComplianceCopy {
         count == 1
             ? "1 contact named a way in and gave none, and the run never once said it found no route"
             : "\(count) contacts named a way in and gave none, and the run never once said it found no route"
+    }
+
+    // #3078: what the silence COSTS. Not that a field is missing: that a word Overture wrote is being
+    // read as a word the page said.
+    static func noRoleClaimAtAll(_ count: Int) -> String {
+        count == 1
+            ? "its 1 contact with a role and a cited page never says whether the role is quoted, so a summary reads as a quote"
+            : "not one of its \(count) contacts with a role and a cited page says whether the role is quoted, so a summary reads as a quote"
     }
 
     // #2625: what an unanswerable rank COSTS. Not that a field is missing: that a show moved up the queue
