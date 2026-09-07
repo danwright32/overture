@@ -221,14 +221,10 @@ struct QueueRenderPassWorkUnitCostTests {
     // half (the same reasoning QueueRebuildCostTests records for its own shape).
     // LIVE-SHAPE: prospects
     private static let corpusSize = 1224
-    // LIVE-SHAPE: recipients
-    private static let recipientCount = 387
-    // LIVE-SHAPE: prospectsWithAContact
-    private static let prospectsWithAContact = 262
-    // LIVE-SHAPE: pendingRecipients
-    private static let pendingRecipients = 359
-    // LIVE-SHAPE: prospectsWithADraftBody
-    private static let prospectsWithADraftBody = 65
+    private static let recipientCount = LiveContactShape.recipients
+    private static let prospectsWithAContact = LiveContactShape.prospectsWithAContact
+    private static let pendingRecipients = LiveContactShape.pendingRecipients
+    private static let prospectsWithADraftBody = LiveContactShape.prospectsWithADraftBody
     // #3506: the INTERSECTION, and the dimension this fixture was missing. Every figure above matched the
     // live store exactly and the corpus still exercised five and a half times the real draft lint load,
     // because the lint scales with PENDING recipients that carry a body and nothing recorded that pairing.
@@ -236,10 +232,8 @@ struct QueueRenderPassWorkUnitCostTests {
     // of them are pending. Every one of the store's 26 non-pending recipients is on such a row, which is
     // what makes the shape consistent: a row gets a body when it is prepped, and its contacts are sent
     // from there.
-    // LIVE-SHAPE: recipientsOnDraftBodyRows
-    private static let recipientsOnDraftBodyRows = 69
-    // LIVE-SHAPE: pendingRecipientsWithADraftBody
-    private static let pendingRecipientsWithADraftBody = 41
+    private static let recipientsOnDraftBodyRows = LiveContactShape.recipientsOnDraftBodyRows
+    private static let pendingRecipientsWithADraftBody = LiveContactShape.pendingRecipientsWithADraftBody
 
     // #3516: the DATE dimension, which is what the self-booking check scales with and what nothing here
     // recorded. `SelfBookingConflict.NightIndex` buckets by night and the work per row is the size of the
@@ -431,38 +425,14 @@ struct QueueRenderPassWorkUnitCostTests {
             ctx.insert(p)
             rows.append(p)
         }
-        // The recipients, laid out to the measured shape rather than spread evenly, because the shape is
-        // the whole point. 305 over 198 prospects, of which 42 sit on the 38 body-carrying rows that have
-        // a contact, and only 16 of THOSE are pending. Every one of the 26 non-pending recipients is on a
-        // body row, which is what makes it consistent: a row gets a draft when it is prepped and its
-        // contacts are sent from there.
-        var made = 0
-        var pendingMade = 0
-
-        // The body rows first: 38 of the 39 that carry a body also carry a contact, holding 42 between
-        // them, so four of them carry two.
-        let bodyRowsWithAContact = Self.prospectsWithADraftBody - 1
-        for n in 0..<bodyRowsWithAContact {
-            let howMany = n < (Self.recipientsOnDraftBodyRows - bodyRowsWithAContact) ? 2 : 1
-            for _ in 0..<howMany {
-                let pending = pendingMade < Self.pendingRecipientsWithADraftBody
-                addRecipient(ctx, to: rows[n], index: made, pending: pending)
-                if pending { pendingMade += 1 }
-                made += 1
-            }
-        }
-
-        // Everything else with a contact is pending, which is what the remaining totals require.
-        var n = Self.prospectsWithADraftBody
-        while made < Self.recipientCount && n < Self.prospectsWithAContact + 1 {
-            let left = Self.recipientCount - made
-            let rowsLeft = Self.prospectsWithAContact + 1 - n
-            let howMany = left > rowsLeft ? 2 : 1
-            for _ in 0..<howMany where made < Self.recipientCount {
-                addRecipient(ctx, to: rows[n], index: made, pending: true)
-                made += 1
-            }
-            n += 1
+        // The recipients, laid out to the measured shape rather than spread evenly, because the shape
+        // is the whole point. The layout DECISION lives in `LiveContactShape` because the hosted rig
+        // needs the identical spread and a rule's data shared while the loop applying it is copied is
+        // not consolidation (L370). What stays here is turning that decision into this target's objects,
+        // which a shared file cannot do: `mac/TestSupport` is compiled into both targets and they reach
+        // the app differently, so it cannot name `Recipient` at all.
+        for (index, place) in LiveContactShape.placements(rowCount: rows.count).enumerated() {
+            addRecipient(ctx, to: rows[place.row], index: index, pending: place.pending)
         }
         try? ctx.save()
         return rows

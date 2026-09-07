@@ -39,8 +39,9 @@ import SwiftData
 @Suite("What a press really costs, end to end (#2727)")
 struct FeltWaitCostTests {
 
-    // The live store's shape, through the one place that records it (#3516).
-    private static let corpusSize = 1142
+    // The live store's shape, through the one place that records it (#3516, #3650).
+    // LIVE-SHAPE: prospects
+    private static let corpusSize = 1224
 
     private func container() throws -> ModelContainer {
         try ModelContainer(for: Schema([Prospect.self, Recipient.self, Inquiry.self,
@@ -54,6 +55,7 @@ struct FeltWaitCostTests {
     private func seed(_ ctx: ModelContext, rows: Int) -> [String] {
         let dates = LiveDateClustering.dates(forRows: rows)
         var keys: [String] = []
+        var made: [Prospect] = []
         for n in 0..<rows {
             let p = Prospect(naturalKey: "row-\(n)", groupName: "Ensemble \(n % 90)", discipline: "music",
                              venue: "Venue \(n % 169) Hall", performanceDate: dates[n],
@@ -64,8 +66,31 @@ struct FeltWaitCostTests {
                              possibleMatchName: nil, status: .new)
             p.presenter = "Ensemble \(n % 90) Presents"
             p.location = "New York, NY"
+            // #3650: a body on the rows the live store carries one on, because the draft lint is reached
+            // only through a non-empty effective body and is the expensive half of building a card.
+            if LiveContactShape.carriesADraftBody(n) { p.draftBody = LiveContactShape.draftBody }
             ctx.insert(p)
+            made.append(p)
             keys.append(p.naturalKey)
+        }
+        // #3650: THE CONTACTS, at the live store's own spread, from the one place that records it.
+        //
+        // This rig held 1,142 prospects and NOT ONE recipient until 2026-09-07, which is the same defect
+        // #2048 fixed in the unhosted cost fixture, still standing here. It matters more here than there:
+        // this is the rig that measures the wait Dan actually FEELS, and almost everything expensive
+        // about a card is per contact (`SendGroup.CardGroups`, `RecipientSnapshot`, and the draft lint).
+        // With no recipients every one of those short-circuits on its first line, so the felt wait it
+        // reported was taken over a store where building a card is nearly free (L48, L354).
+        //
+        // Nothing reported it, and that is the other half: `check-fixture-corpus-drift.sh` scanned only
+        // `mac/OvertureTests`, so this whole target was exempt from the check written to catch it. The
+        // scan root is widened in the same change (L96, L247).
+        for (index, place) in LiveContactShape.placements(rowCount: rows).enumerated() {
+            let r = Recipient(id: "contact-\(index)", email: "contact\(index)@example.com",
+                              name: "Contact \(index)", role: "programming", provenance: .presenter)
+            r.sendState = place.pending ? SendState.pending : SendState.sent
+            r.prospect = made[place.row]
+            ctx.insert(r)
         }
         try? ctx.save()
         return keys

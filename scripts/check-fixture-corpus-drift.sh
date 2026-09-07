@@ -40,7 +40,11 @@ cd "${SCRIPT_DIR}/.." || exit 1
 . "${SCRIPT_DIR}/lib/scratch.sh"
 
 LIVE_STORE="${OVERTURE_LIVE_STORE:-${HOME}/Library/Application Support/Overture/Overture.store}"
-DECL_ROOT="${OVERTURE_CORPUS_DECL_ROOT:-${SCRIPT_DIR}/../mac/OvertureTests}"
+# #3650: EVERY test root, not just the unhosted one. This scanned `mac/OvertureTests` alone, so
+# `mac/OvertureHostedTests` was exempt from the check written to catch exactly this defect, and the rig
+# measuring the wait Dan FEELS sat with zero recipients and zero tags while the scan reported all clear
+# (L96, L247). `mac/TestSupport` is here because a shape shared by two targets has to live there.
+DECL_ROOT="${OVERTURE_CORPUS_DECL_ROOT:-${SCRIPT_DIR}/../mac}"
 
 # How far below the live figure a declaration may sit before it is reported. The store grows every night,
 # so this is not zero: what the check exists to catch is a fixture protecting a MATERIALLY smaller world,
