@@ -10,6 +10,7 @@
 # nothing else, so write one whenever an entry is meant to stay (L233).
 #
 # Seeded 2026-08-27 by the guard's own predicate rather than by a query written beside it (L107).
+CanonicalDomainProcedure.swift:judgement  # #3345 shipped the READING and not the refusal, on Dan's call of 2026-09-06 to measure before enforcing: the mechanism could not be reproduced on any run whose streams are on disk. Its only caller is CanonicalDomainProcedureArchiveTests, which prints the per-run reading every suite run. #3609 is the issue that wires it into the ingest.
 ContactIdentity.swift:isSamePerson
 DownbeatExport.swift:hasLeftReview
 DownbeatExport.swift:hostingSite
