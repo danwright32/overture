@@ -133,13 +133,98 @@ struct RunInstructionComplianceTests {
     // Measured over what the RUN SAID, not over what survived the ingest. A contact refused for naming a
     // route it never found is exactly the evidence being counted, and the ingest discards it, so counting
     // survivors would count zero of the thing in question and the check would report a clean run for ever.
+    //
+    // Asserted as the RULE rather than as one spelling of it. It used to pin the exact expression, and
+    // #3347 refined that expression legitimately (it measures per show now, so each contact is judged
+    // against its own listing) and the guard went red for formatting while the rule it exists for was
+    // untouched. A guard that goes red for the wrong reason teaches the next person to edit it until it
+    // is quiet (L103).
     @Test func theimporterMeasuresTheResultsRatherThanTheSurvivors() {
         let source = SourceGuardHelper.source("Overture/Persistence/PrepImporter.swift")
         #expect(!source.isEmpty)
-        #expect(SourceGuardHelper.containsCode(
-            "RunInstructionCompliance.measure(contacts: results.results.flatMap { $0.contacts ?? [] })",
-            in: source),
+        // Bounded at the loop that follows it, so the region really is the assignment. An end marker
+        // that does not match makes `between` run to the end of the file, at which point every
+        // assertion below is about the whole importer and the one that forbids `recipients` fires on
+        // code that has nothing to do with this (measured, first try).
+        let assignment = SourceGuardHelper.between("outcome.instructionCompliance =",
+                                                   and: "for r in results.results {", in: source)
+        let measured = try! #require(assignment)
+        // It reads what the RUN wrote, which is `contacts` off the results entries.
+        #expect(measured.contains("results.results"),
                 "the compliance count is taken from something other than the run's own results (#2925)")
+        #expect(measured.contains("contacts"),
+                "the compliance count no longer reads the run's contacts at all (#2925)")
+        // And never the survivors. `recipients` is what the ingest LEAVES, and a contact refused for
+        // naming a route it never found is exactly the evidence being counted, so counting survivors
+        // would count zero of the thing in question and report a clean run for ever.
+        #expect(!measured.contains("recipients"), Comment(rawValue:
+            "the compliance count is taken from what survived the ingest rather than from what the run "
+            + "said, so the evidence it exists to count is discarded before it is counted (#2925)"))
+    }
+
+    // MARK: - #3347: a rank the show's own listing contradicts
+
+    private var castOnlyListing: ShowListing {
+        ShowListing(status: ShowListing.read, url: "https://example.org/chills",
+                    text: "An evening of songs. Featuring: Nessa Halloway, Rennick Slade.")
+    }
+
+    @Test func aPrimaryTheListingBillsOnlyAsCastIsCounted() {
+        let m = RunInstructionCompliance.measure(contacts: [contact()], listing: castOnlyListing)
+        #expect(m.primaryContradictedByTheListing == 1)
+        #expect(m.notes.contains { $0.contains("ranked as a decision maker") })
+    }
+
+    // The page CREDITS her, so the rank stands and nothing is counted. Without this the count would be
+    // "how many primary contacts are there", which fires on the ordinary case (L93).
+    @Test func aPrimaryTheListingCreditsIsNotCounted() {
+        let credited = ShowListing(
+            status: ShowListing.read, url: "https://example.org/chills",
+            text: "Produced by Nessa Halloway. Featuring: Nessa Halloway, Rennick Slade.")
+        let m = RunInstructionCompliance.measure(contacts: [contact()], listing: credited)
+        #expect(m.primaryContradictedByTheListing == 0)
+        #expect(!m.notes.contains { $0.contains("ranked as a decision maker") })
+    }
+
+    // NO listing counts nothing, which is the half that decides whether this is safe: a run measured by
+    // a caller holding no work-list must never be reported as contradicted by a page nobody read (L98).
+    @Test func withNoListingNothingIsContradicted() {
+        #expect(RunInstructionCompliance.measure(contacts: [contact()])
+            .primaryContradictedByTheListing == 0)
+    }
+
+    // The sum is what turns per-show measurements into a run, and EVERY field has to move. A field added
+    // later and left out of `+` keeps whatever the FIRST show reported for the whole run, which is a
+    // number that looks perfectly reasonable and is measured over one item (L63).
+    @Test func summingTwoShowsAddsEveryFieldRatherThanSome() {
+        let a = RunInstructionCompliance.Measurement(
+            contacts: 1, withATier: 2, declaredNoRouteFound: 3, routeNamedButNotSupplied: 4,
+            citedAtHigh: 5, citedAtHighSayingWhetherItCorroborates: 6,
+            primaryContradictedByTheListing: 7)
+        let b = RunInstructionCompliance.Measurement(
+            contacts: 10, withATier: 20, declaredNoRouteFound: 30, routeNamedButNotSupplied: 40,
+            citedAtHigh: 50, citedAtHighSayingWhetherItCorroborates: 60,
+            primaryContradictedByTheListing: 70)
+        #expect(a + b == RunInstructionCompliance.Measurement(
+            contacts: 11, withATier: 22, declaredNoRouteFound: 33, routeNamedButNotSupplied: 44,
+            citedAtHigh: 55, citedAtHighSayingWhetherItCorroborates: 66,
+            primaryContradictedByTheListing: 77))
+        // The identity, so a run of no shows reports the same nothing measuring an empty pool did.
+        #expect(RunInstructionCompliance.empty + a == a)
+    }
+
+    // Summed ACROSS shows, each judged against ITS OWN page, which is the whole reason the measurement
+    // moved per show: one flat pool would have to pair a contact with a listing after the fact, and a
+    // mismatched pairing produces a confident number about nothing (L420).
+    @Test func eachShowIsJudgedAgainstItsOwnPage() {
+        let credited = ShowListing(status: ShowListing.read, url: "https://example.org/b",
+                                   text: "Produced by Nessa Halloway. Featuring: Nessa Halloway.")
+        let contradicted = RunInstructionCompliance.measure(contacts: [contact()],
+                                                            listing: castOnlyListing)
+        let supported = RunInstructionCompliance.measure(contacts: [contact()], listing: credited)
+        let run = RunInstructionCompliance.empty + contradicted + supported
+        #expect(run.contacts == 2)
+        #expect(run.primaryContradictedByTheListing == 1)
     }
 
     // MARK: - The refusal has ONE definition (L16)

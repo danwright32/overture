@@ -50,7 +50,8 @@ enum PrepImporter {
         // counted, so counting only survivors would count zero of the thing in question.
         var instructionCompliance = RunInstructionCompliance.Measurement(
             contacts: 0, withATier: 0, declaredNoRouteFound: 0, routeNamedButNotSupplied: 0,
-            citedAtHigh: 0, citedAtHighSayingWhetherItCorroborates: 0)
+            citedAtHigh: 0, citedAtHighSayingWhetherItCorroborates: 0,
+            primaryContradictedByTheListing: 0)
     }
 
     // Fail loud, not silent (#754). The performer matcher is only as good as the two files it reads,
@@ -79,14 +80,25 @@ enum PrepImporter {
     // reachability probe from the app's own run-type state (the probe marker), rather than from a field in
     // the results file. This keeps the cross-language results contract unchanged while still giving ingest
     // the code-enforced probe safety below.
+    // #3347/#2258: `listings` is the show listing the APP rendered and handed the run, keyed by natural
+    // key, so a declared `primary` tier can be judged against how the page actually BILLS that person.
+    // Defaulted EMPTY, which answers "no page" for every key and holds nothing down: a caller that has
+    // no queue must never be able to overrule a run on the strength of a page it never read (L98).
     static func ingest(_ results: PrepResults, into context: ModelContext, now: Date = Date(),
                        clients: [DownbeatClient] = [], history: [HistoryRecord] = [],
-                       isProbe: Bool = false) -> Outcome {
+                       isProbe: Bool = false,
+                       listings: [String: ShowListing] = [:]) -> Outcome {
         var outcome = Outcome()
         // #2641/#2925: measured from the RESULTS, before any of them are matched to a prospect or
         // discarded, so the count is of what the run said rather than of what survived the ingest.
-        outcome.instructionCompliance =
-            RunInstructionCompliance.measure(contacts: results.results.flatMap { $0.contacts ?? [] })
+        // #3347: measured PER SHOW and summed, rather than over one flat pool of contacts, so every
+        // contact is judged against the page of the show it actually came in on. A flat pool would have
+        // to pair a contact with a listing after the fact, which is the mismatched pairing that produces
+        // a confident number about nothing (L420).
+        outcome.instructionCompliance = results.results
+            .map { RunInstructionCompliance.measure(contacts: $0.contacts ?? [],
+                                                    listing: listings[$0.naturalKey]) }
+            .reduce(RunInstructionCompliance.empty) { $0 + $1 }
         for r in results.results {
             let key = r.naturalKey
             guard let p = try? Prospect.stored(key: key, in: context) else {
@@ -138,7 +150,8 @@ enum PrepImporter {
                     // somebody to email, so a refusal sentence from an earlier check must not survive it.
                     p.reachabilityEmptyReason = nil
                 } else if let contacts = r.contacts, !contacts.isEmpty {
-                    ingestContacts(contacts, into: p, context: context)
+                    ingestContacts(contacts, into: p, context: context,
+                                   listing: listings[key])
                     applyPerformerMatch(contacts, to: p, clients: clients, history: history, now: now)
                     // Only now have the venue and press guards run, so this is the first point at which
                     // found can be told from weak. This is the authoritative writer for a probe that
@@ -250,7 +263,8 @@ enum PrepImporter {
                 } else if draftOnlyRequest {
                     outcome.skippedOutOfScope += 1
                 } else {
-                    ingestContacts(contacts, into: p, context: context)
+                    ingestContacts(contacts, into: p, context: context,
+                                   listing: listings[key])
                     // #1961: a contact that lands here changes the answer to "can this show be reached",
                     // and until now only the probe path above ever said so. A show probed on Jul 29 and
                     // given two performers by an ordinary Prep run days later kept the probe's
@@ -368,7 +382,8 @@ enum PrepImporter {
     }
 
     @MainActor
-    private static func ingestContacts(_ contacts: [PrepContact], into p: Prospect, context: ModelContext) {
+    private static func ingestContacts(_ contacts: [PrepContact], into p: Prospect, context: ModelContext,
+                                       listing: ShowListing? = nil) {
         // A batch that (unexpectedly) carries more than one contact of the same provenance cannot be
         // matched to an existing recipient by provenance alone: the pending/sent fallbacks below would
         // let a later contact in the batch grab and overwrite an earlier one's row (#408). When a
@@ -406,7 +421,8 @@ enum PrepImporter {
             if let existing = p.recipients.first(where: { $0.id == id }) {
                 apply(c, email: email, provenance: provenance, venue: p.venue,
                       performanceDate: p.performanceDate, excludingProspectKey: p.naturalKey,
-                      groupName: p.groupName, presenter: p.presenter, context: context, to: existing)
+                      groupName: p.groupName, presenter: p.presenter, listing: listing,
+                      context: context, to: existing)
             } else if let existing = matchSamePerson(in: p, name: c.name, among: contacts) {
                 // #2422: the same person, reached a second way. The id routes above cannot see this by
                 // construction (an email and a `form:` URL are two different ids for one person), and the
@@ -415,7 +431,7 @@ enum PrepImporter {
                 // corrected. Dan, 2026-08-10: "and I've got two of the same person."
                 apply(c, email: email, provenance: provenance, venue: p.venue,
                       performanceDate: p.performanceDate, excludingProspectKey: p.naturalKey,
-                      groupName: p.groupName, presenter: p.presenter,
+                      groupName: p.groupName, presenter: p.presenter, listing: listing,
                       context: context, to: existing)
                 // Re-keyed from what the row ENDS UP holding rather than from the incoming handle, which
                 // is what makes an address beat a form: `apply` keeps the better of the two on each field,
@@ -430,7 +446,8 @@ enum PrepImporter {
                 existing.id = id
                 apply(c, email: email, provenance: provenance, venue: p.venue,
                       performanceDate: p.performanceDate, excludingProspectKey: p.naturalKey,
-                      groupName: p.groupName, presenter: p.presenter, context: context, to: existing)
+                      groupName: p.groupName, presenter: p.presenter, listing: listing,
+                      context: context, to: existing)
             } else if provenanceIsUnambiguous,
                       alreadySent(in: p, provenance: provenance) {
                 continue
@@ -474,9 +491,10 @@ enum PrepImporter {
                     recipient.looksLikeDuplicateContact = DuplicateContactGuard.looksLikeDuplicate(
                         email: email, venue: p.venue, performanceDate: p.performanceDate,
                         excludingProspectKey: p.naturalKey, in: context)
-                    // #2622: who the run says this contact is to the show. Written straight through: the
-                    // judgement is the run's, made with the page in front of it.
-                    recipient.contactTierRaw = c.tier
+                    // #2622: who the run says this contact is to the show. The judgement is the run's,
+                    // made with the page in front of it, so it is written through UNLESS the page it was
+                    // made from contradicts it (#3347).
+                    recipient.contactTierRaw = supportedTier(c, listing: listing)
                     // #2624: and whether the address is in a name nobody on this row accounts for.
                     recipient.looksLikeAnotherPersons = UnaccountedAddressGuard.looksLikeAnotherPersons(
                         email: email, name: c.name, sourceURL: c.sourceUrl,
@@ -485,6 +503,28 @@ enum PrepImporter {
                 p.addRecipient(recipient)
             }
         }
+    }
+
+    // #3347/#2258: the tier this run may claim for this contact, given how the show's own listing bills
+    // them.
+    //
+    // `primary` is defined in `docs/prep-runbook.md` as whoever could actually hire Dan, and the runbook
+    // requires the rank to be judged "from the page you actually read". A person named on that page ONLY
+    // after a cast marker, and credited nowhere on it, is billed as being on the show rather than running
+    // it, so a `primary` there was carried across from somewhere else. Measured on "A Night of Chills &
+    // Thrills": two people, one identical role string, `primary` each, and the page's own words are
+    // `Featuring: Marlowe Fenn Rennick Slade Music Director Corwin T. Hale`.
+    //
+    // HELD DOWN TO NOTHING, not to `secondary`. The page says the claim is unsupported; it does not say
+    // what the right answer is, and `ContactTier`'s own contract is that nil means nobody has said, which
+    // is exactly true here. A guessed tier is worse than none, which is the runbook's own rule.
+    //
+    // Only `primary` is judged. `secondary` and `tertiary` make no claim about authority that a cast
+    // billing could contradict, and holding those down would fire on the ordinary case (L93).
+    private static func supportedTier(_ c: PrepContact, listing: ShowListing?) -> String? {
+        guard c.tier == ContactTier.primary.rawValue else { return c.tier }
+        return BilledHierarchy.billedAsCastOnly(name: c.name, inListingText: listing?.text,
+                                                truncated: listing?.truncated == true) ? nil : c.tier
     }
 
     // #2422: an existing recipient that is the same PERSON as this incoming contact.
@@ -548,6 +588,10 @@ enum PrepImporter {
     private static func apply(_ c: PrepContact, email: String?, provenance: RecipientProvenance,
                               venue: String?, performanceDate: String?, excludingProspectKey: String,
                               groupName: String?, presenter: String?,
+                              // #3347: the page the run read, so a `primary` tier it declares can be
+                              // judged against how that page bills the person. Defaulted nil, which holds
+                              // nothing down, for the reason `ingest`'s own parameter is defaulted empty.
+                              listing: ShowListing? = nil,
                               context: ModelContext, to r: Recipient) {
         let priorEmail = r.email
         let priorRole = r.role
@@ -566,7 +610,7 @@ enum PrepImporter {
         // #2622: a later run's judgement replaces an earlier one, and a run that says nothing leaves what
         // is there. Same fall-back shape as the method and confidence above, so a re-check that only
         // corrects an address cannot silently erase who the contact was judged to be.
-        r.contactTierRaw = c.tier ?? r.contactTierRaw
+        r.contactTierRaw = supportedTier(c, listing: listing) ?? r.contactTierRaw
         // #1856: the same bar as a freshly appended contact, judged on the pair this ingest LEAVES
         // BEHIND. The two fields fall back independently above, so a re-run can raise a recipient to
         // high while carrying no page of its own, and only the result is the claim Dan reads.
@@ -735,8 +779,14 @@ enum PrepImporter {
             results.results = PrepGroupCredit.credited(
                 results.results, groups: PrepGroupCredit.groups(queueURL: queueURL, resultsURL: url))
         }
+        // #3347/#2258: the listings the APP rendered and handed this run, read from the work-list it was
+        // given, so a declared `primary` tier is judged against the page the run actually read. A queue
+        // that cannot be read yields no listings and holds nothing down, which is the fail-safe direction:
+        // overruling a run on the strength of a page nobody read is the worse error (L98, L119).
+        let listings = showListings(queueURL: queueURL)
         var outcome = ingest(results, into: context, now: now,
-                             clients: loaded.clients, history: history.records, isProbe: isProbe)
+                             clients: loaded.clients, history: history.records, isProbe: isProbe,
+                             listings: listings)
         // #754: the health verdict used to be computed here and then thrown away, so a missing or
         // corrupt client export meant every performer match silently found nothing and a real past
         // client read as a cold lead, with no symptom Dan could ever have noticed.
@@ -756,6 +806,18 @@ enum PrepImporter {
             generatedAt: { $0.generatedAt },
             answeredKeys: results.results.map(\.naturalKey))
         return outcome
+    }
+
+    // #3347: the show listings on a work-list, keyed by natural key. Absent for a queue that cannot be
+    // read, and absent per item for a show whose page did not render, and both of those mean "no page to
+    // judge against" rather than "the page said nothing".
+    private static func showListings(queueURL: URL) -> [String: ShowListing] {
+        guard let queue = HandoffFile.read(at: queueURL,
+                                           decode: { try JSONDecoder().decode(PrepQueue.self, from: $0) }).value
+        else { return [:] }
+        var out: [String: ShowListing] = [:]
+        for item in queue.items { out[item.naturalKey] = item.showListing }
+        return out
     }
 
     // #884: consume a results file exactly ONCE, and return nil for one the app has already read.
