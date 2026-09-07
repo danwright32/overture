@@ -79,10 +79,10 @@ const PROVENANCE = ["act", "performer", "presenter"] as const;
 // alsoAnswersFor at v6+ #1597, run-level houses at v7+ #1720, showListing at v8+ #1824,
 // onlyTheActIsNamed at v9+ #1856, venueHistory at v10+ #1887,
 // organisationNamedOnListing at v11+ #2259, refusedEmails at v12+ #2392,
-// presenterOnRecord at v13+ #2983)
+// presenterOnRecord at v13+ #2983, alreadyFoundEmails at v14+ #2990)
 export function assertPrepQueueShape(data: unknown, file: string, expectedVersion: number): void {
   const root = requireObject(data, file, "(root)");
-  const version = requireVersion(root.version, file, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]);
+  const version = requireVersion(root.version, file, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]);
   if (version !== expectedVersion) fail(file, `version ${version} does not match filename version ${expectedVersion}`);
   requireString(root.generatedAt, file, "generatedAt");
   // #1720 v7: the RUN-LEVEL house list, the organisations the app has judged to be the building rather
@@ -137,6 +137,10 @@ export function assertPrepQueueShape(data: unknown, file: string, expectedVersio
   // had already refused.
   const refusedEmailsFieldAllowed = version >= 12;
   const presenterOnRecordFieldAllowed = version >= 13;
+  // #2990 v14: the addresses this show already holds, so a contact re-run does not pay to rediscover
+  // them. Forbidden on older versions for the same reason as every field above: a runner predating the
+  // rule would ignore it and go on re-reporting people the show was handed a moment ago.
+  const alreadyFoundEmailsFieldAllowed = version >= 14;
   items.forEach((item, i) => {
     const o = requireObject(item, file, `items[${i}]`);
     requireString(o.naturalKey, file, `items[${i}].naturalKey`);
@@ -228,6 +232,36 @@ export function assertPrepQueueShape(data: unknown, file: string, expectedVersio
       }
     } else if (o.refusedEmails !== undefined) {
       fail(file, `items[${i}].refusedEmails must not be present before version 12`);
+    }
+    if (alreadyFoundEmailsFieldAllowed) {
+      if (o.alreadyFoundEmails !== undefined) {
+        if (!Array.isArray(o.alreadyFoundEmails)) {
+          fail(file, `items[${i}].alreadyFoundEmails must be an array`);
+        }
+        // Absent is the only way to say "nothing has been found here", for the same reason as
+        // refusedEmails directly above: an empty array asks the run to reason about a list that says
+        // nothing, and the writer only ever emits the field when it has something in it.
+        if ((o.alreadyFoundEmails as unknown[]).length === 0) {
+          fail(file, `items[${i}].alreadyFoundEmails must be absent rather than empty`);
+        }
+        (o.alreadyFoundEmails as unknown[]).forEach((e, j) => {
+          requireString(e, file, `items[${i}].alreadyFoundEmails[${j}]`);
+          if (typeof e === "string" && e.trim() === "") {
+            fail(file, `items[${i}].alreadyFoundEmails[${j}] must not be blank`);
+          }
+        });
+        // The two lists are DISJOINT, and this is the fixture door that rule arrives back through. A
+        // struck address named here would put an address Dan refused back in front of the run as
+        // context, on the very run meant to leave it alone (L16).
+        const struck = new Set(Array.isArray(o.refusedEmails) ? (o.refusedEmails as unknown[]) : []);
+        (o.alreadyFoundEmails as unknown[]).forEach((e) => {
+          if (struck.has(e)) {
+            fail(file, `items[${i}].alreadyFoundEmails names ${String(e)}, which it also refuses`);
+          }
+        });
+      }
+    } else if (o.alreadyFoundEmails !== undefined) {
+      fail(file, `items[${i}].alreadyFoundEmails must not be present before version 14`);
     }
     // v13 (#2983): the producing organisation the app already holds. A blank is refused for the reason
     // the field exists: an empty value reads to the run as a named nobody, which is the same withholding
