@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1518 sentences**.
+Every sentence Overture can say to Dan: **1521 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -14,7 +14,7 @@ What is not, and why:
   sentences under tokens nobody reads.
 - **Nothing, if it is written as two literals joined with `+`.** Those ARE joined here, into the
   one sentence the running app says (#3155). What is still only part of what Dan reads is a
-  sentence carrying a VALUE: 548 of the 1518 below hold a
+  sentence carrying a VALUE: 549 of the 1521 below hold a
   `\(...)` where a number or a name goes, so what is printed is the template. They are counted
   here rather than listed again, because the hole is visible in the line itself; what was missing
   was any statement of how much of this document is templates.
@@ -1625,6 +1625,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/StoreUnavailableView.swift`
 "Overture's data is unavailable."
     `App/StoreLaunchOutcome.swift`
+"Overture's words, not the page's"
+    `Domain/ContactRoleClaim.swift`
 "Overture, \(Plural.count(count, "thing")) due"
     `Domain/DueBadge.swift`
 "Paste a link to the show, or to the organization's events page."
@@ -3265,6 +3267,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ReplyClassify.swift`
 "its 1 confident contact never says the page it cites is anyone on this show, so a same named stranger would be kept as an answer"
     `Domain/RunInstructionCompliance.swift`
+"its 1 contact with a role and a cited page never says whether the role is quoted, so a summary reads as a quote"
+    `Domain/RunInstructionCompliance.swift`
 "just now"
     `Domain/PrepStatus.swift`
 "last prep \(Self.relative(from: last, to: now))"
@@ -3286,6 +3290,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "not one of its \(cited) confident contacts says the page it cites is anyone on this show, so a same named stranger would be kept as an answer"
     `Domain/RunInstructionCompliance.swift`
 "not one of its \(contacts) contacts carries a tier, so the fit score is guessing"
+    `Domain/RunInstructionCompliance.swift`
+"not one of its \(count) contacts with a role and a cited page says whether the role is quoted, so a summary reads as a quote"
     `Domain/RunInstructionCompliance.swift`
 "page fetch"
     `Domain/WebCallRefusals.swift`
