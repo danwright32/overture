@@ -152,6 +152,9 @@ struct RootView: View {
     @State private var showSources = false
     @State private var showDaysOff = false      // #901
     @State private var showExcludedTowns = false   // #1118: review and un-exclude skipped towns
+    // #2408: the addresses Dan struck before a run, and the one place he can put one back. An
+    // organisation-scoped strike is invisible everywhere else once he leaves the card.
+    @State private var showStruckAddresses = false
     @State private var showOrganisations = false   // #1731: what Overture reads as a building
     @State private var showOmniFocusSettings = false   // #931 rehome, #2397 trimmed to the sync window
     // #803: when the DETACHED reading half began, so it has a visible working / still-alive / stalled
@@ -485,6 +488,7 @@ struct RootView: View {
             "archiveOpeningQuery": "\(archiveOpeningQuery.count)",
             "sheets": [showArchive, showPatterns, showFollowUps, showVoiceGuidance, showInquiryIntake,
                        showSources, showDaysOff, showExcludedTowns, showOrganisations,
+                       showStruckAddresses,
                        showOmniFocusSettings].map { $0 ? "1" : "0" }.joined(),
             "status": "\(status.text?.count ?? -1)/\(status.priority)",
             "scoutTask": "\(scoutTask != nil)",
@@ -847,11 +851,39 @@ struct RootView: View {
                     }
                     .help("Towns you've told Overture to skip. Take one back off the list here.")
 
-                    // #1731: who Overture thinks puts each show on. It belongs in this group for the same
-                    // reason the other three do: all four say what Overture is working from, one the
-                    // calendars it reads, one the days it keeps clear, one the places it stays out of, and
-                    // this one the organisations it decided about. No attention state: these verdicts are
-                    // his to review when he chooses, never something that needs him.
+                    // #2408: the addresses he removed before a run. It belongs in this group with the
+                    // other three for the same reason they belong together: all of them say what Overture
+                    // is working from, one the calendars it reads, one the days it keeps clear, one the
+                    // places it stays out of, and this one the addresses it leaves alone. No attention
+                    // state of its own: a strike is his decision working, never something that needs him.
+                    Button {
+                        showStruckAddresses = true
+                    } label: {
+                        ToolbarHoverLabel(title: StruckAddressCopy.heading, systemImage: "envelope.badge.shield.half.filled")
+                    }
+                    .help(StruckAddressCopy.explanation)
+
+                }
+                // #1731: who Overture thinks puts each show on.
+                //
+                // #2408 MOVED IT HERE, out of the group above, and that is a deliberate displacement
+                // rather than a tidy-up. `ToolbarConsolidationGuardTests` refuses a new button without
+                // one, because the row already overflows into the macOS ">>" menu, so an added button
+                // pushes something else towards being hidden and WHICH one must be somebody's decision
+                // rather than an accident of window width.
+                //
+                // Dan's call, 2026-09-07, asked which of the two should be the one that falls into the
+                // overflow: Presenters is read-only EVIDENCE he looks at occasionally (the sheet mutates
+                // nothing at all, by his own 2026-07-29 decision), and the addresses he removed is a list
+                // with an action on it. So it joins "What converts" and "Voice guidance" below, which are
+                // the settings-ish views #901 already put here for this exact reason.
+                // #901 (Dan's walk, 2026-07-14): What converts and Voice guidance sit AFTER the
+                // Sources/Days off group, not before it. With every toolbar label now always shown the row
+                // overflows into the macOS ">>" menu, and in that order the brand-new Days off button was
+                // the first thing hidden. The daily-driver buttons (Archive, Follow-ups) and the two things
+                // Overture is working from (Sources, Days off) come first; these two settings-ish views can
+                // fall into the overflow instead.
+                ToolbarItem(placement: .secondaryAction) {
                     Button {
                         showOrganisations = true
                     } label: {
@@ -859,12 +891,6 @@ struct RootView: View {
                     }
                     .help("Who Overture thinks puts each show on, and who it reads as the building.")
                 }
-                // #901 (Dan's walk, 2026-07-14): What converts and Voice guidance sit AFTER the
-                // Sources/Days off group, not before it. With every toolbar label now always shown the row
-                // overflows into the macOS ">>" menu, and in that order the brand-new Days off button was
-                // the first thing hidden. The daily-driver buttons (Archive, Follow-ups) and the two things
-                // Overture is working from (Sources, Days off) come first; these two settings-ish views can
-                // fall into the overflow instead.
                 ToolbarItem(placement: .secondaryAction) {
                     Button {
                         showPatterns = true
@@ -1186,6 +1212,7 @@ struct RootView: View {
             .sheet(isPresented: $showDaysOff) { DaysOffView() }
             .sheet(isPresented: $showOmniFocusSettings) { OmniFocusSettingsView() }
             .sheet(isPresented: $showExcludedTowns) { ExcludedTownsView() }
+            .sheet(isPresented: $showStruckAddresses) { StruckAddressesView() }
             // #1794: tapping an entry closes the sheet and filters the queue to that organisation's
             // shows. Through the SAME channel the away-alert leads path uses (`deepLinkedKeys`), never a
             // second filter mechanism, which is what Dan's note asked for. The request carries its own
@@ -2025,6 +2052,7 @@ struct RootView: View {
         showSources = false
         showDaysOff = false
         showExcludedTowns = false
+        showStruckAddresses = false
         showOrganisations = false
         showOmniFocusSettings = false
     }
