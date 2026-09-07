@@ -259,7 +259,13 @@ struct ReachedOutCloseWiringTests {
         // (an ending picked here reaches the one write), so it follows the ending one hop further
         // rather than pinning the call that used to sit inline: a guard that pins a rendering instead
         // of the rule fails the first legitimate refinement of it, which is what happened here (L103).
-        #expect(row.contains("closeOut(p, as: outcome)"))
+        // #3651: the RULE, not one spelling of it. This pinned `closeOut(p, as: outcome)`, and the
+        // argument became a value snapshot rather than a live model, so the guard went red while the
+        // claim it makes was untouched. Its own comment above already warned against exactly this and
+        // the assertion did it anyway (L103).
+        #expect(row.contains("closeOut(") && row.contains(", as: outcome)"),
+                Comment(rawValue: "the ending picked in the menu no longer reaches `closeOut`, so this "
+                        + "guard can no longer say it reaches the one write."))
     }
 
     // And the hop lands where it claims to. Asserted separately from the row so a `closeOut` that
