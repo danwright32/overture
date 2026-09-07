@@ -30,9 +30,9 @@ struct QueueRenderPassCostTests {
     // that ships for a month with nothing reporting it: the guard stays GREEN the whole time, because it
     // is protecting a smaller world rather than failing (L354).
     // LIVE-SHAPE: prospects
-    private static let corpusSize = 1139
+    private static let corpusSize = 1224
     // LIVE-SHAPE: untriaged
-    private static let untriaged = 587
+    private static let untriaged = 545
 
     // Ten sweeps of the store, once each, and every one of them named. If this number moves, one of
     // these lines has changed or a new one has appeared, and either is a decision rather than an accident:
@@ -220,15 +220,15 @@ struct QueueRenderPassWorkUnitCostTests {
     // a contact would measure a path the live store does not take and argue for a fix aimed at the wrong
     // half (the same reasoning QueueRebuildCostTests records for its own shape).
     // LIVE-SHAPE: prospects
-    private static let corpusSize = 1142
+    private static let corpusSize = 1224
     // LIVE-SHAPE: recipients
-    private static let recipientCount = 305
+    private static let recipientCount = 387
     // LIVE-SHAPE: prospectsWithAContact
-    private static let prospectsWithAContact = 198
+    private static let prospectsWithAContact = 262
     // LIVE-SHAPE: pendingRecipients
-    private static let pendingRecipients = 279
+    private static let pendingRecipients = 359
     // LIVE-SHAPE: prospectsWithADraftBody
-    private static let prospectsWithADraftBody = 39
+    private static let prospectsWithADraftBody = 65
     // #3506: the INTERSECTION, and the dimension this fixture was missing. Every figure above matched the
     // live store exactly and the corpus still exercised five and a half times the real draft lint load,
     // because the lint scales with PENDING recipients that carry a body and nothing recorded that pairing.
@@ -237,9 +237,9 @@ struct QueueRenderPassWorkUnitCostTests {
     // what makes the shape consistent: a row gets a body when it is prepped, and its contacts are sent
     // from there.
     // LIVE-SHAPE: recipientsOnDraftBodyRows
-    private static let recipientsOnDraftBodyRows = 42
+    private static let recipientsOnDraftBodyRows = 69
     // LIVE-SHAPE: pendingRecipientsWithADraftBody
-    private static let pendingRecipientsWithADraftBody = 16
+    private static let pendingRecipientsWithADraftBody = 41
 
     // #3516: the DATE dimension, which is what the self-booking check scales with and what nothing here
     // recorded. `SelfBookingConflict.NightIndex` buckets by night and the work per row is the size of the
@@ -260,14 +260,35 @@ struct QueueRenderPassWorkUnitCostTests {
     // LIVE-SHAPE: largestSingleDateCluster
     private static let largestSingleDateCluster = 19
     // LIVE-SHAPE: sameNightComparisonLoad
-    private static let sameNightComparisonLoad = 8952
+    private static let sameNightComparisonLoad = 10086
 
     // One card built per row, and not one more. This is the counter #2033 would have moved.
-    private static let allowedQueueItems = 1142
+
+    // RE-DERIVED 2026-09-07, against the live store's own shape rather than a corpus 7% short of it.
+    // Every pin below moved, and each moved with the dimension it depends on rather than on its own:
+    //
+    //   cards and send groups   1142 -> 1224, exactly the corpus, one of each per row as before
+    //   draft lint runs           32 -> 82,   two per pending body-carrying recipient, as before,
+    //                                         and that dimension went 16 -> 41 (2.6x)
+    //   lint outside the build    16 -> 41,   exactly one per pending body-carrying recipient
+    //   self-booking examined    145 -> 320
+    //
+    // The last one moved 2.2x while the corpus moved 1.07x and the comparison load 1.13x, and that is
+    // expected rather than a defect: the check is quadratic in shows sharing a DATE, and the live
+    // histogram has thickened in the middle since it was last recorded (dates holding 13 shows went 5 to
+    // 10, one now holds 15, and dates holding a single show fell 66 to 62). The largest cluster did not
+    // move at all, which is exactly why this fixture records the whole histogram and not the maximum
+    // (L391).
+    //
+    // What this says about the instrument, which is the reason Phase 0 exists: before this, the fixture
+    // reported the app running the draft lint 32 times per pass when it really runs it 82, so every
+    // judgement about whether that cost was worth attacking was made against a store 60% smaller than
+    // the one that ships (L354).
+    private static let allowedQueueItems = 1224
 
     // One send-group build per card. #2046 collapsed three of these into one; nothing pins that it stays
     // one, which is exactly how #2033 put the cost back without moving a number.
-    private static let allowedSendGroupBuilds = 1142
+    private static let allowedSendGroupBuilds = 1224
 
     // How many times the draft lint actually runs over a body during one pass. MEASURED, then pinned,
     // and meant to be argued with rather than updated to whatever the code does.
@@ -297,7 +318,7 @@ struct QueueRenderPassWorkUnitCostTests {
     // across 224 dates at the live store's own clustering, which spans about eight. The live store spans
     // 2026-06-22 to 2027-07-08, so the old window held far more of the corpus inside the scout horizon
     // than the real one does, and both lint terms were measured against that.
-    private static let allowedDraftLintRuns = 32
+    private static let allowedDraftLintRuns = 82
 
     // MEASURED on this corpus by `theLintRunsAreAttributedBetweenCardBuildAndTheRestOfThePass`, not
     // derived. An earlier version of this file asserted the split from arithmetic on a different
@@ -317,7 +338,7 @@ struct QueueRenderPassWorkUnitCostTests {
     // built and reverted on #1930 for larger savings than that. So the term is attributed and priced
     // rather than removed, which is a real result and stops it being investigated again (L248).
     // `LintRunsOutsideTheCardBuildTests` holds both the attribution and the price.
-    private static let allowedLintRunsOutsideTheCardBuild = 16
+    private static let allowedLintRunsOutsideTheCardBuild = 41
 
     // WHERE the 82 goes, measured on THIS corpus rather than inferred from the single-row attribution
     // test below. The first version of this suite carried the split as a comment reading "64 of the 82
@@ -359,7 +380,7 @@ struct QueueRenderPassWorkUnitCostTests {
     // What the SCREEN costs, which is the number this issue was really after: a pass on a stage that
     // shows the marker, plus the three questions the view asks of the index while drawing the result.
     // Measured on the corpus at the live clustering.
-    private static let allowedSelfBookingShowsExaminedOnScreen = 145
+    private static let allowedSelfBookingShowsExaminedOnScreen = 320
 
     // And zero again on Scout, because the view asks nothing there (`focusedStage != .scout` gates both
     // the row marker and the date-heading note). Held separately so a change that starts asking on Scout

@@ -21,8 +21,14 @@ import Foundation
 // number can be hit by choosing a spread: rows, distinct dates and largest cluster together leave the
 // comparison load anywhere between about 6,000 and 12,000.
 //
-// Measured 2026-09-05 on a WAL-inclusive read-only copy of the live store: 1,153 prospects over 235
-// distinct dates, NONE undated, spanning 2026-06-22 to 2027-07-08.
+// Measured 2026-09-07 on a WAL-inclusive read-only copy of the live store: 1,224 prospects over 237
+// distinct dates, NONE undated, spanning 2026-06-22 to 2027-07-08, largest cluster 19, and 10,086 as
+// the sum of each date's squared size, which is the quantity the self-booking check actually pays.
+//
+// RE-RECORDED rather than restamped (#2517). The 2026-09-05 reading was 1,153 rows over 235 dates with
+// a load of 9,037; the store has grown by 71 rows since and the load by 1,049, while the largest cluster
+// has not moved at all. That pairing is the reason this type exists: the two move independently, so a
+// fixture matching the maximum can be exercising the load at a different intensity entirely (L391).
 //
 //   select c, count(*) from (select count(*) c from ZPROSPECT
 //                            where ZPERFORMANCEDATE is not null and ZPERFORMANCEDATE <> ''
@@ -33,15 +39,15 @@ import Foundation
 // design here (L48, and the privacy rule both fixtures state in their own headers).
 enum LiveDateClustering {
 
-    // LIVE-STORE-CLAIM verified=2026-09-05 measure="the performance-date size histogram: how many dates hold one show, two shows and so on, read with sqlite3 from a WAL-inclusive copy of the live store"
+    // LIVE-STORE-CLAIM verified=2026-09-07 measure="the performance-date size histogram: how many dates hold one show, two shows and so on, read with sqlite3 from a WAL-inclusive copy of the live store"
     //
     // (how many shows fall on a date, how many dates hold that many), as the live store holds it.
     static let histogram: [(size: Int, dates: Int)] = [
-        (1, 66), (2, 21), (3, 21), (4, 16), (5, 14), (6, 21), (7, 19), (8, 15),
-        (9, 8), (10, 13), (11, 6), (12, 7), (13, 5), (14, 1), (19, 2),
+        (1, 62), (2, 24), (3, 23), (4, 8), (5, 17), (6, 20), (7, 20), (8, 14),
+        (9, 12), (10, 12), (11, 3), (12, 7), (13, 10), (14, 2), (15, 1), (19, 2),
     ]
 
-    static let rowsInTheLiveStore = 1153
+    static let rowsInTheLiveStore = 1224
     static let largestCluster = 19
 
     // One date per row, for a corpus of `count` rows carrying the live clustering.
