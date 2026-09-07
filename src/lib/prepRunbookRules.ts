@@ -189,6 +189,12 @@ export const RUNBOOK_RULES: RunbookRule[] = [
     pattern: /Before\s+you\s+draft,\s+read\s+what\s+the\s+show\s+IS/i },
   { name: "no-description-is-a-complete-answer",
     pattern: /"No description published"\s+is a correct and complete answer/i },
+  // #2698: a page that was CUT cannot support a finished negative. `truncated` used to say only that the
+  // page continued, so a credit falling past the cut read to the run exactly like a page that named
+  // nobody. The count is now on the item; this is the instruction that makes the run spend it, and it is
+  // guarded because a rule living only in a prompt is a hope (L27).
+  { name: "a-cut-page-cannot-support-a-finished-negative",
+    pattern: /A\s+cut\s+page\s+cannot\s+support\s+a\s+finished\s+negative/i },
   { name: "never-categorize-the-recipient",
     pattern: /Describe Dan, never categorize the recipient/i },
   // #1856: where a listing names no producer, the run pursues the people it DOES name. Without this the
