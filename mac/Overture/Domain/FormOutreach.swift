@@ -180,12 +180,11 @@ enum FormPitch {
         let verdict = prospect.reachabilityResultFromRecipients
         guard verdict == .contactFormOnly || verdict == .socialOnly else { return .unavailable }
         let routes = prospect.usableContactFormURLs + prospect.socialRouteURLs
-        let candidates = prospect.recipients
-            .filter { r in
+        let candidates = Recipient.inSendOrder(
+            prospect.recipients.filter { r in
                 guard let raw = r.contactFormURL?.trimmingCharacters(in: .whitespacesAndNewlines) else { return false }
                 return routes.contains(raw)
-            }
-            .sorted { $0.sendOrderRank != $1.sendOrderRank ? $0.sendOrderRank < $1.sendOrderRank : $0.id < $1.id }
+            })
         guard let target = candidates.first,
               let formURL = target.contactFormURL?.trimmingCharacters(in: .whitespacesAndNewlines) else {
             return .unavailable

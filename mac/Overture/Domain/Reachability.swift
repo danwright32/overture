@@ -313,6 +313,43 @@ enum Reachability {
         // contacts) and a rule spelled twice is one that can come to mean two things (L263, L247). A
         // case added later has to answer this question rather than inherit an answer (L113).
         var meansTheSearchDidNotFinish: Bool { self == .routeNamedButNotSupplied }
+
+        // #3598: what would make this reason FALSE about the show it is stored on.
+        //
+        // Every reason here is a conclusion a check reached about a moment, and nothing updates it when
+        // the show later gains a way in. The question of whether it is still true is not one predicate,
+        // because these reasons do not all claim the same thing: some say there is no way in AT ALL, and
+        // some say only that no usable ADDRESS was found, which a contact form or a social handle is
+        // perfectly consistent with. A single "does the row hold a route" test would clear a truthful
+        // record of a finished address search on every form-only show in the store.
+        //
+        // ON THE VOCABULARY, exhaustive, for the same reason `meansTheSearchDidNotFinish` above is: a
+        // case added later has to answer this rather than inherit an answer, and the answer must not be
+        // spelled once per caller (L113, L263).
+        func isContradicted(byAddress: Bool, byAnyRoute: Bool) -> Bool {
+            switch self {
+            // "Worked out WHO, and no way to reach any of them." Any route at all is a way to reach them.
+            case .namedButNoRoute: return byAnyRoute
+            // "The search never had a target and never really ran." A route belongs to somebody, so a row
+            // holding one had a target after all.
+            case .noOneIdentified: return byAnyRoute
+            // "Named a route type and did not finish the step that finds one." A supplied route is that
+            // step having been finished.
+            case .routeNamedButNotSupplied: return byAnyRoute
+            // The four below are claims about an ADDRESS, and each says so in its own comment above: the
+            // only address found was the room's, or a press desk, or this show's people publish none, or
+            // the check stopped at a social profile without reaching one. A form on the act's own site or
+            // a handle Dan will DM leaves every one of them true, so only an address Dan can actually use
+            // contradicts them.
+            case .onlyVenueContact, .onlyPressContact, .nothingPublished, .onlySocialProfile:
+                return byAddress
+            // #2912's case, and the one reason the card actually SHOWS. It says a handle was found
+            // carrying the target's name with nothing tying it to this show, so the show still has nobody
+            // Overture can say it reaches. A second unconfirmed handle does not make that false; an
+            // address does.
+            case .unconfirmedSocialProfile: return byAddress
+            }
+        }
     }
 
     // Whether a contact names a route it does not carry. Exhaustive over `ContactMethod`, so a method

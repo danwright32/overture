@@ -935,12 +935,49 @@ final class Recipient {
     // the manual-send picker must impose a stable order or "the next recipient" (and which address each
     // click sends) would vary run to run. Act/performer contacts go first (mutually exclusive per
     // performance, so they tie), then a presenter, then a manual add (the #366/#368 contact ladder:
-    // target the act or performer; the presenter only after), ties broken by id.
+    // target the act or performer; the presenter only after).
     var sendOrderRank: Int {
         switch provenance {
         case .act, .performer: return 0
         case .presenter: return 1
         case .manual: return 2
+        }
+    }
+
+    // #3603: what breaks a tie in that ladder, and it is a STATED order rather than an emergent one.
+    //
+    // The rank above ties constantly: on a self-produced show every contact is a performer, so every
+    // one is rank 0 and the tie-break alone decides. That tie-break used to be `id`, which is
+    // `makeId`'s output: the canonical address when there is one, the literal "form:" plus the URL
+    // when there is not. So the order was really alphabetical over a string whose FIRST CHARACTER
+    // depends on whether the contact has an address at all, and "form:" precedes any address from g to
+    // z. Measured on the live store 2026-08-30 (the #3284 evidence): four performer contacts, three
+    // ids beginning "form:" and one address beginning "s", so all three contacts that cannot receive
+    // the email were listed above the one that can.
+    //
+    // So: the ladder first, then whether the email can actually reach this contact, then the id.
+    //
+    // The receivability key is "holds an address", NOT `isSendablePending`. That is deliberate and is
+    // the one choice here worth understanding. `isSendablePending` is the question the SEND asks, and
+    // it folds in the draft's lint findings, the greeting, a calendar conflict and the review guards,
+    // every one of which changes while Dan is editing. Sorting on it would reorder the card under his
+    // hands as he typed, and would run a lint pass per comparison (L62). An address held by a guard is
+    // still an address: that person is one dismissal away from receiving the email, where a form-only
+    // contact is not. `email?.isEmpty == false` is the same predicate `hasUnguardedAddress` and
+    // `offersSendModeChoice` already read, so a contact holding `""` is not treated as reachable.
+    var canReceiveTheEmail: Bool { email?.isEmpty == false }
+
+    // The ONE comparator, because it was written out at six call sites and six copies of an order are
+    // six things to drift (L263, L370). `SendOrderTests.nothingReimplementsTheComparator` is what keeps
+    // it here.
+    //
+    // `nonisolated` because the queue CARD asks this question as well as the send does, off the main
+    // actor in places, and the two must never disagree about who comes first (L16).
+    nonisolated static func inSendOrder(_ recipients: [Recipient]) -> [Recipient] {
+        recipients.sorted { a, b in
+            if a.sendOrderRank != b.sendOrderRank { return a.sendOrderRank < b.sendOrderRank }
+            if a.canReceiveTheEmail != b.canReceiveTheEmail { return a.canReceiveTheEmail }
+            return a.id < b.id
         }
     }
 

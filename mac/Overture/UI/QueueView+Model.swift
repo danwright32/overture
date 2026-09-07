@@ -712,12 +712,14 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     var primaryContact: RecipientSnapshot? {
         // #3284: somebody the draft is actually GOING to, before anything about role.
         //
-        // Contacts reach the snapshot sorted by `sendOrderRank` with the id as the tie-break, and on a
-        // self-produced show every performer shares rank 0, so the id alone decides. `Recipient.makeId`
-        // mints the address when there is one and the literal `"form:" + url` otherwise, and "form:"
-        // precedes any address from g to z, so a contact with no way of receiving the email
-        // systematically took this slot. Measured on the live store 2026-08-30: four performer contacts,
-        // three ids beginning `form:` and one address beginning `s`, and the card named a form.
+        // Contacts reach the snapshot in `Recipient.inSendOrder`, which since #3603 puts a contact who
+        // can receive the email ahead of one who cannot at the same rank. Before that the tie-break was
+        // the id alone, and on a self-produced show every performer ties, so the order was really
+        // alphabetical over `Recipient.makeId`'s output: the address when there is one, the literal
+        // `"form:" + url` otherwise, and "form:" precedes any address from g to z. Measured on the live
+        // store 2026-08-30: four performer contacts, three ids beginning `form:` and one address
+        // beginning `s`, and the card named a form. This rule stands regardless of the order, because
+        // the order answers who is FIRST and this answers who is being WRITTEN TO.
         //
         // `nextRecipientIds` is `sendGroups.pending.map(\.id)`, which IS the set the send is built from,
         // so the line above the draft and the send cannot disagree about who is being written to (L16).
@@ -2910,8 +2912,7 @@ extension QueueItem {
         }
         let draftLintBlockers = DraftIssue.orderedBlockers(
             Set(pendingRecipients.flatMap { lintBlockers($0) }))
-        let contacts = p.recipients
-            .sorted { $0.sendOrderRank != $1.sendOrderRank ? $0.sendOrderRank < $1.sendOrderRank : $0.id < $1.id }
+        let contacts = Recipient.inSendOrder(p.recipients)
             .map { RecipientSnapshot($0, lintBlockers: lintBlockers($0)) }
         let offersSendModeChoice = p.recipients.filter { $0.email?.isEmpty == false }.count > 1
         let hasWeakContactEmail = p.recipients.contains(where: \.isHeldByAGuard)

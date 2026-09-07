@@ -5,9 +5,7 @@ import SwiftData
 enum SendService {
     // A performance's recipients in deterministic send order (SwiftData to-many is unordered).
     nonisolated private static func sendOrdered(_ recipients: [Recipient]) -> [Recipient] {
-        recipients.sorted {
-            $0.sendOrderRank != $1.sendOrderRank ? $0.sendOrderRank < $1.sendOrderRank : $0.id < $1.id
-        }
+        Recipient.inSendOrder(recipients)
     }
 
     // The next recipient a manual or throttled send would target for this performance: the first
