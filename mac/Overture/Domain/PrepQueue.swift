@@ -150,6 +150,30 @@ struct PrepQueueItem: Codable, Equatable, Sendable {
     // ABSENT on the overwhelming majority of items and deliberately not an empty array, so the run is not
     // asked to reason about a list that is almost always nothing.
     var refusedEmails: [String]? = nil
+    // v14 (#2990): the addresses this show ALREADY HOLDS, so a contact re-run does not pay to
+    // rediscover and re-report people it was handed a moment ago.
+    //
+    // It only arises where Dan explicitly asks for a contact re-run: `PrepQueueBuilder.probedWithContact`
+    // sends a show that already has a contact down the `draft_only` path, so the run that starts from
+    // nothing is the one he asked for MORE from.
+    //
+    // MEASURED before it was built, across every archived run on this Mac (2026-09-06): 34 show-answers
+    // where an earlier run had already returned routes for that show, 18 routes rediscovered against 31
+    // genuinely new ones, and 5 of the 34 returning nothing the show did not already hold. Real and
+    // modest, which is why this is a field and not a change to what the run researches.
+    //
+    // CONTEXT, NOT TARGETS, and that is the whole design. He asked for this re-run because he wants
+    // somebody he does not have, so a list the run read as "these are done" would make the re-run
+    // pointless. The runbook is told so in those words.
+    //
+    // ADDRESSES only, the rule `refusedEmails` above follows, because the field is documented to the run
+    // as a list of email addresses and a form handle in it is a value the run reads as one.
+    //
+    // DISJOINT from `refusedEmails` by construction: a struck address is one Dan refused, so naming it
+    // here would put it back in front of the run as context on the very run meant to leave it alone.
+    //
+    // ABSENT, never an empty array, for the same reason as `refusedEmails`.
+    var alreadyFoundEmails: [String]? = nil
     // v13 (#2983): the producing organisation the APP already holds for this show, by name, straight from
     // the stored `presenter`.
     //
@@ -243,7 +267,7 @@ enum PrepRunIntent: Equatable, Sendable {
 }
 
 enum PrepQueueBuilder {
-    static let version = 13
+    static let version = 14
 
     // #1666: the wire vocabulary of a queue item's `reprepMode` (#367), named rather than written out at
     // each use, so the string that crosses to the run and the string a surface reads back are one spelling.

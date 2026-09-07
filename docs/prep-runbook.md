@@ -20,12 +20,12 @@ these files (see `RunSlot`), so a written path can name the other, still-running
 destroy the drafts it has already paid for.
 
 - **Read:** the WORK-LIST the prompt names
-  (`PrepQueue` version `13`: a run-level `houses[]` (see "The queue names the houses" in §1),
+  (`PrepQueue` version `14`: a run-level `houses[]` (see "The queue names the houses" in §1),
   plus `items[]` each with `naturalKey`, `groupName`, `venue`,
   `performanceDate`, `runEndDate`, `discipline`, `sourceListingURL`,
   `possibleMatchName`, `priorRelationship`, `production`, `reprepMode`,
   `openingNightPassed`, `experimentArmInstruction`, `alsoAnswersFor`, `showListing`, `onlyTheActIsNamed`,
-  `venueHistory`, `organisationNamedOnListing`, `refusedEmails`, `presenterOnRecord`). `production` is `self` / `agency` / `unknown`; a v1 item omits it
+  `venueHistory`, `organisationNamedOnListing`, `refusedEmails`, `alreadyFoundEmails`, `presenterOnRecord`). `production` is `self` / `agency` / `unknown`; a v1 item omits it
   (treat as `unknown`). `reprepMode` is `draft_only` / `contacts_only`; absent (the normal case
   for a fresh, never-drafted prospect) means do both, exactly as today. See "Re-prep mode" under
   "Per prospect" below for what each value means for that item. `runEndDate` is the run's closing
@@ -92,6 +92,15 @@ destroy the drafts it has already paid for.
   not an empty list you need to reason about. The app refuses these addresses again when it reads your
   results, so ignoring this field costs Dan money rather than reaching anybody, which is exactly why it is
   worth honouring.
+  `alreadyFoundEmails` (v14, #2990) is a list of addresses THIS SHOW ALREADY HOLDS, found by an earlier
+  run. It is CONTEXT, NOT A TARGET LIST AND NOT A LIST OF PEOPLE WHO ARE DONE. You are being asked to
+  research this show again because Dan wants somebody he does not already have, so spend the item's
+  allowance on people who are NOT on this list: a different performer, the producer, the presenting
+  company. Reporting an address from it back is not wrong, and it is not a find either, so it must never
+  be the whole of your answer for the item. ABSENT (the normal case) means nothing has been found here
+  yet. It NEVER overlaps `refusedEmails` above: a struck address is one Dan refused and is not something
+  the show holds. Measured across every archived run on 2026-09-06: of 49 routes returned on a re-run, 18
+  were already held and 5 re-runs came home with nothing new at all, which is what this exists to stop.
   `venueHistory` (v10, #1887) is how well Dan already knows the ROOM this show plays in, as one of
   `shot_before` / `a_few` / `regularly`. It is a BAND and carries NO COUNT, deliberately: the app
   holds the number and never sends it, so there is nothing for you to state. ABSENT means say

@@ -683,6 +683,25 @@ address he already knew was wrong. His report was a card reading "10 found, 4 re
 personal accounts and the act's own domain, with the only control anywhere sitting in the draft-review
 panel, after the run had been paid for.
 
+Queue version 14 (#2990) adds an optional `alreadyFoundEmails` to each item: the addresses the show
+ALREADY HOLDS, so a contact re-run does not pay to rediscover and re-report people it was handed a
+moment ago. It only arises where Dan explicitly asks for one, because `PrepQueueBuilder.probedWithContact`
+sends a show that already has a contact down the `draft_only` path.
+
+Measured before it was built, across every archived run on this Mac (2026-09-06): 34 show-answers where
+an earlier run had already returned routes for that show, 18 routes rediscovered against 31 genuinely new
+ones, and 5 of the 34 returning nothing the show did not already hold.
+
+CONTEXT, NOT TARGETS, and the runbook is told so in those words: he asked for the re-run because he wants
+somebody he does not have, so a list the run read as "these are done" would make it pointless. ADDRESSES
+only, the rule `refusedEmails` follows, because the field is documented to the run as email addresses and
+a form handle in it is a value the run reads as one. ABSENT rather than empty. DISJOINT from
+`refusedEmails` by construction and by a fixture guard, because a struck address named here would put an
+address Dan refused back in front of the run as context, on the very run meant to leave it alone.
+Written by `PrepQueueService.alreadyFoundAddresses`, through the same refusal ledger the strike list is
+built from so the two cannot disagree; read by `docs/prep-runbook.md` §1. Additive, so `v1.json` through
+`v13.json` stay byte-identical and still decode with it absent.
+
 Queue version 13 (#2983) adds an optional `presenterName` to each item: the producing organisation the
 APP already holds for this show, by name, straight from the stored `presenter`. Until this field the
 only thing either builder derived from `presenter` was `onlyTheActIsNamed`, a boolean ABOUT the fact, so

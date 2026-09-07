@@ -44,6 +44,27 @@ enum PrepQueueService {
     //
     // The organisation half matters as much as the show half: an address Dan struck on the ledger is one
     // this show would inherit, and the run hunting the same organisation would find it again.
+    // #2990: the addresses this show already holds, for the run's own context.
+    //
+    // DISJOINT from `struckAddresses` above by construction, and that is the one interaction that could
+    // go wrong: a struck address is one Dan refused, so naming it here would put it back in front of the
+    // run as context on the very run meant to leave it alone (L16). Judged through the SAME ledger the
+    // strike list is built from, never a second reading of it, so the two cannot disagree about one
+    // address.
+    //
+    // ADDRESSES only, the rule `refusedEmails` follows: the field is documented to the run as a list of
+    // email addresses, and a form handle in it is a value the run reads as one. Sorted, so the same store
+    // always writes byte-identical JSON. Absent, never empty.
+    private static func alreadyFoundAddresses(for p: Prospect,
+                                              refusals: ContactRefusal.Ledger) -> [String]? {
+        let orgKey = p.presenter.flatMap { OrgKey.stored(for: $0) }
+        let struck = Set(refusals.struckAddresses(showKey: p.naturalKey, orgKey: orgKey))
+        let held = p.recipients
+            .compactMap { $0.email?.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty && !struck.contains($0) }
+        return held.isEmpty ? nil : Array(Set(held)).sorted()
+    }
+
     private static func struckAddresses(for p: Prospect,
                                         refusals: ContactRefusal.Ledger) -> [String]? {
         guard !refusals.isEmpty else { return nil }
@@ -110,6 +131,10 @@ enum PrepQueueService {
                     // draft to one he already refused. Absent, never an empty list, on the shows with
                     // nothing struck. Sorted so the same store always writes byte-identical JSON.
                     refusedEmails: struckAddresses(for: p, refusals: refusals),
+                    // #2990: and the addresses the show ALREADY holds, so a contact re-run does not pay
+                    // to rediscover people it was handed a moment ago. Context, never targets: he asked
+                    // for this re-run because he wants somebody he does not have.
+                    alreadyFoundEmails: alreadyFoundAddresses(for: p, refusals: refusals),
                     // #2983: and WHO, not merely that there is a who. Through the same predicate
                     // `onlyTheActIsNamed` above uses, so the two can never disagree. A drafted pitch has
                     // the same reason to name the producing company as a check has to search for it.
@@ -170,6 +195,10 @@ enum PrepQueueService {
                     // would find and report the address Dan struck, the importer would refuse it, and he
                     // would have paid for the lookup twice over.
                     refusedEmails: struckAddresses(for: p, refusals: refusals),
+                    // #2990: and the addresses the show ALREADY holds, so a contact re-run does not pay
+                    // to rediscover people it was handed a moment ago. Context, never targets: he asked
+                    // for this re-run because he wants somebody he does not have.
+                    alreadyFoundEmails: alreadyFoundAddresses(for: p, refusals: refusals),
                     // #2983: the name behind that flag. Without it a check on a show credited to a real
                     // company was told a producer existed and never told which one, so it hunted a
                     // nameless organisation and reported `nothing_published` about one publishing its

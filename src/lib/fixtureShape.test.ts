@@ -69,8 +69,8 @@ describe("prep-queue fixture shapes", () => {
   it("covers exactly the known prep-queue files", () => {
     expect(files.sort()).toEqual([
       // Lexicographic, because the assertion compares against files.sort(): "v10" sorts next to "v1".
-      "v1.json", "v10.json", "v11.json", "v12.json", "v13.json", "v2.json", "v3.json", "v4.json", "v5.json",
-      "v6.json", "v7.json", "v8.json", "v9.json",
+      "v1.json", "v10.json", "v11.json", "v12.json", "v13.json", "v14.json", "v2.json", "v3.json",
+      "v4.json", "v5.json", "v6.json", "v7.json", "v8.json", "v9.json",
     ]);
   });
 
@@ -80,6 +80,30 @@ describe("prep-queue fixture shapes", () => {
       expect(() => assertPrepQueueShape(readJson("prep-queue", file), file, version)).not.toThrow();
     });
   }
+
+  // #2990: the addresses a show already holds are a v14 addition, so they must be rejected on an older
+  // fixture, and the two lists must stay disjoint. Both halves, because the second is the one that puts
+  // an address Dan struck back in front of the run.
+  it("rejects a v14 already-found list appearing in a v13 fixture", () => {
+    const mutated = readJson("prep-queue", "v13.json") as { items: Array<Record<string, unknown>> };
+    mutated.items[0].alreadyFoundEmails = ["someone@example.com"];
+    expect(() => assertPrepQueueShape(mutated, "v13.json", 13))
+      .toThrow(/alreadyFoundEmails.*before version 14/);
+  });
+
+  it("rejects an already-found address that the same item also refuses", () => {
+    const mutated = readJson("prep-queue", "v14.json") as { items: Array<Record<string, unknown>> };
+    mutated.items[1].alreadyFoundEmails = ["harbourwindsfan@example.com"];
+    expect(() => assertPrepQueueShape(mutated, "v14.json", 14))
+      .toThrow(/alreadyFoundEmails names harbourwindsfan@example.com, which it also refuses/);
+  });
+
+  it("rejects an empty already-found list, which says nothing the absence does not", () => {
+    const mutated = readJson("prep-queue", "v14.json") as { items: Array<Record<string, unknown>> };
+    mutated.items[1].alreadyFoundEmails = [];
+    expect(() => assertPrepQueueShape(mutated, "v14.json", 14))
+      .toThrow(/alreadyFoundEmails must be absent rather than empty/);
+  });
 
   // #2259: the company a listing credits is a v11 addition, so it must be rejected on an older fixture
   // that a runner predating the rule would read.

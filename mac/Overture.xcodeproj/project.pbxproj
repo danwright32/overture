@@ -1944,6 +1944,7 @@
 		F4087EC28B4DDFA3BBC4F9EA /* SendDelightTiming.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2172CE8354CB41DD0815A77C /* SendDelightTiming.swift */; };
 		F417B1875CC3FB80B4FB7106 /* GmailSignatureStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7B6482BB9FE1CEA69A3391F /* GmailSignatureStore.swift */; };
 		F4420A866639A5F3E0196D90 /* HandMarkedReplyControl.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1691B5044506A903C7F4C0EA /* HandMarkedReplyControl.swift */; };
+		F46E3E70794EE622A902FE2E /* AlreadyFoundAddressesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F786207B6C7134B124D3911F /* AlreadyFoundAddressesTests.swift */; };
 		F48F7DEA19FE0724775EDCAA /* CalendarIdentity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55BDA6D35128728BE494AB0A /* CalendarIdentity.swift */; };
 		F4B24AFF2EFCF847D2C5145E /* SourceSchedule.swift in Sources */ = {isa = PBXBuildFile; fileRef = F56875ADF0A8D3D852212940 /* SourceSchedule.swift */; };
 		F4D55DA0C17D9D73A75E5AFF /* StalledReplyDraft.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E1BF0A3660CD86472EF2E35 /* StalledReplyDraft.swift */; };
@@ -3548,6 +3549,7 @@
 		F7220671ACEC38ADD2DD0A29 /* ControlRefusalOnScreenTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlRefusalOnScreenTests.swift; sourceTree = "<group>"; };
 		F74256689CB824699C081880 /* WebCallRefusals.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebCallRefusals.swift; sourceTree = "<group>"; };
 		F75CC79C7F80741EE8E0D33C /* ReachedOutClose.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReachedOutClose.swift; sourceTree = "<group>"; };
+		F786207B6C7134B124D3911F /* AlreadyFoundAddressesTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AlreadyFoundAddressesTests.swift; sourceTree = "<group>"; };
 		F78E4201FD7A26BF690E34E1 /* RealStoreTestLockTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RealStoreTestLockTests.swift; sourceTree = "<group>"; };
 		F78ED0DB580AF664FB32EE62 /* ConfirmNeedsBytesToAnchorToTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfirmNeedsBytesToAnchorToTests.swift; sourceTree = "<group>"; };
 		F7C0F936EA18B5C7307A439E /* SourceNote.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourceNote.swift; sourceTree = "<group>"; };
@@ -3795,6 +3797,7 @@
 				9B6C7F8FF306EAA186D48ACA /* AgentsDocCompletenessCheckTests.swift */,
 				E57CB71C59941FFB08CCCEA4 /* AgentsDocSuiteCountsTests.swift */,
 				BD587798641230016EE94CDA /* AlgoliaCalendarTests.swift */,
+				F786207B6C7134B124D3911F /* AlreadyFoundAddressesTests.swift */,
 				92028B90ADC30594AFF31F5F /* AnEmptyAnswerDoesNotOverwriteRoutesTests.swift */,
 				65B67004DA51921652432C0B /* ANoticeCarriesItsActionTests.swift */,
 				55D1EB9596BDFC295B7C2934 /* AnsweredConversationIsNotDraftedTests.swift */,
@@ -6010,6 +6013,7 @@
 				DB14247418D010E326C29C49 /* AgentsDocSuiteCountsTests.swift in Sources */,
 				D04778B99CA9BE3A07EB3302 /* AlgoliaCalendar.swift in Sources */,
 				DD72945D29200E20650D5F29 /* AlgoliaCalendarTests.swift in Sources */,
+				F46E3E70794EE622A902FE2E /* AlreadyFoundAddressesTests.swift in Sources */,
 				07A98A714629B933B1A2DBC6 /* AnEmptyAnswerDoesNotOverwriteRoutesTests.swift in Sources */,
 				BDB5EFF139D902B23640CF77 /* AnsweredConversationIsNotDraftedTests.swift in Sources */,
 				8731D0389B199836DA43CE6D /* AnsweredElsewhere.swift in Sources */,
