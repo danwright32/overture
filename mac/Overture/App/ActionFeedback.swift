@@ -455,6 +455,12 @@ enum ActionAck {
         "\(piece) is not an email address or a link. No contact was added"
     }
 
+    // #2408: says what CHANGED rather than that a row was deleted, because what Dan did was put an
+    // address back into play and what he wants to know is that the next run can use it.
+    static func struckAddressPutBack(_ handle: String) -> String {
+        "\(handle) is back. The next run can research and write to it again"
+    }
+
     static func manualPrepSaved(org: String) -> String {
         "\(org) is drafted and ready for you to review"
     }
