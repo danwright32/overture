@@ -205,4 +205,160 @@ struct RealScrollInvalidationTests {
                         + "(\(counter.evaluations) evaluations, was \(settled)), which is the thing "
                         + "#1774 exists to prevent"))
     }
+
+    // --- #3650: is the lazy stack actually viewport bounded? --------------------------------------
+    //
+    // THIS IS MILESTONE #80's GATE, and it is the one thing the whole plan rests on that nobody had
+    // measured. Phase 4 builds a full card only for the rows that RENDER, which is worth about 478 cards
+    // down to about 20 on Scout at the live shape. That saving is entirely a claim about SwiftUI: if a
+    // `LazyVStack` realizes only what is visible, it holds; if restoring a pinned position deep in the
+    // list realizes every row ABOVE it as well, the saving evaporates on exactly the surface it was
+    // designed for, because the queue restores a pin on every rebuild (#976).
+    //
+    // Dan's own words, 2026-09-07: "my major concern is that as I'm scrolling it'll be building cards if
+    // we do follow the screen which would probably slow it down". The arithmetic says a card is 0.368 ms
+    // against a 16.7 ms frame, so a handful per frame is nothing. The arithmetic is not the risk. THIS is.
+    //
+    // Measured by COUNTING WHICH ROWS EVALUATED A BODY, because that is what a realized row costs, and a
+    // `LazyVStack` evaluates a row's body only when it realizes it. The pair below is what makes either
+    // reading trustworthy: a plain first render is the positive control, so a small number in the deep
+    // case cannot be a counter that was never wired up (L171, L98).
+
+    // Which rows evaluated a body. A class so the SwiftUI value type can report into it, exactly as
+    // `BodyCounter` above does, and a SET rather than a count because the question is HOW MANY DISTINCT
+    // rows were built rather than how many times any of them was.
+    private final class RowRealizationCounter {
+        private(set) var realized: Set<Int> = []
+        func record(_ index: Int) { realized.insert(index) }
+        var count: Int { realized.count }
+        var highest: Int { realized.max() ?? -1 }
+        var lowest: Int { realized.min() ?? -1 }
+    }
+
+    private struct CountingRow: View {
+        let index: Int
+        let counter: RowRealizationCounter
+        var body: some View {
+            counter.record(index)
+            // A fixed height HERE is the fixture's own scaffolding and not a proposal: #3441 refused
+            // fixed row heights in the product because they would truncate the cards Dan reads. This
+            // fixture needs a known row height only so "how many rows fit the viewport" is arithmetic
+            // rather than another thing to measure.
+            return Text("Row \(index)").frame(height: Self.rowHeight)
+        }
+        static let rowHeight: CGFloat = 40
+    }
+
+    // The queue's shape: the position lives on a holder that runs the content as a closure (#1774), and
+    // the rows are a lazy stack carrying `.scrollTargetLayout()`. `startAt` is what makes this the
+    // question rather than a re-run of the tests above.
+    private struct RealizationHarness: View {
+        let counter: RowRealizationCounter
+        let rows: Int
+        let startAt: Int?
+
+        var body: some View {
+            PinnedAt(startAt: startAt) {
+                LazyVStack(spacing: 0) {
+                    ForEach(0..<rows, id: \.self) { n in
+                        CountingRow(index: n, counter: counter).id(n)
+                    }
+                }
+                .scrollTargetLayout()
+            }
+        }
+    }
+
+    private struct PinnedAt<Content: View>: View {
+        let startAt: Int?
+        @ViewBuilder let content: () -> Content
+        @State private var topId: Int?
+
+        var body: some View {
+            ScrollView { content() }
+                .scrollPosition(id: $topId, anchor: .top)
+                .onAppear { topId = startAt }
+        }
+    }
+
+    // How many rows the 300pt viewport can show at 40pt each. Derived rather than written down, so the
+    // reading below is judged against the window this fixture actually opens (L63).
+    private static var rowsThatFitTheViewport: Int {
+        Int((300.0 / CountingRow.rowHeight).rounded(.up))
+    }
+
+    // THE POSITIVE CONTROL. A plain first render at the top must realize a viewport's worth and not the
+    // whole list. If this reads zero the counter is not wired to anything and the measurement below is
+    // about nothing; if it reads 400 then this SwiftUI version is not lazy here at all, and that is the
+    // finding rather than a broken fixture (L171).
+    @Test func aPlainFirstRenderRealizesAboutAViewportOfRows() async throws {
+        let counter = RowRealizationCounter()
+        let (window, hosting) = host(RealizationHarness(counter: counter, rows: 400, startAt: nil))
+        defer { window.close() }
+        _ = try #require(firstScrollView(in: hosting))
+        _ = await waitUntil("the first layout to realize some rows") { counter.count > 0 }
+
+        let fits = Self.rowsThatFitTheViewport
+        print("""
+        row-realization: a plain first render (#3650)
+          rows in the list          400
+          viewport holds            \(fits) rows at \(CountingRow.rowHeight)pt
+          rows that built a body    \(counter.count)   (indices \(counter.lowest) to \(counter.highest))
+        """)
+
+        #expect(counter.count > 0,
+                "no row ever evaluated a body, so the counter is measuring nothing (L98)")
+        #expect(counter.count < 400,
+                Comment(rawValue: "a plain first render built ALL 400 rows, so this stack is not lazy "
+                        + "at all and milestone #80's saving does not exist as designed."))
+    }
+
+    // THE GATE. Restore the position deep in the list, the way the queue does on every rebuild, and count
+    // what got built. Two outcomes, and they send milestone #80 in opposite directions:
+    //
+    //   realizes about a viewport  -> Phase 4 builds cards for rendered rows, and Scout goes to about 20.
+    //   realizes everything above  -> that saving is imaginary on a restored pin, and the fallback is
+    //                                 per-stage card building, chosen HERE on a measurement rather than
+    //                                 discovered in Phase 4.
+    @Test func restoringADeepPositionDoesNotRealizeEverythingAboveIt() async throws {
+        let deep = 300
+        let counter = RowRealizationCounter()
+        let (window, hosting) = host(RealizationHarness(counter: counter, rows: 400, startAt: deep))
+        defer { window.close() }
+        let scroll = try #require(firstScrollView(in: hosting))
+
+        // Waits for the RESTORE to have happened, not merely for a first layout, or this reads the top
+        // of the list and reports it as the deep case (L239).
+        let restored = await waitUntil("the pinned position to be restored deep in the list") {
+            scroll.contentView.bounds.origin.y > 0
+        }
+        _ = await waitUntil("realization to settle after the restore") { counter.highest >= deep - 1 }
+
+        let fits = Self.rowsThatFitTheViewport
+        let ceiling = fits * 4
+        print("""
+        row-realization: restoring a position deep in the list (#3650, milestone #80's gate)
+          rows in the list          400
+          restored to row           \(deep)
+          viewport holds            \(fits) rows at \(CountingRow.rowHeight)pt
+          rows that built a body    \(counter.count)   (indices \(counter.lowest) to \(counter.highest))
+          ceiling for this to pass  \(ceiling)
+          scrolled to               \(scroll.contentView.bounds.origin.y)pt
+
+          Read this as the GATE it is. At or under the ceiling, Phase 4 builds cards for rendered rows
+          and Scout falls from about 478 to about 20. Near 400, a restored pin realizes everything above
+          it, that saving is imaginary, and the fallback is per-stage card building.
+        """)
+
+        #expect(restored,
+                Comment(rawValue: "the position was never restored (still at "
+                        + "\(scroll.contentView.bounds.origin.y)pt), so this measured the top of the "
+                        + "list rather than a deep pin, and its verdict is about nothing (L98)"))
+        #expect(counter.count <= ceiling,
+                Comment(rawValue: "restoring a pin at row \(deep) built \(counter.count) of 400 rows, "
+                        + "against a ceiling of \(ceiling) (four viewports). A restored pin realizes "
+                        + "the rows above it, so building a card per RENDERED row saves far less than "
+                        + "milestone #80's Phase 4 assumes, and the per-stage fallback is what to build "
+                        + "(#3650, #3654)."))
+    }
 }
