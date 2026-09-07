@@ -20,6 +20,7 @@ describe("prep-runbook judgment rules are present (#591)", () => {
 
   it("guards the concrete rules this harness cares about", () => {
     expect(RUNBOOK_RULES.map((r) => r.name).sort()).toEqual([
+      "a-contact-with-no-name-gets-no-tier",
       "a-cut-page-cannot-support-a-finished-negative",
       "a-method-names-a-route",
       "a-name-match-alone-is-not-enough",

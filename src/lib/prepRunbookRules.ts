@@ -195,6 +195,10 @@ export const RUNBOOK_RULES: RunbookRule[] = [
   // #3347: and the RANK comes from how this show bills them, not from what their own site says they do
   // in general. The app drops an unsupported `primary` at ingest; this is the instruction that stops it
   // being produced.
+  // #2625: every tier answers a question about a PERSON, so an address with nobody behind it gets none.
+  // The app drops one at ingest; this is the instruction that stops it being produced.
+  { name: "a-contact-with-no-name-gets-no-tier",
+    pattern: /A\s+contact\s+with\s+no\s+`name`\s+gets\s+no\s+tier\s+at\s+all/i },
   { name: "rank-from-how-this-show-bills-them",
     pattern: /Rank\s+from\s+how\s+THIS\s+SHOW\s+bills\s+them,\s+never\s+from\s+what\s+their\s+own\s+site\s+says/i },
   { name: "no-description-is-a-complete-answer",

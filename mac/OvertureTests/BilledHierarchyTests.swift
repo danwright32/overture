@@ -103,6 +103,23 @@ struct BilledHierarchyTests {
         #expect(BilledHierarchy.billedAsCastOnly(name: "Rennick Slade", inListingText: page))
     }
 
+    // MARK: - #2625: an address with nobody behind it
+
+    // A tier is an answer to "who could hire Dan", and a bare shared inbox with no person attached is
+    // genuinely unanswerable on it. Measured across every archived run, 2026-09-06: 22 of 447 contacts
+    // carry no name, and THIRTEEN of those 22 carry `primary`, every one a `generic_inbox`. So the
+    // strongest available claim was being made about the weakest available finding, on 13 real shows.
+    //
+    // Dan's call, 2026-09-06, shown that measurement and that it moves those shows down his queue: no
+    // tier at all, which is what `ContactTier` already means by nil (nobody has said who this is) and is
+    // exactly true here. Not a fourth case and not a default (L113).
+    @Test func aTierOnAnAddressWithNoNameIsNotAnAnswer() {
+        #expect(BilledHierarchy.tierIsAnswerable(name: "Odalie Prentiss"))
+        #expect(!BilledHierarchy.tierIsAnswerable(name: nil))
+        #expect(!BilledHierarchy.tierIsAnswerable(name: ""))
+        #expect(!BilledHierarchy.tierIsAnswerable(name: "   "))
+    }
+
     // MARK: - Wired, not merely built (L3)
 
     private func context() throws -> ModelContext {
@@ -152,6 +169,29 @@ struct BilledHierarchyTests {
         #expect(contact.contactTierRaw == nil,
                 Comment(rawValue: "the page bills her only under Featuring and credits nobody, so the "
                         + "primary rank was carried across from somewhere other than this show"))
+    }
+
+    // #2625: and a tier about nobody never reaches the row either, on a show whose page says nothing
+    // at all. Wired, not merely built: the predicate is pure and its own tests would stay green
+    // while nothing in the app asked it (L3).
+    @Test func aTierAboutNobodyDoesNotReachTheRow() throws {
+        let ctx = try context()
+        let p = show(ctx)
+        var nameless = PrepContact()
+        nameless.tier = "primary"
+        nameless.method = "generic_inbox"
+        nameless.confidence = "medium"
+        nameless.provenance = "presenter"
+        nameless.email = "info@marlowefenn.example"
+        PrepImporter.ingest(
+            PrepResults(version: 11, generatedAt: "2027-09-01T00:00:00Z",
+                        results: [PrepResult(naturalKey: p.naturalKey, contacts: [nameless])]),
+            into: ctx, isProbe: true)
+        let contact = try #require(p.recipients.first)
+        #expect(contact.name == nil)
+        #expect(contact.contactTierRaw == nil, Comment(rawValue:
+            "a shared inbox with nobody behind it was ranked as somebody who could hire Dan, and "
+            + "that rank lifts the show up the queue"))
     }
 
     // With NO page handed over, the run's judgement stands untouched. This is the half that decides

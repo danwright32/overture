@@ -200,15 +200,15 @@ struct RunInstructionComplianceTests {
         let a = RunInstructionCompliance.Measurement(
             contacts: 1, withATier: 2, declaredNoRouteFound: 3, routeNamedButNotSupplied: 4,
             citedAtHigh: 5, citedAtHighSayingWhetherItCorroborates: 6,
-            primaryContradictedByTheListing: 7)
+            primaryContradictedByTheListing: 7, tieredWithNoName: 8)
         let b = RunInstructionCompliance.Measurement(
             contacts: 10, withATier: 20, declaredNoRouteFound: 30, routeNamedButNotSupplied: 40,
             citedAtHigh: 50, citedAtHighSayingWhetherItCorroborates: 60,
-            primaryContradictedByTheListing: 70)
+            primaryContradictedByTheListing: 70, tieredWithNoName: 80)
         #expect(a + b == RunInstructionCompliance.Measurement(
             contacts: 11, withATier: 22, declaredNoRouteFound: 33, routeNamedButNotSupplied: 44,
             citedAtHigh: 55, citedAtHighSayingWhetherItCorroborates: 66,
-            primaryContradictedByTheListing: 77))
+            primaryContradictedByTheListing: 77, tieredWithNoName: 88))
         // The identity, so a run of no shows reports the same nothing measuring an empty pool did.
         #expect(RunInstructionCompliance.empty + a == a)
     }
@@ -225,6 +225,30 @@ struct RunInstructionComplianceTests {
         let run = RunInstructionCompliance.empty + contradicted + supported
         #expect(run.contacts == 2)
         #expect(run.primaryContradictedByTheListing == 1)
+    }
+
+    // #2625: a tier declared about an address with nobody behind it, counted and refused. Measured
+    // across every archived run 2026-09-06: 22 of 447 contacts carry no name and 13 of those carry
+    // `primary`, so this is not a corner case.
+    @Test func aTierDeclaredAboutNobodyIsCountedAndSaidOutLoud() {
+        var c = contact()
+        c.name = nil
+        let m = RunInstructionCompliance.measure(contacts: [c])
+        #expect(m.tieredWithNoName == 1)
+        #expect(m.notes.contains { $0.contains("without naming anybody") })
+    }
+
+    // A NAMED contact is not counted, or the number would be "how many tiers are there".
+    @Test func aTierAboutSomebodyNamedIsNotCounted() {
+        #expect(RunInstructionCompliance.measure(contacts: [contact()]).tieredWithNoName == 0)
+    }
+
+    // And a nameless contact the run declined to tier is not counted either: there is no claim to
+    // refuse, and counting it would make a run that behaved correctly look like one that did not.
+    @Test func anUntieredNamelessContactIsNotCounted() {
+        var c = contact(tier: nil)
+        c.name = nil
+        #expect(RunInstructionCompliance.measure(contacts: [c]).tieredWithNoName == 0)
     }
 
     // MARK: - The refusal has ONE definition (L16)

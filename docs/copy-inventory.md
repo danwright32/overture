@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1508 sentences**.
+Every sentence Overture can say to Dan: **1510 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -14,7 +14,7 @@ What is not, and why:
   sentences under tokens nobody reads.
 - **Nothing, if it is written as two literals joined with `+`.** Those ARE joined here, into the
   one sentence the running app says (#3155). What is still only part of what Dan reads is a
-  sentence carrying a VALUE: 545 of the 1508 below hold a
+  sentence carrying a VALUE: 546 of the 1510 below hold a
   `\(...)` where a number or a name goes, so what is printed is the template. They are counted
   here rather than listed again, because the hole is visible in the line itself; what was missing
   was any statement of how much of this document is templates.
@@ -366,6 +366,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "1 contact named a way in and gave none, and the run never once said it found no route"
     `Domain/RunInstructionCompliance.swift`
 "1 contact was ranked as a decision maker while its own listing bills them only as cast, so Overture is not using that rank"
+    `Domain/RunInstructionCompliance.swift`
+"1 contact was ranked without naming anybody it could be about, so Overture is not using that rank"
     `Domain/RunInstructionCompliance.swift`
 "1 earlier record could not be read, which is what force quitting Overture while it is frozen leaves behind."
     `Domain/FreezeReport.swift`
@@ -2758,6 +2760,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "\(count) contacts named a way in and gave none, and the run never once said it found no route"
     `Domain/RunInstructionCompliance.swift`
 "\(count) contacts were ranked as decision makers while their own listings bill them only as cast, so Overture is not using those ranks"
+    `Domain/RunInstructionCompliance.swift`
+"\(count) contacts were ranked without naming anybody they could be about, so Overture is not using those ranks"
     `Domain/RunInstructionCompliance.swift`
 "\(count) didn't come back, they'll be retried"
     `Domain/HandoffShortfall.swift`

@@ -44,6 +44,26 @@ enum BilledHierarchy {
     // ("Produced and directed by Showpeople Resident Artist Colby Thompson", 44 characters).
     private static let creditReach = 80
 
+    // #2625: whether a tier is an answerable question about this contact at all.
+    //
+    // A tier says who could actually hire Dan. A bare shared inbox with no person attached cannot be
+    // judged on that, and the run was judging it anyway: measured across every archived run, 2026-09-06,
+    // 22 of 447 contacts carry no name and THIRTEEN of those carry `primary`, every one a
+    // `generic_inbox`. That is the strongest available claim made about the weakest available finding,
+    // and it lifted the fit score on 13 real shows.
+    //
+    // Dan's call, 2026-09-06, shown the measurement and told it moves those shows down his queue: no
+    // tier at all. `ContactTier` already means exactly that by nil, so this needs no fourth case and no
+    // default, which is the L113 trap the issue names: a missing entry that silently takes a fallback
+    // branch is indistinguishable from a deliberate choice.
+    //
+    // It lives HERE, beside the billing rule, because both answer one question: is the rank the run
+    // declared supported by anything. One is about the page and one is about the contact, and a caller
+    // that asked only one of them would be applying half a rule (L247).
+    static func tierIsAnswerable(name: String?) -> Bool {
+        !(name ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
     static func billedAsCastOnly(name: String?, inListingText text: String?,
                                  truncated: Bool = false) -> Bool {
         // A page that was CUT cannot support this, for #2698's reason: the credit is often the last block
