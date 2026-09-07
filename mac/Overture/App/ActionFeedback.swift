@@ -397,7 +397,10 @@ enum ActionAck {
     // fragment plus an interpolation is not a sentence anybody can read cold. So they are two literals,
     // and `ManualPrepSaveReasonTests` holds them together by asserting each acknowledgement is exactly its
     // reason plus this clause, for every refusal there is.
-    static let manualPrepNeedsRecipientReason = "Add an address to send to"
+    // #2896: what to DO, and deliberately not what the field accepts. The note under the field already
+    // names both kinds, and this sentence sits beside the disabled Save button at the same moment, so
+    // repeating them here would be two lines where the second tells him nothing the first did not (#843).
+    static let manualPrepNeedsRecipientReason = "Add someone to write to"
     static let manualPrepNeedsBodyReason = "Write the email before saving it"
     static let manualPrepNeedsSubjectReason = "Add a subject line"
 
@@ -411,18 +414,21 @@ enum ActionAck {
     // he is still typing into. The two share the JUDGMENT, which is the half that must not drift.
     static let manualPrepGreetingHint = "Emails are held at send unless the body opens with a greeting"
 
-    static let manualPrepNeedsRecipient = "Add an address to send to. Nothing was saved"
+    static let manualPrepNeedsRecipient = "Add someone to write to. Nothing was saved"
     static let manualPrepNeedsBody = "Write the email before saving it. Nothing was saved"
     static let manualPrepNeedsSubject = "Add a subject line. Nothing was saved"
 
     // #2023: names the piece that cannot be read rather than refusing the whole field, because the field
     // may hold several people and only one of them is wrong.
-    static func manualPrepBadAddressReason(_ piece: String) -> String {
-        "\(piece) is not an email address"
+    // #2896: names BOTH kinds, because the field takes a route now. The old sentence ("is not an email
+    // address") sent Dan looking for the one thing the shows this sheet is reached from do not have,
+    // which is the same correction #2629 made to Add contact's own refusal.
+    static func manualPrepBadRouteReason(_ piece: String) -> String {
+        "\(piece) is not an email address or a link"
     }
 
-    static func manualPrepBadAddress(_ piece: String) -> String {
-        "\(piece) is not an email address. Nothing was saved"
+    static func manualPrepBadRoute(_ piece: String) -> String {
+        "\(piece) is not an email address or a link. Nothing was saved"
     }
 
     // A gap between two separators has no address in it to name, so it says what it is instead of reading

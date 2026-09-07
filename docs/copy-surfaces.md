@@ -73,8 +73,8 @@ A sentence written as a constant is read here at the file that RENDERS it, not o
     ActionAck.manualPrepGreetingHint  "Emails are held at send unless the body opens with a greeting"
     ActionAck.manualPrepNeedsBody  "Write the email before saving it. Nothing was saved"
     ActionAck.manualPrepNeedsBodyReason  "Write the email before saving it"
-    ActionAck.manualPrepNeedsRecipient  "Add an address to send to. Nothing was saved"
-    ActionAck.manualPrepNeedsRecipientReason  "Add an address to send to"
+    ActionAck.manualPrepNeedsRecipient  "Add someone to write to. Nothing was saved"
+    ActionAck.manualPrepNeedsRecipientReason  "Add someone to write to"
     ActionAck.manualPrepNeedsSubject  "Add a subject line. Nothing was saved"
     ActionAck.manualPrepNeedsSubjectReason  "Add a subject line"
 `Domain/OmniFocusFailureKind.swift`

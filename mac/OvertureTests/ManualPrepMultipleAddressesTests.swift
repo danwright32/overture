@@ -99,7 +99,7 @@ struct ManualPrepMultipleAddressesTests {
         #expect(p.recipients.isEmpty)
         #expect(p.draftBody == nil)
         #expect(!p.draftWrittenByDan)
-        #expect(feedback.message == ActionAck.manualPrepBadAddress("call the box office"))
+        #expect(feedback.message == ActionAck.manualPrepBadRoute("call the box office"))
     }
 
     // The case this issue was filed for: one good address does not buy the bad one a pass, and the
@@ -118,7 +118,7 @@ struct ManualPrepMultipleAddressesTests {
         #expect(p.recipients.isEmpty)
         #expect(p.status == .queued)
         #expect(p.draftBody == nil)
-        #expect(feedback.message == ActionAck.manualPrepBadAddress("mark-at-bargemusic"))
+        #expect(feedback.message == ActionAck.manualPrepBadRoute("mark-at-bargemusic"))
     }
 
     // The defect itself, stated as a rule that cannot come back: whatever is typed, no contact may end up
@@ -149,7 +149,7 @@ struct ManualPrepMultipleAddressesTests {
     @Test func theSaveButtonIsGatedOnTheSameAddressRuleTheRefusalUses() {
         #expect(!ManualPrepEditing.canSave(email: "olga@bargemusic.org, nope", subject: "s", body: "b"))
         #expect(ManualPrepEditing.refusal(email: "olga@bargemusic.org, nope", subject: "s", body: "b")
-                == ActionAck.manualPrepBadAddress("nope"))
+                == ActionAck.manualPrepBadRoute("nope"))
 
         #expect(ManualPrepEditing.canSave(email: "olga@bargemusic.org, mark@bargemusic.org", subject: "s", body: "b"))
         #expect(ManualPrepEditing.refusal(email: "olga@bargemusic.org, mark@bargemusic.org", subject: "s", body: "b") == nil)
@@ -170,7 +170,7 @@ struct ManualPrepMultipleAddressesTests {
     // looks exactly like a single-address box is the same as not having shipped it. So the line under the
     // field is never empty: it either INVITES the second address or CONFIRMS what the ones typed will do.
     @Test func theFieldAlwaysSaysSomething() {
-        let hint = "Separate several addresses with commas to email more than one person."
+        let hint = "Separate several addresses with commas, or paste one link to a contact form or profile."
         #expect(ManualPrepCopy.addressFieldNote(for: "") == hint)
         #expect(ManualPrepCopy.addressFieldNote(for: "olga@bargemusic.org") == hint)
         // Still the invitation while what he has typed cannot yet be read as addresses: the count note

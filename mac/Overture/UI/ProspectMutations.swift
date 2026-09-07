@@ -315,8 +315,32 @@ enum ProspectMutations {
             feedback.acknowledge(refusal, tone: .warning)
             return
         }
-        guard case .addresses(let addresses) = EmailAddressList.parse(email) else { return }
         let trimmedBody = body.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedSubject = subject.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        // #2896: the recipients this save writes, as ROUTES. Addresses first, which is
+        // `ManualContactRoute`'s own order and matters for its reason: an address is a plausible-looking
+        // host, so filing one as a link would silently lose the one route that can be emailed.
+        //
+        // A LINK is a recipient here now, and what saving one MEANS is decided explicitly rather than
+        // left to fall out (Dan's call, 2026-09-06). On a show whose only route is a contact form or a
+        // profile there is nothing to send, so the saved draft is the text he pastes: the show lands in
+        // `.drafted` exactly as an addressed one does, the route is stored on the same field a FOUND
+        // route uses, and the existing form-pitch flow (`FormPitch`, #2612) is what he opens, writes on
+        // and marks sent.
+        //
+        // It can never be emailed, and that is structural rather than a rule somebody has to keep:
+        // `isSendablePending` requires an address, so a link recipient is in no send group anywhere.
+        let routes: [ManualContactRoute]
+        if case .addresses(let addresses) = EmailAddressList.parse(email) {
+            routes = addresses.map { .email($0) }
+        } else if let link = ManualContactRoute.parse(email), case .link = link {
+            routes = [link]
+        } else {
+            // Unreachable: the refusal above already covers every other reading of the field. Returning
+            // rather than writing, because a save that reached here would be one nothing had judged.
+            return
+        }
 
         // One Recipient per person, each through the same path the Add-contact control uses, so a
         // `.blocked` result still means what it always did: that address is already a live contact on this
@@ -325,17 +349,13 @@ enum ProspectMutations {
         //
         // The name is only ever applied when he named ONE person, since a single typed name cannot belong
         // to several addresses.
-        let trimmedName = (addresses.count == 1) ? name?.trimmingCharacters(in: .whitespacesAndNewlines) : nil
-        for address in addresses {
-            // #2629: these come from `EmailAddressList`, so every one is already an address. Routed
-            // through the same `.email` case rather than re-parsed, because the manual-prep sheet writes
-            // an email he types himself and a link would have nothing to send.
-            applyManualRecipient(route: .email(address), name: trimmedName, to: model)
+        let trimmedName = (routes.count == 1) ? name?.trimmingCharacters(in: .whitespacesAndNewlines) : nil
+        for route in routes {
+            applyManualRecipient(route: route, name: trimmedName, to: model)
         }
         // #2034: the choice he made on the sheet, recorded with the draft it belongs to.
         model.sendsTogetherOverride = sendsTogether
-        model.writeManualDraft(subject: subject.trimmingCharacters(in: .whitespacesAndNewlines),
-                               body: trimmedBody)
+        model.writeManualDraft(subject: trimmedSubject, body: trimmedBody)
 
         guard context.saveOrWarn(org: model.groupName, feedback: feedback) else { return }
         feedback.acknowledge(ActionAck.manualPrepSaved(org: model.groupName))

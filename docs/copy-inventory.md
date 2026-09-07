@@ -495,10 +495,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/ActionFeedback.swift`
 "Add address"
     `UI/SourcesView.swift`
-"Add an address to send to"
-    `App/ActionFeedback.swift`
-"Add an address to send to. Nothing was saved"
-    `App/ActionFeedback.swift`
 "Add an email address, or a link to a contact form or profile. No contact was added"
     `App/ActionFeedback.swift`
 "Add another"
@@ -506,6 +502,10 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "Add contact"
     `UI/DraftReviewView.swift`
 "Add one address at a time. No contact was added"
+    `App/ActionFeedback.swift`
+"Add someone to write to"
+    `App/ActionFeedback.swift`
+"Add someone to write to. Nothing was saved"
     `App/ActionFeedback.swift`
 "Add the name of whoever got in touch"
     `Domain/Inquiry.swift`
@@ -1948,8 +1948,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/SendConfirmSheet.swift`
 "Send this reply on the contact's thread"
     `UI/ReplyConversationView.swift`
-"Send to"
-    `UI/ManualPrepSheet.swift`
 "Sending despite the draft warning you confirmed."
     `Domain/DraftReviewNotes.swift`
 "Sending despite the greeting warning you confirmed."
@@ -1974,7 +1972,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/FormOutreach.swift`
 "Sent, waiting to hear back"
     `Domain/InquiryCopy.swift`
-"Separate several addresses with commas to email more than one person."
+"Separate several addresses with commas, or paste one link to a contact form or profile."
     `Domain/ManualPrepPrefill.swift`
 "Set aside"
     `Domain/ClientCoverage.swift`
@@ -2557,6 +2555,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/ActionFeedback.swift`
 "Write this email yourself, with no Prep run and no AI draft"
     `UI/ProspectRowView.swift`
+"Write to"
+    `UI/ManualPrepSheet.swift`
 "Writes from here"
     `UI/QueueView+Model.swift`
 "Written by AI"
@@ -3000,11 +3000,11 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ResponseBody.swift`
 "\(pending) calendars have new listings to read."
     `Domain/ScoutReadBudget.swift`
-"\(piece) is not an email address"
+"\(piece) is not an email address or a link"
     `App/ActionFeedback.swift`
 "\(piece) is not an email address or a link. No contact was added"
     `App/ActionFeedback.swift`
-"\(piece) is not an email address. Nothing was saved"
+"\(piece) is not an email address or a link. Nothing was saved"
     `App/ActionFeedback.swift`
 "\(placed) shows"
     `UI/SourcesView.swift`

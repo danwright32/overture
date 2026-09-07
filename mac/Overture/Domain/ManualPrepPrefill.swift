@@ -130,7 +130,11 @@ enum ManualPrepEditing {
     // a reason exists (L109).
     enum Refusal: Equatable {
         case needsRecipient
-        case badAddress(String)
+        // #2896: what was typed is neither an address nor a link. It used to be `badAddress`, and the
+        // rename is not cosmetic: this field takes a ROUTE now, so a refusal saying "not an email
+        // address" would send Dan looking for the one thing the shows this sheet is reached from do not
+        // have. Same correction #2629 made to Add contact's own refusal.
+        case badRoute(String)
         case extraSeparator
         case needsSubject
         case needsBody
@@ -139,7 +143,7 @@ enum ManualPrepEditing {
         var reason: String {
             switch self {
             case .needsRecipient: return ActionAck.manualPrepNeedsRecipientReason
-            case .badAddress(let piece): return ActionAck.manualPrepBadAddressReason(piece)
+            case .badRoute(let piece): return ActionAck.manualPrepBadRouteReason(piece)
             case .extraSeparator: return ActionAck.manualPrepExtraSeparatorReason
             case .needsSubject: return ActionAck.manualPrepNeedsSubjectReason
             case .needsBody: return ActionAck.manualPrepNeedsBodyReason
@@ -150,12 +154,24 @@ enum ManualPrepEditing {
         var acknowledgement: String {
             switch self {
             case .needsRecipient: return ActionAck.manualPrepNeedsRecipient
-            case .badAddress(let piece): return ActionAck.manualPrepBadAddress(piece)
+            case .badRoute(let piece): return ActionAck.manualPrepBadRoute(piece)
             case .extraSeparator: return ActionAck.manualPrepExtraSeparator
             case .needsSubject: return ActionAck.manualPrepNeedsSubject
             case .needsBody: return ActionAck.manualPrepNeedsBody
             }
         }
+    }
+
+    // #2896: whether the together-or-separately choice applies, which it does only for SEVERAL ADDRESSES.
+    // A link is one route and there is nothing to send on it, so the picker never appears.
+    //
+    // Here rather than in the view, which is this file's own standing rule (#863: every rule lives
+    // outside the view). It was the one question `ManualPrepSheet` answered for itself, by reading the
+    // address list directly, and that is exactly the shape that let this sheet and Add contact come to
+    // disagree about what a contact is.
+    static func offersSendModeChoice(email: String) -> Bool {
+        guard case .addresses(let addresses) = EmailAddressList.parse(email) else { return false }
+        return addresses.count > 1
     }
 
     // Nil when it can be saved, otherwise WHICH refusal applies.
@@ -165,14 +181,7 @@ enum ManualPrepEditing {
     // reply detection, follow-ups, bounce handling and the booking match all key off, so one contact
     // identified by "a@x.org, b@y.org" sends, reports success, and can never match a reply from either.
     static func refusalKind(email: String, subject: String, body: String) -> Refusal? {
-        switch EmailAddressList.parse(email) {
-        case .empty:
-            return .needsRecipient
-        case .invalid(let piece):
-            return piece.isEmpty ? .extraSeparator : .badAddress(piece)
-        case .addresses:
-            break
-        }
+        if let refusal = recipientRefusal(email) { return refusal }
         // Refused in the order the fields sit on the sheet (address, subject, body), so the sentence
         // names the first thing he would look at rather than the last rule that happened to run.
         if subject.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -182,6 +191,32 @@ enum ManualPrepEditing {
             return .needsBody
         }
         return nil
+    }
+
+    // #2896: the recipient field alone, which takes a ROUTE now: one or more addresses, or ONE link to a
+    // contact form or a profile. A link is what shows reached from this sheet often have instead of an
+    // address, and until now the field called one a bad address, which is an instruction Dan cannot
+    // follow (#2612, #2629).
+    //
+    // ADDRESSES ARE TRIED FIRST, which is `ManualContactRoute`'s own order and matters for the same
+    // reason: an address is a plausible-looking host, and filing one as a link would silently lose the
+    // one route that can actually be emailed.
+    //
+    // The link arm asks `ManualContactRoute` rather than reading the question again here, so this sheet
+    // and Add contact cannot come to disagree about what a contact is, which is exactly what they did
+    // (L263, L30).
+    private static func recipientRefusal(_ email: String) -> Refusal? {
+        switch EmailAddressList.parse(email) {
+        case .empty:
+            return .needsRecipient
+        case .addresses:
+            return nil
+        case .invalid(let piece):
+            // A blank between two separators is a different fault and keeps its own sentence (L11).
+            if piece.isEmpty { return .extraSeparator }
+            if case .link = ManualContactRoute.parse(email) { return nil }
+            return .badRoute(piece)
+        }
     }
 
     // What the save path says once a press has happened.
@@ -234,7 +269,10 @@ enum ManualPrepCopy {
     // both at once: that is the #843 defect, a second line saying what the first already said.
     static func addressFieldNote(for typed: String) -> String {
         recipientCountNote(for: typed)
-            ?? "Separate several addresses with commas to email more than one person."
+            // #2896: says what the field ACCEPTS, which is a route now. The old sentence named only
+            // addresses, and it is the first thing Dan reads on a sheet he reached from a show whose only
+            // way in is a form or a profile, so it told him the one thing that would not work.
+            ?? "Separate several addresses with commas, or paste one link to a contact form or profile."
     }
 
     // #2023, and L64: who a message goes to belongs in what Dan reviews, so naming a second person has to
