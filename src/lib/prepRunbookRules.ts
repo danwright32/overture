@@ -193,6 +193,12 @@ export const RUNBOOK_RULES: RunbookRule[] = [
   // page continued, so a credit falling past the cut read to the run exactly like a page that named
   // nobody. The count is now on the item; this is the instruction that makes the run spend it, and it is
   // guarded because a rule living only in a prompt is a hope (L27).
+  // #2681: the stored producing credit keeps whatever the page put in front of the name, and the app
+  // deliberately does not cut it off (measured: one role prefix and four two-person credits in thirteen,
+  // so every mechanical rule destroyed more than it repaired). The run is what makes the search good, so
+  // the instruction is guarded rather than left to be remembered (L27).
+  { name: "the-credit-may-carry-a-role-search-the-name",
+    pattern: /The\s+value\s+may\s+carry\s+a\s+role\s+in\s+front\s+of\s+the\s+name,\s+and\s+the\s+name\s+is\s+what\s+you\s+search/i },
   { name: "a-cut-page-cannot-support-a-finished-negative",
     pattern: /A\s+cut\s+page\s+cannot\s+support\s+a\s+finished\s+negative/i },
   { name: "never-categorize-the-recipient",
