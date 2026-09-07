@@ -576,6 +576,7 @@
 		444A0FA537BDD2DFCCF9C2CB /* AppEnvironment.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0AE80712417BBF34FEA73430 /* AppEnvironment.swift */; };
 		44581E22D86F7ECD0E608A8B /* TestFilesAreInTheBuiltProjectTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E73CA861184A5C580399484 /* TestFilesAreInTheBuiltProjectTests.swift */; };
 		44A08701383BC787E1CA3182 /* ReplyWatchable.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A6341DB6204D5AE36BB2880 /* ReplyWatchable.swift */; };
+		44D7C8ACF0A8877EA9E553D4 /* PrepManuallyTakesARouteTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E0F9788622FC1C893241EBE /* PrepManuallyTakesARouteTests.swift */; };
 		44E58907B1A855B528AA38B8 /* VenueTixExtractor.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADB71F56DF74479701BC1F89 /* VenueTixExtractor.swift */; };
 		44E5F92CE5EAF67B9BD1FDFB /* SourceGuardHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51E49C7D7A0552D17A0B564B /* SourceGuardHelper.swift */; };
 		44F65898CFCB3812B00977CC /* ReplyTriageDueTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB783B66431DE75B16EE8CC6 /* ReplyTriageDueTests.swift */; };
@@ -3038,6 +3039,7 @@
 		9CED84E4FCBA2C09B73BFD10 /* ReachedOutHeadingAndCountdownAgreeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReachedOutHeadingAndCountdownAgreeTests.swift; sourceTree = "<group>"; };
 		9CF0846F8FC12B6A26A1A9CB /* BuildFreshness.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BuildFreshness.swift; sourceTree = "<group>"; };
 		9D59191D583AE8E9F3C798A3 /* EmailAddressListTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmailAddressListTests.swift; sourceTree = "<group>"; };
+		9E0F9788622FC1C893241EBE /* PrepManuallyTakesARouteTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrepManuallyTakesARouteTests.swift; sourceTree = "<group>"; };
 		9E10A3A36DE78E73EF6EAE0B /* ReviewStatus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReviewStatus.swift; sourceTree = "<group>"; };
 		9E1BF0A3660CD86472EF2E35 /* StalledReplyDraft.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StalledReplyDraft.swift; sourceTree = "<group>"; };
 		9E749A609BF9074C67D6B972 /* GroupIsOneEmailDownstreamTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupIsOneEmailDownstreamTests.swift; sourceTree = "<group>"; };
@@ -4270,6 +4272,7 @@
 				4EC69E4C8D6972F6A0D7803B /* PrepImporterProbeTests.swift */,
 				00E563EC137DDC54063B7980 /* PrepImporterTests.swift */,
 				B5D534252A6F37159BA37D7F /* PrepListingHandoffTests.swift */,
+				9E0F9788622FC1C893241EBE /* PrepManuallyTakesARouteTests.swift */,
 				168BBFB44364142E9B4489E6 /* PrepPillNamesTheRunTests.swift */,
 				15694DC3BE6349887EAF4CB6 /* PrepProgressContractTests.swift */,
 				CA75350679F2740C1E574D33 /* PrepProgressTakeoverTests.swift */,
@@ -6748,6 +6751,7 @@
 				0C90443179FCBB3A84CDA21C /* PrepImporterTests.swift in Sources */,
 				C58B5F4E5130740F23896D06 /* PrepLaunchCopy.swift in Sources */,
 				9B1B83395711D52E33DB299F /* PrepListingHandoffTests.swift in Sources */,
+				44D7C8ACF0A8877EA9E553D4 /* PrepManuallyTakesARouteTests.swift in Sources */,
 				1486C357C90F688C07B035B2 /* PrepPillNamesTheRunTests.swift in Sources */,
 				1B515A7DE7F5BC17B5224AF9 /* PrepProgress.swift in Sources */,
 				E08B44B6C2BDB07E35E3EB84 /* PrepProgressContractTests.swift in Sources */,

@@ -88,7 +88,7 @@ struct ManualPrepMutationTests {
 
         #expect(p.status == .queued)
         #expect(p.hasDraft == false)
-        #expect(feedback.message == "Add an address to send to. Nothing was saved")
+        #expect(feedback.message == "Add someone to write to. Nothing was saved")
     }
 
     // #3369 DELETED `aShowOnANightHeCannotWorkIsRefusedWithTheSameSentence`. It asserted that Dan's own
