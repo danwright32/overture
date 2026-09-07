@@ -51,7 +51,7 @@ enum PrepImporter {
         var instructionCompliance = RunInstructionCompliance.Measurement(
             contacts: 0, withATier: 0, declaredNoRouteFound: 0, routeNamedButNotSupplied: 0,
             citedAtHigh: 0, citedAtHighSayingWhetherItCorroborates: 0,
-            primaryContradictedByTheListing: 0)
+            primaryContradictedByTheListing: 0, tieredWithNoName: 0)
     }
 
     // Fail loud, not silent (#754). The performer matcher is only as good as the two files it reads,
@@ -522,6 +522,10 @@ enum PrepImporter {
     // Only `primary` is judged. `secondary` and `tertiary` make no claim about authority that a cast
     // billing could contradict, and holding those down would fire on the ordinary case (L93).
     private static func supportedTier(_ c: PrepContact, listing: ShowListing?) -> String? {
+        // #2625: a tier is an answer to "who could hire Dan", and nobody is attached to a bare shared
+        // inbox, so there is nothing to answer. Asked FIRST and for every tier, not only `primary`,
+        // because the question is unanswerable at every rank rather than unsupported at one.
+        guard BilledHierarchy.tierIsAnswerable(name: c.name) else { return nil }
         guard c.tier == ContactTier.primary.rawValue else { return c.tier }
         return BilledHierarchy.billedAsCastOnly(name: c.name, inListingText: listing?.text,
                                                 truncated: listing?.truncated == true) ? nil : c.tier

@@ -38,6 +38,10 @@ enum RunInstructionCompliance {
         // is a different fault with a different remedy: the tier instruction was FOLLOWED, and the answer
         // it produced is contradicted by the page the run was handed.
         var primaryContradictedByTheListing: Int
+        // #2625: contacts the run gave a tier while naming nobody it could be about. Its own field for
+        // the same reason as the one above: a different fault with a different remedy, and the tier
+        // instruction was followed, it was just answered about an address with nobody behind it.
+        var tieredWithNoName: Int
 
         // Not "fewer than all", deliberately. A partial run is a different thing from an ignored
         // instruction, and accusing on a partial would fire on the ordinary case.
@@ -66,6 +70,9 @@ enum RunInstructionCompliance {
         // remedies, and a sentence about both would name neither (L11).
         var notes: [String] {
             var out: [String] = []
+            if tieredWithNoName > 0 {
+                out.append(RunComplianceCopy.tieredWithNoName(tieredWithNoName))
+            }
             if primaryContradictedByTheListing > 0 {
                 out.append(RunComplianceCopy.primaryTheListingContradicts(primaryContradictedByTheListing))
             }
@@ -91,7 +98,7 @@ enum RunInstructionCompliance {
     static let empty = Measurement(contacts: 0, withATier: 0, declaredNoRouteFound: 0,
                                    routeNamedButNotSupplied: 0, citedAtHigh: 0,
                                    citedAtHighSayingWhetherItCorroborates: 0,
-                                   primaryContradictedByTheListing: 0)
+                                   primaryContradictedByTheListing: 0, tieredWithNoName: 0)
 
     static func measure(contacts: [PrepContact], listing: ShowListing? = nil) -> Measurement {
         var withATier = 0
@@ -100,7 +107,11 @@ enum RunInstructionCompliance {
         var cited = 0
         var citedAndAnswered = 0
         var contradicted = 0
+        var namelessTiers = 0
         for c in contacts {
+            // #2625: a tier declared about an address with nobody behind it. Through the SAME predicate
+            // the ingest refuses it with, so the count and the row cannot disagree (L16).
+            if c.tier != nil, !BilledHierarchy.tierIsAnswerable(name: c.name) { namelessTiers += 1 }
             // #3347: through the SAME predicate the ingest holds the tier down with, never a second one
             // written beside it, so the count and the row can never disagree about one contact (L16).
             if c.tier == ContactTier.primary.rawValue,
@@ -129,7 +140,8 @@ enum RunInstructionCompliance {
                            declaredNoRouteFound: noRouteFound, routeNamedButNotSupplied: routeMissing,
                            citedAtHigh: cited,
                            citedAtHighSayingWhetherItCorroborates: citedAndAnswered,
-                           primaryContradictedByTheListing: contradicted)
+                           primaryContradictedByTheListing: contradicted,
+                           tieredWithNoName: namelessTiers)
     }
 }
 
@@ -146,7 +158,8 @@ extension RunInstructionCompliance.Measurement {
              citedAtHighSayingWhetherItCorroborates:
                 a.citedAtHighSayingWhetherItCorroborates + b.citedAtHighSayingWhetherItCorroborates,
              primaryContradictedByTheListing:
-                a.primaryContradictedByTheListing + b.primaryContradictedByTheListing)
+                a.primaryContradictedByTheListing + b.primaryContradictedByTheListing,
+             tieredWithNoName: a.tieredWithNoName + b.tieredWithNoName)
     }
 }
 
@@ -164,6 +177,14 @@ enum RunComplianceCopy {
         count == 1
             ? "1 contact named a way in and gave none, and the run never once said it found no route"
             : "\(count) contacts named a way in and gave none, and the run never once said it found no route"
+    }
+
+    // #2625: what an unanswerable rank COSTS. Not that a field is missing: that a show moved up the queue
+    // on the strength of an address with nobody behind it.
+    static func tieredWithNoName(_ count: Int) -> String {
+        count == 1
+            ? "1 contact was ranked without naming anybody it could be about, so Overture is not using that rank"
+            : "\(count) contacts were ranked without naming anybody they could be about, so Overture is not using those ranks"
     }
 
     // #3347/#2258: what the wrong rank COSTS, in the terms the sentences above use. The cost is not that

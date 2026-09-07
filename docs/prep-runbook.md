@@ -718,6 +718,13 @@ If the page does not support any of the three, OMIT the field. An absent tier re
 which is honest, and it scores exactly what a found address has always scored. A guessed tier is worse
 than none: `primary` moves a show up into what Dan looks at first, and `tertiary` moves it down.
 
+**A contact with no `name` gets no tier at all** (#2625). All three answers are about a PERSON, and a
+shared inbox you could not put a person behind (`info@`, `bookings@`) is not somebody who could say yes;
+it is a door. Omit the field rather than reaching for the nearest of the three. Measured across every
+archived run on 2026-09-06: 22 of 447 contacts carried no name and THIRTEEN of those carried `primary`,
+every one a generic inbox, so the strongest answer was being given about the weakest finding on 13 real
+shows. Overture drops a tier on a nameless contact at ingest, so one emitted anyway is simply lost.
+
 **Already-covered fit-risk flag (#611).** While reading the act/presenter's own site for the
 waterfall above, also watch for an EXPLICIT statement that they already have their own
 photographer (e.g. the site names a "Photographer in Residence," a "House Photographer," or
