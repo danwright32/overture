@@ -333,7 +333,7 @@ final class Prospect {
     // (#2147, L75). The CARD still shows the handle, marked, because looking at it costs Dan seconds.
     var socialRouteURLs: [String] {
         recipients.compactMap { r -> String? in
-            guard !r.nameMatchOnly,
+            guard !r.isUnconfirmedNameMatch,
                   let raw = r.contactFormURL?.trimmingCharacters(in: .whitespacesAndNewlines),
                   !raw.isEmpty, Reachability.isSocialOnly(raw),
                   !VenueContactGuard.looksLikeVenue(formURL: raw, venue: venue),

@@ -213,6 +213,7 @@ A sentence written as a constant is read here at the file that RENDERS it, not o
     ReachabilityCopy.checkAgain  "Check again"
     ReachabilityCopy.checkAgainRetry  "Try again"
     ReachabilityCopy.checkMissedItBadge  "A check missed this show"
+    ReachabilityCopy.confirmProfileControl  "This is them"
     ReachabilityCopy.contactFormOnlyBadge  "Contact form only"
     ReachabilityCopy.emailFoundBadge  "Email found"
     ReachabilityCopy.emailFoundHelp  "A reachability check found a contact you can email for this show."

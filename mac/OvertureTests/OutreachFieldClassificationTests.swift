@@ -49,6 +49,10 @@ struct OutreachFieldClassificationTests {
         // answers about an ADDRESS rather than a record that somebody was written to.
         "looksLikeVenue": "a guard's opinion of the address",
         "looksLikeVenueDismissed": "Dan waving that guard off, an answer about the address",
+        // #2937: the same shape as the four dismissals beside it. It is an answer about WHOSE the
+        // route is, not a record that anybody was written to, and it is carried per RECIPIENT, so a
+        // row holding it has still had nothing sent from it.
+        "nameMatchOnlyDismissed": "Dan saying a guessed profile really is the person, an answer about the route",
         "contactTierRaw": "who the check judged this contact to be, a fact about the ADDRESS not about a send",
         "looksLikeAnotherPersons": "a guard's opinion of the address",
         "looksLikeAnotherPersonsDismissed": "Dan waving that guard off, an answer about the address",
