@@ -1194,6 +1194,33 @@ price and no turnaround (the Offer rule above), the same portfolio link, and the
 ask for a known fact" rule. The subject line is third person in both cases, which reads fine
 whoever receives it.
 
+**A direct message is not an email (#2630).** Some shows have no address at all: the only route you
+found is a contact form on the act's own site, or a social profile Dan will DM by hand. You know which,
+because you found the routes yourself in step 1 and they are the routes you are about to emit. Where the
+ONLY route is one of those, write the body for THAT, not for an inbox.
+
+The pitch is the same pitch and every rule above still holds. What changes is its SHAPE, because a DM is
+read in a narrow column on a phone and stops being read long before a fourth paragraph:
+
+- **No subject line.** There is nowhere to put one, and an opening line that is really a subject wearing
+  a sentence's clothes is worse than none.
+- **Roughly 60 to 80 words**, against the 150 an email runs to.
+- **Two short paragraphs at most**, and one is often right.
+- **The same three things and nothing else:** who Dan is, that he is writing about THIS show (named, not
+  described), and the ask. The credential compresses to one clause rather than a list of venues, and the
+  portfolio link goes on its own short line at the end.
+
+What gets cut is elaboration, never the ask and never the introduction: a DM that arrives without saying
+who Dan is reads as spam, which is the one thing a shorter format must not become. Everything forbidden
+in an email is forbidden here too (no price, no turnaround, no gallery path, no invented count).
+
+Measured 2026-08-13 on the Song & Word card (Vivace Arts Collective, The Green Room 42, 2026-08-16): the
+run found only an Instagram profile for the presenter and still produced a 150 word body under the
+subject "Photographing Vivace Arts Collective's Song & Word at The Green Room 42."
+
+Still emit a `subject`, because the app requires one and Dan reads it on the review card; it is simply
+never sent. Keep it short and third person, as everywhere else here.
+
 **Answering "what do you charge": Dan's own two paragraphs, VERBATIM (#2874).** This governs a
 REPLY to someone who asked, and nothing else. A cold pitch still carries no rate and no turnaround
 (the Offer rule above), so these paragraphs never appear in a first email, and the Prep run you are

@@ -21,6 +21,7 @@ enum DraftIssue: Equatable, Hashable, Sendable, CaseIterable {
     case repeatedSentenceShape    // two sentences in a row built the same way (#2807)
     case restatesItself           // a sentence that says one thing twice, or padding (#2949)
     case repeatsOneWord           // one word carrying the same idea across too many sentences (#2949)
+    case tooLongForADirectMessage // an email-length body on a show whose only route is a form or a DM (#2630)
 
     var label: String {
         switch self {
@@ -40,6 +41,11 @@ enum DraftIssue: Equatable, Hashable, Sendable, CaseIterable {
         case .repeatedSentenceShape: return "Two sentences in a row are built the same way"
         case .restatesItself: return "A sentence says the same thing twice"
         case .repeatsOneWord: return "One word is doing the same job in too many sentences"
+        // #2630: says what is wrong in Dan's terms and WHY, rather than naming a word count. The body is
+        // not too long; it is too long for where it is going, and the reason it is going there is the
+        // part he can act on.
+        case .tooLongForADirectMessage:
+            return "Too long for a DM: this show has no address, so it is sent by hand"
         }
     }
 
@@ -75,13 +81,16 @@ enum DraftIssue: Equatable, Hashable, Sendable, CaseIterable {
         // CONSTRUCTION out of punctuation and connector words, and English lets a perfectly good pair of
         // sentences land on the same one; the cost of a wrong block is Dan's time on a draft that reads
         // fine.
+        // #2630: advisory, for the reason above. How long a pitch should be is a judgment about WORDING
+        // rather than a fact about the text, and the ceiling it reads is a rough one by design, so the
+        // cost of a wrong block would be Dan's time on a draft that reads perfectly.
         // #2949: both advisory, for the reason above them. They are judgements about WORDING, which is
         // not the bar #789 set for a blocker, and the cost of a wrong block is Dan's time on a draft that
         // reads fine.
         case .performativeEnthusiasm, .emDash, .presumesBooking, .coldHedge,
              .asksForKnownFact, .concessionLanguage, .nonCanonicalRate,
              .hedgedEffectClaim, .asksForNothing, .repeatedSentenceShape,
-             .restatesItself, .repeatsOneWord: return false
+             .restatesItself, .repeatsOneWord, .tooLongForADirectMessage: return false
         }
     }
 
@@ -101,6 +110,13 @@ enum DraftCheck {
     //
     // The empty fallback is not defensive padding: without it a block with nothing to name would read
     // "This draft won't send: ." and tell him nothing at all about what to fix.
+    // #2630: words as a person counts them, which is what the brief is written in. Whitespace separated
+    // and nothing cleverer: the number is a rough ceiling on a judgment, so precision here would be
+    // precision about the wrong thing.
+    static func wordCount(_ body: String) -> Int {
+        body.split(whereSeparator: { $0.isWhitespace }).count
+    }
+
     static func blockMessage(blockers: [DraftIssue]) -> String {
         let what = blockers.map(\.label).joined(separator: " and ")
         return "This draft won't send: \(what.isEmpty ? "a blocking issue" : what)."
@@ -164,11 +180,25 @@ enum DraftCheck {
     // returning client ("If you'd like me to photograph this year's event as well, just say the word"),
     // which asks for nothing by this rule and is exactly right for who it went to. The first version of
     // this check applied to every body and flagged it, and that test is what caught it.
+    // #2630: the top of the brief's range, stated ONCE and read by the rule below, so
+    // `docs/prep-runbook.md` and this check cannot come to mean different numbers (L41).
+    static let directMessageWordCeiling = 80
+
+    // #2630: `routeIsHandDelivered` says this show's only way in is a contact form or a social profile,
+    // so the pitch is pasted by hand into a narrow column rather than sent to an inbox. Defaulted FALSE,
+    // which flags nothing, so every existing call site is unchanged and a caller that has not been told
+    // the route can never warn about one it never measured (L98, L11).
     static func findings(in body: String, title: String? = nil,
                          knownsDate: Bool = false, knownsVenue: Bool = false,
-                         isColdPitch: Bool = false) -> [DraftIssue] {
+                         isColdPitch: Bool = false,
+                         routeIsHandDelivered: Bool = false) -> [DraftIssue] {
         let text = body.lowercased()
         var issues: [DraftIssue] = []
+        // #2630: judged on the ROUTE, not on the body alone. The same 150 words are right for an inbox
+        // and wrong for a DM, which is why this cannot be a rule about length by itself.
+        if routeIsHandDelivered, wordCount(body) > directMessageWordCeiling {
+            issues.append(.tooLongForADirectMessage)
+        }
         if body.contains(Typography.emDash) { issues.append(.emDash) }
         // #1141: an exclamation point inside the show's OWN title (e.g. "...Glee!") is part of its name,
         // not enthusiasm the drafter added, so strip the known title before hunting for a stray "!". A

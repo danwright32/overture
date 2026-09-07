@@ -201,6 +201,11 @@ export const RUNBOOK_RULES: RunbookRule[] = [
   // marks a summary; this is the instruction that makes it possible to know which it is.
   { name: "say-whose-words-the-role-is",
     pattern: /Say\s+whose\s+words\s+the\s+role\s+is\s+\(`roleQuoted`/i },
+  // #2630: a show whose only route is a form or a DM gets a pitch written for that, not a 150 word email
+  // under a subject line nothing will ever show. The run knows which route it is writing for, because it
+  // found the routes itself one step earlier.
+  { name: "a-direct-message-is-not-an-email",
+    pattern: /A\s+direct\s+message\s+is\s+not\s+an\s+email/i },
   { name: "a-contact-with-no-name-gets-no-tier",
     pattern: /A\s+contact\s+with\s+no\s+`name`\s+gets\s+no\s+tier\s+at\s+all/i },
   { name: "rank-from-how-this-show-bills-them",

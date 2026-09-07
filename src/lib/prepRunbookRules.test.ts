@@ -22,6 +22,7 @@ describe("prep-runbook judgment rules are present (#591)", () => {
     expect(RUNBOOK_RULES.map((r) => r.name).sort()).toEqual([
       "a-contact-with-no-name-gets-no-tier",
       "a-cut-page-cannot-support-a-finished-negative",
+      "a-direct-message-is-not-an-email",
       "a-method-names-a-route",
       "a-name-match-alone-is-not-enough",
       "a-name-match-carries-the-flag",

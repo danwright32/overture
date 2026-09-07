@@ -406,6 +406,17 @@ struct QueueItem: Identifiable, Equatable, Sendable {
         }
     }
 
+    // #2630: is this show's only way in one Dan opens and writes on by hand (a contact form, or a social
+    // profile he DMs)? That is what decides whether the pitch is read in an inbox or in a narrow column
+    // on a phone, and so what shape it should be.
+    //
+    // Read from the row's OWN verdict, which is the same pair `FormPitch` is gated on, so the check that
+    // warns about a body's length and the control that records the pitch agree about how it will travel
+    // (L16).
+    var routeIsHandDelivered: Bool {
+        reachabilityResult == .contactFormOnly || reachabilityResult == .socialOnly
+    }
+
     var displayedContactAddresses: [DisplayedAddress] {
         let own = contacts.compactMap { c -> DisplayedAddress? in
             let email = (c.email ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
