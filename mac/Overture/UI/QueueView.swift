@@ -1316,6 +1316,13 @@ struct QueueView: View {
     func reachedOutRow(_ pair: (prospect: Prospect, recipient: Recipient, next: Date),
                        now: Date, since: Date?, sourceCalendars: [String: String]) -> some View {
         let p = pair.prospect, r = pair.recipient
+        // #3651: the row's identity as VALUES, taken here on the render path where the models are known
+        // good, so a control below captures this rather than the models themselves. A button closure
+        // outlives the body that made it, and deletes run on the main context with a window open
+        // (`LaunchMigrations` at launch, and `DuplicateContactMerge`, `SameNightTitleVariantMerge`,
+        // `DriftedRunMerge` and `ContactRefusal` throughout), so a captured model read at press time is a
+        // crash rather than a stale row.
+        let identity = ReachedOutSnapshot(show: p, contact: r, next: pair.next)
         return HStack(alignment: .top, spacing: OVSpacing.md) {
             VStack(alignment: .leading, spacing: 3) {
                 Text(p.groupName).font(OVType.groupName).foregroundStyle(OVColor.ink)
@@ -1452,7 +1459,7 @@ struct QueueView: View {
                 // #2395: the endings come from the one vocabulary, and from the half that is possible for
                 // this show, so nobody is offered "Date conflict" on a pitch they already sent.
                 CloseOutMenu(outcomes: ShowOutcome.menu(wasPitched: p.wasPitched)) { outcome in
-                    closeOut(p, as: outcome)
+                    closeOut(identity, as: outcome)
                 }
                 // #2711: the only thing Dan could record about a DM pitch was that it ENDED. A reply that
                 // arrives inside Instagram never reaches Gmail, so a conversation that had actually
@@ -1681,7 +1688,19 @@ struct QueueView: View {
     //
     // The snapshot is taken before the write for the same reason performSend takes one: once the ending
     // lands, the row is gone from the queue's answer and the card playing the exit cannot come from it.
-    private func closeOut(_ p: Prospect, as outcome: ShowOutcome) {
+    // #3651: resolved through the ONE shared resolver before anything is read off a model, against
+    // `QueueView`'s own live `prospects` and never the pass's captured scope, which is what `RenderData`'s
+    // own comment already required.
+    //
+    // A refusal is SAID, in the wording that names its own cause: the show being gone, the show having
+    // been merged or moved, and its contact having been struck off are three different things and only
+    // one of them is "could not find that show" (L11, L260).
+    private func closeOut(_ row: ReachedOutSnapshot, as outcome: ShowOutcome) {
+        let resolved = ReachedOutSnapshot.resolve(row, in: prospects)
+        guard case .found(let p, _) = resolved else {
+            feedback.acknowledge(resolved.sentence(org: row.org), tone: .warning)
+            return
+        }
         let snapshot = QueueItem(p)
         withAnimation(.easeOut(duration: 0.15)) {
             sendState.depart(snapshot.id, as: snapshot, because: .closedOut)
