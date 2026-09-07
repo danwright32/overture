@@ -136,6 +136,7 @@ A sentence written as a constant is read here at the file that RENDERS it, not o
     CancelledShootCopy.unblockTitle  "Not happening"
     CancelledShootCopy.unblockedLabel  "You said it isn't happening"
 `UI/DraftReviewView.swift`
+    ContactRoleCopy.characterisationNote  "Overture's words, not the page's"
     FormOutreachCopy.copyAndOpen  "Copy pitch and open form"
     FormOutreachCopy.didNotSend  "Didn't send"
     FormOutreachCopy.sentIt  "I sent it"
