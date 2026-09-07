@@ -64,6 +64,15 @@ destroy the drafts it has already paid for.
   you still read the text yourself. On a rental room this is the common case: measured across 54 Below's 61 listings on
   2026-08-11, 17 bill a producer and 16 of those name an individual, whom the app's rule does not accept
   as a company and leaves for you. See §1's route.
+  **The value may carry a role in front of the name, and the name is what you search** (#2681). The app
+  stores whatever the page put between the credit and the name, so a page reading "Produced and directed
+  by Showpeople Resident Artist Colby Thompson" hands you that whole phrase. Search the PERSON, here
+  "Colby Thompson", not the phrase: an over-qualified query is the failure that once buried a real
+  company under an unrelated foreign firm. It may also name TWO people joined by "and", and then both are
+  research targets, not one name to be trimmed down. The app deliberately does not cut the role off for
+  you, and that was measured rather than assumed: across 133 real archived listings the rule reads 13
+  credits, exactly ONE carries a role in front of the name, and FOUR are two people joined by "and", so
+  every mechanical rule tried on that corpus destroyed more real credits than it repaired.
   `presenterOnRecord` (v13, #2983) is the producing organisation THE APP ALREADY HOLDS for this show, by
   name. It is the same fact `onlyTheActIsNamed` is the flag for, and the two always agree: a name here
   means that flag is `false` or absent, and `onlyTheActIsNamed: true` means there is no name to give you.

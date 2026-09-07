@@ -90,6 +90,7 @@ describe("prep-runbook judgment rules are present (#591)", () => {
       "several-contacts-get-an-unnamed-hello",
       "soft-question-close-retired",
       "the-city-not-the-state",
+      "the-credit-may-carry-a-role-search-the-name",
       "the-page-may-name-a-company",
       "try-the-canonical-domain",
       "use-the-listing-handed-over",
