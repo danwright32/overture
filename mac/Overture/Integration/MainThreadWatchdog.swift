@@ -62,6 +62,9 @@ final class MainThreadWatchdog: @unchecked Sendable {
 
     private var timer: DispatchSourceTimer?
     private var sequence = 0
+    // #3635: whether a ping is still waiting on the main thread. Guarded by `keptLock`, which already
+    // serialises everything else this class mutates.
+    private var pingOutstanding = false
     private var kept = StallLog.Kept(records: [], highWater: nil, evicted: 0, belowFloor: 0)
     private let keptLock = NSLock()
 
@@ -101,7 +104,31 @@ final class MainThreadWatchdog: @unchecked Sendable {
 
     // ONE ping. Posted from the watchdog's own queue; the closure runs on the main thread and does nothing
     // but read a clock, so the measurement is the DELAY and not the work.
+    //
+    // AND ONLY ONE IN FLIGHT AT A TIME (#3635). This used to post on every interval whatever was already
+    // outstanding, so during a freeze the pings QUEUED, and when the main thread finally drained they all
+    // ran in the same instant and each recorded its own lateness. One freeze wrote a strictly decreasing
+    // series, one record per interval it lasted, so the freeze's DURATION became its record COUNT and
+    // every count taken from the log was inflated (L427). Measured on Dan's live Mac 2026-09-07: 611
+    // records for 129 real freezes, and the app told him in its own voice that it had stopped responding
+    // 611 times.
+    //
+    // Skipping is also what keeps the DRAIN cheap. A 40 second freeze used to leave 160 closures sitting
+    // on the main queue, every one of which ran at the exact moment the app was trying to catch up, which
+    // is work added to the worst moment there is by the thing measuring it.
+    //
+    // What is given up, said plainly: the skipped pings are not counted anywhere. The freeze's own
+    // duration is what this exists to record and the longest queued ping was always the only record
+    // carrying it, so nothing measured is lost; what is gone is a second, redundant estimate of the same
+    // quantity.
     private func ping() {
+        let claimed = keptLock.withLock { () -> Bool in
+            guard !pingOutstanding else { return false }
+            pingOutstanding = true
+            return true
+        }
+        guard claimed else { return }
+
         let posted = now()
         let sequence = nextSequence()
         DispatchQueue.main.async { [weak self] in
@@ -110,7 +137,14 @@ final class MainThreadWatchdog: @unchecked Sendable {
             let delay = ran.timeIntervalSince(posted) - self.interval
             // Back on the watchdog's queue to judge and write, because everything after this point must
             // be able to happen while the main thread is wedged.
-            self.queue.async { self.recordIfStalled(delay, sequence: sequence, at: ran) }
+            self.queue.async {
+                // RELEASED FIRST, and on every path. `recordIfStalled` returns early for a ping that was
+                // not late, and a release that sat after that guard would leave the flag set for the rest
+                // of the session on the very first on-time ping. The watchdog would then record one thing
+                // and go quiet, and silence is exactly what a healthy session looks like (L98).
+                self.keptLock.withLock { self.pingOutstanding = false }
+                self.recordIfStalled(delay, sequence: sequence, at: ran)
+            }
         }
     }
 

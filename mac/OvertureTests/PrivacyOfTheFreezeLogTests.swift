@@ -140,7 +140,18 @@ struct PrivacyOfTheFreezeLogTests {
         let body = try #require(SourceGuardHelper.bodyOfFunction(named: "ping", in: watchdog))
         // The main closure reads a clock and hops straight back off. Anything else in there is work on
         // the thread this exists to measure.
-        #expect(body.contains("self.queue.async { self.recordIfStalled("),
+        //
+        // Asserted as the RULE rather than as one spelling of it (L103). This used to match the exact
+        // text `self.queue.async { self.recordIfStalled(`, and #3635 added a line inside that same block
+        // (releasing the in-flight flag), which is the refinement the rule permits and the spelling did
+        // not: the guard went red while the property it protects was untouched.
+        let hop = "self.queue.async"
+        let hopAt = try #require(body.range(of: hop), "the ping never hops back to the watchdog's queue")
+        #expect(!body[body.startIndex..<hopAt.lowerBound].contains("recordIfStalled("),
+                Comment(rawValue: "the ping judges or writes BEFORE hopping back to the watchdog's own "
+                        + "queue, so that work happens on the main thread this exists to measure and "
+                        + "cannot run during the freeze it records (#3435)."))
+        #expect(body[hopAt.lowerBound...].contains("recordIfStalled("),
                 "the judging and the writing no longer happen on the watchdog's own queue")
         let recorded = try #require(SourceGuardHelper.bodyOfFunction(named: "recordIfStalled", in: watchdog))
         #expect(!recorded.contains("DispatchQueue.main"),
