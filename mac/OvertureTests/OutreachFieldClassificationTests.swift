@@ -31,6 +31,10 @@ struct OutreachFieldClassificationTests {
         "email": "the address, which is what a check FINDS rather than what a send records",
         "name": "who the address belongs to",
         "role": "their job title, from the page the address came off",
+        // #3078: whose words that job title is. A fact about how the LOOKUP described somebody, on
+        // the same side of the line as `role` itself and re-derived on every ingest, so it records
+        // nothing about anybody having been written to.
+        "roleIsACharacterisation": "whether the role above is the run's summary rather than a phrase the cited page carries",
         "prospect": "the show this contact belongs to",
 
         // How the address was found. This is the whole other side of the distinction: a found address is

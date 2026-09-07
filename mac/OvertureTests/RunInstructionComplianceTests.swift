@@ -200,15 +200,18 @@ struct RunInstructionComplianceTests {
         let a = RunInstructionCompliance.Measurement(
             contacts: 1, withATier: 2, declaredNoRouteFound: 3, routeNamedButNotSupplied: 4,
             citedAtHigh: 5, citedAtHighSayingWhetherItCorroborates: 6,
-            primaryContradictedByTheListing: 7, tieredWithNoName: 8)
+            primaryContradictedByTheListing: 7, tieredWithNoName: 8,
+            roleOnACitedPage: 9, roleSayingWhoseWordsItIs: 10)
         let b = RunInstructionCompliance.Measurement(
             contacts: 10, withATier: 20, declaredNoRouteFound: 30, routeNamedButNotSupplied: 40,
             citedAtHigh: 50, citedAtHighSayingWhetherItCorroborates: 60,
-            primaryContradictedByTheListing: 70, tieredWithNoName: 80)
+            primaryContradictedByTheListing: 70, tieredWithNoName: 80,
+            roleOnACitedPage: 90, roleSayingWhoseWordsItIs: 100)
         #expect(a + b == RunInstructionCompliance.Measurement(
             contacts: 11, withATier: 22, declaredNoRouteFound: 33, routeNamedButNotSupplied: 44,
             citedAtHigh: 55, citedAtHighSayingWhetherItCorroborates: 66,
-            primaryContradictedByTheListing: 77, tieredWithNoName: 88))
+            primaryContradictedByTheListing: 77, tieredWithNoName: 88,
+            roleOnACitedPage: 99, roleSayingWhoseWordsItIs: 110))
         // The identity, so a run of no shows reports the same nothing measuring an empty pool did.
         #expect(RunInstructionCompliance.empty + a == a)
     }
@@ -249,6 +252,39 @@ struct RunInstructionComplianceTests {
         var c = contact(tier: nil)
         c.name = nil
         #expect(RunInstructionCompliance.measure(contacts: [c]).tieredWithNoName == 0)
+    }
+
+    // #3078: a role resting on a cited page, with nobody saying whose words it is.
+    @Test func aRoleOnACitedPageThatNeverSaysWhoseWordsItIsIsCounted() {
+        var c = contact()
+        c.role = "Playwright"
+        c.sourceUrl = "https://example.org/bio"
+        let m = RunInstructionCompliance.measure(contacts: [c])
+        #expect(m.roleOnACitedPage == 1)
+        #expect(m.roleSayingWhoseWordsItIs == 0)
+        #expect(m.notes.contains { $0.contains("whether the role is quoted") })
+    }
+
+    @Test func aRunThatSaysWhoseWordsItIsIsNotAccused() {
+        var c = contact()
+        c.role = "Music Director"
+        c.sourceUrl = "https://example.org/bio"
+        c.roleQuoted = true
+        let m = RunInstructionCompliance.measure(contacts: [c])
+        #expect(m.roleSayingWhoseWordsItIs == 1)
+        #expect(!m.notes.contains { $0.contains("whether the role is quoted") })
+    }
+
+    // A role with NO page has nothing to be quoted from, so it is not in the population at all.
+    // Counting it would put the ordinary case in the denominator and make adoption look worse than
+    // it is (L139), and 96 of the 270 roles in the archives are a bare "performer".
+    @Test func aRoleRestingOnNoPageIsNotInThePopulation() {
+        var c = contact()
+        c.role = "performer"
+        c.sourceUrl = nil
+        let m = RunInstructionCompliance.measure(contacts: [c])
+        #expect(m.roleOnACitedPage == 0)
+        #expect(!m.notes.contains { $0.contains("whether the role is quoted") })
     }
 
     // MARK: - The refusal has ONE definition (L16)

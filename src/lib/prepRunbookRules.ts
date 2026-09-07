@@ -197,6 +197,10 @@ export const RUNBOOK_RULES: RunbookRule[] = [
   // being produced.
   // #2625: every tier answers a question about a PERSON, so an address with nobody behind it gets none.
   // The app drops one at ingest; this is the instruction that stops it being produced.
+  // #3078: a role a run SUMMARISED and a role the page SAID reached the card as the same words. The app
+  // marks a summary; this is the instruction that makes it possible to know which it is.
+  { name: "say-whose-words-the-role-is",
+    pattern: /Say\s+whose\s+words\s+the\s+role\s+is\s+\(`roleQuoted`/i },
   { name: "a-contact-with-no-name-gets-no-tier",
     pattern: /A\s+contact\s+with\s+no\s+`name`\s+gets\s+no\s+tier\s+at\s+all/i },
   { name: "rank-from-how-this-show-bills-them",

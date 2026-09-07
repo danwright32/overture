@@ -227,6 +227,25 @@ struct PrepContact: Codable, Equatable, Sendable {
     // the rule is dormant until runs emit it, which `PerformerCorroborationAdoption` measures rather than
     // leaving to be discovered (L128).
     var performanceCorroborated: Bool?
+    // v12 (#3078): is `role` a phrase the page named in `sourceUrl` actually carries, or your own
+    // summary of what it says?
+    //
+    // `role` is unbounded free text the app derives nothing from, and nothing asked whether the word the
+    // run chose is on the page it cited, so a paraphrase reached the card with the same authority as a
+    // quote. The measured case, 2026-08-17: `role: "Playwright"` for a performer whose cited page says
+    // "an actor and writer" and carries the word once, inside the NAME OF A THEATRE in an unrelated
+    // regional credit.
+    //
+    // DECLARED rather than measured, which is #3078's open question answered by #2269 closing: every
+    // `WebFetch` result a run receives is PROSE written by a small model against the page, so the run
+    // never holds the page and there is nothing at ingest to check a role against.
+    //
+    // TRUE is the unremarkable value and ABSENT is what every contact written before this carries and
+    // what a run with nothing to declare sends, so absence reads as "nobody has said" and changes
+    // nothing. Reading it as a characterisation would mark 270 of the 447 contacts in the archives at
+    // once (L98, L128). The rule is dormant until runs emit it, which `RunInstructionCompliance`
+    // measures rather than leaving to be discovered.
+    var roleQuoted: Bool?
 }
 
 struct PrepDraft: Codable, Equatable, Sendable {
@@ -256,7 +275,7 @@ enum PrepResultsDecoder {
     // for exactly the reason the paragraph above gives.
     // #2912 raised this to 10 with the contact `nameMatchOnly` field, IN THE SAME COMMIT as
     // `fixtures/prep-results/v10.json`, for exactly the reason the paragraph above gives.
-    static let supportedVersion = 11
+    static let supportedVersion = 12
     static let minimumVersion = 1
 
     static func decode(_ data: Data) throws -> PrepResults {
