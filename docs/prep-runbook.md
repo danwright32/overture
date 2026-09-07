@@ -117,7 +117,7 @@ destroy the drafts it has already paid for.
   must not guess between (no history there, no history imported at all, or a Carnegie show, where
   the tenure credential already covers that exact room). See §2's rule on saying Dan knows the room.
 - **Write:** the RESULTS FILE the prompt names
-  (`PrepResults` version `11`: `results[]` each with `naturalKey`, `contacts[]`, `draft`, an
+  (`PrepResults` version `12`: `results[]` each with `naturalKey`, `contacts[]`, `draft`, an
   optional `alreadyCoveredNote` (see the already-covered fit-risk flag in §1 below), an
   optional `emptyReason` REQUIRED on any entry whose `contacts` is absent, see "Say WHY an
   entry has no contacts" in §1, and (v8, #1824) an optional `showSummary` with a
@@ -130,7 +130,8 @@ destroy the drafts it has already paid for.
   an optional `nameMatchOnly` saying the only thing tying this route to that party is the NAME,
   see step 3(c) in §1, and (v11, #2895) an optional `performanceCorroborated` saying whether the page
   in `sourceUrl` ties that PERSON to THIS performance, see "Say whether the page you cited
-  corroborates the performance" in §1. Emit either
+  corroborates the performance" in §1, and (v12, #3078) an optional `roleQuoted` saying whether `role`
+  is a phrase that page carries or your own summary of it. Emit either
   the act OR its named lead performer(s), never both, see §1 below, plus at most one
   real presenting org. A show has ONE letter, `draft.body`, addressed to whoever its
   contacts turn out to be (see §2's "Address the one letter to the people it reaches").
@@ -692,6 +693,21 @@ A page you cannot corroborate against is not a failure and is not a reason to em
 contact with `confidence: "low"` and `performanceCorroborated: false`, exactly as the rule above already
 says. Saying nothing is also allowed and is what an older run did, so it changes nothing, but it means
 the check cannot help you.
+
+**Say whose words the role is (`roleQuoted`, v12, #3078).** On any contact carrying BOTH a `role` and a
+`sourceUrl`, add `roleQuoted: true` when the role is a phrase that page actually carries, and
+`roleQuoted: false` when it is your own summary of what the page says. Both are legitimate and neither is
+better: a page that says "she produces and directs the company's season" supports `Producer` perfectly
+well as YOUR words, and the app is not asking you to stop summarising. It is asking which it is.
+
+It is the OTHER HALF of the same live case. `performanceCorroborated` asks whether the page ties that
+person to this performance, and it is not the question of whether the page supports the ROLE: on
+2026-08-17 the run answered the first and nobody asked the second, and `Playwright` reached the card
+reading exactly like a quote. Overture prints the role either way, because a role you summarised is
+still useful, and adds "Overture's words, not the page's" when you say it is yours.
+
+Saying nothing is allowed and is what every older run did, so it changes nothing and no role is marked.
+It also means Dan cannot tell your summary from a quote, which is the whole cost.
 
 **`confidence` and `nameMatchOnly` (v10, #2912) answer two different questions, and only one of them
 is about the PERSON.** `confidence` says how good the ROUTE is, and it is close to mechanical: a form

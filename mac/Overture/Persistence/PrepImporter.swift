@@ -51,7 +51,8 @@ enum PrepImporter {
         var instructionCompliance = RunInstructionCompliance.Measurement(
             contacts: 0, withATier: 0, declaredNoRouteFound: 0, routeNamedButNotSupplied: 0,
             citedAtHigh: 0, citedAtHighSayingWhetherItCorroborates: 0,
-            primaryContradictedByTheListing: 0, tieredWithNoName: 0)
+            primaryContradictedByTheListing: 0, tieredWithNoName: 0,
+            roleOnACitedPage: 0, roleSayingWhoseWordsItIs: 0)
     }
 
     // Fail loud, not silent (#754). The performer matcher is only as good as the two files it reads,
@@ -473,6 +474,10 @@ enum PrepImporter {
                 // #2912: the run's own declaration that only the NAME matched, kept so the card can mark
                 // the handle as a guess and so it never counts as a route (Prospect.socialRouteURLs).
                 recipient.nameMatchOnly = c.nameMatchOnly == true
+                // #3078: whose words the role is, so the card can keep it and stop presenting it as
+                // something the page said.
+                recipient.roleIsACharacterisation = ContactRoleClaim.isCharacterisation(
+                    roleQuoted: c.roleQuoted, role: c.role)
                 // #1866: and the fact that it did, so "Unverified email found" can say which of the two
                 // things put it there. Written here rather than derived at read time because the guard
                 // rewrites the confidence in place: once `high` has become `low` the row no longer holds
@@ -638,6 +643,12 @@ enum PrepImporter {
         // `form_or_dm` carries. Latching it would also leave the mark on a row whose next check finally
         // read a real address off a page, holding a genuinely verified find down to `low` forever.
         r.nameMatchOnly = c.nameMatchOnly == true
+        // #3078: re-derived from THIS run for `nameMatchOnly`'s reason directly above, and judged
+        // against the role the row ENDS UP holding rather than the incoming one, because `role` falls
+        // back a few lines up: a run that corrects only an address must not leave the note describing a
+        // role it never spoke about.
+        r.roleIsACharacterisation = ContactRoleClaim.isCharacterisation(roleQuoted: c.roleQuoted,
+                                                                       role: r.role)
         r.contactConfidenceRaw = ContactConfidenceGuard.confidence(raw: r.contactConfidenceRaw,
                                                                    sourceURL: r.contactSourceURL,
                                                                    nameMatchOnly: r.nameMatchOnly,
