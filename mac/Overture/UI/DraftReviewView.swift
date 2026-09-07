@@ -371,7 +371,11 @@ struct DraftReviewView: View {
                                            // #2531: the ask rule is a COLD pitch rule. A returning client
                                            // reads a different register, and the real email Dan sent one
                                            // asks for nothing by this rule and is right not to.
-                                           isColdPitch: item.priorRelationship == "none")
+                                           isColdPitch: item.priorRelationship == "none",
+                                           // #2630: whether this pitch is pasted by hand into a narrow
+                                           // column rather than sent to an inbox, which is what decides
+                                           // whether an email-length body is too long.
+                                           routeIsHandDelivered: item.routeIsHandDelivered)
                 .filter { !$0.isBlocking })
         }
     }
