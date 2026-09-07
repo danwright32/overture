@@ -52,13 +52,14 @@ macOS may relocate this into the overflow menu or drop it entirely at a narrow w
 
 A sentence written as a constant is read here at the file that RENDERS it, not only at the file that declares it. That is the case the rest of this document and `copy-inventory.md` cannot show: moving an existing sentence onto a new screen changes no literal anywhere, so it produces no diff and gets no cold read, which is exactly when placement most needs reading.
 
-51 files render a sentence declared as a constant.
+53 files render a sentence declared as a constant.
 
 `App/OvertureApp.swift`
     StoreLaunchOutcome.defaultUnavailableReason  "Overture's data is unavailable."
 `App/RootView.swift`
     CancelledReadCopy.title  "Scout stopped"
     RunProgressCopy.diedLineForReplies  "Drafting replies"
+    StruckAddressCopy.heading  "Addresses you removed"
 `Domain/DebugStaging.swift`
     SendIdentity.danWright  "Dan Wright"
 `Domain/EmptyState.swift`
@@ -98,6 +99,9 @@ A sentence written as a constant is read here at the file that RENDERS it, not o
 `Domain/SendGate.swift`
     GmailCopy.notConnected  "Connect Gmail first"
     SendGate.noAddressReason  "No email address for this contact"
+`Domain/StruckAddressListing.swift`
+    StruckAddressCopy.unnamedOrganisation  "an organisation no show names any more"
+    StruckAddressCopy.unnamedShow  "a show no longer in the queue"
 `Domain/UpdateAttempt.swift`
     BuildFreshnessCopy.dismiss  "Not now"
     BuildFreshnessCopy.update  "Update Overture"
@@ -294,6 +298,10 @@ A sentence written as a constant is read here at the file that RENDERS it, not o
 `UI/StoreShrinkNoticeSheet.swift`
     StoreShrinkCopy.dismiss  "Continue anyway"
     StoreShrinkCopy.reveal  "Show me the backups"
+`UI/StruckAddressesView.swift`
+    StruckAddressCopy.everyShowBy  "every show by"
+    StruckAddressCopy.heading  "Addresses you removed"
+    StruckAddressCopy.restoreControl  "Put back"
 `UI/UpdateFailureSheet.swift`
     UpdateAttemptCopy.title  "Overture could not update"
 `UI/WatchlistMutations.swift`

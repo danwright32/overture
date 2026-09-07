@@ -518,9 +518,14 @@ final class Recipient {
     // The stable join + dedupe key: the canonicalized email when present, else the form URL (so a
     // form-only contact survives an email being added later), else nil when there is neither and so
     // nothing to make a recipient from.
+    // #2408: the prefix that marks a handle as a LINK rather than an address, named rather than written
+    // out at each use. Two spellings of one marker is how a reader comes to strip a prefix the writer
+    // does not add (L263).
+    static let formHandlePrefix = "form:"
+
     static func makeId(email: String?, formURL: String?) -> String? {
         if let email, !email.isEmpty { return ReplyDetection.email(from: email) }
-        if let formURL, !formURL.isEmpty { return "form:" + formURL }
+        if let formURL, !formURL.isEmpty { return formHandlePrefix + formURL }
         return nil
     }
 

@@ -139,20 +139,40 @@ struct ToolbarConsolidationGuardTests {
         #expect(!rootView.isEmpty)
         let occurrences = rootView.components(separatedBy: "ToolbarHoverLabel(").count - 1
         // Dismissed, Due, What converts, Voice guidance, Sources (#800), Days off (#901), Skipped towns
-        // (#1118), Presenters (#1731), the merged Scout/Prep idle state, the disconnected-Gmail CTA, and
-        // the OmniFocus menu's idle state: eleven call sites.
+        // (#1118), Presenters (#1731), Addresses you removed (#2408), the merged Scout/Prep idle state,
+        // the disconnected-Gmail CTA, and the OmniFocus menu's idle state: twelve call sites.
         //
         // The number is pinned deliberately rather than loosened to "at least one". SwiftUI's toolbar
         // builder tops out at ten CHILDREN and the row already overflows into the macOS ">>" menu, so a
         // new button is never free: it pushes something else towards being hidden. Making this test fail
         // is the point, because it forces whoever adds one to decide what it displaces.
-        #expect(occurrences == 11)
+        //
+        // #2408 is the twelfth, and it DID displace something rather than being waved through: Presenters
+        // moved out of the "what Overture is working from" group and into the settings-ish group below,
+        // where it will be the one that falls into the overflow. Dan's call, 2026-09-07, on being shown
+        // that the row already overflows and asked which of the two should go: Presenters is read-only
+        // evidence he looks at occasionally (the sheet mutates nothing at all, his 2026-07-29 decision),
+        // and the addresses he removed is a list with an action on it.
+        #expect(occurrences == 12)
     }
 
     // #901 (Dan's walk, 2026-07-14): Days off is ordered AHEAD of the settings-ish buttons (What
     // converts, Voice guidance), so if the toolbar ever overflows into the macOS ">>" menu the brand-new
     // Days off button is not the first thing hidden. The daily-driver and "what Overture works from"
     // buttons come first; the settings views can fall into overflow instead.
+    // #2408: and Presenters is now ordered BEHIND them, which is the displacement itself asserted rather
+    // than left as a comment. Without this the move could be quietly undone and the twelfth button would
+    // go back to pushing whatever the window width happened to choose.
+    @Test func presentersIsOrderedBehindTheAddressesDanRemoved() {
+        #expect(!rootView.isEmpty)
+        guard let struck = rootView.range(of: "showStruckAddresses = true"),
+              let presenters = rootView.range(of: "showOrganisations = true") else {
+            Issue.record("expected both the removed-addresses and Presenters buttons in the toolbar")
+            return
+        }
+        #expect(struck.lowerBound < presenters.lowerBound)
+    }
+
     @Test func daysOffIsOrderedAheadOfTheSettingsButtons() {
         #expect(!rootView.isEmpty)
         guard let daysOff = rootView.range(of: "showDaysOff = true"),

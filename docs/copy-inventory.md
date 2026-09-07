@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1513 sentences**.
+Every sentence Overture can say to Dan: **1521 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -14,7 +14,7 @@ What is not, and why:
   sentences under tokens nobody reads.
 - **Nothing, if it is written as two literals joined with `+`.** Those ARE joined here, into the
   one sentence the running app says (#3155). What is still only part of what Dan reads is a
-  sentence carrying a VALUE: 547 of the 1513 below hold a
+  sentence carrying a VALUE: 549 of the 1521 below hold a
   `\(...)` where a number or a name goes, so what is printed is the template. They are counted
   here rather than listed again, because the hole is visible in the line itself; what was missing
   was any statement of how much of this document is templates.
@@ -121,7 +121,7 @@ What is not, and why:
 - `UI/DraftSignaturePreview.swift`: renders the outbound email's own HTML (body + Gmail signature), not Overture's voice (#1203)
 - `UI/DraftSignaturePreview.swift`: browser-side measuring script, not a sentence Overture says to Dan (#915)
 
-## The same sentence, said in more than one place (56)
+## The same sentence, said in more than one place (57)
 
 Two copies of a sentence will drift. #843 owns fixing these.
 
@@ -200,6 +200,9 @@ Two copies of a sentence will drift. #843 owns fixing these.
 - "Nothing matches this filter"
   - `Domain/EmptyState.swift`
   - `Domain/EmptyState.swift`
+- "Put back"
+  - `Domain/ClientCoverage.swift`
+  - `Domain/StruckAddressListing.swift`
 - "Reached out"
   - `App/ActionFeedback.swift`
   - `Domain/AgentRoster.swift`
@@ -519,6 +522,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/LeadIntakeModel.swift`
 "Added \(who). \(totalCount) recipient\(totalCount == 1 ? "" : "s") on \(org) now."
     `App/ActionFeedback.swift`
+"Addresses you removed"
+    `Domain/StruckAddressListing.swift`
 "After the show"
     `UI/FollowUpsView.swift`
 "Agency-routed showcase rental, the dead zone that rarely converts."
@@ -1698,6 +1703,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/DraftCheck.swift`
 "Put back"
     `Domain/ClientCoverage.swift`
+    `Domain/StruckAddressListing.swift`
 "Put it back"
     `Domain/CancelledShootCopy.swift`
 "Put this prospect back in the queue as undecided"
@@ -2605,6 +2611,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/StageEmptyState.swift`
 "You have already been in touch with them about this and answered their reply."
     `Domain/OmniFocusSync.swift`
+"You haven't removed any addresses. Removing one on a card puts it here, so you can put it back."
+    `Domain/StruckAddressListing.swift`
 "You linked their reply. It's waiting on you."
     `Domain/ProposedConversation.swift`
 "You linked this conversation. Overture didn't email them."
@@ -2613,6 +2621,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/FormOutreach.swift`
 "You opened their profile \(when). Did you send it?"
     `Domain/FormOutreach.swift`
+"You removed these before a run, so Overture doesn't research them or write to them. Put one back and the next run can use it again."
+    `Domain/StruckAddressListing.swift`
 "You said it isn't happening"
     `Domain/CancelledShootCopy.swift`
 "You set this: \(what)"
@@ -2709,6 +2719,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/StageEmptyState.swift`
 "\(Plural.count(count, "show")) you've pitched"
     `Domain/StageEmptyState.swift`
+"\(StruckAddressCopy.everyShowBy) \(entry.scopeName)"
+    `UI/StruckAddressesView.swift`
 "\(a) vs \(b) "
     `UI/ExperimentReportView.swift`
 "\(added) from watched calendars"
@@ -2839,6 +2851,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/OmniFocusSync.swift`
 "\(found) times"
     `Domain/RunBoundaryViolations.swift`
+"\(handle) is back. The next run can research and write to it again"
+    `App/ActionFeedback.swift`
 "\(i.followUpsDue) due"
     `Domain/AgentRoster.swift`
 "\(i.followUpsDue) due, somebody may have answered"
@@ -3167,6 +3181,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/HandoffDecodeFailure.swift`
 "a required field is missing: \(path(context, adding: key))"
     `Domain/HandoffDecodeFailure.swift`
+"a show no longer in the queue"
+    `Domain/StruckAddressListing.swift`
 "a show that wrote back"
     `UI/QueueView+Model.swift`
 "a show you booked in Overture"
@@ -3187,6 +3203,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/OrganisationListing.swift`
 "all the same title"
     `Domain/OrganisationListing.swift`
+"an organisation no show names any more"
+    `Domain/StruckAddressListing.swift`
 "another show"
     `Domain/SelfBookingConflict.swift`
 "at \(v)"
@@ -3219,6 +3237,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/QueueView+Model.swift`
 "event streams NOT archived (\(count) found): \(reason)"
     `App/PrepRunArchive.swift`
+"every show by"
+    `Domain/StruckAddressListing.swift`
 "gave it up"
     `App/ActionFeedback.swift`
 "gave them up"
