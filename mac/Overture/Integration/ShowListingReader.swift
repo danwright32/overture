@@ -83,7 +83,12 @@ enum ShowListingReader {
         guard !text.isEmpty else { return ShowListing(status: ShowListing.unreadable, url: raw) }
 
         if text.count > textLimit {
-            return ShowListing(status: ShowListing.read, url: raw, text: cut(text), truncated: true)
+            // #2698: the count is taken from the two halves rather than computed from `textLimit`, so it
+            // is a measurement of what this page actually lost rather than an arithmetic restatement of
+            // the budget. `cut` backs up to a word boundary, so the two differ by up to 40 characters.
+            let kept = cut(text)
+            return ShowListing(status: ShowListing.read, url: raw, text: kept, truncated: true,
+                               droppedCharacters: text.count - kept.count)
         }
         return ShowListing(status: ShowListing.read, url: raw, text: text)
     }

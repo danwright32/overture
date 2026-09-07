@@ -559,8 +559,20 @@ reader were a performing arts organisation. Dan's call was to render it app-side
 found a detached run auto-approving everything.
 
 Three states, and the runbook is told all three because the honest sentence differs for each: `read` (with
-the page's bounded readable `text`, plus `truncated` when it had to be cut), `unreadable` (the page did not
-load or carried nothing), and ABSENT (there was no page to look at, or a file written before this field).
+the page's bounded readable `text`, plus `truncated` and `droppedCharacters` when it had to be cut),
+`unreadable` (the page did not load or carried nothing), and ABSENT (there was no page to look at, or a file
+written before this field).
+
+#2698 adds `droppedCharacters`, how much readable text fell past that cut, written ONLY alongside
+`truncated` and absent everywhere else. Additive and optional, so no version bump is forced and every queue
+file written before it still decodes with the field missing. It exists because `truncated: true` says the
+page continued and nothing else, so a producing credit that fell past the cut was indistinguishable, from
+inside the run, from a page that never named one, and the run then reported "no producer credited" with
+complete confidence (the #2554 failure). Absent rather than zero on a page that fitted: zero is a real
+measurement meaning the cut dropped nothing, and a page nobody cut was never measured at all (L98, L11).
+Written by `ShowListingReader.read`, the only writer of `text` and `truncated`; read by
+`docs/prep-runbook.md` §2, which is told it may not report a finished negative about a page it only half
+holds.
 The app deliberately hands over the page's TEXT rather than trying to pick "the description" out of it:
 roughly a third of the store's listing URLs point at a season calendar or an index rather than one show's
 own page, and the run, which holds the show's name, date and venue, is the only side that can tell. Read by

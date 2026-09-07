@@ -194,6 +194,17 @@ struct ShowListing: Codable, Equatable, Sendable {
     // description that fell past the cut is never reported as a page that published none (L11: a message
     // may claim only what its check actually measured). Absent means the whole page is here.
     var truncated: Bool? = nil
+    // #2698: HOW MUCH was lost at that cut, in characters of readable text. Written only where
+    // `truncated` is set, and absent everywhere else, which is deliberate: zero is a real measurement
+    // meaning the cut dropped nothing, and a page nobody cut was never measured at all, so writing zero
+    // there would make the emptiest possible non-answer read as a finding (L98, L11).
+    //
+    // `truncated: true` on its own says the page continued and nothing more, so from inside the run a
+    // producing credit that fell past the cut is indistinguishable from a page that never named one, and
+    // the run then reports "no producer credited" with complete confidence. That is the #2554 failure.
+    // This does not tell the run WHAT it lost, and deliberately does not claim to: what it converts is an
+    // unqualified negative into one that carries its own scope.
+    var droppedCharacters: Int? = nil
 
     static let read = "read"
     static let unreadable = "unreadable"

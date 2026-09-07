@@ -804,6 +804,35 @@ already drifting from the Swift version it mirrored.
   streams, one stream carries several shows, so the calls are the whole chunk's rather than that show's
   and it says so: per item attribution is milestone 61 Phase 1.3 and does not exist yet.
 
+- **Asking whether the producer rule's calibration has fallen behind the live feed:
+  `scripts/check-producer-corpus-drift.sh` (#2680).** #2554 pinned the producer rule's boundary against
+  the real VenueTix feed, committed as `fixtures/venuetix-supertitles/2026-08-13.json`, and
+  `SuperTitleCalibrationTests` asserts the exact set of phrases the rule calls a producer. Nothing
+  re-measured, so that guard would have stayed green against August's world indefinitely, which is L48
+  and L56 exactly: a rule calibrated on a snapshot and then trusted as a contract.
+  It fetches the feed with the venue's own Origin header (the same one `VenueTixCalendar.feedRequest`
+  sends), and judges both sides with the app's OWN rule, compiled straight from
+  `mac/Overture/Domain/ProducerShapedName.swift` rather than reimplemented in the script, because a
+  second definition of the producer rule drifts in whichever direction flatters the person who wrote it
+  (L107).
+  It NEVER rewrites the fixture, on `docs/copy-inventory.md`'s rule since #1994: a new corpus is always
+  a change somebody read, and a check that regenerates its own subject defends whatever it produced.
+  Read its answer correctly. Three exit codes, and the third is the one that matters: `2` is UNMEASURED
+  (the fetch failed, the feed did not parse, it carried events but no supertitle at all, the corpus is
+  missing, or the rule would not compile), because a failed fetch and a feed that changed nothing leave
+  the same empty difference (L98, L11). `1` is DRIFTED and is ADVISORY: the feed turns over every week,
+  so a gate on ordinary churn has its threshold raised until it catches nothing (L93). `0` is in step.
+  **Read the BOUNDARY MOVED block, not just the counts.** Arrivals and departures are ordinary; a
+  supertitle the rule now calls a producer that the calibration does not carry is the thing to look at,
+  because silent over-matching is the failure this area actually has. On its first real run, 2026-09-06,
+  the corpus was 24 days old: 28 supertitles had arrived, 42 had gone, and 13 of the arrivals the rule
+  accepts (three explicit `Produced by` credits, eight possessive self-producers and two companies).
+  The names themselves are deliberately not repeated here: they are real people's, this repository is
+  public, and the fixture is where that evidence already lives (L155).
+  It is OPT IN and not in `scripts/test-all.sh`: it reaches the network. Its judging half rides along on
+  every push through `scripts/check-producer-corpus-drift.test.sh`, which drives all three outcomes
+  through the `OVERTURE_VENUETIX_FEED_FILE` seam without a single request.
+
 - **Asking whether a fixture sized against the live store has fallen behind it:
   `scripts/check-fixture-corpus-drift.sh` (#3426).** Two cost guards sized their corpus with a number
   measured against the live store once and never moved, and by 2026-08-31 both were exercising a store
