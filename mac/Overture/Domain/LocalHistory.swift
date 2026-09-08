@@ -109,6 +109,24 @@ enum LocalHistory {
             if p.outcome == .replied || p.recipients.contains(where: \.replied) {
                 return HistoryRecord(groupName: p.groupName, status: "warm", origin: .overtureActivity)
             }
+            // #3674: a bounce teaches NOTHING, and it is the only PITCHED ending that needs a branch
+            // here to say so. Every other one either records an answer or falls through to "contacted"
+            // truthfully. A bounced show carries a `sentAt`, so without this line it would be filed as
+            // "contacted", which is a claim about the ORG's prior relationship with Dan and is false:
+            // nobody there received anything. It is `noWayToReachThem`'s situation (#2684) reached by a
+            // different route, Overture having a route that turned out to be wrong rather than none at
+            // all, and it must teach the same nothing.
+            //
+            // BELOW the warm branch on purpose, never above it. A bounce is per ADDRESS, so a show whose
+            // second contact replied is warm on that reply, which is the strongest signal the history
+            // carries and the one this must not take away.
+            //
+            // What it changes today is only the record, not the ranking: `Ranker.priorPoints` weights
+            // "contacted" and no record alike at 0. What it protects is every later reader of the
+            // history, and #16's count of shows lost to a bad address, from repeating a false fact.
+            // `BouncedOutcomeTests` asserts this against its three neighbours in one run, so a later
+            // tidy up into "contacted" or either lost branch goes red.
+            if p.showOutcome == .emailBounced { return nil }
             if p.sentAt != nil {
                 return HistoryRecord(groupName: p.groupName, status: "contacted", origin: .overtureActivity)
             }

@@ -138,12 +138,15 @@ struct ClosingAPitchOutFromTheRowTests {
     // the reader-side mapping that replaced the contact-level copy this phase removed.
     // #2863 added a sixth, "They said the price was too high", which reads as `lostDoorOpen`: an org that
     // wanted the work and could not pay this time is not one to stop pitching.
-    @Test func themenuOffersTheSixWaysAPitchEnds() {
+    // #3674 added a seventh, "The email bounced", which reads as `lostDoorOpen` for the sharper version of
+    // the same reason: nobody refused anything, the message did not arrive.
+    @Test func themenuOffersTheSevenWaysAPitchEnds() {
         #expect(ShowOutcome.pitched.map(\.label)
-                == ["Booked", "Never heard back", "They said not now", "They said no",
+                == ["Booked", "Never heard back", "The email bounced", "They said not now", "They said no",
                     "They said the price was too high", "I turned them down"])
         #expect(ShowOutcome.pitched.map(\.asPerformanceStatus)
-                == [.booked, .lostDoorOpen, .lostDoorOpen, .lostNotInterested, .lostDoorOpen, .stoodDown])
+                == [.booked, .lostDoorOpen, .lostDoorOpen, .lostDoorOpen, .lostNotInterested,
+                    .lostDoorOpen, .stoodDown])
     }
 
     // MARK: - recording it

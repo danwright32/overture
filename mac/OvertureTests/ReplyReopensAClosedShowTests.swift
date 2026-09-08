@@ -39,7 +39,7 @@ struct ReplyReopensAClosedShowTests {
         return p
     }
 
-    // MARK: - The one ending a reply refutes
+    // MARK: - The two endings a reply refutes
 
     @Test func areplyAfterNeverHeardBackClearsTheEnding() {
         let p = show(closedAs: .neverHeardBack, at: closedAt)
@@ -48,12 +48,27 @@ struct ReplyReopensAClosedShowTests {
         #expect(p.showOutcomeAt == nil, "the ending is gone and its stamp is not")
     }
 
+    // #3674. Dan's call, 2026-09-07, asked directly with both readings in front of him: a bounce reopens
+    // too. The ending's stated purpose is "an indicator I'm never going to hear back", so a reply is that
+    // being proved wrong, and it covers the case the bounce flag is per ADDRESS for, a show with two
+    // contacts where one bounced and the other person answers.
+    @Test func areplyAfterABouncedEmailClearsTheEnding() {
+        let p = show(closedAs: .emailBounced, at: closedAt)
+        #expect(p.reopenOnReply(at: later))
+        #expect(p.showOutcome == nil, "the show still reads as bounced after somebody wrote back")
+        #expect(p.showOutcomeAt == nil, "the ending is gone and its stamp is not")
+    }
+
     // MARK: - The endings a reply does not refute
 
     // Exhaustive over the vocabulary rather than a sample, so an ending added later is JUDGED here
-    // rather than defaulting into being clearable (L113). Only the one Dan named may go.
+    // rather than defaulting into being clearable (L113). Only the two Dan named may go.
+    //
+    // The pair is written out LITERALLY rather than derived from `ReplyReopen.endingIsRefuted`, which is
+    // the rule under test: a guard whose expected value and actual value come from one lookup can only
+    // ever prove that lookup is self-consistent (L70).
     @Test func noOtherEndingIsEverClearedByAReply() {
-        for outcome in ShowOutcome.allCases where outcome != .neverHeardBack {
+        for outcome in ShowOutcome.allCases where outcome != .neverHeardBack && outcome != .emailBounced {
             let p = show(closedAs: outcome, at: closedAt)
             #expect(!p.reopenOnReply(at: later),
                     Comment(rawValue: "a reply cleared \(outcome.rawValue), which records something that happened"))

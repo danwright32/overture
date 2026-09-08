@@ -20,6 +20,14 @@ enum ReplyReopen {
     static func endingIsRefuted(by outcome: ShowOutcome) -> Bool {
         switch outcome {
         case .neverHeardBack: return true
+        // #3674. Dan's call, 2026-09-07, asked directly with both readings in front of him. His stated
+        // purpose for the ending is "an indicator I'm never going to hear back", and a reply is that
+        // being proved wrong. It also covers the case the bounce flag is PER CONTACT for: a show with
+        // two addresses where one bounced and the other person answers.
+        //
+        // It is the one place this parts company with the general rule above. The bounce did happen;
+        // what it was recorded to MEAN did not, which is the same thing that is true of a silence.
+        case .emailBounced: return true
         case .booked, .theySaidNo, .theySaidNotNow, .theySaidPriceTooHigh, .turnedThemDown,
              .dateConflict, .hadPaidWork, .pitchingOtherShows, .tooSoon, .notAFit,
              .dontWantToShoot, .noWayToReachThem, .duplicate, .wentBy, .tooFar:

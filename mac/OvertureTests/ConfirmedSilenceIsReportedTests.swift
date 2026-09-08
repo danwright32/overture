@@ -79,11 +79,22 @@ struct ConfirmedSilenceIsReportedTests {
     // phrase would otherwise have satisfied a drift check about wording by having no wording to drift.
     // That a pitched ending has one at all is `CountedPhraseHasNoDefaultTests`; this stays the question
     // of whether the two agree.
+    //
+    // #3674 relaxed the check from exact equality to a SUFFIX rule, and the distinction is the whole of
+    // what it still defends. `emailBounced` reads "The email bounced" on the menu and "bounced" in the
+    // report, because the report renders "\(count) \(phrase)" and "3 the email bounced" is not a
+    // sentence. That is a SHORTENING: every word of the phrase is the label's own, in the label's own
+    // order, with leading words dropped. What the rule still refuses is a second PHRASING ("delivery
+    // failed", "undeliverable"), which is the #843 trap this exists for, since no such wording is a
+    // suffix of the label. Exact equality would have forced either a menu Dan did not choose or a report
+    // line that is not English, and a guard that must be switched off to ship a correct decision is one
+    // that would have been switched off (L93).
     @Test func theCountedPhraseIsTheLabelsOwnWords() throws {
         for outcome in ShowOutcome.pitched {
             let phrase = try #require(outcome.countedPhrase, "\(outcome) has no counted phrase")
-            #expect(phrase.lowercased() == outcome.label.lowercased(),
+            #expect(outcome.label.lowercased().hasSuffix(phrase.lowercased()),
                     "\(outcome) says one thing on the menu and another in the report")
+            #expect(!phrase.isEmpty, "\(outcome) has an empty counted phrase, which every label suffixes")
         }
     }
 
