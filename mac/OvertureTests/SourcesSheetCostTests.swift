@@ -22,22 +22,24 @@ import SwiftData
 // separately, because the whole design of this surface rests on the claim that the signature is "cheap to
 // evaluate every redraw" while the recompute behind it is not. That claim is what has never been measured.
 //
-// THE FIRST READING, 2026-09-08, over 1,226 prospects and 73 sources, means of 10 after a warm pass:
+// THE FIRST READING, 2026-09-08, over 1,226 prospects, 73 sources and 31 clients, means of 10 after a
+// warm pass:
 //
-//   per body evaluation   6.68 ms   SourceYield 3.84, UnplacedRooms 2.43, ClientCoverage 0.40
-//   behind the gates      SourceYield.tallies 6.20 ms, UnplacedRooms.from 2.60 ms
+//   per body evaluation   6.88 ms   SourceYield 3.95, UnplacedRooms 2.46, ClientCoverage 0.47
+//   behind the gates      SourceYield.tallies 6.21 ms, UnplacedRooms.from 2.64 ms
 //
 // TWO THINGS IN IT ARE WORTH MORE THAN THE TOTAL, and neither is what the phase expected to find.
 //
-// **The `UnplacedRooms` gate barely pays for itself.** Its change-key costs 2.43 ms and the recompute it
-// avoids costs 2.60 ms, so the gate saves about 7%. Both walk the same `waitingShows(prospects:context:)`
+// **The `UnplacedRooms` gate barely pays for itself.** Its change-key costs 2.46 ms and the recompute it
+// avoids costs 2.64 ms, so the gate saves about 7%. Both walk the same `waitingShows(prospects:context:)`
 // and the key then hashes a venue string while the recompute builds a small map, which is why they cost
-// almost the same. `SourceYield`'s gate is better but not by much: 3.84 ms to avoid 6.20 ms, saving 38%.
+// almost the same. `SourceYield`'s gate is better but not by much: 3.95 ms to avoid 6.21 ms, saving 36%.
 // A cache is supposed to make the common path cheap, and on the common path (nothing changed) this one
-// pays 62% of the price it exists to avoid.
+// pays 64% of the price it exists to avoid. `ClientCoverage`'s is the one doing its job: 0.47 ms to
+// gate an O(clients x sources) match.
 //
 // **And this is NOT what freezes the sheet.** #3645 measured 30 real freezes on this surface in one day
-// at a median of 1.34 seconds. 6.68 ms per body evaluation cannot produce that on its own, so the change
+// at a median of 1.34 seconds. 6.88 ms per body evaluation cannot produce that on its own, so the change
 // keys are not the cause and converting them would not fix it. What turns milliseconds into a freeze is
 // HOW MANY body evaluations an interaction drives, which this instrument deliberately cannot see: it
 // times one derivation, unhosted. Counting evaluations needs the hosted target, and that is #3645'"'"'s
@@ -56,6 +58,13 @@ struct SourcesSheetCostTests {
         let prospects: [Prospect]
         let sources: [WatchedSource]
         let context: StageContext
+        // The OTHER two inputs `ClientCoverage.signature` reads. Carried rather than defaulted to empty:
+        // timing that signature with no clients and nothing dismissed measures the sources half alone
+        // and reports a lower bound as the sheet's cost, which is a measurement taken with the expensive
+        // path switched off (L102).
+        let clients: [DownbeatClient]
+        let dismissedIds: Set<String>
+        let rosterHealth: DownbeatBridge.Health
     }
 
     private func live(in dir: URL, now: Date) throws -> Live {
@@ -63,7 +72,7 @@ struct SourcesSheetCostTests {
             throw LiveStoreClone.Refusal.backupFailed("no live store on this machine")
         }
         let schema = Schema([Prospect.self, Recipient.self, WatchedSource.self,
-                             ExcludedTown.self, AllowedSeedTown.self])
+                             ExcludedTown.self, AllowedSeedTown.self, DismissedCoverageClient.self])
         let ctx = ModelContext(try ModelContainer(
             for: schema,
             configurations: [ModelConfiguration(schema: schema, url: clone, cloudKitDatabase: .none)]))
@@ -71,6 +80,7 @@ struct SourcesSheetCostTests {
         let sources = try ctx.fetch(FetchDescriptor<WatchedSource>())
         let excluded = try ctx.fetch(FetchDescriptor<ExcludedTown>())
         let allowedSeed = try ctx.fetch(FetchDescriptor<AllowedSeedTown>())
+        let dismissed = try ctx.fetch(FetchDescriptor<DismissedCoverageClient>())
         // Built the way `SourcesView.roomContext` builds it (`SourcesView.swift:106`), so the signature
         // this times is the one the sheet really evaluates rather than a cheaper cousin (L107).
         let geo = GeoRefusals(userExcludedTowns: Set(excluded.map(\.town)),
@@ -83,7 +93,10 @@ struct SourcesSheetCostTests {
         return Live(prospects: prospects, sources: sources,
                     context: StageContext(now: now, geo: geo,
                                           clients: ClientWindow(sources: sources,
-                                                                clients: roster.clients)))
+                                                                clients: roster.clients)),
+                    clients: roster.clients,
+                    dismissedIds: Set(dismissed.map(\.clientId)),
+                    rosterHealth: roster.health)
     }
 
     private static func milliseconds(rounds: Int, _ body: () -> Void) -> Double {
@@ -148,20 +161,21 @@ struct SourcesSheetCostTests {
 
             let now = Date()
             let l = try live(in: dir, now: now)
-            let dismissed: Set<String> = []
             let rounds = 10
 
             // Warmed, so the first pass's SwiftData faulting is not counted as the cost of a redraw.
             _ = SourceYield.signature(l.prospects)
             _ = UnplacedRooms.signature(l.prospects, context: l.context)
-            _ = ClientCoverage.signature(sources: l.sources, clients: [], dismissedIds: dismissed)
+            _ = ClientCoverage.signature(sources: l.sources, clients: l.clients,
+                                             dismissedIds: l.dismissedIds)
 
             let yieldSig = Self.milliseconds(rounds: rounds) { _ = SourceYield.signature(l.prospects) }
             let roomsSig = Self.milliseconds(rounds: rounds) {
                 _ = UnplacedRooms.signature(l.prospects, context: l.context)
             }
             let coverSig = Self.milliseconds(rounds: rounds) {
-                _ = ClientCoverage.signature(sources: l.sources, clients: [], dismissedIds: dismissed)
+                _ = ClientCoverage.signature(sources: l.sources, clients: l.clients,
+                                             dismissedIds: l.dismissedIds)
             }
             let perRedraw = yieldSig + roomsSig + coverSig
 
@@ -172,12 +186,18 @@ struct SourcesSheetCostTests {
                 _ = UnplacedRooms.from(l.prospects, context: l.context)
             }
 
-            print(String(format: "sources-sheet-cost: over %d prospects and %d sources, the three "
+            // The roster is a FILE, so it is the one input that can silently go missing and make the
+            // coverage timing a measurement of the sources half alone. Reported with the number rather
+            // than beside it, because a count and how it was obtained are one fact (L544).
+            let rosterNote = l.rosterHealth == .ok
+                ? "\(l.clients.count) clients"
+                : "ROSTER \(l.rosterHealth), so the coverage key below is a LOWER BOUND"
+            print(String(format: "sources-sheet-cost: over %d prospects, %d sources and %@, the three "
                          + "change-keys the sheet evaluates on EVERY body evaluation cost %.2f ms "
                          + "together (SourceYield %.2f, UnplacedRooms %.2f, ClientCoverage %.2f). The "
                          + "recomputes behind them, which run only when a key differs, cost "
                          + "SourceYield.tallies %.2f ms and UnplacedRooms.from %.2f ms.",
-                         l.prospects.count, l.sources.count, perRedraw,
+                         l.prospects.count, l.sources.count, rosterNote, perRedraw,
                          yieldSig, roomsSig, coverSig, yieldRecompute, roomsRecompute))
 
             #expect(l.prospects.count > 0, "the clone holds no prospects, so nothing here was measured")
