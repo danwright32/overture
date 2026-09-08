@@ -76,10 +76,16 @@ enum QueueRenderPass {
     //
     // The work is done deep inside value types: `QueueItem.init` builds a card, `SendGroup.CardGroups`
     // resolves who a send reaches, and `DraftCheck.blockingFindings` runs the lint over a body. None of
-    // them can be handed a tally without threading one through every caller, and `QueueItem(` alone has
-    // 318 construction sites, 314 of them in 93 test files that are not about cost. Making it a parameter
-    // would buy compile-time coverage of FOUR app sites at the price of 314 edits, and every one of those
-    // tests would then carry an argument it never reads.
+    // them can be handed a tally without threading one through every caller, and `QueueItem(` has
+    // hundreds of construction sites, the overwhelming majority of them in test files that are not about
+    // cost. Making it a parameter would buy compile-time coverage of a handful of app sites at the price
+    // of every one of those edits, and each of those tests would then carry an argument it never reads.
+    //
+    // #3654: the RATIO is what the argument turns on, and it is not written down here any more. It was,
+    // as "318 construction sites, 314 of them in 93 test files", measured in the #2048 era and stale by
+    // 74 by the time anybody looked (L32, L316, and #3487's rule for a count quoted in prose).
+    // `CardConstructionCensusTests` re-derives it on every run and refuses if the app's share ever grows
+    // enough to change the answer, so the reasoning above is re-measurable rather than dated.
     //
     // What the task local buys instead is the property `Corpus.all` already has and the reason that
     // counter works: nothing has to opt in. A new call site anywhere is counted whether or not whoever
