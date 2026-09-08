@@ -97,20 +97,22 @@ final class ScoutStageCardLoadLiveStoreTests {
             .appendingPathComponent("downbeat-export.json")
     }
 
-    /// A copy of the export inside the sandbox, loaded through the app's own reader. An absent export is
+    /// The roster, read through the app's own reader and READ ONLY. An absent or unreadable export is
     /// not a failure here: it is a machine state this test cannot set (L411), and it is reported as one.
-    private func rosterFromACopy(in dir: URL, now: Date)
-        throws -> (clients: [DownbeatClient], health: DownbeatBridge.Health) {
-        let source = Self.releaseRosterURL
-        guard FileManager.default.fileExists(atPath: source.path) else {
-            return ([], .missing)
-        }
-        let copy = dir.appendingPathComponent("downbeat-export.json")
-        if FileManager.default.fileExists(atPath: copy.path) {
-            try FileManager.default.removeItem(at: copy)
-        }
-        try FileManager.default.copyItem(at: source, to: copy)
-        let loaded = DownbeatBridge.loadWithHealth(from: copy, now: now)
+    ///
+    /// It was written to take a COPY first, on `LiveStoreClone`'s precedent, and that was wrong twice
+    /// over. `LiveStoreCopyGuardTests.nothingButTheHelperCopiesTheLiveStore` refused it, correctly by its
+    /// own rule (a file that names the live store path AND copies files is doing by hand what the shared
+    /// clone does once), and the honest answer to a guard refusing you is not to spell the same operation
+    /// differently. It was also no safer: a copy of a file being rewritten is torn exactly as a read of it
+    /// is, and the tear is handled either way, because a half-written export fails to decode and arrives
+    /// as `.unreadable`, which this reports rather than believes.
+    ///
+    /// Nothing here writes. That is what makes reading the real path acceptable where #2097's redirect of
+    /// `StoreLocation.handoffDirectory` would otherwise apply: that redirect exists so a test run cannot
+    /// WRITE into Dan's handoff directory, and this suite already reads his real store the same way.
+    private func roster(now: Date) -> (clients: [DownbeatClient], health: DownbeatBridge.Health) {
+        let loaded = DownbeatBridge.loadWithHealth(from: Self.releaseRosterURL, now: now)
         return (loaded.clients, loaded.health)
     }
 
@@ -138,16 +140,13 @@ final class ScoutStageCardLoadLiveStoreTests {
         // a file that genuinely holds none are different facts, and only one of them may be believed
         // (L544, and the reason `ClientRoster` keeps `health` at all).
         //
-        // READ FROM A COPY, exactly as the store above is. `DownbeatBridge.loadWithHealth()` with no
-        // argument resolves `StoreLocation.handoffDirectory`, and #2097 deliberately redirects that to a
-        // temp folder under test so no run can reach Dan's live handoff directory. Pointing the loader
-        // back at the real path would step around a protection whose whole point is that folder, so this
-        // copies the export into the sandbox and loads THAT, which is the same treatment `LiveStoreClone`
-        // gives the store. It also has to name the RELEASE path explicitly: the test bundle is a Debug
-        // build, and pairing the Release store with the Debug build's roster would be two machines'
-        // answers to one question (the first version of this test did exactly that, and the health
-        // reading is what caught it).
-        let loaded = try rosterFromACopy(in: dir, now: now)
+        // It has to name the RELEASE path explicitly, which is the part that bit. The test bundle is a
+        // Debug build, so `DownbeatBridge.loadWithHealth()` with no argument resolves this build's own
+        // handoff directory, and pairing the Release STORE with the Debug build's ROSTER is two machines'
+        // answers to one question. The first version of this test did exactly that and reported the
+        // roster as `.missing` on a Mac that has one; the health reading is what caught it, which is the
+        // whole reason it is carried rather than assumed.
+        let loaded = roster(now: now)
         let geo = GeoRefusals(userExcludedTowns: Set(excluded.map(\.town)),
                               allowedSeedTowns: Set(allowedSeed.map(\.town)))
         let window = ClientWindow(sources: sources, clients: loaded.clients)
