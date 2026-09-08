@@ -14,7 +14,12 @@ struct SelfBookingRunNightsTests {
     private func show(_ key: String, _ nights: [String], commitment: Bool = false,
                       engagement: String? = nil, name: String = "Show",
                       times: [String: [String]] = [:]) -> SelfBookingConflict.Show {
-        SelfBookingConflict.Show(key: key, nights: nights, isCommitment: commitment,
+        // #3676: these suites test the COLLISION, which reads only `isCommitment`, so which tier a
+        // committed show carries is immaterial here. `.emailed` is used throughout, being the
+        // archetype the check was written for; the tier's own behaviour lives in
+        // SelfBookingHeaderTierTests.
+        SelfBookingConflict.Show(key: key, nights: nights,
+                                 commitment: commitment ? .emailed : nil,
                                  engagementKey: engagement, name: name, timesByNight: times)
     }
 
@@ -127,16 +132,19 @@ struct SelfBookingRunNightsTests {
     }
 
     // The queue-wide note asks the same question of the whole group: it may say "on this date" only when
-    // every clash in the group really is on that date.
+    // every clash in the group really is on that date. #3676 moved this onto `headerClaim`, which answers
+    // it and the tier question together, so the two cannot be asked of different clash sets.
     @Test func theGroupsNoteDropsThisDateWhenAClashIsOnALaterNight() {
         let laterRun = show("run", ["2026-10-27", "2026-10-29"])
         let sameNight = show("card", ["2026-10-27"])
         let committed = show("committed", ["2026-10-27", "2026-10-29"], commitment: true, name: "Orchestra A")
         let index = SelfBookingConflict.NightIndex([committed, laterRun, sameNight])
         // The one-night card clashes on its own date, so the note is unchanged.
-        #expect(SelfBookingConflict.everyClashIsOn("2026-10-27", for: [sameNight], in: index))
+        #expect(SelfBookingConflict.headerClaim(for: [sameNight], on: "2026-10-27", in: index)?.allOnThisDate
+                == true)
         // The run also clashes on Oct 29, which is not the header's date.
-        #expect(!SelfBookingConflict.everyClashIsOn("2026-10-27", for: [laterRun, sameNight], in: index))
+        #expect(SelfBookingConflict.headerClaim(for: [laterRun, sameNight], on: "2026-10-27",
+                                                in: index)?.allOnThisDate == false)
     }
 
     // The index is the SAME predicate as the direct call, so the cheap path a render pass uses and the
@@ -241,9 +249,9 @@ struct SelfBookingRunNightsCopyTests {
     // blocked-calendar half: the sentence was true and read false, because the eye binds the date in the
     // sentence to the header above it.
     @Test func theDateHeaderNoteSaysThisDateOnlyWhenTheClashIsOnIt() {
-        #expect(SelfBookingCopy.dateHeaderNote(allOnThisDate: true)
+        #expect(SelfBookingCopy.dateHeaderNote(.init(commitment: .emailed, allOnThisDate: true))
                 == "Another pitch is already in progress on this date")
-        #expect(SelfBookingCopy.dateHeaderNote(allOnThisDate: false)
+        #expect(SelfBookingCopy.dateHeaderNote(.init(commitment: .emailed, allOnThisDate: false))
                 == "Another pitch is already in progress on a night one of these runs plays")
     }
 }

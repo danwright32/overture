@@ -22,11 +22,38 @@ enum SelfBookingConflict {
         // a blocked day, where clearing a real clash on no evidence is the direction that loses safety, and
         // wrong here, where walking a span would manufacture a clash on the dark nights of a weekly series.
         let nights: [String]
-        // #1219: this show counts as a same-night COMMITMENT (a booked shoot, a pitch already emailed, or a
-        // live draft/approved) rather than a dead-dismissed or untouched candidate. The caller decides the
-        // predicate (QueueModel.selfBookingIsCommitment); single tier, so any commitment intervenes the
-        // same way.
-        let isCommitment: Bool
+        // #1219/#3676: WHAT this show has committed to the night, or nil for a dead-dismissed or untouched
+        // candidate. The caller decides it (QueueModel.selfBookingCommitment).
+        //
+        // #3676 replaced the boolean this used to be. Which shows COLLIDE is unchanged and still single
+        // tier: `isCommitment` below is the whole of what the collision reads, so a prepped show still
+        // raises the row marker, the send confirm and the prep confirm exactly as it always did. What the
+        // tier is for is the DATE HEADER, whose sentence asserts a pitch is in progress and was being said
+        // over shows that had only been prepped. Dan, 2026-09-07: "Prepping is not committing to pitching."
+        //
+        // ONE discriminated value rather than a boolean plus a tier beside it, because two fields for one
+        // fact drift and the call site cannot tell which won (L544).
+        enum Commitment: Equatable {
+            case booked     // a confirmed shoot, or dismissed BECAUSE booked elsewhere: nothing is pitched
+            case emailed    // a pitch actually sent and not closed out
+            case prepped    // drafted or approved with a draft, nothing sent yet
+
+            // How strongly the night is spoken for, so a night holding several kinds speaks for the
+            // strongest. Deliberately decided here rather than left to whichever show sorts first, which
+            // would let the header change sentence between redraws.
+            var rank: Int {
+                switch self {
+                case .prepped: return 0
+                case .emailed: return 1
+                case .booked: return 2
+                }
+            }
+        }
+
+        let commitment: Commitment?
+
+        // Every collision predicate reads THIS and not the tier, so #3676 cannot have narrowed the check.
+        var isCommitment: Bool { commitment != nil }
         // The shared production id: the same run touring venues is one show, not a double-booking.
         //
         // #3323: read through GroupNameMatch.normalize, NOT as raw display text, because that is the fold
@@ -170,14 +197,30 @@ enum SelfBookingConflict {
         sameNight(for: target, in: index).filter { !isAClash(target, $0) }
     }
 
-    // #3323: whether every clash across a date GROUP falls on that group's own date. The date-header note
-    // sits under a header naming one date, so it may only say "on this date" when that is true; a run in
-    // the group clashing on a later night makes the sentence read as a claim about the header (#1501).
+    // #3676: what the date header may say about a whole date GROUP, or nil when the group is clear.
     //
-    // True when there are no clashes at all: the caller decides whether to show a note, and a group with
-    // nothing to report must not push it into the run wording.
-    static func everyClashIsOn(_ date: String, for group: [Show], in index: NightIndex) -> Bool {
-        group.allSatisfy { show in conflicts(for: show, in: index).allSatisfy { $0.night == date } }
+    // Two facts, produced together because the second depends on the first. `commitment` is the STRONGEST
+    // thing anything in the group collides with, and `allOnThisDate` is measured over the clashes AT THAT
+    // TIER ONLY, so the sentence is exactly as specific as the evidence behind the tier it speaks for.
+    //
+    // #3323's half is unchanged and is why `allOnThisDate` exists at all: the note sits under a header
+    // naming ONE date, so it may only say "on this date" when the clash really is on it. A run in the group
+    // clashing on a later night makes the sentence read as a claim about the header above it (#1501).
+    struct HeaderClaim: Equatable {
+        let commitment: Show.Commitment
+        let allOnThisDate: Bool
+    }
+
+    static func headerClaim(for group: [Show], on date: String?, in index: NightIndex) -> HeaderClaim? {
+        let overlaps = group.flatMap { conflicts(for: $0, in: index) }
+        // An overlap can only come from a committed show, so an empty tier list means an empty clash list.
+        guard let strongest = overlaps.compactMap({ $0.other.commitment }).max(by: { $0.rank < $1.rank })
+        else { return nil }
+        // An UNKNOWN header date may not claim "on this date": it would assert a date nothing measured, so
+        // it falls to the run wording, which is true of any night (L11).
+        guard let date else { return HeaderClaim(commitment: strongest, allOnThisDate: false) }
+        let atTier = overlaps.filter { $0.other.commitment == strongest }
+        return HeaderClaim(commitment: strongest, allOnThisDate: atTier.allSatisfy { $0.night == date })
     }
 
     private static func isAClash(_ target: Show, _ overlap: Overlap) -> Bool {
@@ -246,17 +289,39 @@ struct SelfBookingPrepClash: Equatable {
 // sentence Dan reads. Every user-facing line NAMES the clashing show(s) so he remembers which one; a
 // blank groupName reads as "another show".
 enum SelfBookingCopy {
-    // The queue-wide date-header flag. A short date-level note; the per-row marker names the specifics.
+    // The queue-wide date-header flag, or NIL when the night holds nothing worth a date-level sentence.
+    // The per-row marker names the specifics and is untouched by #3676.
     //
-    // #3323: two sentences, not one. The note is drawn under a header naming ONE date, and since the check
-    // reads every night of a run the clash it reports may be days after that date. "on this date" would
-    // then be a claim the check never measured, sitting directly under the date it appears to be about.
-    // That is #1501's defect exactly, on the other half of the system: the sentence was true and read
-    // false, because the eye binds the date in the sentence to the header above it.
-    static func dateHeaderNote(allOnThisDate: Bool) -> String {
-        allOnThisDate
-            ? "Another pitch is already in progress on this date"
-            : "Another pitch is already in progress on a night one of these runs plays"
+    // #3676: FOUR sentences and one silence, keyed on what the night actually holds. Dan, 2026-09-07: "I
+    // want it to tell me when another pitch is in progress. If I've already emailed someone and that show
+    // is not closed out, it should say exactly what it says now. Otherwise it doesn't need to be there."
+    // A prepped show is already covered, per row, by "Also pitching <name> on this date", which names the
+    // show where this sentence cannot, so a second statement here is the same fact twice on one screen and
+    // the weaker of the two (L605).
+    //
+    // A BOOKED night speaks in its own words rather than today's (his call the same day, from a picker): a
+    // confirmed shoot is not a pitch in progress, and it is the strongest reason of all not to double up.
+    //
+    // #3323's split is unchanged and rides on each: two sentences, not one. The note is drawn under a
+    // header naming ONE date, and since the check reads every night of a run the clash it reports may be
+    // days after that date. "on this date" would then be a claim the check never measured, sitting directly
+    // under the date it appears to be about. That is #1501's defect exactly, on the other half of the
+    // system: the sentence was true and read false, because the eye binds the date in the sentence to the
+    // header above it.
+    static func dateHeaderNote(_ claim: SelfBookingConflict.HeaderClaim?) -> String? {
+        guard let claim else { return nil }
+        switch claim.commitment {
+        case .prepped:
+            return nil
+        case .emailed:
+            return claim.allOnThisDate
+                ? "Another pitch is already in progress on this date"
+                : "Another pitch is already in progress on a night one of these runs plays"
+        case .booked:
+            return claim.allOnThisDate
+                ? "You are already shooting another show on this date"
+                : "You are already shooting another show on a night one of these runs plays"
+        }
     }
 
     // The prep-launch confirm: shown before a Prep run when one or more of the shows being prepped sit on a

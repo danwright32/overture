@@ -886,8 +886,17 @@ Anatomy:
 
   Nothing else counts as a greeting. "I hope this finds you well" is not one (and is separately
   forbidden as a tell), and neither is diving straight into the first sentence.
-- **Subject:** specific, low-key. "Photographing [group]'s [performance] at [venue]."
+- **Subject:** specific, low-key. "Photographing [group]'s [performance] at [venue]"
   This formula stays fixed across drafts; the variety budget below goes into the body.
+  **A subject NEVER ends in punctuation (#3677, Dan 2026-09-07: "email subjects shouldn't end in
+  punctuation").** It is a label, not a sentence, and it is the one thing in the pitch a stranger
+  sees before opening anything. The rule is about the LAST character only: an apostrophe, an
+  ampersand or a comma INSIDE a subject is ordinary and fine ("Photographing Bargemusic's Bach &
+  Beyond at the Boathouse"). A question mark or an exclamation point at the end is the same
+  finding as a full stop. The one exception is a mark belonging to the show's own name, which the
+  drafter did not add ("Photographing Nihao Broadway!").
+  The stop used to sit INSIDE the quotes on the line above, so the formula being copied ended in
+  one and the drafter reproduced the example rather than the rule (L562).
 - **Sentence one always introduces Dan, by name and by trade (Dan, 2026-07-31).** A cold
   reader does not know who is writing, so nothing else may come first: not a credential,
   not an observation, not the reason. Dan's own proven pitch opens "My name is Dan and I'm
@@ -900,6 +909,26 @@ Anatomy:
   **The exception is `priorRelationship` `booked` or `warm` (#1215):** they already know
   him, the cold self-introduction is wrong for them, and the register bullet above governs
   instead.
+
+  **What "reword it every time" licenses, and what it does not (#3683).** The licence is over
+  the WORDING. It is not a licence over the grammar, and the two worked examples above happen
+  to keep the grammar fixed without saying that is the invariant, which is the gap a drafter
+  finds. **Dan stays the SUBJECT of the clause that states his trade, in the first person.**
+  Free: which words name the trade, and how the sentence around them is built (an appositive,
+  a compound, a second sentence). Fixed: he is the one that clause is about.
+
+  A rewrite can name his name and name his trade and still break this, which is why naming
+  both is not enough on its own. Drafted 2026-09-07 and read by Dan the same day: "I'm Dan
+  Wright, and live performance is the whole of my photography work here in NYC." His words
+  were "it's so awkward". He is introduced by name, and then the sentence changes subject
+  underneath him, so the clause whose whole job is to say what Dan does is about *live
+  performance* instead. Write "I'm Dan Wright, a live performance photographer here in NYC".
+
+  Two more faults in that same sentence, neither of them this rule. "The whole of my
+  photography work" is formal and faintly literary sitting beside the "I'm" and "I've"
+  everywhere else in the same email, which is the register rule. And it makes an exclusivity
+  claim nobody asked for (this is ALL I shoot) in place of the plain job title the rule wants,
+  which is a claim about Dan that nothing established.
 - **Always "New York City" or "NYC", never bare "New York" (Dan, 2026-07-31).** Where Dan
   works is the CITY, and the city is a different place from the state. Every reference to
   it in a draft, in his self-introduction and anywhere else, says "New York City" or "NYC"
@@ -1018,6 +1047,16 @@ Anatomy:
 
   A draft MAY acknowledge they might be covered already ("if you don't have someone on it
   already"), Dan's call 2026-07-31: it is honest about how often a show is already booked.
+  **The hedge NAMES what it is about rather than pointing at it (#3685).** Its pronoun needs a
+  noun to reach for, and on a MULTI NIGHT RUN there is none: the run is referenced as a
+  singular "run" and the individual nights are never a noun phrase in the email at all, so a
+  plural pronoun agrees with something nobody wrote. Drafted 2026-09-07: "If you don't already
+  have someone covering **them**, I'd be glad to talk about your photography plans for the
+  run." Walking back from "them", the nearest nouns are "my portfolio" and a domain name.
+  Write the noun instead, whatever the night count: "if you don't already have someone
+  covering the run", "if nobody is on these performances yet". That is the seam of two rules
+  that are each right, since the multi-night rule is exactly what puts a plural pronoun within
+  reach of a singular antecedent.
 - **Credential + portfolio link (#365):** work in one of Dan's citable credentials
   (Carnegie Hall tenure of nearly 10 years, or the Madison Square Garden / Lincoln
   Center / Radio City Music Hall venues) plus the portfolio link

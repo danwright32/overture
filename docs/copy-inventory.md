@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1530 sentences**.
+Every sentence Overture can say to Dan: **1532 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -14,7 +14,7 @@ What is not, and why:
   sentences under tokens nobody reads.
 - **Nothing, if it is written as two literals joined with `+`.** Those ARE joined here, into the
   one sentence the running app says (#3155). What is still only part of what Dan reads is a
-  sentence carrying a VALUE: 552 of the 1530 below hold a
+  sentence carrying a VALUE: 552 of the 1532 below hold a
   `\(...)` where a number or a name goes, so what is printed is the template. They are counted
   here rather than listed again, because the hole is visible in the line itself; what was missing
   was any statement of how much of this document is templates.
@@ -2605,6 +2605,10 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/SourceFixConfirmActions.swift`
 "You answered them"
     `UI/QueueView+Model.swift`
+"You are already shooting another show on a night one of these runs plays"
+    `Domain/SelfBookingConflict.swift`
+"You are already shooting another show on this date"
+    `Domain/SelfBookingConflict.swift`
 "You asked for this reply draft \(ago(requestedAt, now: now)) and it never arrived."
     `Domain/StalledReplyDraft.swift`
 "You blocked \(day) (\(name))."
