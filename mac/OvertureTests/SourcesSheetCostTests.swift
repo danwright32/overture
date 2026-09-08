@@ -22,11 +22,17 @@ import SwiftData
 // separately, because the whole design of this surface rests on the claim that the signature is "cheap to
 // evaluate every redraw" while the recompute behind it is not. That claim is what has never been measured.
 //
-// THE FIRST READING, 2026-09-08, over 1,226 prospects, 73 sources and 31 clients, means of 10 after a
-// warm pass:
+// THE READINGS, 2026-09-08, over 1,226 prospects, 73 sources and 31 clients, means of 10 after a warm
+// pass. BEFORE is the sheet as #3656 found it, three hash gates gating two recomputes; AFTER is the same
+// sheet with the two whole-store gates removed, which is what shipped:
 //
-//   per body evaluation   6.88 ms   SourceYield 3.95, UnplacedRooms 2.46, ClientCoverage 0.47
-//   behind the gates      SourceYield.tallies 6.21 ms, UnplacedRooms.from 2.64 ms
+//   BEFORE  per body evaluation   6.88 ms   SourceYield 3.95, UnplacedRooms 2.46, ClientCoverage 0.47
+//           behind the gates      SourceYield.tallies 6.21 ms, UnplacedRooms.from 2.64 ms
+//   AFTER   per body evaluation   8.98 ms   tallies 6.08, rooms 2.41, ClientCoverage key 0.49
+//
+// **+2.10 ms per redraw**, and that is the whole price of the change. It is measured in the same change
+// that made it rather than estimated beside it (L5), and it came in under the +2.44 ms the decision was
+// taken on. What it buys is that no number on this sheet can any longer be one the store disagrees with.
 //
 // TWO THINGS IN IT ARE WORTH MORE THAN THE TOTAL, and neither is what the phase expected to find.
 //
@@ -111,7 +117,7 @@ struct SourcesSheetCostTests {
     // while the surface reads as cached and correct. Timing it would measure a number that means
     // nothing. This asserts each signature really does respond to its own input, so the readings below
     // are readings of a live gate (L171, L557: a check that has never once passed is measuring nothing).
-    @Test func eachSignatureRespondsToItsOwnInput() throws {
+    @Test func theWholeStoreDerivationsProduceSomethingToTime() throws {
         let ctx = ModelContext(try ModelContainer(
             for: Schema([Prospect.self, Recipient.self, WatchedSource.self]),
             configurations: [ModelConfiguration(isStoredInMemoryOnly: true)]))
@@ -120,20 +126,14 @@ struct SourcesSheetCostTests {
                          production: "self", profile: "strong", coverage: "likely_uncovered",
                          fitScore: 8, tier: "high", fitReason: "r", matchedClientName: nil,
                          possibleMatchSource: nil, possibleMatchName: nil)
+        p.sourceIds = ["s1"]
         ctx.insert(p)
         try ctx.save()
 
-        let before = SourceYield.signature([p])
-        p.status = .queued
-        #expect(SourceYield.signature([p]) != before,
-                "SourceYield.signature does not move when a status does, so its gate never fires")
+        #expect(!SourceYield.tallies(in: [p]).isEmpty,
+                "SourceYield.tallies produced nothing, so the reading below times an empty loop")
 
-        let roomContext = StageContext(geo: .none, clients: .none)
-        let roomsBefore = UnplacedRooms.signature([p], context: roomContext)
-        p.venue = "A Different Room"
-        #expect(UnplacedRooms.signature([p], context: roomContext) != roomsBefore,
-                "UnplacedRooms.signature does not move when a venue does, so its gate never fires")
-
+        // The one gate that REMAINS, and it has to still move on its own input or it caches forever.
         let s = WatchedSource(sourceId: "s1", orgName: "An Org", listingsURL: nil, kind: .html)
         let coverBefore = ClientCoverage.signature(sources: [s], clients: [], dismissedIds: [])
         s.orgName = "A Renamed Org"
@@ -164,41 +164,36 @@ struct SourcesSheetCostTests {
             let rounds = 10
 
             // Warmed, so the first pass's SwiftData faulting is not counted as the cost of a redraw.
-            _ = SourceYield.signature(l.prospects)
-            _ = UnplacedRooms.signature(l.prospects, context: l.context)
+            _ = SourceYield.tallies(in: l.prospects)
+            _ = UnplacedRooms.from(l.prospects, context: l.context)
             _ = ClientCoverage.signature(sources: l.sources, clients: l.clients,
-                                             dismissedIds: l.dismissedIds)
+                                         dismissedIds: l.dismissedIds)
 
-            let yieldSig = Self.milliseconds(rounds: rounds) { _ = SourceYield.signature(l.prospects) }
-            let roomsSig = Self.milliseconds(rounds: rounds) {
-                _ = UnplacedRooms.signature(l.prospects, context: l.context)
-            }
-            let coverSig = Self.milliseconds(rounds: rounds) {
-                _ = ClientCoverage.signature(sources: l.sources, clients: l.clients,
-                                             dismissedIds: l.dismissedIds)
-            }
-            let perRedraw = yieldSig + roomsSig + coverSig
-
+            // #3656: what the sheet pays NOW. The two hash gates are gone, so their recomputes ARE the
+            // per-redraw cost; ClientCoverage's gate stays and its key is still what a redraw pays.
             let yieldRecompute = Self.milliseconds(rounds: rounds) {
                 _ = SourceYield.tallies(in: l.prospects)
             }
             let roomsRecompute = Self.milliseconds(rounds: rounds) {
                 _ = UnplacedRooms.from(l.prospects, context: l.context)
             }
-
+            let coverSig = Self.milliseconds(rounds: rounds) {
+                _ = ClientCoverage.signature(sources: l.sources, clients: l.clients,
+                                             dismissedIds: l.dismissedIds)
+            }
+            let perRedraw = yieldRecompute + roomsRecompute + coverSig
             // The roster is a FILE, so it is the one input that can silently go missing and make the
             // coverage timing a measurement of the sources half alone. Reported with the number rather
             // than beside it, because a count and how it was obtained are one fact (L544).
             let rosterNote = l.rosterHealth == .ok
                 ? "\(l.clients.count) clients"
                 : "ROSTER \(l.rosterHealth), so the coverage key below is a LOWER BOUND"
-            print(String(format: "sources-sheet-cost: over %d prospects, %d sources and %@, the three "
-                         + "change-keys the sheet evaluates on EVERY body evaluation cost %.2f ms "
-                         + "together (SourceYield %.2f, UnplacedRooms %.2f, ClientCoverage %.2f). The "
-                         + "recomputes behind them, which run only when a key differs, cost "
-                         + "SourceYield.tallies %.2f ms and UnplacedRooms.from %.2f ms.",
+            print(String(format: "sources-sheet-cost: over %d prospects, %d sources and %@, one body "
+                         + "evaluation costs %.2f ms: SourceYield.tallies %.2f, UnplacedRooms.from %.2f, "
+                         + "and the one remaining change-key ClientCoverage.signature %.2f. Since #3656 "
+                         + "the first two are paid outright rather than gated on a hash of the store.",
                          l.prospects.count, l.sources.count, rosterNote, perRedraw,
-                         yieldSig, roomsSig, coverSig, yieldRecompute, roomsRecompute))
+                         yieldRecompute, roomsRecompute, coverSig))
 
             #expect(l.prospects.count > 0, "the clone holds no prospects, so nothing here was measured")
             #expect(l.sources.count > 0,
