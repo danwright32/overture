@@ -292,25 +292,31 @@ final class Prospect {
     // counts as sendable. Mirrors the venue and press guard outcome exactly: an address held by either
     // guard is real but not sendable, which is `weakContactOnly` rather than `noEmailFound` (#1324).
     var reachabilityResultFromRecipients: Reachability.ProbeResult {
-        // #3387: `hasUnguardedAddress`, not `isSendablePending`. This arm asks whether an address
-        // exists that no research guard is holding; the send predicate folds in a calendar conflict, a
-        // blank subject and two lint judgements, none of which is a fact about reachability.
-        if recipients.contains(where: \.hasUnguardedAddress) { return .emailFound }
-        // #1798: through the ONE shared definition, which lists every guard that can hold an address
-        // (`Recipient.isHeldByAGuard`). This rule listed two of the three, so an address held only as a
-        // possible duplicate was neither sendable nor weak and fell through to "no address at all".
-        if recipients.contains(where: \.isHeldByAGuard) { return .weakContactOnly }
-        // #1626: no address anywhere, but the act publishes a form on its own site. Ranked below the
-        // address states deliberately: those are about whether an address exists at all, and leaving
-        // their order untouched keeps #1324's tested behaviour exactly as it was. The combination (a
-        // venue address AND the act's own form) was not observed in the 2026-07-27 run and is not
-        // re-ranked on speculation.
-        if !usableContactFormURLs.isEmpty { return .contactFormOnly }
-        // #2612: no address and no form on their own site, but a social profile that takes messages.
-        // Ranked BELOW the form for the same reason the form sits below the address states: a form on
-        // their own site is the stronger of the two hand routes, and a show holding both should say the
-        // one Dan reaches for first. Above `noEmailFound` because it is a route, not the absence of one.
-        return socialRouteURLs.isEmpty ? .noEmailFound : .socialOnly
+        // #3653: the cascade itself lives in `Reachability.result(from:)` so a tier-one row can ask the
+        // same question without hand-rolling a second copy of it. What stays here is gathering the facts,
+        // which is the only part that needs a model.
+        //
+        // ONE WALK, not four. Each arm used to ask the contacts separately (`hasUnguardedAddress`,
+        // `isHeldByAGuard`, `usableContactFormURLs`, `socialRouteURLs`), and short-circuiting only helped
+        // the rows that answered early. The two URL lists are still computed lazily, because a row with
+        // an address never needs them and they are the expensive pair.
+        //
+        // #3387: `hasUnguardedAddress`, not `isSendablePending`. This asks whether an address exists that
+        // no research guard is holding; the send predicate folds in a calendar conflict, a blank subject
+        // and two lint judgements, none of which is a fact about reachability.
+        // #1798: guarded through the ONE shared definition (`Recipient.isHeldByAGuard`), which lists every
+        // guard that can hold an address. This rule once listed two of the three, so an address held only
+        // as a possible duplicate fell through to "no address at all".
+        var unguarded = false
+        var guarded = false
+        for r in recipients {
+            if r.hasUnguardedAddress { unguarded = true; break }
+            if r.isHeldByAGuard { guarded = true }
+        }
+        if unguarded { return Reachability.result(from: .init(hasUnguardedAddress: true)) }
+        if guarded { return Reachability.result(from: .init(hasGuardedAddress: true)) }
+        return Reachability.result(from: .init(hasUsableContactForm: !usableContactFormURLs.isEmpty,
+                                               hasSocialRoute: !socialRouteURLs.isEmpty))
     }
 
     // #3387 / milestone 61 Phase 0.1. Does a way in of ANY kind exist: an address, a form on the act's

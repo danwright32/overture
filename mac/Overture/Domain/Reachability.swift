@@ -24,6 +24,41 @@ import Foundation
 // and the comment was the only thing in the tree asserting otherwise (#1640, #3069). Both are gone. Pure and exhaustively tested (a rule is only as real as
 // its detection). Layer 2 (an opt-in per-date probe) upgrades this to a firmer email-found/not-found.
 enum Reachability {
+
+    // #3653 step 3b.5 (milestone #80): the route cascade, as ONE rule over facts, with no model in sight.
+    //
+    // WHY IT IS HERE RATHER THAN ON `Prospect`. `Prospect.reachabilityResultFromRecipients` is the rule
+    // and its own comment says why it is one: "One definition, used by every writer, so the importer's
+    // upgrade and the row's own snapshot can never disagree about what counts as sendable." It had no
+    // seam, so a tier-one row that needs the same verdict could only re-implement it, and a rule's DATA
+    // shared while the code applying it is copied is not consolidation (L107, L263, L370).
+    //
+    // AND IT COLLAPSES THE WALKS. The cascade asked the contacts up to four separate times, once per arm.
+    // Gathering the four facts in one pass and handing them here is one walk, which is what #3653's
+    // `recipientWalks == rowsInScope` pin needs in order to be met without duplicating this rule.
+    //
+    // THE ORDER IS THE RULE and every step of it was a decision somebody recorded: an unguarded address
+    // first (#3387), an address held by a guard as WEAK rather than absent (#1324, #1798), the act's own
+    // form above a social profile because it is the stronger hand route (#1626, #2612), and a social
+    // profile above nothing because it is a route rather than the absence of one.
+    struct RouteFacts: Equatable, Sendable {
+        /// An address exists that no research guard is holding.
+        var hasUnguardedAddress: Bool = false
+        /// An address exists and a guard holds it: real, but not sendable.
+        var hasGuardedAddress: Bool = false
+        /// A form on the act's OWN site, past the venue and press guards.
+        var hasUsableContactForm: Bool = false
+        /// A social profile that takes messages, past the same guards.
+        var hasSocialRoute: Bool = false
+    }
+
+    static func result(from facts: RouteFacts) -> ProbeResult {
+        if facts.hasUnguardedAddress { return .emailFound }
+        if facts.hasGuardedAddress { return .weakContactOnly }
+        if facts.hasUsableContactForm { return .contactFormOnly }
+        return facts.hasSocialRoute ? .socialOnly : .noEmailFound
+    }
+
     // #1640: `likelyReachable` is gone with the website branch that was its only writer. A value nothing
     // produces reads as a case the classifier can reach and is never reached, which is the shape #2811 and
     // #3154 exist to find.

@@ -1448,6 +1448,7 @@
 		B7F525B24D25F79EE0C8B5AB /* AnsweredReplyNote.swift in Sources */ = {isa = PBXBuildFile; fileRef = BEF8FA94B2435C4C51F38EFE /* AnsweredReplyNote.swift */; };
 		B845F698530B9BDA98D1C6E4 /* OrganisationsSheetModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B82D11C10A566616C745EA49 /* OrganisationsSheetModelTests.swift */; };
 		B848C8FFF9F1489A1DC221EB /* RunProgress.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB7282E503DFB2A4A9D4F694 /* RunProgress.swift */; };
+		B84A17505F5DF6096EE91CED /* ReachabilityRouteCascadeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E8A840364E8BAF3265302511 /* ReachabilityRouteCascadeTests.swift */; };
 		B87267E76AFB6ACEBA70DFF6 /* NaturalKeyRemap.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF5399E8357B99E3A474E5A0 /* NaturalKeyRemap.swift */; };
 		B872EE4155A7604990262153 /* BackupLogHonestyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB62D50D07E41F362DEB407B /* BackupLogHonestyTests.swift */; };
 		B8C693EEAAE6A5F82D71A407 /* RecurringEventDateGuardTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16FBA3C502F064F71CB15201 /* RecurringEventDateGuardTests.swift */; };
@@ -3516,6 +3517,7 @@
 		E86872C2D168C0DEF8984DA2 /* AwayAlertTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AwayAlertTests.swift; sourceTree = "<group>"; };
 		E8756FC6C0288732BE6DA264 /* ShowSearchFieldGuardTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShowSearchFieldGuardTests.swift; sourceTree = "<group>"; };
 		E894E2E958EE3100C3C5FE02 /* OmniFocusSyncStatusTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OmniFocusSyncStatusTests.swift; sourceTree = "<group>"; };
+		E8A840364E8BAF3265302511 /* ReachabilityRouteCascadeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReachabilityRouteCascadeTests.swift; sourceTree = "<group>"; };
 		E8AA42B16919FC72DF30DC23 /* ContactRefusal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContactRefusal.swift; sourceTree = "<group>"; };
 		E8AA8F6949356B7411F42B22 /* DueBadgeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DueBadgeTests.swift; sourceTree = "<group>"; };
 		E8B714D41070A6453D2AC877 /* ContactTier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContactTier.swift; sourceTree = "<group>"; };
@@ -4422,6 +4424,7 @@
 				8FEDA1F78AE7B4ED5B77970D /* ReachabilityProbeQueueTests.swift */,
 				24F7850C823B37E99EB2E26B /* ReachabilityProbeReuseTests.swift */,
 				7508C64C9CDFAAEE32F7EFA9 /* ReachabilityRecheckTests.swift */,
+				E8A840364E8BAF3265302511 /* ReachabilityRouteCascadeTests.swift */,
 				3A5209D30FF42AE009C40FFC /* ReachabilityRunReportTests.swift */,
 				AC7B7DFA27CAC32A7AAEAD9D /* ReachabilityStageCommentTests.swift */,
 				491CE4FB833F19A93EAD1353 /* ReachabilityTests.swift */,
@@ -6962,6 +6965,7 @@
 				95E928F561A68B8164E25078 /* ReachabilityProbeQueueTests.swift in Sources */,
 				C5727253134A960439B4E3E0 /* ReachabilityProbeReuseTests.swift in Sources */,
 				2DB59BDCBC2FDC21DE2B7812 /* ReachabilityRecheckTests.swift in Sources */,
+				B84A17505F5DF6096EE91CED /* ReachabilityRouteCascadeTests.swift in Sources */,
 				95D24447B9FEFF391C9C044A /* ReachabilityRunReportTests.swift in Sources */,
 				381BCB4539F9F660C0E93775 /* ReachabilityRunSummary.swift in Sources */,
 				F0CAEECE3E92BC5C7D8408AF /* ReachabilityStageCommentTests.swift in Sources */,
