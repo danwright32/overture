@@ -255,7 +255,7 @@ struct QueueShowableSurfacesAreOnePredicateTests {
               answers: "which stage a deep-linked lead lands in",
               mustCall: ["stage"]),
         .init(path: "Overture/UI/QueueView.swift",
-              marker: "private func scoutRows(_ data: RenderData) -> [QueueItem] {",
+              marker: "private func scoutRows(_ data: RenderData) -> [QueueScopeRow] {",
               answers: "the Scout rows a night-dismiss acts on",
               mustCall: ["focusedKeys"]),
         .init(path: "Overture/UI/QueueView.swift",

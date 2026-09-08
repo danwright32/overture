@@ -214,8 +214,12 @@ struct PresenterLineWiringTests {
         // broke the moment a parameter was added after `now:`, and a marker that stops matching returns
         // nil, which every `contains` below is quietly false against (#2192). The name is the thing this
         // guard is actually about.
-        guard let body = SourceGuardHelper.bodyOfFunction(named: "items", in: model) else {
-            Issue.record("QueueModel.items(from:) is gone, so this guard is asking nothing")
+        // #3653: `scope`, not `items`. The builder was renamed when it started producing the cheap
+        // scope rows beside the cards, and `items` is now a one-line forwarder onto it, so a guard left
+        // on that name reads a body containing nothing but the forwarding call and every `contains`
+        // below is quietly false against it (L135, and #2192's lesson one name over).
+        guard let body = SourceGuardHelper.bodyOfFunction(named: "scope", in: model) else {
+            Issue.record("QueueModel.scope(from:) is gone, so this guard is asking nothing")
             return
         }
         #expect(body.contains("ProducerGate.VenueBrands("))

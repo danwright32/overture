@@ -23,7 +23,11 @@ struct QueueItemConstructionGuardTests {
     // The memberwise call itself: from `self.init(` inside the two-argument initializer to its closing
     // line. Read by markers rather than line numbers, which move.
     private func memberwiseCall(in text: String) -> String? {
-        guard let start = text.range(of: "init(_ p: Prospect, sendGroups: SendGroup.CardGroups) {") else {
+        // #3653: the initialiser gained a `contacts:` parameter, so the marker is the signature's
+        // CLOSING line. Anchoring on the opening one would start the scan inside the parameter list, and
+        // `self.init(` is found from there either way, so it would still have worked and would have been
+        // reading a region nobody meant it to (L70).
+        guard let start = text.range(of: "contacts: [Recipient]? = nil) {") else {
             return nil
         }
         let rest = text[start.upperBound...]

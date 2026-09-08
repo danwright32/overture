@@ -144,7 +144,12 @@ struct EverySurfaceIsCountedGuardTests {
     static func cardBuildingFiles(_ files: [AppSourceWalk.File]) -> [String] {
         files.filter { file in
             let code = SourceGuardHelper.normalizedCode(file.text)
-            return code.contains("QueueModel.items(from:") || code.contains("map(QueueItem.init)")
+            // #3653: `scope(from:` joins the list rather than replacing `items(from:`. The render pass
+            // takes the arm that builds the cheap rows beside the cards; ArchiveView and QueueView's own
+            // action-path property still take the cards-only forwarder. A walk that knew only the new
+            // spelling would stop seeing two of the four surfaces it exists to enumerate (L96, L247).
+            return code.contains("QueueModel.items(from:") || code.contains("QueueModel.scope(from:")
+                || code.contains("map(QueueItem.init)")
         }
         .map(\.name).sorted()
     }

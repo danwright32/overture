@@ -48,9 +48,16 @@ struct QueueRenderDataGuardTests {
             Issue.record("expected to find the render pass")
             return
         }
-        // One binding of the items array, then everything downstream uses that local.
-        let occurrences = body.components(separatedBy: "let items = QueueModel.items(").count - 1
+        // One binding of the scope, then everything downstream uses that local.
+        //
+        // #3653: the needle is `QueueModel.scope(`, because one build now yields the cheap rows AND the
+        // cards from a single walk of each show's contacts. The rule is unchanged and is if anything
+        // sharper: a second call here would be a second walk of every show as well as a second map.
+        let occurrences = body.components(separatedBy: "let scope = QueueModel.scope(").count - 1
         #expect(occurrences == 1)
+        #expect(!body.contains("QueueModel.items("), Comment(rawValue:
+            "the pass reached the cards-only arm, which would build them a second time and walk every "
+            + "show's contacts again to do it"))
     }
 
     // #1771: the snapshot is the one place a render's derived state lives, so AgentInputs belongs IN it.
@@ -73,7 +80,10 @@ struct QueueRenderDataGuardTests {
             Issue.record("expected to find probeSelectionBar's body")
             return
         }
-        #expect(body.contains("allItems: data.items"))
+        // #3653: `data.rows`, the pass's cheap scope rows. The bar asks which dates hold something to
+        // check and what a run over them would cost, and every one of those is answerable from a row, so
+        // it is not a reason to build a card for a show nobody is looking at (#3654).
+        #expect(body.contains("allItems: data.rows"))
         // `allItems: items` there is `self.items`, the computed property that rebuilds the whole queue.
         #expect(!body.contains("allItems: items"))
         // #1916: the rows stay a closure, so an unticked queue never pays for the scoutRows sweep.
