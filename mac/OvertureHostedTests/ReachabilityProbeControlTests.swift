@@ -10,12 +10,12 @@ import ViewInspector
 @MainActor
 @Suite("Reachability probe control (#1308)")
 struct ReachabilityProbeControlTests {
-    private func item(_ key: String, status: ReviewStatus = .new) -> QueueItem {
-        QueueItem(id: key, groupName: key, discipline: "music", venue: "Weill Recital Hall",
-                  performanceDate: "2026-09-12", sourceListingURL: nil,
-                  priorRelationship: "none", production: "self", profile: "strong",
-                  coverage: "likely_uncovered", fitScore: 6, tier: "mid", fitReason: "r",
-                  matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil, status: status)
+    // #3654: a ROW. This control sits on a date heading and asks only which shows under it a paid check
+    // could still be about, which is answerable without a card, so the heading does not force one for
+    // every show beneath it.
+    private func item(_ key: String, status: ReviewStatus = .new) -> QueueScopeRow {
+        QueueScopeRow(id: key, groupName: key, discipline: "music", venue: "Weill Recital Hall",
+                      performanceDate: "2026-09-12", fitScore: 6, status: status)
     }
 
     @Test func showsAndTapReportsTheCandidateKeys() throws {

@@ -121,9 +121,10 @@ struct FeltWaitCostTests {
     // tests would burn its whole deadline (90 s, 20 s, 20 s, 60 s) in the SERIAL hosted bundle and then
     // fail, on every push, for a reason naming nothing (L98, L110).
     //
-    // The card counter is deliberately still read where a test is asking about CARDS (the press and the
-    // write both assert on `cardsAfterThePress`), because the ratio of the two is what Phase 4 is judged
-    // by and folding them would make the saving unmeasurable at the moment it starts.
+    // The card counter is still READ beside it, and reported rather than asserted: the ratio of the two
+    // is what Phase 4 is judged by, and folding them would make the saving unmeasurable at the exact
+    // moment it starts. It reads ZERO in this harness, which is a fact about the rig (its window is never
+    // ordered front, so its lazy stack realizes nothing) rather than about the app.
     //
     // A DEADLINE rather than a bare wait, because a wait with no deadline cannot fail, it can only hang,
     // and a hang is indistinguishable from a slow machine while holding the shared xcodebuild lock
@@ -209,6 +210,7 @@ struct FeltWaitCostTests {
         var rebuiltAfterThePress = false
         var warmed = false
         var cardsAfterThePress = 0
+        var rowsAfterThePress = 0
         let built = QueueRenderPass.WorkTally.measure {
             warmed = warmTheList(ctx, keys: keys, rows: 40, in: hosting)
             // #3653 step 3a: TWO baselines, because these are two quantities now. The pump waits on ROWS
@@ -231,12 +233,27 @@ struct FeltWaitCostTests {
                 hosting.displayIfNeeded()
                 RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.01))
             }
+            rowsAfterThePress = (QueueRenderPass.WorkTally.current?.queueRows ?? 0) - settledRows
             cardsAfterThePress = (QueueRenderPass.WorkTally.current?.queueItems ?? 0) - settledCards
         }
 
         #expect(warmed, "the list never drew at all, so there was nothing to press on")
 
-        #expect(built.queueItems > 0, "the queue built no cards at all, so nothing here was measured")
+        // #3654 changed WHICH counter is the positive control here, and the reason is a finding about
+        // this rig rather than a rename.
+        //
+        // Before, a pass built one card per show in scope, so `queueItems` moved whether or not a single
+        // row body ever ran. Now a card is built when something DRAWS a row, and this harness builds
+        // exactly ZERO of them: its window is borderless and deliberately never ordered front (#3480),
+        // and its `LazyVStack` realizes nothing. So the suite has always been measuring THE PASS and has
+        // never once measured a row body, which is precisely what #3654's own correction B3 warned this
+        // rig could not see.
+        //
+        // The pass is still the thing this milestone is about and the timings below are still its cost,
+        // so the control moves to the quantity the rig can actually observe rather than being weakened to
+        // something a dead rig would also satisfy (L63, L159). What a rendered row costs is measured by
+        // `CardsOnlyForWhatRendersTests` against the store directly, where it can be.
+        #expect(built.queueRows > 0, "the queue built no rows at all, so nothing here was measured")
         #expect(rebuiltAfterThePress, Comment(rawValue:
                 "the press provoked no rebuild, so every timing in this suite would be a timeout rather "
                 + "than a cost, and a timeout reads as a very slow press (L98, L110)"))
@@ -262,15 +279,23 @@ struct FeltWaitCostTests {
         // Named as PASSES rather than cards so the assertion says what it means, and bounded on BOTH
         // sides: below one would mean the list stopped rebuilding at all, above one that a second
         // derivation has come back.
-        let passes = Double(cardsAfterThePress) / Double(38)
-        #expect(cardsAfterThePress > 0, "the press built no cards, so no pass was counted")
+        // #3654: over ROWS, for the reason recorded above the positive control. A card follows the
+        // screen now and this rig draws nothing, so a ratio over cards reads 0.0 for a perfectly healthy
+        // pass. What the ratio asks is unchanged.
+        let passes = Double(rowsAfterThePress) / Double(38)
+        #expect(rowsAfterThePress > 0, "the press built no rows, so no pass was counted")
         #expect(passes >= 0.9 && passes <= 1.1, Comment(rawValue:
                 "one press provoked \(String(format: "%.1f", passes)) whole-store passes "
-                + "(\(cardsAfterThePress) cards over 38 rows in scope). ONE is what a press is supposed "
+                + "(\(rowsAfterThePress) rows over 38 rows in scope). ONE is what a press is supposed "
                 + "to cost. TWO is what it cost before #2598, and the way back is a computed property "
                 + "that derives the store being read from the render path while the pass already holds "
                 + "the rows. Less than one means the list stopped rebuilding at all, which would make "
                 + "every timing in this suite a timeout rather than a cost."))
+        // Reported and not asserted, because it is a fact about the RIG rather than about the app: this
+        // window is never ordered front, its lazy stack realizes nothing, and a card is now built only
+        // when a row draws. Printing it is what stops the next reader taking a zero here for a defect,
+        // and what would say so the day somebody makes this harness realize rows (L98, L11).
+        print("felt-wait-cards-drawn: \(cardsAfterThePress) cards built by the render path after the press")
     }
 
     // THE CLASS, not the instance. #2598 found ONE render-path derivation and removed it; what stops the
@@ -288,7 +313,7 @@ struct FeltWaitCostTests {
         let (window, hosting) = host(queueView(c))
         defer { window.close() }
 
-        var cardsAfterTheWrite = 0
+        var rowsAfterTheWrite = 0
         var warmed = false
         _ = QueueRenderPass.WorkTally.measure {
             warmed = warmTheList(ctx, keys: keys, rows: 40, in: hosting)
@@ -310,16 +335,22 @@ struct FeltWaitCostTests {
                 hosting.displayIfNeeded()
                 RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.01))
             }
-            cardsAfterTheWrite = (QueueRenderPass.WorkTally.current?.queueItems ?? 0) - settledCards
+            rowsAfterTheWrite = (QueueRenderPass.WorkTally.current?.queueRows ?? 0) - settledRows
         }
 
         #expect(warmed, "the list never drew, so there was nothing to write against")
         // 39 rows in scope: the warm-up dismissed one of the forty and this write dismisses none.
-        let passes = Double(cardsAfterTheWrite) / Double(39)
-        #expect(cardsAfterTheWrite > 0, "the write provoked no rebuild at all")
+        //
+        // #3654: over ROWS. The pass builds one row per show in scope and a card only for what draws, and
+        // this rig draws nothing (see `aPressReallyRebuildsTheQueue` for why), so a ratio over cards would
+        // be 0.0 for a healthy pass. The claim is unchanged and is still the one #2598 is about: any write
+        // is ONE whole-store pass, and more than one means something on the render path derives the store
+        // a second time.
+        let passes = Double(rowsAfterTheWrite) / Double(39)
+        #expect(rowsAfterTheWrite > 0, "the write provoked no rebuild at all")
         #expect(passes >= 0.9 && passes <= 1.1, Comment(rawValue:
                 "one field write provoked \(String(format: "%.1f", passes)) whole-store passes "
-                + "(\(cardsAfterTheWrite) cards over 39 rows in scope). Any write is one pass; more than "
+                + "(\(rowsAfterTheWrite) rows over 39 rows in scope). Any write is one pass; more than "
                 + "one means something on the render path derives the store a second time (#2598)."))
     }
 

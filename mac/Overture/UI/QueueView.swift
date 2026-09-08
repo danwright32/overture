@@ -244,8 +244,13 @@ struct QueueView: View {
     // (focusedKeys) and invalidates the body; before, that alone rebuilt `items` seven-plus times and
     // re-faulted the store on each one, which is what froze the machine for a beat on every switch.
     struct RenderData {
-        let items: [QueueItem]
-        let visible: [QueueItem]
+        // #3654: the pass's card store, and the ONLY way a surface gets a card during a render.
+        //
+        // The two arrays that used to sit here (`items` and `visible`, one card per show in scope) are
+        // gone, and their absence is the phase: nothing can ask for every card any more, because there is
+        // no array of them to ask. A surface that draws a row asks the store for that row's card, which
+        // is what records the key and what counts a miss.
+        let cards: QueueModel.CardStore
         // #3507: the queue's own scope of Prospect models, derived once by the pass from the single
         // whole-table query. Everything on the RENDER path that needs a model row reads it from here, so
         // a per-row call site cannot re-derive it; a user ACTION, which runs outside a pass, uses
@@ -291,7 +296,7 @@ struct QueueView: View {
         let visibleRows: [QueueScopeRow]
         // The stage's rows, already filtered to the focused stage and with the just-sent rows folded back
         // in, and already grouped by date. Grouping ~500 Scout rows per scroll frame was pure waste.
-        let focusedRows: [QueueItem]
+        let focusedRows: [QueueScopeRow]
         let dateGroups: [QueueModel.DateGroup]
         let inquiryRows: [InquiryRow]
         // #1962: the pass's own resolved geography, so a surface built from this snapshot answers
@@ -303,6 +308,14 @@ struct QueueView: View {
     // can be measured in a test. A SwiftUI body cannot be evaluated in one, so anything left in here is
     // unmeasurable by construction. What stays is gathering: reading this view's own state and the three
     // file-backed answers, and handing them over.
+    // #3654: what the last frame drew, and where this frame's requests are recorded.
+    //
+    // `@State` so it survives the body evaluations, and a plain class rather than an observed object
+    // because the row-request component writes to it DURING a render. Reading it here, once, before the
+    // pass, is what makes the ordering contract true: keys registered during frame N feed the map for
+    // frame N+1.
+    @State private var cardKeys = QueueModel.CardKeyRegistry()
+
     private func makeRenderData() -> RenderData {
         let now = Date()
         // Asked ONCE: three of the inputs below are decided from it, and it reads marker files.
@@ -326,7 +339,12 @@ struct QueueView: View {
                 ? PrepQueueService.lastRunStartedAt(slot: .check) : nil,
             checkLookups: inFlight == .reachabilityCheck ? PrepQueueService.liveCheckLookups() : nil,
             replyRunAlive: ReplyClassifyService.isRunning(now: now),
-            trace: renderTrace))
+            trace: renderTrace,
+            // #3654: the rows the LAST frame drew, and the register this one writes into. Taken rather
+            // than read, so the set is what the last frame drew and not everything Dan has scrolled past
+            // since the app opened.
+            requestedCardKeys: cardKeys.takeKeys(),
+            cardKeyRegistry: cardKeys))
     }
 
     #if DEBUG
@@ -733,8 +751,9 @@ struct QueueView: View {
                     QueueDateGroups(groups: data.dateGroups, sendState: sendState) {
                         // #1436: un-replied inquiries (the to-send stage) surface with the shows.
                         inquirySection(inquiryRows)
-                    } content: { group, departing in
-                        dateSection(group, data: data, departing: departing)
+                    } content: { group, departing, departingCards in
+                        dateSection(group, data: data, departing: departing,
+                                    departingCards: departingCards)
                             .id(QueueModel.showGroupScrollID(group.id))
                     }
                 }
@@ -794,7 +813,8 @@ struct QueueView: View {
     // (QueueModel.groupByDate) and the unavailability rule (QueueModel.groupIsUnavailable) are tested
     // model helpers; this only renders them.
     private func dateSection(_ group: QueueModel.DateGroup, data: RenderData,
-                             departing: [String: DepartureReason]) -> some View {
+                             departing: [String: DepartureReason],
+                             departingCards: [String: QueueItem]) -> some View {
         VStack(alignment: .leading, spacing: OVSpacing.sm) {
             HStack(alignment: .firstTextBaseline, spacing: OVSpacing.sm) {
                 if !group.weekday.isEmpty {
@@ -864,8 +884,9 @@ struct QueueView: View {
 
             // #1922: `departing` arrives as a plain dictionary from QueueDateGroups, which is the view
             // that read it. Reading it here would be the same dependency one level down.
-            ForEach(group.items) { item in
-                prospectRow(item, data: data, departure: departing[item.id])
+            ForEach(group.items) { row in
+                prospectRow(row, data: data, departure: departing[row.id],
+                            departingCard: departingCards[row.id])
             }
         }
     }
@@ -936,7 +957,7 @@ struct QueueView: View {
     // as shows leave the stage (Scout/Prep/Review map one-to-one to a live status; so does Send while its
     // most-urgent focus is still the one Dan tapped). Falls back to the heading captured at tap time (the
     // rare Send-focus-shifted case), then to the #308 away-leads phrasing.
-    private func focusedStageHeading(rows: [QueueItem], agentInputs: AgentInputs) -> String {
+    private func focusedStageHeading(rows: [some QueueScopeFacts], agentInputs: AgentInputs) -> String {
         if let stage = focusedStage,
            let live = AgentRoster.statuses(agentInputs).first(where: { $0.focus == stage }) {
             return "\(live.name): \(live.detail)"
@@ -1516,8 +1537,19 @@ struct QueueView: View {
         .padding(.vertical, OVSpacing.xs)
     }
 
-    @ViewBuilder private func prospectRow(_ item: QueueItem, data: RenderData,
-                                          departure: DepartureReason?) -> some View {
+    // #3654: THE ROW REQUEST. The one place a drawn row turns into a card.
+    //
+    // It takes a ROW and asks the store, which is what records the key for the next pass and what counts
+    // a miss. A surface cannot draw a row without coming through here, because there is no array of cards
+    // left to reach for: `RenderData` carries the store and nothing else (L621, a rule each call site has
+    // to remember is enforceable by nothing).
+    //
+    // A DEPARTING row takes its card from the snapshot instead, and must: the send has already changed
+    // what the show is, and the leaving delight is drawing the card as it was when Dan pressed.
+    @ViewBuilder private func prospectRow(_ row: QueueScopeRow, data: RenderData,
+                                          departure: DepartureReason?,
+                                          departingCard: QueueItem?) -> some View {
+        let item = departingCard ?? data.cards.card(for: row)
         if let departure, departure.showsSendDelight {
             // #361: the leaving delight. Appears instantly in place of the just-sent row (insertion
             // .identity), then the glide-up removal plays when `departing` clears. Reduced Motion drops
@@ -2003,7 +2035,7 @@ enum QueueRenderCounter {
     nonisolated(unsafe) private static var renders: [String: Int] = [:]
     // #1931: the rows the LAST derivation produced. Value-type snapshots, already built by that pass, so
     // comparing them costs no fetch and no stat.
-    nonisolated(unsafe) private static var previousRows: [QueueItem]?
+    nonisolated(unsafe) private static var previousRows: [QueueScopeRow]?
 
     static let firstRender = "first render"
     static let nothingVisible = "nothing this view reads"
@@ -2029,7 +2061,7 @@ enum QueueRenderCounter {
     // renders were landing in the same log a real observation is read from: two runs interleaved in one
     // file, each starting again at #1. The count itself is in-memory and harmless, so only the file is
     // protected. Same signal the launch-time background work already skips on (#195).
-    static func recordDerivation(inputs: [String: String] = [:], rows: [QueueItem]? = nil,
+    static func recordDerivation(inputs: [String: String] = [:], rows: [QueueScopeRow]? = nil,
                                  to url: URL? = nil,
                                  underTests: Bool = AppEnvironment.isRunningUnderTests,
                                  maxLogBytes: Int = AgentLogLocation.defaultMaxLogBytes) {
@@ -2205,7 +2237,10 @@ struct QueueScrollHolder<Content: View>: View {
 // been saying it twice (#843). A tap reports the candidate keys up so QueueView opens the confirm sheet;
 // it never runs on its own.
 struct ReachabilityProbeControl: View {
-    let items: [QueueItem]
+    // #3654: ROWS. Everything this control asks (which shows on this night a paid check could still be
+    // about) is answerable from one, so a date heading offering the check does not force a card for every
+    // show under it.
+    let items: [QueueScopeRow]
     let dateLabel: String
     // #1609: Dan's geography refusals, so the control never offers a PAID check on a show somewhere he
     // has refused to travel. Defaulted to none so a preview or a test that does not care is unchanged.

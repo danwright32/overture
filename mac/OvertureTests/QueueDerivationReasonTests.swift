@@ -205,12 +205,12 @@ struct DerivationRowChangeTests {
         #expect(QueueRenderCounter.lastReason == QueueRenderCounter.firstRender)
     }
 
-    private func item(id: String, fit: Int) -> QueueItem {
-        QueueItem(id: id, groupName: "Vienna Philharmonic", discipline: "music", venue: "Stern Auditorium",
-                  performanceDate: "2026-11-14", sourceListingURL: nil,
-                  priorRelationship: "none", production: "self", profile: "strong",
-                  coverage: "likely_uncovered", fitScore: fit, tier: "high", fitReason: "r",
-                  matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil, status: .new)
+    // #3654: the counter compares the pass's cheap SCOPE ROWS, because a card is no longer built for
+    // every show. What it asks is unchanged, which is whether the rows this view derives changed at all.
+    private func item(id: String, fit: Int) -> QueueScopeRow {
+        QueueScopeRow(id: id, groupName: "Vienna Philharmonic", discipline: "music",
+                      venue: "Stern Auditorium", performanceDate: "2026-11-14",
+                      fitScore: fit, tier: "high")
     }
 }
 

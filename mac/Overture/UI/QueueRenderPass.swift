@@ -216,6 +216,19 @@ enum QueueRenderPass {
         // #1930's fingerprint of what this view derives FROM, gathered by the caller because it describes
         // the caller's own state. DEBUG only in effect: the pass records it and nothing else reads it.
         var trace: [String: String] = [:]
+        // #3654: the shows the LAST frame actually drew, plus whatever else a surface asked for, or nil
+        // for every row in scope.
+        //
+        // KEYS REGISTERED DURING FRAME N FEED THE MAP FOR FRAME N+1, and that ordering is the contract
+        // rather than a limitation. The card map is computed BEFORE the body renders; which rows a
+        // `LazyVStack` realizes is discovered DURING it. So the first frame of a newly drawn or newly
+        // scrolled surface asks for keys nobody predicted, those cards are built on the spot, and the
+        // store counts them as EXPECTED misses. What must never happen is a request for a key this set
+        // named and the pass did not build, which is `unexpectedCardMisses` and is pinned at zero.
+        var requestedCardKeys: Set<String>? = nil
+        // Where this pass's own render path will record what it draws, for the pass after it. Nil in
+        // every test that measures one pass on its own, which have no next frame.
+        var cardKeyRegistry: QueueModel.CardKeyRegistry? = nil
     }
 
     @MainActor
@@ -237,14 +250,15 @@ enum QueueRenderPass {
                                      sources: i.sources, refusals: i.refusals,
                                      // #2524: the same window the stage rule applies, so the card's
                                      // sentence and the stage's decision come from one answer.
-                                     clients: context.clients, now: context.now, today: context.today)
+                                     clients: context.clients, now: context.now,
+                                     cardKeys: i.requestedCardKeys,
+                                     cardKeyRegistry: i.cardKeyRegistry, today: context.today)
         // #3653 Phase 3: one build, two halves. The cards are what the screen draws; the rows are what
         // every whole-scope sweep below reads, and they cost one contacts walk between them rather than
         // one each.
-        let items = scope.items
         let rows = scope.rows
         #if DEBUG
-        QueueRenderCounter.recordDerivation(inputs: i.trace, rows: items)
+        QueueRenderCounter.recordDerivation(inputs: i.trace, rows: rows)
         #endif
         let reachedOut = ReachedOutQueue.activeWithDates(from: inQueue.all, now: context.now)
         let reachedOutKeys = Set(reachedOut.map(\.prospect.naturalKey))
@@ -252,15 +266,14 @@ enum QueueRenderPass {
         // masthead can no longer state a smaller backlog than the pills it sits above.
         let inAStage = StageNavigation.queueKeys(in: inQueue.all, reachedOutKeys: reachedOutKeys,
                                                  context: context)
-        let visible = items.filter { inAStage.contains($0.id) }
         let visibleRows = rows.filter { inAStage.contains($0.id) }
         // #1774/#1140: in stage mode membership is re-derived live (a sent draft drops out); in leads mode
         // the frozen key set stands. The dispatch lives in StageNavigation so it is tested.
         let wanted = Set(StageNavigation.focusedKeys(stage: i.focusedStage, leadKeys: i.focusedKeys ?? [],
                                                      in: inQueue.all, context: context))
-        let focusedRows = items.filter { wanted.contains($0.id) }
+        let focusedRows = rows.filter { wanted.contains($0.id) }
         return QueueView.RenderData(
-            items: items, visible: visible,
+            cards: scope.cards,
             // #3507: the scope itself, so the render path reads the list this pass already derived rather
             // than deriving it again per row. Every caller that needs it during a render takes it from
             // here; only a user ACTION, which happens outside a pass, derives its own.

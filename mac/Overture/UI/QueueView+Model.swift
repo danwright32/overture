@@ -1749,16 +1749,22 @@ enum QueueModel {
         let items: [Item]
     }
 
-    typealias DateGroup = DateGroupOf<QueueItem>
+    // #3654: the plain name means the ROW-shaped group, because that is what the queue's own list holds
+    // now: a card is built for a row when something is about to draw it, not for every show in the stage.
+    typealias DateGroup = DateGroupOf<QueueScopeRow>
 
     // Groups by performance date, preserving incoming order. Undated collect last.
     // #361: fold the just-sent rows playing their leaving delight back into the displayed rows, so each
     // glides out in its place. The send has already dropped them from `visible`, so they come from the
     // departing snapshots; a defensive filter avoids showing one twice if `visible` briefly still holds
     // it before the @Query refilters.
-    static func withDeparting(_ visible: [QueueItem], departing: [String: QueueItem]) -> [QueueItem] {
+    // #3654: the visible half is ROWS and the departing half is CARDS, which is what the two actually
+    // are, and the card is reduced to a row through the one protocol-driven initialiser rather than by a
+    // field list kept by hand (L96).
+    static func withDeparting(_ visible: [QueueScopeRow],
+                              departing: [String: QueueItem]) -> [QueueScopeRow] {
         guard !departing.isEmpty else { return visible }
-        return visible.filter { departing[$0.id] == nil } + Array(departing.values)
+        return visible.filter { departing[$0.id] == nil } + departing.values.map(QueueScopeRow.init)
     }
 
     // #1922: the same fold, applied to groups ALREADY BUILT rather than to the rows going into the
@@ -1771,7 +1777,15 @@ enum QueueModel {
     // Dan is watching with nowhere to land. Expressed through the two tested helpers, so the ordering
     // (existing dates first, a night that exists only for a departing card last) is exactly what the
     // rows-first version produced.
-    static func groups(_ groups: [DateGroup], withDeparting departing: [String: QueueItem]) -> [DateGroup] {
+    // #3654: groups of ROWS, spliced with departing CARDS.
+    //
+    // The two halves are different types on purpose and neither is a mistake. The list holds rows,
+    // because a row is what a show reduces to before anybody decides whether to draw it. The departing
+    // snapshot is a card, because the leaving delight draws a card and the show has already gone from the
+    // store's answer, so there is nothing left to build one from. The card is reduced to a row HERE,
+    // through the one protocol-driven initialiser, so no field list is maintained by hand (L96).
+    static func groups(_ groups: [DateGroupOf<QueueScopeRow>],
+                       withDeparting departing: [String: QueueItem]) -> [DateGroupOf<QueueScopeRow>] {
         guard !departing.isEmpty else { return groups }
         return groupByDate(withDeparting(groups.flatMap(\.items), departing: departing))
     }
@@ -2286,14 +2300,14 @@ enum QueueModel {
     // down on the first show Dan keeps, and reading the gate here would take the marker off the header the
     // moment he said "I can shoot this anyway". That decision is about whether to PITCH the show; the
     // calendar is blocked either way, and the header's job is to say what the day is.
-    static func groupIsUnavailable(_ items: [QueueItem]) -> Bool {
+    static func groupIsUnavailable(_ items: [some QueueScopeFacts]) -> Bool {
         items.contains { $0.hasConflict && conflictScope($0) == .thisNight }
     }
 
     // #1501: which night of a flagged show's run the clash is on, derived from two fields the item already
     // carries so the header, the pill and the sentence are three renderings of ONE decision rather than
     // three rules that eventually contradict each other on screen (#863/#885).
-    static func conflictScope(_ item: QueueItem) -> ConflictScope? {
+    static func conflictScope(_ item: some QueueScopeFacts) -> ConflictScope? {
         ConflictScope.of(blockedDate: item.conflictBlockedDate, performanceDate: item.performanceDate)
     }
 
@@ -2449,7 +2463,7 @@ enum QueueModel {
     // the keep-or-dismiss moment, or somewhere he has refused to travel, was never checked and must not
     // say it was. Those headings stay bare, which is honest; the marker is a claim, so it is made only
     // where an answer actually exists.
-    static func dateReachabilityIsFullyChecked(_ items: [QueueItem], now: Date = Date(),
+    static func dateReachabilityIsFullyChecked(_ items: [some QueueScopeFacts], now: Date = Date(),
                                                today: String = QueueModel.easternToday(),
                                                geo: GeoRefusals = .none) -> Bool {
         guard reachabilityProbeCandidateKeys(items, now: now, today: today, geo: geo).isEmpty else {
@@ -2470,7 +2484,7 @@ enum QueueModel {
     // them, or the heading would take its date from a show it says nothing about (L287).
     //
     // Nil when nothing datable is left, which the copy renders as the sentence it always showed.
-    static func dateReachabilityCheckedOn(_ items: [QueueItem], now: Date = Date(),
+    static func dateReachabilityCheckedOn(_ items: [some QueueScopeFacts], now: Date = Date(),
                                           today: String = QueueModel.easternToday(),
                                           geo: GeoRefusals = .none) -> Date? {
         items
@@ -2484,7 +2498,7 @@ enum QueueModel {
     // them, so the date always describes the answer that satisfied the freshness rule rather than a
     // second opinion about which answer counts (L16, L70). An inherited answer carries its own
     // `probedAt`, so a show held by a sibling's paid check is datable too.
-    private static func reachabilityAnswerDate(_ i: QueueItem) -> Date? {
+    private static func reachabilityAnswerDate(_ i: some QueueScopeFacts) -> Date? {
         if let inherited = i.inheritedReachability { return inherited.probedAt }
         return i.reachabilityProbedAt
     }
@@ -2608,14 +2622,14 @@ enum QueueModel {
 
     // #3323: the EARLIEST night any of those clashes falls on, so the copy can name it. Nil when the row
     // is clear, which is what keeps a caller from rendering a night for a show that has no clash.
-    static func selfBookingClashNight(for item: QueueItem,
+    static func selfBookingClashNight(for item: some QueueScopeFacts,
                                       in index: SelfBookingConflict.NightIndex) -> String? {
         selfBookingConflicts(for: item, in: index).first?.night
     }
 
     // #3323: the row marker, assembled here so the view does not have to hold the night and the names
     // together itself (the #863 rule: a sentence built in a view is invisible to the copy inventory).
-    static func selfBookingRowMarker(for item: QueueItem,
+    static func selfBookingRowMarker(for item: some QueueScopeFacts,
                                      in index: SelfBookingConflict.NightIndex) -> String? {
         SelfBookingCopy.rowMarker(selfBookingConflictNames(for: item, in: index),
                                   clashNight: selfBookingClashNight(for: item, in: index),
@@ -2643,7 +2657,7 @@ enum QueueModel {
     // #3323: the note also says WHERE. A run in the group clashing on a later night makes "on this date"
     // a claim about the header it sits under that the check never measured, so the claim is asked whether
     // every clash at the tier it speaks for really falls on the header's own date.
-    static func selfBookingNote(_ group: [QueueItem], on date: String?,
+    static func selfBookingNote(_ group: [some QueueScopeFacts], on date: String?,
                                 in index: SelfBookingConflict.NightIndex) -> String? {
         SelfBookingCopy.dateHeaderNote(SelfBookingConflict.headerClaim(for: group.map(selfBookingShow),
                                                                        on: date, in: index))
@@ -2755,6 +2769,8 @@ enum QueueModel {
                       // only answer for them. The production caller is asserted to pass a real value.
                       heldKeys: Set<String> = [],
                       today: String? = nil) -> [QueueItem] {
+        // #3654: `cardKeys` is left at nil, which is EVERY row. This arm is what a caller that wants
+        // the cards themselves takes, so narrowing it here would silently hand back a shorter array.
         scope(from: prospects, answers: answers, corpus: corpus, rowsForLinking: rowsForLinking,
               overrides: overrides, sources: sources, refusals: refusals, clients: clients, now: now,
               heldKeys: heldKeys, today: today).items
@@ -2803,6 +2819,16 @@ enum QueueModel {
                       // about a live run) genuinely have no run state and "nothing held" is the right and
                       // only answer for them. The production caller is asserted to pass a real value.
                       heldKeys: Set<String> = [],
+                      // #3654: the shows a card is actually wanted for, or nil for every row.
+                      //
+                      // A card costs the send grouping, the recipient snapshots and a draft lint pass over
+                      // every pending contact's body; a row costs about twenty fields. The whole-corpus
+                      // tables above are built from the FULL corpus whatever this says, so narrowing it
+                      // provably cannot change what any card holds: it changes only which ones exist.
+                      cardKeys: Set<String>? = nil,
+                      // Where the render path's requests are recorded for the NEXT pass. Nil everywhere
+                      // but the app.
+                      cardKeyRegistry: CardKeyRegistry? = nil,
                       today: String? = nil) -> Scope {
         let day = today ?? EasternDate.today(now)
         // #3652/#3644: over `rowsForLinking`, which defaults to the rows being built. Its three
@@ -2825,83 +2851,254 @@ enum QueueModel {
         // judges against, so a dismissal cannot quietly take an organisation under the bar and remove the
         // control from the rows still showing. Built once here for the same reason as venueBrands above.
         let rowCounts = organisationRowCounts((corpus ?? prospects).map(\.presenter))
-        func organisationRowCount(_ presenter: String?) -> Int {
-            guard let key = ProducerGate.key(presenter) else { return 0 }
-            return rowCounts[key] ?? 0
-        }
         // #1825: built ONCE, for the same reason as venueBrands above. Every row resolves its own sources
         // through this rather than walking the watchlist per card.
         // #2816: the table lives on QueueModel now, because the reached-out and follow-up rows resolve
         // their own links against it too, and two builds of one table are two things to drift.
         let calendarBySourceId = sourceCalendarIndex(sources)
+        let pre = CardPreamble(linked: linked, inherited: inherited, venueBrands: venueBrands,
+                               rowCounts: rowCounts, calendarBySourceId: calendarBySourceId,
+                               overrides: overrides, clients: clients, now: now, day: day)
+
         var rows: [QueueScopeRow] = []
+        var contactsByKey: [String: [Recipient]] = [:]
+        var cards: [String: QueueItem] = [:]
         rows.reserveCapacity(prospects.count)
-        let items = prospects.map { p -> QueueItem in
-            // #3653 Phase 3: the contacts, read ONCE for this show and given to BOTH halves.
+        contactsByKey.reserveCapacity(prospects.count)
+        for p in prospects {
+            // #3653 Phase 3: the contacts, read ONCE for this show, whatever is built from them.
             //
-            // This is the whole reason a row and a card are built together rather than by two functions.
-            // `Prospect.countedRecipients` is the accessor that records `WorkTally.recipientReaches`, and
-            // #3675 pinned a card at exactly one reach per show. A row that asked the model its own
-            // questions would make that two, and `QueueRenderPassCostTests`'s pass-level pin would go
-            // red, correctly: the cheap half would have cost a second walk of every show's contacts.
+            // `Prospect.countedRecipients` is the accessor that records `WorkTally.recipientReaches`, so
+            // this is the line the pass-level pin measures. The array is KEPT, because #3654 builds a
+            // card for a show minutes after its row, when the person scrolls to it, and reading the
+            // contacts again then would make the pin a function of how far Dan scrolled rather than of
+            // the code (L63). It costs nothing to keep: SwiftData already faulted and cached the
+            // relationship on the object, so these are references to objects the context is holding
+            // anyway.
             let contacts = p.countedRecipients
-            let facts = RecipientFacts.of(p, contacts: contacts)
-            rows.append(QueueScopeRow(p, facts: facts,
-                                      inheritedReachability: inherited[p.naturalKey]))
-            var item = QueueItem(p, sendGroups: SendGroup.CardGroups(of: p), contacts: contacts)
-            // #2524: inside the sweep that was already happening. Asked as its own pass over the store it
-            // was a ninth whole-store sweep per render, which `QueueRenderPassCostTests` refused.
-            item.offeredEarlyAsAClient = isOfferedEarlyAsAClient(
-                performanceDate: p.performanceDate, isPastClient: clients.isPastClientShow(p), today: day)
-            item.sourceCalendarURLs = p.sourceIds.compactMap { calendarBySourceId[$0] }
-            item.linkedEngagementMembers = linked[p.naturalKey] ?? []
-            item.inheritedReachability = inherited[p.naturalKey]
-            // #1648: one staleness evaluation, feeding both the badge and the merit split.
-            item.contactRoute = p.contactRouteForScoring(now: now)
-            item.presenterLine = presenterLine(title: p.groupName, presenter: p.presenter,
-                                               venue: p.venue, venueBrands: venueBrands)
-            item.producerStanding = producerStanding(of: p.presenter, overrides: overrides)
-            // Only an organisation the gate can actually key is correctable. A name that folds away to
-            // nothing would store a key no presenter can ever match, which reads exactly like no
-            // correction at all.
-            //
-            // #1763: and only one a correction could actually MOVE. A presenter spelled exactly like a
-            // room is refused by isVenueBrand's first line, before it ever reads overrides.promoted, so
-            // promoting it stores a key the gate then ignores. Measured on the live store 2026-07-29:
-            // 15 organisations, 312 rows, all 15 still refused after being promoted. Offering the control
-            // there is the #1679 shape, a correction that reads as applied while changing nothing, so the
-            // row says nothing rather than something untrue.
-            //
-            // A correction ALREADY in force keeps its control regardless, because the way back is a real
-            // state change and stranding Dan with one he cannot take back is the worse failure.
-            // #1732: and only where the correction would be worth something. The counts are worked out
-            // once for the whole build, above, never per row.
-            item.correctableOrganisation = correctableOrganisation(
-                p.presenter, venueBrands: venueBrands, standing: item.producerStanding,
-                rowCount: organisationRowCount(p.presenter))
-            // Read off the SAME corpus verdict the card itself draws from, so the menu can never state a
-            // classification the row is not actually using.
-            item.treatedAsVenue = venueBrands.contains(p.presenter)
-            item.presenterWasTheRoom = p.presenterWasTheRoom == true   // #1788
-            // #1731: only meaningful where the verdict IS the building; nil otherwise.
-            item.readAsTheBuildingReason = venueBrands.contains(p.presenter)
-                ? OrganisationListing.buildingReason(
-                    isRoomName: venueBrands.isRoomName(p.presenter),
-                    standing: item.producerStanding)
-                : nil
-            return item
+            let key = p.naturalKey
+            contactsByKey[key] = contacts
+            rows.append(QueueScopeRow(p, facts: RecipientFacts.of(p, contacts: contacts),
+                                      inheritedReachability: inherited[key]))
+            // #3654: a card ONLY for a show something is going to draw. `nil` means every one of them,
+            // which is what `items(from:)` and Archive still ask for.
+            if cardKeys?.contains(key) ?? true {
+                cards[key] = card(p, contacts: contacts, preamble: pre)
+            }
         }
-        return Scope(rows: rows, items: items)
+        return Scope(rows: rows,
+                     cards: CardStore(cards: cards, shows: prospects, contactsByKey: contactsByKey,
+                                      preamble: pre, requestedKeys: cardKeys,
+                                      registry: cardKeyRegistry))
+    }
+
+    // The whole-corpus tables one build derives from, worked out ONCE and shared by every card it makes.
+    //
+    // A VALUE THE STORE KEEPS, which is the whole of what makes #3654 possible. A card built on the spot
+    // for a row that has just scrolled into view has to be the same card the pass would have built, and
+    // every one of these is a whole-store derivation: `venueBrands` walks every presenter against every
+    // venue spelling, `rowCounts` counts every organisation's rows, `inherited` reads the ledger against
+    // the unfiltered corpus. Rebuilding any of them per card would be the #1687 defect with a new cause.
+    //
+    // They are all built from the FULL corpus and never from the rows being drawn, so narrowing which
+    // cards get built provably cannot change what any card says (this phase's own safety argument).
+    struct CardPreamble {
+        let linked: [String: [EngagementLink.Member]]
+        let inherited: [String: OrgAnswerLedger.Inherited]
+        let venueBrands: ProducerGate.VenueBrands
+        let rowCounts: [String: Int]
+        let calendarBySourceId: [String: String]
+        let overrides: ProducerOverrides
+        let clients: ClientWindow
+        let now: Date
+        let day: String
+
+        func organisationRowCount(_ presenter: String?) -> Int {
+            guard let key = ProducerGate.key(presenter) else { return 0 }
+            return rowCounts[key] ?? 0
+        }
+    }
+
+    // ONE card, from a show and the tables the build already has.
+    //
+    // The only place a card is decorated, reached both by the pass's prebuild and by a row that arrives on
+    // screen after it. Two spellings of this would be two cards that can disagree about a show, and only
+    // one of them would be the one on screen (L107, L263).
+    static func card(_ p: Prospect, contacts: [Recipient]?, preamble pre: CardPreamble) -> QueueItem {
+        var item = QueueItem(p, sendGroups: SendGroup.CardGroups(of: p), contacts: contacts)
+        // #2524: inside the sweep that was already happening. Asked as its own pass over the store it
+        // was a ninth whole-store sweep per render, which `QueueRenderPassCostTests` refused.
+        item.offeredEarlyAsAClient = isOfferedEarlyAsAClient(
+            performanceDate: p.performanceDate, isPastClient: pre.clients.isPastClientShow(p),
+            today: pre.day)
+        item.sourceCalendarURLs = p.sourceIds.compactMap { pre.calendarBySourceId[$0] }
+        item.linkedEngagementMembers = pre.linked[p.naturalKey] ?? []
+        item.inheritedReachability = pre.inherited[p.naturalKey]
+        // #1648: one staleness evaluation, feeding both the badge and the merit split.
+        item.contactRoute = p.contactRouteForScoring(now: pre.now)
+        item.presenterLine = presenterLine(title: p.groupName, presenter: p.presenter,
+                                           venue: p.venue, venueBrands: pre.venueBrands)
+        item.producerStanding = producerStanding(of: p.presenter, overrides: pre.overrides)
+        // Only an organisation the gate can actually key is correctable. A name that folds away to
+        // nothing would store a key no presenter can ever match, which reads exactly like no
+        // correction at all.
+        //
+        // #1763: and only one a correction could actually MOVE. A presenter spelled exactly like a
+        // room is refused by isVenueBrand's first line, before it ever reads the promoted set, so
+        // promoting it stores a key the gate then ignores. Measured on the live store 2026-07-29:
+        // 15 organisations, 312 rows, all 15 still refused after being promoted. Offering the control
+        // there is the #1679 shape, a correction that reads as applied while changing nothing, so the
+        // row says nothing rather than something untrue.
+        //
+        // A correction ALREADY in force keeps its control regardless, because the way back is a real
+        // state change and stranding Dan with one he cannot take back is the worse failure.
+        // #1732: and only where the correction would be worth something. The counts are worked out
+        // once for the whole build, above, never per row.
+        item.correctableOrganisation = correctableOrganisation(
+            p.presenter, venueBrands: pre.venueBrands, standing: item.producerStanding,
+            rowCount: pre.organisationRowCount(p.presenter))
+        // Read off the SAME corpus verdict the card itself draws from, so the menu can never state a
+        // classification the row is not actually using.
+        item.treatedAsVenue = pre.venueBrands.contains(p.presenter)
+        item.presenterWasTheRoom = p.presenterWasTheRoom == true   // #1788
+        // #1731: only meaningful where the verdict IS the building; nil otherwise.
+        item.readAsTheBuildingReason = pre.venueBrands.contains(p.presenter)
+            ? OrganisationListing.buildingReason(
+                isRoomName: pre.venueBrands.isRoomName(p.presenter),
+                standing: item.producerStanding)
+            : nil
+        return item
     }
 
     // The rows every whole-scope consumer reads, and the cards the screen draws, as ONE value.
     //
-    // TWO ARRAYS AND NOT A PAIR OF FUNCTIONS, which is #3653's central constraint rather than a
+    // ONE BUILD AND NOT A PAIR OF FUNCTIONS, which is #3653's central constraint rather than a
     // convenience. Building them separately would read each show's contacts twice, and the cost pin that
     // exists to catch exactly that would refuse it.
     struct Scope {
         let rows: [QueueScopeRow]
-        let items: [QueueItem]
+        let cards: CardStore
+
+        // Every card, in row order. What `items(from:)` and Archive still ask for, and what a build that
+        // requested every key produces anyway; on a NARROWED build it is the cards that were asked for,
+        // which is why nothing on the render path uses it (a row resolves its own card through the store).
+        var items: [QueueItem] { rows.compactMap { cards.alreadyBuilt($0.id) } }
+    }
+
+    // #3654: the one place a rendered row gets its card, and the only thing that counts a miss.
+    //
+    // WHY A COMPONENT AND NOT A RULE. The render path REGISTERS the keys it draws; it does not opt in.
+    // A behaviour each call site must remember cannot be enforced by any scan, because a surface that
+    // never registers is indistinguishable from one where the condition never arises (L621). So a surface
+    // that wants a card has to come through here, and coming through here is what records the key.
+    //
+    // MISSING IS FAIL-SAFE AND FAIL-LOUD, on the precedent already in this file: a request for a key that
+    // was not prebuilt BUILDS IT ON THE SPOT, so the render is always correct and never an empty card or
+    // a placeholder standing in for a required value (L67). What varies is which counter moves, and the
+    // two are kept apart because folding them makes an expected miss and a wrong key set read identically
+    // (L11):
+    //
+    //   expectedFirstFrameMisses  a key the pass was never asked for. The card map is computed BEFORE the
+    //                             body renders and the rows a lazy stack realizes are discovered DURING
+    //                             it, so the first frame of a newly drawn or newly scrolled surface
+    //                             misses BY CONSTRUCTION. Counted, reported, silent in the app.
+    //   unexpectedCardMisses      a request for a key the pass BELIEVED it had built. That is a real
+    //                             defect in the key set, and it is the count the accounting identity pins
+    //                             at zero.
+    // #3654: the keys the render path ASKED FOR, carried from one frame to the next.
+    //
+    // A PLAIN CLASS AND DELIBERATELY NOT OBSERVED. The row-request component writes to it while the body
+    // is being evaluated, and a write to observed state there would invalidate the body that is drawing,
+    // which is the loop this whole milestone exists to remove. Nothing reads it during a render; the next
+    // pass does, once, before the body runs.
+    //
+    // IT IS EMPTIED BY EACH PASS, which is what bounds it. Left to accumulate, it would hold every key
+    // Dan has ever scrolled past, so the set the next pass prebuilds would grow through a session until it
+    // was the whole stage again and the saving would quietly disappear, with nothing saying so (L289).
+    // Emptied per pass, it holds the rows the LAST frame actually drew, which is the viewport.
+    final class CardKeyRegistry {
+        private(set) var keys: Set<String> = []
+
+        func note(_ key: String) { keys.insert(key) }
+
+        /// What the last frame drew, and reset for the next one. Called once by the pass, never by a
+        /// surface.
+        func takeKeys() -> Set<String> {
+            defer { keys.removeAll(keepingCapacity: true) }
+            return keys
+        }
+    }
+
+    // NOT `@MainActor`, and that is forced rather than chosen: `QueueModel.scope` is a nonisolated
+    // synchronous function (it is a pure derivation over values, which is what makes its cost measurable
+    // at all), so a main-actor store could not be built from the very place the cards are built. It holds
+    // `Prospect` models and is only ever touched from the render path, exactly like `RenderData.queueScope`
+    // beside it.
+    final class CardStore {
+        private var cards: [String: QueueItem]
+        private let showsByKey: [String: Prospect]
+        private let contactsByKey: [String: [Recipient]]
+        private let preamble: CardPreamble
+        // The keys the pass was ASKED to build, or nil for "every row", which is what a caller wanting
+        // the whole set passes. A nil here can never produce an unexpected miss, because there was no
+        // narrower belief to be wrong about.
+        let requestedKeys: Set<String>?
+        // Where a request is RECORDED for the next pass. Nil outside the app, which is every test that
+        // measures a pass on its own: the recording is about what the next frame should prebuild, and a
+        // test asking what one pass costs has no next frame.
+        private let registry: CardKeyRegistry?
+
+        private(set) var expectedFirstFrameMisses = 0
+        private(set) var unexpectedCardMisses = 0
+
+        init(cards: [String: QueueItem], shows: [Prospect], contactsByKey: [String: [Recipient]],
+             preamble: CardPreamble, requestedKeys: Set<String>?,
+             registry: CardKeyRegistry? = nil) {
+            self.registry = registry
+            self.cards = cards
+            self.showsByKey = Dictionary(shows.map { ($0.naturalKey, $0) }, uniquingKeysWith: { a, _ in a })
+            self.contactsByKey = contactsByKey
+            self.preamble = preamble
+            self.requestedKeys = requestedKeys
+        }
+
+        /// What was prebuilt, without asking for anything to be built. Never counts a miss: this is for a
+        /// caller enumerating what the pass produced, not for a surface that needs a card to draw.
+        func alreadyBuilt(_ key: String) -> QueueItem? { cards[key] }
+
+        var builtCount: Int { cards.count }
+
+        /// The card for a row on screen. Builds it if the pass did not, and says which kind of miss that
+        /// was.
+        func card(for row: QueueScopeRow) -> QueueItem {
+            // RECORDED FIRST, before the hit test, and that ordering is the whole mechanism. A hit is
+            // exactly as much evidence that this row is on screen as a miss is, so recording only on the
+            // miss path would empty the request set the moment the prebuild started working: the next
+            // pass would prebuild nothing, every row would miss, and the two states would alternate
+            // forever while every counter looked reasonable.
+            registry?.note(row.id)
+            if let hit = cards[row.id] { return hit }
+            if requestedKeys?.contains(row.id) == true {
+                unexpectedCardMisses += 1
+            } else {
+                expectedFirstFrameMisses += 1
+            }
+            guard let show = showsByKey[row.id] else {
+                // The row exists and its show does not, which no pass can produce: a row is built FROM a
+                // show. Counted as an unexpected miss whatever the key set said, because it is a fault in
+                // the build rather than a scroll arriving early, and the row still draws (L67).
+                unexpectedCardMisses += 1
+                return QueueItem(id: row.id, groupName: row.groupName, discipline: row.discipline,
+                                 venue: row.venue, performanceDate: row.performanceDate,
+                                 sourceListingURL: nil, priorRelationship: "none", production: "self",
+                                 profile: "strong", coverage: "likely_uncovered", fitScore: row.fitScore,
+                                 tier: row.tier, fitReason: "", matchedClientName: nil,
+                                 possibleMatchSource: nil, possibleMatchName: nil, status: row.status)
+            }
+            let built = QueueModel.card(show, contacts: contactsByKey[row.id], preamble: preamble)
+            cards[row.id] = built
+            return built
+        }
     }
 
     // The SwiftData-to-value boundary, kept here so OrgAnswerLedger itself stays free of the store and
@@ -3281,7 +3478,9 @@ extension RecipientSnapshot {
 // domain so BulkDismiss stays independent of the view's QueueItem, and here rather than in the date header
 // so the mapping is one definition instead of one per call site.
 extension BulkDismiss.Show {
-    init(_ item: QueueItem) {
+    // #3654: over the protocol, so the night dismiss reads a ROW. Every field it needs is one, which is
+    // what lets a realized date heading offer the action without a card for every show under it.
+    init(_ item: some QueueScopeFacts) {
         self.init(key: item.id, groupName: item.groupName,
                   performanceDate: item.performanceDate, runEndDate: item.runEndDate)
     }
