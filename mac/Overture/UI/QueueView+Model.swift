@@ -2699,6 +2699,18 @@ enum QueueModel {
     // unaffected and simply inherit nothing.
     static func items(from prospects: [Prospect],
                       answers: [OrgReachabilityAnswer] = [], corpus: [Prospect]? = nil,
+                      // #3652: the rows the cross-venue engagement link is CLUSTERED over, which is not
+                      // the same question as which rows are being built. `EngagementLink.group` can only
+                      // link what it is handed, so a show whose sibling engagement is not in this list
+                      // stops saying it plays anywhere else, and nothing reports that: the note simply
+                      // does not draw, which reads exactly like a production that plays once (L98).
+                      //
+                      // Defaulted to the rows being built, which is what every call site does today, so
+                      // this is a no-op until #3654 narrows `prospects` to the rows on screen and passes
+                      // the full set here. It is NOT defaulted to `corpus`: that would newly link
+                      // siblings sitting on DISMISSED rows, which is a product question rather than a
+                      // performance one and is deliberately left alone inside a performance change.
+                      rowsForLinking: [Prospect]? = nil,
                       overrides: ProducerOverrides = .none,
                       sources: [WatchedSource] = [],
                       // #2392: the addresses Dan has struck, read once by the caller and handed in.
@@ -2724,7 +2736,11 @@ enum QueueModel {
                       heldKeys: Set<String> = [],
                       today: String? = nil) -> [QueueItem] {
         let day = today ?? EasternDate.today(now)
-        let linked = EngagementLink.group(prospects.map(EngagementLink.Row.init))
+        // #3652/#3644: over `rowsForLinking`, which defaults to the rows being built. Its three
+        // neighbours below judge against `corpus ?? prospects` and each says why; this one carried no
+        // reason at all, and an entry with no written reason beside three that each have one is evidence
+        // it was never reasoned about rather than deliberately chosen (L233).
+        let linked = EngagementLink.group((rowsForLinking ?? prospects).map(EngagementLink.Row.init))
         let inherited = inheritedAnswers(answers, corpus: corpus ?? prospects,
                                          overrides: overrides, refusals: refusals,
                                          heldKeys: heldKeys, now: now)
