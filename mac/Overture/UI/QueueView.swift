@@ -646,7 +646,8 @@ struct QueueView: View {
             QueueScrollHolder(jumpTarget: jumpTarget) {
                 VStack(alignment: .leading, spacing: OVSpacing.xl) {
                     masthead(visible: data.visible, items: data.items, fanOutLine: data.fanOutLine,
-                             notices: notices, agentInputs: data.agentInputs)
+                             notices: notices, pendingBookings: data.pendingBookings,
+                             agentInputs: data.agentInputs)
                     // #1134: stage-only navigation is the only mode. The stage pills in the masthead choose
                     // what shows; this always renders the focused view for the current stage (Scout by
                     // default), or the exact away-alert leads (#308) when focusedStage is nil.
@@ -1035,9 +1036,15 @@ struct QueueView: View {
     // no default, so a new call site has to answer the question.
     func masthead(visible: [QueueItem], items: [QueueItem], fanOutLine: String?,
                   notices: [AppNotice],
+                  // #3653: the pass's own count, not a second derivation of it. `QueueRenderPass` already
+                  // walks every row for this once (`QueueRenderPass.swift:252`) and puts it on
+                  // `RenderData`; the masthead walked them all again for the same number, which is a
+                  // whole-store pass per render that neither cost counter can see, because both are bound
+                  // around the pass and this happened in a view body after it returned. That blind spot
+                  // is the whole reason it survived (#3577's shape, one file over).
+                  pendingBookings: Int,
                   agentInputs: AgentInputs) -> some View {
         let summary = QueueModel.summary(visible)
-        let pendingBookings = QueueModel.pendingBookingCount(items)
         return VStack(alignment: .leading, spacing: OVSpacing.sm) {
             HStack(spacing: OVSpacing.xs) {
                 Text("Overture").font(OVType.wordmark).foregroundStyle(OVColor.forestText)
