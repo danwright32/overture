@@ -153,8 +153,21 @@ struct FollowUpsCostTests {
             // The EARLIEST pitch was tried first and produced nothing, which the guard below caught: at
             // that clock every other contact's own pitch is still in the future, so one row could be due
             // at most. That is the instrument being checked before it was believed.
-            let busyNow = prospects.flatMap { $0.recipients.compactMap(\.sentAt) }
-                .max().map { $0.addingTimeInterval(60 * 60 * 24 * 7) } ?? now
+            // REFUSED rather than defaulted. Written `?? now` this silently makes the busy reading a
+            // second copy of the quiet one on a store with no pitches at all, and the `busyTotal > 0`
+            // guard below would then fire naming the wrong cause: "the bracket produced no rows" reads
+            // as a finding about the derivation when the real fact is that there was nothing to move the
+            // clock relative to. Two causes, two messages (L11).
+            let latestPitch = prospects.flatMap { $0.recipients.compactMap(\.sentAt) }.max()
+            guard let anchor = latestPitch else {
+                Issue.record(Comment(rawValue: "no contact in the store has ever been pitched, so there "
+                                     + "is no instant at which follow-up work can be due and the busy "
+                                     + "bracket cannot be taken at all. UNMEASURED, and not a finding "
+                                     + "about what Follow-ups costs."))
+                await RealStoreTestLock.shared.release()
+                return
+            }
+            let busyNow = anchor.addingTimeInterval(60 * 60 * 24 * 7)
             _ = DueWork.rows(prospects: prospects, now: busyNow, replyRunAlive: false)
             let busyStarted = Date()
             var busyRows = lastRows
