@@ -2931,11 +2931,11 @@ extension QueueItem {
         // on its own, and the three fields that had been exiled below are back where they belong.
         let voiceLearningCandidate = p.sentAt != nil && p.originalDraftBody != nil
         let nextRecipientIds = sendGroups.pending.map(\.id)
-        let weakContactHoldReason = p.recipients.compactMap(\.holdReason).first
+        let weakContactHoldReason = p.countedRecipients.compactMap(\.holdReason).first
         let formPitch = FormPitch.state(of: p)
-        let draftGreetedContactName = p.recipients.first { $0.sendState == .pending && $0.greetingNamesSomeoneElse }?.name
+        let draftGreetedContactName = p.countedRecipients.first { $0.sendState == .pending && $0.greetingNamesSomeoneElse }?.name
         let conflictBlockedDate = p.conflictKey.flatMap { BlockedCalendar.Day(key: $0) }?.date
-        let draftGreetedName = p.recipients
+        let draftGreetedName = p.countedRecipients
             .first { $0.sendState == .pending && $0.greetingNamesSomeoneElse }
             .flatMap { DraftGreeting.greetedName($0.effectiveBody) }
         // #3498: the lint runs ONCE per pending contact for this card, and every reader below shares the
@@ -2947,7 +2947,7 @@ extension QueueItem {
         // PENDING only. Every reader below either asks about a pending contact or refuses a non-pending
         // one before it consults the lint, so linting the rest would be work nobody uses: measured, that
         // was 24 extra runs per render on this store's shape.
-        let pendingRecipients = p.recipients.filter { $0.sendState == .pending }
+        let pendingRecipients = p.countedRecipients.filter { $0.sendState == .pending }
         let lintBlockersByRecipient = Dictionary(uniqueKeysWithValues:
             pendingRecipients.map { ($0.id, $0.draftLintBlockers) })
         // Falls back to the real derivation for a contact the map does not hold, so this can never answer
@@ -2958,15 +2958,15 @@ extension QueueItem {
         }
         let draftLintBlockers = DraftIssue.orderedBlockers(
             Set(pendingRecipients.flatMap { lintBlockers($0) }))
-        let contacts = Recipient.inSendOrder(p.recipients)
+        let contacts = Recipient.inSendOrder(p.countedRecipients)
             .map { RecipientSnapshot($0, lintBlockers: lintBlockers($0)) }
-        let offersSendModeChoice = p.recipients.filter { $0.email?.isEmpty == false }.count > 1
-        let hasWeakContactEmail = p.recipients.contains(where: \.isHeldByAGuard)
-        let hasAnyEmailContact = p.recipients.contains { $0.email?.isEmpty == false }
-        let draftMissingGreeting = p.recipients.contains { $0.sendState == .pending && $0.draftIsMissingGreeting }
-        let draftGreetingMisaddressed = p.recipients.contains { $0.sendState == .pending && $0.greetingMisaddressed }
-        let draftGreetingNamesSomeoneElse = p.recipients.contains { $0.sendState == .pending && $0.greetingNamesSomeoneElse }
-        let greetingOverridden = !p.recipients.contains { $0.sendState == .pending && $0.isBlockedByGreeting }
+        let offersSendModeChoice = p.countedRecipients.filter { $0.email?.isEmpty == false }.count > 1
+        let hasWeakContactEmail = p.countedRecipients.contains(where: \.isHeldByAGuard)
+        let hasAnyEmailContact = p.countedRecipients.contains { $0.email?.isEmpty == false }
+        let draftMissingGreeting = p.countedRecipients.contains { $0.sendState == .pending && $0.draftIsMissingGreeting }
+        let draftGreetingMisaddressed = p.countedRecipients.contains { $0.sendState == .pending && $0.greetingMisaddressed }
+        let draftGreetingNamesSomeoneElse = p.countedRecipients.contains { $0.sendState == .pending && $0.greetingNamesSomeoneElse }
+        let greetingOverridden = !p.countedRecipients.contains { $0.sendState == .pending && $0.isBlockedByGreeting }
         // #3498: read from the shared answer above rather than asking the lint again. The override half
         // is kept exactly as `Recipient.isBlockedByDraftLint` states it, because a body Dan has overridden
         // is not blocked however many findings it carries.

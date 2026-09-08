@@ -1,0 +1,124 @@
+import Testing
+import Foundation
+import SwiftData
+
+// #3653 step 3d (milestone #80): how many times building a card reaches for a show's contacts, COUNTED.
+//
+// WHY COUNTED AND NOT NAME-LISTED, which is the whole point of this step. A source guard forbidding
+// `DraftCheck`, `SendGroup`, `RecipientSnapshot` and `draftLintBlockers` in the tier-one file asserts a
+// PROXY for the quantity it protects (L63): it would pass unchanged while tier one took three walks per
+// row, none of them naming any forbidden symbol. That is the exact shape #2033 used in this same file to
+// triple per-card work while the sweep counter did not move.
+//
+// So the claim #3654 has to make is a NUMBER, and the number has to exist before the change that is
+// supposed to move it. That is this milestone's own discipline, and it has already paid twice: the gate
+// (#3662) and the honest baselines (#3664, #3665) both found the instruments saying something other than
+// what the plan assumed.
+//
+// WHAT IT COUNTS: reaches, not rows walked. Every one of the twelve sites below walks the contacts, so
+// the reach count is what must fall to one when tier one gathers the facts once. Counting rows walked
+// instead would move with the store's contact spread as well as with the code, and this has to answer
+// one question only (L63).
+@MainActor
+@Suite("How many times building a card reaches for a show's contacts (#3653)")
+struct RecipientWalkCountTests {
+
+    // What one card costs today, reaching for the contacts once per fact it needs. #3654 makes this ONE,
+    // by gathering the facts in a single pass, and this number is what proves it did rather than merely
+    // rearranged the code.
+    private static let reachesPerCardToday = 12
+
+    private func container() throws -> ModelContainer {
+        try ModelContainer(for: Schema([Prospect.self, Recipient.self]),
+                           configurations: [ModelConfiguration(isStoredInMemoryOnly: true)])
+    }
+
+    private func show(_ ctx: ModelContext, key: String, contacts: Int) -> Prospect {
+        let p = Prospect(naturalKey: key, groupName: "Ensemble", discipline: "music",
+                         venue: "Weill Recital Hall", performanceDate: "2026-10-01",
+                         sourceListingURL: nil, priorRelationship: "none", production: "presenter",
+                         profile: "strong", coverage: "likely_uncovered", fitScore: 5, tier: "mid",
+                         fitReason: "r", matchedClientName: nil, possibleMatchSource: nil,
+                         possibleMatchName: nil, status: .new)
+        ctx.insert(p)
+        for n in 0..<contacts {
+            let r = Recipient(id: "\(key)-c\(n)", email: "c\(n)@example.com", name: "Contact \(n)",
+                              role: "programming", provenance: .presenter)
+            r.prospect = p
+            ctx.insert(r)
+        }
+        return p
+    }
+
+    // THE POSITIVE CONTROL, first, because a pin at any number is satisfied by a counter nothing
+    // increments (L171, L98). It is the same trap #3664 found in the fixtures beside this one.
+    @Test func theCounterMovesAtAll() throws {
+        let ctx = ModelContext(try container())
+        let p = show(ctx, key: "show-1", contacts: 2)
+        try ctx.save()
+
+        let tally = QueueRenderPass.WorkTally.measure { _ = QueueItem(p) }
+
+        #expect(tally.recipientReaches > 0,
+                Comment(rawValue: "building a card recorded no reach for the contacts at all, so the pin "
+                        + "below is a bound on nothing and would pass with the counter deleted."))
+    }
+
+    // THE PIN. One card, one show's worth of contacts, a known number of reaches.
+    @Test func oneCardReachesForTheContactsAKnownNumberOfTimes() throws {
+        let ctx = ModelContext(try container())
+        let p = show(ctx, key: "show-1", contacts: 2)
+        try ctx.save()
+
+        let tally = QueueRenderPass.WorkTally.measure { _ = QueueItem(p) }
+
+        #expect(tally.recipientReaches == Self.reachesPerCardToday,
+                Comment(rawValue: "building one card reached for its contacts \(tally.recipientReaches) "
+                        + "times against a pinned \(Self.reachesPerCardToday). Moving this number is a "
+                        + "decision about what a card costs: DOWN is #3654 landing, and up is per-card "
+                        + "work being added where nothing else would report it (#2033's shape)."))
+    }
+
+    // AND IT SCALES WITH CARDS, not with contacts, which is what makes it the right quantity to pin
+    // against a change that reduces how many CARDS get built (L63).
+    @Test func theCountScalesWithCardsRatherThanWithContacts() throws {
+        let ctx = ModelContext(try container())
+        let few = show(ctx, key: "few", contacts: 1)
+        let many = show(ctx, key: "many", contacts: 9)
+        try ctx.save()
+
+        let one = QueueRenderPass.WorkTally.measure { _ = QueueItem(few) }
+        let other = QueueRenderPass.WorkTally.measure { _ = QueueItem(many) }
+        let two = QueueRenderPass.WorkTally.measure { _ = QueueItem(few); _ = QueueItem(many) }
+
+        #expect(one.recipientReaches == other.recipientReaches,
+                Comment(rawValue: "a show with 9 contacts reached \(other.recipientReaches) times against "
+                        + "\(one.recipientReaches) for a show with 1, so this counts rows walked rather "
+                        + "than reaches and would move with the store's contact spread as well as with "
+                        + "the code (L63)."))
+        #expect(two.recipientReaches == one.recipientReaches * 2,
+                "two cards must cost twice one card, or this cannot judge a change that builds fewer")
+    }
+
+    // The L96 half: a new reach added later must go through the counted accessor, or the pin above
+    // silently stops covering it. A hand-maintained list of call sites is exempt from exactly the thing
+    // it is written to catch.
+    @Test("the card build reaches for contacts only through the counted accessor")
+    func theCardBuildCannotReachTheContactsUncounted() throws {
+        let model = SourceGuardHelper.source("Overture/UI/QueueView+Model.swift")
+        let opening = "init(_ p: Prospect, sendGroups: SendGroup.CardGroups) {"
+        let start = try #require(model.range(of: opening),
+                                 "the card initialiser is gone, so this guard is about nothing (L98)")
+        let rest = model[start.upperBound...]
+        let close = try #require(rest.range(of: "\n    }"))
+        let body = String(rest[..<close.lowerBound])
+
+        #expect(!body.contains("p.recipients"),
+                Comment(rawValue: "the card build reads `p.recipients` directly, so that reach is not "
+                        + "counted and the pin above no longer measures what a card costs. Go through "
+                        + "`p.countedRecipients` (L96: a guard driven by a hand-written registry checks "
+                        + "only what the registry lists)."))
+        #expect(body.contains("countedRecipients"),
+                "the card build no longer reaches for the contacts at all, so the pin is about nothing")
+    }
+}

@@ -113,7 +113,7 @@ enum QueueRenderPass {
 
         private let lock = NSLock()
         private var counts = (queueItems: 0, sendGroupBuilds: 0, draftLintRuns: 0,
-                              selfBookingShowsExamined: 0)
+                              selfBookingShowsExamined: 0, recipientReaches: 0)
 
         var queueItems: Int { lock.withLock { counts.queueItems } }
         var sendGroupBuilds: Int { lock.withLock { counts.sendGroupBuilds } }
@@ -123,6 +123,18 @@ enum QueueRenderPass {
         // call count is the same number whether each call reads one night's bucket or walks the
         // whole queue (L63).
         var selfBookingShowsExamined: Int { lock.withLock { counts.selfBookingShowsExamined } }
+        // #3653 step 3d: how many times building a card REACHES for a show's contacts.
+        //
+        // Counted rather than name-listed, which is the whole point of this counter. A source guard
+        // forbidding `DraftCheck`, `SendGroup` and friends in the tier-one file asserts a PROXY for the
+        // quantity it protects, and would pass unchanged while tier one took three walks per row naming
+        // none of them (L63). That is the shape #2033 used in this same file to triple per-card work
+        // while the sweep counter did not move.
+        //
+        // REACHES, not rows walked: every reach walks the contacts, so this is the quantity #3654 must
+        // take to one, and it moves with the CODE rather than with how many contacts the store happens
+        // to hold.
+        var recipientReaches: Int { lock.withLock { counts.recipientReaches } }
 
         // Each recorded through the TYPE rather than on an instance, so a call site does not need to know
         // whether anybody is listening, and reads one task local before doing anything else.
@@ -137,6 +149,10 @@ enum QueueRenderPass {
         static func recordDraftLintRun() {
             guard let t = current else { return }
             t.lock.withLock { t.counts.draftLintRuns += 1 }
+        }
+        static func recordRecipientReach() {
+            guard let t = current else { return }
+            t.lock.withLock { t.counts.recipientReaches += 1 }
         }
         static func recordSelfBookingShowsExamined(_ n: Int) {
             guard n > 0, let t = current else { return }
