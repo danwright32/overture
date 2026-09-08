@@ -305,42 +305,49 @@ struct ReplyInvariantsLiveStoreTests {
     @Test
     func noConversationWasSilencedByWhatLooksLikeAnAutomaticReply() async throws {
         try await withLiveShows { shows in
-            let answered = shows.flatMap { p in
-                p.recipients.compactMap { r -> Answer? in
-                    guard let handled = r.replyHandledAt, let theirs = r.repliedAt else { return nil }
+            // #3694: judged by `AutomaticAnswerSignature`, which is a pure rule over three named instants
+            // and is unit tested against both live rows that proved this was measuring the wrong thing.
+            // The rule used to be written inline here, which meant the only way to exercise it was against
+            // Dan's real store: it cannot be made to hold a case on purpose, so neither the false positive
+            // nor the false negative could be reproduced before they happened.
+            //
+            // THE ANCHOR IS `inboundReplySentAt`, NOT `repliedAt`. `Recipient.swift:428` says why in as
+            // many words: `repliedAt` is when Overture NOTICED a reply, which is a property of the
+            // watcher's schedule, and "inboundReplySentAt is the real thing" (#2113).
+            let verdicts = shows.flatMap { p in
+                p.recipients.compactMap { r -> AutomaticAnswerSignature.Verdict? in
+                    guard let handled = r.replyHandledAt else { return nil }
                     // #3171: the attach path writes `conversationAttachedAt`, `repliedAt` and
-                    // `replyHandledAt` from ONE `now`, so its delta is zero by construction.
-                    return Answer(gap: handled.timeIntervalSince(theirs),
-                                  recordedInOneWriteWithTheAttach: r.conversationAttachedAt == handled)
+                    // `replyHandledAt` from ONE `now`, so its delta is zero by construction. Set aside by
+                    // EVIDENCE rather than by the delta being suspiciously round: a zero gap is also what
+                    // an instant autoresponder would produce, so excluding zero itself would blind the
+                    // rule to its own worst case. What it asks is whether the attach instant IS the answer
+                    // instant, which only that one write can produce.
+                    return AutomaticAnswerSignature.judge(.init(
+                        theirMessageSentAt: r.inboundReplySentAt,
+                        noticedAt: r.repliedAt,
+                        answeredAt: handled,
+                        recordedInOneWriteWithTheAttach: r.conversationAttachedAt == handled))
                 }
             }
-            // #3171: a row recorded in a single attach write is set aside BEFORE the signature is applied,
-            // because there is nothing there to measure. `AttachConversation.attach` runs detection with
-            // its own `now` (which stamps `repliedAt`) and then stamps `replyHandledAt` from the same
-            // `now` when the thread's newest message is already Dan's, so the two instants are equal for
-            // an arithmetic reason rather than because anything answered anything in zero seconds. The
-            // live store held exactly one such row and it read as the defect this test exists to catch.
-            //
-            // Set aside by EVIDENCE rather than by the delta being suspiciously round: a zero gap is also
-            // what an instant autoresponder would produce, so excluding zero itself would blind the rule
-            // to its own worst case. What the exclusion asks is whether the attach instant IS the answer
-            // instant, which only that one write can produce.
-            let fromOneAttachWrite = answered.filter(\.recordedInOneWriteWithTheAttach)
-            let suspicious = answered.filter {
-                !$0.recordedInOneWriteWithTheAttach && $0.gap >= 0 && $0.gap <= Self.automaticReplyWindow
-            }
+            let answered = verdicts
+            let fromOneAttachWrite = verdicts.filter { $0 == .setAsideAsAnAttachWrite }
+            let unmeasurable = verdicts.filter { if case .unmeasurable = $0 { return true } else { return false } }
+            let suspicious = verdicts.filter { if case .suspicious = $0 { return true } else { return false } }
             // The population, printed every run for the reason the corpus line above exists: a rule that
             // examined zero rows and a rule that examined every row must not look alike (L98). The set
             // aside count is printed for the same reason: an exclusion nobody can see the size of is one
             // that can grow to cover the whole corpus without anybody noticing (L182).
             print("LIVE STORE AUTO-REPLY CHECK: \(answered.count) conversations carry a recorded answer, "
                   + "\(fromOneAttachWrite.count) of them recorded in one write with a conversation attach "
-                  + "and therefore not measurable here, "
-                  + "\(suspicious.count) of the rest recorded within \(Int(Self.automaticReplyWindow))s of "
-                  + "the message they answer. A zero population means this measured nothing.")
+                  + "and therefore not measurable here, \(unmeasurable.count) more unmeasurable for want "
+                  + "of an anchor or because the answer predates their message, "
+                  + "\(suspicious.count) of the rest sent within "
+                  + "\(Int(AutomaticAnswerSignature.window))s of the message they answer. A zero "
+                  + "population means this measured nothing.")
             #expect(suspicious.isEmpty, """
                 \(suspicious.count) conversation(s) had their answer recorded within \
-                \(Int(Self.automaticReplyWindow)) seconds of the message it answers, which is the shape of an \
+                \(Int(AutomaticAnswerSignature.window)) seconds of the message it answers, which is the shape of an \
                 automatic reply from Dan's own mailbox rather than one he wrote (#2960). Those rows are \
                 silenced permanently, because markReplyAnswered never moves the stamp backwards. The repair \
                 is the same shape as #2926's. No row is named here on purpose: this is a public repository \
@@ -349,17 +356,10 @@ struct ReplyInvariantsLiveStoreTests {
         }
     }
 
-    // One conversation's recorded answer, as the two facts the signature above is decided from. A struct
-    // rather than a bare interval because the second fact is what tells an autoresponder's zero gap from
-    // an attach write's, and a pair of parallel arrays would let the two drift apart (#3171).
-    private struct Answer {
-        let gap: TimeInterval
-        let recordedInOneWriteWithTheAttach: Bool
-    }
-
-    // Ninety seconds. Above the few seconds an autoresponder takes and far below anything a person does,
-    // and stated as a constant so the mutation proving this guard has something to move.
-    private static let automaticReplyWindow: TimeInterval = 90
+    // #3694: `Answer` and `automaticReplyWindow` lived here and are DELETED rather than left beside the
+    // rule that replaced them. Both are now `AutomaticAnswerSignature`'s, which is where the judging
+    // happens, and a superseded type kept with its justification rewritten is how a codebase ends up half
+    // converted with the old thing arguing for itself (L29, L613).
 
     // #2985/#2986: how much this suite actually measured, reported every run.
     //
