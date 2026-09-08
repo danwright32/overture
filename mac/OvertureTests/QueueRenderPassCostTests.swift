@@ -280,11 +280,27 @@ struct QueueRenderPassWorkUnitCostTests {
     // reported the app running the draft lint 32 times per pass when it really runs it 82, so every
     // judgement about whether that cost was worth attacking was made against a store 60% smaller than
     // the one that ships (L354).
+    //
+    // #3654: THIS IS THE UNNARROWED ARM, and saying so is the point of this paragraph. A pass asked for
+    // no particular keys builds a card for every show, which is what `QueueModel.items(from:)` and
+    // Archive still want. THE QUEUE DOES NOT TAKE THIS ARM any more: it passes the keys the last frame
+    // drew, and `oneQueueShapedPassBuildsCardsOnlyForAViewport` below is that configuration at the same
+    // production scale. Both are pinned, because a guard that only ever exercises the branch the app
+    // does not run is measuring the wrong world (L101).
     private static let allowedQueueItems = 1224
 
     // One send-group build per card. #2046 collapsed three of these into one; nothing pins that it stays
-    // one, which is exactly how #2033 put the cost back without moving a number.
+    // one, which is exactly how #2033 put the cost back without moving a number. Unnarrowed arm, as
+    // above: one per card means one per show only when every card is asked for.
     private static let allowedSendGroupBuilds = 1224
+
+    // #3654: what the QUEUE actually asks for, which is the rows the last frame drew.
+    //
+    // Twenty rather than a viewport's eight, and the difference is deliberate: eight is what #3662
+    // measured a 300pt window realizing at a fixed 40pt row height, and the queue's cards are variable
+    // height (#3441 refused to change that), so the real number moves with the content. What is being
+    // pinned here is not the viewport's size but that the pass builds THAT MANY and not the scope.
+    private static let aViewportsWorthOfCards = 20
 
     // #3653 step 3d: one walk of a show's contacts per show in scope, for a pass building a row and a
     // card for each. Held as its own number rather than reusing `allowedQueueItems`, because #3654 takes
@@ -465,12 +481,17 @@ struct QueueRenderPassWorkUnitCostTests {
         ctx.insert(r)
     }
 
-    private func inputs(_ rows: [Prospect], stage: StageFocus = .scout) -> QueueRenderPass.Inputs {
+    private func inputs(_ rows: [Prospect], stage: StageFocus = .scout,
+                        // #3654: nil is the UNNARROWED arm, one card per show, which is what
+                        // `items(from:)` and Archive ask for. The queue passes the keys its last frame
+                        // drew, and one test below uses that instead.
+                        cardKeys: Set<String>? = nil) -> QueueRenderPass.Inputs {
         QueueRenderPass.Inputs(
             allProspects: QueueRenderPass.Corpus(rows),
             inquiries: [], orgAnswers: [],
             context: .at("2026-08-02", now: Date(timeIntervalSince1970: 1_785_000_000)),
-            focusedStage: stage, focusedKeys: nil)
+            focusedStage: stage, focusedKeys: nil,
+            requestedCardKeys: cardKeys)
     }
 
     // The fixture really does carry the shape it claims, because every count below is only meaningful if
@@ -521,6 +542,31 @@ struct QueueRenderPassWorkUnitCostTests {
 
         #expect(work.queueItems == Self.allowedQueueItems)
         #expect(work.sendGroupBuilds == Self.allowedSendGroupBuilds)
+    }
+
+    // #3654 step 4d: the queue's OWN configuration, at the same production scale as the pins above.
+    //
+    // The two numbers together are the phase, and neither says it alone: the unnarrowed arm builds 1,224
+    // cards and this one builds twenty, off the same corpus, in the same pass, with the same rows. What
+    // must NOT move between them is the walk count, and that is asserted here rather than left implied:
+    // a narrowing that read a show's contacts again to make a card later would have moved the cost rather
+    // than removed it, and every card count above would still be right.
+    @Test func oneQueueShapedPassBuildsCardsOnlyForAViewport() throws {
+        let ctx = ModelContext(try container())
+        let rows = seed(ctx)
+        let drawn = Set(rows.prefix(Self.aViewportsWorthOfCards).map(\.naturalKey))
+
+        var built = 0
+        let work = QueueRenderPass.WorkTally.measure {
+            built = QueueRenderPass.make(inputs(rows, cardKeys: drawn)).cards.builtCount
+        }
+
+        #expect(built == Self.aViewportsWorthOfCards)
+        #expect(work.queueItems == Self.aViewportsWorthOfCards)
+        #expect(work.sendGroupBuilds == Self.aViewportsWorthOfCards)
+        #expect(work.queueRows == Self.allowedQueueItems, "the rows are still every show in scope")
+        #expect(work.recipientReaches == Self.allowedRecipientReaches,
+                "the contacts are still read once per show in scope, whatever a card is built for")
     }
 
     // #3653 step 3d: the pass-level walk pin, which is the claim the whole split rests on.
