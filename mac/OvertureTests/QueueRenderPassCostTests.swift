@@ -374,7 +374,15 @@ struct QueueRenderPassWorkUnitCostTests {
     // What the SCREEN costs, which is the number this issue was really after: a pass on a stage that
     // shows the marker, plus the three questions the view asks of the index while drawing the result.
     // Measured on the corpus at the live clustering.
-    private static let allowedSelfBookingShowsExaminedOnScreen = 320
+    //
+    // #3676 took it from 320 to 260, and the reduction is the point rather than a side effect worth
+    // absorbing quietly. `selfBookingNote` used to ask the index the same question TWICE for every row
+    // that clashed: once in a `filter` that decided whether to draw a note at all, and again inside
+    // `everyClashIsOn` to decide which sentence. `headerClaim` replaced both with one walk, because it
+    // has to hold the overlaps anyway in order to read their commitment tier. Pinned at the new number,
+    // not loosened to a ceiling: this counter exists so a change that moves work is VISIBLE, and a bound
+    // that both readings satisfy would have hidden this one in the direction that looks harmless.
+    private static let allowedSelfBookingShowsExaminedOnScreen = 260
 
     // And zero again on Scout, because the view asks nothing there (`focusedStage != .scout` gates both
     // the row marker and the date-heading note). Held separately so a change that starts asking on Scout

@@ -2487,13 +2487,25 @@ enum QueueModel {
     // GONE along with both callout headlines. It chose between two sentences the control no longer shows.
     // A stale result still announces itself where it belongs, on the ROW, via Reachability.Badge.staleProbe.
 
+    // #3676: WHICH commitment this row carries, or nil for none. The four arms and their ORDER are exactly
+    // the boolean this replaced, so no row changes whether it collides at all; what is new is that each arm
+    // now names itself, because the date header has to tell an emailed pitch from a merely prepped one.
+    //
+    // The two `nil` arms are why "emailed" here already means "and not closed out": a lost pitch frees the
+    // date (#1248) and any other dismissed show is dead, and both are decided BEFORE `sentAt` is read.
+    static func selfBookingCommitment(_ i: QueueItem) -> SelfBookingConflict.Show.Commitment? {
+        if i.isBooked { return .booked }                       // a confirmed shoot (outcome/performanceStatus booked)
+        if i.showOutcome == .hadPaidWork { return .booked }    // dismissed BECAUSE booked elsewhere: still committed
+        if i.isLost { return nil }                             // #1248: a pitch marked lost frees the date, even if it was sent
+        if i.status == .dismissed { return nil }               // any other dismissed show is dead; ignore it
+        if i.sentAt != nil { return .emailed }                 // a live pitch is already out
+        // An in-progress draft. Prepping is not committing to pitching (Dan, 2026-09-07), so this tier
+        // collides everywhere it always did and the date header stays silent over it.
+        return (i.status == .drafted || i.status == .approved) && i.hasDraft ? .prepped : nil
+    }
+
     static func selfBookingIsCommitment(_ i: QueueItem) -> Bool {
-        if i.isBooked { return true }                         // a confirmed shoot (outcome/performanceStatus booked)
-        if i.showOutcome == .hadPaidWork { return true }  // dismissed BECAUSE booked elsewhere: still committed
-        if i.isLost { return false }                          // #1248: a pitch marked lost frees the date, even if it was sent
-        if i.status == .dismissed { return false }            // any other dismissed show is dead; ignore it
-        if i.sentAt != nil { return true }                    // a live pitch is already out
-        return (i.status == .drafted || i.status == .approved) && i.hasDraft  // an in-progress draft
+        selfBookingCommitment(i) != nil
     }
 
     // #1699 part 3: the curtain time(s) this row plays on the night the clash check compares, or empty
@@ -2539,7 +2551,7 @@ enum QueueModel {
             if !published.isEmpty { times[night] = published }
         }
         return SelfBookingConflict.Show(key: i.id, nights: nights,
-                                        isCommitment: selfBookingIsCommitment(i),
+                                        commitment: selfBookingCommitment(i),
                                         engagementKey: i.groupName, name: i.groupName,
                                         timesByNight: times)
     }
@@ -2617,17 +2629,18 @@ enum QueueModel {
 
     // The queue-wide date-header note: shown when any row in this date group faces a self-booking conflict
     // against the WHOLE queue, so it stays visible even after the other show has moved to another stage.
+    //
+    // #3676: NIL over a night whose only clashes are prepped. The claim carries both what the night holds
+    // and whether that holding is on the header's own date, and the copy decides from the pair; nothing
+    // here chooses a sentence, so the header's three states have one definition (L70).
+    //
     // #3323: the note also says WHERE. A run in the group clashing on a later night makes "on this date"
-    // a claim about the header it sits under that the check never measured, so the group is asked whether
-    // every clash it holds really falls on the header's own date.
+    // a claim about the header it sits under that the check never measured, so the claim is asked whether
+    // every clash at the tier it speaks for really falls on the header's own date.
     static func selfBookingNote(_ group: [QueueItem], on date: String?,
                                 in index: SelfBookingConflict.NightIndex) -> String? {
-        let clashing = group.filter { hasSelfBookingConflict(for: $0, in: index) }
-        guard !clashing.isEmpty else { return nil }
-        guard let date else { return SelfBookingCopy.dateHeaderNote(allOnThisDate: false) }
-        let onThisDate = SelfBookingConflict.everyClashIsOn(date, for: clashing.map(selfBookingShow),
-                                                           in: index)
-        return SelfBookingCopy.dateHeaderNote(allOnThisDate: onThisDate)
+        SelfBookingCopy.dateHeaderNote(SelfBookingConflict.headerClaim(for: group.map(selfBookingShow),
+                                                                       on: date, in: index))
     }
 
     // #1219: which of the shows ABOUT TO BE PREPPED (by key) sit on a night that already holds a committed

@@ -27,7 +27,12 @@ struct SelfBookingIndexAgreesWithTheScanTests {
 
     private func show(_ id: Int, nights: [String], committed: Bool,
                       times: [String: [String]] = [:]) -> SelfBookingConflict.Show {
-        SelfBookingConflict.Show(key: "show-\(id)", nights: nights, isCommitment: committed,
+        // #3676: these suites test the COLLISION, which reads only `isCommitment`, so which tier a
+        // committed show carries is immaterial here. `.emailed` is used throughout, being the
+        // archetype the check was written for; the tier's own behaviour lives in
+        // SelfBookingHeaderTierTests.
+        SelfBookingConflict.Show(key: "show-\(id)", nights: nights,
+                                 commitment: committed ? .emailed : nil,
                                  engagementKey: "Ensemble \(id)", name: "Ensemble \(id)",
                                  timesByNight: times)
     }

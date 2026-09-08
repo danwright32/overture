@@ -15,7 +15,12 @@ struct SelfBookingWorkableNightTests {
                       name: String = "Show", date: String? = "2026-08-06") -> SelfBookingConflict.Show {
         // #3323: one night, spelled as the night-plural type. `date` is nil-able because a show with no
         // night at all is one of the cases below, and it becomes an empty night list.
-        SelfBookingConflict.Show(key: key, nights: date.map { [$0] } ?? [], isCommitment: commitment,
+        // #3676: these suites test the COLLISION, which reads only `isCommitment`, so which tier a
+        // committed show carries is immaterial here. `.emailed` is used throughout, being the
+        // archetype the check was written for; the tier's own behaviour lives in
+        // SelfBookingHeaderTierTests.
+        SelfBookingConflict.Show(key: key, nights: date.map { [$0] } ?? [],
+                                 commitment: commitment ? .emailed : nil,
                                  engagementKey: nil, name: name,
                                  timesByNight: date.map { [$0: times] } ?? [:])
     }
@@ -115,7 +120,7 @@ struct SelfBookingWorkableNightTests {
 struct SelfBookingWorkableCopyTests {
     private func show(_ key: String, at times: [String], name: String = "Show")
         -> SelfBookingConflict.Show {
-        SelfBookingConflict.Show(key: key, nights: ["2026-08-06"], isCommitment: true,
+        SelfBookingConflict.Show(key: key, nights: ["2026-08-06"], commitment: .emailed,
                                  engagementKey: nil, name: name,
                                  timesByNight: ["2026-08-06": times])
     }

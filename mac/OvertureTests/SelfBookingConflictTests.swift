@@ -10,7 +10,12 @@ struct SelfBookingConflictTests {
                       engagement: String? = nil, name: String = "Show") -> SelfBookingConflict.Show {
         // #3323: one night, spelled as the night-plural type. The run-aware cases live in
         // SelfBookingRunNightsTests; these hold the single-night behaviour that must survive expansion.
-        SelfBookingConflict.Show(key: key, nights: date.map { [$0] } ?? [], isCommitment: commitment,
+        // #3676: these suites test the COLLISION, which reads only `isCommitment`, so which tier a
+        // committed show carries is immaterial here. `.emailed` is used throughout, being the
+        // archetype the check was written for; the tier's own behaviour lives in
+        // SelfBookingHeaderTierTests.
+        SelfBookingConflict.Show(key: key, nights: date.map { [$0] } ?? [],
+                                 commitment: commitment ? .emailed : nil,
                                  engagementKey: engagement, name: name, timesByNight: [:])
     }
 

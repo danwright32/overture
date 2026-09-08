@@ -348,6 +348,25 @@ export const RUNBOOK_RULES: RunbookRule[] = [
     pattern: /no two sentences in a row may use the same connector construction/i },
   { name: "body-runs-in-short-paragraphs",
     pattern: /Write the body in short paragraphs/i },
+  // #3683: "reword it every time" is a licence over the WORDING, never over the grammar. Both this
+  // runbook and the brand voice skill required sentence one to carry Dan's name AND his trade, and
+  // neither said who the trade clause has to be ABOUT, so a real draft satisfied both halves while
+  // moving him out of the subject slot ("I'm Dan Wright, and live performance is the whole of my
+  // photography work here in NYC"). Guarded because naming both halves is what everyone checks, so the
+  // invariant is the part a rewrite drops silently.
+  { name: "dan-is-the-subject-of-the-trade-clause",
+    pattern: /SUBJECT of the clause that states his trade/i },
+  // #3685: the closing hedge names what it is about rather than pointing at it. On a multi night run
+  // there is no plural noun anywhere in the email for a plural pronoun to reach for, because the run is
+  // referenced as a singular "run" and its nights are never a noun phrase at all.
+  // #3677: a subject is a label, not a sentence. Guarded because the FORMULA one line above used to
+  // carry the stop inside its own quotes, so the example taught the inverse of the rule and was then
+  // defended with the rule's authority (L562). A guard on the rule is what stops the stop coming back
+  // into the example.
+  { name: "a-subject-never-ends-in-punctuation",
+    pattern: /A subject NEVER ends in punctuation/i },
+  { name: "the-hedge-names-what-it-is-about",
+    pattern: /hedge NAMES what it is about rather than pointing at it/i },
   // #2874: the answer to "what do you charge", the highest-intent reply Overture ever drafts. The whole
   // answer used to be one parenthetical here ("$250 an hour plus tax, one-hour minimum, gallery within
   // two weeks"), which is the CEILING on what a drafted reply can say, and on 2026-08-17 a real reply to

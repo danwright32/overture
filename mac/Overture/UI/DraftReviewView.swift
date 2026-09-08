@@ -377,6 +377,16 @@ struct DraftReviewView: View {
                                            // whether an email-length body is too long.
                                            routeIsHandDelivered: item.routeIsHandDelivered)
                 .filter { !$0.isBlocking })
+            // #3677: the subject line, which no check of any kind had ever read. Under the SAME voice
+            // suppression as the body findings above, on the same reasoning: a subject Dan typed himself
+            // is his, and the stop this catches is the drafter reproducing a formula.
+            //
+            // The REPLY path deliberately does not get this and must not: `FollowUp.replySubject` passes
+            // the original subject through verbatim because Gmail threads a reply by MATCHING subject, so
+            // a pitch already sent with a stop has to keep it or the nudge arrives as a separate email.
+            if let subject = item.draftSubject {
+                issueFlags(DraftCheck.subjectFindings(in: subject, title: item.groupName))
+            }
         }
     }
 

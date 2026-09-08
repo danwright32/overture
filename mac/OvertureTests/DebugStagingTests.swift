@@ -453,7 +453,7 @@ final class DebugStagingTests {
             if let date = p.performanceDate, !p.performanceStartTimes.isEmpty {
                 times[date] = p.performanceStartTimes
             }
-            return SelfBookingConflict.Show(key: p.naturalKey, nights: nights, isCommitment: true,
+            return SelfBookingConflict.Show(key: p.naturalKey, nights: nights, commitment: .emailed,
                                             engagementKey: p.groupName, name: p.groupName,
                                             timesByNight: times)
         }

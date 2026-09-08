@@ -22,6 +22,8 @@ enum DraftIssue: Equatable, Hashable, Sendable, CaseIterable {
     case restatesItself           // a sentence that says one thing twice, or padding (#2949)
     case repeatsOneWord           // one word carrying the same idea across too many sentences (#2949)
     case tooLongForADirectMessage // an email-length body on a show whose only route is a form or a DM (#2630)
+    case subjectEndsInPunctuation // a subject line closed like a sentence: it is a label (#3677)
+    case hedgePronounHasNoAntecedent // the closing hedge points at a plural nothing named (#3685)
 
     var label: String {
         switch self {
@@ -46,6 +48,18 @@ enum DraftIssue: Equatable, Hashable, Sendable, CaseIterable {
         // part he can act on.
         case .tooLongForADirectMessage:
             return "Too long for a DM: this show has no address, so it is sent by hand"
+        // #3677: says what to do rather than naming the character. Dan's own words for it were "email
+        // subjects shouldn't end in punctuation".
+        case .subjectEndsInPunctuation:
+            return "The subject line ends in punctuation: a subject is a label, not a sentence"
+        // #3685: names the fix rather than the grammar term. What Dan has to do is write the noun.
+        //
+        // It does NOT quote the pronoun, and that was caught by the cold read rather than reasoned out:
+        // the first wording said `says "them"`, while the rule matches "they", "these" and "those" as
+        // well, so on any of those three the sentence would have named a word the draft does not contain.
+        // A message may claim only what its check measured (L11).
+        case .hedgePronounHasNoAntecedent:
+            return "The closing hedge points at a plural the draft never names: name the run instead"
         }
     }
 
@@ -87,10 +101,19 @@ enum DraftIssue: Equatable, Hashable, Sendable, CaseIterable {
         // #2949: both advisory, for the reason above them. They are judgements about WORDING, which is
         // not the bar #789 set for a blocker, and the cost of a wrong block is Dan's time on a draft that
         // reads fine.
+        // #3677: advisory, and it is the one on this list closest to clearing the bar, so the reason is
+        // worth writing down rather than inheriting. A trailing character IS a fact about the text and
+        // cannot false-positive, but the cost of a wrong block is Dan's time on a SEND and the cost of a
+        // wrong warning is a glance, and a subject he typed himself with a stop is his to send. #3677
+        // recommended advisory on exactly that reading.
+        // #3685: advisory, on the standing reason. Whether a pronoun has something to point at is read
+        // here from a closed list of nouns, which is a judgement about wording rather than a fact about
+        // the text, and the runbook tells the run to reword the hedge every time.
         case .performativeEnthusiasm, .emDash, .presumesBooking, .coldHedge,
              .asksForKnownFact, .concessionLanguage, .nonCanonicalRate,
              .hedgedEffectClaim, .asksForNothing, .repeatedSentenceShape,
-             .restatesItself, .repeatsOneWord, .tooLongForADirectMessage: return false
+             .restatesItself, .repeatsOneWord, .tooLongForADirectMessage,
+             .subjectEndsInPunctuation, .hedgePronounHasNoAntecedent: return false
         }
     }
 
@@ -224,7 +247,130 @@ enum DraftCheck {
         if repeatsOneWord(text) { issues.append(.repeatsOneWord) }
         if hasRepeatedSentenceShape(body) { issues.append(.repeatedSentenceShape) }
         if isColdPitch, !asksAboutPhotographyPlans(body) { issues.append(.asksForNothing) }
+        if hedgePronounLacksAnAntecedent(body) { issues.append(.hedgePronounHasNoAntecedent) }
         return issues
+    }
+
+    // #3685: the closing hedge's pronoun, on a multi night run, agreeing with a noun nobody wrote.
+    //
+    // Found 2026-09-07 in a real drafted cold pitch: "If you don't already have someone covering THEM,
+    // I'd be glad to talk about your photography plans for the run." Walking back from "them", the only
+    // nouns are "my portfolio" and a domain name; the show is named two paragraphs up as a singular
+    // "run", and the individual nights are never a noun phrase in the email at all.
+    //
+    // The defect is at the SEAM of two rules that are each right. The canonical hedge is singular and
+    // anchored ("if you don't have someone on it already"), and the multi night rule requires the RUN to
+    // be referenced rather than its opening night. The drafter did both correctly and pluralised the
+    // pronoun to agree with the several performances it now had in mind.
+    //
+    // NARROW on purpose, which is what #3685 asked for. It reads only the hedge's own object, so it can
+    // never be answered by an unrelated plural elsewhere in the draft, and it looks for an antecedent
+    // only in the hedge's own sentence and the one before it, because a pronoun reaching further than
+    // that is the defect whatever it finds. Measured 2026-09-07 against the 43 real drafted bodies in
+    // `fixtures/draft-ask/cases.json`: it fires on NONE of them, passes the canonical singular phrasing,
+    // and passes the edit Dan himself made to this very draft.
+    //
+    // ADVISORY, on the standing reason: this is a judgement about wording rather than a fact about the
+    // text, and the runbook tells the run to reword the hedge every time.
+    static func hedgePronounLacksAnAntecedent(_ body: String) -> Bool {
+        let sentences = bodySentences(body)
+        for (index, sentence) in sentences.enumerated() {
+            let low = sentence.lowercased()
+            guard hedgeOpeners.contains(where: low.contains) else { continue }
+            guard let re = Patterns.hedgePluralObject else { continue }
+            let ns = sentence as NSString
+            guard let m = re.firstMatch(in: sentence,
+                                        range: NSRange(location: 0, length: ns.length)) else { continue }
+            // Everything the pronoun could reach without the reader having to hold a whole paragraph:
+            // the sentence before it, and its own text up to the pronoun.
+            let previous = index > 0 ? sentences[index - 1] : ""
+            let reach = (previous + " " + ns.substring(to: m.range(at: 1).location)).lowercased()
+            let words = Set(reach.components(separatedBy: CharacterSet.alphanumerics.inverted)
+                .filter { !$0.isEmpty })
+            if words.isDisjoint(with: pluralRunNouns) { return true }
+        }
+        return false
+    }
+
+    // The sentences of a whole body, for a rule that reads across a paragraph break rather than inside
+    // one. Deliberately NOT `sentences(in:)`, which is paragraph scoped because the cadence rule needs it
+    // to be: a hedge and its antecedent routinely sit either side of a break, and #3685's own example
+    // does (the portfolio line and the hedge are one paragraph, the run is named two paragraphs up).
+    private static func bodySentences(_ body: String) -> [String] {
+        let text = body.replacingOccurrences(of: "\n", with: " ")
+        guard let re = Patterns.sentenceBoundary else { return [text] }
+        let ns = text as NSString
+        var out: [String] = []
+        var start = 0
+        for m in re.matches(in: text, range: NSRange(location: 0, length: ns.length)) {
+            let end = m.range.location + m.range.length
+            out.append(ns.substring(with: NSRange(location: start, length: end - start)))
+            start = end
+        }
+        if start < ns.length { out.append(ns.substring(from: start)) }
+        return out.map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+    }
+
+    // copy-inventory:ignore-start  #3685 hedge lint: phrases MATCHED in a draft, never anything Overture says
+
+    // How the hedge opens. Every wording the runbook and the skill sanction, plus the two the drafter
+    // reaches for when rewording it, since it is told to reword it every time.
+    private static let hedgeOpeners = ["if you don't", "if you do not", "if you haven't",
+                                       "if you have not", "if nobody", "if no one", "unless you",
+                                       "in case you"]
+    // The plural nouns this copy uses for a run. A CLOSED list rather than a test for a trailing "s",
+    // because the question is whether the pronoun has something to MEAN, and only these mean it here.
+    private static let pluralRunNouns: Set<String> = ["nights", "performances", "shows", "dates",
+                                                      "concerts", "evenings", "matinees", "events",
+                                                      "sets", "showings"]
+    // copy-inventory:ignore-end
+
+    // #3677: every rule about the SUBJECT LINE, which until now had no reader of any kind.
+    //
+    // `DraftCheck`'s findings all read the BODY, and neither call site ever passed a subject, so the one
+    // piece of outbound copy a stranger sees before opening anything was the only piece nothing had ever
+    // checked. The eval side was the same: `prepEval.ts` reads `draft.subject` once, to ask whether the
+    // show's night is named, and nothing scores its shape.
+    //
+    // A function of its own rather than a trailing-character test folded into `findings`, so the next
+    // subject rule has somewhere to go. That is what #3677 asked for, because the gap it found is the
+    // whole subject being unread rather than this one character.
+    //
+    // `title` is the show's own name, for the #1141 reason: a mark that is part of the title was not put
+    // there by the drafter.
+    static func subjectFindings(in subject: String, title: String? = nil) -> [DraftIssue] {
+        var issues: [DraftIssue] = []
+        if subjectEndsLikeASentence(subject, title: title) { issues.append(.subjectEndsInPunctuation) }
+        return issues
+    }
+
+    // copy-inventory:ignore-start  #3677 subject lint: marks MATCHED at the end of a draft's subject, never anything Overture says
+
+    // The marks that close a sentence or hold one open. A subject carrying one of these LAST is written
+    // as a sentence; the same characters INSIDE it are ordinary and are deliberately not judged, because
+    // "Photographing Bargemusic's Bach & Beyond at the Boathouse" is a perfectly good subject and a rule
+    // about punctuation as such would fire on the ordinary case (L93).
+    private static let subjectClosingMarks: Set<Character> = [".", ",", ";", ":", "!", "?"]
+    // copy-inventory:ignore-end
+
+    // Dan, 2026-09-07, reading a real draft review card: "email subjects shouldn't end in punctuation".
+    // The card read "Photographing The ATF Cabaret at The Green Room 42." A subject is a LABEL, and the
+    // stop is the one thing in the pitch a stranger sees before opening anything.
+    //
+    // A question mark and an exclamation point are the same finding, not a different one: they are a
+    // sentence mark on a label just as a full stop is. `performativeEnthusiasm` catches a stray "!" in
+    // the BODY and structurally cannot see one here, because it is never given the subject.
+    //
+    // The TITLE exemption is #1141's rule on this half. A show called "Nihao Broadway!" ends in an
+    // exclamation point that belongs to its own name, so a subject ending in the title keeps its mark.
+    // With no title supplied nothing is exempted, which is the honest answer for a caller that never
+    // said what the show is called.
+    private static func subjectEndsLikeASentence(_ subject: String, title: String?) -> Bool {
+        let trimmed = subject.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let last = trimmed.last, subjectClosingMarks.contains(last) else { return false }
+        if let title = title?.trimmingCharacters(in: .whitespacesAndNewlines), !title.isEmpty,
+           trimmed.lowercased().hasSuffix(title.lowercased()) { return false }
+        return true
     }
 
     // #2531: does the body actually REQUEST something, and does the request presuppose they have
@@ -354,6 +500,27 @@ enum DraftCheck {
         // call sites already handled a nil regex by declining to judge, and that behaviour is unchanged.
         static let sentenceBoundary = try? NSRegularExpression(pattern: #"[.!?]["')\]]*\s+(?=[A-Z"(])"#)
         static let dollarFigure = try? NSRegularExpression(pattern: #"\$\s?(\d[\d,]*)"#)
+        // #3685: the hedge's own OBJECT, a plural pronoun where the run's noun belongs. Scoped to the
+        // verbs and prepositions the hedge actually uses, so an unrelated "them" elsewhere in the
+        // sentence is not what this reads.
+        //
+        // The two halves of the pronoun list are matched DIFFERENTLY, and the split is grammatical rather
+        // than a tuning knob. "them" and "they" are never determiners, so they are matched wherever they
+        // appear. "these" and "those" are determiners as often as they are pronouns, and the difference is
+        // whether a noun follows, so they are matched only where they END their clause.
+        //
+        // Found by the test rather than reasoned out, twice. "If nobody is on THESE PERFORMANCES yet" is
+        // one of the two fixed wordings the runbook now recommends, and a rule with no lookahead reported
+        // the remedy as the defect. Then a lookahead applied to ALL FOUR stopped matching "covering them
+        // and I'd be glad", because a real pronoun can be followed by an adverb.
+        //
+        // What this deliberately does NOT catch: a demonstrative pronoun with an adverb after it ("on
+        // these yet"). Telling that from "on these nights" needs to know whether the next word is a noun,
+        // which nothing here can do, and the direction that guesses wrong on the recommended remedy is
+        // the worse one (L93).
+        static let hedgePluralObject = try? NSRegularExpression(
+            pattern: #"\b(?:covering|shooting|photographing|on|for|with)\s+(them\b|they\b|these(?=\s*[,.;:!?]|\s*$)|those(?=\s*[,.;:!?]|\s*$))"#,
+            options: [.caseInsensitive])
         static let commaJoinedConnector = try? NSRegularExpression(
             pattern: #",\s+("# + clauseConnectors.joined(separator: "|") + #")\s+([a-z']+)"#,
             options: [.caseInsensitive])
@@ -581,14 +748,30 @@ enum DraftCheck {
     private static let subordinators: Set<String> = ["if", "when", "while", "since", "because",
                                                      "although", "though", "after", "before", "once",
                                                      "unless", "whenever", "as"]
-    // What a real clause starts with, used ONLY to tell a clause join from an Oxford comma. Without it
-    // "Madison Square Garden, Lincoln Center, and Radio City Music Hall" reads as a connector, and since
-    // that exact list is in Dan's own reference pitch the rule would refuse his text (L104: test the
-    // matcher against what it must PRESERVE, not only against what it must catch).
+    // What a real clause starts with, ONE of the two clause signals used to tell a clause join from an
+    // Oxford comma. Some such test is required: without it "Madison Square Garden, Lincoln Center, and
+    // Radio City Music Hall" reads as a connector, and since that exact list is in Dan's own reference
+    // pitch the rule would refuse his text (L104: test the matcher against what it must PRESERVE, not
+    // only against what it must catch).
     private static let clauseSubjects: Set<String> = ["i", "i'm", "i've", "i'd", "i'll", "it", "it's",
                                                       "we", "you", "they", "he", "she", "there", "that",
                                                       "my", "the", "his", "her", "their", "your"]
+    // #3684: the OTHER clause signal. A closed-class finite verb is something a noun phrase never has,
+    // so it recognises a clause whose subject is a bare noun ("live performance IS the whole of ...")
+    // where a list of subject words never can. Closed on purpose: an open list of lexical verbs would be
+    // the same allowlist defect one part of speech along.
+    private static let finiteVerbs: Set<String> = ["is", "are", "was", "were", "am", "has", "have",
+                                                   "had", "does", "do", "did", "will", "would", "can",
+                                                   "could", "should", "may", "might", "must", "shall",
+                                                   "isn't", "aren't", "wasn't", "weren't", "hasn't",
+                                                   "haven't", "hadn't", "doesn't", "don't", "didn't",
+                                                   "won't", "wouldn't", "can't", "couldn't", "shouldn't"]
     // copy-inventory:ignore-end
+
+    // How far into the trailing text to look for that verb. A clause states its verb early ("live
+    // performance is", three words), and a wide window would start reading a long list item's own
+    // relative clause as evidence of a join.
+    private static let clauseHeadWords = 6
 
     // The construction of one sentence, or nil for a sentence that joins no clause. A nil NEVER pairs:
     // Dan's complaint was explicitly not about length, so two short plain sentences side by side are not
@@ -615,10 +798,57 @@ enum DraftCheck {
         for m in re.matches(in: sentence, range: NSRange(location: 0, length: ns.length)) {
             let word = ns.substring(with: m.range(at: 1)).lowercased()
             let next = ns.substring(with: m.range(at: 2)).lowercased()
-            if (word == "and" || word == "or") && !clauseSubjects.contains(next) { continue }
+            let connectorEnd = m.range(at: 1).location + m.range(at: 1).length
+            if word == "and" || word == "or",
+               isTheLastItemOfAList(ns, commaAt: m.range.location,
+                                    trailingFrom: connectorEnd, next: next) { continue }
             return word
         }
         return nil
+    }
+
+    // Whether an "and" or an "or" after a comma closes a LIST rather than joining a clause.
+    //
+    // #3684: this used to be `!clauseSubjects.contains(next)`, an allowlist of 20 pronouns and
+    // determiners, which could only ever recognise a clause opening on one of them. A trailing clause
+    // whose subject is a bare noun matched none, so it was discarded as a suspected Oxford comma:
+    // "I'm Dan Wright, and live performance is the whole of my photography work here in NYC" reported no
+    // shape at all, and since a nil never pairs, the sentence beside it (a second ", and" clause) had
+    // nothing to pair WITH. Note which way that failed. The list was calibrated against what the rule
+    // must preserve (Dan's venue list) and what it must catch (#2807's draft, whose trailing clauses all
+    // open on I or I'm), and the third population, a genuine clause with a noun subject, fails GREEN: the
+    // check goes on passing while blind and its silence reads as a clean draft (L324).
+    //
+    // A list item now has to EARN the skip, on two pieces of evidence at once.
+    //
+    // First, an OXFORD COMMA: a second comma at or before this one. A three-item list always carries two
+    // ("A, B, and C") and a two-item list is written with none, so a lone comma is a clause join whatever
+    // words follow it. That is a property of the LIST rather than of its vocabulary, which is exactly why
+    // it can see a noun it has never met.
+    //
+    // Second, NO CLAUSE SIGNAL in what follows: neither a subject from `clauseSubjects` nor a finite verb
+    // in the first `clauseHeadWords` words. A noun phrase ("Radio City Music Hall") has neither.
+    //
+    // Both are required, because either alone is wrong on a shape this copy really has. "I'm Dan Wright, a
+    // live performance photographer here in NYC, and I shoot without flash" carries two commas and is a
+    // clause join. "..., and documentary coverage means the room is never lit" carries no closed-class
+    // verb at its head and is one too.
+    //
+    // Calibrated against the corpus #3684 named before it shipped: it catches the draft in that issue and
+    // #2807's, passes Dan's own reference pitch and #2807's target rewrite, and fires on 2 of the 43 real
+    // drafted bodies in `fixtures/draft-ask/cases.json`. Both of those two are genuine finds of the same
+    // defect, adjacent ", and" clauses the old rule missed because the word after "and" was "if".
+    private static func isTheLastItemOfAList(_ sentence: NSString, commaAt: Int,
+                                             trailingFrom: Int, next: String) -> Bool {
+        let throughTheComma = sentence.substring(to: min(commaAt + 1, sentence.length))
+        guard throughTheComma.filter({ $0 == "," }).count >= 2 else { return false }
+        guard !clauseSubjects.contains(next) else { return false }
+        let trailing = sentence.substring(from: min(trailingFrom, sentence.length)).lowercased()
+        let head = trailing
+            .components(separatedBy: CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyz'").inverted)
+            .filter { !$0.isEmpty }
+            .prefix(clauseHeadWords)
+        return !head.contains { finiteVerbs.contains($0) }
     }
 
     // A whole-word containment test, so "most" does not fire on "almost" and "often" does not fire on
