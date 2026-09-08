@@ -291,6 +291,21 @@ final class Prospect {
     // every writer, so the importer's upgrade and the row's own snapshot can never disagree about what
     // counts as sendable. Mirrors the venue and press guard outcome exactly: an address held by either
     // guard is real but not sendable, which is `weakContactOnly` rather than `noEmailFound` (#1324).
+    // #3653 step 3d: the ONE way card construction reads a show's contacts, so every reach is counted.
+    //
+    // Not a convenience. `QueueItem.init` reached for `recipients` twelve separate times, once per fact
+    // it needed, and nothing could see it: `QueueRenderPass.Corpus` counts sweeps over rows the pass was
+    // HANDED and `WorkTally` counted card CONSTRUCTIONS, so per-card contact work could grow without any
+    // instrument moving. That is exactly how #2033 tripled it once.
+    //
+    // A guard on the card build asserts it reads the contacts only through here, so a thirteenth reach
+    // added later is counted rather than exempt: a hand-written list of call sites is blind to precisely
+    // the thing it exists to catch (L96).
+    var countedRecipients: [Recipient] {
+        QueueRenderPass.WorkTally.recordRecipientReach()
+        return recipients
+    }
+
     var reachabilityResultFromRecipients: Reachability.ProbeResult {
         // #3653: the cascade itself lives in `Reachability.result(from:)` so a tier-one row can ask the
         // same question without hand-rolling a second copy of it. What stays here is gathering the facts,
