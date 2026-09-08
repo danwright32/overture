@@ -45,6 +45,14 @@ protocol QueueScopeFacts {
     var reachabilityResult: Reachability.ProbeResult? { get }
     var inheritedReachability: OrgAnswerLedger.Inherited? { get }
 
+    // #3654: what a DATE HEADING reads. `conflictBlockedDate` decides the Unavailable pill through
+    // `conflictScope`, and `runEndDate` is what tells a night dismiss which shows play on past the night
+    // it names. Both are cheap projections of a stored field, so putting them on the row is what keeps a
+    // realized date heading from needing a card for every show under it.
+    var conflictBlockedDate: String? { get }
+    var runEndDate: String? { get }
+    var hasConflict: Bool { get }
+
     // Derived on both sides, from the SAME pure rules, which is what `QueueScopeRowParityTests` pins.
     var performanceStatus: PerformanceStatus { get }
     var isBooked: Bool { get }
@@ -117,20 +125,21 @@ struct QueueScopeRow: Identifiable, Equatable, Sendable, QueueScopeFacts {
     var reachabilityResult: Reachability.ProbeResult? = nil
     var inheritedReachability: OrgAnswerLedger.Inherited? = nil
 
+    var conflictBlockedDate: String? = nil
+    var runEndDate: String? = nil
+
+    // #3654: STORED, where it used to be derived from `facts.standings` on every read.
+    //
+    // The change is what lets a row be built from anything that can answer a row's questions, which the
+    // departing-card splice needs: a card carries this answer and not the standings behind it, so a row
+    // deriving it would read `.new` for a show the card beside it calls booked, and `isBooked` with it.
+    // The rule is unchanged and still runs exactly once per show, in the initialiser below.
+    var performanceStatus: PerformanceStatus = .new
+
     // The contacts, reduced to the facts a row needs, gathered in ONE walk.
     var facts: RecipientFacts = .none
 
-    // #3653: the two rules a row derives rather than stores, each through the SAME pure function the
-    // card's own value comes from, so a row and a card can never disagree about a show (L107).
-    //
-    // `PerformanceStatus.of(_:)` cannot be used here: it takes a `Prospect` and reads its recipients, so
-    // asking it would be the second walk this whole design exists to avoid. `derive(_:leadBooked:)` is
-    // the same rule over the standings the walk already gathered, which is why #3670 and #3653's step
-    // 3b.5 pulled it out.
-    var performanceStatus: PerformanceStatus {
-        if let recorded = showOutcome?.asPerformanceStatus { return recorded }
-        return PerformanceStatus.derive(facts.standings, leadBooked: outcome == .booked)
-    }
+    var hasConflict: Bool { conflictBlockedDate != nil }
 
     var isBooked: Bool { performanceStatus == .booked || outcome == .booked }
 
@@ -232,6 +241,60 @@ extension QueueScopeRow {
                   reachabilityRecheckRequestedAt: p.reachabilityRecheckRequestedAt,
                   reachabilityResult: facts.reachabilityAsHeld,
                   inheritedReachability: inheritedReachability,
+                  conflictBlockedDate: p.conflictKey.flatMap { BlockedCalendar.Day(key: $0) }?.date,
+                  runEndDate: p.runEndDate,
+                  // #3653: through the SAME pure function the card's own value comes from, so a row and a
+                  // card can never disagree about a show (L107). `PerformanceStatus.of(_:)` cannot be used
+                  // here: it takes a `Prospect` and reads its recipients, so asking it would be the second
+                  // walk this whole design exists to avoid. `derive(_:leadBooked:)` is the same rule over
+                  // the standings the walk already gathered, which is why #3653's step 3b.5 pulled it out.
+                  performanceStatus: p.showOutcome?.asPerformanceStatus
+                      ?? PerformanceStatus.derive(facts.standings, leadBooked: p.outcome == .booked),
                   facts: facts)
+    }
+}
+
+extension QueueScopeRow {
+    // #3654: a row from anything that can already answer a row's questions, which today means a CARD.
+    //
+    // The date-grouped list holds rows and the just-sent snapshot it splices back in is a card, because
+    // the leaving delight draws the card. Rather than a second reduction of a show, this copies every
+    // member of the protocol, so a field added to the row is added to the protocol and then MUST be set
+    // here or this does not compile. That is the whole reason it is written over the protocol rather than
+    // over `QueueItem`: a hand-written field list is exempt from exactly the drift it exists to prevent
+    // (L96, L510).
+    //
+    // `facts` does not travel, and cannot: a card keeps the contacts themselves and never the reduction.
+    // Nothing that reads a spliced row reads `facts` (it is Phase 5's, for the search), and the two
+    // answers derived from it, `performanceStatus` and `reachabilityResult`, are STORED and do travel.
+    init(_ other: some QueueScopeFacts) {
+        self.init(id: other.id,
+                  groupName: other.groupName,
+                  discipline: other.discipline,
+                  venue: other.venue,
+                  presenter: other.presenter,
+                  location: other.location,
+                  performanceDate: other.performanceDate,
+                  runNights: other.runNights,
+                  performanceStartTimes: other.performanceStartTimes,
+                  nightStartTimes: other.nightStartTimes,
+                  startTimesVary: other.startTimesVary,
+                  fitScore: other.fitScore,
+                  tier: other.tier,
+                  status: other.status,
+                  sentAt: other.sentAt,
+                  outcome: other.outcome,
+                  showOutcome: other.showOutcome,
+                  bookingSuggested: other.bookingSuggested,
+                  hasDraft: other.hasDraft,
+                  reachabilityProbedAt: other.reachabilityProbedAt,
+                  reachabilityUnansweredAt: other.reachabilityUnansweredAt,
+                  reachabilityRecheckRequestedAt: other.reachabilityRecheckRequestedAt,
+                  reachabilityResult: other.reachabilityResult,
+                  inheritedReachability: other.inheritedReachability,
+                  conflictBlockedDate: other.conflictBlockedDate,
+                  runEndDate: other.runEndDate,
+                  performanceStatus: other.performanceStatus,
+                  facts: .none)
     }
 }

@@ -118,8 +118,10 @@ struct QueueRenderPassCostTests {
         // about how much a keystroke, a dismiss and a scroll are allowed to cost Dan.
         #expect(tally.sweeps == Self.allowedSweeps)
         // And it really did derive the whole store, so the count above is not the cost of doing nothing.
-        #expect(data.items.count == Self.corpusSize)
-        #expect(!data.visible.isEmpty)
+        // #3654: over the ROWS, because a card is now built only for a show something is about to draw
+        // and this pass drew nothing. The claim is unchanged: the pass derived the whole store.
+        #expect(data.rows.count == Self.corpusSize)
+        #expect(!data.visibleRows.isEmpty)
     }
 
     // The cost does not grow with what Dan is looking at. A stage focus, a frozen key set and a deep link
@@ -580,8 +582,10 @@ struct QueueRenderPassWorkUnitCostTests {
 
         let data = QueueRenderPass.make(inputs(rows))
 
-        #expect(data.rows.map(\.id) == data.items.map(\.id))
-        #expect(data.visibleRows.map(\.id) == data.visible.map(\.id))
+        // #3654: the cards a pass ASKED FOR are the cards it built, in the order its rows are in. With
+        // no key set, which is what a caller wanting the whole scope passes, that is every row.
+        #expect(data.cards.builtCount == data.rows.count)
+        #expect(data.rows.compactMap { data.cards.alreadyBuilt($0.id)?.id } == data.rows.map(\.id))
         #expect(!data.rows.isEmpty, "the pass built no rows at all, so nothing above was measured")
     }
 

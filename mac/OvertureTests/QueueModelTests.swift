@@ -76,7 +76,9 @@ struct DateGroupUnavailableTests {
     }
 
     @Test func anEmptyGroupIsNot() {
-        #expect(QueueModel.groupIsUnavailable([]) == false)
+        // #3654: the empty literal is TYPED, because the check is generic over what a whole-scope reader
+        // may know about a show and an untyped `[]` gives it nothing to infer from.
+        #expect(QueueModel.groupIsUnavailable([QueueItem]()) == false)
     }
 
     // #929: a multi-night run can be flagged for a LATER night while its opening night, the date it groups
