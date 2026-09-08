@@ -177,11 +177,14 @@ struct FollowUpsCostTests {
             let busyPerRun = Date().timeIntervalSince(busyStarted) / Double(rounds) * 1000
             let busyTotal = busyRows.afterTheShow.count + busyRows.silent.count
                 + busyRows.stalledReplyDrafts.count + busyRows.conversationsToConfirm.count
-            print(String(format: """
-                follow-ups-cost (busy): the same corpus at a clock where work IS due took %.1f ms                 (mean of %d) and produced %d rows: %d after-the-show, %d silent, %d stalled reply                 drafts, %d to confirm. This is the bracket the reading above cannot give, because with                 nothing due SendGroup.oneRowPerGroup is handed an empty array every time.
-                """, busyPerRun, rounds, busyTotal,
-                busyRows.afterTheShow.count, busyRows.silent.count,
-                busyRows.stalledReplyDrafts.count, busyRows.conversationsToConfirm.count))
+            print(String(format: "follow-ups-cost (busy): the same corpus at a clock where work IS due "
+                         + "took %.1f ms (mean of %d) and produced %d rows: %d after-the-show, %d "
+                         + "silent, %d stalled reply drafts, %d to confirm. This is the bracket the "
+                         + "reading above cannot give, because with nothing due "
+                         + "SendGroup.oneRowPerGroup is handed an empty array every time.",
+                         busyPerRun, rounds, busyTotal,
+                         busyRows.afterTheShow.count, busyRows.silent.count,
+                         busyRows.stalledReplyDrafts.count, busyRows.conversationsToConfirm.count))
             #expect(busyTotal > 0,
                     Comment(rawValue: "the busy reading produced no rows either, so it is a second "
                             + "measurement of the same short circuit rather than a bracket (L171)."))
