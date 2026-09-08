@@ -113,9 +113,17 @@ enum QueueRenderPass {
 
         private let lock = NSLock()
         private var counts = (queueItems: 0, sendGroupBuilds: 0, draftLintRuns: 0,
-                              selfBookingShowsExamined: 0, recipientReaches: 0)
+                              selfBookingShowsExamined: 0, recipientReaches: 0, queueRows: 0)
 
         var queueItems: Int { lock.withLock { counts.queueItems } }
+        // #3653 step 3a: how many cheap SCOPE ROWS the pass built, which is a different quantity from
+        // `queueItems` the moment #3654 lands and only the rendered shows get a card.
+        //
+        // A SECOND counter rather than a rename, and the difference matters: the ratio of the two is what
+        // Phase 4 is judged by, so folding them would make the saving unmeasurable at the exact moment it
+        // starts happening. Until then they are equal by construction, which is what
+        // `QueueRenderPassCostTests` pins.
+        var queueRows: Int { lock.withLock { counts.queueRows } }
         var sendGroupBuilds: Int { lock.withLock { counts.sendGroupBuilds } }
         var draftLintRuns: Int { lock.withLock { counts.draftLintRuns } }
         // #3438: how many OTHER shows the self-booking check had to look at. Counted as shows
@@ -141,6 +149,10 @@ enum QueueRenderPass {
         static func recordQueueItem() {
             guard let t = current else { return }
             t.lock.withLock { t.counts.queueItems += 1 }
+        }
+        static func recordQueueRow() {
+            guard let t = current else { return }
+            t.lock.withLock { t.counts.queueRows += 1 }
         }
         static func recordSendGroupBuild() {
             guard let t = current else { return }
@@ -220,12 +232,17 @@ enum QueueRenderPass {
         let geo = context.geo
         // #1121/#1774: the whole-store derivation, paid ONCE here and threaded down, rather than by each
         // computed property that wants a row.
-        let items = QueueModel.items(from: inQueue.all, answers: i.orgAnswers,
+        let scope = QueueModel.scope(from: inQueue.all, answers: i.orgAnswers,
                                      corpus: everyProspect, overrides: i.overrides,
                                      sources: i.sources, refusals: i.refusals,
                                      // #2524: the same window the stage rule applies, so the card's
                                      // sentence and the stage's decision come from one answer.
                                      clients: context.clients, now: context.now, today: context.today)
+        // #3653 Phase 3: one build, two halves. The cards are what the screen draws; the rows are what
+        // every whole-scope sweep below reads, and they cost one contacts walk between them rather than
+        // one each.
+        let items = scope.items
+        let rows = scope.rows
         #if DEBUG
         QueueRenderCounter.recordDerivation(inputs: i.trace, rows: items)
         #endif
@@ -236,6 +253,7 @@ enum QueueRenderPass {
         let inAStage = StageNavigation.queueKeys(in: inQueue.all, reachedOutKeys: reachedOutKeys,
                                                  context: context)
         let visible = items.filter { inAStage.contains($0.id) }
+        let visibleRows = rows.filter { inAStage.contains($0.id) }
         // #1774/#1140: in stage mode membership is re-derived live (a sent draft drops out); in leads mode
         // the frozen key set stands. The dispatch lives in StageNavigation so it is tested.
         let wanted = Set(StageNavigation.focusedKeys(stage: i.focusedStage, leadKeys: i.focusedKeys ?? [],
@@ -249,7 +267,7 @@ enum QueueRenderPass {
             queueScope: inQueue.all,
             // #3323: built once for the pass, from the WHOLE item set rather than the focused stage, so a
             // clash with a show in another stage still counts (#1246).
-            selfBooking: QueueModel.selfBookingIndex(items),
+            selfBooking: QueueModel.selfBookingIndex(rows),
             agentInputs: AgentInputs.from(prospects: inQueue.all,
                                           // #2968: the Follow-ups number alone is taken over
                                           // everything, because the sheet and the toolbar badge
@@ -265,8 +283,9 @@ enum QueueRenderPass {
             checkLookups: i.checkLookups,
             reachedOut: reachedOut,
             reachedOutKeys: reachedOutKeys,
-            pendingBookings: QueueModel.pendingBookingCount(items),
+            pendingBookings: QueueModel.pendingBookingCount(rows),
             fanOutLine: fanOutWarning(inQueue.all),
+            rows: rows, visibleRows: visibleRows,
             focusedRows: focusedRows,
             dateGroups: QueueModel.groupByDate(focusedRows),
             inquiryRows: inquiryRows(i.inquiries, stage: i.focusedStage, now: context.now),
