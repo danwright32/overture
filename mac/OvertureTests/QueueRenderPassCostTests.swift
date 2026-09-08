@@ -284,6 +284,12 @@ struct QueueRenderPassWorkUnitCostTests {
     // one, which is exactly how #2033 put the cost back without moving a number.
     private static let allowedSendGroupBuilds = 1224
 
+    // #3653 step 3d: one walk of a show's contacts per show in scope, for a pass building a row and a
+    // card for each. Held as its own number rather than reusing `allowedQueueItems`, because #3654 takes
+    // the card count away from the scope count and this one must NOT move when it does: a row is built
+    // for every show whether it renders or not, and it is the row that does the walking.
+    private static let allowedRecipientReaches = 1224
+
     // How many times the draft lint actually runs over a body during one pass. MEASURED, then pinned,
     // and meant to be argued with rather than updated to whatever the code does.
     //
@@ -513,6 +519,70 @@ struct QueueRenderPassWorkUnitCostTests {
 
         #expect(work.queueItems == Self.allowedQueueItems)
         #expect(work.sendGroupBuilds == Self.allowedSendGroupBuilds)
+    }
+
+    // #3653 step 3d: the pass-level walk pin, which is the claim the whole split rests on.
+    //
+    // COUNTED, never name-listed, and the issue is explicit about why. A source guard forbidding
+    // `DraftCheck`, `SendGroup` and friends inside the tier-one type asserts a PROXY for the quantity it
+    // protects, and would pass unchanged while a row took three walks of a show's contacts naming none of
+    // them (L63). That is exactly the shape #2033 used in this same file to triple per-card work while
+    // the sweep counter did not move.
+    //
+    // ONE REACH PER SHOW IN SCOPE, for a pass that now builds a cheap row AND a full card for each.
+    // `RecipientWalkCountTests` already pins one reach per CARD; this is the pass-level version, and it
+    // is the one that can see a row asking the model its own questions beside the card that already
+    // asked. Nothing else can: both halves would be internally correct and the store would simply be
+    // walked twice.
+    @Test func onePassReachesEachShowsContactsExactlyOnce() throws {
+        let ctx = ModelContext(try container())
+        let rows = seed(ctx)
+
+        let work = QueueRenderPass.WorkTally.measure {
+            _ = QueueRenderPass.make(inputs(rows))
+        }
+
+        #expect(work.recipientReaches == Self.allowedRecipientReaches)
+    }
+
+    // #3653 step 3a: one cheap row per show in scope, and today exactly as many cards.
+    //
+    // THE EQUALITY IS THE POINT, and it is what #3654 is meant to BREAK. Until then a card is built for
+    // every show whether it is on screen or not, so the two counters agree by construction, and the four
+    // `FeltWaitCostTests` waits were re-pointed onto the row counter while that was still true rather
+    // than in the change that stops it being true. Pinned here so the re-point is provably a no-op today:
+    // a re-point that quietly changed what those waits mean would have been indistinguishable from one
+    // that did not, and each of them fails by TIMING OUT, which reads as a slow machine (L110).
+    @Test func onePassBuildsOneScopeRowPerShowAndTodayOneCardEach() throws {
+        let ctx = ModelContext(try container())
+        let rows = seed(ctx)
+
+        let work = QueueRenderPass.WorkTally.measure {
+            _ = QueueRenderPass.make(inputs(rows))
+        }
+
+        #expect(work.queueRows == Self.allowedQueueItems)
+        #expect(work.queueRows == work.queueItems, Comment(rawValue:
+            "the row and card counts have parted, which is #3654's job and not this phase's: the four "
+            + "FeltWaitCostTests waits now key on rows, so check they still measure what they claim"))
+    }
+
+    // #3653 Phase 3: the pass's rows and its cards are the same shows, in the same order.
+    //
+    // Asserted as an ORDERED key list rather than as two counts, because equal counts is what a pass that
+    // built the rows from a different filter would also report, and every whole-scope sweep now reads the
+    // rows while the screen draws the cards. If the two lists diverged, a masthead count, a date heading
+    // or the Scout ordering would describe a different set of shows from the cards beneath them, and both
+    // halves would be internally consistent (L228).
+    @Test func theRowsAndTheCardsAreTheSameShowsInTheSameOrder() throws {
+        let ctx = ModelContext(try container())
+        let rows = seed(ctx)
+
+        let data = QueueRenderPass.make(inputs(rows))
+
+        #expect(data.rows.map(\.id) == data.items.map(\.id))
+        #expect(data.visibleRows.map(\.id) == data.visible.map(\.id))
+        #expect(!data.rows.isEmpty, "the pass built no rows at all, so nothing above was measured")
     }
 
     // #3516. Read the three numbers together: the pass alone, the screen on a stage that draws the

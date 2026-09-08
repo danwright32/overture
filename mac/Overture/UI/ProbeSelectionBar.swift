@@ -35,8 +35,8 @@ struct ProbeSelectionBar: View {
     // @autoclosure and returns nil before evaluating them when nothing is ticked, so an unticked queue
     // never pays for the StageNavigation.focusedKeys sweep that produces them. Handing it an already-built
     // array would move that sweep back onto every render and undo the guard.
-    let rows: () -> [QueueItem]
-    let allItems: [QueueItem]
+    let rows: () -> [QueueScopeRow]
+    let allItems: [QueueScopeRow]
     let today: String
     let stage: StageFocus?
     var overrides: ProducerOverrides = .none

@@ -112,7 +112,18 @@ struct FeltWaitCostTests {
         return (window, hosting)
     }
 
-    // Pump the run loop until the queue has built `expected` more cards, or the deadline passes.
+    // Pump the run loop until the queue has built `expected` more SCOPE ROWS, or the deadline passes.
+    //
+    // #3653 step 3a: ROWS, not cards, and the re-point had to land in the same change that made the pass
+    // build rows at all. These four waits keyed on `WorkTally.queueItems` until then, which was the same
+    // number: one card per show in scope. #3654 breaks that equality on purpose, building a card only for
+    // what is on screen, and at that moment every condition here becomes unmeetable, so each of these
+    // tests would burn its whole deadline (90 s, 20 s, 20 s, 60 s) in the SERIAL hosted bundle and then
+    // fail, on every push, for a reason naming nothing (L98, L110).
+    //
+    // The card counter is deliberately still read where a test is asking about CARDS (the press and the
+    // write both assert on `cardsAfterThePress`), because the ratio of the two is what Phase 4 is judged
+    // by and folding them would make the saving unmeasurable at the moment it starts.
     //
     // A DEADLINE rather than a bare wait, because a wait with no deadline cannot fail, it can only hang,
     // and a hang is indistinguishable from a slow machine while holding the shared xcodebuild lock
@@ -122,7 +133,7 @@ struct FeltWaitCostTests {
                                      seconds: TimeInterval = 20) -> Bool {
         let deadline = Date().addingTimeInterval(seconds)
         while Date() < deadline {
-            if (QueueRenderPass.WorkTally.current?.queueItems ?? 0) - start >= expected { return true }
+            if (QueueRenderPass.WorkTally.current?.queueRows ?? 0) - start >= expected { return true }
             // The LAYOUT AND DISPLAY are driven explicitly, and that is not decoration: this window is
             // never ordered front, because doing so crashes the shared app host (#3480), so AppKit runs
             // no display cycle of its own for it and turning the run loop alone evaluates nothing.
@@ -136,7 +147,7 @@ struct FeltWaitCostTests {
             hosting.displayIfNeeded()
             RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.01))
         }
-        return (QueueRenderPass.WorkTally.current?.queueItems ?? 0) - start >= expected
+        return (QueueRenderPass.WorkTally.current?.queueRows ?? 0) - start >= expected
     }
 
     // The two deep-link bindings QueueView takes are held by a tiny wrapper rather than passed as
@@ -200,13 +211,18 @@ struct FeltWaitCostTests {
         var cardsAfterThePress = 0
         let built = QueueRenderPass.WorkTally.measure {
             warmed = warmTheList(ctx, keys: keys, rows: 40, in: hosting)
-            let settled = QueueRenderPass.WorkTally.current?.queueItems ?? 0
+            // #3653 step 3a: TWO baselines, because these are two quantities now. The pump waits on ROWS
+            // built, and what the test reports is CARDS built, and folding them would give a card delta
+            // measured from a row baseline: the same number today, and silently wrong the moment #3654
+            // stops building one card per show (L118).
+            let settledRows = QueueRenderPass.WorkTally.current?.queueRows ?? 0
+            let settledCards = QueueRenderPass.WorkTally.current?.queueItems ?? 0
             let rows = (try? ctx.fetch(FetchDescriptor<Prospect>())) ?? []
             ProspectMutations.dismissAll([keys[0]], reason: .notAFit, dateLabel: "1 Aug",
                                          prospects: rows, context: ctx, feedback: ActionFeedback())
             // Two fewer than the corpus: the warm-up dismissed one and this press dismisses another, and
             // both leave the queue's own scope.
-            rebuiltAfterThePress = pumpUntilCardsBuilt(38, from: settled, in: hosting, seconds: 20)
+            rebuiltAfterThePress = pumpUntilCardsBuilt(38, from: settledRows, in: hosting, seconds: 20)
             // A moment longer AFTER the condition holds, so a SECOND pass provoked by the same press is
             // counted rather than being cut off by the wait ending at the first one.
             let settle = Date().addingTimeInterval(1)
@@ -215,7 +231,7 @@ struct FeltWaitCostTests {
                 hosting.displayIfNeeded()
                 RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.01))
             }
-            cardsAfterThePress = (QueueRenderPass.WorkTally.current?.queueItems ?? 0) - settled
+            cardsAfterThePress = (QueueRenderPass.WorkTally.current?.queueItems ?? 0) - settledCards
         }
 
         #expect(warmed, "the list never drew at all, so there was nothing to press on")
@@ -276,20 +292,25 @@ struct FeltWaitCostTests {
         var warmed = false
         _ = QueueRenderPass.WorkTally.measure {
             warmed = warmTheList(ctx, keys: keys, rows: 40, in: hosting)
-            let settled = QueueRenderPass.WorkTally.current?.queueItems ?? 0
+            // #3653 step 3a: TWO baselines, because these are two quantities now. The pump waits on ROWS
+            // built, and what the test reports is CARDS built, and folding them would give a card delta
+            // measured from a row baseline: the same number today, and silently wrong the moment #3654
+            // stops building one card per show (L118).
+            let settledRows = QueueRenderPass.WorkTally.current?.queueRows ?? 0
+            let settledCards = QueueRenderPass.WorkTally.current?.queueItems ?? 0
 
             let rows = (try? ctx.fetch(FetchDescriptor<Prospect>())) ?? []
             rows.first { $0.naturalKey == keys[0] }?.fitScore = 9
             try? ctx.save()
 
-            _ = pumpUntilCardsBuilt(39, from: settled, in: hosting, seconds: 20)
+            _ = pumpUntilCardsBuilt(39, from: settledRows, in: hosting, seconds: 20)
             let settle = Date().addingTimeInterval(1)
             while Date() < settle {
                 hosting.layoutSubtreeIfNeeded()
                 hosting.displayIfNeeded()
                 RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.01))
             }
-            cardsAfterTheWrite = (QueueRenderPass.WorkTally.current?.queueItems ?? 0) - settled
+            cardsAfterTheWrite = (QueueRenderPass.WorkTally.current?.queueItems ?? 0) - settledCards
         }
 
         #expect(warmed, "the list never drew, so there was nothing to write against")
@@ -327,7 +348,12 @@ struct FeltWaitCostTests {
             // Draw the list once and let it settle, so what is timed below is a press on a DRAWN list
             // rather than the list appearing for the first time.
             firstRenderSettled = warmTheList(ctx, keys: keys, rows: Self.corpusSize, in: hosting)
-            let settled = QueueRenderPass.WorkTally.current?.queueItems ?? 0
+            // #3653 step 3a: TWO baselines, because these are two quantities now. The pump waits on ROWS
+            // built, and what the test reports is CARDS built, and folding them would give a card delta
+            // measured from a row baseline: the same number today, and silently wrong the moment #3654
+            // stops building one card per show (L118).
+            let settledRows = QueueRenderPass.WorkTally.current?.queueRows ?? 0
+            let settledCards = QueueRenderPass.WorkTally.current?.queueItems ?? 0
             let rows = (try? ctx.fetch(FetchDescriptor<Prospect>())) ?? []
 
             // 1. THE WRITE, which is what happens synchronously under Dan's finger: the model change and
@@ -340,9 +366,9 @@ struct FeltWaitCostTests {
             // 2. EVERYTHING AFTER: the query invalidating, the rebuild, and SwiftUI rendering the result.
             //    This is the half no existing instrument could see.
             // Two fewer than the corpus: the warm-up dismissed one and this press dismisses another.
-            rebuilt = pumpUntilCardsBuilt(Self.corpusSize - 2, from: settled, in: hosting, seconds: 60)
+            rebuilt = pumpUntilCardsBuilt(Self.corpusSize - 2, from: settledRows, in: hosting, seconds: 60)
             afterSeconds = Date().timeIntervalSince(pressed) - writeSeconds
-            cardsInTheRebuild = (QueueRenderPass.WorkTally.current?.queueItems ?? 0) - settled
+            cardsInTheRebuild = (QueueRenderPass.WorkTally.current?.queueItems ?? 0) - settledCards
         }
 
         let ms = { (s: Double) in String(format: "%.1f", s * 1000) }

@@ -281,6 +281,14 @@ struct QueueView: View {
         // argument to the masthead, and an argument evaluates at its call site, so it ran on every pass
         // while reading as though it belonged to the masthead (#1916's lesson, one level up).
         let fanOutLine: String?
+        // #3653 Phase 3: the CHEAP half of every show in scope, and of the ones in a stage.
+        //
+        // Every whole-scope sweep reads these rather than the cards beside them, which is what makes
+        // #3654's narrowing possible: a sweep that can only see a row cannot be the reason a card has to
+        // exist for a show nobody is looking at. `rows` and `items` are the same shows in the same order,
+        // and `visibleRows` and `visible` likewise, which `QueueRenderPassCostTests` pins.
+        let rows: [QueueScopeRow]
+        let visibleRows: [QueueScopeRow]
         // The stage's rows, already filtered to the focused stage and with the just-sent rows folded back
         // in, and already grouped by date. Grouping ~500 Scout rows per scroll frame was pure waste.
         let focusedRows: [QueueItem]
@@ -438,11 +446,11 @@ struct QueueView: View {
     // Both read this, so the total Dan watches while choosing is the total he approves.
     // The rows the Scout stage is currently showing, derived the same way focusedSection derives them,
     // so a ticked date means exactly the shows under that heading and nothing else.
-    private func scoutRows(_ data: RenderData) -> [QueueItem] {
+    private func scoutRows(_ data: RenderData) -> [QueueScopeRow] {
         let wanted = Set(StageNavigation.focusedKeys(stage: .scout, leadKeys: [],
                                                      in: data.queueScope,
                                                      context: StageContext(geo: geo, clients: clientWindow)))
-        return data.items.filter { wanted.contains($0.id) }
+        return data.rows.filter { wanted.contains($0.id) }
     }
 
     // #1805: the shows the last check was given and never reached. Read from the same rule the report's
@@ -462,7 +470,7 @@ struct QueueView: View {
     // This is #1121's and #1774's defect exactly, one call site further out: a computed property is
     // re-run by every reader, and a call site reads as a free field access with nothing at the point of
     // use saying what it costs (L383).
-    private func missedByACheckKeys(in items: [QueueItem]) -> [String] {
+    private func missedByACheckKeys(in items: [some QueueScopeFacts]) -> [String] {
         QueueModel.keysMissedByACheck(items, today: today, geo: geo)
     }
 
@@ -516,7 +524,7 @@ struct QueueView: View {
             rows: { scoutRows(data) },
             // #1771: `data.items`, not `self.items`. Reading the computed property here rebuilt the entire
             // queue a second time on every render, one word away from the snapshot the caller already holds.
-            allItems: data.items,
+            allItems: data.rows,
             today: today, stage: focusedStage,
             overrides: ProducerOverrides(promotedRows: promotedProducers, demotedRows: demotedHouses),
             geo: geo,
@@ -645,7 +653,7 @@ struct QueueView: View {
             // be assembled in QueueView.body on every scroll frame exactly as before.
             QueueScrollHolder(jumpTarget: jumpTarget) {
                 VStack(alignment: .leading, spacing: OVSpacing.xl) {
-                    masthead(visible: data.visible, items: data.items, fanOutLine: data.fanOutLine,
+                    masthead(visible: data.visibleRows, items: data.rows, fanOutLine: data.fanOutLine,
                              notices: notices, pendingBookings: data.pendingBookings,
                              agentInputs: data.agentInputs)
                     // #1134: stage-only navigation is the only mode. The stage pills in the masthead choose
@@ -1034,7 +1042,7 @@ struct QueueView: View {
     // #2204: `notices` is what the app has to say for itself, threaded in for the same reason
     // `fanOutLine` is: the caller decides what is shown rather than this view inheriting silence. It has
     // no default, so a new call site has to answer the question.
-    func masthead(visible: [QueueItem], items: [QueueItem], fanOutLine: String?,
+    func masthead(visible: [some QueueScopeFacts], items: [some QueueScopeFacts], fanOutLine: String?,
                   notices: [AppNotice],
                   // #3653: the pass's own count, not a second derivation of it. `QueueRenderPass` already
                   // walks every row for this once (`QueueRenderPass.swift:252`) and puts it on

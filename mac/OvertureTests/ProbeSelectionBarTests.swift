@@ -19,18 +19,16 @@ struct ProbeSelectionBarTests {
     private static let barWidth: CGFloat = 760
     private let today = "2026-09-01"
 
-    private func item(_ key: String, date: String, presenter: String?, venue: String) -> QueueItem {
-        var i = QueueItem(id: key, groupName: key, discipline: "theater", venue: venue,
-                          performanceDate: date, sourceListingURL: nil,
-                          priorRelationship: "none", production: "self", profile: "strong",
-                          coverage: "likely_uncovered", fitScore: 6, tier: "mid", fitReason: "r",
-                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
-                          status: .new)
-        i.presenter = presenter
-        return i
+    // #3653 Phase 3: the bar takes the pass's cheap SCOPE ROWS rather than its cards, because everything
+    // it asks (which dates hold something to check, what a run over them would cost) is answerable from a
+    // row. That is the point of the split rather than a detail of this test: a control that needed a card
+    // would be a reason to build one for every show in the store on every render.
+    private func item(_ key: String, date: String, presenter: String?, venue: String) -> QueueScopeRow {
+        QueueScopeRow(id: key, groupName: key, discipline: "theater", venue: venue,
+                      presenter: presenter, performanceDate: date, fitScore: 6)
     }
 
-    private var rows: [QueueItem] {
+    private var rows: [QueueScopeRow] {
         [item("a", date: "2026-09-12", presenter: "FRIGID New York", venue: "Under St Marks"),
          item("b", date: "2026-09-12", presenter: "Solo Co", venue: "The Tank"),
          item("c", date: "2026-09-13", presenter: "FRIGID New York", venue: "The Kraine Theater")]

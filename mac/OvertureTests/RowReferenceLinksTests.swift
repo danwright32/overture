@@ -155,8 +155,9 @@ struct ListingLinkLabelWiringTests {
         // broke the moment a parameter was added after `now:`, and a marker that stops matching returns
         // nil, which every `contains` below is quietly false against (#2192). The name is the thing this
         // guard is actually about.
-        guard let body = SourceGuardHelper.bodyOfFunction(named: "items", in: model) else {
-            Issue.record("QueueModel.items(from:) is gone, so this guard is asking nothing")
+        // #3653: `scope`, not `items`. See PresenterLineTests for why the rename moved this needle.
+        guard let body = SourceGuardHelper.bodyOfFunction(named: "scope", in: model) else {
+            Issue.record("QueueModel.scope(from:) is gone, so this guard is asking nothing")
             return
         }
         #expect(body.contains("item.sourceCalendarURLs"))

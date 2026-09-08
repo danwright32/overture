@@ -1,5 +1,56 @@
 import Foundation
 
+// #3653 Phase 3: what a whole-scope consumer of the render pass is allowed to know about a show.
+//
+// THE POINT IS THE REFUSAL, not the list. A function written over `[QueueItem]` can reach any of the
+// card's 130 fields, so nothing stops a whole-scope sweep growing a read of a lint verdict, a send group
+// or a greeting, and the day one does, the card can no longer be built for the rendered rows alone: the
+// whole-scope consumer would need one for every show in the store. That regression is invisible in
+// review, because the new line reads exactly like every line around it (L63, the #2033 shape in this
+// same file).
+//
+// Written over `some QueueScopeFacts` instead, the compiler refuses it. The body can reach nothing but
+// the ~24 answers below, which are precisely what `QueueScopeRow` carries, so "this sweep does not need
+// a card" stops being a claim in a PR body and becomes a thing the build enforces.
+//
+// `QueueItem` conforms too, and that is not a loophole: it is what lets today's callers, and the parity
+// oracle, pass a card where a row is expected and get the same answer. The narrowing that matters is on
+// the FUNCTIONS, which can no longer see anything else.
+protocol QueueScopeFacts {
+    var id: String { get }
+    var groupName: String { get }
+    var discipline: String { get }
+    var venue: String? { get }
+    var presenter: String? { get }
+    var location: String? { get }
+
+    var performanceDate: String? { get }
+    var runNights: [String] { get }
+    var performanceStartTimes: [String] { get }
+    var nightStartTimes: [String] { get }
+    var startTimesVary: Bool { get }
+
+    var fitScore: Int { get }
+    var tier: String { get }
+    var status: ReviewStatus { get }
+    var sentAt: Date? { get }
+    var outcome: Outcome { get }
+    var showOutcome: ShowOutcome? { get }
+    var bookingSuggested: Bool { get }
+    var hasDraft: Bool { get }
+
+    var reachabilityProbedAt: Date? { get }
+    var reachabilityUnansweredAt: Date? { get }
+    var reachabilityRecheckRequestedAt: Date? { get }
+    var reachabilityResult: Reachability.ProbeResult? { get }
+    var inheritedReachability: OrgAnswerLedger.Inherited? { get }
+
+    // Derived on both sides, from the SAME pure rules, which is what `QueueScopeRowParityTests` pins.
+    var performanceStatus: PerformanceStatus { get }
+    var isBooked: Bool { get }
+    var isLost: Bool { get }
+}
+
 // #3653 Phase 3c: the cheap half of a queue card.
 //
 // NAMED `QueueScopeRow` AND NOT `QueueRow`, which is what the plan called it. `QueueRow` is taken, by
@@ -24,35 +75,50 @@ import Foundation
 //
 // WHAT IS DELIBERATELY NOT HERE: anything lint-derived, greeting-derived or send-group-derived. Those
 // are what a card costs, and #3654 is what stops them being paid for a show nobody is looking at.
-struct QueueScopeRow: Identifiable, Equatable, Sendable {
-    let id: String
-    let groupName: String
-    let discipline: String
-    let venue: String?
-    let presenter: String?
-    let location: String?
+//
+// EVERY FIELD BUT THE IDENTITY CARRIES A DEFAULT, on `QueueItem`'s own precedent beside it. A row is
+// built from a show by the initialiser at the bottom of this file, which fills all of them, and the
+// memberwise one exists so a test can state the three or four fields its question is about instead of
+// twenty-four. A row built with a field missing is therefore possible, which is the price: what stops it
+// mattering is that nothing in `mac/Overture` calls the memberwise init at all.
+struct QueueScopeRow: Identifiable, Equatable, Sendable, QueueScopeFacts {
+    var id: String
+    var groupName: String
+    var discipline: String
+    var venue: String? = nil
+    var presenter: String? = nil
+    var location: String? = nil
 
-    let performanceDate: String?
-    let runNights: [String]
-    let performanceStartTimes: [String]
-    let nightStartTimes: [String]
-    let startTimesVary: Bool
+    var performanceDate: String? = nil
+    var runNights: [String] = []
+    var performanceStartTimes: [String] = []
+    var nightStartTimes: [String] = []
+    var startTimesVary: Bool = false
 
-    let fitScore: Int
-    let tier: String
-    let status: ReviewStatus
-    let sentAt: Date?
-    let outcome: Outcome
-    let showOutcome: ShowOutcome?
-    let bookingSuggested: Bool
-    let hasDraft: Bool
+    var fitScore: Int = 0
+    var tier: String = "mid"
+    var status: ReviewStatus = .new
+    var sentAt: Date? = nil
+    var outcome: Outcome = .noResponse
+    var showOutcome: ShowOutcome? = nil
+    var bookingSuggested: Bool = false
+    var hasDraft: Bool = false
 
-    let reachabilityProbedAt: Date?
-    let reachabilityUnansweredAt: Date?
-    let reachabilityResult: Reachability.ProbeResult?
+    var reachabilityProbedAt: Date? = nil
+    var reachabilityUnansweredAt: Date? = nil
+    // #3653: BOTH of the fields that release a show from a fresh answer, not one of them.
+    //
+    // `hasFreshReachabilityAnswer` reads the re-check request FIRST and the inherited answer SECOND, and
+    // a row carrying only the probe stamp would answer that question with two of its three inputs
+    // missing: a show Dan asked to re-check would read as still answered, and a show holding only its
+    // organisation's answer would read as never checked. Both are wrong in the direction that offers to
+    // spend money, or refuses to (#2261, #1598 Phase 5).
+    var reachabilityRecheckRequestedAt: Date? = nil
+    var reachabilityResult: Reachability.ProbeResult? = nil
+    var inheritedReachability: OrgAnswerLedger.Inherited? = nil
 
     // The contacts, reduced to the facts a row needs, gathered in ONE walk.
-    let facts: RecipientFacts
+    var facts: RecipientFacts = .none
 
     // #3653: the two rules a row derives rather than stores, each through the SAME pure function the
     // card's own value comes from, so a row and a card can never disagree about a show (L107).
@@ -108,9 +174,18 @@ extension RecipientFacts {
     // guard forbidding `DraftCheck`, `SendGroup` and friends here would assert a PROXY for the quantity
     // it protects and would pass unchanged while the row took three walks naming none of them (L63).
     static func of(_ p: Prospect) -> RecipientFacts {
-        let contacts = p.countedRecipients
-        return RecipientFacts(standings: contacts.map(\.standing),
-                              reachabilityAsHeld: p.reachabilityResultAsHeld)
+        of(p, contacts: p.countedRecipients)
+    }
+
+    // The same reduction, from contacts the caller has ALREADY read.
+    //
+    // The render pass reads them once and builds a row and a card from that one read, so it takes this
+    // arm; anything asking about a single show on its own takes the arm above. ONE definition of what a
+    // row knows about a show's contacts, because two would drift and only one of them would be the one
+    // the pass actually uses (L107, L263).
+    static func of(_ p: Prospect, contacts: [Recipient]) -> RecipientFacts {
+        RecipientFacts(standings: contacts.map(\.standing),
+                       reachabilityAsHeld: p.reachabilityResultAsHeld)
     }
 }
 
@@ -120,7 +195,19 @@ extension QueueScopeRow {
     // The facts are HANDED IN rather than gathered here, which is the whole reason this is cheap: the
     // pass gathers them once per show and gives the same value to this and to the card, so building both
     // is one walk rather than two and `RecipientWalkCountTests`'s pin still holds.
-    init(_ p: Prospect, facts: RecipientFacts) {
+    init(_ p: Prospect, facts: RecipientFacts,
+         // #3653: the organisation's answer, which is NOT a fact about this show's own contacts and so
+         // cannot come from the walk. It is derived once per pass from the whole-store ledger
+         // (`QueueModel.inheritedAnswers`) and handed in, exactly as the card receives it, so the row and
+         // the card cannot disagree about whether a show already has an answer to inherit.
+         inheritedReachability: OrgAnswerLedger.Inherited? = nil) {
+        // #3653 step 3a: counted here, the one place a row is built from a show.
+        //
+        // It exists so the four `FeltWaitCostTests` waits have something to wait ON once #3654 stops
+        // building a card for every show: today they key on `WorkTally.queueItems`, and the day the card
+        // count stops being the scope count, every one of those conditions becomes unmeetable and each
+        // test burns its full deadline (90s, 20s, 20s, 60s) in the serial hosted bundle before failing.
+        QueueRenderPass.WorkTally.recordQueueRow()
         self.init(id: p.naturalKey,
                   groupName: p.groupName,
                   discipline: p.discipline,
@@ -142,7 +229,9 @@ extension QueueScopeRow {
                   hasDraft: p.draftBody != nil,
                   reachabilityProbedAt: p.reachabilityProbedAt,
                   reachabilityUnansweredAt: p.reachabilityUnansweredAt,
+                  reachabilityRecheckRequestedAt: p.reachabilityRecheckRequestedAt,
                   reachabilityResult: facts.reachabilityAsHeld,
+                  inheritedReachability: inheritedReachability,
                   facts: facts)
     }
 }

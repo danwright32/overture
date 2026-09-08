@@ -113,7 +113,12 @@ struct RecipientWalkCountTests {
     @Test("the card build reaches for contacts only through the counted accessor")
     func theCardBuildCannotReachTheContactsUncounted() throws {
         let model = SourceGuardHelper.source("Overture/UI/QueueView+Model.swift")
-        let opening = "init(_ p: Prospect, sendGroups: SendGroup.CardGroups) {"
+        // #3653: the initialiser gained a `contacts:` parameter (the render pass reads them once and
+        // hands the same array to the row and the card), so the marker is the signature's CLOSING line
+        // rather than its opening one. Still signature-pinned, and deliberately so: a marker that stops
+        // mid-signature would start the brace scan inside the parameter list, which is the hollow-guard
+        // shape `SourceGuardMarkerIntegrityTests` exists to refuse (L70).
+        let opening = "contacts: [Recipient]? = nil) {"
         let start = try #require(model.range(of: opening),
                                  "the card initialiser is gone, so this guard is about nothing (L98)")
         let rest = model[start.upperBound...]
@@ -127,6 +132,10 @@ struct RecipientWalkCountTests {
                         + "only what the registry lists)."))
         #expect(body.contains("countedRecipients"),
                 "the card build no longer reaches for the contacts at all, so the pin is about nothing")
+        // #3653: and the handed-in arm is the SAME array, never a second read dressed as a fallback.
+        #expect(body.contains("contacts ?? p.countedRecipients"),
+                Comment(rawValue: "the card no longer takes the contacts the render pass already read, "
+                        + "so a pass that builds a row and a card walks every show's contacts twice"))
     }
 
     // AND ONLY ONCE. The pin above says how many reaches happen at run time; this says the card build
@@ -136,7 +145,12 @@ struct RecipientWalkCountTests {
     @Test("the card build faults the contacts exactly once")
     func theCardBuildBindsTheContactsOnce() throws {
         let model = SourceGuardHelper.source("Overture/UI/QueueView+Model.swift")
-        let opening = "init(_ p: Prospect, sendGroups: SendGroup.CardGroups) {"
+        // #3653: the initialiser gained a `contacts:` parameter (the render pass reads them once and
+        // hands the same array to the row and the card), so the marker is the signature's CLOSING line
+        // rather than its opening one. Still signature-pinned, and deliberately so: a marker that stops
+        // mid-signature would start the brace scan inside the parameter list, which is the hollow-guard
+        // shape `SourceGuardMarkerIntegrityTests` exists to refuse (L70).
+        let opening = "contacts: [Recipient]? = nil) {"
         let start = try #require(model.range(of: opening),
                                  "the card initialiser is gone, so this guard is about nothing (L98)")
         let rest = model[start.upperBound...]
