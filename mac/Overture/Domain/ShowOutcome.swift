@@ -63,6 +63,19 @@ enum ShowOutcome: String, CaseIterable, Equatable, Hashable, Sendable {
     // yet: the difference between "still waiting to hear" and "they never answered, I am closing this"
     // can only be captured at the moment Dan closes it.
     case neverHeardBack = "never_heard_back"
+    // #3674: the message never arrived. Dan: "I need a new reason that says that the email bounced. So
+    // it's not a rejected, but it's an indicator I'm never going to hear back."
+    //
+    // Must never be folded into `neverHeardBack`, which is where it landed before. A silence is an org
+    // that RECEIVED a pitch and chose not to answer; a bounce is one that received nothing, so recording
+    // it as a silence asserts something false about them and, at any volume, teaches Dan to stop pitching
+    // organisations whose address was merely typed wrong. It is a fact about the ADDRESS, not about the
+    // org, which makes it the one lost reason that names something fixable.
+    //
+    // Kept separate is what makes #16 able to ask how many pitches a season die on a bad address, which
+    // is the number that says whether contact finding is losing shows after the send as well as before
+    // it (`noWayToReachThem` counts only the ones that never got that far).
+    case emailBounced = "email_bounced"
     case theySaidNotNow = "they_said_not_now"
     case theySaidNo = "they_said_no"
     // #2863: they wanted the work and could not pay this rate. Must never be folded into `theySaidNo`,
@@ -101,6 +114,7 @@ enum ShowOutcome: String, CaseIterable, Equatable, Hashable, Sendable {
         case .duplicate: return "Duplicate"
         case .booked: return "Booked"
         case .neverHeardBack: return "Never heard back"
+        case .emailBounced: return "The email bounced"
         case .theySaidNotNow: return "They said not now"
         case .theySaidNo: return "They said no"
         // #2863: the "They said..." shape, because it is the plainest report of what happened and it
@@ -130,6 +144,13 @@ enum ShowOutcome: String, CaseIterable, Equatable, Hashable, Sendable {
         switch self {
         case .booked: return "booked"
         case .neverHeardBack: return "never heard back"
+        // #3674: a SHORTENING of the label rather than the whole of it, and the only value here that
+        // is. The report renders "\(count) \(phrase)", and "3 the email bounced" is not a sentence
+        // while "3 bounced" is. Dan chose the menu wording on 2026-09-07 with both readings in front of
+        // him. Dropping the leading words keeps one vocabulary; inventing different ones would be #843
+        // from the naming direction, which is why the guard in `ConfirmedSilenceIsReportedTests` is a
+        // suffix rule and not a free pass.
+        case .emailBounced: return "bounced"
         case .theySaidNotNow: return "they said not now"
         case .theySaidNo: return "they said no"
         case .theySaidPriceTooHigh: return "they said the price was too high"
@@ -153,7 +174,10 @@ enum ShowOutcome: String, CaseIterable, Equatable, Hashable, Sendable {
 
     // #2863 put `theySaidPriceTooHigh` beside the other answers somebody actually gave, after the flat
     // no and before Dan's own refusal, which stays last.
-    static let pitched: [ShowOutcome] = [.booked, .neverHeardBack, .theySaidNotNow,
+    // #3674 put `emailBounced` directly under `neverHeardBack`. They are the two endings that record no
+    // answer, and the whole point of the new one is that Dan has a choice between them, which adjacency
+    // is what makes him notice (L609).
+    static let pitched: [ShowOutcome] = [.booked, .neverHeardBack, .emailBounced, .theySaidNotNow,
                                          .theySaidNo, .theySaidPriceTooHigh, .turnedThemDown]
 
     static var danCanChoose: [ShowOutcome] { neverPitched + pitched }
@@ -201,6 +225,7 @@ extension ShowOutcome {
         switch outcome {
         case .booked: return "\(org) recorded as booked."
         case .neverHeardBack: return "\(org) closed out: never heard back."
+        case .emailBounced: return "\(org) closed out: the email bounced."
         case .theySaidNotNow: return "\(org) closed out: they said not now."
         case .theySaidNo: return "\(org) closed out: they said no."
         // #2863: names the rate rather than the refusal, because that is the whole reason this ending
@@ -302,6 +327,11 @@ extension ShowOutcome {
         // A silence leaves the door open exactly as a soft no does. A distinct RECORD, so the reporting can
         // tell "they said not now" from "nobody answered", and the same STATUS, because neither is a refusal.
         case .neverHeardBack, .theySaidNotNow: return .lostDoorOpen
+        // #3674: `lostDoorOpen` with the two above, because nobody refused anything: the message did not
+        // arrive. `lostNotInterested` would say the org turned the work down, which is the one thing it
+        // cannot have done. A distinct RECORD from both, so the lost split can count it, and the same
+        // STATUS, for the same reason they share one.
+        case .emailBounced: return .lostDoorOpen
         case .theySaidNo: return .lostNotInterested
         // #2863: `lostDoorOpen`, with `neverHeardBack` and `theySaidNotNow`, because an org that wanted
         // the work and could not pay this time is not an org to stop pitching. `lostNotInterested` would
@@ -330,7 +360,7 @@ extension ShowOutcome {
         case .wentBy: return .wentBy
         case .tooFar: return .tooFar
         case .booked, .neverHeardBack, .theySaidNotNow, .theySaidNo, .theySaidPriceTooHigh,
-             .turnedThemDown:
+             .turnedThemDown, .emailBounced:
             return nil
         // #2684: this ending never existed under `DismissReason`, so it has no spelling there and the
         // bridge's contract is now "the nine that predate it" rather than every never-pitched value.
