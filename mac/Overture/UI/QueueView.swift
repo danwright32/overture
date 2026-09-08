@@ -1562,7 +1562,12 @@ struct QueueView: View {
                 // call site it would be read during QueueView's body, and every "Sending…" would re-derive
                 // the whole store; read there, a send redraws the cards on screen and nothing else.
                 QueueSendAwareRow(key: item.id, sendState: sendState) { highlightedKey, sendingSince, replySince, isAddressStruck in
-                    ProspectRowFactory.row(item, today: today, prospects: data.queueScope, context: context, feedback: feedback,
+                    // #3690: the LIVE list, in a closure, so it is derived on a press and never during a
+                    // render. `prospects` here is the property at the top of this file whose own comment
+                    // says it is "read from HERE only by the action handlers, which run on a press rather
+                    // than during a render"; handing `data.queueScope` broke that rule, and handing the
+                    // property directly would run its whole-store filter and sort once per rendered row.
+                    ProspectRowFactory.row(item, today: today, prospects: { prospects }, context: context, feedback: feedback,
                                           dayOffOffer: dayOffOffer,
                                           gmailConnected: data.gmailConnected,
                                           // #2267: the row's own "Check again" spends money, so it goes
