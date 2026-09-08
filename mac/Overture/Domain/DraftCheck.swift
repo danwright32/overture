@@ -53,8 +53,13 @@ enum DraftIssue: Equatable, Hashable, Sendable, CaseIterable {
         case .subjectEndsInPunctuation:
             return "The subject line ends in punctuation: a subject is a label, not a sentence"
         // #3685: names the fix rather than the grammar term. What Dan has to do is write the noun.
+        //
+        // It does NOT quote the pronoun, and that was caught by the cold read rather than reasoned out:
+        // the first wording said `says "them"`, while the rule matches "they", "these" and "those" as
+        // well, so on any of those three the sentence would have named a word the draft does not contain.
+        // A message may claim only what its check measured (L11).
         case .hedgePronounHasNoAntecedent:
-            return "The closing hedge says \"them\" with no plural anywhere near it: name the run instead"
+            return "The closing hedge points at a plural the draft never names: name the run instead"
         }
     }
 

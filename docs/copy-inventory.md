@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1532 sentences**.
+Every sentence Overture can say to Dan: **1534 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -14,7 +14,7 @@ What is not, and why:
   sentences under tokens nobody reads.
 - **Nothing, if it is written as two literals joined with `+`.** Those ARE joined here, into the
   one sentence the running app says (#3155). What is still only part of what Dan reads is a
-  sentence carrying a VALUE: 552 of the 1532 below hold a
+  sentence carrying a VALUE: 552 of the 1534 below hold a
   `\(...)` where a number or a name goes, so what is printed is the template. They are counted
   here rather than listed again, because the hole is visible in the line itself; what was missing
   was any statement of how much of this document is templates.
@@ -35,6 +35,8 @@ What is not, and why:
 - `Domain/DebugStaging.swift`: a debug-only stand-in draft body (contact-facing email copy, not app voice)
 - `Domain/DebugStaging.swift`: a debug-only stand-in draft body (contact-facing email copy, not app voice)
 - `Domain/DraftCheck.swift`: draft lint needles: phrases the linter HUNTS FOR, never words it says (#915)
+- `Domain/DraftCheck.swift`: #3685 hedge lint: phrases MATCHED in a draft, never anything Overture says
+- `Domain/DraftCheck.swift`: #3677 subject lint: marks MATCHED at the end of a draft's subject, never anything Overture says
 - `Domain/DraftCheck.swift`: cadence lint needles: connector and subordinator words MATCHED in a draft, never words Overture says (#2807)
 - `Domain/DraftCheck.swift`: Words MATCHED in a draft, never shown to Dan (#1887)
 - `Domain/DriftedRunMerge.swift`: developer diagnostic log, not the app's own voice (#915)
@@ -2189,6 +2191,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/Reachability.swift`
 "The city and state it's in"
     `UI/SourcesView.swift`
+"The closing hedge points at a plural the draft never names: name the run instead"
+    `Domain/DraftCheck.swift`
 "The contact check finished but didn't produce any results. It may have hit an error, so no show was marked as checked."
     `Domain/DetachedRunOutcome.swift`
 "The date is known"
@@ -2283,6 +2287,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/DraftReviewView.swift`
 "The sources sheet was on screen."
     `Domain/FreezeReport.swift`
+"The subject line ends in punctuation: a subject is a label, not a sentence"
+    `Domain/DraftCheck.swift`
 "The update never started. Ask Claude to look."
     `Domain/UpdateAttempt.swift`
 "The update stopped without saying why. Ask Claude to look."
