@@ -243,7 +243,8 @@ struct ArchiveView: View {
     // FollowUpsView's `since` parameter.
     func row(_ item: QueueItem, context: ModelContext, feedback: ActionFeedback,
              dayOffOffer: DayOffOfferRequest = DayOffOfferRequest(), outboundSendSince: Date? = nil) -> some View {
-        ProspectRowFactory.row(item, today: today, prospects: prospects, context: context, feedback: feedback,
+        // #3690: a closure, so the array is read on a press rather than captured per row.
+        ProspectRowFactory.row(item, today: today, prospects: { prospects }, context: context, feedback: feedback,
                               dayOffOffer: dayOffOffer,
                               // #1770: read once from the cache here rather than by each card it builds.
                               gmailConnected: GmailConnection.shared.isConnected,
