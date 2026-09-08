@@ -1,0 +1,21 @@
+# Conversations the auto-reply signature flagged that somebody has READ and settled (#3694).
+#
+# The signature is a signature and not a proof: an answer sent within 90 seconds of the message it
+# answers is the shape of an autoresponder from Dan's own mailbox, and it is also the shape of Dan
+# answering something he was already looking at. Without this file the invariant goes red on the
+# second case, somebody looks, and the next run asks again (L269, L538).
+#
+# This log GROWS. It records conversations somebody has read, not a defect being paid off, so it is
+# the shape of fixtures/test-identity-provenance.txt and NOT of fixtures/test-data-email-domains.txt.
+#
+# KEYED ON THE TWO INSTANTS, and that is deliberate. Not a name, not an address, not a show, not a
+# Gmail message id: two timestamps identify the conversation for this purpose and identify no person,
+# and this is a public repository (L155, L222).
+#
+# One entry per line:
+#   <their message, ISO8601>  <the answer, ISO8601>  <why it was settled>
+#
+# A line this cannot read is REFUSED, never skipped, because a skipped line reads exactly like a
+# conversation nobody judged.
+
+2026-08-31T16:37:55Z 2026-08-31T16:39:17Z Dan confirmed 2026-09-08 that he answered this one himself

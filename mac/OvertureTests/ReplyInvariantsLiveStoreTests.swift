@@ -314,6 +314,12 @@ struct ReplyInvariantsLiveStoreTests {
             // THE ANCHOR IS `inboundReplySentAt`, NOT `repliedAt`. `Recipient.swift:428` says why in as
             // many words: `repliedAt` is when Overture NOTICED a reply, which is a property of the
             // watcher's schedule, and "inboundReplySentAt is the real thing" (#2113).
+            // The judgements somebody has already made. Read here and REFUSED on a malformed line rather
+            // than skipped, so a typo cannot quietly un-settle a conversation and send this red naming
+            // one that was dealt with weeks ago (L100).
+            let judged = try JudgedFastAnswers.parse(
+                String(contentsOf: RepoRoot.url.appendingPathComponent("fixtures/answered-fast-by-hand.txt"),
+                       encoding: .utf8))
             let verdicts = shows.flatMap { p in
                 p.recipients.compactMap { r -> AutomaticAnswerSignature.Verdict? in
                     guard let handled = r.replyHandledAt else { return nil }
@@ -327,13 +333,15 @@ struct ReplyInvariantsLiveStoreTests {
                         theirMessageSentAt: r.inboundReplySentAt,
                         noticedAt: r.repliedAt,
                         answeredAt: handled,
-                        recordedInOneWriteWithTheAttach: r.conversationAttachedAt == handled))
+                        recordedInOneWriteWithTheAttach: r.conversationAttachedAt == handled),
+                        judged: judged)
                 }
             }
             let answered = verdicts
             let fromOneAttachWrite = verdicts.filter { $0 == .setAsideAsAnAttachWrite }
             let unmeasurable = verdicts.filter { if case .unmeasurable = $0 { return true } else { return false } }
             let suspicious = verdicts.filter { if case .suspicious = $0 { return true } else { return false } }
+            let settled = verdicts.filter { if case .judgedByHand = $0 { return true } else { return false } }
             // The population, printed every run for the reason the corpus line above exists: a rule that
             // examined zero rows and a rule that examined every row must not look alike (L98). The set
             // aside count is printed for the same reason: an exclusion nobody can see the size of is one
@@ -342,6 +350,8 @@ struct ReplyInvariantsLiveStoreTests {
                   + "\(fromOneAttachWrite.count) of them recorded in one write with a conversation attach "
                   + "and therefore not measurable here, \(unmeasurable.count) more unmeasurable for want "
                   + "of an anchor or because the answer predates their message, "
+                  + "\(settled.count) already read and settled in "
+                  + "fixtures/answered-fast-by-hand.txt, "
                   + "\(suspicious.count) of the rest sent within "
                   + "\(Int(AutomaticAnswerSignature.window))s of the message they answer. A zero "
                   + "population means this measured nothing.")
