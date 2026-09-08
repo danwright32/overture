@@ -223,7 +223,13 @@ struct PresenterLineWiringTests {
             return
         }
         #expect(body.contains("ProducerGate.VenueBrands("))
-        #expect(body.contains("presenterLine"))
+        // #3654: the per-card decoration moved out of the builder into `QueueModel.card`, which is the one
+        // place a card is made, reached both by the pass's prebuild and by a row that arrives on screen
+        // after it. Asserted THERE, or this guard would be satisfied by the table being built and say
+        // nothing about any card reading it.
+        let cardBody = SourceGuardHelper.bodyOfFunction(named: "card", in: model)
+        #expect(cardBody?.contains("presenterLine") == true,
+                "QueueModel.card no longer sets the presenter line, or is gone")
         // The corpus is the whole store, not the caller's already-filtered rows: judging brands against a
         // triaged subset would let a dismissal quietly change which names draw (the #1598 reasoning that
         // put `corpus` on this signature in the first place).

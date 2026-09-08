@@ -160,10 +160,16 @@ struct ListingLinkLabelWiringTests {
             Issue.record("QueueModel.scope(from:) is gone, so this guard is asking nothing")
             return
         }
-        #expect(body.contains("item.sourceCalendarURLs"))
+        // #3654: the table is built in the builder and READ in `QueueModel.card`, the one place a card
+        // is decorated. Both halves are asserted, because either alone is satisfied by the other being
+        // deleted: a table nothing reads, or a read of a table nobody builds.
+        #expect(body.contains("sourceCalendarIndex("))
+        let cardBody = SourceGuardHelper.bodyOfFunction(named: "card", in: model)
+        #expect(cardBody?.contains("item.sourceCalendarURLs") == true,
+                "QueueModel.card no longer resolves the row's source calendars, or is gone")
         // Resolved through the row's OWN sources, not "any watched source", so a row can never inherit a
         // calendar address from a source it was never found on.
-        #expect(body.contains("sourceIds.compactMap"))
+        #expect(cardBody?.contains("sourceIds.compactMap") == true)
     }
 
     @Test func bothCardSurfacesPassTheWatchlistIn() {

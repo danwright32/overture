@@ -13,9 +13,8 @@ import Foundation
 // learn `filtered.isEmpty`, and then the empty branch derived it again. On the refreshed fixture one
 // rebuild is 533ms (QueueRebuildCostTests, 2026-09-02), so the empty path paid roughly double.
 //
-// WHY THE ANSWER IS FREE. `QueueModel.items(from:)` ends in `return prospects.map { ... }`, a
-// one-to-one map, so `items.count` is always `prospects.count` and `items.isEmpty` is always
-// `prospects.isEmpty`. The question the empty state asks is answerable from the @Query array's own
+// WHY THE ANSWER IS FREE. `QueueModel.items(from:)` gives one card per show handed to it, so
+// `items.count` is always `prospects.count` and `items.isEmpty` is always `prospects.isEmpty`. The question the empty state asks is answerable from the @Query array's own
 // count, which reads no rows at all.
 //
 // A source guard rather than a timing one: what changed is only how much work happens to produce the
@@ -67,20 +66,25 @@ struct ArchiveEmptyStateDerivesNothingGuardTests {
         // parameter list and only balances at the end of the whole type. The "body" it returned was
         // every line of the file below that point, which of course contains the map, so the assertion
         // agreed with itself whatever the function did (L70). It was hollow and it passed.
-        // #3653: `scope`, not `items`. The builder gained the cheap scope rows and was renamed with
-        // them; `items` forwards to it in one line, and a guard reading that line would assert nothing
-        // while looking exactly like this one.
-        guard let items = SourceGuardHelper.bodyOfFunction(named: "scope", in: source) else {
-            Issue.record("expected to find QueueModel.scope(from:)")
-            return
+        // #3654 MOVED THIS FROM THE SOURCE TO THE BEHAVIOUR, because the source stopped being able to
+        // say it. The builder no longer ends in a map at all: it walks the shows once, building a cheap
+        // row for each and a card only for the ones something is about to draw. Any needle over that loop
+        // would assert a SPELLING, while what Archive relies on is the ANSWER (L63).
+        //
+        // So it is asked of the arm Archive actually calls. `QueueModel.items(from:)` requests every
+        // card, so one comes out per show in, and `items.count` is still `prospects.count`. The day
+        // somebody narrows that arm, this goes red with a number rather than with a missing string.
+        let shows = (0..<7).map {
+            Prospect(naturalKey: "k\($0)", groupName: "Show \($0)", discipline: "choral", venue: nil,
+                     performanceDate: nil, sourceListingURL: nil, priorRelationship: "none",
+                     production: "self", profile: "strong", coverage: "likely_uncovered",
+                     fitScore: 5, tier: "mid", fitReason: "r", matchedClientName: nil,
+                     possibleMatchSource: nil, possibleMatchName: nil)
         }
-        // The needle is the MAP, wherever its result goes. It used to be spelled `return prospects.map`;
-        // it is now bound to a local, because the same walk also fills the row array beside it. What the
-        // empty state depends on is unchanged and is what this asserts: one card out per show in, so the
-        // input's count answers "are there any rows" without building one.
-        #expect(items.contains("prospects.map { p -> QueueItem in"),
-                Comment(rawValue: "QueueModel.scope no longer ends in a one-to-one map over its input. "
+        #expect(QueueModel.items(from: shows).count == shows.count,
+                Comment(rawValue: "QueueModel.items is no longer one-to-one with its input. "
                         + "ArchiveView.emptyState answers 'are there any rows' from the input's count on "
                         + "the strength of that, so it is now answering a different question."))
+        #expect(QueueModel.items(from: [Prospect]()).isEmpty)
     }
 }
