@@ -2931,11 +2931,28 @@ extension QueueItem {
         // on its own, and the three fields that had been exiled below are back where they belong.
         let voiceLearningCandidate = p.sentAt != nil && p.originalDraftBody != nil
         let nextRecipientIds = sendGroups.pending.map(\.id)
-        let weakContactHoldReason = p.countedRecipients.compactMap(\.holdReason).first
+        // #3654: the contacts, read ONCE for this card, and READ THE MEASUREMENT BEFORE ASSUMING WHY.
+        //
+        // The twelve separate reaches this replaces are NOT twelve faults. SwiftData faults a to-many
+        // relationship on first access and caches it on the object, so the other eleven were array
+        // accesses over a tiny collection: 78.6% of shows carry no contact at all and the median show
+        // with any has ONE (live store, 2026-09-07).
+        //
+        // MEASURED, and the honest answer is that this changes nothing. Felt wait 1,135.2 ms against
+        // 1,133.6 ms before it; the card-build term 479.6 and 485.8 ms against 419.8 and 431.1 ms, which
+        // is a machine under continuous load rather than a regression. Run-to-run variation is larger
+        // than the effect in both directions.
+        //
+        // So this is kept for CLARITY and for what it does to the counter, never as a saving: with one
+        // binding, `WorkTally.recipientReaches` counts FAULTS rather than reads, so the pin means what
+        // its name says and a genuine second fault added by the tier-one split cannot hide among eleven
+        // cheap ones. Claiming a cost benefit here would be a number nobody took (L102, L107).
+        let contactsOnce = p.countedRecipients
+        let weakContactHoldReason = contactsOnce.compactMap(\.holdReason).first
         let formPitch = FormPitch.state(of: p)
-        let draftGreetedContactName = p.countedRecipients.first { $0.sendState == .pending && $0.greetingNamesSomeoneElse }?.name
+        let draftGreetedContactName = contactsOnce.first { $0.sendState == .pending && $0.greetingNamesSomeoneElse }?.name
         let conflictBlockedDate = p.conflictKey.flatMap { BlockedCalendar.Day(key: $0) }?.date
-        let draftGreetedName = p.countedRecipients
+        let draftGreetedName = contactsOnce
             .first { $0.sendState == .pending && $0.greetingNamesSomeoneElse }
             .flatMap { DraftGreeting.greetedName($0.effectiveBody) }
         // #3498: the lint runs ONCE per pending contact for this card, and every reader below shares the
@@ -2947,7 +2964,7 @@ extension QueueItem {
         // PENDING only. Every reader below either asks about a pending contact or refuses a non-pending
         // one before it consults the lint, so linting the rest would be work nobody uses: measured, that
         // was 24 extra runs per render on this store's shape.
-        let pendingRecipients = p.countedRecipients.filter { $0.sendState == .pending }
+        let pendingRecipients = contactsOnce.filter { $0.sendState == .pending }
         let lintBlockersByRecipient = Dictionary(uniqueKeysWithValues:
             pendingRecipients.map { ($0.id, $0.draftLintBlockers) })
         // Falls back to the real derivation for a contact the map does not hold, so this can never answer
@@ -2958,15 +2975,15 @@ extension QueueItem {
         }
         let draftLintBlockers = DraftIssue.orderedBlockers(
             Set(pendingRecipients.flatMap { lintBlockers($0) }))
-        let contacts = Recipient.inSendOrder(p.countedRecipients)
+        let contacts = Recipient.inSendOrder(contactsOnce)
             .map { RecipientSnapshot($0, lintBlockers: lintBlockers($0)) }
-        let offersSendModeChoice = p.countedRecipients.filter { $0.email?.isEmpty == false }.count > 1
-        let hasWeakContactEmail = p.countedRecipients.contains(where: \.isHeldByAGuard)
-        let hasAnyEmailContact = p.countedRecipients.contains { $0.email?.isEmpty == false }
-        let draftMissingGreeting = p.countedRecipients.contains { $0.sendState == .pending && $0.draftIsMissingGreeting }
-        let draftGreetingMisaddressed = p.countedRecipients.contains { $0.sendState == .pending && $0.greetingMisaddressed }
-        let draftGreetingNamesSomeoneElse = p.countedRecipients.contains { $0.sendState == .pending && $0.greetingNamesSomeoneElse }
-        let greetingOverridden = !p.countedRecipients.contains { $0.sendState == .pending && $0.isBlockedByGreeting }
+        let offersSendModeChoice = contactsOnce.filter { $0.email?.isEmpty == false }.count > 1
+        let hasWeakContactEmail = contactsOnce.contains(where: \.isHeldByAGuard)
+        let hasAnyEmailContact = contactsOnce.contains { $0.email?.isEmpty == false }
+        let draftMissingGreeting = contactsOnce.contains { $0.sendState == .pending && $0.draftIsMissingGreeting }
+        let draftGreetingMisaddressed = contactsOnce.contains { $0.sendState == .pending && $0.greetingMisaddressed }
+        let draftGreetingNamesSomeoneElse = contactsOnce.contains { $0.sendState == .pending && $0.greetingNamesSomeoneElse }
+        let greetingOverridden = !contactsOnce.contains { $0.sendState == .pending && $0.isBlockedByGreeting }
         // #3498: read from the shared answer above rather than asking the lint again. The override half
         // is kept exactly as `Recipient.isBlockedByDraftLint` states it, because a body Dan has overridden
         // is not blocked however many findings it carries.

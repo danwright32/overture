@@ -23,10 +23,17 @@ import SwiftData
 @Suite("How many times building a card reaches for a show's contacts (#3653)")
 struct RecipientWalkCountTests {
 
-    // What one card costs today, reaching for the contacts once per fact it needs. #3654 makes this ONE,
-    // by gathering the facts in a single pass, and this number is what proves it did rather than merely
-    // rearranged the code.
-    private static let reachesPerCardToday = 12
+    // ONE, since the contacts are read once per card and every fact reads that local.
+    //
+    // CORRECTING WHAT #3671 IMPLIED. That change counted twelve reaches and treated the number as a cost
+    // to be driven down. Measured, driving it to one changed nothing: felt wait 1,135.2 ms against
+    // 1,133.6 ms, card build within run-to-run noise. SwiftData faults a to-many relationship once and
+    // caches it, so eleven of the twelve were array accesses over a collection whose median size is one.
+    //
+    // What the pin is FOR, therefore, is not a saving. It is that the number now counts FAULTS rather
+    // than reads, so a genuine second fault added by the tier-one split shows up as two instead of
+    // hiding among eleven cheap ones. That is worth pinning; a cost claim here would not be (L102, L107).
+    private static let reachesPerCard = 1
 
     private func container() throws -> ModelContainer {
         try ModelContainer(for: Schema([Prospect.self, Recipient.self]),
@@ -72,9 +79,9 @@ struct RecipientWalkCountTests {
 
         let tally = QueueRenderPass.WorkTally.measure { _ = QueueItem(p) }
 
-        #expect(tally.recipientReaches == Self.reachesPerCardToday,
+        #expect(tally.recipientReaches == Self.reachesPerCard,
                 Comment(rawValue: "building one card reached for its contacts \(tally.recipientReaches) "
-                        + "times against a pinned \(Self.reachesPerCardToday). Moving this number is a "
+                        + "times against a pinned \(Self.reachesPerCard). Moving this number is a "
                         + "decision about what a card costs: DOWN is #3654 landing, and up is per-card "
                         + "work being added where nothing else would report it (#2033's shape)."))
     }
@@ -121,4 +128,28 @@ struct RecipientWalkCountTests {
         #expect(body.contains("countedRecipients"),
                 "the card build no longer reaches for the contacts at all, so the pin is about nothing")
     }
+
+    // AND ONLY ONCE. The pin above says how many reaches happen at run time; this says the card build
+    // holds ONE binding rather than a dozen, so a reader can see the rule at the call site rather than
+    // having to run the suite to discover it. Kept as a second, cheaper net and named as one: the pin is
+    // the proof (L63).
+    @Test("the card build faults the contacts exactly once")
+    func theCardBuildBindsTheContactsOnce() throws {
+        let model = SourceGuardHelper.source("Overture/UI/QueueView+Model.swift")
+        let opening = "init(_ p: Prospect, sendGroups: SendGroup.CardGroups) {"
+        let start = try #require(model.range(of: opening),
+                                 "the card initialiser is gone, so this guard is about nothing (L98)")
+        let rest = model[start.upperBound...]
+        let close = try #require(rest.range(of: "\n    }"))
+        let body = String(rest[..<close.lowerBound])
+
+        let reaches = body.components(separatedBy: "p.countedRecipients").count - 1
+        #expect(reaches == 1,
+                Comment(rawValue: "the card build reaches for the contacts \(reaches) times in source. "
+                        + "One binding is what makes `recipientReaches` count FAULTS rather than reads, "
+                        + "which is the only thing that lets the pin notice a second fault the split "
+                        + "adds. It is not a cost claim: driving this from twelve to one was measured "
+                        + "and changed nothing."))
+    }
+
 }
