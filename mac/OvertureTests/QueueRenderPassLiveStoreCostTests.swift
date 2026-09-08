@@ -364,4 +364,88 @@ struct QueueRenderPassLiveStoreCostTests {
                 + "measured the same nothing #1930 withdrew the proposal over"))
         #expect(plain.build > 0, "building every card took no measurable time, so it never ran")
     }
+
+    // #3654: WHERE the per-card time actually goes, before anybody designs around a guess.
+    //
+    // What is known: the card-build term is roughly 420 to 480 ms over 1,224 rows, and #2598 established
+    // that the cost is the per-card construction rather than the corpus scan. What was ASSUMED, by me in
+    // #3671 and corrected in #3673, is that walking each show's contacts is where that sits. Measured, it
+    // is not: collapsing twelve contact reaches per card to one moved nothing, because SwiftData faults a
+    // to-many relationship once and caches it.
+    //
+    // So this asks the question the live store can answer without any refactor at all. 962 of its shows
+    // carry NO contact and 262 carry at least one (measured 2026-09-07). A contactless card runs no draft
+    // lint, builds no `RecipientSnapshot`, and every contact-derived fact short-circuits on an empty
+    // array. If per-card cost is contact-derived, the two groups must differ sharply. If they cost the
+    // same, what a card costs is the construction itself, and a design aimed at contact work is aimed at
+    // nothing (L107: a number quoted to justify a design must be produced by the code's own predicate).
+    //
+    // WHAT THIS CANNOT SAY, stated so nobody over-reads it. It compares two POPULATIONS of Dan's real
+    // shows, not one population two ways, so the groups differ in more than their contacts: a show with
+    // contacts has been prepped, so it more often carries a draft body, an outcome and a send state. That
+    // makes it the WEAKER direction for the contact hypothesis and the stronger one for its refutation: if
+    // the group that does MORE work costs the same per card, contact work is not the term.
+    @Test func measureWhetherContactsAreWhatACardCosts() throws {
+        guard ProcessInfo.processInfo.environment["MEASURE_QUEUE_LIVE_STORE"] != nil else {
+            print("queue-live-store-cards: not measured. Set TEST_RUNNER_MEASURE_QUEUE_LIVE_STORE=1 to run it.")
+            return
+        }
+
+        let clone = try cloneLiveStore()
+        let container = try openContainer(at: clone)
+        let ctx = ModelContext(container)
+        let rows = (try? ctx.fetch(FetchDescriptor<Prospect>())) ?? []
+
+        // Split AFTER the fetch and after one warming pass, so neither group pays for the other's
+        // materialisation and residency is not the variable (the prefetch reading beside this one
+        // establishes that a warm and a cold build differ by under half a millisecond).
+        for r in rows { _ = r.recipients.isEmpty }
+
+        let withContacts = rows.filter { !$0.recipients.isEmpty }
+        let without = rows.filter { $0.recipients.isEmpty }
+
+        // Guarded rather than assumed: a split that put everything on one side would report a per-card
+        // figure for a population of nothing, and a division by zero reads as a finding (L98).
+        guard withContacts.count > 50, without.count > 50 else {
+            print("""
+            queue-live-store-cards: UNMEASURED. The store split \(withContacts.count) with contacts
+              against \(without.count) without, which is too lopsided to compare per-card costs.
+            """)
+            return
+        }
+
+        func build(_ rows: [Prospect]) -> Double { seconds { for r in rows { _ = QueueItem(r) } } }
+        // Each group built twice, alternating, so a drift in machine load lands on both rather than on
+        // whichever ran second (L224: a duration compared against a fixed number measures the machine).
+        let a1 = build(withContacts), b1 = build(without)
+        let a2 = build(withContacts), b2 = build(without)
+
+        let withPer = ((a1 + a2) / 2) / Double(withContacts.count) * 1000
+        let withoutPer = ((b1 + b2) / 2) / Double(without.count) * 1000
+        let ratio = withoutPer > 0 ? withPer / withoutPer : 0
+
+        print("""
+        queue-live-store-cards: is building a card about its contacts? (#3654)
+          shows with a contact      \(withContacts.count)
+          shows with none           \(without.count)
+                                     per card
+          with contacts             \(String(format: "%.4f", withPer)) ms
+          without                   \(String(format: "%.4f", withoutPer)) ms
+          ratio                     \(String(format: "%.2f", ratio))x
+
+          Read the RATIO. Near 1 means a card costs the same whether or not it has contacts, so what a
+          card costs is its construction and a tier-one design aimed at contact work is aimed at
+          something already free (#3673 measured that directly). Far above 1 means contact-derived work
+          is the term after all and tier one should carry exactly the fields that avoid it.
+
+          It compares two POPULATIONS of real shows rather than one population two ways, so the groups
+          differ in more than contacts: a show with contacts has been prepped, so it more often carries a
+          draft body and an outcome. That is the weaker direction for the contact hypothesis and the
+          stronger one for refuting it.
+        """)
+
+        #expect(withPer > 0 && withoutPer > 0,
+                "a group built in no measurable time, so nothing here was timed (L98)")
+    }
+
 }
