@@ -2262,6 +2262,10 @@ enum QueueModel {
     // A night the hover displayed but the clash check could not read would be a night Dan was shown and
     // Overture silently treated as unknown.
     static func nightTimes(_ nightStartTimes: [String]) -> [String: [String]] {
+        // #3737: counted here, at the one place the map is built, because that is the quantity. Every
+        // entry below costs a `DateFormatter` parse, so a caller that rebuilds this inside a loop pays
+        // the whole array per iteration and nothing about the call site says so (L383).
+        QueueRenderPass.WorkTally.recordNightTimeMapBuild()
         var byNight: [String: [String]] = [:]
         for entry in nightStartTimes {
             let parts = entry.split(separator: " ", omittingEmptySubsequences: false)
@@ -2536,8 +2540,19 @@ enum QueueModel {
     // one off it would say nothing about the night in question. The per-night schedule kept for the
     // hover DOES name that night, so that is what is read: the most specific true answer available.
     // When it names nothing for this night, the answer is nothing, never the run's other nights.
-    static func selfBookingStartTimes(_ i: some QueueScopeFacts, on date: String) -> [String] {
-        if let night = nightTimes(i.nightStartTimes)[date] { return night }
+    // #3737: the parsed map is HANDED IN, and that is the whole of the fix.
+    //
+    // It used to be rebuilt on the first line of this function, and the only caller asks this once per
+    // night, so a show with N nights carrying N entries paid N rebuilds of an N entry map, each running a
+    // `DateFormatter` parse per entry: N squared parses to answer a question that needs N. Measured by
+    // #3736 at 125.9 ms of the queue pass's 421.6 ms floor, its single largest term.
+    //
+    // The parameter is NOT defaulted to rebuilding it. A default standing for "work it out yourself"
+    // would leave the quadratic reachable from any caller that forgot, which is a rule living only in a
+    // signature (L168, L27); making it required means the compiler asks the question instead.
+    static func selfBookingStartTimes(_ i: some QueueScopeFacts, on date: String,
+                                      nightTimes byNight: [String: [String]]) -> [String] {
+        if let night = byNight[date] { return night }
         // A run whose nights disagree may not lend one night's time to another (the card refuses to
         // state one for exactly this reason), so a run that said nothing about THIS night says nothing.
         guard !i.startTimesVary else { return [] }
@@ -2565,9 +2580,16 @@ enum QueueModel {
 
     static func selfBookingShow(_ i: some QueueScopeFacts) -> SelfBookingConflict.Show {
         let nights = selfBookingNights(i)
+        // #3737: parsed ONCE for this show, above the loop that reads it.
+        //
+        // And not at all when there is nothing to parse. A show that published no per-night schedule is
+        // the common case, and building an empty map for it still costs the call: measured on the live
+        // store, most rows carry no `nightStartTimes` at all. The empty map is the same answer the parse
+        // would give, so this is a shortcut rather than a different rule.
+        let byNight = i.nightStartTimes.isEmpty ? [:] : nightTimes(i.nightStartTimes)
         var times: [String: [String]] = [:]
         for night in nights {
-            let published = selfBookingStartTimes(i, on: night)
+            let published = selfBookingStartTimes(i, on: night, nightTimes: byNight)
             if !published.isEmpty { times[night] = published }
         }
         return SelfBookingConflict.Show(key: i.id, nights: nights,
