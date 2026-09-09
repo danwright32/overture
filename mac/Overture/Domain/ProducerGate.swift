@@ -27,6 +27,11 @@ enum ProducerGate {
     //     Theater Company plays it, spelled both ways, and nothing else.
     static func key(_ raw: String?) -> String? {
         guard let raw else { return nil }
+        // #3742: counted here, at the one place a name is folded, because this is not a cheap call: it
+        // runs a regex over the string plus a Unicode fold plus several trims. A caller that folds the
+        // same name once per SHOW rather than once per NAME pays all of that again for nothing, and
+        // nothing at the call site says so (L383).
+        QueueRenderPass.WorkTally.recordProducerKeyFold()
         // #1784: through VenueNormalization's one shared strip rather than a second copy of the same
         // regex. Keeping a private copy here is exactly how this fold and OrgKey's drifted apart on the
         // single question they have to answer the same way.
@@ -98,10 +103,29 @@ enum ProducerGate {
             QueueRenderPass.WorkTally.recordProducerIndex()
             var byPresenter: [String: Set<String>] = [:]
             var venueKeys: Set<String> = []
+            // #3742: each distinct NAME folded once, not once per show that carries it.
+            //
+            // `ProducerGate.key` runs a regex plus a Unicode fold plus several trims, and this loop asked
+            // it twice per show. On the live store that is about 2,460 calls over roughly 514 distinct
+            // strings, because a venue hosts many shows and a presenter presents many. The memo is LOCAL
+            // to this initialiser rather than a static, deliberately: a shared cache would be mutable
+            // state every test in the process contends for, which is the class
+            // `scripts/check-test-shared-state.sh` exists to report (#3270).
+            //
+            // The answer is identical by construction: `key` is pure, so the same string folds the same
+            // way, and this returns what a second call would have.
+            var folded: [String: String?] = [:]
+            func foldOnce(_ raw: String?) -> String? {
+                guard let raw else { return nil }
+                if let hit = folded[raw] { return hit }
+                let key = ProducerGate.key(raw)
+                folded[raw] = key
+                return key
+            }
             for show in shows {
-                let venueKey = ProducerGate.key(show.venue)
+                let venueKey = foldOnce(show.venue)
                 if let venueKey { venueKeys.insert(venueKey) }
-                guard let presenterKey = ProducerGate.key(show.presenter) else { continue }
+                guard let presenterKey = foldOnce(show.presenter) else { continue }
                 var rooms = byPresenter[presenterKey] ?? []
                 if let venueKey { rooms.insert(venueKey) }
                 byPresenter[presenterKey] = rooms
