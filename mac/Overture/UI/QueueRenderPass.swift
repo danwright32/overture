@@ -121,7 +121,7 @@ enum QueueRenderPass {
         private var counts = (queueItems: 0, sendGroupBuilds: 0, draftLintRuns: 0,
                               selfBookingShowsExamined: 0, recipientReaches: 0, queueRows: 0,
                               oracleCards: 0, oracleSendGroupBuilds: 0, oracleDraftLintRuns: 0,
-                              oracleRecipientReaches: 0)
+                              oracleRecipientReaches: 0, nightTimeMapBuilds: 0)
 
         // #3654 step 4c: the in-app divergence check is a SECOND WRITER of this tally, and that is
         // settled here rather than discovered in a red run.
@@ -164,6 +164,14 @@ enum QueueRenderPass {
         // to hold.
         var recipientReaches: Int { lock.withLock { counts.recipientReaches } }
 
+        // #3737: how many times a show's night-to-curtain map is BUILT from its stored entries.
+        //
+        // Counted rather than timed, and counted as BUILDS rather than as calls to the function that
+        // consults it, for the reason `selfBookingShowsExamined` above already records: a call count is
+        // the same number whether each call rebuilds the map or reads one it was handed (L63). Each build
+        // runs a `DateFormatter` parse over every entry, so this is the quantity the quadratic lived in.
+        var nightTimeMapBuilds: Int { lock.withLock { counts.nightTimeMapBuilds } }
+
         // What the divergence check itself spent, held apart from every number above so the pass's own
         // pins mean what their names say.
         var oracleCards: Int { lock.withLock { counts.oracleCards } }
@@ -177,6 +185,10 @@ enum QueueRenderPass {
             guard let t = current else { return }
             let oracle = asOracle
             t.lock.withLock { if oracle { t.counts.oracleCards += 1 } else { t.counts.queueItems += 1 } }
+        }
+        static func recordNightTimeMapBuild() {
+            guard let t = current else { return }
+            t.lock.withLock { t.counts.nightTimeMapBuilds += 1 }
         }
         static func recordQueueRow() {
             guard let t = current else { return }
