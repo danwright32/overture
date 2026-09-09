@@ -32,14 +32,37 @@ PURE_SUITE_DIRS=("mac/OvertureTests" "mac/TestSupport")
 # own prose, an issue reference in a test) is never mistaken for one. Both spellings count: @testable
 # buys nothing here, and neither resolves.
 app_module_import_violations() {
-  local files=("$@") file line_number
-  for file in "${files[@]}"; do
-    [[ -f "${file}" ]] || continue
-    while IFS=: read -r line_number _; do
-      [[ -n "${line_number}" ]] || continue
-      echo "${file}:${line_number}: imports the app as a module, which the pure suite cannot resolve"
-    done < <(grep -nE '^[[:space:]]*(@testable[[:space:]]+)?import[[:space:]]+Overture[[:space:]]*$' "${file}")
+  # ONE grep over every file, not one grep per file, and that is a fix rather than a tidy-up.
+  #
+  # It was a process substitution inside the loop, so a run over the pure suite forked 1,031 greps. Alone
+  # that is three seconds and looks fine. Under `scripts/run-shell-fixtures.sh`, where eight lanes fork at
+  # once, it exhausts the per-user process table: `fork` starts failing, bash retries, and the fixture
+  # sits at 100% CPU making no progress. Measured on this Mac 2026-09-08, three times, wedging at exactly
+  # the same point each time (374 open pipes, about 187 files in), while the same fixture run on its own
+  # through the same runner finished in three seconds.
+  #
+  # That is L102 exactly: the cost was measured with the expensive path switched off, so the number read
+  # as reassurance for the one case nobody had tested. It is also why the wedge looked like a hang and
+  # not like slowness, and why killing it and re-running never learned anything.
+  local files=() file
+  for file in "$@"; do
+    # A file that does not exist is skipped rather than fatal: main() globs the tree, and a file deleted
+    # between the glob and the read must not take the whole check down with it.
+    [[ -f "${file}" ]] && files+=("${file}")
   done
+  [[ ${#files[@]} -gt 0 ]] || return 0
+  # `-H` so the filename is printed even when exactly one file is left, which is what a caller checking a
+  # single path gets. Without it a one-file call prints `12:` and the reformatting below silently drops
+  # the name it exists to report.
+  grep -HnE '^[[:space:]]*(@testable[[:space:]]+)?import[[:space:]]+Overture[[:space:]]*$' "${files[@]}" \
+    | while IFS=: read -r file line_number _; do
+        [[ -n "${line_number}" ]] || continue
+        echo "${file}:${line_number}: imports the app as a module, which the pure suite cannot resolve"
+      done
+  # grep exits 1 when nothing matched, which is the HEALTHY case here, and this file runs under
+  # `pipefail`. Without this the function returns 1 on a clean tree and any caller that ever starts
+  # checking its status would read "clean" as "failed".
+  return 0
 }
 
 main() {
