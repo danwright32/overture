@@ -172,12 +172,18 @@ struct ListingLinkLabelWiringTests {
         #expect(cardBody?.contains("sourceIds.compactMap") == true)
     }
 
+    // #3655 Phase 5: the two surfaces build through DIFFERENT declarations now, so the marker is per
+    // surface rather than one spelling assumed to fit both. Archive asks `QueueModel.scope` for rows plus
+    // a narrowed card set; the queue's own `items` is unchanged. Written as a pair with the file, and a
+    // marker that matches nothing is still a recorded issue rather than a silent skip (L100).
     @Test func bothCardSurfacesPassTheWatchlistIn() {
-        for path in ["Overture/UI/QueueView.swift", "Overture/UI/ArchiveView.swift"] {
+        let markers = ["Overture/UI/QueueView.swift": "private var items: [QueueItem] {",
+                       "Overture/UI/ArchiveView.swift": "private func makeScope() -> QueueModel.Scope {"]
+        for (path, marker) in markers {
             let source = SourceGuardHelper.source(path)
-            guard let body = SourceGuardHelper.propertyBody("private var items: [QueueItem] {", in: source)
+            guard let body = SourceGuardHelper.propertyBody(marker, in: source)
             else {
-                Issue.record("\(path) no longer builds its rows through a `private var items: [QueueItem]`")
+                Issue.record("\(path) no longer builds its cards through `\(marker)`")
                 continue
             }
             #expect(body.contains("sources: watchedSources"),

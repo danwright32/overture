@@ -149,6 +149,62 @@ struct QueueScopeRow: Identifiable, Equatable, Sendable, QueueScopeFacts {
     }
 }
 
+// #3655 Phase 5: a row is searchable, which is what lets Archive and the queue's bar search without a
+// card. The fact itself is gathered by the one contacts walk the pass already makes.
+extension QueueScopeRow: ShowSearchFacts {
+    var searchableContacts: [SearchableContact] { facts.searchableContacts }
+}
+
+// #3655 Phase 5: one contact, reduced to the two fields search matches on, and NOTHING else.
+//
+// THE POINT IS THE REDACTION, and the redaction is TWO conformances rather than one, because a
+// measurement said one was not enough. These are real people's names and addresses on a value type in a
+// PUBLIC repository, and the routes that carry such a value out of a run are ones no repository scanner
+// can see into (L222): a failure diff and a `dump()` land in run logs this repo keeps at named paths
+// (`/tmp/overture-mutate-run.log`, `~/.overture-mac-test-diagnostics/`), and from there into whatever
+// somebody pastes them into. #2839, #3110 and #3140 are three scrubs of that same class already paid for
+// here.
+//
+// WHAT WAS MEASURED, 2026-09-09, on Apple Swift 6.3.3 / Xcode 26.6 / Swift Testing 1902, BEFORE this
+// field existed (#3655's 5a reading, recorded in full on the issue):
+//
+//   #expect failure diff        honours CustomStringConvertible      redacted
+//   string interpolation        honours CustomStringConvertible      redacted
+//   dump()                      REFLECTS THE STORED PROPERTIES       LEAKED, in full
+//
+// `dump()` printed the redacted description as the node's own HEADER and then walked the children
+// underneath it anyway, so the full name and the full local part appeared one line below the word
+// "redacted", which is the shape most likely to convince a reader the redaction worked (L446).
+//
+// `CustomReflectable` is what closes that one route, because `dump()` goes through `Mirror(reflecting:)`
+// and `Mirror` consults `customMirror`. It is the documented seam for the route that leaked rather than
+// a second guess at one.
+//
+// THE ISSUE'S OWN OTHER ESCAPE DOES NOT WORK, and is written down so nobody reaches for it on 5a's
+// authority: a reference type leaks under `dump()` identically, because `Mirror` reflects a class's
+// stored properties exactly as it reflects a struct's. A one-way digest is not viable either, on its own
+// merits: the match is a case- and diacritic-insensitive SUBSTRING search, and a digest can answer
+// equality and not substring, so keying off one would silently change what Dan can find.
+//
+// `PrivacyOfTheSearchableContactTests` drives all three routes, including the two that were already
+// safe, because a guard written only against the route somebody happened to think of passes while the
+// others leak.
+struct SearchableContact: Equatable, Sendable, CustomStringConvertible, CustomDebugStringConvertible,
+                          CustomReflectable {
+    let name: String?
+    let email: String?
+
+    // copy-inventory:ignore-start  a redaction marker for a run log, never a sentence Dan reads (#3655)
+    static let redactedMark = "<contact redacted>"
+    // copy-inventory:ignore-end
+
+    var description: String { Self.redactedMark }
+    var debugDescription: String { Self.redactedMark }
+    // NO CHILDREN AT ALL, rather than one redacted child. Both were measured and both close the route;
+    // this one emits nothing, so there is no per-field shape left for a later change to fill back in.
+    var customMirror: Mirror { Mirror(self, children: [], displayStyle: .struct) }
+}
+
 // The contacts of one show, reduced to the facts anything cheap needs to know about them.
 //
 // THE POINT IS THE WALK, not the fields. `Prospect.countedRecipients` is the one accessor that records
@@ -171,7 +227,19 @@ struct RecipientFacts: Equatable, Sendable {
     // the expensive pair whether it needed them or not: a cheaper row that costs more (L102).
     let reachabilityAsHeld: Reachability.ProbeResult?
 
-    static let none = RecipientFacts(standings: [], reachabilityAsHeld: nil)
+    // #3655 Phase 5: what SEARCH may read of this show's contacts, and the only identity on a row.
+    //
+    // A VALUE ARRAY AND NOT A JOINED STRING, which is the whole design decision here. Lowercasing the
+    // names and addresses into one haystack makes the joining separator matchable, so a query spanning a
+    // name-to-email boundary would match text that exists in no record (L555). It would also silently
+    // change the matching RULE: `ShowSearch.contains` matches with
+    // `[.caseInsensitive, .diacriticInsensitive]`, so pre-lowercasing neither helps nor reproduces the
+    // diacritic folding, and a fold done here would be a second definition of a rule that already has one
+    // (L107).
+    let searchableContacts: [SearchableContact]
+
+    static let none = RecipientFacts(standings: [], reachabilityAsHeld: nil,
+                                     searchableContacts: [])
 }
 
 extension RecipientFacts {
@@ -194,7 +262,10 @@ extension RecipientFacts {
     // the pass actually uses (L107, L263).
     static func of(_ p: Prospect, contacts: [Recipient]) -> RecipientFacts {
         RecipientFacts(standings: contacts.map(\.standing),
-                       reachabilityAsHeld: p.reachabilityResultAsHeld)
+                       reachabilityAsHeld: p.reachabilityResultAsHeld,
+                       // #3655: gathered in the SAME walk as the standings above, which is what keeps a
+                       // searchable row at the one recipient reach `RecipientWalkCountTests` pins.
+                       searchableContacts: contacts.map { SearchableContact(name: $0.name, email: $0.email) })
     }
 }
 

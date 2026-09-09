@@ -34,7 +34,7 @@ struct SearchScopeTests {
     // The whole point: ten characters, one sweep.
     @Test func typingAWholeQueryCostsOneSweep() {
         let sweep = Sweep([item("a"), item("b")])
-        var scope = SearchScope()
+        var scope = SearchScope<QueueItem>()
 
         scope.begin(sweep.build)
         for _ in 0..<10 { _ = scope.items(sweep.build) }
@@ -46,7 +46,7 @@ struct SearchScopeTests {
     // An idle bar builds nothing at all, which is #1926's guarantee and must survive this.
     @Test func aScopeThatWasNeverStartedHoldsNothing() {
         let sweep = Sweep([item("a")])
-        let scope = SearchScope()
+        let scope = SearchScope<QueueItem>()
 
         #expect(scope.isHolding == false)
         #expect(sweep.count == 0)
@@ -56,7 +56,7 @@ struct SearchScopeTests {
     // from a copy taken minutes ago.
     @Test func clearingTheBoxDropsWhatWasHeld() {
         let sweep = Sweep([item("a")])
-        var scope = SearchScope()
+        var scope = SearchScope<QueueItem>()
 
         scope.begin(sweep.build)
         scope.end()
@@ -70,7 +70,7 @@ struct SearchScopeTests {
     // life of the window.
     @Test func aLaterSearchSeesShowsThatArrivedSinceTheEarlierOne() {
         let sweep = Sweep([item("a")])
-        var scope = SearchScope()
+        var scope = SearchScope<QueueItem>()
 
         scope.begin(sweep.build)
         let duringFirst = scope.items(sweep.build)
@@ -87,7 +87,7 @@ struct SearchScopeTests {
     // is in rather than the transition, so this is asked on every keystroke.
     @Test func startingASearchAlreadyUnderWayChangesNothing() {
         let sweep = Sweep([item("a")])
-        var scope = SearchScope()
+        var scope = SearchScope<QueueItem>()
 
         scope.begin(sweep.build)
         scope.begin(sweep.build)
@@ -101,7 +101,7 @@ struct SearchScopeTests {
     // defaulted to empty would show "no results" for a show that is right there.
     @Test func readingBeforeTheSearchStartedStillAnswersFromTheStore() {
         let sweep = Sweep([item("a"), item("b")])
-        let scope = SearchScope()
+        let scope = SearchScope<QueueItem>()
 
         let results = scope.items(sweep.build)
 
@@ -119,10 +119,15 @@ struct SearchScopeWiringTests {
     // Both scopes, not just the one the issue named. The archive count sweeps everything Overture has
     // ever tracked and is paid on exactly the queries that find nothing, which is the worst case to
     // leave per keystroke (L30, fix the class).
+    //
+    // #3655 Phase 5: the TYPE is named in the needle as well as the holding, because holding a swept
+    // scope of CARDS once per search is still a whole-store card build per search, which is the cost this
+    // phase removed. A field that went back to `SearchScope<QueueItem>` would hold correctly and pay for
+    // exactly what #3655 stopped paying for.
     @Test func bothScopesAreHeldForTheSearch() {
         #expect(!field.isEmpty)
-        #expect(field.contains("@State private var queueScope = SearchScope()"))
-        #expect(field.contains("@State private var archiveScope = SearchScope()"))
+        #expect(field.contains("@State private var queueScope = SearchScope<QueueScopeRow>()"))
+        #expect(field.contains("@State private var archiveScope = SearchScope<QueueScopeRow>()"))
     }
 
     // Held or not, the scope is still read through ShowSearch, so the blank-query guard stays where it

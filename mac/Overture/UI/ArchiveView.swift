@@ -49,6 +49,13 @@ struct ArchiveView: View {
     // differently from the other.
     @Query private var watchedSources: [WatchedSource]
 
+    // #3655 Phase 5: what the LAST frame drew, and where this frame's requests are recorded, on exactly
+    // the contract #3654 established for the queue. `@State` so it survives the body evaluations, and a
+    // plain class rather than an observed object because the row request writes to it DURING a render.
+    // Read once, before the derivation, which is what makes the ordering true: keys registered during
+    // frame N feed the map for frame N + 1.
+    @State private var cardKeys = QueueModel.CardKeyRegistry()
+
     @State private var activeStatuses: Set<ArchiveStatus> = ArchiveOpening.defaultStatuses
     @State private var query: String = ""
     @State private var highlightedKey: String?
@@ -69,12 +76,40 @@ struct ArchiveView: View {
     var onConnectGmail: () -> Void = {}
 
     private var today: String { QueueModel.easternToday() }
-    private var items: [QueueItem] {
-        QueueModel.items(from: prospects, answers: orgAnswers,
+    // #3655 Phase 5: the pass, which yields a ROW for every show in the store and a CARD only for the
+    // shows something is going to draw.
+    //
+    // THIS IS THE PHASE. `PinnedScrollHolder.swift:9-10` records #3437's own profile putting
+    // `ArchiveView.items` at 65% of the main thread while typing: this screen built a full card for every
+    // prospect in the store, per keystroke, so that the status chips could sort them and the search could
+    // read their contacts. Neither needs a card. The chips read `ArchiveStatus.of`, which is three row
+    // fields, and the search reads `ShowSearchFacts`, which a row now answers.
+    //
+    // A FUNCTION and never a computed property, for the reason `filteredItems()` below already carries:
+    // Swift does not memoise a computed property between accesses, so a second reader in one body pass
+    // pays the whole derivation again, and a call site reads as a free field access whatever it costs
+    // (L383). `ArchiveDerivesItsListOnceGuardTests` counts the call sites, which a property access cannot
+    // be counted by.
+    private func makeScope() -> QueueModel.Scope {
+        QueueModel.scope(from: prospects, answers: orgAnswers,
                          overrides: ProducerOverrides(promotedRows: promotedProducers,
                                                       demotedRows: demotedHouses),
                          sources: watchedSources,
-                         refusals: ContactRefusal.ledger(from: refusedAddresses))
+                         refusals: ContactRefusal.ledger(from: refusedAddresses),
+                         // #3654's ordering contract: what the last frame drew is what this one prebuilds.
+                         // A row that was not predicted still draws, from a card built on the spot, and
+                         // the store counts that as an EXPECTED first-frame miss rather than a defect.
+                         cardKeys: cardKeys.takeKeys(),
+                         cardKeyRegistry: cardKeys)
+    }
+
+    // #3655: the rows for an ACTION, which happens outside a render pass and so has no pass to read.
+    //
+    // Deliberately separate from `makeScope()` and deliberately building no cards at all: `reveal` and
+    // `requestSend` each ask a row-level question (which status chip holds this show, which nights are
+    // already committed) about a store nobody is drawing at that instant.
+    private func actionRows() -> [QueueScopeRow] {
+        prospects.map { QueueScopeRow($0, facts: RecipientFacts.of($0)) }
     }
 
     // #3492: a FUNCTION, not a computed property, and called exactly once. It was
@@ -85,8 +120,8 @@ struct ArchiveView: View {
     //
     // Naming it as a call is what makes the quantity assertable: ArchiveDerivesItsListOnceGuardTests
     // counts the call sites, which a property access cannot be counted by.
-    private func filteredItems() -> [QueueItem] {
-        items
+    private func filteredItems(_ rows: [QueueScopeRow]) -> [QueueScopeRow] {
+        rows
             .filter { activeStatuses.contains(ArchiveStatus.of($0)) }
             .filter { ShowSearch.matches($0, query: query) }
             .sorted { ($0.performanceDate ?? "") > ($1.performanceDate ?? "") }
@@ -97,19 +132,23 @@ struct ArchiveView: View {
         // the queue. A second reason beyond cost: two independent derivations of one query can in
         // principle disagree, so the count beside the title and the list beneath it were computed
         // separately. One derivation removes that.
-        let filtered = filteredItems()
+        // #3655: ONE pass, and the rows and the card store both come out of it, so the list on screen and
+        // the cards drawn into it are two halves of one derivation rather than two derivations.
+        let scope = makeScope()
+        let filtered = filteredItems(scope.rows)
         VStack(alignment: .leading, spacing: 0) {
             header(filtered: filtered)
             Divider()
             filterBar
-            // #1926: the scope is handed over as a closure, so the whole-store map behind `items` is not
-            // built for a field nobody has typed into. Archive's own field keeps searching everything.
-            ShowSearchField(query: $query, allItems: { items }) { result in
+            // #1926: the scope is handed over as a closure, so it is not built for a field nobody has
+            // typed into. #3655: it is the ROWS this pass already derived, so a search over everything
+            // Overture has ever tracked costs nothing beyond the pass that was happening anyway.
+            ShowSearchField(query: $query, allItems: { scope.rows }) { result in
                 reveal(result.id)
             }
             .padding(.horizontal, OVSpacing.lg).padding(.vertical, OVSpacing.sm)
             Divider()
-            content(filtered: filtered)
+            content(filtered: filtered, cards: scope.cards)
         }
         .frame(minWidth: 640, idealWidth: 780, maxWidth: 960, minHeight: 520, idealHeight: 720, maxHeight: 900)
         .background(OVColor.canvas)
@@ -134,13 +173,15 @@ struct ArchiveView: View {
     // status is not among the currently active filter chips. #685: an optional recipient narrows
     // the highlight to one contact within the card instead of the whole card.
     private func reveal(_ key: String, recipientId: String? = nil) {
-        guard let target = items.first(where: { $0.id == key }) else { return }
+        // #3655: a ROW is enough to say which chip holds this show, and a reveal is an action outside any
+        // render pass, so it derives its own rather than reading one it has no access to.
+        guard let target = actionRows().first(where: { $0.id == key }) else { return }
         activeStatuses.insert(ArchiveStatus.of(target))
         highlightedKey = key
         highlightedRecipientId = recipientId
     }
 
-    private func header(filtered: [QueueItem]) -> some View {
+    private func header(filtered: [QueueScopeRow]) -> some View {
         HStack {
             Text("Archive").font(OVType.dateHeading).foregroundStyle(OVColor.ink)
             Text("\(filtered.count)").font(.system(size: 12)).foregroundStyle(OVColor.inkFaint)
@@ -165,7 +206,8 @@ struct ArchiveView: View {
         .padding(.horizontal, OVSpacing.lg).padding(.vertical, OVSpacing.sm)
     }
 
-    @ViewBuilder private func content(filtered: [QueueItem]) -> some View {
+    @ViewBuilder private func content(filtered: [QueueScopeRow],
+                                      cards: QueueModel.CardStore) -> some View {
         if filtered.isEmpty {
             emptyState
         } else {
@@ -178,9 +220,9 @@ struct ArchiveView: View {
             // scroll re-runs this closure and derives nothing.
             PinnedScrollHolder { proxy, pinned in
                 LazyVStack(alignment: .leading, spacing: OVSpacing.md) {
-                    ForEach(filtered) { item in
-                        row(item, context: context, feedback: feedback,
-                            dayOffOffer: dayOffOffer, outboundSendSince: outboundSending[item.id])
+                    ForEach(filtered) { scopeRow in
+                        row(scopeRow, cards: cards, context: context, feedback: feedback,
+                            dayOffOffer: dayOffOffer, outboundSendSince: outboundSending[scopeRow.id])
                     }
                 }
                 .scrollTargetLayout()
@@ -241,10 +283,15 @@ struct ArchiveView: View {
     // @Environment(ActionFeedback.self) read, which traps with no ancestor view providing one) or
     // fighting an owned @State from outside a view instance. Same prop-threading fix as
     // FollowUpsView's `since` parameter.
-    func row(_ item: QueueItem, context: ModelContext, feedback: ActionFeedback,
+    // #3655 Phase 5: THE ROW REQUEST, on #3654's contract. It takes a ROW and asks the store, which is
+    // what records the key for the next pass and what counts a miss. A card is built on the spot when the
+    // pass did not predict this row, so the render is always correct and never a placeholder (L67).
+    func row(_ scopeRow: QueueScopeRow, cards: QueueModel.CardStore,
+             context: ModelContext, feedback: ActionFeedback,
              dayOffOffer: DayOffOfferRequest = DayOffOfferRequest(), outboundSendSince: Date? = nil) -> some View {
+        let item = cards.card(for: scopeRow)
         // #3690: a closure, so the array is read on a press rather than captured per row.
-        ProspectRowFactory.row(item, today: today, prospects: { prospects }, context: context, feedback: feedback,
+        return ProspectRowFactory.row(item, today: today, prospects: { prospects }, context: context, feedback: feedback,
                               dayOffOffer: dayOffOffer,
                               // #1770: read once from the cache here rather than by each card it builds.
                               gmailConnected: GmailConnection.shared.isConnected,
@@ -269,7 +316,11 @@ struct ArchiveView: View {
               var confirmation = SendConfirmation(prospect: model) else { return }
         // #1244: the Archive send path warns on a same-date self double-booking too, using the SAME shared
         // helper as the main queue's requestSend, so the guard doesn't depend on which screen Dan sends from.
-        confirmation.selfBookingWarning = QueueModel.sendSelfBookingWarning(for: item, in: QueueModel.selfBookingIndex(items))
+        // #3655: the night index is built over ROWS, which is all it reads, and over the whole store
+        // rather than the filtered list, so a clash with a show behind an inactive chip still counts
+        // (#1246).
+        confirmation.selfBookingWarning = QueueModel.sendSelfBookingWarning(
+            for: item, in: QueueModel.selfBookingIndex(actionRows()))
         pendingConfirm = PendingSend(id: item.id, confirmation: confirmation)
     }
 

@@ -122,6 +122,7 @@ What is not, and why:
 - `Integration/VenueTixCalendar.swift`: an outbound API request scoped by Origin, not the app's voice (#915)
 - `UI/DraftSignaturePreview.swift`: renders the outbound email's own HTML (body + Gmail signature), not Overture's voice (#1203)
 - `UI/DraftSignaturePreview.swift`: browser-side measuring script, not a sentence Overture says to Dan (#915)
+- `UI/QueueScopeRow.swift`: a redaction marker for a run log, never a sentence Dan reads (#3655)
 
 ## The same sentence, said in more than one place (57)
 

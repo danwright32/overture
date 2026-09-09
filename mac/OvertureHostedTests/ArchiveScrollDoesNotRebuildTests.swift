@@ -33,7 +33,9 @@ struct ArchiveScrollDoesNotRebuildTests {
 
     // Enough rows that the list scrolls at all: a scroll shorter than the content moves nothing, and a
     // list that fits on screen has no top for a row to cross.
-    private func seed(_ ctx: ModelContext, rows: Int = 120) {
+    static let seededRows = 120
+
+    private func seed(_ ctx: ModelContext, rows: Int = seededRows) {
         for n in 0..<rows { insert(ctx, n) }
         try? ctx.save()
     }
@@ -132,10 +134,16 @@ struct ArchiveScrollDoesNotRebuildTests {
         //
         // The pump stops the moment a card is built, so the failing case is fast, and runs out its
         // deadline only when nothing is built, which is the case with nothing to wait for (L290).
+        //
+        // #3655 Phase 5 re-aimed the PUMP as well as the assertion. It stopped on the first CARD, which
+        // was the first sign of a rebuild before cards were built lazily and is now the ordinary sign of
+        // a row coming into view, so it would return on the first newly drawn row and measure a fraction
+        // of the scroll. It stops on the first ROW instead, which is what a rebuild still produces and a
+        // scroll no longer does.
         let work = QueueRenderPass.WorkTally.measure {
             scrollDown(scroll)
             let deadline = Date().addingTimeInterval(2)
-            while Date() < deadline && (QueueRenderPass.WorkTally.current?.queueItems ?? 0) == 0 {
+            while Date() < deadline && (QueueRenderPass.WorkTally.current?.queueRows ?? 0) == 0 {
                 RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.02))
             }
         }
@@ -148,11 +156,31 @@ struct ArchiveScrollDoesNotRebuildTests {
         }
         #expect(moved, "the Archive never scrolled, so a zero card count below proves nothing")
 
-        #expect(work.queueItems == 0,
-                Comment(rawValue: "scrolling the Archive built \(work.queueItems) cards. The position is "
-                        + "bound to the view's own @State inside a body that derives the whole store, so "
-                        + "every write SwiftUI makes as a row crosses the top rebuilds all of them "
-                        + "(#3437). #1774 fixed this for the Queue by moving the position onto a holder."))
+        // #3655 Phase 5 RE-AIMED THIS ASSERTION, and the reason is worth reading before changing it back.
+        //
+        // It was `work.queueItems == 0`, and that was the right expression of "the body did not
+        // re-derive the store" for as long as a pass built a card for every show in it. Phase 5 split
+        // that work in two: a pass builds a cheap ROW for every show, and a CARD only for a show
+        // something is about to draw. So a scroll now legitimately builds a card per row it reveals, and
+        // the old assertion would fail on the correct code while measuring nothing about the defect
+        // (L220: a change that splits work re-aims every guard calibrated against the whole).
+        //
+        // The claim is unchanged. What carries it is `queueRows`, which is the counter that still moves
+        // once per show in the STORE: a re-derivation would put one per show on it, and a scroll
+        // puts none on it at all.
+        #expect(work.queueRows == 0,
+                Comment(rawValue: "scrolling the Archive derived \(work.queueRows) rows, which is the "
+                        + "whole store being rebuilt. The position must live on the holder, not on the "
+                        + "view's own @State inside a body that derives the store (#3437, #1774)."))
+
+        // And the cards it DID build are a viewport's worth rather than a corpus's, which is the half
+        // `queueRows` cannot see: a card store handed the wrong key set would build every card while the
+        // row count stayed at zero.
+        #expect(work.queueItems < Self.seededRows,
+                Comment(rawValue: "scrolling built \(work.queueItems) cards out of \(Self.seededRows) "
+                        + "shows, which is the whole store rather than the rows that came into view "
+                        + "(#3655). A card is built for a row something is about to draw and for no "
+                        + "other show."))
     }
 }
 
