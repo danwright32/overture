@@ -3300,6 +3300,19 @@ extension QueueItem: PrepEligibilityFacts {}
 // conformance only proves the names exist.
 extension QueueItem: QueueScopeFacts {}
 
+// #3655 Phase 5: a card can answer a search too, which is what keeps the parity oracle able to hand one
+// where a row is expected.
+//
+// COMPUTED, and deliberately not stored: nothing on the render path reads this (a rendered row searches
+// through its ROW), so storing it would put a second copy of every contact's name and address on a card
+// that already holds them, for a question the card is never asked. What it costs is paid only by a
+// caller that searches cards, which after this phase is the parity oracle and nothing else.
+extension QueueItem: ShowSearchFacts {
+    var searchableContacts: [SearchableContact] {
+        contacts.map { SearchableContact(name: $0.name, email: $0.email) }
+    }
+}
+
 extension QueueItem {
     init(_ p: Prospect) {
         self.init(p, sendGroups: SendGroup.CardGroups(of: p))

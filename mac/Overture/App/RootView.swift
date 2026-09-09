@@ -334,9 +334,27 @@ struct RootView: View {
         Set(ReachedOutQueue.active(from: rows, now: Date()).map(\.prospect.naturalKey))
     }
 
-    // Every show Overture has ever tracked. Not what the search bar above the Queue offers (see
-    // searchableItems); it is what Archive holds, counted so an empty search can say the show is there.
+    // Every show Overture has ever tracked, as CARDS. Not what the search bar above the Queue offers
+    // (see searchableRows); it is what the Prep selection sheet reads.
+    //
+    // #3655 Phase 5: this is no longer what SEARCH runs on, and the split is the phase. A card carries
+    // the send grouping, the recipient snapshots and a draft lint pass over every pending contact's body,
+    // and building one per show in the store was being paid the moment Dan typed a character. What is
+    // left here needs a card and cannot take a row: `QueueModel.calendarClashesForPrep` reads
+    // `hasUnclearedConflict` and `conflictNote`, and the note is card-derived. It is also not on a
+    // keystroke path at all: it is read inside a `.sheet` content closure, so it evaluates when the sheet
+    // opens and never during a render of the queue behind it.
     private var allItems: [QueueItem] { allProspects.map(QueueItem.init) }
+
+    // #3655 Phase 5: the same shows as ROWS, which is what both halves of the search bar run on.
+    //
+    // A row is about twenty fields and one contacts walk; a card is 130 fields and a lint pass. Nothing
+    // the search does (matching a name, an address, a venue; sorting by date; carrying an id to a deep
+    // link) needs anything a row does not carry, which `ShowSearchFacts` is what enforces rather than
+    // states.
+    private var allRows: [QueueScopeRow] {
+        allProspects.map { QueueScopeRow($0, facts: RecipientFacts.of($0)) }
+    }
 
     // #1580: what the persistent bar above the Queue can find, which is exactly the shows a stage will
     // render. Dan asked for the split: "search should only allow me to search for shows in the queue.
@@ -345,12 +363,13 @@ struct RootView: View {
     //
     // Scoped by StageNavigation.stagedKeys, the same predicate the stage lists render from, so a pick
     // can only ever land on a row he can see.
-    private var searchableItems: [QueueItem] {
+    // #3655 Phase 5: ROWS, not cards. The scoping rule below is unchanged; what it filters is cheaper.
+    private var searchableRows: [QueueScopeRow] {
         // #3493: ONE walk of the store, shared by the scope and the reached-out set it is judged with.
         let kept = nonDismissedProspects
         let scope = StageNavigation.stagedKeys(in: kept, reachedOutKeys: reachedOutKeys(in: kept),
                                                context: StageContext(geo: geo, clients: clientWindow))
-        return allItems.filter { scope.contains($0.id) }
+        return allRows.filter { scope.contains($0.id) }
     }
 
     // Whether a deep-linked show (an OmniFocus follow-up tap, #628, or a search pick) should jump into
@@ -365,7 +384,7 @@ struct RootView: View {
     // #1580: one copy, not two. A search pick is now always in scope and so always takes the Queue
     // branch, but the Archive branch stays for the follow-up taps, which can name a closed show.
     private func routeDeepLink(toKey key: String) {
-        // #3493: bound once, for the same reason searchableItems binds it.
+        // #3493: bound once, for the same reason searchableRows binds it.
         let kept = nonDismissedProspects
         if StageNavigation.opensInQueue(key: key, in: kept,
                                         reachedOutKeys: reachedOutKeys(in: kept),
@@ -525,8 +544,8 @@ struct RootView: View {
             #endif
             // #1926: the bar owns the query, and both scopes are handed over as work to do rather than
             // work already done. Neither closure runs unless Dan is actually searching.
-            QueueSearchBar(items: { searchableItems },
-                           archiveItems: { allItems },
+            QueueSearchBar(items: { searchableRows },
+                           archiveItems: { allRows },
                            onSelect: { result in routeDeepLink(toKey: result.id) },
                            onSearchArchive: { query in openArchive(query: query) })
             .padding(.horizontal, OVSpacing.lg).padding(.vertical, OVSpacing.sm)

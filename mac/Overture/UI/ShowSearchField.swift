@@ -17,16 +17,16 @@ struct ShowSearchField: View {
     // sweep of every prospect, and as a plain array argument it was worked out on every render pass of
     // the view hosting this field, empty box included. Nothing below calls it unless Dan has typed
     // something, so an idle bar costs nothing at all.
-    let allItems: () -> [QueueItem]
+    let allItems: () -> [QueueScopeRow]
     var placeholder: String = "Search shows, venues, contacts"
     // Declared ahead of the #1580 pair below so a call site's trailing closure still binds HERE. Swift's
     // forward scan matches a trailing closure to the first closure-typed parameter it reaches, so moving
     // this down silently handed Archive's `{ result in reveal(result.id) }` to onSearchArchive instead.
-    var onSelect: (QueueItem) -> Void = { _ in }
+    var onSelect: (QueueScopeRow) -> Void = { _ in }
     // #1580: the shows OUTSIDE this field's scope, counted (never listed) so an empty result can tell
     // Dan whether the show is missing or merely somewhere else, and hand him the jump. Both are absent on
     // Archive's own field, which already searches everything and has nowhere to send him.
-    var archiveItems: () -> [QueueItem] = { [] }
+    var archiveItems: () -> [QueueScopeRow] = { [] }
     var onSearchArchive: ((String) -> Void)?
     @FocusState private var isFocused: Bool
     @State private var showDropdown = false
@@ -36,15 +36,15 @@ struct ShowSearchField: View {
     // #1932: what this search runs against, built when the search starts rather than on every keystroke.
     // Two of them, because the archive count sweeps everything Overture has ever tracked and is paid on
     // exactly the queries that find nothing, which is the worst case to leave per character.
-    @State private var queueScope = SearchScope()
-    @State private var archiveScope = SearchScope()
+    @State private var queueScope = SearchScope<QueueScopeRow>()
+    @State private var archiveScope = SearchScope<QueueScopeRow>()
 
     private var trimmedQuery: String { query.trimmingCharacters(in: .whitespacesAndNewlines) }
     private var isSearching: Bool { ShowSearch.isSearching(query) }
 
     // The matching, the ordering and the cap are ShowSearch's (#1926), so they are testable and so the
     // scope is built only when there is something to search for.
-    private var matches: [QueueItem] { ShowSearch.results(in: queueScope.items(allItems), query: query) }
+    private var matches: [QueueScopeRow] { ShowSearch.results(in: queueScope.items(allItems), query: query) }
 
     var body: some View {
         // #1432: the control itself is OVSearchField, shared with the Sources sheet's own field. Only the
@@ -168,7 +168,7 @@ struct ShowSearchField: View {
         return ShowSearch.matchCount(in: archiveScope.items(archiveItems), query: trimmedQuery)
     }
 
-    private func pick(_ result: QueueItem) {
+    private func pick(_ result: QueueScopeRow) {
         onSelect(result)
         query = ""
         selection.clear()

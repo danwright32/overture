@@ -14,14 +14,16 @@ import Foundation
 //
 // A value with its own tests rather than a couple of lines inside a SwiftUI body, because a body cannot
 // be evaluated in a unit test and a rule nothing checks is a rule that quietly stops holding.
-struct SearchScope {
-    private var held: [QueueItem]?
+// #3655 Phase 5: GENERIC over what is being searched, because the two callers now search ROWS and the
+// parity oracle still searches cards. It holds whatever it was given and knows nothing about either.
+struct SearchScope<Show> {
+    private var held: [Show]?
 
     var isHolding: Bool { held != nil }
 
     // A search has begun. Sweeps once; asked again while the same search is under way it does nothing,
     // because the field announces the state it is in on every keystroke rather than the transition.
-    mutating func begin(_ build: () -> [QueueItem]) {
+    mutating func begin(_ build: () -> [Show]) {
         guard held == nil else { return }
         held = build()
     }
@@ -35,7 +37,7 @@ struct SearchScope {
     // optimisation rather than a second source of truth: on the first character the body can run before
     // the start is announced, and answering with an empty list there would show "no results" for a show
     // that is right in front of Dan.
-    func items(_ build: () -> [QueueItem]) -> [QueueItem] {
+    func items(_ build: () -> [Show]) -> [Show] {
         held ?? build()
     }
 }

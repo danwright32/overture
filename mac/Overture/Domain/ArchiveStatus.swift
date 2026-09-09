@@ -37,7 +37,10 @@ enum ArchiveStatus: Hashable, Sendable {
         }
     }
 
-    static func of(_ item: QueueItem) -> ArchiveStatus {
+    // #3655 Phase 5: over a ROW, so Archive can sort a whole store into its status chips without
+    // building a card for any of it. Every field it reads (`showOutcome`, `status`, `performanceStatus`)
+    // is one a row carries, which is what made the narrowing legal rather than a widening of the row.
+    static func of(_ item: some QueueScopeFacts) -> ArchiveStatus {
         // Checked before .dismissed: a retired show IS stored as dismissed (that is how it leaves the
         // queue and stops being counted), and its reason is the only thing that distinguishes it.
         if item.showOutcome == .wentBy { return .wentBy }

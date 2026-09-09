@@ -22,6 +22,20 @@ struct ArchiveViewSendStateTests {
                  status: .approved, draftSubject: "S", draftBody: "Hi", hasPendingRecipient: true)
     }
 
+    // #3655 Phase 5: `ArchiveView.row` takes a ROW and resolves its card through the store, which is the
+    // one place a drawn row turns into a card and the only thing that records the key for the next pass.
+    // So this hands it a store already holding exactly the card the test built, which keeps the assertion
+    // about send-state threading and nothing else, while still driving the real row-request path.
+    private func store(holding item: QueueItem) -> QueueModel.CardStore {
+        QueueModel.CardStore(cards: [item.id: item], shows: [], contactsByKey: [:],
+                             preamble: QueueModel.CardPreamble(
+                                linked: [:], inherited: [:],
+                                venueBrands: ProducerGate.VenueBrands(shows: [], overrides: .none),
+                                rowCounts: [:], calendarBySourceId: [:], overrides: .none,
+                                clients: .none, now: Date(), day: "2026-08-01"),
+                             requestedKeys: [item.id])
+    }
+
     private func context() throws -> ModelContext {
         let container = try ModelContainer(for: Schema([Prospect.self]),
                                            configurations: [ModelConfiguration(isStoredInMemoryOnly: true)])
@@ -31,7 +45,10 @@ struct ArchiveViewSendStateTests {
     @Test func noOutboundSendShowsTheSendButton() throws {
         let view = ArchiveView()
 
-        _ = try view.row(approvedItemWithDraft(), context: context(), feedback: ActionFeedback())
+        let item = approvedItemWithDraft()
+
+        _ = try view.row(QueueScopeRow(item), cards: store(holding: item),
+                         context: context(), feedback: ActionFeedback())
             .inspect().find(button: SendConfirmCopy.openReview)
     }
 
@@ -39,7 +56,10 @@ struct ArchiveViewSendStateTests {
         let view = ArchiveView()
         let since = Date(timeIntervalSince1970: 1000)
 
-        let rendered = view.row(approvedItemWithDraft(), context: try context(), feedback: ActionFeedback(),
+        let item = approvedItemWithDraft()
+
+        let rendered = view.row(QueueScopeRow(item), cards: store(holding: item),
+                                context: try context(), feedback: ActionFeedback(),
                                 outboundSendSince: since)
         #expect((try? rendered.inspect().find(button: SendConfirmCopy.openReview)) == nil)
         let texts = try rendered.inspect().findAll(ViewType.Text.self).map { try $0.string() }
