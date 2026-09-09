@@ -104,6 +104,20 @@ enum ProposedConversationCopy {
         "Overture isn't connected to Gmail, so it can't read your inbox. Connect it in Settings and try again."
     static let pickNothingFound =
         "Overture read your inbox and found nothing from around this pitch that could be their reply."
+    // #3708: the two answers that are NOT "read it and found nothing", kept apart from it and from each
+    // other because only one of the three is Overture telling Dan the reply is not there (L98, L11).
+    //
+    // A read that stopped short covers both ways it can stop (too many pages of ids, too many messages),
+    // because to Dan they are one fact: the newest stretch of the window was read and the older mail in
+    // it was not. The number is the budget itself rather than a word like "some", since "is their reply
+    // older than the last 300 messages" is a question he can actually answer.
+    static func pickStoppedShort(examined: Int) -> String {
+        "Overture read the \(examined) most recent messages since this pitch went out and stopped there. "
+            + "If their reply is older than those, it isn't in this list."
+    }
+    static let pickNoPitchDate =
+        "Overture has no record of when this pitch went out, so it doesn't know how far back to read "
+            + "your inbox. Nothing was read."
 }
 
 // Deliberately NOT main-actor isolated, like `PostEventPrompt` and `FollowUp`, the other two members of

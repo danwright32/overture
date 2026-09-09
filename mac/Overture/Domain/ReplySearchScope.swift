@@ -43,6 +43,22 @@ extension Recipient: ReplySearchSubject {
     var replySearchHasConversation: Bool { hasWatchableConversation }
 }
 
+extension Recipient {
+    // #3708: the oldest mail worth reading when DAN asks by hand, which is a different question from
+    // `replySearchAnchor` directly above and is deliberately kept beside it so nobody meets one without
+    // the other.
+    //
+    // That one is the AUTOMATIC pass's, and it is nil on an emailed pitch on purpose: Overture is
+    // already watching a thread there, so the tick has nothing to read for. This one is nil only when
+    // nothing went out at all, because a pitch Overture sent by email is exactly the case where a reply
+    // can have landed on a thread it never watched (#3706).
+    //
+    // `formOutreachRecordedAt` first, so the two anchors AGREE wherever both apply. A form pitch also
+    // carries a `sentAt`, stamped when Dan recorded it, and reading that instead would give one contact
+    // two different pitch dates depending on which route asked.
+    var manualSearchAnchor: Date? { formOutreachRecordedAt ?? sentAt }
+}
+
 extension Inquiry: ReplySearchSubject {
     // #2712: when Dan logged it. An inquiry has no send of Overture's to date from, and its conversation
     // can only be one that already existed in his mailbox, so the moment he recorded it is the earliest
