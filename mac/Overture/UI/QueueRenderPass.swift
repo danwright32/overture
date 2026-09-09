@@ -122,7 +122,8 @@ enum QueueRenderPass {
                               selfBookingShowsExamined: 0, recipientReaches: 0, queueRows: 0,
                               oracleCards: 0, oracleSendGroupBuilds: 0, oracleDraftLintRuns: 0,
                               oracleRecipientReaches: 0, nightTimeMapBuilds: 0,
-                              stagePlacements: 0, producerIndexes: 0)
+                              stagePlacements: 0, producerIndexes: 0,
+                              producerKeyFolds: 0)
 
         // #3654 step 4c: the in-app divergence check is a SECOND WRITER of this tally, and that is
         // settled here rather than discovered in a red run.
@@ -188,6 +189,13 @@ enum QueueRenderPass {
         // same whether the callee builds an index or reads one it was handed (L63).
         var producerIndexes: Int { lock.withLock { counts.producerIndexes } }
 
+        // #3742: how many times a presenter or venue NAME was folded into a producer key.
+        //
+        // The quantity, because folding is the cost: a regex, a Unicode fold and several trims per call.
+        // A count of index BUILDS cannot see a build that folds every show's name rather than every
+        // distinct name, which is the same number of builds and five times the work (L63).
+        var producerKeyFolds: Int { lock.withLock { counts.producerKeyFolds } }
+
         // What the divergence check itself spent, held apart from every number above so the pass's own
         // pins mean what their names say.
         var oracleCards: Int { lock.withLock { counts.oracleCards } }
@@ -201,6 +209,10 @@ enum QueueRenderPass {
             guard let t = current else { return }
             let oracle = asOracle
             t.lock.withLock { if oracle { t.counts.oracleCards += 1 } else { t.counts.queueItems += 1 } }
+        }
+        static func recordProducerKeyFold() {
+            guard let t = current else { return }
+            t.lock.withLock { t.counts.producerKeyFolds += 1 }
         }
         static func recordProducerIndex() {
             guard let t = current else { return }
