@@ -59,12 +59,16 @@ struct QueueSearchInvalidationGuardTests {
     // #1916 shape: the argument evaluates at the call site, so the sweep runs on every render pass of a
     // view that renders for a dozen unrelated reasons, with the box sitting empty.
     @Test func bothScopesArriveAsClosuresNotBuiltLists() {
-        #expect(rootView.contains("QueueSearchBar(items: { searchableItems }"))
-        #expect(rootView.contains("archiveItems: { allItems }"))
-        #expect(searchBar.contains("let items: () -> [QueueItem]"))
-        #expect(searchBar.contains("let archiveItems: () -> [QueueItem]"))
-        #expect(field.contains("let allItems: () -> [QueueItem]"))
-        #expect(field.contains("var archiveItems: () -> [QueueItem]"))
+        // #3655 Phase 5: still closures, and now closures over ROWS. The TYPE is part of every needle
+        // deliberately: a bar handed `() -> [QueueItem]` would be perfectly lazy and would build a card
+        // for every show in the store the moment Dan typed a character, which is the cost this phase
+        // removed. Laziness and cheapness are two claims and this suite now makes both.
+        #expect(rootView.contains("QueueSearchBar(items: { searchableRows }"))
+        #expect(rootView.contains("archiveItems: { allRows }"))
+        #expect(searchBar.contains("let items: () -> [QueueScopeRow]"))
+        #expect(searchBar.contains("let archiveItems: () -> [QueueScopeRow]"))
+        #expect(field.contains("let allItems: () -> [QueueScopeRow]"))
+        #expect(field.contains("var archiveItems: () -> [QueueScopeRow]"))
     }
 
     // The field asks the tested helpers rather than filtering inline. Inline, the blank-query guard would

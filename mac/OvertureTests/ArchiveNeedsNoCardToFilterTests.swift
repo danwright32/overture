@@ -139,16 +139,21 @@ struct ArchiveNeedsNoCardToFilterTests {
 struct ArchiveWiringGuardTests {
     private var archive: String { SourceGuardHelper.source("Overture/UI/ArchiveView.swift") }
 
+    // Every needle is bound to a NAMED local before the expectation. `#expect(archive.contains(...))`
+    // renders its operand on failure, and `archive` is the whole file: the first form of this suite
+    // printed 250 lines of ArchiveView over the one sentence saying what had gone wrong (L445).
     @Test("Archive asks for a narrowed scope, not every card in the store")
     func archiveAsksForANarrowedScope() {
         #expect(!archive.isEmpty)
         // The whole-store card build this phase removed. Named as the call it was, so a revert is red.
-        #expect(!archive.contains("QueueModel.items(from:"),
+        let buildsEveryCard = archive.contains("QueueModel.items(from:")
+        #expect(!buildsEveryCard,
                 Comment(rawValue: "ArchiveView is building a card for every show in the store again, "
                         + "which is the #3437 profile's 65% of the main thread while typing (#3655)"))
-        #expect(archive.contains("cardKeys: cardKeys.takeKeys()"),
-                "Archive no longer narrows its card build to what the last frame drew")
-        #expect(archive.contains("cardKeyRegistry: cardKeys"),
+        let narrows = archive.contains("cardKeys: cardKeys.takeKeys()")
+        #expect(narrows, "Archive no longer narrows its card build to what the last frame drew")
+        let records = archive.contains("cardKeyRegistry: cardKeys")
+        #expect(records,
                 Comment(rawValue: "Archive builds a narrowed set of cards and records nothing, so the "
                         + "NEXT frame would predict nothing and every row would miss (#3654's contract)"))
     }
@@ -158,7 +163,8 @@ struct ArchiveWiringGuardTests {
     // and the saving would quietly disappear with nothing saying so (L289).
     @Test("the registry is emptied by each pass")
     func theRegistryIsTakenRatherThanRead() {
-        #expect(!archive.contains("cardKeys: cardKeys.keys"),
+        let readsWithoutEmptying = archive.contains("cardKeys: cardKeys.keys")
+        #expect(!readsWithoutEmptying,
                 Comment(rawValue: "Archive reads the registry without emptying it, so the prebuilt set "
                         + "grows through a session until it is the whole store again (L289)"))
     }
@@ -167,7 +173,8 @@ struct ArchiveWiringGuardTests {
     // surface that reached for a card any other way would draw correctly and register nothing.
     @Test("a drawn row gets its card through the store")
     func aDrawnRowGoesThroughTheStore() {
-        #expect(archive.contains("cards.card(for: scopeRow)"),
+        let goesThroughTheStore = archive.contains("cards.card(for: scopeRow)")
+        #expect(goesThroughTheStore,
                 Comment(rawValue: "Archive's row no longer resolves its card through the store, so "
                         + "nothing records what it drew and the next pass predicts nothing (L621)"))
     }

@@ -1,5 +1,6 @@
 import Testing
 import Foundation
+import SwiftData
 
 // #3655 Phase 5: what a search over a ROW can still find, and what it can no longer silently stop
 // finding.
@@ -15,50 +16,65 @@ import Foundation
 //   1. PARITY. What a row matches and what a card matches are the same answer, field by field, over the
 //      same show. That is the "no matched field is lost" claim, checked against the thing it narrowed
 //      FROM rather than against a list somebody wrote.
+//
+//      WHAT PARITY CANNOT SEE, measured rather than reasoned about: both sides go through ONE matcher,
+//      so deleting a field's match from `ShowSearch.matches` keeps them agreeing and this arm stays
+//      green. Confirmed by mutation, 2026-09-09. Guard 2 is what catches that, and the positive controls
+//      inside these tests are what catch it a second time, which is why each one asserts that the halves
+//      still match rather than only that a spanning query does not.
 //   2. COVERAGE. Every stored property of `Recipient` is CLASSIFIED, so a contact field added later
 //      cannot silently sit outside the search: it is in neither list, and this goes red until somebody
 //      says which it is (L96). A hand-written list of what IS searched would only ever check what
 //      somebody remembered; the list is derived from the model and the classification is what is
 //      declared.
+@MainActor
 @Suite("Search over a row finds what search over a card found (#3655)")
 struct SearchCoversEveryContactFieldTests {
 
     // MARK: - 1. Parity
 
-    private func card(name: String?, email: String?, groupName: String = "Aurora Strings",
-                      venue: String? = "Weill Recital Hall") -> QueueItem {
-        var item = QueueItem(id: "k", groupName: groupName, discipline: "music", venue: venue,
-                             performanceDate: "2026-08-01", sourceListingURL: nil,
-                             priorRelationship: "none", production: "self", profile: "strong",
-                             coverage: "likely_uncovered", fitScore: 4, tier: "mid", fitReason: "r",
-                             matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
-                             status: .new)
-        item.contacts = [RecipientSnapshot(id: "r1", name: name, email: email, role: nil,
-                                           provenance: .manual, sendState: .pending, replied: false,
-                                           lastReplyText: nil, resolution: nil, bounced: false,
-                                           outcomeSource: nil)]
-        return item
+    private func container() throws -> ModelContainer {
+        try ModelContainer(for: Schema([Prospect.self, Recipient.self]),
+                           configurations: [ModelConfiguration(isStoredInMemoryOnly: true)])
     }
 
-    // The row built from the SAME card, through the splice initialiser, plus the searchable fact the
-    // pass's contacts walk would have gathered. Two values standing for one show, which is what makes the
-    // comparison below a parity check rather than two separate assertions.
-    private func row(from item: QueueItem) -> QueueScopeRow {
-        var scopeRow = QueueScopeRow(item)
-        scopeRow.facts = RecipientFacts(
-            standings: [], reachabilityAsHeld: nil,
-            searchableContacts: item.contacts.map { SearchableContact(name: $0.name, email: $0.email) })
-        return scopeRow
+    // ONE SHOW, and the row and the card A REAL PASS BUILDS FROM IT.
+    //
+    // This suite's first form built the row's searchable fact by hand, from the card's own contacts, and
+    // a mutation proved what that was worth: dropping the address inside `RecipientFacts.of`, which is the
+    // ONLY place the row's contacts are gathered in the app, left the suite green. The fixture reproduced
+    // the code it was supposed to be checking, so the two sides agreed because the test had made them
+    // agree (L48, L52). Derived through `QueueModel.scope` instead, the same mutation is caught.
+    private func pair(name: String?, email: String?, groupName: String = "Aurora Strings",
+                      venue: String? = "Weill Recital Hall") throws -> (row: QueueScopeRow, card: QueueItem) {
+        let ctx = ModelContext(try container())
+        let p = Prospect(naturalKey: "k", groupName: groupName, discipline: "music", venue: venue,
+                         performanceDate: "2026-08-01", sourceListingURL: nil, priorRelationship: "none",
+                         production: "self", profile: "strong", coverage: "likely_uncovered",
+                         fitScore: 4, tier: "mid", fitReason: "r", matchedClientName: nil,
+                         possibleMatchSource: nil, possibleMatchName: nil)
+        ctx.insert(p)
+        if name != nil || email != nil {
+            let r = Recipient(id: "r1", email: email, name: name, provenance: .act)
+            r.sendState = .pending
+            p.recipients.append(r)
+        }
+
+        let scope = QueueModel.scope(from: [p], cardKeys: ["k"])
+        let row = try #require(scope.rows.first)
+        let card = try #require(scope.cards.alreadyBuilt("k"))
+        // The two really are about one show, asserted rather than assumed: a pass that returned a row for
+        // one show and a card for another would satisfy every comparison below by accident.
+        #expect(row.id == card.id)
+        return (row, card)
     }
 
     // Every field the search reads, one query each, plus the two shapes that are easy to lose in a
     // rewrite: a different case and a stripped diacritic. A single "it still matches" test would pass
     // with three of the five fields dropped.
     @Test("a row and a card give the same answer for every field and every query")
-    func rowAndCardAgreeFieldByField() {
-        let item = card(name: "Wren Ashcombe", email: "wren.a@example.invalid",
-                        groupName: "Aurora Strings", venue: "Weill Recital Hall")
-        let scopeRow = row(from: item)
+    func rowAndCardAgreeFieldByField() throws {
+        let (scopeRow, item) = try pair(name: "Wren Ashcombe", email: "wren.a@example.invalid")
 
         let queries = [
             "Aurora",              // the group name
@@ -85,9 +101,8 @@ struct SearchCoversEveryContactFieldTests {
     // to make a search cheap is to lowercase everything into one string and that reproduces the case
     // folding while silently dropping this (L107).
     @Test("a row folds diacritics exactly as a card does")
-    func diacriticsFoldOnBothSides() {
-        let item = card(name: "Zoë Marchbank", email: "zoe@example.invalid")
-        let scopeRow = row(from: item)
+    func diacriticsFoldOnBothSides() throws {
+        let (scopeRow, item) = try pair(name: "Zoë Marchbank", email: "zoe@example.invalid")
 
         for query in ["Zoe", "Zoë", "zoe marchbank"] {
             #expect(ShowSearch.matches(scopeRow, query: query) == ShowSearch.matches(item, query: query),
@@ -103,9 +118,8 @@ struct SearchCoversEveryContactFieldTests {
     // matchable, so a query spanning a name-to-email boundary matches text that exists in no record
     // (L555). This asserts it does not.
     @Test("a query spanning two contact fields matches nothing")
-    func aQuerySpanningTwoFieldsFindsNothing() {
-        let item = card(name: "Wren Ashcombe", email: "wren.a@example.invalid")
-        let scopeRow = row(from: item)
+    func aQuerySpanningTwoFieldsFindsNothing() throws {
+        let (scopeRow, _) = try pair(name: "Wren Ashcombe", email: "wren.a@example.invalid")
 
         // The two fields, adjacent, as a joined haystack would hold them.
         #expect(!ShowSearch.matches(scopeRow, query: "Ashcombe wren.a"))
@@ -119,8 +133,11 @@ struct SearchCoversEveryContactFieldTests {
     // what a spliced row carries (a departing card keeps its contacts and the row beside it does not), so
     // this is a real state rather than a defensive one.
     @Test("a row with no searchable contacts still matches its group and venue")
-    func aRowWithNoContactsStillMatchesItsOwnText() {
-        var scopeRow = QueueScopeRow(card(name: "Wren Ashcombe", email: "wren.a@example.invalid"))
+    func aRowWithNoContactsStillMatchesItsOwnText() throws {
+        // A SPLICED row, which is what a departing card leaves behind: it carries every answer the card
+        // carried and `.none` for the facts, because a card keeps the contacts themselves and never the
+        // reduction. So this is a real state rather than a defensive one.
+        var scopeRow = QueueScopeRow(try pair(name: "Wren Ashcombe", email: "wren.a@example.invalid").card)
         scopeRow.facts = .none
 
         #expect(ShowSearch.matches(scopeRow, query: "Aurora"))

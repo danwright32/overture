@@ -31,7 +31,7 @@ struct RootViewSearchFieldGuardTests {
         // sits, which says nothing about the search bar at all.
         // #1926: the bar owns the typed query, so the call site names it rather than a binding here.
         guard let body = SourceGuardHelper.propertyBody("var body: some View {", in: rootView),
-              let bar = body.range(of: "QueueSearchBar(items: { searchableItems }"),
+              let bar = body.range(of: "QueueSearchBar(items: { searchableRows }"),
               let queue = body.range(of: "queueContent") else {
             Issue.record("expected the body to hold both the search bar and the queue")
             return

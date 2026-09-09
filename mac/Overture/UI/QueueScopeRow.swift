@@ -194,7 +194,7 @@ struct SearchableContact: Equatable, Sendable, CustomStringConvertible, CustomDe
     let name: String?
     let email: String?
 
-    // copy-inventory:ignore-start  #3655: a redaction marker for a run log, never a sentence Dan reads.
+    // copy-inventory:ignore-start  a redaction marker for a run log, never a sentence Dan reads (#3655)
     static let redactedMark = "<contact redacted>"
     // copy-inventory:ignore-end
 
