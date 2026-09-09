@@ -264,4 +264,87 @@ struct QueueInvalidationGuardTests {
             #expect(body.contains("jumpTarget = "))
         }
     }
+
+    // MARK: - #3658 Phase 8: what raising a sheet is allowed to cost
+
+    // Every sheet the queue raises, derived from the HOLDER rather than listed here, so a ninth added
+    // later joins this check without anybody remembering to add it (L96).
+    private var sheetsFile: String { SourceGuardHelper.source("Overture/UI/QueueSheets.swift") }
+
+    private var sheetFlags: [String] {
+        guard let body = SourceGuardHelper.propertyBody("final class QueueSheetState {", in: sheetsFile)
+        else { return [] }
+        return SourceGuardHelper.storedPropertyNames(inClassBody: body)
+    }
+
+    // THE PHASE, in one assertion. `body`'s first line is `let data = makeRenderData()`, so while a sheet
+    // flag was `@State` here, opening a reply sheet paid the whole derivation and dismissing it paid it
+    // again, and neither changes a row of store data.
+    //
+    // Derived on BOTH sides: the flags come from the holder and the state declarations come from
+    // QueueView, so neither list is one somebody has to keep in step (L96, L41).
+    @Test func noSheetFlagIsStateOnTheQueueItself() {
+        let flags = sheetFlags
+        #expect(flags.count >= 8,
+                Comment(rawValue: "read only \(flags.count) flags off QueueSheetState, so this checked "
+                        + "almost nothing"))
+        guard let queue = SourceGuardHelper.propertyBody("struct QueueView: View {", in: queueView) else {
+            Issue.record("expected to find QueueView")
+            return
+        }
+        for flag in flags {
+            let declared = queue.contains("@State private var \(flag)")
+            #expect(!declared,
+                    Comment(rawValue: "QueueView declares `@State private var \(flag)`, so raising that "
+                            + "sheet invalidates the body that derives the whole store, which is exactly "
+                            + "what #3658 removed. It belongs on QueueSheetState."))
+        }
+    }
+
+    // And this body must not READ one either. Holding the object is free; reading a property of it puts
+    // every write straight back onto the derivation, silently, with every other test still green.
+    @Test func theQueueBodyReadsNoSheetFlag() {
+        let flags = sheetFlags
+        #expect(!flags.isEmpty, "no flags were read off the holder, so this checked nothing")
+        let code = SwiftSource.scannableLines(in: queueView).map(\.code).joined(separator: "\n")
+        for flag in flags {
+            // A READ is `sheets.<flag>` not followed by ` =`. Every legitimate site is a write, made from
+            // an action closure rather than from the body's own evaluation.
+            let reads = code.components(separatedBy: "sheets.\(flag)").dropFirst()
+                .filter { !$0.hasPrefix(" = ") }
+            #expect(reads.isEmpty,
+                    Comment(rawValue: "QueueView reads `sheets.\(flag)` \(reads.count) times. A read here "
+                            + "makes this view an observer of that flag, so writing it invalidates the "
+                            + "body that derives the store and the move buys nothing (#3658)."))
+        }
+    }
+
+    // L238: one flag, one presenter. Two surfaces bound to one flag present the same sheet twice and
+    // dismissing one leaves the other standing, which is the other failure the move could have caused and
+    // the one a happy-path check cannot see.
+    @Test func exactlyOneSurfacePresentsEachSheetFlag() {
+        let flags = sheetFlags
+        #expect(!flags.isEmpty, "no flags were read off the holder, so this checked nothing")
+        let appSources = (try? FileManager.default
+            .subpathsOfDirectory(atPath: RepoRoot.mac.appendingPathComponent("Overture").path)) ?? []
+        let swift = appSources.filter { $0.hasSuffix(".swift") }
+        #expect(swift.count > 50, "walked \(swift.count) app sources, which is too few to have looked")
+
+        for flag in flags {
+            // ONE needle, counted once per file. Two needles that both match the same text (a trailing
+            // brace and a trailing space) counted every presenter twice, and the guard then reported the
+            // correct code as two surfaces, which is the shape a guard must not have: it would be
+            // switched off rather than believed (L93). Seen while writing it.
+            let needle = ".sheet(item: $sheets.\(flag))"
+            var presenters = 0
+            for path in swift {
+                let text = SourceGuardHelper.source("Overture/\(path)")
+                presenters += text.components(separatedBy: needle).count - 1
+            }
+            #expect(presenters == 1,
+                    Comment(rawValue: "\(presenters) surfaces present `\(flag)`. Exactly one may: two "
+                            + "put the same sheet up twice and dismissing one leaves the other standing "
+                            + "(L238), and none means a flag that can be raised and never shown (L46)."))
+        }
+    }
 }

@@ -56,15 +56,11 @@ struct QueueView: View {
     // replied ones in reached-out (StageNavigation.stage(for:)); closed ones leave.
     @Query private var inquiries: [Inquiry]
     // The inquiry Dan is composing a first reply to (nil = none).
-    @State private var replyingTo: Inquiry?
     // #2128: the prospect half of the same thing. A panel over the queue, so the compose box's text lives
     // one level down and typing cannot re-derive the store (the #1774 / #1922 / #1923 class).
-    @State private var answeringReply: ReplyTarget?
     // #2130: the nudge or closing note the row's control is about to send, held so Dan approves the exact
     // email first. Its own state rather than pendingConfirm, whose onSend is wired to the pitch send.
-    @State private var pendingRowNudge: PendingRowNudge?
     // #1504: the inquiry whose logged details Dan is correcting (nil = none).
-    @State private var editingInquiry: Inquiry?
 
     // #991: Dan's stored town refusals. A @Query so ADDING one re-renders the queue and the gate
     // re-decides every row against the new union at once, which is the "no migration" property #990's
@@ -90,16 +86,26 @@ struct QueueView: View {
     @State private var pendingConfirm: PendingSend?
     // #1500: a whole night waiting on its confirm (nil = none). Holds the keys the group was SHOWING when
     // Dan picked the reason, so what the confirm counts is what the action takes.
-    @State private var pendingNightDismiss: NightDismiss?
     // #1219: a committing action (Approve or per-row Re-prep) waiting on the self-booking confirm (nil =
     // none pending). One guard for both, since they share the dialog and differ only in verb and action.
-    @State private var pendingSelfBookingGuard: SelfBookingGuard?
     @State private var showReconnect = false
+
+    // #3658 Phase 8: the eight sheets the queue can raise, on ONE observed holder rather than eight
+    // pieces of this view's own `@State`.
+    //
+    // THIS IS THE PHASE. `body`'s first line is `let data = makeRenderData()`, so while these were
+    // `@State` here, opening a reply sheet paid the whole derivation and dismissing it paid it again,
+    // and neither changes a row of store data. An observed write reaches only the views that READ the
+    // property, and the one reader is `QueueSheetHost`.
+    //
+    // NOTHING IN THIS BODY MAY READ A PROPERTY OF IT. A single read here would put every sheet write
+    // straight back onto the derivation, silently, with every test still green, which is what
+    // `QueueInvalidationGuardTests` refuses.
+    @State private var sheets = QueueSheetState()
     // #2718: which contact's proposed conversation is being linked right now. A confirm makes two Gmail
     // calls, so the control has to say it is working rather than sitting there looking unpressed.
     @State private var linkingConversationFor: String?
     // #2718: which pitch's manual "Link their reply" picker is open.
-    @State private var manualLinkTarget: ManualLinkTarget?
     // #436: in-flight sends, so a tapped Send shows a live "Sending…" state instead of a dead button.
     // Outbound keyed by prospect natural key; replies keyed by recipient id. Cleared when the await ends.
     // #1922: they live on SendProgressState now, an object, so a send animates its own card instead of
@@ -196,16 +202,6 @@ struct QueueView: View {
     @State private var probeSelection = ProbeSelectionState()
 
     // #1308 Layer 2: the pending "Check reachability" confirm, holding the date's candidate keys.
-    @State private var pendingProbe: ProbeConfirm?
-    private struct ProbeConfirm: Identifiable {
-        let id = UUID()
-        let keys: [String]
-        let dateLabel: String
-        // #1597: set only for a multi-date selection, whose sentences come from ProbeSelectionCopy.
-        // Absent means the single-date wording, unchanged.
-        var title: String? = nil
-        var message: String? = nil
-    }
 
     private var items: [QueueItem] {
         QueueModel.items(from: prospects, answers: orgAnswers, corpus: allProspects,
@@ -410,7 +406,18 @@ struct QueueView: View {
         let data = makeRenderData()
         // #3654 step 4c: recorded here, where the pass's answer arrives, rather than inside the pass.
         recordCardCheck(data.cardCheck, now: Date())
-        return mainContent(data)
+        // #3658 Phase 8: the eight sheets, presented by the host rather than by this body, so raising one
+        // no longer invalidates the body that derives the store. The content is a CLOSURE for
+        // `QueueScrollHolder`'s reason (#1774): a built view would be constructed here, which is the pass
+        // this keeps out of the way.
+        return QueueSheetHost(
+            sheets: sheets,
+            gmailConnected: data.gmailConnected,
+            probeSelection: probeSelection,
+            onProbe: { onProbeReachability($0) },
+            onDismissNight: { pending, keys in dismissNight(pending, keys: keys) },
+            onRowNudge: { pending, body in performRowNudge(pending, body: body) },
+            content: { mainContent(data) })
             // #3474: the Dock tile and the menu bar glyph read a PUBLISHED number, because neither can
             // hold a SwiftData query. Until now the only writer was the 30 minute reconcile, so both
             // stated a count up to half an hour old: measured on the live store 2026-09-02, Dan recorded
@@ -429,67 +436,9 @@ struct QueueView: View {
                 onSend: { performSend($0) },
                 onConnectGmail: onConnectGmail
             )
-            // #1436: compose and send Dan's reply to a hire inquiry, through the SAME screen a scouted
-            // show is answered on since #2145. One list should not behave two ways.
-            .sheet(item: $replyingTo) { inquiry in
-                ReplySheet(composition: .answering(inquiry, context: context, feedback: feedback),
-                           gmailConnected: data.gmailConnected)
-            }
-            .sheet(item: $pendingRowNudge) { pending in
-                SendConfirmSheet(confirmation: pending.confirmation,
-                                 onSend: { performRowNudge(pending, body: nil) },
-                                 onCancel: { pendingRowNudge = nil },
-                                 // #2575: both kinds this sheet raises are composed end to end by
-                                 // Overture, so both get the box.
-                                 onSendEdited: { performRowNudge(pending, body: $0) })
-            }
-            .sheet(item: $answeringReply) { target in
-                // #2145: the one reply screen, told what it is answering. An inquiry builds its own
-                // composition and reaches the same screen.
-                ReplySheet(composition: .answering(target.recipient, of: target.prospect,
-                                                   context: context, feedback: feedback),
-                           gmailConnected: data.gmailConnected)
-            }
-            // #1504: the same sheet that logs one, opened on an existing record.
-            .sheet(item: $editingInquiry) { InquiryIntakeSheet(editing: $0) }
-            // #2718: Dan's manual route, for when the search found their reply and did not back it.
-            .sheet(item: $manualLinkTarget) { target in
-                LinkReplyPicker(prospect: target.prospect, recipient: target.recipient) {
-                    manualLinkTarget = nil
-                }
-            }
     }
 
-    // #1219: a committing action (Approve or Re-prep) waiting on the self-booking confirm, so the naming
-    // and the action to run stay out of the button wiring and the confirm reads from one place.
-    private struct SelfBookingGuard: Identifiable {
-        let key: String
-        let title: String
-        let proceedLabel: String
-        let message: String
-        let proceed: () -> Void
-        var id: String { key }
-    }
 
-    // #1500: the night Dan right-clicked, the reason he picked, and the rows that were on screen when he
-    // picked it. The keys are captured at that moment rather than re-derived on confirm, so a scout landing
-    // between the menu and the button cannot widen what he agreed to.
-    private struct NightDismiss: Identifiable {
-        let dateLabel: String
-        let reason: ShowOutcome
-        let keys: [String]
-        let runs: [String]
-        // The narrower set: the shows that play only on this night. Empty when there is no choice to make.
-        let keysOnlyThisNight: [String]
-        // #3365: through BulkDismiss, never restated here. It was a second copy of the same rule, and the
-        // rule has just gained a condition (a one-night reason offers no choice); a copy would have kept
-        // the buttons and the sentence above them disagreeing about whether there was one (#863).
-        var offersChoice: Bool {
-            BulkDismiss.offersChoice(reason: reason, runsPastTheNight: runs,
-                                     keysOnlyThisNight: keysOnlyThisNight)
-        }
-        var id: String { "\(dateLabel)|\(reason.rawValue)" }
-    }
 
     // #1597: everything the selection bar and its confirm need, computed ONCE from the ticked dates.
     // Both read this, so the total Dan watches while choosing is the total he approves.
@@ -535,7 +484,7 @@ struct QueueView: View {
         // different waits.
         let summary = ProbeSelection.summarizeShowsACheckMissed(
             count: keys.count, secondsPerRound: ProbeSelection.liveSecondsPerRound())
-        pendingProbe = ProbeConfirm(keys: keys, dateLabel: "",
+        sheets.pendingProbe = ProbeConfirm(keys: keys, dateLabel: "",
                                     title: ProbeSelectionCopy.multiDateTitle(summary),
                                     message: ProbeSelectionCopy.finishMissedShowsMessage(summary))
     }
@@ -559,7 +508,7 @@ struct QueueView: View {
             // missed show, which since that issue raises this same sheet with nothing behind it.
             hasAnswer: item.reachabilityProbedAt != nil || item.inheritedReachability != nil,
             secondsPerRound: ProbeSelection.liveSecondsPerRound())
-        pendingProbe = ProbeConfirm(keys: [item.id], dateLabel: "",
+        sheets.pendingProbe = ProbeConfirm(keys: [item.id], dateLabel: "",
                                     title: ProbeSelectionCopy.multiDateTitle(summary),
                                     message: ProbeSelectionCopy.oneShowRecheckMessage(summary))
     }
@@ -579,7 +528,7 @@ struct QueueView: View {
             geo: geo,
             checkRunning: checkRunning,
             onRun: { keys, title, message in
-                pendingProbe = ProbeConfirm(keys: keys, dateLabel: "", title: title, message: message)
+                sheets.pendingProbe = ProbeConfirm(keys: keys, dateLabel: "", title: title, message: message)
             })
     }
 
@@ -596,52 +545,6 @@ struct QueueView: View {
             // banner is attached the same way.
             .overlay(alignment: .top) { probeSelectionBar(data) }
             .background(OVColor.canvas)
-            // #1219/#1249: confirm an Approve or a per-row Re-prep that lands on a date already holding a
-            // pitch. First-party branded sheet (SelfBookingConfirmSheet), not a stock system dialog.
-            .sheet(item: $pendingSelfBookingGuard) { pending in
-                SelfBookingConfirmSheet(
-                    title: pending.title, message: pending.message, proceedLabel: pending.proceedLabel,
-                    onProceed: { pending.proceed(); pendingSelfBookingGuard = nil },
-                    onCancel: { pendingSelfBookingGuard = nil })
-            }
-            // #1308 Layer 2: confirm an opt-in reachability probe before it spends. Reuses the same
-            // first-party branded sheet; the copy states the honest cost (free for shows Dan keeps).
-            .sheet(item: $pendingProbe) { pending in
-                SelfBookingConfirmSheet(
-                    title: pending.title ?? ReachabilityProbeCopy.confirmTitle(count: pending.keys.count),
-                    message: pending.message
-                        ?? ReachabilityProbeCopy.confirmMessage(dateLabel: pending.dateLabel,
-                                                                count: pending.keys.count),
-                    proceedLabel: ReachabilityProbeCopy.confirmProceed,
-                    onProceed: {
-                        onProbeReachability(Set(pending.keys))
-                        probeSelection.clear()
-                        pendingProbe = nil
-                    },
-                    onCancel: { pendingProbe = nil })
-            }
-            // #1500: confirm a whole night before it goes. The count is the point: Dan has to know exactly
-            // how much he is about to bury, and which run loses its later dates with it.
-            .sheet(item: $pendingNightDismiss) { pending in
-                SelfBookingConfirmSheet(
-                    title: BulkDismiss.confirmTitle(count: pending.keys.count, dateLabel: pending.dateLabel),
-                    message: BulkDismiss.confirmMessage(count: pending.keys.count, reason: pending.reason,
-                                                        runs: pending.runs, dateLabel: pending.dateLabel,
-                                                        offeringChoice: pending.offersChoice),
-                    proceedLabel: BulkDismiss.confirmProceed(count: pending.keys.count,
-                                                             offeringChoice: pending.offersChoice),
-                    symbol: "archivebox",
-                    // #1500 follow-up (Dan, 2026-07-26): leave the runs where they are and clear only what
-                    // plays tonight. Offered only when a night actually holds both kinds.
-                    alternativeLabel: pending.offersChoice
-                        ? BulkDismiss.confirmProceedOnlyThisNight(count: pending.keysOnlyThisNight.count)
-                        : nil,
-                    onAlternative: pending.offersChoice
-                        ? { dismissNight(pending, keys: pending.keysOnlyThisNight); pendingNightDismiss = nil }
-                        : nil,
-                    onProceed: { dismissNight(pending, keys: pending.keys); pendingNightDismiss = nil },
-                    onCancel: { pendingNightDismiss = nil })
-            }
     }
 
     // #2724: a night dismiss removes every row on a date, and until this nothing marked them leaving, so
@@ -816,8 +719,8 @@ struct QueueView: View {
                         if case .inquiry(let inquiryRow) = queueRow, let inquiry = byId[inquiryRow.id] {
                             InquiryRowView(
                                 row: inquiryRow,
-                                onReply: { replyingTo = inquiry },
-                                onEdit: { editingInquiry = inquiry },
+                                onReply: { sheets.replyingTo = inquiry },
+                                onEdit: { sheets.editingInquiry = inquiry },
                                 onMarkBooked: { markInquiry(inquiry, .booked) },
                                 onMarkLost: { markInquiry(inquiry, .lost($0)) },
                                 onDetachConversation: {
@@ -903,7 +806,7 @@ struct QueueView: View {
                     items: group.items, dateLabel: group.monthDay,
                     geo: geo,
                     isRunning: checkRunning,
-                    onTap: { keys, label in pendingProbe = ProbeConfirm(keys: keys, dateLabel: label) })
+                    onTap: { keys, label in sheets.pendingProbe = ProbeConfirm(keys: keys, dateLabel: label) })
             }
             .padding(.bottom, OVSpacing.xxs)
             .overlay(alignment: .bottom) { Rectangle().fill(OVColor.line).frame(height: 1) }
@@ -945,7 +848,7 @@ struct QueueView: View {
                 } else {
                     ForEach(ShowOutcome.neverPitched, id: \.self) { reason in
                         Button(reason.label) {
-                            pendingNightDismiss = NightDismiss(dateLabel: group.monthDay, reason: reason,
+                            sheets.pendingNightDismiss = NightDismiss(dateLabel: group.monthDay, reason: reason,
                                                                keys: plan.keys, runs: plan.runsPastTheNight,
                                                                keysOnlyThisNight: plan.keysOnlyThisNight)
                         }
@@ -1331,8 +1234,8 @@ struct QueueView: View {
                                 // inquiry is; the card box and its own typography are gone.
                                 InquiryRowView(
                                     row: row, style: .listRow,
-                                    onReply: { replyingTo = inquiry },
-                                    onEdit: { editingInquiry = inquiry },
+                                    onReply: { sheets.replyingTo = inquiry },
+                                    onEdit: { sheets.editingInquiry = inquiry },
                                     onMarkBooked: { markInquiry(inquiry, .booked) },
                                     onMarkLost: { markInquiry(inquiry, .lost($0)) },
                                     onDetachConversation: {
@@ -1511,7 +1414,7 @@ struct QueueView: View {
                 // #2166: and it now carries the urgency the label used to, in its own fill.
                 if replyOffered {
                     Button(ReplyPanelCopy.answer) {
-                        answeringReply = ReplyTarget(prospect: p,
+                        sheets.answeringReply = ReplyTarget(prospect: p,
                                                      recipient: ReplyIdentity.answering(for: r, in: p))
                     }
                     .buttonStyle(.plain).font(OVType.meta)
@@ -1725,7 +1628,7 @@ struct QueueView: View {
             proceed()
             return
         }
-        pendingSelfBookingGuard = SelfBookingGuard(key: item.id, title: title,
+        sheets.pendingSelfBookingGuard = SelfBookingGuard(key: item.id, title: title,
                                                    proceedLabel: PrepLaunchCopy.proceedLabel,
                                                    message: message, proceed: proceed)
     }
@@ -1822,7 +1725,7 @@ struct QueueView: View {
             feedback.acknowledge(resolved.sentence(org: row.org), tone: .warning)
             return
         }
-        manualLinkTarget = ManualLinkTarget(prospect: p, recipient: r)
+        sheets.manualLinkTarget = ManualLinkTarget(prospect: p, recipient: r)
     }
 
     private func performSend(_ naturalKey: String, selecting: [String]? = nil, together: Bool? = nil) {
@@ -1933,7 +1836,7 @@ struct QueueView: View {
     @ViewBuilder
     private func manualLinkControl(_ r: Recipient, of p: Prospect) -> some View {
         if ProposedConversation.offersManualLink(r) {
-            Button(ProposedConversationCopy.manualLink) { manualLinkTarget = ManualLinkTarget(prospect: p, recipient: r) }
+            Button(ProposedConversationCopy.manualLink) { sheets.manualLinkTarget = ManualLinkTarget(prospect: p, recipient: r) }
                 .buttonStyle(.plain).font(.system(size: 10)).foregroundStyle(OVColor.gold)
         }
     }
@@ -1970,7 +1873,7 @@ struct QueueView: View {
             // #2397: one kind of nudge now. The conversation track's own re-touch email went with the
             // states that chose its wording, so a follow-up is always the silent sequence's own.
             if let confirmation = SendConfirmation(followUpFor: r, of: p) {
-                pendingRowNudge = PendingRowNudge(naturalKey: p.naturalKey, recipientId: r.id,
+                sheets.pendingRowNudge = PendingRowNudge(naturalKey: p.naturalKey, recipientId: r.id,
                                                   confirmation: confirmation, isClosing: false,
                                                   isConversation: false)
             }
@@ -1982,7 +1885,7 @@ struct QueueView: View {
     // #2575: `body` is what the send sheet's text box held when Dan pressed Send, nil for a send he did
     // not edit. Passed straight through; nothing recomposes it on the way.
     private func performRowNudge(_ pending: PendingRowNudge, body: String?) {
-        pendingRowNudge = nil
+        sheets.pendingRowNudge = nil
         // #2710: one branch now. The conversation track's only email was the closing note, which is gone,
         // so a row nudge is a follow-up and nothing else.
         ProspectMutations.sendFollowUp(pending.naturalKey, pending.recipientId,
