@@ -254,10 +254,14 @@ struct QueueRenderPassLiveStoreCostTests {
         let engagementTerm = medianSeconds {
             _ = EngagementLink.group(inQueue.all.map(EngagementLink.Row.init))
         }
+        // #3743: the index is SHARED now, so the two terms that need it are timed with one in hand and
+        // the index is timed once on its own. Measured the other way each rebuilt it and the block stopped
+        // mirroring the pass, which is the same correction #3738 made to the stage terms (L118).
+        let producerIndex = ProducerGate.Corpus(everyProspect.map {
+            ProducerGate.Show(presenter: $0.presenter, venue: $0.venue)
+        })
         let brandsTerm = medianSeconds {
-            _ = ProducerGate.VenueBrands(
-                shows: everyProspect.map { ProducerGate.Show(presenter: $0.presenter, venue: $0.venue) },
-                overrides: .none)
+            _ = ProducerGate.VenueBrands(corpus: producerIndex, overrides: .none)
         }
         let rowCountsTerm = medianSeconds {
             _ = QueueModel.organisationRowCounts(everyProspect.map(\.presenter))
@@ -272,8 +276,27 @@ struct QueueRenderPassLiveStoreCostTests {
         let contactsTerm = medianSeconds {
             for p in inQueue.all { _ = RecipientFacts.of(p) }
         }
+        // #3743: the term #3741 could not reach, which was almost all of that block's 41.3 ms remainder.
+        //
+        // It is SKIPPED ENTIRELY when the stored ledger is empty (`guard !answers.isEmpty`), so a reading
+        // of zero here would mean the clone held no organisation answers rather than the work being free.
+        // The count is printed beside it for exactly that reason (L98).
+        // #3743: the index BOTH of the two big terms need, over the same corpus, in the same pass. They
+        // used to build one each; `QueueModel.scope` builds it once and hands it to both now. Timed on
+        // its own so the shared part is a line rather than something folded into whichever term happens
+        // to be measured first (L370, L118).
+        let producerCorpusTerm = medianSeconds {
+            _ = ProducerGate.Corpus(everyProspect.map {
+                ProducerGate.Show(presenter: $0.presenter, venue: $0.venue)
+            })
+        }
+        let inheritedTerm = medianSeconds {
+            _ = QueueModel.inheritedAnswers(answers, corpus: everyProspect, overrides: .none,
+                                            refusals: .none, heldKeys: [], now: resolved.now,
+                                            producerCorpus: producerIndex)
+        }
         let scopeNamed = engagementTerm.median + brandsTerm.median + rowCountsTerm.median
-            + rowsTerm.median
+            + rowsTerm.median + inheritedTerm.median + producerCorpusTerm.median
 
         // The terms the first decomposition left out, chased because they were the REMAINDER: the five
         // above came to 154 ms of a 421.7 ms floor, and a remainder that large is where the answer is
@@ -396,8 +419,12 @@ struct QueueRenderPassLiveStoreCostTests {
           INSIDE `QueueModel.scope`, the largest term left. The pieces a test can reach; what
           `inheritedAnswers` and the rest cost is this block's own remainder rather than a guess.
             engagement clustering      \(ms(engagementTerm.median)) ms   \(spread(engagementTerm))
+            the producer index, ONCE, shared by the two terms under it (#3743):
+                                       \(ms(producerCorpusTerm.median)) ms   \(spread(producerCorpusTerm))
             presenter against venue    \(ms(brandsTerm.median)) ms   \(spread(brandsTerm))
             organisation row counts    \(ms(rowCountsTerm.median)) ms   \(spread(rowCountsTerm))
+            inheriting an org answer   \(ms(inheritedTerm.median)) ms   \(spread(inheritedTerm))
+              over \(answers.count) stored answers, which is what it is skipped entirely without
             a row per show             \(ms(rowsTerm.median)) ms   \(spread(rowsTerm))
               of which the contacts walk
                                        \(ms(contactsTerm.median)) ms   \(spread(contactsTerm))

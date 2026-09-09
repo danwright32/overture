@@ -2858,17 +2858,23 @@ enum QueueModel {
         // reason at all, and an entry with no written reason beside three that each have one is evidence
         // it was never reasoned about rather than deliberately chosen (L233).
         let linked = EngagementLink.group((rowsForLinking ?? prospects).map(EngagementLink.Row.init))
+        // #3743: the presenter-against-venue index, built ONCE and handed to both whole-corpus
+        // derivations that need it. `inheritedAnswers` built one and `ProducerGate.VenueBrands` built an
+        // equivalent one from the same shows in the same pass; measured on the live store the index alone
+        // is 27.2 ms, so it was being paid twice per render.
+        let producerCorpus = ProducerGate.Corpus((corpus ?? prospects).map {
+            ProducerGate.Show(presenter: $0.presenter, venue: $0.venue)
+        })
         let inherited = inheritedAnswers(answers, corpus: corpus ?? prospects,
                                          overrides: overrides, refusals: refusals,
-                                         heldKeys: heldKeys, now: now)
+                                         heldKeys: heldKeys, now: now,
+                                         producerCorpus: producerCorpus)
         // #1687: built ONCE here from the same whole-store corpus the gate above judges against, never per
         // row. Deciding whether a presenter is really its building's brand walks every presenter in the
         // store against every venue spelling in it (roughly 400 by 114 on Dan's), which is a cost a card
         // must not pay on every render. The corpus is deliberately the unfiltered store rather than the
         // caller's rows, so a dismissal cannot quietly change which names draw.
-        let venueBrands = ProducerGate.VenueBrands(
-            shows: (corpus ?? prospects).map { ProducerGate.Show(presenter: $0.presenter, venue: $0.venue) },
-            overrides: overrides)
+        let venueBrands = ProducerGate.VenueBrands(corpus: producerCorpus, overrides: overrides)
         // #1732: how many rows each organisation carries, over the SAME unfiltered corpus venueBrands
         // judges against, so a dismissal cannot quietly take an organisation under the bar and remove the
         // control from the rows still showing. Built once here for the same reason as venueBrands above.
@@ -3221,11 +3227,23 @@ enum QueueModel {
 
     // The SwiftData-to-value boundary, kept here so OrgAnswerLedger itself stays free of the store and
     // its rules stay unit-testable.
-    private static func inheritedAnswers(_ answers: [OrgReachabilityAnswer], corpus: [Prospect],
+    // #3743: INTERNAL rather than private, so the cost instrument can time it.
+    //
+    // #3741 decomposed `QueueModel.scope` and left 41.3 ms unaccounted for, and this was the one
+    // substantial piece a test could not reach. Naming that remainder after this function without timing
+    // it would be a second definition of a measurement nobody took (L107, L507), so the access widened
+    // rather than the claim being made. Nothing else calls it, and `ScopeCallsTheLedgerOnceTests` asserts
+    // that, so widening the access has not widened what can happen.
+    static func inheritedAnswers(_ answers: [OrgReachabilityAnswer], corpus: [Prospect],
                                          overrides: ProducerOverrides,
                                          refusals: ContactRefusal.Ledger,
                                          heldKeys: Set<String>,
-                                         now: Date) -> [String: OrgAnswerLedger.Inherited] {
+                                         now: Date,
+                                         // #3743: the producer index, when the caller already built one.
+                                         // Defaulted to nil so the cost instrument and any test can call
+                                         // this without one and get the identical answer.
+                                         producerCorpus: ProducerGate.Corpus? = nil)
+        -> [String: OrgAnswerLedger.Inherited] {
         guard !answers.isEmpty else { return [:] }
         let flat = answers.compactMap { row -> OrgAnswerLedger.Answer? in
             guard let result = row.result else { return nil }
@@ -3242,7 +3260,7 @@ enum QueueModel {
                                  hasOwnAnswer: $0.reachabilityProbedAt != nil)
         }
         return OrgAnswerLedger.inherited(from: usable, shows: shows, now: now, heldKeys: heldKeys,
-                                         overrides: overrides)
+                                         overrides: overrides, corpus: producerCorpus)
     }
 
     // #939: distinct from relatedRunNote above (same venue, a separate run): this production also plays
