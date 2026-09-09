@@ -54,9 +54,15 @@ enum AttachConversationWriteCopy {
     static let alreadyLinked =
         "This pitch already has a conversation linked. Detach that one first if you linked the wrong thread."
 
-    static let notAHandSentPitch =
-        "Overture only links a conversation to a pitch you sent through a form or a DM. It already watches "
-            + "the ones it emailed itself."
+    // #3709: what replaced `notAHandSentPitch`. That sentence said "Overture only links a conversation to
+    // a pitch you sent through a form or a DM. It already watches the ones it emailed itself", and both
+    // halves became false the moment an emailed pitch could be linked: it watches the thread it SENT on,
+    // which is exactly the thread a forwarded reply does not arrive on (#3706). A message may claim only
+    // what its check actually measured (L11), and what this one measures is that something went out at
+    // all.
+    static let notAPitchThatWentOut =
+        "Overture only links a conversation to a pitch that has actually gone out. Nothing has been sent "
+            + "to this contact yet."
 
     static let noThread =
         "Overture couldn't tell which conversation to link, so it linked nothing."
@@ -93,15 +99,24 @@ enum AttachConversation {
         let thread = threadId.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !thread.isEmpty else { return .refused(reason: AttachConversationWriteCopy.noThread) }
         // Assume it runs twice. A second attach is refused rather than quietly overwriting the first,
-        // because the field holds ONE conversation and replacing it would strand everything detection
-        // wrote about the other one.
-        guard !r.hasWatchableConversation else {
+        // because replacing a thread a PREVIOUS ATTACH put there would strand everything detection wrote
+        // about it AND overwrite the snapshot the detach restores from, which is the one loss no undo
+        // could recover.
+        //
+        // #3709: asked of `conversationAttachedAt` rather than of `hasWatchableConversation`, which is the
+        // whole widening. Those two used to mean the same thing here, because the only contacts that
+        // reached this function were ones Overture had never emailed. A pitch it DID email holds a thread
+        // it wrote itself, on which no forwarded reply can ever arrive, and that one it can put back
+        // (`attachDisplacedThreadId`), so refusing it was refusing the case #3706 is about.
+        guard r.conversationAttachedAt == nil else {
             return .refused(reason: AttachConversationWriteCopy.alreadyLinked)
         }
-        // Dan's scope: only a pitch Overture could neither send nor watch. A pitch it emailed itself
-        // already holds a conversation and is watched by the ordinary reply checker.
-        guard r.formOutreachRecordedAt != nil else {
-            return .refused(reason: AttachConversationWriteCopy.notAHandSentPitch)
+        // Something went out, so there is a reply that could exist. Asked of the shared predicate rather
+        // than of the channel, so this and every other surface answer "was this contact reached" the same
+        // way (L16); it is `formOutreachRecordedAt != nil` for a form pitch, which is exactly the guard
+        // this replaced, and a real send for an emailed one.
+        guard r.hasProvenOutreach else {
+            return .refused(reason: AttachConversationWriteCopy.notAPitchThatWentOut)
         }
 
         let address = fromAddress?.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -145,18 +160,41 @@ enum AttachConversation {
         // a strike made from here on is recorded under the address. That is consistent, because the
         // check above refuses an attach onto a contact struck under either spelling, so no strike can be
         // stranded by the change.
+        // #3709: the thread the pitch went out on, kept so the detach can put it back. Only when there
+        // really was one and it is not the thread being attached, so a re-link of the same thread records
+        // nothing and the detach has nothing false to restore.
+        if let existing = r.gmailThreadId?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !existing.isEmpty, existing != thread {
+            r.attachDisplacedThreadId = existing
+        }
         r.gmailThreadId = thread
         r.conversationAttachedAt = now
         if let subject = subject?.trimmingCharacters(in: .whitespacesAndNewlines), !subject.isEmpty {
             r.attachedThreadSubject = subject
         }
         r.conversationEverAttachedAt = r.conversationEverAttachedAt ?? now
-        if let canonical, (r.email ?? "").isEmpty {
-            r.email = canonical
-            // #2719: recorded at the moment it happens, because afterwards an address the attach wrote
-            // and one that was already there are indistinguishable, and the detach must take back only
-            // what this attach put on the contact.
-            r.attachWroteAddress = true
+        // Two arms, and which one runs is what the detach reads back.
+        //
+        // #2719's arm FILLS an empty address, and the detach nulls it again. #3709's arm REPLACES a
+        // populated one, which is new behaviour and is Dan's call of 2026-09-08: the row talks to whoever
+        // wrote, and the address the pitch actually went to is kept underneath rather than dropped, so
+        // the show cannot come to read as "pitched the performer, performer replied".
+        //
+        // A writer who IS the contact displaces nothing, so nothing is recorded: `attachDisplacedEmail`
+        // means an address was really moved off this row, and a restore of an address onto a contact that
+        // never lost it would be an undo inventing work.
+        if let canonical {
+            let current = (r.email ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            if current.isEmpty {
+                r.email = canonical
+                // #2719: recorded at the moment it happens, because afterwards an address the attach wrote
+                // and one that was already there are indistinguishable, and the detach must take back only
+                // what this attach put on the contact.
+                r.attachWroteAddress = true
+            } else if current.lowercased() != canonical.lowercased() {
+                r.attachDisplacedEmail = current
+                r.email = canonical
+            }
         }
 
         // Detection, over the thread already in hand, in this same write.

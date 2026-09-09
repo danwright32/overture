@@ -605,7 +605,15 @@ enum PrepImporter {
         let priorEmail = r.email
         let priorRole = r.role
         let priorName = r.name
-        if let email { r.email = email }
+        // #3709: an address a hand LINK moved is Dan's answer about who is actually talking, not a
+        // guess, so a later check does not put the pitched one back over it. The re-check on a pitched
+        // show finds the PUBLISHED address, which is the producer's, so without this the next run moves
+        // the row back off the person who wrote in, the link's whole point is gone, and nothing anywhere
+        // reports it.
+        //
+        // `DuplicateContactMerge` is the only other writer of this field and cannot hit the same defect:
+        // it fills an empty winner address and never overwrites a populated one.
+        if let email, r.attachDisplacedEmail == nil { r.email = email }
         r.name = c.name ?? r.name
         r.role = c.role ?? r.role
         r.provenance = provenance
