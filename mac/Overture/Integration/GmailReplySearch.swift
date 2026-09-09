@@ -110,6 +110,83 @@ struct GmailReplySearch {
     static let gaveUpWaiting =
         "Overture gave up waiting for Gmail while looking for replies to the pitches you sent through a form or a DM."
 
+    // #3708: the same three failures said in the on-demand route's own voice. The three above name the
+    // form and DM pitches, which is what the TICK reads for, and the on-demand route is most often asked
+    // about a pitch Overture sent by email, where that sentence would be false. A message may claim only
+    // what its check actually measured (L11), so the reads report WHAT failed and each caller says it in
+    // its own words rather than borrowing the other's.
+    static func couldNotReadForThisPitch(status: Int) -> String {
+        "Overture couldn't read Gmail while looking for their reply. Gmail refused the request "
+            + "(HTTP \(status))."
+    }
+    static let couldNotReachGmailForThisPitch =
+        "Overture couldn't reach Gmail while looking for their reply."
+    static let gaveUpWaitingForThisPitch =
+        "Overture gave up waiting for Gmail while looking for their reply."
+
+    // What a single Gmail read could not do, before anybody words it.
+    enum ReadFailure: Equatable {
+        case refused(status: Int)
+        case unreachable
+        case timedOut
+
+        // The tick's wording: it reads for the pitches Overture cannot watch.
+        // `@MainActor` because the sentences it chooses between are this type's own, and this type is.
+        @MainActor
+        var tickSentence: String {
+            switch self {
+            case .refused(let status): return GmailReplySearch.couldNotRead(status: status)
+            case .unreachable: return GmailReplySearch.couldNotReachGmail
+            case .timedOut: return GmailReplySearch.gaveUpWaiting
+            }
+        }
+
+        // The on-demand wording: Dan is standing in front of one contact, asking about one reply.
+        @MainActor
+        var onDemandSentence: String {
+            switch self {
+            case .refused(let status): return GmailReplySearch.couldNotReadForThisPitch(status: status)
+            case .unreachable: return GmailReplySearch.couldNotReachGmailForThisPitch
+            case .timedOut: return GmailReplySearch.gaveUpWaitingForThisPitch
+            }
+        }
+    }
+
+    // Why a read saw less than the whole window. Kept apart from "it read the lot" rather than folded
+    // into a count, because a truncated read that reports like a complete one reads as "the mailbox
+    // holds nothing more" (L98).
+    enum StopReason: Equatable {
+        case tooManyPages
+        case tooManyMessages
+    }
+
+    // Which end of the window a read spends its budget on.
+    //
+    // The tick reads OLDEST first because a truncated tick must be RESUMABLE: the high-water mark may
+    // only ever advance over mail that was really examined, so keeping the newest N instead would step
+    // the mark past every older message it never looked at and they would never be read again.
+    //
+    // A read Dan asked for resumes from nothing, so the same choice would spend the whole budget on the
+    // oldest mail in the window and report finding nothing while the reply sat at the top of the inbox.
+    // Opposite ends, for the same reason: neither route may quietly skip the mail that matters to it.
+    enum ReadOrder {
+        case oldestFirst
+        case newestFirst
+    }
+
+    // #3708: what a read Dan asked for did. `notConnected` and `failed` stay apart from a completed read
+    // for the reason `Outcome` above records at length: nothing found must be reachable from exactly one
+    // of these.
+    enum OnDemandOutcome: Equatable {
+        case notConnected
+        case failed(reason: String)
+        case read(candidates: [InboundMessage], stoppedShort: StopReason?)
+    }
+
+    // The cost ceiling for a read Dan asked for. Its own number rather than `maxMessagesPerTick`, which
+    // is sized for work that repeats every thirty minutes for ever; this one is paid once, on a press.
+    static let maxMessagesOnDemand = 300
+
     // MARK: the query
 
     // Everything inbound since the window opened. There is deliberately no `from:` term: the form's
@@ -211,65 +288,33 @@ struct GmailReplySearch {
 
         let deadline = clock().addingTimeInterval(timeout)
 
-        // The ids first. `messages.list` is cheap (up to 500 ids a call) and answers NEWEST FIRST, so
-        // collecting every page and then reversing gives oldest first, which is what makes a truncated
-        // tick resumable: the mark can only ever advance to mail that was actually examined, and the
-        // next tick picks up from there. Keeping the newest N instead would step the mark over every
-        // older message it never looked at, and they would never be read again.
-        var refs: [ListPage.Ref] = []
-        var pageToken: String?
-        var pages = 0
-        repeat {
-            if clock() > deadline { return .failed(reason: Self.gaveUpWaiting) }
-            let listed = await read(Self.listURL(query: Self.query(since: windowStart), pageToken: pageToken),
-                                    token: token, fetch: fetch)
-            switch listed {
-            case .failed(let reason): return .failed(reason: reason)
-            case .ok(let data):
-                guard let page = Self.parseList(data) else { return .failed(reason: Self.couldNotReachGmail) }
-                refs.append(contentsOf: page.messages)
-                pageToken = page.nextPageToken
-            }
-            pages += 1
-        } while pageToken != nil && pages < Self.maxListPages
-
-        if pageToken != nil {
+        // #3708: the mailbox read itself lives in `collect`, shared with the on-demand route, so the two
+        // cannot come to two ideas of what reading a window means (L30). What stays HERE is everything
+        // that belongs to the tick alone: the scope, the stamps and the high-water mark.
+        let candidates: [InboundMessage]
+        let examinedThrough: Date?
+        switch await collect(since: windowStart, token: token, order: .oldestFirst,
+                             cap: Self.maxMessagesPerTick, deadline: deadline, clock: clock, fetch: fetch) {
+        case .failed(let failure):
+            return .failed(reason: failure.tickSentence)
+        case .ok(let found, let through, let stoppedShort):
+            candidates = found
+            examinedThrough = through
             // No silent caps: a run that stopped short says so, because a truncated read that reports
-            // like a complete one reads as "the mailbox holds nothing more".
-            // copy-inventory:ignore-start  developer diagnostic log, not the app's own voice (#915)
-            AgentLog.note("[Overture] The reply search stopped after \(Self.maxListPages) pages of ids; "
-                          + "the next tick resumes from the high-water mark.")
-            // copy-inventory:ignore-end
-        }
-
-        var candidates: [InboundMessage] = []
-        var examinedThrough: Date?
-        var examined = 0
-        for ref in refs.reversed() {
-            guard examined < Self.maxMessagesPerTick else {
-                // copy-inventory:ignore-start  developer diagnostic log, not the app's own voice (#915)
+            // like a complete one reads as "the mailbox holds nothing more". Two sentences, because the
+            // two limits stop at different places and only one of them is about the ids.
+            // copy-inventory:ignore-start  developer diagnostic logs, not the app's own voice (#915)
+            switch stoppedShort {
+            case .tooManyPages:
+                AgentLog.note("[Overture] The reply search stopped after \(Self.maxListPages) pages of ids; "
+                              + "the next tick resumes from the high-water mark.")
+            case .tooManyMessages:
                 AgentLog.note("[Overture] The reply search examined \(Self.maxMessagesPerTick) messages "
                               + "this tick and stopped; the next tick resumes from the high-water mark.")
-                // copy-inventory:ignore-end
+            case nil:
                 break
             }
-            if clock() > deadline { return .failed(reason: Self.gaveUpWaiting) }
-            switch await read(Self.metadataURL(id: ref.id), token: token, fetch: fetch) {
-            case .failed(let reason): return .failed(reason: reason)
-            case .ok(let data):
-                examined += 1
-                guard let message = Self.parseMetadata(data) else { continue }
-                // Gmail's `after:` is a search operator this code does not control, so the window is
-                // enforced here as well. Without it the first tick on a new contact could propose a
-                // message that arrived before the pitch was even made.
-                if let seen = examinedThrough { examinedThrough = max(seen, message.sentAt) }
-                else { examinedThrough = message.sentAt }
-                guard message.sentAt >= windowStart else { continue }
-                // Dan's own mail is excluded by the query; this is the belt to that brace, since an
-                // answer proposed from his own sent copy would name him as the presenter.
-                guard message.fromAddress != ReplyDetection.email(from: fromEmail) else { continue }
-                candidates.append(message)
-            }
+            // copy-inventory:ignore-end
         }
 
         // Only now, and only on a tick that completed. A failed tick above returned before reaching any
@@ -294,6 +339,115 @@ struct GmailReplySearch {
         return .searched(candidates: candidates, searchedThrough: examinedThrough, saveFailed: saveFailed)
     }
 
+    // MARK: reading on demand
+
+    // #3708: Dan asking, on purpose, about ONE contact.
+    //
+    // It shares nothing with the tick but the reading. The tick's scope refuses every emailed pitch (it
+    // holds a conversation) and everything past the thirty-day horizon, which between them is exactly
+    // the case #3706 is about, and widening that scope is the fix this phase exists NOT to make: it is
+    // the read the reconcile tick makes automatically every thirty minutes, and a sent pitch never ages
+    // off until Dan closes it out, so its window would widen by a day every day.
+    //
+    // So this reads back to the pitch itself, newest mail first, and touches neither the stamps nor the
+    // high-water mark the tick resumes from. Advancing either would step the tick over a window it never
+    // examined, permanently and silently (L5, L512).
+    func searchOnDemand(since: Date) async -> OnDemandOutcome {
+        guard GmailConnection.shared.refreshedIsConnected(),
+              let token = try? await GmailAuthManager.shared.validAccessToken() else { return .notConnected }
+        return await readOnDemand(since: since, token: token)
+    }
+
+    // The testable core, on the same seams as `searchMailbox`: a token in hand, an injected fetch and an
+    // injected clock, so the whole decision path runs with no network and no live mailbox (L2).
+    func readOnDemand(
+        since: Date,
+        token: String,
+        cap: Int = maxMessagesOnDemand,
+        clock: @escaping () -> Date = { Date() },
+        fetch: (URLRequest) async throws -> (Data, URLResponse) = { try await GmailNetworking.session.data(for: $0) }
+    ) async -> OnDemandOutcome {
+        let deadline = clock().addingTimeInterval(timeout)
+        switch await collect(since: since, token: token, order: .newestFirst, cap: cap,
+                             deadline: deadline, clock: clock, fetch: fetch) {
+        case .failed(let failure):
+            return .failed(reason: failure.onDemandSentence)
+        case .ok(let candidates, _, let stoppedShort):
+            return .read(candidates: candidates, stoppedShort: stoppedShort)
+        }
+    }
+
+    // MARK: the shared read
+
+    // What reading one window of the mailbox produced. `examinedThrough` is the newest instant the read
+    // actually looked at, which only the tick has a use for: it is what its high-water mark advances to.
+    enum Collected: Equatable {
+        case failed(ReadFailure)
+        case ok(candidates: [InboundMessage], examinedThrough: Date?, stoppedShort: StopReason?)
+    }
+
+    // ONE definition of "read the mailbox from this instant", used by the tick and by the on-demand
+    // route, so a rule about what counts as a candidate cannot hold on one path and not the other (L30).
+    // Everything that differs between them is a parameter: which end to spend the budget on, how much
+    // budget there is, and how long to wait.
+    //
+    // It reports what it FOUND and what it could not do, and words none of it. The two callers read the
+    // mailbox for different reasons and have to say so differently (L11).
+    private func collect(since windowStart: Date, token: String, order: ReadOrder, cap: Int,
+                         deadline: Date, clock: @escaping () -> Date,
+                         fetch: (URLRequest) async throws -> (Data, URLResponse)) async -> Collected {
+        // The ids first. `messages.list` is cheap (up to 500 ids a call) and answers NEWEST FIRST, so
+        // collecting every page gives the whole window in that order and the caller's `order` decides
+        // which end is read.
+        var refs: [ListPage.Ref] = []
+        var pageToken: String?
+        var pages = 0
+        repeat {
+            if clock() > deadline { return .failed(.timedOut) }
+            switch await read(Self.listURL(query: Self.query(since: windowStart), pageToken: pageToken),
+                              token: token, fetch: fetch) {
+            case .failed(let failure): return .failed(failure)
+            case .ok(let data):
+                guard let page = Self.parseList(data) else { return .failed(.unreachable) }
+                refs.append(contentsOf: page.messages)
+                pageToken = page.nextPageToken
+            }
+            pages += 1
+        } while pageToken != nil && pages < Self.maxListPages
+
+        // The ids ran out before the window did. Recorded ahead of the per-message cap because it is the
+        // broader loss: whole pages were never even named, so the caller is told about that one first.
+        var stoppedShort: StopReason? = pageToken != nil ? .tooManyPages : nil
+
+        var candidates: [InboundMessage] = []
+        var examinedThrough: Date?
+        var examined = 0
+        for ref in (order == .oldestFirst ? Array(refs.reversed()) : refs) {
+            guard examined < cap else {
+                if stoppedShort == nil { stoppedShort = .tooManyMessages }
+                break
+            }
+            if clock() > deadline { return .failed(.timedOut) }
+            switch await read(Self.metadataURL(id: ref.id), token: token, fetch: fetch) {
+            case .failed(let failure): return .failed(failure)
+            case .ok(let data):
+                examined += 1
+                guard let message = Self.parseMetadata(data) else { continue }
+                // Gmail's `after:` is a search operator this code does not control, so the window is
+                // enforced here as well. Without it the first read on a new contact could offer a
+                // message that arrived before the pitch was even made.
+                if let seen = examinedThrough { examinedThrough = max(seen, message.sentAt) }
+                else { examinedThrough = message.sentAt }
+                guard message.sentAt >= windowStart else { continue }
+                // Dan's own mail is excluded by the query; this is the belt to that brace, since an
+                // answer offered from his own sent copy would name him as the presenter.
+                guard message.fromAddress != ReplyDetection.email(from: fromEmail) else { continue }
+                candidates.append(message)
+            }
+        }
+        return .ok(candidates: candidates, examinedThrough: examinedThrough, stoppedShort: stoppedShort)
+    }
+
     // MARK: the calls
 
     // copy-inventory:ignore-start  Google API URLs and an HTTP header, not sentences Overture says (#915)
@@ -314,23 +468,25 @@ struct GmailReplySearch {
 
     // Two answers, never an optional. A nil body would put "Gmail refused" and "Gmail returned nothing"
     // back into one value, which is the collapse this whole file exists to avoid.
+    // #3708: the failure half is a CAUSE rather than a sentence, because two callers read the mailbox
+    // for different reasons and each has to say so in its own words (L11).
     enum Read {
         case ok(Data)
-        case failed(String)
+        case failed(ReadFailure)
     }
 
-    // A reason on every failure path, carrying the status when there is one, because "Gmail said no" and
+    // A cause on every failure path, carrying the status when there is one, because "Gmail said no" and
     // "Gmail said 401" send whoever reads it in different directions.
     private func read(_ url: URL?, token: String,
                       fetch: (URLRequest) async throws -> (Data, URLResponse)) async -> Read {
-        guard let url else { return .failed(Self.couldNotReachGmail) }
+        guard let url else { return .failed(.unreachable) }
         var req = URLRequest(url: url)
         req.httpMethod = "GET"
         req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        guard let (data, resp) = try? await fetch(req) else { return .failed(Self.couldNotReachGmail) }
-        guard let http = resp as? HTTPURLResponse else { return .failed(Self.couldNotReachGmail) }
+        guard let (data, resp) = try? await fetch(req) else { return .failed(.unreachable) }
+        guard let http = resp as? HTTPURLResponse else { return .failed(.unreachable) }
         guard (200..<300).contains(http.statusCode) else {
-            return .failed(Self.couldNotRead(status: http.statusCode))
+            return .failed(.refused(status: http.statusCode))
         }
         return .ok(data)
     }
