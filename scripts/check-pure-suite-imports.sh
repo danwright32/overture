@@ -54,14 +54,24 @@ app_module_import_violations() {
   # `-H` so the filename is printed even when exactly one file is left, which is what a caller checking a
   # single path gets. Without it a one-file call prints `12:` and the reformatting below silently drops
   # the name it exists to report.
-  grep -HnE '^[[:space:]]*(@testable[[:space:]]+)?import[[:space:]]+Overture[[:space:]]*$' "${files[@]}" \
-    | while IFS=: read -r file line_number _; do
-        [[ -n "${line_number}" ]] || continue
-        echo "${file}:${line_number}: imports the app as a module, which the pure suite cannot resolve"
-      done
-  # grep exits 1 when nothing matched, which is the HEALTHY case here, and this file runs under
-  # `pipefail`. Without this the function returns 1 on a clean tree and any caller that ever starts
-  # checking its status would read "clean" as "failed".
+  local found status
+  found="$(grep -HnE '^[[:space:]]*(@testable[[:space:]]+)?import[[:space:]]+Overture[[:space:]]*$' \
+    "${files[@]}")"
+  status=$?
+  # THREE OUTCOMES, not two, and the third is the one that matters. grep exits 0 when it matched, 1 when
+  # it did not, and 2 or more when it FAILED (a file it could not read, a bad pattern). Folding 1 and 2
+  # together is the shape L11 names: a check that could not run would report the same clean answer as one
+  # that ran and found nothing, and this guard's whole job is to be believed when it says the pure suite
+  # will compile.
+  if [[ ${status} -gt 1 ]]; then
+    echo "check-pure-suite-imports: UNMEASURED: grep failed (status ${status}) over ${#files[@]} files." >&2
+    return 2
+  fi
+  [[ -n "${found}" ]] || return 0
+  while IFS=: read -r file line_number _; do
+    [[ -n "${line_number}" ]] || continue
+    echo "${file}:${line_number}: imports the app as a module, which the pure suite cannot resolve"
+  done <<< "${found}"
   return 0
 }
 

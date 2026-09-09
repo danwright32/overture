@@ -163,6 +163,28 @@ else
   FAILURES=$((FAILURES + 1))
 fi
 
+# THREE OUTCOMES from the grep, not two, and the third is the one that matters. grep exits 0 when it
+# matched, 1 when it did not, and 2 or more when it FAILED. Folding 1 and 2 together would make a check
+# that could not run report the same clean answer as one that ran and found nothing, and this guard's
+# whole job is to be believed when it says the pure suite will compile (L11, L98).
+grep_fail="${TMP}/failing"
+mkdir -p "${grep_fail}"
+cat > "${grep_fail}/grep" <<'STUB'
+#!/usr/bin/env bash
+exit 2
+STUB
+chmod +x "${grep_fail}/grep"
+failed_output="$(PATH="${grep_fail}:${PATH}" app_module_import_violations "${counted[@]}" 2>&1)"
+failed_status=$?
+if [[ ${failed_status} -eq 2 ]]; then
+  echo "ok - a grep that FAILED is unmeasured, not clean"
+else
+  echo "FAIL - grep failing reported status ${failed_status}, which a clean tree also reports."
+  echo "  A check that could not run must not answer the same as one that ran and found nothing."
+  FAILURES=$((FAILURES + 1))
+fi
+assert_contains "and it says so" "${failed_output}" "UNMEASURED"
+
 # And the real thing: every file actually compiled into the pure suite.
 real=()
 for dir in "${PURE_SUITE_DIRS[@]}"; do
