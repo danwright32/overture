@@ -256,7 +256,12 @@ struct ReachedOutCloseWiringTests {
         // `propertyBody(` and its literal hid the call from a scan that reads raw text.
         let row = try #require(SourceGuardHelper.bodyOfFunction(named: "reachedOutRow", in: source))
         #expect(row.contains("ReachedOutClose.passedHint(hasOpened: p.hasOpened(today: today)"))
-        #expect(row.contains("CloseOutMenu(outcomes: ShowOutcome.menu(wasPitched: p.wasPitched))"))
+        // #3707: the closing paren went with it. The menu grew a second argument (the reply link, which
+        // rides inside it rather than as a fourth control on the row), so pinning the call's exact
+        // rendering would fail the first legitimate refinement of it, which is the trap the comment on
+        // the assertion below already records (L103). What this claims is unchanged: the endings offered
+        // here come from the one vocabulary, for the half that is possible on this show.
+        #expect(row.contains("CloseOutMenu(outcomes: ShowOutcome.menu(wasPitched: p.wasPitched)"))
         // #2417: the menu now hands the ending to `closeOut`, which marks the row leaving BEFORE it
         // writes, so the screen answers on the press. The claim this guard exists to make is unchanged
         // (an ending picked here reaches the one write), so it follows the ending one hop further

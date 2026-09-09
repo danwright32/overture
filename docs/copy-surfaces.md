@@ -132,6 +132,7 @@ A sentence written as a constant is read here at the file that RENDERS it, not o
     BuildFreshnessCopy.update  "Update Overture"
     BuildFreshnessCopy.updateNote  "This opens Terminal and runs the install. Overture quits partway through and comes back on its own."
 `UI/CloseOutMenu.swift`
+    LinkReplyFromAnotherThread.menuLabel  "Link a reply from another thread"
     ReachedOutClose.menuLabel  "Close this out"
 `UI/DaysOffView.swift`
     CancelledShootCopy.restoreHelp  "Keep this night clear for this shoot again."

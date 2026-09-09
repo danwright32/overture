@@ -15,14 +15,28 @@ import SwiftUI
 // than from a vocabulary of this control's own. Passed in rather than looked up here, so the row's own send
 // record decides what Dan is offered and this view cannot quietly disagree with the write path about which
 // endings are possible.
+// #3707: the reply link rides in here rather than on the row. Dan's call, 2026-09-08: most reached-out
+// rows will never need it, so it belongs behind a menu he already opens rather than beside the endings at
+// rest. It is a parameter and not a predicate read here, so this view never decides who may be asked: the
+// row passes nil where the question does not apply, exactly as `outcomes` is passed rather than looked up.
+//
+// The label above is unchanged, Dan's call in the same session, asked with the alternative in front of
+// him: the menu goes on saying "Close this out" and the link sits under a separator beneath the endings.
 struct CloseOutMenu: View {
     var outcomes: [ShowOutcome]
+    var onLinkReply: (() -> Void)?
     var onChoose: (ShowOutcome) -> Void
 
     var body: some View {
         Menu {
             ForEach(outcomes, id: \.self) { outcome in
                 Button(outcome.label) { onChoose(outcome) }
+            }
+            // Under a separator, because it is not an ending: everything above closes the pitch and this
+            // one says it is still alive. Without the rule the eye reads it as a fifth outcome.
+            if let onLinkReply {
+                Divider()
+                Button(LinkReplyFromAnotherThread.menuLabel) { onLinkReply() }
             }
         } label: {
             Label(ReachedOutClose.menuLabel, systemImage: ContactRowControls.Kind.outcome.icon)
