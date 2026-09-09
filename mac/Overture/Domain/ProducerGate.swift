@@ -93,6 +93,9 @@ enum ProducerGate {
         private let venuesByPresenter: [String: Set<String>]
 
         init(_ shows: [Show]) {
+            // #3743: counted here, at the one place the index is built, so "once per pass" is a number a
+            // test can assert rather than a claim in a comment (L27, L63).
+            QueueRenderPass.WorkTally.recordProducerIndex()
             var byPresenter: [String: Set<String>] = [:]
             var venueKeys: Set<String> = []
             for show in shows {
@@ -112,6 +115,11 @@ enum ProducerGate {
         func distinctVenueCount(_ presenterKey: String) -> Int {
             venuesByPresenter[presenterKey]?.count ?? 0
         }
+
+        // #3743: every presenter in the corpus, ALREADY FOLDED, so a caller that needs to walk them does
+        // not fold every show's presenter string a second time. `VenueBrands` is the caller, and it used
+        // to do exactly that.
+        var presenterKeys: [String] { Array(venuesByPresenter.keys) }
     }
 
     // #1702: "this presenter name is really the building's own brand", named once and shared, because a
@@ -378,16 +386,26 @@ enum ProducerGate {
             self.roomNameKeys = roomNameKeys
         }
 
-        init(shows: [Show], overrides: ProducerOverrides = .none) {
+        // #3743: FROM A CORPUS the caller already built, which is the whole point of this initialiser.
+        //
+        // `QueueModel.scope` builds a `ProducerGate.Corpus` for the inherited answer ledger and used to
+        // build a second, equivalent index here from the same shows in the same pass: measured on the
+        // live store, that index alone is 27.2 ms, and it was being paid twice. The corpus already holds
+        // the folded venue index AND the folded presenter keys, so this walks keys rather than folding
+        // every show's presenter string again.
+        //
+        // Equivalent to the `shows:` initialiser below by construction, not by claim: the corpus folds
+        // presenters with the same `ProducerGate.key` and skips the same unreadable ones, so it holds
+        // exactly the keys that loop produced. `VenueBrandsFromACorpusTests` asserts the two agree.
+        init(corpus: Corpus, overrides: ProducerOverrides = .none) {
             // #1963: indexed ONCE for the whole pass, rather than every presenter walking every room. This
             // init was the biggest single slice of the queue's derivation on the live store, and nearly
             // all of it was that walk.
-            let venues = ProducerGate.VenueKeyIndex(ProducerGate.venueKeys(of: shows))
+            let venues = corpus.venues
             let venueKeys = venues.keys
             var keys = Set<String>()
             var rooms = Set<String>()
-            for presenter in Set(shows.compactMap { $0.presenter }) {
-                guard let key = ProducerGate.key(presenter), !keys.contains(key) else { continue }
+            for key in corpus.presenterKeys where !keys.contains(key) {
                 if ProducerGate.isVenueBrand(key, venues: venues, overrides: overrides) {
                     keys.insert(key)
                     // Read off the SAME venue key set the arm itself uses, so this can only ever be true
@@ -397,6 +415,14 @@ enum ProducerGate {
             }
             brandKeys = keys
             roomNameKeys = rooms
+        }
+
+        // The shows-taking form, kept for every caller that has no corpus in hand, which is every test
+        // and every importer. A FORWARDER and never a second implementation: two entry points onto one
+        // derivation is the shape that drifts, and here the drift would decide which presenters the
+        // producer gate admits, which decides which shows Dan is offered (L263).
+        init(shows: [Show], overrides: ProducerOverrides = .none) {
+            self.init(corpus: Corpus(shows), overrides: overrides)
         }
 
         func contains(_ presenter: String?) -> Bool {

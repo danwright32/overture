@@ -122,7 +122,7 @@ enum QueueRenderPass {
                               selfBookingShowsExamined: 0, recipientReaches: 0, queueRows: 0,
                               oracleCards: 0, oracleSendGroupBuilds: 0, oracleDraftLintRuns: 0,
                               oracleRecipientReaches: 0, nightTimeMapBuilds: 0,
-                              stagePlacements: 0)
+                              stagePlacements: 0, producerIndexes: 0)
 
         // #3654 step 4c: the in-app divergence check is a SECOND WRITER of this tally, and that is
         // settled here rather than discovered in a red run.
@@ -180,6 +180,14 @@ enum QueueRenderPass {
         // whole time while the work behind it was tripled (L63).
         var stagePlacements: Int { lock.withLock { counts.stagePlacements } }
 
+        // #3743: how many times the presenter-against-venue index was built from the corpus in one pass.
+        //
+        // Two whole-corpus derivations needed one, and each built its own: the venue-brand table and the
+        // inherited answer ledger. Measured at 27.2 ms each on the live store. Counted rather than timed,
+        // and counted as BUILDS rather than as calls to either of them, because a call count reads the
+        // same whether the callee builds an index or reads one it was handed (L63).
+        var producerIndexes: Int { lock.withLock { counts.producerIndexes } }
+
         // What the divergence check itself spent, held apart from every number above so the pass's own
         // pins mean what their names say.
         var oracleCards: Int { lock.withLock { counts.oracleCards } }
@@ -193,6 +201,10 @@ enum QueueRenderPass {
             guard let t = current else { return }
             let oracle = asOracle
             t.lock.withLock { if oracle { t.counts.oracleCards += 1 } else { t.counts.queueItems += 1 } }
+        }
+        static func recordProducerIndex() {
+            guard let t = current else { return }
+            t.lock.withLock { t.counts.producerIndexes += 1 }
         }
         static func recordStagePlacement() {
             guard let t = current else { return }
