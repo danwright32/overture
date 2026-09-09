@@ -34,6 +34,10 @@ struct FollowUpsView: View {
     // out row uses, and for the same reason: confirming reaches Gmail, so the control has to show three
     // visibly different states (at rest, working, failed) rather than one indefinite spinner.
     @State private var linkingConversationFor: String?
+    // #3707: the reply picker, opened from this row's own menu. Held here rather than handed up to
+    // RootView because the row that raises it is this sheet's, and #2967 already established that this
+    // surface presents its own Gmail work.
+    @State private var manualLinkTarget: ManualLinkTarget?
     @State private var showReconnect = false
     // #976: the section at the top of the scroll, bound so the list holds its place while its rows
     // rebuild. `prospects` is a @Query, so a reply-classify or Prep run re-emits it and rebuilds this
@@ -181,6 +185,14 @@ struct FollowUpsView: View {
                              onCancel: { pending = nil },
                              // #2575: the words in the box are the words that send.
                              onSendEdited: { performNudge(p.id, p.recipientId, body: $0) })
+        }
+        // #3707: the same picker the Reached out row opens, on the row where #3706's false ending is
+        // actually recorded: this is where PostEventPrompt asks how the show went, and a pitch that got a
+        // real answer on another thread is the one about to be filed as neverHeardBack.
+        .sheet(item: $manualLinkTarget) { target in
+            LinkReplyPicker(prospect: target.prospect, recipient: target.recipient) {
+                manualLinkTarget = nil
+            }
         }
         // #2967: confirming reaches Gmail, so this sheet can meet a dead connection the same way the
         // Reached out row can. The SHARED alert (#631), never a second wording, and it carries the
@@ -371,7 +383,14 @@ struct FollowUpsView: View {
                     // last thing Overture sends a silent contact, so what is left after the show is Dan
                     // recording how it ended, from the row he is standing on. The two differ only in the
                     // sentence beside them, which `PostEventPrompt.reason` decides.
-                    CloseOutMenu(outcomes: ShowOutcome.menu(wasPitched: p.wasPitched)) { outcome in
+                    // #3707: the sibling of the Reached out row's menu, covered with it rather than
+                    // left for a later sweep (the class, not the instance). This row is the one that
+                    // asks how the show ended, so it is where saying "a reply arrived elsewhere" is
+                    // worth the most.
+                    CloseOutMenu(outcomes: ShowOutcome.menu(wasPitched: p.wasPitched),
+                                 onLinkReply: LinkReplyFromAnotherThread.isOffered(r)
+                                     ? { manualLinkTarget = ManualLinkTarget(prospect: p, recipient: r) }
+                                     : nil) { outcome in
                         ProspectMutations.recordOutcome(QueueItem(p), outcome, prospects: prospects,
                                                         context: context, feedback: feedback)
                     }

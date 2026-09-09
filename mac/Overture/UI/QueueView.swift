@@ -1525,7 +1525,12 @@ struct QueueView: View {
                 // night it is wanted. The hint above is the other trigger for the same act.
                 // #2395: the endings come from the one vocabulary, and from the half that is possible for
                 // this show, so nobody is offered "Date conflict" on a pitch they already sent.
-                CloseOutMenu(outcomes: ShowOutcome.menu(wasPitched: p.wasPitched)) { outcome in
+                // #3707: and, under a separator inside the same menu, the way to tell Overture that a
+                // reply arrived on a thread it never watched. nil where that cannot have happened, so
+                // the item is absent rather than present and refusing.
+                CloseOutMenu(outcomes: ShowOutcome.menu(wasPitched: p.wasPitched),
+                             onLinkReply: LinkReplyFromAnotherThread.isOffered(r)
+                                 ? { linkReplyFromAnotherThread(identity) } : nil) { outcome in
                     closeOut(identity, as: outcome)
                 }
                 // #2711: the only thing Dan could record about a DM pitch was that it ENDED. A reply that
@@ -1800,6 +1805,24 @@ struct QueueView: View {
                 sendState.finishDeparting(snapshot.id)
             }
         }
+    }
+
+    // #3707: opening the reply picker on a pitch Overture emailed, from the row's own menu.
+    //
+    // Resolved against the LIVE list by identity and never from the model the pass captured, the rule
+    // #3651 and #3690 settled for every control on this row: a button closure outlives the body that made
+    // it, deletes run on the main context with a window open, and a captured model read at press time is
+    // a crash rather than a stale row.
+    //
+    // A refusal is SAID, in the wording that names its own cause, because a control whose failure is
+    // written nowhere leaves pressing it again as the only diagnosis available (L148, L11).
+    private func linkReplyFromAnotherThread(_ row: ReachedOutSnapshot) {
+        let resolved = ReachedOutSnapshot.resolve(row, in: prospects)
+        guard case .found(let p, let r) = resolved else {
+            feedback.acknowledge(resolved.sentence(org: row.org), tone: .warning)
+            return
+        }
+        manualLinkTarget = ManualLinkTarget(prospect: p, recipient: r)
     }
 
     private func performSend(_ naturalKey: String, selecting: [String]? = nil, together: Bool? = nil) {
