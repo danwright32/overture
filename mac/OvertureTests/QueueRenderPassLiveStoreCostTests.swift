@@ -235,9 +235,14 @@ struct QueueRenderPassLiveStoreCostTests {
         let reachedOutKeys = Set(ReachedOutQueue.activeWithDates(from: inQueue.all,
                                                                 now: resolved.now)
             .map(\.prospect.naturalKey))
+        // #3738: the pass decides every show's stages ONCE and reads that table four ways, so the
+        // decomposition is the table plus its projections rather than four independent sweeps. Timed the
+        // other way the four lines each rebuilt the table and their sum exceeded the floor they are
+        // components of, which is the arithmetic saying the split was wrong rather than the floor (L118).
+        let placeTerm = medianSeconds { _ = StageNavigation.placements(in: inQueue.all, context: resolved) }
+        let placement = StageNavigation.placements(in: inQueue.all, context: resolved)
         let stageTerm = medianSeconds {
-            _ = StageNavigation.queueKeys(in: inQueue.all, reachedOutKeys: reachedOutKeys,
-                                          context: resolved)
+            _ = StageNavigation.queueKeys(in: placement, reachedOutKeys: reachedOutKeys)
         }
         let fanOutTerm = medianSeconds { _ = QueueRenderPass.fanOutWarning(inQueue.all) }
 
@@ -250,17 +255,17 @@ struct QueueRenderPassLiveStoreCostTests {
         let agentTerm = medianSeconds {
             _ = AgentInputs.from(prospects: inQueue.all, allProspects: everyProspect, inquiries: [],
                                  context: resolved, gmailConnected: false,
-                                 runInFlight: nil, replyRunAlive: false)
+                                 runInFlight: nil, replyRunAlive: false, placement: placement)
         }
         let focusedTerm = medianSeconds {
-            _ = Set(StageNavigation.focusedKeys(stage: .scout, leadKeys: [], in: inQueue.all,
-                                                context: resolved))
+            _ = Set(StageNavigation.focusedKeys(stage: .scout, leadKeys: [], in: placement))
         }
         let selfBookingTerm = medianSeconds { _ = QueueModel.selfBookingIndex(rowsForTerms) }
         let pendingTerm = medianSeconds { _ = QueueModel.pendingBookingCount(rowsForTerms) }
         let groupTerm = medianSeconds { _ = QueueModel.groupByDate(rowsForTerms) }
 
         let named = geoTerm.median + scopeTerm.median + reachedOutTerm.median + stageTerm.median
+            + placeTerm.median
             + fanOutTerm.median + agentTerm.median + focusedTerm.median + selfBookingTerm.median
             + pendingTerm.median + groupTerm.median
         let unaccounted = max(0, floorSeconds - named)
@@ -334,10 +339,11 @@ struct QueueRenderPassLiveStoreCostTests {
             resolve every show's place \(ms(geoTerm.median)) ms   \(spread(geoTerm))
             QueueModel.scope, no cards \(ms(scopeTerm.median)) ms   \(spread(scopeTerm))
             reached-out sweep          \(ms(reachedOutTerm.median)) ms   \(spread(reachedOutTerm))
-            stage membership           \(ms(stageTerm.median)) ms   \(spread(stageTerm))
+            place every show's stages \(ms(placeTerm.median)) ms   \(spread(placeTerm))
+            masthead membership        \(ms(stageTerm.median)) ms   \(spread(stageTerm))
             possible-match fan-out     \(ms(fanOutTerm.median)) ms   \(spread(fanOutTerm))
-            stage pill counts          \(ms(agentTerm.median)) ms   \(spread(agentTerm))
-            focused stage membership   \(ms(focusedTerm.median)) ms   \(spread(focusedTerm))
+            pill counts, from the table \(ms(agentTerm.median)) ms   \(spread(agentTerm))
+            focused rows, from the table \(ms(focusedTerm.median)) ms   \(spread(focusedTerm))
             self-booking night index   \(ms(selfBookingTerm.median)) ms   \(spread(selfBookingTerm))
             pending booking count      \(ms(pendingTerm.median)) ms   \(spread(pendingTerm))
             group by date              \(ms(groupTerm.median)) ms   \(spread(groupTerm))
