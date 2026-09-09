@@ -141,7 +141,9 @@ struct BulkDismissOneNightChoiceTests {
 @Suite("There is one rule about whether the night offers a choice (#3365)")
 struct BulkDismissChoiceIsOneRuleTests {
     @Test func theViewAsksBulkDismissRatherThanRestatingIt() {
-        let view = SourceGuardHelper.source("Overture/UI/QueueView.swift")
+        // #3658 Phase 8: `NightDismiss` moved to `QueueSheets.swift` with the sheet that presents it. The
+        // rule it must ASK rather than restate is unchanged, and so is what a restatement would look like.
+        let view = SourceGuardHelper.source("Overture/UI/QueueSheets.swift")
         #expect(view.contains("BulkDismiss.offersChoice(reason: reason"))
         // The old shape, restated inline. Its absence is the guard.
         #expect(!view.contains("!runs.isEmpty && !keysOnlyThisNight.isEmpty"))

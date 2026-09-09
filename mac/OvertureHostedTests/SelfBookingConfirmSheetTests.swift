@@ -31,12 +31,19 @@ struct SelfBookingConfirmSheetTests {
     }
 
     @Test func queueViewPresentsTheBrandedSheetNotAStockDialog() {
-        let source = SourceGuardHelper.source("Overture/UI/QueueView.swift")
-        #expect(!source.isEmpty)
-        #expect(source.contains("SelfBookingConfirmSheet("),
+        // #3658 Phase 8: the queue's sheets are presented by `QueueSheetHost`, in its own file, since
+        // their state moved off `QueueView`. Both files are checked for the stock dialog rather than one:
+        // the branded sheet is the host's now, and a `.confirmationDialog` could reappear in either.
+        let sheets = SourceGuardHelper.source("Overture/UI/QueueSheets.swift")
+        let queue = SourceGuardHelper.source("Overture/UI/QueueView.swift")
+        #expect(!sheets.isEmpty)
+        #expect(!queue.isEmpty)
+        #expect(sheets.contains("SelfBookingConfirmSheet("),
                 "The Approve/Re-prep self-booking confirm must route through the branded sheet (#1249).")
-        #expect(!source.contains(".confirmationDialog("),
+        #expect(!sheets.contains(".confirmationDialog("),
                 "The stock system confirmationDialog must be gone once the branded sheet replaces it (#1249).")
+        #expect(!queue.contains(".confirmationDialog("),
+                "A stock system confirmationDialog reappeared on QueueView (#1249).")
     }
 
     @Test func prepSelectionSheetPresentsTheBrandedSheetNotAStockDialog() {
