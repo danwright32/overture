@@ -246,6 +246,35 @@ struct QueueRenderPassLiveStoreCostTests {
         }
         let fanOutTerm = medianSeconds { _ = QueueRenderPass.fanOutWarning(inQueue.all) }
 
+        // INSIDE `QueueModel.scope`, which is the largest term left once #3737 and #3738 landed.
+        //
+        // Same rule as the floor above: a remainder nobody decomposes is where the unexplained cost sits
+        // (L507). These are the pieces reachable from a test; `inheritedAnswers` and the card build are
+        // not, and what they cost shows up as this block's own remainder rather than being guessed at.
+        let engagementTerm = medianSeconds {
+            _ = EngagementLink.group(inQueue.all.map(EngagementLink.Row.init))
+        }
+        let brandsTerm = medianSeconds {
+            _ = ProducerGate.VenueBrands(
+                shows: everyProspect.map { ProducerGate.Show(presenter: $0.presenter, venue: $0.venue) },
+                overrides: .none)
+        }
+        let rowCountsTerm = medianSeconds {
+            _ = QueueModel.organisationRowCounts(everyProspect.map(\.presenter))
+        }
+        // The row loop: one contacts walk and one `QueueScopeRow` per show, which is what `scope` does
+        // for every show whatever the card set says.
+        let rowsTerm = medianSeconds {
+            for p in inQueue.all { _ = QueueScopeRow(p, facts: RecipientFacts.of(p)) }
+        }
+        // And the contacts walk ALONE, so the row's own cost can be told from the cost of reaching its
+        // contacts. They are one line in the loop and two very different things to fix.
+        let contactsTerm = medianSeconds {
+            for p in inQueue.all { _ = RecipientFacts.of(p) }
+        }
+        let scopeNamed = engagementTerm.median + brandsTerm.median + rowCountsTerm.median
+            + rowsTerm.median
+
         // The terms the first decomposition left out, chased because they were the REMAINDER: the five
         // above came to 154 ms of a 421.7 ms floor, and a remainder that large is where the answer is
         // (L507). Timed in the same way, over the same corpus.
@@ -350,6 +379,18 @@ struct QueueRenderPassLiveStoreCostTests {
             ---
             named terms                \(ms(named)) ms
             NOT ACCOUNTED FOR          \(ms(unaccounted)) ms
+
+          INSIDE `QueueModel.scope`, the largest term left. The pieces a test can reach; what
+          `inheritedAnswers` and the rest cost is this block's own remainder rather than a guess.
+            engagement clustering      \(ms(engagementTerm.median)) ms   \(spread(engagementTerm))
+            presenter against venue    \(ms(brandsTerm.median)) ms   \(spread(brandsTerm))
+            organisation row counts    \(ms(rowCountsTerm.median)) ms   \(spread(rowCountsTerm))
+            a row per show             \(ms(rowsTerm.median)) ms   \(spread(rowsTerm))
+              of which the contacts walk
+                                       \(ms(contactsTerm.median)) ms   \(spread(contactsTerm))
+            ---
+            named                      \(ms(scopeNamed)) ms
+            NOT ACCOUNTED FOR          \(ms(max(0, scopeTerm.median - scopeNamed))) ms
         """)
 
         // The only assertions, and both are about the measurement being REAL rather than about the
