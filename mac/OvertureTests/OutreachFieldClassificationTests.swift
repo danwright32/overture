@@ -162,6 +162,13 @@ struct OutreachFieldClassificationTests {
             + "counted",
         "attachDisplacedThreadId": "the thread the pitch went out on before a link replaced it; a "
             + "companion of both conversationEverAttachedAt and gmailThreadId, which are counted",
+        // #3712: the same companion claim, and the strongest of the three. It is assigned FROM
+        // `gmailMessageId`, in the same write, on a row that must already hold one, and `gmailMessageId`
+        // is itself counted and is never cleared by the attach or the detach. So a row carrying this
+        // cannot exist without carrying the counted field it was copied from.
+        "attachDisplacedMessageId": "which outgoing message the row held when a link replaced its "
+            + "thread, so the threading can tell an id on the linked conversation from one on the "
+            + "displaced one; copied from gmailMessageId, which is counted and which it never moves",
         "replyCandidateSearchedAt": "when OVERTURE last read the mailbox for an answer to this pitch, "
             + "which is a record of its own looking and says nothing about anybody having been written to; "
             + "the write that proves this contact was reached is formOutreachRecordedAt, which is counted",

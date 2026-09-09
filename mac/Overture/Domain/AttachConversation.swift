@@ -70,6 +70,16 @@ enum AttachConversationWriteCopy {
     // #2715: what the reply panel says once a conversation was linked by hand, so the row does not read
     // as though Overture emailed them (L46). Its reader is `ReplyPanel.linkedByHandLine`.
     static let linkedByHand = "You linked this conversation. Overture didn't email them."
+
+    // #3712: the same fact on a row where Overture DID email, just not here. On #3706's show the pitch
+    // went to a producer, the producer forwarded it, and a performer wrote back on a thread of their own,
+    // so the sentence above is at best ambiguous ("them" is now the writer) and reads to Dan as though
+    // Overture had lost the record of a pitch he certainly sent. It names the address instead, which is
+    // both the exact truth and the thing worth knowing on the panel where he is reading the reply: this
+    // answer came by way of somebody else.
+    static func linkedByHandAfterEmailing(_ pitched: String) -> String {
+        "You linked this conversation. Overture emailed \(pitched), not this thread."
+    }
 }
 
 @MainActor
@@ -166,6 +176,12 @@ enum AttachConversation {
         if let existing = r.gmailThreadId?.trimmingCharacters(in: .whitespacesAndNewlines),
            !existing.isEmpty, existing != thread {
             r.attachDisplacedThreadId = existing
+            // #3712: and WHICH outgoing message the row was holding at that moment. `gmailMessageId`
+            // itself stays exactly where it is (it is the proof Overture emailed this contact), so this
+            // is not a move: it is the fact that the id now stored is one on the thread being displaced
+            // rather than on the thread being linked, which is what tells the threading, the repair and
+            // the nudge that this conversation is not Overture's to add to.
+            r.attachDisplacedMessageId = r.gmailMessageId
         }
         r.gmailThreadId = thread
         r.conversationAttachedAt = now

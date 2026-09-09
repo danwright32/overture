@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1546 sentences**.
+Every sentence Overture can say to Dan: **1554 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -14,7 +14,7 @@ What is not, and why:
   sentences under tokens nobody reads.
 - **Nothing, if it is written as two literals joined with `+`.** Those ARE joined here, into the
   one sentence the running app says (#3155). What is still only part of what Dan reads is a
-  sentence carrying a VALUE: 556 of the 1546 below hold a
+  sentence carrying a VALUE: 561 of the 1554 below hold a
   `\(...)` where a number or a name goes, so what is printed is the template. They are counted
   here rather than listed again, because the hole is visible in the line itself; what was missing
   was any statement of how much of this document is templates.
@@ -850,6 +850,10 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/InquiryCopy.swift`
 "Email found"
     `Domain/Reachability.swift`
+"Email goes to \(address) from now on, not \(displaced)."
+    `Domain/ProposedConversation.swift`
+"Email goes to \(address) from now on."
+    `Domain/ProposedConversation.swift`
 "Email or link"
     `UI/DraftReviewView.swift`
     `UI/ProspectRowView.swift`
@@ -1133,7 +1137,15 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ProposedConversation.swift`
 "Linked. Overture is watching that conversation now."
     `Domain/ProposedConversation.swift`
-"Linking this saves \(address) on the contact. Overture will watch the conversation, and any email it sends on this show from now on goes to that address."
+"Linking one of these moves the contact from \(displaced) onto whoever wrote it, and every email on this show from now on goes to them. The address it replaces is kept on the contact."
+    `Domain/ProposedConversation.swift`
+"Linking one of these saves the writer's address on the contact. Overture watches that conversation instead of the one it emailed, and every email on this show from now on goes to that address."
+    `Domain/ProposedConversation.swift`
+"Linking one of these saves the writer's address on the contact. Overture will watch that conversation, and every email on this show from now on goes to that address."
+    `Domain/ProposedConversation.swift`
+"Linking this moves the contact from \(displaced) to \(address). Overture will watch the conversation, and every email on this show from now on goes to \(address). The address it replaces is kept on the contact."
+    `Domain/ProposedConversation.swift`
+"Linking this saves \(address) on the contact. Overture will watch the conversation, and every email on this show from now on goes to that address."
     `Domain/ProposedConversation.swift`
 "Links a site that is not danwrightphotography.com"
     `Domain/DraftCheck.swift`
@@ -1545,6 +1557,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/PrepRunArchive.swift`
 "Overture could not update"
     `Domain/UpdateAttempt.swift`
+"Overture couldn't find the message you picked, so it linked nothing. Try picking it again."
+    `Domain/ProposedConversation.swift`
 "Overture couldn't finish starting up"
     `Domain/LaunchMigrations.swift`
 "Overture couldn't get this reply ready to send."
@@ -2326,8 +2340,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/InquiryIntakeSheet.swift`
 "Their reply is here and you've already answered it."
     `Domain/ProposedConversation.swift`
-"Their reply is here and you've already answered it. Email goes to \(address) from now on."
-    `Domain/ProposedConversation.swift`
 "Their shows sit oddly for a company. Correct one from any of its shows if it looks wrong."
     `UI/OrganisationsView.swift`
 "There's no linked conversation on this pitch to unlink."
@@ -2408,6 +2420,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/SourceFixConfirmActions.swift`
 "This pitch already has a conversation linked. Detach that one first if you linked the wrong thread."
     `Domain/AttachConversation.swift`
+"This pitch went to \(displaced). Linking one of these moves the contact onto whoever wrote it. Overture watches that conversation instead of the one it emailed, and every email on this show from now on goes to them. The address it replaces is kept on the contact."
+    `Domain/ProposedConversation.swift`
 "This production also plays \(list)."
     `UI/QueueView+Model.swift`
 "This production also plays at \(venue) on \(dateLabel)."
@@ -2662,6 +2676,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "You linked their reply. It's waiting on you."
     `Domain/ProposedConversation.swift`
 "You linked this conversation. Overture didn't email them."
+    `Domain/AttachConversation.swift`
+"You linked this conversation. Overture emailed \(pitched), not this thread."
     `Domain/AttachConversation.swift`
 "You opened their form \(when). Did you send it?"
     `Domain/FormOutreach.swift`

@@ -152,6 +152,13 @@ enum ReplyPanel {
     // by hand is permanent and is what this line is about.
     static func linkedByHandLine(for recipient: Recipient) -> String? {
         guard recipient.conversationAttachedAt != nil else { return nil }
+        // #3712: on a row whose link REPLACED the thread the pitch went out on, Overture did email this
+        // contact, at the address now kept underneath, so the sentence below would read as a denial of a
+        // pitch Dan certainly sent. Keyed on the displaced ADDRESS rather than the displaced thread,
+        // because it is the address the sentence names and a line may claim only what it can show (L67).
+        if let pitched = recipient.attachDisplacedEmail, !pitched.isEmpty {
+            return AttachConversationWriteCopy.linkedByHandAfterEmailing(pitched)
+        }
         return AttachConversationWriteCopy.linkedByHand
     }
 

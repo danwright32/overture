@@ -83,6 +83,11 @@ enum DetachConversation {
         // and a follow-up has nothing to thread onto.
         r.gmailThreadId = r.attachDisplacedThreadId
         r.attachDisplacedThreadId = nil
+        // #3712: cleared with it, in the same write, because the two are one fact. It says the stored
+        // outgoing message is on the DISPLACED thread, and the line above has just made that thread the
+        // stored one again, so leaving it would go on reporting a conversation Overture did not send on
+        // about the conversation it did.
+        r.attachDisplacedMessageId = nil
         r.attachedThreadSubject = nil
         r.conversationAttachedAt = nil
         // `conversationEverAttachedAt` is deliberately NOT cleared. #3069 removed the undo it was built

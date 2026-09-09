@@ -228,7 +228,8 @@ struct FollowUpsView: View {
                 .font(.system(size: 10)).foregroundStyle(OVColor.inkSoft)
             // What confirming DOES, beside the control that does it, so what Dan approves is exactly
             // what happens including who it reaches (L64).
-            Text(ProposedConversationCopy.confirmDetail(address: candidate.fromAddress))
+            Text(ProposedConversationCopy.confirmDetail(address: candidate.fromAddress,
+                                                        replacing: d.recipient.email))
                 .font(.system(size: 10)).foregroundStyle(OVColor.inkSoft)
                 .fixedSize(horizontal: false, vertical: true)
             HStack(spacing: OVSpacing.sm) {
