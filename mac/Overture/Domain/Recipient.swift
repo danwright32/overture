@@ -330,6 +330,30 @@ final class Recipient {
     // it put there. An address that was already on the contact was never the attach's to remove, and nil
     // afterwards is indistinguishable from nil before without recording the fact at the time.
     var attachWroteAddress: Bool = false
+    // #3709: the address the pitch actually went to, when a link MOVED the contact onto somebody else.
+    //
+    // Dan's call, 2026-09-08, asked directly, because overwriting a populated address is new behaviour
+    // and doing it naively would leave the row carrying the sent message and the sent date under the
+    // writer's name: the show would read as "pitched the performer, performer replied" when the truth is
+    // "pitched the producer, producer forwarded, performer replied". So the row talks to the writer and
+    // underneath it still records where the pitch went, which is what milestone 37's org ledger and #16's
+    // funnel need in order to learn which contacts get answers.
+    //
+    // It is the FLAG as well as the value, deliberately, rather than a `attachReplacedAddress` boolean
+    // beside it: non-nil means a live replacing attach displaced this address, because the detach clears
+    // it in the same write that puts the address back. Two fields answering one question is how they come
+    // to disagree (L83). It is mutually exclusive with `attachWroteAddress` by construction: one arm
+    // fills an empty address, the other replaces a populated one.
+    //
+    // Read by `DetachConversation` (#3710) and by `PrepImporter.apply`, which must not put the pitched
+    // address back over a link Dan made by hand.
+    var attachDisplacedEmail: String?
+    // #3709: the thread the PITCH went out on, when a link replaced it with the one they answered on.
+    //
+    // Without it a detach would null `gmailThreadId` and an emailed pitch would come back holding no
+    // conversation at all, so Overture would stop watching the thread it sent on and there would be
+    // nothing for a follow-up to thread onto. Read by `DetachConversation` (#3710).
+    var attachDisplacedThreadId: String?
     // #2719: that a conversation has EVER been attached here, which the detach deliberately does not
     // clear.
     //

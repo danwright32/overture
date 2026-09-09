@@ -1619,7 +1619,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/OmniFocusSync.swift`
 "Overture needs OmniFocus permission"
     `Integration/OmniFocusUserNotifier.swift`
-"Overture only links a conversation to a pitch you sent through a form or a DM. It already watches the ones it emailed itself."
+"Overture only links a conversation to a pitch that has actually gone out. Nothing has been sent to this contact yet."
     `Domain/AttachConversation.swift`
 "Overture opened with \(live) \(live == 1 ? "show" : "shows"). Its most recent backup holds \(previous). Nothing has been changed. If that drop is a surprise, quit Overture and restore a backup before working: every launch takes another backup, and only the last ten are kept."
     `App/StoreShrinkCheck.swift`

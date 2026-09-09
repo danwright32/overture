@@ -152,6 +152,16 @@ struct OutreachFieldClassificationTests {
             + "dismissedReplyId above and not outreach for the same reason it is not",
         "attachWroteAddress": "whether the ATTACH is what put the current address here, so a detach takes "
             + "back only what it wrote; provenance of a field, not evidence anybody was contacted",
+        // #3709: both are COMPANIONS, and the companion claim is checked rather than assumed. Each is
+        // written only by `AttachConversation.attach`, which sets `conversationEverAttachedAt` in the same
+        // write and which the detach deliberately never clears, so a row carrying either necessarily
+        // carries a field this rule already counts. `attachDisplacedThreadId` is doubly covered: it can
+        // only be set on a row that already held a `gmailThreadId`, which is counted too.
+        "attachDisplacedEmail": "the address the pitch went to before a link moved the row onto whoever "
+            + "wrote back; history of an ADDRESS, and a companion of conversationEverAttachedAt, which is "
+            + "counted",
+        "attachDisplacedThreadId": "the thread the pitch went out on before a link replaced it; a "
+            + "companion of both conversationEverAttachedAt and gmailThreadId, which are counted",
         "replyCandidateSearchedAt": "when OVERTURE last read the mailbox for an answer to this pitch, "
             + "which is a record of its own looking and says nothing about anybody having been written to; "
             + "the write that proves this contact was reached is formOutreachRecordedAt, which is counted",
