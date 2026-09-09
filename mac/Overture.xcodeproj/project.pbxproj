@@ -1339,6 +1339,7 @@
 		A5D3F8893928319CA9F08C85 /* StoreLock.swift in Sources */ = {isa = PBXBuildFile; fileRef = 780FA66ADB1FB483CA9CAEAB /* StoreLock.swift */; };
 		A5DE8D4824F221F650AD50E5 /* CancelNamesWhatItStopsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A2E92FEB39497D24B51D6CD /* CancelNamesWhatItStopsTests.swift */; };
 		A5E32C54B2F8E8E728D85C34 /* BilledHierarchy.swift in Sources */ = {isa = PBXBuildFile; fileRef = FED9D429F9C7FFB4B2C92BEF /* BilledHierarchy.swift */; };
+		A61B6201A58513ED92A86DBB /* GmailReplySearchOnDemandTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5430A53914661B582FEC4CF7 /* GmailReplySearchOnDemandTests.swift */; };
 		A668E482DF21663353CA6A48 /* ForbiddenTextScanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 43DADEF78EBD94C643560A91 /* ForbiddenTextScanner.swift */; };
 		A6704E92D5B28FDEF903162A /* ScoutExtractWatchGuardTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1337617F33D2466B2BBE3A9D /* ScoutExtractWatchGuardTests.swift */; };
 		A68770BD714DB89DD19A663C /* StoreLaunchOutcome.swift in Sources */ = {isa = PBXBuildFile; fileRef = B78AD6E161E510665CE7F4A8 /* StoreLaunchOutcome.swift */; };
@@ -2627,6 +2628,7 @@
 		53E37EE0B14FAF18A01CD95B /* RenderPathGetsCardsFromTheStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RenderPathGetsCardsFromTheStoreTests.swift; sourceTree = "<group>"; };
 		53E44875CE3B304B81DAA57A /* VoiceGuidanceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceGuidanceView.swift; sourceTree = "<group>"; };
 		53FEBE52D4DA20F9DF590FD2 /* FileTimestampTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileTimestampTests.swift; sourceTree = "<group>"; };
+		5430A53914661B582FEC4CF7 /* GmailReplySearchOnDemandTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GmailReplySearchOnDemandTests.swift; sourceTree = "<group>"; };
 		5440B824ED54858222A28E76 /* PresenterLineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PresenterLineTests.swift; sourceTree = "<group>"; };
 		544258D79D119C1CED8DC7CE /* ScoutExtractConfirmSuppressionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScoutExtractConfirmSuppressionTests.swift; sourceTree = "<group>"; };
 		5454EA8146D35AC295D998B0 /* EveryAddressIsVisibleTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EveryAddressIsVisibleTests.swift; sourceTree = "<group>"; };
@@ -4169,6 +4171,7 @@
 				A71F7ED9A518101FD7DD35B3 /* GmailNetworkingTests.swift */,
 				4FD23D3AE7DCC9C84BAF2D0E /* GmailReplyCheckerSaveGuardTests.swift */,
 				C3ADC0E8F2B910DDEFF34E45 /* GmailReplyCheckerTests.swift */,
+				5430A53914661B582FEC4CF7 /* GmailReplySearchOnDemandTests.swift */,
 				564EFD50D00188461CDCCE5B /* GmailReplySearchTests.swift */,
 				25CEA888631E3F3292A7A5FB /* GmailSenderTests.swift */,
 				B01583CAAE029ACD32FA2053 /* GmailSignatureDarkBackgroundTests.swift */,
@@ -6598,6 +6601,7 @@
 				D080F2D9F46A6129E6CCB26E /* GmailReplyCheckerSaveGuardTests.swift in Sources */,
 				5D645B6D0343266BEFF839BC /* GmailReplyCheckerTests.swift in Sources */,
 				60CA10AB4F963BD2D1215A40 /* GmailReplySearch.swift in Sources */,
+				A61B6201A58513ED92A86DBB /* GmailReplySearchOnDemandTests.swift in Sources */,
 				C2D5B5A17D31EA3CC7694B8F /* GmailReplySearchTests.swift in Sources */,
 				2894EB0344FEC7E3DFED2CDC /* GmailSender.swift in Sources */,
 				04602E0E963B445CB6DCC62D /* GmailSenderTests.swift in Sources */,

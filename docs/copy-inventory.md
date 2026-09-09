@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1541 sentences**.
+Every sentence Overture can say to Dan: **1546 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -14,7 +14,7 @@ What is not, and why:
   sentences under tokens nobody reads.
 - **Nothing, if it is written as two literals joined with `+`.** Those ARE joined here, into the
   one sentence the running app says (#3155). What is still only part of what Dan reads is a
-  sentence carrying a VALUE: 554 of the 1541 below hold a
+  sentence carrying a VALUE: 556 of the 1546 below hold a
   `\(...)` where a number or a name goes, so what is printed is the template. They are counted
   here rather than listed again, because the hole is visible in the line itself; what was missing
   was any statement of how much of this document is templates.
@@ -87,8 +87,7 @@ What is not, and why:
 - `Integration/GmailMessage.swift`: RFC822 headers: a mail server reads these, not Dan (#915)
 - `Integration/GmailReplyChecker.swift`: the HTTP Authorization header Google reads, not a sentence
 - `Integration/GmailReplySearch.swift`: a Gmail search query, not a sentence Overture says (#915)
-- `Integration/GmailReplySearch.swift`: developer diagnostic log, not the app's own voice (#915)
-- `Integration/GmailReplySearch.swift`: developer diagnostic log, not the app's own voice (#915)
+- `Integration/GmailReplySearch.swift`: developer diagnostic logs, not the app's own voice (#915)
 - `Integration/GmailReplySearch.swift`: developer diagnostic log, not the app's own voice (#915)
 - `Integration/GmailReplySearch.swift`: Google API URLs and an HTTP header, not sentences Overture says (#915)
 - `Integration/GmailSender.swift`: developer diagnostic log, not the app's own voice (#915)
@@ -1554,7 +1553,11 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/StoreRelocation.swift`
 "Overture couldn't reach Gmail while looking for replies to the pitches you sent through a form or a DM."
     `Integration/GmailReplySearch.swift`
+"Overture couldn't reach Gmail while looking for their reply."
+    `Integration/GmailReplySearch.swift`
 "Overture couldn't read Gmail while looking for replies to the pitches you sent through a form or a DM. Gmail refused the request (HTTP \(status))."
+    `Integration/GmailReplySearch.swift`
+"Overture couldn't read Gmail while looking for their reply. Gmail refused the request (HTTP \(status))."
     `Integration/GmailReplySearch.swift`
 "Overture couldn't read \(failures.count) of the files it works from, so whatever they held has not been used."
     `Domain/AppNotice.swift`
@@ -1584,8 +1587,12 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/InquiryCopy.swift`
 "Overture gave up waiting for Gmail while looking for replies to the pitches you sent through a form or a DM."
     `Integration/GmailReplySearch.swift`
+"Overture gave up waiting for Gmail while looking for their reply."
+    `Integration/GmailReplySearch.swift`
 "Overture has no Downbeat export, so it doesn't know which nights you're already shooting."
     `Domain/AppNotice.swift`
+"Overture has no record of when this pitch went out, so it doesn't know how far back to read your inbox. Nothing was read."
+    `Domain/ProposedConversation.swift`
 "Overture has not checked for replies or bookings in \(PrepStatus.duration(seconds: seconds))"
     `Domain/WatchGap.swift`
 "Overture has not yet checked whether the cards it builds for your queue are right, so nothing here can say whether they are."
@@ -1618,6 +1625,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/StoreShrinkCheck.swift`
 "Overture put this show back the way it was, but it can't reach outside the app: "
     `Domain/DetachConversation.swift`
+"Overture read the \(examined) most recent messages since this pitch went out and stopped there. If their reply is older than those, it isn't in this list."
+    `Domain/ProposedConversation.swift`
 "Overture read your inbox and found nothing from around this pitch that could be their reply."
     `Domain/ProposedConversation.swift`
 "Overture recorded those before it kept their dates, so it can't say which have already happened. What it can say is that a new shoot came through as recently as \(arrived), and the export now holds none at all. Re-export it from Downbeat, then re-read it here."
