@@ -56,6 +56,12 @@ struct QueueRenderPassLiveStoreCostTests {
         FileManager.default.fileExists(atPath: liveStoreURL.path)
     }
 
+    // #3660 Phase 10: how many rows a frame draws, as a STATED figure rather than a guess at the size
+    // of Dan's window. Twelve is above what a laptop window shows and below what a tall one does, so the
+    // narrowed reading is a conservative one: a real viewport is more likely to be smaller than this than
+    // larger, which makes the measured saving a floor rather than a best case.
+    private static let viewportRows = 12
+
     private let sandboxes = TemporarySandboxes()
 
     // Through the ONE shared clone (#1672). Copying the .store, its -wal and its -shm one file at a time
@@ -82,6 +88,28 @@ struct QueueRenderPassLiveStoreCostTests {
         let start = Date()
         work()
         return Date().timeIntervalSince(start)
+    }
+
+    // #3660 Phase 10: how many samples every reading below is the MEDIAN of.
+    //
+    // A single reading is not a yardstick (L656). Measured 2026-09-09 while adding the narrowed arm: the
+    // pass with no card and the same pass with twelve came out 442 ms and 435 ms, in that order, which
+    // cannot be true (the second contains the first) and is simply what a difference smaller than the
+    // run-to-run noise looks like on a shared Mac (L224). Both those numbers were real; neither was a
+    // yardstick. The median of several is.
+    private static let samples = 5
+
+    /// The MEDIAN of `samples` runs, not the mean and not one reading. The median because these
+    /// distributions have a long right tail (another process waking is a slow sample, and nothing makes a
+    /// sample artificially fast), so a mean tracks whatever else this Mac happened to do.
+    ///
+    /// It also returns the spread, because a median quoted without one is a number nobody can tell a
+    /// stable reading from a noisy one by (L172, L395).
+    private func medianSeconds(_ work: () -> Void) -> (median: Double, low: Double, high: Double) {
+        var runs: [Double] = []
+        for _ in 0..<Self.samples { runs.append(seconds(work)) }
+        runs.sort()
+        return (runs[runs.count / 2], runs.first ?? 0, runs.last ?? 0)
     }
 
     @Test(.enabled(if: liveStoreExists, "no live store on this machine"))
@@ -117,26 +145,93 @@ struct QueueRenderPassLiveStoreCostTests {
         }
 
         // 3. The whole pass, so the remainder is everything else QueueRenderPass.make does.
-        let work = QueueRenderPass.WorkTally.measure {
-            _ = QueueRenderPass.make(QueueRenderPass.Inputs(
+        func makePass(cardKeys: Set<String>?) -> QueueView.RenderData {
+            QueueRenderPass.make(QueueRenderPass.Inputs(
                 allProspects: QueueRenderPass.Corpus(prospects),
                 inquiries: [], orgAnswers: answers, sources: sources,
                 context: .at(QueueModel.easternToday(), now: Date()),
-                focusedStage: .scout, focusedKeys: nil))
+                focusedStage: .scout, focusedKeys: nil,
+                requestedCardKeys: cardKeys))
         }
-        let passSeconds = seconds {
-            _ = QueueRenderPass.make(QueueRenderPass.Inputs(
-                allProspects: QueueRenderPass.Corpus(prospects),
-                inquiries: [], orgAnswers: answers, sources: sources,
-                context: .at(QueueModel.easternToday(), now: Date()),
-                focusedStage: .scout, focusedKeys: nil))
+        let work = QueueRenderPass.WorkTally.measure { _ = makePass(cardKeys: nil) }
+        let pass = medianSeconds { _ = makePass(cardKeys: nil) }
+        let passSeconds = pass.median
+
+        // 4. #3660 Phase 10: THE PASS THE APP ACTUALLY RUNS, which is the one nothing here measured.
+        //
+        // THIS IS THE CORRECTION, and it is worth reading before the numbers. Every timing in this file
+        // called `QueueModel.items(from:)` and left `requestedCardKeys` at nil, which means a card for
+        // EVERY show in scope. Since #3654 the app asks for the keys the last frame drew, so the arm this
+        // instrument was timing has not been the shipping arm since that merged, while the readout on
+        // every push went on saying `Queue rebuild cost` (L400, L63: a check's NAME is not a statement of
+        // its coverage, and an instrument aimed at the wrong arm keeps reporting a number nobody can act
+        // on).
+        //
+        // The viewport is a STATED size rather than a guess at Dan's window, and the per-card marginal
+        // cost is printed beside it so the reading generalises to a taller one instead of being true only
+        // of this number (L172, L316).
+        // 5. #3660 Phase 10: the PREAMBLE alone, with no card built at all.
+        //
+        // The fourth arm, and the one that changes what to do next. `QueueModel.scope` derives the
+        // whole-corpus tables (the engagement clustering, the presenter-against-venue walk, the
+        // organisation row counts, the inherited answer ledger) BEFORE it builds a single card, and every
+        // one of them is over the whole store whatever the card set says. Narrowing the cards provably
+        // cannot touch them, which is what makes them the term to read: without this arm the difference
+        // between the two arms above reads as "the pass got cheaper" with no way to see how much of it
+        // never could (L507, a remainder nobody records is where the unexplained cost accumulates).
+        _ = QueueModel.scope(from: prospects, answers: answers, corpus: prospects, sources: sources,
+                             cardKeys: [])
+        let preamble = medianSeconds {
+            _ = QueueModel.scope(from: prospects, answers: answers, corpus: prospects, sources: sources,
+                                 cardKeys: [])
         }
+        let preambleSeconds = preamble.median
+
+        let focused = makePass(cardKeys: nil).focusedRows
+        let viewport = Set(focused.prefix(Self.viewportRows).map(\.id))
+        _ = makePass(cardKeys: viewport)                    // warm, as above
+        let narrowedWork = QueueRenderPass.WorkTally.measure { _ = makePass(cardKeys: viewport) }
+        let narrowed = medianSeconds { _ = makePass(cardKeys: viewport) }
+        let narrowedSeconds = narrowed.median
+
+        // 6. THE FLOOR: the same pass with NO card at all.
+        //
+        // The number that decides what is worth building next, and the one no arm above can give. Every
+        // arm that builds cards mixes two costs, so "the pass got cheaper" says nothing about how much of
+        // it COULD get cheaper. This is the part narrowing provably cannot reach: the whole-corpus tables,
+        // a row for every show, the stage navigation, the reached-out sweep, the geography and the date
+        // grouping. Measured over the pass's OWN corpus rather than over a differently scoped one, so it
+        // is a component of the readings above rather than a number beside them (L118).
+        _ = makePass(cardKeys: [])
+        let floor = medianSeconds { _ = makePass(cardKeys: []) }
+        let floorSeconds = floor.median
 
         let recipients = (try? ctx.fetch(FetchDescriptor<Recipient>()))?.count ?? 0
         let ms = { (s: Double) in String(format: "%.1f", s * 1000) }
         let rest = max(0, passSeconds - itemsSeconds)
+        // The marginal card, derived from the two arms rather than assumed: the difference in time over
+        // the difference in cards built. Stated so a taller window can be priced without re-measuring,
+        // and so a reader can tell a pass that got cheaper from one that merely built fewer cards.
+        let spread = { (r: (median: Double, low: Double, high: Double)) in
+            "(\(Self.samples) runs, \(ms(r.low)) to \(ms(r.high)))"
+        }
+        let floorShare = narrowedSeconds > 0
+            ? String(format: "%.0f%%", floorSeconds / narrowedSeconds * 100)
+            : "not measurable"
+        let extraCards = work.queueItems - narrowedWork.queueItems
+        let perCard = extraCards > 0
+            ? String(format: "%.3f", (passSeconds - narrowedSeconds) * 1000 / Double(extraCards))
+            : "not measurable, both arms built the same number of cards"
 
         // Counts and durations only. Nothing here can name a show, a venue, a person or a URL.
+        //
+        // #3660 Phase 10: `the pass minus that` is a DIFFERENCE and not a component, and the label says
+        // so now. `itemsSeconds` times a standalone `QueueModel.items` over the whole store, while the
+        // pass derives its own scope over the non-dismissed subset, so subtracting one from the other
+        // mixes two corpora. It was labelled `everything else` and read as the pass's non-card half,
+        // which the floor arm below shows it is not: the pass with no card at all is 99% of the narrowed
+        // pass, not 23% of it. Kept rather than deleted, because it is the number every earlier reading
+        // of this instrument was quoted from and removing it would leave those unexplainable (L277).
         //
         // GROUPED so the arithmetic cannot be misread. The first version listed the fetch beside the
         // pass's own two halves above a line reading `whole pass`, and those three do not add up to it:
@@ -151,20 +246,63 @@ struct QueueRenderPassLiveStoreCostTests {
 
           BEFORE the pass, paid once per store change, twice where two queries read the table:
             fetch and materialise     \(ms(fetchSeconds)) ms
-          THE PASS itself, which these two divide between them:
-            build the cards           \(ms(itemsSeconds)) ms
-            everything else           \(ms(rest)) ms
-            the pass                  \(ms(passSeconds)) ms
+          THE PASS itself, EVERY card built, which is what this instrument measured before #3660:
+            a whole-store card build  \(ms(itemsSeconds)) ms
+            the pass minus that       \(ms(rest)) ms
+            the pass                  \(ms(passSeconds)) ms   \(spread(pass))
           END TO END, the fetch plus the pass:
             total                     \(ms(fetchSeconds + passSeconds)) ms
 
           work units in the pass: \(work.queueItems) cards, \(work.sendGroupBuilds) send groups, \(work.draftLintRuns) draft lint runs
+
+          NARROWED to what a frame draws (#3654), which is the arm the app actually runs:
+            viewport                  \(viewport.count) rows of \(focused.count) in the focused stage
+            the pass                  \(ms(narrowedSeconds)) ms   \(spread(narrowed))
+            END TO END with the fetch \(ms(fetchSeconds + narrowedSeconds)) ms
+            work units                \(narrowedWork.queueItems) cards, \(narrowedWork.sendGroupBuilds) send groups, \(narrowedWork.draftLintRuns) draft lint runs
+            marginal cost per card    \(perCard) ms
+
+          THE FLOOR, the same pass with NO card built, which narrowing cannot reach:
+            the pass                  \(ms(floorSeconds)) ms   \(spread(floor))
+            share of the narrowed arm \(floorShare)
+            of which whole-corpus tables and a row per show, measured on its own:
+                                      \(ms(preambleSeconds)) ms   \(spread(preamble))
         """)
 
         // The only assertions, and both are about the measurement being REAL rather than about the
         // numbers, which move with whatever else this Mac is running (L224).
         #expect(!prospects.isEmpty, "the clone held no prospects, so this timed an empty store")
         #expect(passSeconds > 0, "a whole pass took no measurable time, so it never ran")
+        #expect(narrowedSeconds > 0, "the narrowed pass took no measurable time, so it never ran")
+        // The two arms really are different arms. Without this, a narrowing that silently stopped
+        // narrowing would print two numbers that agree and read as a pass that got no cheaper, which is
+        // indistinguishable from an instrument measuring the same thing twice (L70, L98).
+        #expect(narrowedWork.queueItems < work.queueItems,
+                Comment(rawValue: "the narrowed arm built \(narrowedWork.queueItems) cards and the full "
+                        + "arm \(work.queueItems). If those are equal the narrowing is not in force and "
+                        + "both lines above describe one arm."))
+        #expect(preambleSeconds > 0, "the preamble took no measurable time, so it never ran")
+        #expect(floorSeconds > 0, "the floor took no measurable time, so it never ran")
+        // The arms are ORDERED, which is the one thing about them that cannot be a matter of what else
+        // the machine is running: more cards cannot be cheaper. A reading that breaks this is the
+        // instrument misfiring rather than a finding about the code (L224).
+        // ORDERED, within the noise this run actually measured rather than exactly. More cards cannot be
+        // cheaper, but two arms differing by less than the spread of their own samples are not ordered by
+        // anything, and demanding they be would make this fire on the ordinary case (L224, L172). The
+        // tolerance is DERIVED from the widest spread in this run, so it tracks how noisy the machine is
+        // rather than being a number somebody picked.
+        let noise = max(pass.high - pass.low, max(narrowed.high - narrowed.low, floor.high - floor.low))
+        #expect(preambleSeconds <= floorSeconds + noise,
+                Comment(rawValue: "scope alone (\(ms(preambleSeconds)) ms) came out dearer than the whole "
+                        + "pass with no cards (\(ms(floorSeconds)) ms) by more than this run's own noise "
+                        + "(\(ms(noise)) ms), which cannot be true: the second contains the first"))
+        #expect(floorSeconds <= narrowedSeconds + noise,
+                Comment(rawValue: "the no-card pass (\(ms(floorSeconds)) ms) came out dearer than the same "
+                        + "pass with \(viewport.count) cards (\(ms(narrowedSeconds)) ms) by more than this "
+                        + "run's own noise (\(ms(noise)) ms)"))
+        #expect(narrowedWork.queueItems <= viewport.count,
+                Comment(rawValue: "the narrowed arm built \(narrowedWork.queueItems) cards for a viewport "
+                        + "of \(viewport.count), so it built cards nothing asked for"))
     }
 
     // #3507: does the SECOND prospect query cost anything, or does SwiftData share the row cache?
