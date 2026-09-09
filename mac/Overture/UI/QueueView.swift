@@ -294,6 +294,9 @@ struct QueueView: View {
         // and `visibleRows` and `visible` likewise, which `QueueRenderPassCostTests` pins.
         let rows: [QueueScopeRow]
         let visibleRows: [QueueScopeRow]
+        // #3654 step 4c: what the pass's own check of one sampled card found. Reported here rather than
+        // written by the pass, which may not reach the filesystem.
+        let cardCheck: QueueModel.Scope.CardCheck
         // The stage's rows, already filtered to the focused stage and with the just-sent rows folded back
         // in, and already grouped by date. Grouping ~500 Scout rows per scroll frame was pure waste.
         let focusedRows: [QueueScopeRow]
@@ -315,6 +318,32 @@ struct QueueView: View {
     // pass, is what makes the ordering contract true: keys registered during frame N feed the map for
     // frame N+1.
     @State private var cardKeys = QueueModel.CardKeyRegistry()
+    // #3654 step 4c: this process, and a number counting up inside it. A record's identity is the pair,
+    // because a sequence restarts at 1 in every launch and is not an identity on its own (L186, and
+    // `FreezeLog.reportedIdsKey`, which records what keying on the bare number cost).
+    @State private var cardCheckSession = UUID().uuidString
+    @State private var cardCheckSequence = 0
+
+    // #3654 step 4c: the WRITE side of the in-app check, which the pass deliberately does not do.
+    //
+    // Two things land here and they are different facts. A divergence is appended to its own file, once,
+    // so a launch can say it. And a STAMP records that the check ran at all, throttled to once a minute,
+    // because without it an empty file means both "every card matched" and "nothing ever looked", and a
+    // monitor that has never once passed is not measuring anything (L557, L98).
+    private func recordCardCheck(_ check: QueueModel.Scope.CardCheck, now: Date) {
+        guard check.ran else { return }
+        let defaults = UserDefaults.standard
+        let last = defaults.object(forKey: CardDivergenceLog.lastRanKey) as? Date
+        if CardDivergenceReport.shouldStamp(last: last, now: now) {
+            defaults.set(now, forKey: CardDivergenceLog.lastRanKey)
+        }
+        guard let divergence = check.divergence else { return }
+        cardCheckSequence += 1
+        let record = CardDivergenceRecord(session: cardCheckSession, sequence: cardCheckSequence,
+                                          at: now, fields: divergence.fields,
+                                          cardsBuilt: divergence.cardsBuilt, stage: focusedStage?.rawValue)
+        CardDivergenceLog.append(record, to: CardDivergenceLog.url(in: StoreLocation.handoffDirectory))
+    }
 
     private func makeRenderData() -> RenderData {
         let now = Date()
@@ -379,6 +408,8 @@ struct QueueView: View {
 
     var body: some View {
         let data = makeRenderData()
+        // #3654 step 4c: recorded here, where the pass's answer arrives, rather than inside the pass.
+        recordCardCheck(data.cardCheck, now: Date())
         return mainContent(data)
             // #3474: the Dock tile and the menu bar glyph read a PUBLISHED number, because neither can
             // hold a SwiftData query. Until now the only writer was the 30 minute reconcile, so both

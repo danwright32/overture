@@ -119,7 +119,21 @@ enum QueueRenderPass {
 
         private let lock = NSLock()
         private var counts = (queueItems: 0, sendGroupBuilds: 0, draftLintRuns: 0,
-                              selfBookingShowsExamined: 0, recipientReaches: 0, queueRows: 0)
+                              selfBookingShowsExamined: 0, recipientReaches: 0, queueRows: 0,
+                              oracleCards: 0, oracleSendGroupBuilds: 0, oracleDraftLintRuns: 0,
+                              oracleRecipientReaches: 0)
+
+        // #3654 step 4c: the in-app divergence check is a SECOND WRITER of this tally, and that is
+        // settled here rather than discovered in a red run.
+        //
+        // It rebuilds one sampled card per pass through the shipping card builder, so without this every
+        // measured pass would count that card, its send groups, its lint runs and its contacts read, and
+        // `detailCards == requestedCardKeys.count` could not hold (L375). The exclusion is STATED and
+        // SCOPED rather than implicit (L324): it covers exactly the work done inside
+        // `QueueModel.checkOneCardAgainstAFreshBuild` and nothing else, and
+        // `TheOracleIsCountedApartTests` asserts a measured pass reports the same numbers with the check
+        // on and off.
+        @TaskLocal static var asOracle = false
 
         var queueItems: Int { lock.withLock { counts.queueItems } }
         // #3653 step 3a: how many cheap SCOPE ROWS the pass built, which is a different quantity from
@@ -150,11 +164,19 @@ enum QueueRenderPass {
         // to hold.
         var recipientReaches: Int { lock.withLock { counts.recipientReaches } }
 
+        // What the divergence check itself spent, held apart from every number above so the pass's own
+        // pins mean what their names say.
+        var oracleCards: Int { lock.withLock { counts.oracleCards } }
+        var oracleSendGroupBuilds: Int { lock.withLock { counts.oracleSendGroupBuilds } }
+        var oracleDraftLintRuns: Int { lock.withLock { counts.oracleDraftLintRuns } }
+        var oracleRecipientReaches: Int { lock.withLock { counts.oracleRecipientReaches } }
+
         // Each recorded through the TYPE rather than on an instance, so a call site does not need to know
         // whether anybody is listening, and reads one task local before doing anything else.
         static func recordQueueItem() {
             guard let t = current else { return }
-            t.lock.withLock { t.counts.queueItems += 1 }
+            let oracle = asOracle
+            t.lock.withLock { if oracle { t.counts.oracleCards += 1 } else { t.counts.queueItems += 1 } }
         }
         static func recordQueueRow() {
             guard let t = current else { return }
@@ -162,15 +184,18 @@ enum QueueRenderPass {
         }
         static func recordSendGroupBuild() {
             guard let t = current else { return }
-            t.lock.withLock { t.counts.sendGroupBuilds += 1 }
+            let oracle = asOracle
+            t.lock.withLock { if oracle { t.counts.oracleSendGroupBuilds += 1 } else { t.counts.sendGroupBuilds += 1 } }
         }
         static func recordDraftLintRun() {
             guard let t = current else { return }
-            t.lock.withLock { t.counts.draftLintRuns += 1 }
+            let oracle = asOracle
+            t.lock.withLock { if oracle { t.counts.oracleDraftLintRuns += 1 } else { t.counts.draftLintRuns += 1 } }
         }
         static func recordRecipientReach() {
             guard let t = current else { return }
-            t.lock.withLock { t.counts.recipientReaches += 1 }
+            let oracle = asOracle
+            t.lock.withLock { if oracle { t.counts.oracleRecipientReaches += 1 } else { t.counts.recipientReaches += 1 } }
         }
         static func recordSelfBookingShowsExamined(_ n: Int) {
             guard n > 0, let t = current else { return }
@@ -305,6 +330,10 @@ enum QueueRenderPass {
             pendingBookings: QueueModel.pendingBookingCount(rows),
             fanOutLine: fanOutWarning(inQueue.all),
             rows: rows, visibleRows: visibleRows,
+            // #3654 step 4c: what the in-app check found, REPORTED and never written here. This pass may
+            // not touch the filesystem (`QueueRenderPassIsPureTests` holds it to that), so the caller
+            // does the recording, exactly as it reads the Gmail connection and hands that in.
+            cardCheck: scope.cardCheck,
             focusedRows: focusedRows,
             dateGroups: QueueModel.groupByDate(focusedRows),
             inquiryRows: inquiryRows(i.inquiries, stage: i.focusedStage, now: context.now),

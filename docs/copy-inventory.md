@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1534 sentences**.
+Every sentence Overture can say to Dan: **1540 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -14,7 +14,7 @@ What is not, and why:
   sentences under tokens nobody reads.
 - **Nothing, if it is written as two literals joined with `+`.** Those ARE joined here, into the
   one sentence the running app says (#3155). What is still only part of what Dan reads is a
-  sentence carrying a VALUE: 552 of the 1534 below hold a
+  sentence carrying a VALUE: 554 of the 1540 below hold a
   `\(...)` where a number or a name goes, so what is printed is the template. They are counted
   here rather than listed again, because the hole is visible in the line itself; what was missing
   was any statement of how much of this document is templates.
@@ -30,6 +30,7 @@ What is not, and why:
 - `App/StoreShrinkCheck.swift`: SQL, not a sentence Overture says to Dan
 - `App/UpdateCommandFile.swift`: a shell script for Terminal, not Overture's voice to Dan (#915)
 - `Domain/BilledHierarchy.swift`: parser tokens matched against a listing page, never Overture's voice
+- `Domain/CardDivergence.swift`: a filename, not a sentence Overture says
 - `Domain/CatchAllFitReasonMigration.swift`: the retired sentence, named only so this pass can find and clear it
 - `Domain/CompiledPattern.swift`: A developer assertion, never rendered to Dan (#3432)
 - `Domain/DebugStaging.swift`: a debug-only stand-in draft body (contact-facing email copy, not app voice)
@@ -331,6 +332,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/ActionFeedback.swift`
 " Left the email you wrote yourself alone; re-prep that show on its own card if you want it replaced."
     `App/ActionFeedback.swift`
+" Nothing was lost and nothing here needs deciding, but it is worth reporting."
+    `Domain/CardDivergenceReport.swift`
 " One other match is flagged the same way."
     `Domain/PossibleMatchFanOut.swift`
 " Press Run scout again once the reading finishes."
@@ -1453,6 +1456,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/SendConfirmSheet.swift`
 "Once you have sent a pitch, the shows you are waiting to hear back about show up here, soonest follow-up first. A show drops off when you close it out, or when its follow-ups run out."
     `UI/QueueView.swift`
+"One earlier record could not be read."
+    `Domain/CardDivergenceReport.swift`
 "One email to everyone"
     `UI/SendConfirmSheet.swift`
 "One of the addresses is blank"
@@ -1509,6 +1514,10 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/SuppressionReport.swift`
 "Outside New York, New Jersey and Connecticut."
     `UI/QueueView+Model.swift`
+"Overture built \(count) cards in your queue wrongly and corrected them before drawing them."
+    `Domain/CardDivergenceReport.swift`
+"Overture built a card in your queue wrongly and corrected it before drawing it."
+    `Domain/CardDivergenceReport.swift`
 "Overture can't read your Downbeat export, so it doesn't know which nights you're already shooting."
     `Domain/AppNotice.swift`
 "Overture cannot reach its data, so there is nowhere to add a lead"
@@ -1577,6 +1586,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/AppNotice.swift`
 "Overture has not checked for replies or bookings in \(PrepStatus.duration(seconds: seconds))"
     `Domain/WatchGap.swift`
+"Overture has not yet checked whether the cards it builds for your queue are right, so nothing here can say whether they are."
+    `Domain/CardDivergenceReport.swift`
 "Overture has stopped looking for a reply to this one. If they did write, link it by hand."
     `Domain/ProposedConversation.swift`
 "Overture hasn't read your inbox for a reply to this one yet."
@@ -2803,6 +2814,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/RunInstructionCompliance.swift`
 "\(count) didn't come back, they'll be retried"
     `Domain/HandoffShortfall.swift`
+"\(count) earlier records could not be read."
+    `Domain/CardDivergenceReport.swift`
 "\(count) more shows stored a reason like these, but their own answers say they can be reached, so their cards never say it."
     `UI/EmptyAnswerSection.swift`
 "\(count) of those are shows that name their producing organisation."
