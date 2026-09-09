@@ -121,7 +121,8 @@ enum QueueRenderPass {
         private var counts = (queueItems: 0, sendGroupBuilds: 0, draftLintRuns: 0,
                               selfBookingShowsExamined: 0, recipientReaches: 0, queueRows: 0,
                               oracleCards: 0, oracleSendGroupBuilds: 0, oracleDraftLintRuns: 0,
-                              oracleRecipientReaches: 0, nightTimeMapBuilds: 0)
+                              oracleRecipientReaches: 0, nightTimeMapBuilds: 0,
+                              stagePlacements: 0)
 
         // #3654 step 4c: the in-app divergence check is a SECOND WRITER of this tally, and that is
         // settled here rather than discovered in a red run.
@@ -172,6 +173,13 @@ enum QueueRenderPass {
         // runs a `DateFormatter` parse over every entry, so this is the quantity the quadratic lived in.
         var nightTimeMapBuilds: Int { lock.withLock { counts.nightTimeMapBuilds } }
 
+        // #3738: how many times every show's stages were decided from scratch in one pass.
+        //
+        // The quantity, not a proxy for it. `matches` faults a prospect's recipients, and the pass used
+        // to ask it through three separate sweeps; a count of CALLS to `queueKeys` would have read 1 the
+        // whole time while the work behind it was tripled (L63).
+        var stagePlacements: Int { lock.withLock { counts.stagePlacements } }
+
         // What the divergence check itself spent, held apart from every number above so the pass's own
         // pins mean what their names say.
         var oracleCards: Int { lock.withLock { counts.oracleCards } }
@@ -185,6 +193,10 @@ enum QueueRenderPass {
             guard let t = current else { return }
             let oracle = asOracle
             t.lock.withLock { if oracle { t.counts.oracleCards += 1 } else { t.counts.queueItems += 1 } }
+        }
+        static func recordStagePlacement() {
+            guard let t = current else { return }
+            t.lock.withLock { t.counts.stagePlacements += 1 }
         }
         static func recordNightTimeMapBuild() {
             guard let t = current else { return }
@@ -305,15 +317,21 @@ enum QueueRenderPass {
         #endif
         let reachedOut = ReachedOutQueue.activeWithDates(from: inQueue.all, now: context.now)
         let reachedOutKeys = Set(reachedOut.map(\.prospect.naturalKey))
+        // #3738: every show's stages, decided ONCE for this pass and read by all four answers below.
+        //
+        // This pass asked the same question three times: the masthead's membership, the pill counts and
+        // the focused stage's rows. `matches` faults a prospect's recipients and was being evaluated
+        // about 23,000 times per render on the live store, which #3736 measured at 152.1 ms of the pass's
+        // floor. One table, four readers.
+        let placement = StageNavigation.placements(in: inQueue.all, context: context)
         // #1567: counted through StageNavigation, the same predicate as the pills beneath it, so the
         // masthead can no longer state a smaller backlog than the pills it sits above.
-        let inAStage = StageNavigation.queueKeys(in: inQueue.all, reachedOutKeys: reachedOutKeys,
-                                                 context: context)
+        let inAStage = StageNavigation.queueKeys(in: placement, reachedOutKeys: reachedOutKeys)
         let visibleRows = rows.filter { inAStage.contains($0.id) }
         // #1774/#1140: in stage mode membership is re-derived live (a sent draft drops out); in leads mode
         // the frozen key set stands. The dispatch lives in StageNavigation so it is tested.
         let wanted = Set(StageNavigation.focusedKeys(stage: i.focusedStage, leadKeys: i.focusedKeys ?? [],
-                                                     in: inQueue.all, context: context))
+                                                     in: placement))
         let focusedRows = rows.filter { wanted.contains($0.id) }
         return QueueView.RenderData(
             cards: scope.cards,
@@ -332,7 +350,10 @@ enum QueueRenderPass {
                                           allProspects: everyProspect,
                                           inquiries: i.inquiries,
                                           context: context, gmailConnected: i.gmailConnected,
-                                          runInFlight: i.runInFlight, replyRunAlive: i.replyRunAlive),
+                                          runInFlight: i.runInFlight, replyRunAlive: i.replyRunAlive,
+                                          // #3738: the table this pass already built, so the pill counts
+                                          // read it rather than deciding every show's stages again.
+                                          placement: placement),
             gmailConnected: i.gmailConnected,
             probeRunning: i.runInFlight == .reachabilityCheck,
             checkRunSince: i.checkRunSince,
@@ -349,6 +370,9 @@ enum QueueRenderPass {
             focusedRows: focusedRows,
             dateGroups: QueueModel.groupByDate(focusedRows),
             inquiryRows: inquiryRows(i.inquiries, stage: i.focusedStage, now: context.now),
+            // #3738: read by the empty-stage card, which pointed Dan at the next stage with work by
+            // counting every show again inside a SwiftUI body. One derivation, two readers (L16).
+            stageCounts: StageNavigation.counts(in: placement),
             geo: geo)
     }
 

@@ -298,6 +298,9 @@ struct QueueView: View {
         let focusedRows: [QueueScopeRow]
         let dateGroups: [QueueModel.DateGroup]
         let inquiryRows: [InquiryRow]
+        // #3738: what each stage pill counts, from the pass's own placement table. The empty-stage card
+        // reads it rather than deciding every show's stages a second time inside a body.
+        let stageCounts: [StageFocus: Int]
         // #1962: the pass's own resolved geography, so a surface built from this snapshot answers
         // from the same table instead of sweeping the store again through the unresolved value.
         let geo: GeoRefusals
@@ -864,7 +867,10 @@ struct QueueView: View {
     private func stageEmptyState(for stage: StageFocus, data: RenderData) -> some View {
         // #1962: the pass's resolved geography, not a fresh unresolved one, so an empty stage does
         // not re-resolve every show's place to count the others.
-        let counts = StageNavigation.counts(in: data.queueScope, context: StageContext(geo: data.geo, clients: clientWindow))
+        // #3738: and the pass's own COUNTS, not a second sweep. This decided every show's stages again,
+        // inside a SwiftUI body, to point Dan at the next stage with work in it. The pass had already
+        // decided them.
+        let counts = data.stageCounts
         // #1194: the reached-out pointer counts SHOWS (StageEmptyState labels it "N shows you've pitched"),
         // so it matches the pill; data.reachedOut is per-recipient, so collapse to distinct shows here.
         let reachedOutShows = Set(data.reachedOut.map(\.prospect.naturalKey)).count

@@ -34,7 +34,7 @@ struct QueueRenderPassCostTests {
     // LIVE-SHAPE: untriaged
     private static let untriaged = 545
 
-    // Ten sweeps of the store, once each, and every one of them named. If this number moves, one of
+    // Nine sweeps of the store, once each, and every one of them named. If this number moves, one of
     // these lines has changed or a new one has appeared, and either is a decision rather than an accident:
     //
     //   1. the whole-store corpus the rows are judged against (venue brands, inherited answers)
@@ -42,11 +42,17 @@ struct QueueRenderPassCostTests {
     //   3. resolving each show's place for the pass (#1962)
     //   4. building the queue's rows
     //   5. the shows already reached out to
-    //   6. which shows are in a stage at all
-    //   7. which of those the focused stage renders
-    //   8. the agent strip's inputs
-    //   9. the possible-match fan-out scan
-    //  10. handing the scope to the render path, which walks it per row (#3507)
+    //   6. deciding every show's stages, ONCE, into the table lines 7 and 8 read (#3738)
+    //   7. the agent strip's inputs
+    //   8. the possible-match fan-out scan
+    //   9. handing the scope to the render path, which walks it per row (#3507)
+    //
+    // WENT FROM TEN TO NINE AT #3738, and this one IS the pass getting cheaper, unlike the rise at #3507
+    // below. Three of the ten were the same question asked three ways over one corpus: which shows are in
+    // a stage at all, which the focused stage renders, and the nine pill counts. They are one sweep now,
+    // and the two that were separate are projections of the table it builds, which walk it rather than
+    // the store. Measured on the live store, the three fell from 152.1 ms to 80.0 ms and the pass the app
+    // runs from 317.9 ms to 249.8 ms.
     //
     // WAS EIGHT UNTIL #3507, AND THE RISE IS THE PASS GETTING CHEAPER, which is the one reading of this
     // number that has to be written down rather than left to be worked out. `QueueView` used to hold TWO
@@ -60,7 +66,7 @@ struct QueueRenderPassCostTests {
     //
     // So this counter is not a cost measure on its own and must not be read as one (L63). The figure that
     // moved in the direction anybody cares about is in `QueueRenderPassLiveStoreCostTests`.
-    private static let allowedSweeps = 10
+    private static let allowedSweeps = 9
 
     private func container() throws -> ModelContainer {
         try ModelContainer(

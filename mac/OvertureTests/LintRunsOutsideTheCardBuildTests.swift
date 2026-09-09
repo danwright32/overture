@@ -33,7 +33,13 @@ struct LintRunsOutsideTheCardBuildTests {
     // Zero is pinned for the others deliberately and beside the assertion that says why it is zero: a
     // counter whose only input is a value nothing produces reports zero indistinguishably from a real
     // measurement (L90). Here the zeroes are the finding.
-    private static let allowedLintRunsInTheStageCounts = 16
+    // #3738 MOVED WHERE THEY HAPPEN AND NOT HOW MANY. They were reached through
+    // `StageNavigation.counts`, which evaluated `matches` against all nine focuses for every show. That
+    // evaluation now happens once, in `StageNavigation.placements`, and `counts` reads the table it
+    // produced. So the sixteen belong to the PLACEMENT and the three readers of it run the lint zero
+    // times, which is a better answer to #3518's question than the one this suite first recorded: they
+    // are one derivation's cost rather than a term inside the agent strip.
+    private static let allowedLintRunsInThePlacement = 16
     private static let allowedLintRunsInEveryOtherDerivation = 0
 
     // A generous ceiling on what those cost, set far above the measured 0.595% rather than at a round
@@ -122,15 +128,22 @@ struct LintRunsOutsideTheCardBuildTests {
         let reachedOut = lintRuns { _ = ReachedOutQueue.activeWithDates(from: rows, now: resolved.now) }
         let keys = Set(ReachedOutQueue.activeWithDates(from: rows, now: resolved.now)
             .map(\.prospect.naturalKey))
+        // #3738: the pass decides every show's stages ONCE and reads that table three ways, so the
+        // attribution follows the pass. Measured through the prospect-taking forwarders instead, each of
+        // the three built its own table and each reported the same sixteen runs, which reads as the pass
+        // running them three times when it runs them once (L118).
+        let placing = lintRuns { _ = StageNavigation.placements(in: rows, context: resolved) }
+        let placement = StageNavigation.placements(in: rows, context: resolved)
         let inAStage = lintRuns {
-            _ = StageNavigation.queueKeys(in: rows, reachedOutKeys: keys, context: resolved)
+            _ = StageNavigation.queueKeys(in: placement, reachedOutKeys: keys)
         }
         let focused = lintRuns {
-            _ = StageNavigation.focusedKeys(stage: .scout, leadKeys: [], in: rows, context: resolved)
+            _ = StageNavigation.focusedKeys(stage: .scout, leadKeys: [], in: placement)
         }
         let agentStrip = lintRuns {
             _ = AgentInputs.from(prospects: rows, allProspects: rows, inquiries: [], context: resolved,
-                                 gmailConnected: false, runInFlight: nil, replyRunAlive: false)
+                                 gmailConnected: false, runInFlight: nil, replyRunAlive: false,
+                                 placement: placement)
         }
         let fanOut = lintRuns { _ = QueueRenderPass.fanOutWarning(rows) }
         let places = lintRuns { _ = resolved }
@@ -138,7 +151,7 @@ struct LintRunsOutsideTheCardBuildTests {
         // One level deeper into the agent strip, which is where they all turn out to be. Each of its own
         // whole-store derivations run alone, so "the agent strip" is an answer somebody can act on rather
         // than a bigger box to put the number in.
-        let stageCounts = lintRuns { _ = StageNavigation.counts(in: rows, context: resolved) }
+        let stageCounts = lintRuns { _ = StageNavigation.counts(in: placement) }
         let dueWork = lintRuns {
             _ = DueWork.counts(prospects: rows, now: resolved.now, replyRunAlive: false)
         }
@@ -149,7 +162,7 @@ struct LintRunsOutsideTheCardBuildTests {
         let insideTheStrip = stageCounts + dueWork + deadEnds + stalledDrafts
 
         let outside = wholePass - cardBuild
-        let attributed = reachedOut + inAStage + focused + agentStrip + fanOut + places
+        let attributed = reachedOut + placing + inAStage + focused + agentStrip + fanOut + places
         print("""
         lint-runs-outside-the-card-build: where the other \(outside) come from (#3518)
           whole pass                        \(wholePass)
@@ -159,6 +172,7 @@ struct LintRunsOutsideTheCardBuildTests {
           run alone, over the same corpus:
             resolving every show's place    \(places)
             the shows already reached out   \(reachedOut)
+            placing every show in a stage  \(placing)
             which shows are in a stage      \(inAStage)
             which the focused stage renders \(focused)
             the agent strip's inputs        \(agentStrip)
@@ -217,7 +231,13 @@ struct LintRunsOutsideTheCardBuildTests {
         // is a caller nobody has listed, which is what this exists to surface, and it is reported with
         // its size rather than absorbed.
         // The attribution itself, pinned. Without this the table above is a report somebody reads once.
-        #expect(stageCounts == Self.allowedLintRunsInTheStageCounts)
+        #expect(placing == Self.allowedLintRunsInThePlacement,
+                Comment(rawValue: "placing every show in its stages ran the lint \(placing) times, "
+                        + "against the \(Self.allowedLintRunsInThePlacement) this pass is pinned at"))
+        // ZERO for the three readers, and that is the #3738 finding rather than a formality: each is a
+        // projection of the table above, so a reader that ran the lint at all would be deciding
+        // something rather than reading a record (L263).
+        #expect(stageCounts == Self.allowedLintRunsInEveryOtherDerivation)
         #expect(dueWork == Self.allowedLintRunsInEveryOtherDerivation)
         #expect(deadEnds == Self.allowedLintRunsInEveryOtherDerivation)
         #expect(stalledDrafts == Self.allowedLintRunsInEveryOtherDerivation)
@@ -232,6 +252,11 @@ struct LintRunsOutsideTheCardBuildTests {
                         + "measured when #3518 was closed on that number. If this is real rather than a "
                         + "loaded Mac, the decision recorded there is worth re-taking."))
 
+        // #3738: the agent strip now runs the lint zero times, because the one term inside it that did
+        // (`StageNavigation.counts`) reads a table the caller built. The identity below still holds, at
+        // zero on both sides, and that is deliberately NOT treated as it passing: `placing` above is
+        // where the sixteen went, and it is asserted at sixteen rather than at "not zero", so an empty
+        // measurement cannot satisfy this suite (L98, L182).
         #expect(agentStrip == insideTheStrip,
                 Comment(rawValue: "\(agentStrip - insideTheStrip) of the agent strip's \(agentStrip) "
                         + "lint runs belong to none of its own derivations named here, so the strip is "
