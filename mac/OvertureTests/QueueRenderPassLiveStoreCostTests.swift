@@ -301,7 +301,20 @@ struct QueueRenderPassLiveStoreCostTests {
 
         let recipients = (try? ctx.fetch(FetchDescriptor<Recipient>()))?.count ?? 0
         let ms = { (s: Double) in String(format: "%.1f", s * 1000) }
-        let rest = max(0, passSeconds - itemsSeconds)
+        // #3660: this difference stopped being meaningful once the pass got cheaper than the standalone
+        // build it subtracts, and it printed `0.0 ms`, which reads as a real measurement of nothing (L98).
+        //
+        // It was always two corpora (`itemsSeconds` builds over the whole store, the pass over its own
+        // non-dismissed scope), and while the pass was the dearer of the two the difference was at least
+        // a positive number with a caveat. Now that #3737 and #3738 have taken the pass below it, the
+        // subtraction is negative and clamping it to zero states a measurement nobody took. So it says
+        // which it is instead. The line is kept rather than deleted because every earlier reading of this
+        // instrument was quoted from it (L277).
+        let rest = passSeconds - itemsSeconds
+        let restLabel = rest > 0
+            ? "\(ms(rest)) ms"
+            : "not meaningful: the pass is now CHEAPER than a whole-store card build, and the two "
+              + "measure different corpora. Read THE FLOOR below."
         // The marginal card, derived from the two arms rather than assumed: the difference in time over
         // the difference in cards built. Stated so a taller window can be priced without re-measuring,
         // and so a reader can tell a pass that got cheaper from one that merely built fewer cards.
@@ -341,7 +354,7 @@ struct QueueRenderPassLiveStoreCostTests {
             fetch and materialise     \(ms(fetchSeconds)) ms
           THE PASS itself, EVERY card built, which is what this instrument measured before #3660:
             a whole-store card build  \(ms(itemsSeconds)) ms
-            the pass minus that       \(ms(rest)) ms
+            the pass minus that       \(restLabel)
             the pass                  \(ms(passSeconds)) ms   \(spread(pass))
           END TO END, the fetch plus the pass:
             total                     \(ms(fetchSeconds + passSeconds)) ms
