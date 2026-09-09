@@ -206,15 +206,21 @@ enum SendService {
         let spent = group.map(\.followUpCount).max() ?? recipient.followUpCount
         guard FollowUp.isAwaitingNudge(recipient, in: prospect, now: now), spent < config.maxFollowUps,
               let email = recipient.email, !email.isEmpty else { return false }
-        // #2717: this path needs no attached-conversation refusal of its own, and that is a measured
-        // verdict rather than an omission. `isAwaitingNudge` above reads `Recipient.isAwaitingFollowUp`,
-        // which requires `outreachChannel == .email`, while an attached conversation only ever exists on a
-        // `.contactForm` row: the two are mutually exclusive by construction, so a refusal added here
-        // could never fire. One was written and then removed for exactly that reason, because a guard that
-        // cannot be seen to fail is indistinguishable from no guard while reading as protection (L1, L29).
-        // The rule it would have enforced is asserted where it is actually decided, by
-        // `anAttachedConversationNeverBecomesNudgeable` (#2716) and by the follow-up test in
-        // `AttachedConversationReadersTests`.
+        // #2717: this path needs no attached-conversation refusal of its own, and that is still true, but
+        // NOT for the reason recorded here until #3712. That reason was that `isAwaitingFollowUp` requires
+        // `outreachChannel == .email` while an attached conversation only ever exists on a `.contactForm`
+        // row, so "the two are mutually exclusive by construction". Milestone 82's phase 3 made an emailed
+        // pitch attachable and that construction stopped holding: #3706's row is `.email`, holds a
+        // conversation Overture never sent on, and reached this function with nothing in the way. A
+        // recorded reason for the ABSENCE of a guard is read by everyone afterwards as a decision somebody
+        // made, so it is corrected here rather than left standing (L346, L407).
+        //
+        // What keeps the guard unnecessary now is that `isAwaitingFollowUp` itself asks
+        // `replyWatchConversationIsAttached`, which #3712 widened to mean what it says: the stored thread
+        // is not one Overture sent on, whatever the channel. So the refusal lives in the predicate every
+        // nudge surface already reads, rather than in this one send path (L16). Asserted by
+        // `anAttachedConversationNeverBecomesNudgeable` (#2716), by the follow-up test in
+        // `AttachedConversationReadersTests`, and by `itIsNoLongerNudgeable` (#3712).
         let addresses = group.compactMap(\.email).filter { !$0.isEmpty }
         // Reply on THIS contact's conversation (#74, per-recipient #418 D): same threadId, In-Reply-To
         // the contact's last Message-ID, and a "Re:" subject, so a reply to the nudge lands on the

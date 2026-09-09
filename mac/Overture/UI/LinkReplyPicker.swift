@@ -77,6 +77,19 @@ struct LinkReplyPicker: View {
                         .font(OVType.meta).foregroundStyle(OVColor.inkSoft)
                         .fixedSize(horizontal: false, vertical: true)
                 }
+                // #3711: what linking DOES, once, above the list. What Dan approves has to be exactly
+                // what happens including who it reaches (L64), and on a pitch that already has an address
+                // that is a MOVE: off the address he pitched and off the conversation Overture sent on.
+                // Said here rather than on each row because it is a fact about the contact, the same on
+                // every row, and each row already names the person it would move to.
+                //
+                // Only where there is a list. On the empty branch it would describe an act nothing on
+                // screen can perform.
+                Text(ProposedConversationCopy.pickWhatLinkingDoes(
+                        replacing: recipient.email,
+                        alsoMovesTheConversation: recipient.hasWatchableConversation))
+                    .font(.system(size: 10)).foregroundStyle(OVColor.inkSoft)
+                    .fixedSize(horizontal: false, vertical: true)
                 // #2159/L76: macOS hides scrollbars until a gesture starts, so a plain capped ScrollView
                 // is pixel-identical at rest to one showing everything it has, and Dan would answer only
                 // what he could see. This list can genuinely run long: a month of inbound mail can hold
@@ -108,11 +121,6 @@ struct LinkReplyPicker: View {
             Text(ProposedConversationCopy.detail(subject: candidate.subject,
                                                  sentAt: candidate.sentAt, now: Date()))
                 .font(OVType.meta).foregroundStyle(OVColor.inkSoft)
-            // What linking DOES, on every row, because each row would save a DIFFERENT address and what
-            // Dan approves has to be exactly what happens including who it reaches (L64).
-            Text(ProposedConversationCopy.confirmDetail(address: candidate.fromAddress))
-                .font(.system(size: 10)).foregroundStyle(OVColor.inkSoft)
-                .fixedSize(horizontal: false, vertical: true)
             if linking == candidate.messageId {
                 HStack(spacing: OVSpacing.sm) {
                     ProgressView().controlSize(.small)
@@ -157,12 +165,18 @@ struct LinkReplyPicker: View {
 
     private func link(_ candidate: ProposedConversation.Candidate) async {
         linking = candidate.messageId
-        // Routed through the SAME propose-then-confirm pair the automatic path uses, rather than calling
-        // the attach directly, so a hand link and a confirmed proposal cannot end up writing different
-        // things (L16 applied to a write rather than a count).
-        ProposedConversation.clear(on: recipient)
-        ProposedConversation.propose(candidate, on: recipient, now: Date())
-        let outcome = await ConfirmProposedConversation().confirm(on: recipient, of: prospect, in: context)
+        // Routed through the SAME confirm the automatic path uses, rather than calling the attach
+        // directly, so a hand link and a confirmed proposal cannot end up writing different things (L16
+        // applied to a write rather than a count).
+        //
+        // #3712: the candidate is HANDED to it. This used to store the pick through
+        // `ProposedConversation.propose` and let `confirm` read it back, and `propose` is guarded by
+        // `isAskable`, which asks whether this is a form pitch with no conversation. On the emailed pitch
+        // this picker exists for, the write matched nothing, `confirm` found no proposal, and every pick
+        // was refused. A write that matches nothing reports success and the next step acts on a state
+        // nobody created (L100).
+        let outcome = await ConfirmProposedConversation().confirm(on: recipient, of: prospect,
+                                                                  in: context, picked: candidate)
         linking = nil
         switch outcome {
         case .notConnected:

@@ -1877,14 +1877,20 @@ struct QueueView: View {
                 .font(.system(size: 10)).foregroundStyle(OVColor.inkSoft)
             manualLinkControl(r, of: p)
         case .attachedAwaitingAnswer:
-            Text(ProposedConversationCopy.attachedAwaitingAnswer)
+            // #3711: the same three stored facts the answered state below reads, so the row accounts for
+            // the address the same way whether or not Dan has written back yet.
+            Text(ProposedConversationCopy.attachedAwaitingAnswer(wroteAddress: r.attachWroteAddress,
+                                                                 address: r.email,
+                                                                 displaced: r.attachDisplacedEmail))
                 .font(.system(size: 10)).foregroundStyle(OVColor.gold)
+                .fixedSize(horizontal: false, vertical: true)
         // #2806: the state that used to draw nothing. Inkfaint rather than gold: nothing is waiting on
         // him, so this is an account of what happened and not a call to act, and colouring it like the
         // line above would put a second thing demanding attention on a row that needs none.
         case .attachedAndAnswered:
             Text(ProposedConversationCopy.linkedAndAnswered(wroteAddress: r.attachWroteAddress,
-                                                            address: r.email))
+                                                            address: r.email,
+                                                            displaced: r.attachDisplacedEmail))
                 .font(.system(size: 10)).foregroundStyle(OVColor.inkSoft)
                 .fixedSize(horizontal: false, vertical: true)
         case .proposed(let candidate):
@@ -1899,7 +1905,8 @@ struct QueueView: View {
                     .font(.system(size: 10)).foregroundStyle(OVColor.inkSoft)
                 // What confirming DOES, beside the control that does it, so what Dan approves is exactly
                 // what happens including who it reaches (L64).
-                Text(ProposedConversationCopy.confirmDetail(address: candidate.fromAddress))
+                Text(ProposedConversationCopy.confirmDetail(address: candidate.fromAddress,
+                                                            replacing: r.email))
                     .font(.system(size: 10)).foregroundStyle(OVColor.inkSoft)
                     .fixedSize(horizontal: false, vertical: true)
                 HStack(spacing: OVSpacing.sm) {

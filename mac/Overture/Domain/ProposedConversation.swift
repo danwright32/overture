@@ -33,11 +33,45 @@ enum ProposedConversationCopy {
     // he asked was "did the link work, what did it do", so the line says what it DID: their reply landed
     // and his answer is already on it, which is precisely what `replyHandledAt` records and what no
     // surface said.
-    static func linkedAndAnswered(wroteAddress: Bool, address: String?) -> String {
-        guard wroteAddress, let address, !address.isEmpty else {
-            return "Their reply is here and you've already answered it."
+    // #3711: `displaced` is the address the pitch actually WENT to, when linking moved the contact off
+    // it. Its own parameter rather than a second flag, on `address`'s own precedent: a row whose flag says
+    // an address was displaced and carries none cannot render "not " with nothing after it (L67).
+    static func linkedAndAnswered(wroteAddress: Bool, address: String?, displaced: String? = nil) -> String {
+        let account = "Their reply is here and you've already answered it."
+        guard let clause = addressClause(wroteAddress: wroteAddress, address: address,
+                                          displaced: displaced) else { return account }
+        return account + " " + clause
+    }
+
+    // #3711: the same account for the state where he has NOT answered yet. It was a bare `let` saying
+    // "You linked their reply. It's waiting on you", which is true of a link that merely captured a reply
+    // and silent about the bigger thing a link can now do, which is move the contact onto a different
+    // person entirely. The two states share one clause for that (below) rather than each describing the
+    // move in its own words, because one fact told two ways on one screen is two facts to a reader (L605).
+    static func attachedAwaitingAnswer(wroteAddress: Bool = false, address: String? = nil,
+                                       displaced: String? = nil) -> String {
+        let account = "You linked their reply. It's waiting on you."
+        guard let clause = addressClause(wroteAddress: wroteAddress, address: address,
+                                          displaced: displaced) else { return account }
+        return account + " " + clause
+    }
+
+    // WHO the show talks to from now on, which is the consequence with the longest reach and the one
+    // neither state used to give. Nil when there is nothing to say: an attach onto a contact that already
+    // had the writer's address changed nobody's address at all, and a sentence about it would be a fact
+    // invented to fill a line.
+    //
+    // The displaced arm is checked FIRST, because a link that MOVED the contact is the bigger claim and
+    // the two arms are mutually exclusive on the attach side anyway (`attachWroteAddress` fills an empty
+    // address, `attachDisplacedEmail` replaces a populated one). Reading them the other way round would
+    // silently prefer the smaller sentence if that ever stopped holding.
+    private static func addressClause(wroteAddress: Bool, address: String?, displaced: String?) -> String? {
+        guard let address, !address.isEmpty else { return nil }
+        if let displaced, !displaced.isEmpty, displaced.lowercased() != address.lowercased() {
+            return "Email goes to \(address) from now on, not \(displaced)."
         }
-        return "Their reply is here and you've already answered it. Email goes to \(address) from now on."
+        guard wroteAddress else { return nil }
+        return "Email goes to \(address) from now on."
     }
 
     static let question = "Is this their reply?"
@@ -64,9 +98,87 @@ enum ProposedConversationCopy {
     // including WHO it reaches (L64): confirming writes this address onto the contact, and every future
     // email on this show goes there. A sheet saying only "link this conversation" would hide the half
     // that matters.
-    static func confirmDetail(address: String) -> String {
-        "Linking this saves \(address) on the contact. Overture will watch the conversation, and any "
-            + "email it sends on this show from now on goes to that address."
+    // #3711: what confirming DOES, one whole sentence per state rather than one built from clauses.
+    //
+    // `replacing` is the address the pitch actually went to. The sentence this replaces was written for a
+    // contact with no address at all, and where there IS one, confirming agrees to something larger than
+    // saving an address: it moves the show off the one Dan pitched. What he approves has to be exactly
+    // what happens, including who it reaches (L64).
+    //
+    // Written out twice rather than assembled from parts, deliberately. `docs/copy-inventory.md` is read
+    // by a person, in the words Dan will read, and a sentence built from fragments arrives there as its
+    // fragments ("Overture will watch the conversation,"), which is exactly the reading that document
+    // exists to make possible (#915).
+    //
+    // It says NOTHING about a conversation being displaced, and that is measured rather than assumed:
+    // both its call sites draw `ProposedConversation.State.proposed`, which is reachable only through
+    // `isAskable`, which requires `!hasWatchableConversation`. A parameter for it would be one nothing
+    // could ever pass true.
+    //
+    // `isAskable` also requires `formOutreachRecordedAt`, so every row this can appear on is a FORM
+    // pitch, which is why it says "the address it replaces" where the picker says "the address you
+    // pitched": a form pitch went to a form, and an address Prep found for that contact is not one Dan
+    // pitched to. The two sentences differ because the two states differ, and only the second is entitled
+    // to the warmer phrasing (L11).
+    static func confirmDetail(address: String, replacing: String? = nil) -> String {
+        guard let displaced = displacedAddress(replacing, adopting: address) else {
+            return "Linking this saves \(address) on the contact. Overture will watch the conversation, "
+                + "and every email on this show from now on goes to that address."
+        }
+        return "Linking this moves the contact from \(displaced) to \(address). Overture will watch the "
+            + "conversation, and every email on this show from now on goes to \(address). The address it "
+            + "replaces is kept on the contact."
+    }
+
+    // #3711: the same thing said ONCE, above the picker's list, because the picker is the one surface
+    // that shows several candidates at a time.
+    //
+    // `confirmDetail` above is per candidate and right where there is one: the row's proposal and the
+    // Follow-ups sheet each ask about a single message. In the picker it was drawn on every row, and its
+    // whole first half is a fact about the CONTACT rather than about the message, identical down the
+    // list. At the real count that is a wall of repeated text nobody reads, and no fixture reaches it
+    // (L579); saying it once and letting each row's own sender line name who it would move to is every
+    // fact once per screen (L605).
+    //
+    // Unlike `confirmDetail` this one CAN be reached on a contact holding a conversation, because the
+    // menu route (#3707) offers it on an emailed pitch, and that is the state milestone 82 exists for.
+    // Overture stops watching the thread it sent on, which is a consequence Dan could not guess and which
+    // no other sentence tells him. Named as the one it EMAILED rather than the one it is watching, which
+    // is exact for every state a link can actually succeed in: a watched thread that no attach put there
+    // came from a real send, and `AttachConversation` refuses a contact that already holds an attached
+    // one.
+    //
+    // Four states, four whole sentences, for the reason above. Only the two that MOVE a conversation open
+    // with "this pitch went to": those are reachable only from the menu route, which needs a real send,
+    // and on a form pitch reached from the inline control the pitch went to a FORM rather than to an
+    // address (L11). What every branch that displaces one says, in the same words as the row's own
+    // sentence, is that it survives: one fact, one wording, wherever it is shown (L605).
+    static func pickWhatLinkingDoes(replacing: String?, alsoMovesTheConversation: Bool = false) -> String {
+        guard let displaced = displacedAddress(replacing) else {
+            return alsoMovesTheConversation
+                ? "Linking one of these saves the writer's address on the contact. Overture watches that "
+                    + "conversation instead of the one it emailed, and every email on this show from now "
+                    + "on goes to that address."
+                : "Linking one of these saves the writer's address on the contact. Overture will watch "
+                    + "that conversation, and every email on this show from now on goes to that address."
+        }
+        return alsoMovesTheConversation
+            ? "This pitch went to \(displaced). Linking one of these moves the contact onto whoever wrote "
+                + "it. Overture watches that conversation instead of the one it emailed, and every email "
+                + "on this show from now on goes to them. The address it replaces is kept on the contact."
+            : "Linking one of these moves the contact from \(displaced) onto whoever wrote it, and every "
+                + "email on this show from now on goes to them. The address it replaces is kept on the "
+                + "contact."
+    }
+
+    // The address a link would really move OFF this contact, or nil where nothing moves: nothing stored,
+    // whitespace, or the writer already being the contact. Asked in one place, so two sentences about one
+    // act cannot disagree about whether it is a move (L16).
+    private static func displacedAddress(_ replacing: String?, adopting: String? = nil) -> String? {
+        guard let trimmed = replacing?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !trimmed.isEmpty else { return nil }
+        if let adopting, trimmed.lowercased() == adopting.lowercased() { return nil }
+        return trimmed
     }
 
     // The three states each get their own sentence, or they sit in the data and vanish from the product
@@ -84,9 +196,14 @@ enum ProposedConversationCopy {
     // stuck in).
     static let stoppedLooking =
         "Overture has stopped looking for a reply to this one. If they did write, link it by hand."
-    static let attachedAwaitingAnswer =
-        "You linked their reply. It's waiting on you."
     static let linked = "Linked. Overture is watching that conversation now."
+    // #3712: what a confirm with no conversation in front of it says. It used to borrow
+    // `DetachConversationCopy.nothingLinked`, which is the DETACH's sentence and reads "there's no linked
+    // conversation on this pitch to unlink": a message about undoing something, shown to Dan at the moment
+    // he asked to do it. A message may claim only what its check measured (L11), and what this one
+    // measured is that the question it was about to answer is no longer on the row.
+    static let nothingToLink =
+        "Overture couldn't find the message you picked, so it linked nothing. Try picking it again."
     // Time-taking work says WORKING, not just spins: linking makes two Gmail calls, and a control that
     // looks identical whether it is progressing, hung or dead is a defect.
     static let linking = "Linking..."

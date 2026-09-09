@@ -354,6 +354,18 @@ final class Recipient {
     // conversation at all, so Overture would stop watching the thread it sent on and there would be
     // nothing for a follow-up to thread onto. Read by `DetachConversation` (#3710).
     var attachDisplacedThreadId: String?
+    // #3712: the outgoing message the DISPLACED thread's ancestry hangs off, recorded at the same moment
+    // and for the same reason as the thread above.
+    //
+    // It is not restored by the detach, because it is never moved: `gmailMessageId` stays exactly where
+    // it is, since it is what proves Overture emailed this contact (`hasProvenOutreach`) and clearing it
+    // would make the show read as never pitched. What it records is WHICH message the stored id was when
+    // the link was made, and that is the only way to answer the question three readers ask: is the
+    // message Overture holds on this row a message on the conversation the row now stores? While the two
+    // are equal it is not, and the moment Overture answers on the linked thread `sendReplyDraft` stores
+    // an id that is on it and the question answers itself (L68: a refusal keyed on the attach alone would
+    // outlive its reason). Read by `replyWatchConversationIsAttached`.
+    var attachDisplacedMessageId: String?
     // #2719: that a conversation has EVER been attached here, which the detach deliberately does not
     // clear.
     //
@@ -638,8 +650,17 @@ final class Recipient {
     // typically weeks old. Reading the attach as "this is an email contact now" would make the nudge
     // instantly OVERDUE, count it in the Due pill, and send a real cold nudge onto a stranger's
     // conversation. Do not "fix" this to consult the address or the thread.
+    // #3712: and never onto a conversation Overture did not send on. This is the OPPOSITE direction to
+    // the paragraph above and does not weaken it: that one refuses to read an attach as "this is an email
+    // contact now", which would make a form pitch instantly nudgeable. This one refuses to go on treating
+    // an EMAIL contact as nudgeable once a link has moved it onto somebody else's thread and somebody
+    // else's address. The nudge is a cold chase, threaded onto the conversation Overture itself started,
+    // and after a replacing attach the row holds neither: it would arrive as a chase of a pitch the writer
+    // never received, on a conversation Overture never opened. It heals with the predicate, so a row
+    // Overture has since answered on is nudgeable again exactly as it was.
     var isAwaitingFollowUp: Bool {
         isSilent && resolution == nil && outcomeSource != .manual && outreachChannel == .email
+            && !replyWatchConversationIsAttached
     }
 
     // #677: this contact replied and nobody has dealt with it yet: replied, no resolution recorded,
