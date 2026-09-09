@@ -206,6 +206,65 @@ struct QueueRenderPassLiveStoreCostTests {
         let floor = medianSeconds { _ = makePass(cardKeys: []) }
         let floorSeconds = floor.median
 
+        // 7. #3660 Phase 10: WHERE INSIDE THE FLOOR the time goes.
+        //
+        // The floor is 99% of the shipping pass, so "the pass is expensive" is now a statement about
+        // these terms and nothing else. Without this split the only available next step is to chunk the
+        // whole thing, which is a large and risky change aimed at a cost nobody has located: a remainder
+        // that is never decomposed is exactly where the unexplained time accumulates (L507).
+        //
+        // Each term is timed AS THE PASS CALLS IT, over the pass's own corpus, so these are components of
+        // the floor above rather than numbers beside it (L118). They will not sum to it exactly: the pass
+        // also allocates the RenderData and runs the terms not listed here, and any one reading carries
+        // the noise its own spread reports.
+        let everyProspect = prospects
+        let inQueue = QueueRenderPass.Corpus(prospects).narrowed(QueueModel.queueScope)
+        let baseContext = StageContext.at(QueueModel.easternToday(), now: Date())
+        _ = baseContext.resolvingPlaces(of: inQueue.all)
+        let geoTerm = medianSeconds { _ = baseContext.resolvingPlaces(of: inQueue.all) }
+        let resolved = baseContext.resolvingPlaces(of: inQueue.all)
+
+        let scopeTerm = medianSeconds {
+            _ = QueueModel.scope(from: inQueue.all, answers: answers, corpus: everyProspect,
+                                 sources: sources, clients: resolved.clients, now: resolved.now,
+                                 cardKeys: [], today: resolved.today)
+        }
+        let reachedOutTerm = medianSeconds {
+            _ = ReachedOutQueue.activeWithDates(from: inQueue.all, now: resolved.now)
+        }
+        let reachedOutKeys = Set(ReachedOutQueue.activeWithDates(from: inQueue.all,
+                                                                now: resolved.now)
+            .map(\.prospect.naturalKey))
+        let stageTerm = medianSeconds {
+            _ = StageNavigation.queueKeys(in: inQueue.all, reachedOutKeys: reachedOutKeys,
+                                          context: resolved)
+        }
+        let fanOutTerm = medianSeconds { _ = QueueRenderPass.fanOutWarning(inQueue.all) }
+
+        // The terms the first decomposition left out, chased because they were the REMAINDER: the five
+        // above came to 154 ms of a 421.7 ms floor, and a remainder that large is where the answer is
+        // (L507). Timed in the same way, over the same corpus.
+        let rowsForTerms = QueueModel.scope(from: inQueue.all, answers: answers, corpus: everyProspect,
+                                            sources: sources, clients: resolved.clients,
+                                            now: resolved.now, cardKeys: [], today: resolved.today).rows
+        let agentTerm = medianSeconds {
+            _ = AgentInputs.from(prospects: inQueue.all, allProspects: everyProspect, inquiries: [],
+                                 context: resolved, gmailConnected: false,
+                                 runInFlight: nil, replyRunAlive: false)
+        }
+        let focusedTerm = medianSeconds {
+            _ = Set(StageNavigation.focusedKeys(stage: .scout, leadKeys: [], in: inQueue.all,
+                                                context: resolved))
+        }
+        let selfBookingTerm = medianSeconds { _ = QueueModel.selfBookingIndex(rowsForTerms) }
+        let pendingTerm = medianSeconds { _ = QueueModel.pendingBookingCount(rowsForTerms) }
+        let groupTerm = medianSeconds { _ = QueueModel.groupByDate(rowsForTerms) }
+
+        let named = geoTerm.median + scopeTerm.median + reachedOutTerm.median + stageTerm.median
+            + fanOutTerm.median + agentTerm.median + focusedTerm.median + selfBookingTerm.median
+            + pendingTerm.median + groupTerm.median
+        let unaccounted = max(0, floorSeconds - named)
+
         let recipients = (try? ctx.fetch(FetchDescriptor<Recipient>()))?.count ?? 0
         let ms = { (s: Double) in String(format: "%.1f", s * 1000) }
         let rest = max(0, passSeconds - itemsSeconds)
@@ -265,8 +324,26 @@ struct QueueRenderPassLiveStoreCostTests {
           THE FLOOR, the same pass with NO card built, which narrowing cannot reach:
             the pass                  \(ms(floorSeconds)) ms   \(spread(floor))
             share of the narrowed arm \(floorShare)
-            of which whole-corpus tables and a row per show, measured on its own:
+            of which the whole-corpus tables plus a row per show, over EVERY row in the store,
+            which is a wider corpus than the pass's own and so reads dearer than the
+            `QueueModel.scope` line below it. Two corpora, not two answers (L118):
                                       \(ms(preambleSeconds)) ms   \(spread(preamble))
+
+          INSIDE THE FLOOR, each term timed as the pass calls it, over the pass's own corpus.
+          These do not sum to the floor: the pass runs more than these and each carries its own noise.
+            resolve every show's place \(ms(geoTerm.median)) ms   \(spread(geoTerm))
+            QueueModel.scope, no cards \(ms(scopeTerm.median)) ms   \(spread(scopeTerm))
+            reached-out sweep          \(ms(reachedOutTerm.median)) ms   \(spread(reachedOutTerm))
+            stage membership           \(ms(stageTerm.median)) ms   \(spread(stageTerm))
+            possible-match fan-out     \(ms(fanOutTerm.median)) ms   \(spread(fanOutTerm))
+            stage pill counts          \(ms(agentTerm.median)) ms   \(spread(agentTerm))
+            focused stage membership   \(ms(focusedTerm.median)) ms   \(spread(focusedTerm))
+            self-booking night index   \(ms(selfBookingTerm.median)) ms   \(spread(selfBookingTerm))
+            pending booking count      \(ms(pendingTerm.median)) ms   \(spread(pendingTerm))
+            group by date              \(ms(groupTerm.median)) ms   \(spread(groupTerm))
+            ---
+            named terms                \(ms(named)) ms
+            NOT ACCOUNTED FOR          \(ms(unaccounted)) ms
         """)
 
         // The only assertions, and both are about the measurement being REAL rather than about the
