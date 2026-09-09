@@ -2886,10 +2886,24 @@ enum QueueModel {
                 cards[key] = card(p, contacts: contacts, preamble: pre)
             }
         }
+        // #3654 step 4c. Run on EVERY pass and never behind a `#if DEBUG`: the one instrument of this
+        // shape already in the file is Debug only, and Dan runs Release, so a check that shipped off
+        // would be code nobody has ever executed (L535, C3). `CardCheckShipsInReleaseTests` holds it.
+        var divergence: Scope.Divergence?
+        if let found = checkOneCardAgainstAFreshBuild(cards: cards, contactsByKey: contactsByKey,
+                                                      corpus: prospects, preamble: pre) {
+            // CORRECTION C1: the CORRECT card wins the render. The finding is recorded; the person is not
+            // shown a card the app has just proved wrong.
+            cards[found.key] = found.fresh
+            divergence = Scope.Divergence(fields: found.fields, cardsBuilt: cards.count)
+        }
         return Scope(rows: rows,
                      cards: CardStore(cards: cards, shows: prospects, contactsByKey: contactsByKey,
                                       preamble: pre, requestedKeys: cardKeys,
-                                      registry: cardKeyRegistry))
+                                      registry: cardKeyRegistry),
+                     // Present whenever a sample was taken, so `checked == false` and "agreed" are
+                     // different answers rather than one silence (L98).
+                     cardCheck: Scope.CardCheck(ran: !cards.isEmpty, divergence: divergence))
     }
 
     // The whole-corpus tables one build derives from, worked out ONCE and shared by every card it makes.
@@ -2917,6 +2931,75 @@ enum QueueModel {
             guard let key = ProducerGate.key(presenter) else { return 0 }
             return rowCounts[key] ?? 0
         }
+    }
+
+    // #3654 step 4c: the in-app check, run once per pass over the cards the pass just built.
+    //
+    // WHAT IT COMPARES, and what it therefore can and cannot find. It rebuilds ONE sampled card through
+    // the shipping `card(_:contacts:preamble:)` with the contacts read AGAIN, and compares the two field
+    // by field. So it finds a stale contacts array, a card left over from an earlier pass, and a key
+    // resolved to the wrong show. It cannot find a wrong whole-corpus table, because both sides read the
+    // same one; that is `NarrowedCardsAgreeWithFullOnesTests`, which asks it against a FULL build and is
+    // far too expensive to do per render.
+    //
+    // THE ROW IS RESOLVED INDEPENDENTLY, by searching the corpus for the key rather than taking the show
+    // the loop above was holding. A check that draws on the same lookup as the thing it judges falls
+    // silent exactly when that lookup is what is wrong (L345, L70).
+    //
+    // CORRECTION C4: the sample is chosen by RISK and never by cost. The cheapest rendered card is the
+    // one with no contacts at all, which is 78.6% of the live store and is exactly the card on which
+    // nothing contact-derived can differ, so a cheapest-card rule would sample the population that cannot
+    // fail (L147, L142). The riskiest is the one with the most pending contacts carrying a body, which is
+    // where the send grouping, the greeting rules and the draft lint all do their work.
+    //
+    // CORRECTION C1: on a divergence the FRESH card is put into the store, so the render draws the
+    // correct one. Reporting a card wrong and then drawing it anyway is a finding the person cannot act
+    // on standing beside the defect it names (L272).
+    static func checkOneCardAgainstAFreshBuild(
+        cards: [String: QueueItem], contactsByKey: [String: [Recipient]], corpus: [Prospect],
+        preamble pre: CardPreamble) -> (key: String, fields: [String], fresh: QueueItem)? {
+        guard let key = riskiestKey(among: cards.keys, contactsByKey: contactsByKey),
+              let mine = cards[key] else { return nil }
+        // Independently resolved: `first(where:)` over the corpus, not the store's own index.
+        guard let show = corpus.first(where: { $0.naturalKey == key }) else { return nil }
+        let fresh = QueueRenderPass.WorkTally.$asOracle.withValue(true) {
+            card(show, contacts: nil, preamble: pre)
+        }
+        let differing = differingFieldNames(mine, fresh)
+        guard !differing.isEmpty else { return nil }
+        return (key, differing, fresh)
+    }
+
+    // The most pending body-carrying contacts, ties broken by key so a pass is deterministic.
+    static func riskiestKey(among keys: some Collection<String>,
+                            contactsByKey: [String: [Recipient]]) -> String? {
+        keys.max { a, b in
+            let (ra, rb) = (riskWeight(contactsByKey[a]), riskWeight(contactsByKey[b]))
+            if ra != rb { return ra < rb }
+            return a > b
+        }
+    }
+
+    private static func riskWeight(_ contacts: [Recipient]?) -> Int {
+        (contacts ?? []).filter { $0.sendState == .pending && !($0.effectiveBody ?? "").isEmpty }.count
+    }
+
+    // Which fields differ, BY NAME and never by value. The names are constants of this app; the values
+    // are contacts' names, addresses, greetings and letters. See `CardDivergenceRecord` for the whole of
+    // that decision, which is #3654's CORRECTION C7.
+    static func differingFieldNames(_ mine: QueueItem, _ fresh: QueueItem) -> [String] {
+        guard mine != fresh else { return [] }
+        let freshFields = Dictionary(uniqueKeysWithValues:
+            Mirror(reflecting: fresh).children.compactMap { child -> (String, Any)? in
+                child.label.map { ($0, child.value) }
+            })
+        var out: [String] = []
+        for child in Mirror(reflecting: mine).children {
+            guard let label = child.label else { continue }
+            guard let other = freshFields[label] else { out.append(label); continue }
+            if String(describing: child.value) != String(describing: other) { out.append(label) }
+        }
+        return out.sorted()
     }
 
     // ONE card, from a show and the tables the build already has.
@@ -2978,6 +3061,19 @@ enum QueueModel {
     struct Scope {
         let rows: [QueueScopeRow]
         let cards: CardStore
+        // #3654 step 4c: what the in-app check did on this pass. Never optional: "no sample was taken"
+        // and "a sample agreed" are different facts and both have to be sayable (L11).
+        var cardCheck = CardCheck(ran: false, divergence: nil)
+
+        struct CardCheck: Equatable, Sendable {
+            let ran: Bool
+            let divergence: Divergence?
+        }
+
+        struct Divergence: Equatable, Sendable {
+            let fields: [String]
+            let cardsBuilt: Int
+        }
 
         // Every card, in row order. What `items(from:)` and Archive still ask for, and what a build that
         // requested every key produces anyway; on a NARROWED build it is the cards that were asked for,

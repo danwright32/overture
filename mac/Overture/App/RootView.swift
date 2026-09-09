@@ -1035,6 +1035,7 @@ struct RootView: View {
                 // (L105). The file only grows when the app really freezes, so once per launch is plenty.
                 FreezeLog.compact(at: FreezeLog.url(in: StoreLocation.handoffDirectory))
                 reportAnyFreezes()
+                reportAnyCardDivergences()
                 // #1035: the same reattach, for the scout's detached read. A scout-extract run outlives
                 // the app, so one can still be going at launch (a relaunch over a live run, or the window
                 // scene torn down and rebuilt mid-read). Reopen the takeover and follow it to completion
@@ -1866,6 +1867,19 @@ struct RootView: View {
     //
     // Said ONCE per freeze, through `FreezeReport`, which remembers in defaults what it has already said.
     // A message that reappears on every launch is what teaches somebody to skim the whole panel (#884).
+    // #3654 step 4c: what the queue's own check of its cards found, said once per record.
+    //
+    // Said at LAUNCH rather than on the render that found it, deliberately. The check runs inside a render
+    // pass, and a notice raised from there would arrive while Dan is scrolling, about a card the app has
+    // already corrected before drawing it (CORRECTION C1). Nothing is waiting on him: what he can do with
+    // it is report it, and a launch is when he can.
+    private func reportAnyCardDivergences() {
+        guard let message = CardDivergenceReport.newlyReported(in: StoreLocation.handoffDirectory) else {
+            return
+        }
+        status.set(message, priority: .warning)
+    }
+
     private func reportAnyFreezes() {
         guard let message = FreezeReport.newlyReported(in: StoreLocation.handoffDirectory,
                                                        watchdogRan: freezeWatch.isWatching,
