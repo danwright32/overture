@@ -33,7 +33,10 @@ struct RawValueInCopyGuardTests {
     }
 
     private static let exemptions: [Exemption] = [
-        Exemption(file: "QueueView.swift", fragment: "\\(dateLabel)|",
+        // #3658 Phase 8: the identity moved with `NightDismiss` when the queue's sheets got their own
+        // file. Re-pointed rather than widened, because an exemption that stopped matching is deleted or
+        // re-aimed rather than left to hide a real one behind it, which is this suite's own rule.
+        Exemption(file: "QueueSheets.swift", fragment: "\\(dateLabel)|",
                   why: "a date group's SwiftUI identity, so two nights' rows are told apart in a list"),
         Exemption(file: "RunNightDrop.swift", fragment: "\\(Self.separator)",
                   why: "#2691's dropped night, stored self-describing and parsed back by DroppedNight"),

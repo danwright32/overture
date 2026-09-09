@@ -14,6 +14,11 @@ struct BulkDismissWiringGuardTests {
         SourceGuardHelper.source(rel, file: file)
     }
 
+    // #3658 Phase 8: the queue's sheets moved to their own file when their state moved off `QueueView`.
+    // The MENU that raises this one is still QueueView's; the SHEET that confirms it is here. Every
+    // assertion below now names which of the two it is about, rather than one file standing for both.
+    private var sheetsFile: String { source("Overture/UI/QueueSheets.swift") }
+
     @Test func theDateHeaderOffersTheActionOnARightClick() {
         let queue = source("Overture/UI/QueueView.swift")
         #expect(!queue.isEmpty)
@@ -50,17 +55,23 @@ struct BulkDismissWiringGuardTests {
     // is stated, which is the issue's own requirement: no silent burying of rows Dan cannot see.
     @Test func pickingAReasonRaisesTheConfirmRatherThanDismissingImmediately() {
         let queue = source("Overture/UI/QueueView.swift")
-        #expect(queue.contains("pendingNightDismiss = NightDismiss("))
-        #expect(queue.contains(".sheet(item: $pendingNightDismiss)"))
+        // The RAISE is still the queue's: a menu pick records the night and shows nothing yet.
+        #expect(queue.contains("sheets.pendingNightDismiss = NightDismiss("))
+        // #3658: the PRESENTATION is the host's. Both halves are asserted, because the claim spans two
+        // files now and checking either alone leaves the other free to be deleted (L280).
+        #expect(sheetsFile.contains(".sheet(item: $sheets.pendingNightDismiss)"))
         // A first-party branded sheet, not a stock system dialog (#1249, and Dan's standing preference).
-        // #2726: named at THIS presentation. `SelfBookingConfirmSheet(` occurs three times in this view
+        // #2726: named at THIS presentation. `SelfBookingConfirmSheet(` occurs three times in the host
         // (the self-booking guard, the probe confirm, and this one), so a bare search for it was answered
         // by either of the other two and would have passed with the night-dismiss sheet deleted (L135).
         #expect(SourceGuardHelper.containsCode(
-            ".sheet(item: $pendingNightDismiss) { pending in SelfBookingConfirmSheet(", in: queue))
-        // The dismissal itself happens on the sheet's own buttons, and nowhere else in this view. Which
-        // shows each button takes is pinned separately, below.
-        #expect(queue.contains("onProceed: { dismissNight(pending,"))
+            ".sheet(item: $sheets.pendingNightDismiss) { pending in SelfBookingConfirmSheet(",
+            in: sheetsFile))
+        // The dismissal itself happens on the sheet's own buttons and nowhere else, and it reaches the
+        // queue's own `dismissNight` through the one closure the host is given. Both ends, or the sheet
+        // could call something else entirely while this stayed green.
+        #expect(sheetsFile.contains("onProceed: { onDismissNight(pending,"))
+        #expect(queue.contains("onDismissNight: { pending, keys in dismissNight(pending, keys: keys) }"))
     }
 
     // The action goes through the one mutation that records a single undo entry for the night. A view that
@@ -76,17 +87,18 @@ struct BulkDismissWiringGuardTests {
     // same mutation, so the only thing separating "clear the night" from "leave the runs alone" is which
     // key set each one passes. Swapping them is invisible on screen until dates start disappearing.
     @Test func eachButtonPassesItsOwnSetOfShows() {
-        let queue = source("Overture/UI/QueueView.swift")
-        #expect(queue.contains("onAlternative: pending.offersChoice"))
-        #expect(queue.contains("dismissNight(pending, keys: pending.keysOnlyThisNight)"))
-        #expect(queue.contains("onProceed: { dismissNight(pending, keys: pending.keys)"))
+        // #3658: on the host, which is where the two buttons now are. The rule is unchanged: the narrower
+        // button takes the narrower set and swapping them is invisible on screen until dates start
+        // disappearing.
+        #expect(sheetsFile.contains("onAlternative: pending.offersChoice"))
+        #expect(sheetsFile.contains("onDismissNight(pending, pending.keysOnlyThisNight)"))
+        #expect(sheetsFile.contains("onProceed: { onDismissNight(pending, pending.keys)"))
     }
 
     // And the narrower way out is offered only when the night actually holds both kinds. A sheet offering
     // "dismiss only the 0" would be a button that does nothing.
     @Test func theNarrowerButtonIsOnlyOfferedWhenThereIsAChoice() {
-        let queue = source("Overture/UI/QueueView.swift")
-        #expect(queue.contains("alternativeLabel: pending.offersChoice"))
+        #expect(sheetsFile.contains("alternativeLabel: pending.offersChoice"))
     }
 
     // And the undo the App performs resolves EVERY row of the entry, not just the first. Resolving one

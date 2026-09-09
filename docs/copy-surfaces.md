@@ -12,7 +12,7 @@ stripped. **What it deliberately does not claim:** which container a given sente
 That is not knowable from one file, since a sentence declared in one view routinely surfaces
 through another, and a wrong label would be worse than none.
 
-17 files render at least one container.
+18 files render at least one container.
 
 ## Surfaces where a message can go astray
 
@@ -335,8 +335,10 @@ A sentence written as a constant is read here at the file that RENDERS it, not o
     Sheet
 `UI/ProspectRowView.swift`
     Popover, Sheet
+`UI/QueueSheets.swift`
+    Sheet
 `UI/QueueView.swift`
-    Menu, Sheet
+    Menu
 `UI/ReplySheet.swift`
     Sheet
 `UI/ScoutSummaryView.swift`

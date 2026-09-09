@@ -310,10 +310,13 @@ struct QueueInvalidationGuardTests {
         for flag in flags {
             // A READ is `sheets.<flag>` not followed by ` =`. Every legitimate site is a write, made from
             // an action closure rather than from the body's own evaluation.
-            let reads = code.components(separatedBy: "sheets.\(flag)").dropFirst()
-                .filter { !$0.hasPrefix(" = ") }
-            #expect(reads.isEmpty,
-                    Comment(rawValue: "QueueView reads `sheets.\(flag)` \(reads.count) times. A read here "
+            // COUNTED, never asserted on the array. `#expect` renders its operand, and the array here
+            // holds whole slices of QueueView, so asserting `reads.isEmpty` printed most of the file over
+            // the sentence explaining what went wrong (L445). Seen while proving this guard.
+            let readCount = code.components(separatedBy: "sheets.\(flag)").dropFirst()
+                .filter { !$0.hasPrefix(" = ") }.count
+            #expect(readCount == 0,
+                    Comment(rawValue: "QueueView reads `sheets.\(flag)` \(readCount) times. A read here "
                             + "makes this view an observer of that flag, so writing it invalidates the "
                             + "body that derives the store and the move buys nothing (#3658)."))
         }
