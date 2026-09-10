@@ -85,7 +85,8 @@ struct TheWatchdogStandsDownTests {
     func compactionKeepsTheNewest() {
         let records = (1...10).map { n in
             StallRecord(session: "s", sequence: n, at: Date(timeIntervalSince1970: 1_785_000_000),
-                        seconds: 0.3, surface: .queue, load: .baseline, loadAverage: 1)
+                        seconds: 0.3, surface: .queue, load: .baseline, loadAverage: 1,
+                        passes: nil)
         }
         let kept = FreezeLog.compacted(records, cap: 4)
         #expect(kept.records.count == 4)
@@ -101,10 +102,12 @@ struct TheWatchdogStandsDownTests {
     func theLongestStallSurvivesCompaction() {
         var records = [StallRecord(session: "s", sequence: 1,
                                    at: Date(timeIntervalSince1970: 1_785_000_000), seconds: 58.0,
-                                   surface: .queue, load: .baseline, loadAverage: 1)]
+                                   surface: .queue, load: .baseline, loadAverage: 1,
+                                   passes: nil)]
         records += (2...20).map { n in
             StallRecord(session: "s", sequence: n, at: Date(timeIntervalSince1970: 1_785_000_000),
-                        seconds: 0.3, surface: .queue, load: .baseline, loadAverage: 1)
+                        seconds: 0.3, surface: .queue, load: .baseline, loadAverage: 1,
+                        passes: nil)
         }
         let kept = FreezeLog.compacted(records, cap: 5)
 
@@ -119,7 +122,8 @@ struct TheWatchdogStandsDownTests {
     func aShortFileIsUntouched() {
         let records = (1...3).map { n in
             StallRecord(session: "s", sequence: n, at: Date(timeIntervalSince1970: 1_785_000_000),
-                        seconds: 0.3, surface: .queue, load: .baseline, loadAverage: 1)
+                        seconds: 0.3, surface: .queue, load: .baseline, loadAverage: 1,
+                        passes: nil)
         }
         let kept = FreezeLog.compacted(records, cap: 200)
         #expect(kept.records == records)

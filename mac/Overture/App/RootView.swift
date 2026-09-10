@@ -1288,6 +1288,10 @@ struct RootView: View {
             // Injected outermost so the sheets above inherit it too (#285).
             .environment(feedback)
             .environment(dayOffOffer)
+            // #3760: so the surface that runs the render pass can tell the watchdog it ran one. Injected
+            // rather than reached for, on the same footing as the two above, and read as an OPTIONAL by
+            // the surfaces so a missed injection is a pass nobody counted rather than a crash.
+            .environment(freezeWatch)
             // #1414: the Edit menu's Undo raises a token on the App; the reversal happens HERE, where
             // the context, the live rows and the feedback banner all exist.
             .onChange(of: undoRequest.token) { _, _ in performQueueUndo() }
