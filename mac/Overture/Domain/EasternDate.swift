@@ -77,24 +77,22 @@ enum EasternDate {
             }
             return value
         }
+        // The RANGES that matter, and only those. The month must be 1...12 and the day 1...31, because
+        // those are the two the formatter REJECTS outright (`2026-13-01` and `2026-01-32` are both nil)
+        // and where `Calendar.date(from:)` would instead roll over into a different month and disagree.
+        //
+        // A PER MONTH day limit is deliberately NOT checked, and that is a finding rather than a
+        // simplification. The first version of this carried one, with the full Gregorian leap rule
+        // beside it, and a mutation replacing that rule with the naive `year % 4 == 0` SURVIVED the whole
+        // equivalence corpus. The reason is that `Calendar.date(from:)` rolls an out of range day over
+        // exactly as the formatter does: `2026-04-31` becomes 1 May and `1900-02-29` becomes 1 March
+        // either way. So the precision distinguished nothing, no test could make it fail, and code no
+        // test can tell from its absence is code arguing for itself (L29, L1).
         guard let year = digits(0..<4), let month = digits(5..<7), let day = digits(8..<10),
-              (1...12).contains(month), day >= 1, day <= daysInMonth(month, year: year)
+              (1...12).contains(month), (1...31).contains(day)
         else { return nil }
 
         return calendar.date(from: DateComponents(year: year, month: month, day: day))
-    }
-
-    private static func daysInMonth(_ month: Int, year: Int) -> Int {
-        switch month {
-        case 1, 3, 5, 7, 8, 10, 12: return 31
-        case 4, 6, 9, 11: return 30
-        default:
-            // The full Gregorian rule, not "divisible by four". 1900 is not a leap year and 2000 is, and
-            // both are in the corpus the equivalence suite compares against, precisely because the short
-            // rule gets them wrong in opposite directions.
-            let leap = (year % 4 == 0 && year % 100 != 0) || year % 400 == 0
-            return leap ? 29 : 28
-        }
     }
 
     // Whole Eastern calendar days from one day string to another. Negative if `to` is before
