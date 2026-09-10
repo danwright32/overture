@@ -96,17 +96,24 @@ final class OneVenueIdentityLiveStoreTests {
             // What survives the repair is what this is for, and it is the population that matters: a
             // deferred conflict (two rows each carrying a decision of Dan's) is one the pass refuses to
             // resolve blind, so it stays and is still reported here.
-            _ = NaturalKeyVenueMigration.run(in: ctx)
+            // #3496: the WHOLE launch, not this one pass. `DriftedRunMerge` and
+            // `SameNightTitleVariantMerge` both run after it and are the passes that actually clear a
+            // same-night duplicate, so replaying only this one asserted "no duplicates remain" having
+            // replayed none of the work that removes them (L385, L41).
+            // #3496: the candidate population, counted BEFORE the replay. Counting after answers "is the
+            // store clean now", which the assertion below already answers, and it cannot tell a store that
+            // had nothing to fix from one the replay fixed. Those are opposite facts, and the question this
+            // line exists to answer is whether the check had anything to examine at all (L182, L98, L11).
+            let bucketsBefore = Self.identityBuckets(live)
+            let doubledBefore = bucketsBefore.filter { $0.value.count > 1 }.count
+            LaunchReplay.run(in: ctx, handoffDirectory: try sandboxes.make(named: "venue-identity-handoff"))
             try ctx.save()
             let repaired = (try ctx.fetch(FetchDescriptor<Prospect>())).filter { $0.status != .dismissed }
-            var seen: [String: [Prospect]] = [:]
-            for p in repaired {
-                guard let date = p.performanceDate, !date.isEmpty else { continue }
-                let venueKey = VenuePlaces.canonicalKey(for: p.venue) ?? "unplaced"
-                let titleKey = TitleNormalization.normalizeForKey(p.groupName)
-                seen["\(titleKey)|\(date)|\(venueKey)", default: []].append(p)
-            }
+            let seen = Self.identityBuckets(repaired)
             let duplicates = seen.filter { $0.value.count > 1 }
+            print("One venue identity corpus: \(doubledBefore) identity bucket(s) held more than one live "
+                  + "row before the launch replay, out of \(bucketsBefore.count); "
+                  + "\(seen.filter { $0.value.count > 1 }.count) after")
             #expect(duplicates.isEmpty,
                     "#1761/#1764: \(duplicates.count) show(s) are stored more than once under one identity: \(duplicates.keys.sorted().prefix(3))")
             await RealStoreTestLock.shared.release()
@@ -114,6 +121,20 @@ final class OneVenueIdentityLiveStoreTests {
             await RealStoreTestLock.shared.release()
             throw error
         }
+    }
+
+    // ONE definition of the identity bucket, used for the before count and the after assertion alike. Two
+    // spellings of the same fold is how these symptoms came back last time, and a readout computed by a
+    // second copy of the rule would be reporting about a different population than the check (L70, L107).
+    private static func identityBuckets(_ rows: [Prospect]) -> [String: [Prospect]] {
+        var seen: [String: [Prospect]] = [:]
+        for p in rows {
+            guard let date = p.performanceDate, !date.isEmpty else { continue }
+            let venueKey = VenuePlaces.canonicalKey(for: p.venue) ?? "unplaced"
+            let titleKey = TitleNormalization.normalizeForKey(p.groupName)
+            seen["\(titleKey)|\(date)|\(venueKey)", default: []].append(p)
+        }
+        return seen
     }
 
     // The other half of #1802, and the one a count cannot show: that there is ONE fold. A second spelling
