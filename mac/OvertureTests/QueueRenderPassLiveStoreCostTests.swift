@@ -122,7 +122,11 @@ struct QueueRenderPassLiveStoreCostTests {
         }
 
         let clone = try cloneLiveStore()
-        let ctx = ModelContext(try openContainer(at: clone))
+        // #3750: the CONTAINER is held, so the fetch decomposition below can open a fresh CONTEXT per arm
+        // against the same file. A fresh container per arm would time opening the store rather than
+        // reading it.
+        let container = try openContainer(at: clone)
+        let ctx = ModelContext(container)
 
         // 1. What a @Query costs: the table read plus materialising every object. The in-memory fixture
         //    never pays this, and QueueView holds two such queries over the prospect table, so this is the
@@ -134,6 +138,40 @@ struct QueueRenderPassLiveStoreCostTests {
             prospects = (try? ctx.fetch(FetchDescriptor<Prospect>())) ?? []
             answers = (try? ctx.fetch(FetchDescriptor<OrgReachabilityAnswer>())) ?? []
             sources = (try? ctx.fetch(FetchDescriptor<WatchedSource>())) ?? []
+        }
+
+        // #3750: WHERE INSIDE THE FETCH the time goes, which nothing has ever asked.
+        //
+        // The fetch is now the largest single thing between this app and the milestone's bar: 168 ms
+        // against a pass of 175. Everything above decomposes the pass; this decomposes the half nobody
+        // has looked at, on the same rule (L507).
+        //
+        // EACH ARM GETS A FRESH CONTEXT, which is the whole reason this is measurable at all. A fetch of
+        // a table already read is served from the context's row cache, so timing the three in one context
+        // measures the ORDER they were written in rather than what each costs. The container is shared,
+        // so what is being told apart is the context's work rather than the file's.
+        func timedInAFreshContext(_ work: (ModelContext) -> Void) -> (median: Double, low: Double, high: Double) {
+            medianSeconds {
+                let fresh = ModelContext(container)
+                work(fresh)
+            }
+        }
+        let prospectFetch = timedInAFreshContext { c in
+            _ = (try? c.fetch(FetchDescriptor<Prospect>())) ?? []
+        }
+        let answersFetch = timedInAFreshContext { c in
+            _ = (try? c.fetch(FetchDescriptor<OrgReachabilityAnswer>())) ?? []
+        }
+        let sourcesFetch = timedInAFreshContext { c in
+            _ = (try? c.fetch(FetchDescriptor<WatchedSource>())) ?? []
+        }
+        // And the RELATIONSHIP, which the fetch above does not pay and the pass does: every card and every
+        // stage decision reaches a show's `recipients`, and SwiftData faults that on first touch. Timed
+        // apart from the fetch because they are two different costs that a single `fetch and materialise`
+        // line has always folded into one (L118).
+        let faultRecipients = timedInAFreshContext { c in
+            let rows = (try? c.fetch(FetchDescriptor<Prospect>())) ?? []
+            for row in rows { _ = row.recipients.count }
         }
 
         // A warm pass first, so the split below is not dominated by first-touch faulting.
@@ -392,6 +430,15 @@ struct QueueRenderPassLiveStoreCostTests {
 
           BEFORE the pass, paid once per store change, twice where two queries read the table:
             fetch and materialise     \(ms(fetchSeconds)) ms
+          #3750: inside it, each in a FRESH context so a warm row cache cannot answer for the next.
+          These are three separate reads, so they do not sum to the line above, which reads all three
+          into ONE context and pays the shared setup once.
+            the prospect table        \(ms(prospectFetch.median)) ms   \(spread(prospectFetch))
+            the org answer table      \(ms(answersFetch.median)) ms   \(spread(answersFetch))
+            the watched source table  \(ms(sourcesFetch.median)) ms   \(spread(sourcesFetch))
+            the same read PLUS faulting every show's recipients, which the pass does and the fetch
+            above does not:
+                                      \(ms(faultRecipients.median)) ms   \(spread(faultRecipients))
           THE PASS itself, EVERY card built, which is what this instrument measured before #3660:
             a whole-store card build  \(ms(itemsSeconds)) ms
             the pass minus that       \(restLabel)
@@ -459,6 +506,12 @@ struct QueueRenderPassLiveStoreCostTests {
         #expect(!prospects.isEmpty, "the clone held no prospects, so this timed an empty store")
         #expect(passSeconds > 0, "a whole pass took no measurable time, so it never ran")
         #expect(narrowedSeconds > 0, "the narrowed pass took no measurable time, so it never ran")
+        // #3750: the relationship really is extra work, or the two arms are measuring one thing and the
+        // line separating them says nothing (L70).
+        #expect(faultRecipients.median > prospectFetch.median,
+                Comment(rawValue: "faulting every show's recipients (\(ms(faultRecipients.median)) ms) came "
+                        + "out no dearer than the fetch alone (\(ms(prospectFetch.median)) ms), so one of "
+                        + "the two is not measuring what its label says"))
         // The two arms really are different arms. Without this, a narrowing that silently stopped
         // narrowing would print two numbers that agree and read as a pass that got no cheaper, which is
         // indistinguishable from an instrument measuring the same thing twice (L70, L98).
