@@ -121,12 +121,17 @@ struct TheWatchdogCountsPassesTests {
         await waitUntil("a stall to be recorded", timeout: .seconds(20)) { !records.all.isEmpty }
         watchdog.stop()
 
-        let stall = records.all.max { $0.seconds < $1.seconds }
-        #expect(stall != nil)
-        // At least the passes bumped inside it. Never the total, which would be one more.
-        #expect(stall?.passes != nil)
-        #expect((stall?.passes ?? 0) >= 1)
-        #expect((stall?.passes ?? 99) <= during)
+        // Judged over ALL the records rather than over the longest one. The longest stall is the one
+        // that spans a sleep on an idle machine, and under load it might not be: an unrelated stall
+        // could be longest and span no bump, which would fail this for a reason that is about the
+        // machine rather than about the wiring (L290, L224).
+        let counts = records.all.map(\.passes)
+        #expect(counts.allSatisfy { $0 != nil }, "a record carried no pass count at all")
+        // At least one stall spanned a bump, which is the wiring under test.
+        #expect(counts.contains { ($0 ?? 0) >= 1 })
+        // And never more than were bumped, which is what a reading of the whole-process TOTAL rather
+        // than the difference would produce: one pass was bumped before the watchdog started.
+        #expect(counts.allSatisfy { ($0 ?? 0) <= during }, "a record counted more passes than were bumped")
     }
 
     @Test func aFreezeInAProcessThatNeverCountedAPassRecordsNothingRatherThanZero() async {
