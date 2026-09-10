@@ -420,7 +420,7 @@ enum ProducerGate {
         //
         // Equivalent to the `shows:` initialiser below by construction, not by claim: the corpus folds
         // presenters with the same `ProducerGate.key` and skips the same unreadable ones, so it holds
-        // exactly the keys that loop produced. `VenueBrandsFromACorpusTests` asserts the two agree.
+        // exactly the keys that loop produced. `ScopeBuildsOneProducerIndexTests` asserts the two agree.
         init(corpus: Corpus, overrides: ProducerOverrides = .none) {
             // #1963: indexed ONCE for the whole pass, rather than every presenter walking every room. This
             // init was the biggest single slice of the queue's derivation on the live store, and nearly

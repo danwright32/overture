@@ -131,7 +131,7 @@ enum FormOutreachCopy {
     // recorded form pitch is FINAL, so the refusal, its sentence and the undo they belonged to are gone
     // rather than a control being built to make them reachable (L29).
     //
-    // `FormOutreachFinalityTests` is what holds that decision now, in behaviour rather than in this
+    // `FormOutreachTests` is what holds that decision now, in behaviour rather than in this
     // comment.
 
     static let markedLine = "Sent through their form. You told Overture they replied."
