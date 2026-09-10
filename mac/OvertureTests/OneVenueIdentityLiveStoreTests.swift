@@ -96,7 +96,11 @@ final class OneVenueIdentityLiveStoreTests {
             // What survives the repair is what this is for, and it is the population that matters: a
             // deferred conflict (two rows each carrying a decision of Dan's) is one the pass refuses to
             // resolve blind, so it stays and is still reported here.
-            _ = NaturalKeyVenueMigration.run(in: ctx)
+            // #3496: the WHOLE launch, not this one pass. `DriftedRunMerge` and
+            // `SameNightTitleVariantMerge` both run after it and are the passes that actually clear a
+            // same-night duplicate, so replaying only this one asserted "no duplicates remain" having
+            // replayed none of the work that removes them (L385, L41).
+            LaunchReplay.run(in: ctx, handoffDirectory: try sandboxes.make(named: "venue-identity-handoff"))
             try ctx.save()
             let repaired = (try ctx.fetch(FetchDescriptor<Prospect>())).filter { $0.status != .dismissed }
             var seen: [String: [Prospect]] = [:]
