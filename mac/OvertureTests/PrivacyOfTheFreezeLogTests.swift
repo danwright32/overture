@@ -116,6 +116,62 @@ struct PrivacyOfTheFreezeLogTests {
         }
     }
 
+    // #3763: the committed BASELINE is a second place this data lives, and it is in a PUBLIC repository.
+    //
+    // `fixtures/freeze-log-baseline-20260910.ndjson` is 686 real records off Dan's Mac, kept because
+    // milestone 80's before and after comparison is read from them and a relaunch discards the oldest
+    // (686 against a `FreezeLog.fileCap` of 500, so 186 would have gone). Everything above this test
+    // guards the SHAPE of a record as the app writes it; nothing guarded a file of real ones checked in.
+    //
+    // The permitted keys are DERIVED from `StallRecord`'s own stored properties rather than listed here,
+    // so a field added to the record later cannot arrive in this fixture unexamined, and a hand list
+    // cannot drift from the type it is supposed to describe (L41, L96).
+    @Test("the committed freeze baseline carries only the record's own stored fields")
+    func theCommittedBaselineCarriesNothingElse() throws {
+        let url = RepoRoot.url.appendingPathComponent("fixtures/freeze-log-baseline-20260910.ndjson")
+        let text = try #require(try? String(contentsOf: url, encoding: .utf8),
+                                "the committed freeze baseline is missing, so this guard measured nothing")
+        let lines = text.split(separator: "\n").filter { !$0.isEmpty }
+        // A FLOOR, so a truncated or emptied fixture is a failure rather than a clean pass over nothing
+        // (L98). The file held 686 when it was committed; anything near that is fine, nothing is not.
+        #expect(lines.count > 600, "read only \(lines.count) records, so this guard checked almost nothing")
+
+        let body = try #require(SourceGuardHelper.between("struct StallRecord", and: "\n}", in: model))
+        let stored = body.components(separatedBy: "\n")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { ($0.hasPrefix("let ") || $0.hasPrefix("var ")) && !$0.contains("{") }
+        let permitted = Set(stored.compactMap { line -> String? in
+            let afterKeyword = line.dropFirst(4)
+            guard let colon = afterKeyword.firstIndex(of: ":") else { return nil }
+            return String(afterKeyword[..<colon]).trimmingCharacters(in: .whitespaces)
+        })
+        #expect(permitted.count >= 6,
+                "read only \(permitted.count) stored fields off StallRecord, so the rule below judges against a short list")
+
+        var seen = Set<String>()
+        for line in lines {
+            let object = try #require(try? JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any],
+                                      "a line of the committed baseline is not an object")
+            seen.formUnion(object.keys)
+        }
+        let unexpected = seen.subtracting(permitted).sorted()
+        #expect(unexpected.isEmpty, Comment(rawValue:
+            "the committed baseline carries \(unexpected.joined(separator: ", ")), which is not a stored "
+            + "field of StallRecord. A key nobody declared is a key nobody checked for a person's name, "
+            + "in a file in a PUBLIC repository (#3763, L222)."))
+
+        // And the surface really is only ever the enum's own spelling, never free text that happened to
+        // parse. This is the half a key check cannot see.
+        let allowedSurfaces = Set(StallSurface.allCases.map(\.rawValue))
+        for line in lines {
+            guard let object = try? JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any],
+                  let surface = object["surface"] as? String else { continue }
+            #expect(allowedSurfaces.contains(surface),
+                    Comment(rawValue: "the committed baseline carries surface `\(surface)`, which is not a "
+                            + "StallSurface case, so something wrote free text into it"))
+        }
+    }
+
     // The watchdog reads the surface from a BOX the main thread stamps, and never asks the main actor for
     // it. Asking at write time would make the field unavailable at exactly the moment the record is being
     // written, so the guard would fall silent on precisely the input it exists to judge (L345).
