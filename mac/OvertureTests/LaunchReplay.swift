@@ -29,10 +29,15 @@ enum LaunchReplay {
     // because a caller asserting anything date-relative needs to pin both ends of it (L130).
     @discardableResult
     static func run(in context: ModelContext, handoffDirectory: URL, now: Date = Date()) -> Bool {
-        // Force-unwrapped deliberately: `UserDefaults(suiteName:)` returns nil only for a name that
+        // Force-unwrapped deliberately: the suite name initialiser returns nil only for a name that
         // collides with a reserved domain, and a fresh UUID cannot. A silent fallback to `.standard`
         // here would reintroduce exactly the live write this isolation exists to prevent, so failing
         // loudly is the safe direction (L42).
+        //
+        // The API is named in PROSE rather than spelled out, because
+        // `TestsCannotReachSharedStateTests.everyDefaultsSuiteIsScoped` scans for that literal and cannot
+        // tell a comment about it from a call to it. Spelled out, this comment was reported as a test
+        // building an unscoped defaults suite (#3767).
         let suiteName = "overture-launch-replay-\(UUID().uuidString)"
         let isolated = UserDefaults(suiteName: suiteName)!
         defer { isolated.removePersistentDomain(forName: suiteName) }
