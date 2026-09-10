@@ -349,6 +349,29 @@ struct QueueRenderPassLiveStoreCostTests {
                 ProducerGate.Show(presenter: $0.presenter, venue: $0.venue)
             })
         }
+        // #3742: WHAT A CACHE KEY WOULD COST, before anybody builds the cache.
+        //
+        // The proposal is to reuse the producer index across passes, since its inputs (the corpus's
+        // presenter and venue pairs, plus the overrides) change on a scout run and not on a scroll. Any
+        // such cache needs a key derived from those inputs, because a key on anything cheaper can be
+        // wrong, and a wrong `VenueBrands` changes which presenters the producer gate admits, which
+        // changes which shows Dan is offered. No cost test would see that.
+        //
+        // But a content key is ITSELF a walk of every row, so the saving is the index minus the key, not
+        // the index. That is the number nobody had, and it is what decides whether the cache is worth its
+        // invalidation risk. Measured here rather than reasoned about (L107).
+        //
+        // Hashing is the CHEAPEST honest key: it reads both fields of every row exactly as the index
+        // does, and does strictly less with them.
+        let indexKeyTerm = medianSeconds {
+            var hasher = Hasher()
+            for p in everyProspect {
+                hasher.combine(p.presenter)
+                hasher.combine(p.venue)
+            }
+            _ = hasher.finalize()
+        }
+
         let inheritedTerm = medianSeconds {
             _ = QueueModel.inheritedAnswers(answers, corpus: everyProspect, overrides: .none,
                                             refusals: .none, heldKeys: [], now: resolved.now,
@@ -441,7 +464,9 @@ struct QueueRenderPassLiveStoreCostTests {
             the org answer table      \(ms(answersFetch.median)) ms   \(spread(answersFetch))
             the watched source table  \(ms(sourcesFetch.median)) ms   \(spread(sourcesFetch))
             the same read PLUS faulting every show's recipients, which the pass does and the fetch
-            above does not:
+            above does not. Read the DIFFERENCE against the spreads either side of it: measured
+            twice a day apart it was 13 ms and then under 4 ms, so what this says is that
+            faulting the relationships is small, not how small (#3750):
                                       \(ms(faultRecipients.median)) ms   \(spread(faultRecipients))
           THE PASS itself, EVERY card built, which is what this instrument measured before #3660:
             a whole-store card build  \(ms(itemsSeconds)) ms
@@ -493,6 +518,11 @@ struct QueueRenderPassLiveStoreCostTests {
             engagement clustering      \(ms(engagementTerm.median)) ms   \(spread(engagementTerm))
             the producer index, ONCE, shared by the two terms under it (#3743):
                                        \(ms(producerCorpusTerm.median)) ms   \(spread(producerCorpusTerm))
+              and what a CACHE KEY over the same rows would cost, which is what a cross-pass
+              cache would have to pay before it could skip the build (#3742):
+                                       \(ms(indexKeyTerm.median)) ms   \(spread(indexKeyTerm))
+              so reusing the index across passes is worth at most the difference:
+                                       \(ms(max(0, producerCorpusTerm.median - indexKeyTerm.median))) ms
             presenter against venue    \(ms(brandsTerm.median)) ms   \(spread(brandsTerm))
             organisation row counts    \(ms(rowCountsTerm.median)) ms   \(spread(rowCountsTerm))
             inheriting an org answer   \(ms(inheritedTerm.median)) ms   \(spread(inheritedTerm))
@@ -510,12 +540,23 @@ struct QueueRenderPassLiveStoreCostTests {
         #expect(!prospects.isEmpty, "the clone held no prospects, so this timed an empty store")
         #expect(passSeconds > 0, "a whole pass took no measurable time, so it never ran")
         #expect(narrowedSeconds > 0, "the narrowed pass took no measurable time, so it never ran")
-        // #3750: the relationship really is extra work, or the two arms are measuring one thing and the
-        // line separating them says nothing (L70).
-        #expect(faultRecipients.median > prospectFetch.median,
+        // #3750: the relationship arm contains the fetch arm, so it cannot be MEANINGFULLY cheaper.
+        //
+        // WITHIN THIS RUN'S OWN NOISE, which the first version of this assertion did not allow and which
+        // is the same correction #3735 already made to the three pass arms below. It demanded strict
+        // ordering and fired on a correct run: 173.4 ms against 176.8 ms, three milliseconds apart on
+        // readings of a hundred and seventy, which is not an ordering at all (L224). That was this defect
+        // class being repeated in the very change that had fixed it one file over (L387).
+        //
+        // The tolerance is DERIVED from the widest spread the two arms actually reported, so it tracks
+        // how noisy the machine is rather than being a number somebody picked.
+        let fetchNoise = max(prospectFetch.high - prospectFetch.low,
+                             faultRecipients.high - faultRecipients.low)
+        #expect(faultRecipients.median >= prospectFetch.median - fetchNoise,
                 Comment(rawValue: "faulting every show's recipients (\(ms(faultRecipients.median)) ms) came "
-                        + "out no dearer than the fetch alone (\(ms(prospectFetch.median)) ms), so one of "
-                        + "the two is not measuring what its label says"))
+                        + "out cheaper than the fetch alone (\(ms(prospectFetch.median)) ms) by more than "
+                        + "this run's own noise (\(ms(fetchNoise)) ms), which cannot be true: the second "
+                        + "contains the first"))
         // The two arms really are different arms. Without this, a narrowing that silently stopped
         // narrowing would print two numbers that agree and read as a pass that got no cheaper, which is
         // indistinguishable from an instrument measuring the same thing twice (L70, L98).
