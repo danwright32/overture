@@ -178,6 +178,33 @@ struct QueueRenderPassLiveStoreCostTests {
             for row in rows { _ = row.recipients.count }
         }
 
+        // #3750: WHAT A PARTIAL FETCH WOULD BUY, before anybody changes a `@Query`.
+        //
+        // The fetch materialises every stored property of every `Prospect`, and the type has about 130 of
+        // them while a `QueueScopeRow` is built from roughly two dozen. `FetchDescriptor.propertiesToFetch`
+        // exists for exactly that. What nobody knows is whether the cost IS the field materialising:
+        // 133 microseconds a row could as easily be object allocation and SwiftData's own bookkeeping, in
+        // which case a partial fetch buys nothing and costs a fault on every reader that wants more.
+        //
+        // Measured before building, which is the same move that has corrected three premises today (L107).
+        // The list below is the ROW's own fields, read off `QueueScopeRow.init(_:facts:)`, plus the few
+        // `StageNavigation.matches` needs. It is not exhaustive and does not need to be: what is being
+        // measured is whether narrowing the fetch changes the number at all.
+        let rowFields: [PartialKeyPath<Prospect>] = [
+            \Prospect.naturalKey, \Prospect.groupName, \Prospect.discipline, \Prospect.venue,
+            \Prospect.presenter, \Prospect.location, \Prospect.performanceDate, \Prospect.runNights,
+            \Prospect.performanceStartTimes, \Prospect.nightStartTimes, \Prospect.startTimesVary,
+            \Prospect.fitScore, \Prospect.tier, \Prospect.statusRaw, \Prospect.sentAt,
+            \Prospect.outcomeRaw, \Prospect.showOutcomeRaw, \Prospect.bookingSuggested,
+            \Prospect.draftBody, \Prospect.reachabilityProbedAt, \Prospect.reachabilityUnansweredAt,
+            \Prospect.reachabilityRecheckRequestedAt, \Prospect.runEndDate,
+        ]
+        let partialFetch = timedInAFreshContext { c in
+            var descriptor = FetchDescriptor<Prospect>()
+            descriptor.propertiesToFetch = rowFields
+            _ = (try? c.fetch(descriptor)) ?? []
+        }
+
         // A warm pass first, so the split below is not dominated by first-touch faulting.
         _ = QueueModel.items(from: prospects, answers: answers, corpus: prospects, sources: sources)
 
@@ -463,6 +490,9 @@ struct QueueRenderPassLiveStoreCostTests {
             the prospect table        \(ms(prospectFetch.median)) ms   \(spread(prospectFetch))
             the org answer table      \(ms(answersFetch.median)) ms   \(spread(answersFetch))
             the watched source table  \(ms(sourcesFetch.median)) ms   \(spread(sourcesFetch))
+            the same read narrowed to the \(rowFields.count) fields a ROW is built from, which is
+            what a partial @Query would cost (#3750):
+                                      \(ms(partialFetch.median)) ms   \(spread(partialFetch))
             the same read PLUS faulting every show's recipients, which the pass does and the fetch
             above does not. Read the DIFFERENCE against the spreads either side of it: measured
             twice a day apart it was 13 ms and then under 4 ms, so what this says is that
