@@ -65,6 +65,13 @@ struct SameNightRoomVariantMergeLiveStoreTests {
         try ctx.save()
 
         let remaining = dated((try? ctx.fetch(FetchDescriptor<Prospect>())) ?? [])
+        // #3496: what this actually examined, for the reason the sibling suites now say it too. A night
+        // holding one row can never offend, so the population that matters is the nights holding more
+        // than one, and a run where that is zero has asserted nothing (L182, L98, L11).
+        let nightsHoldingMoreThanOne = Dictionary(grouping: remaining, by: { $0.performanceDate ?? "" })
+            .filter { $0.value.count > 1 }.count
+        print("Same-night room variant corpus: \(remaining.count) dated row(s), "
+              + "\(nightsHoldingMoreThanOne) night(s) holding more than one, after the launch replay")
         var offenders: [String] = []
         for (_, night) in Dictionary(grouping: remaining, by: { $0.performanceDate ?? "" }) {
             for i in night.indices {

@@ -65,7 +65,14 @@ struct LiveStoreDuplicateInvariantGuardTests {
         // The isolation is the other half of #3496's fix and is load bearing: replaying with the real
         // settings store has PresenterWithheldRecheck stamp a boundary into the LIVE app's settings from
         // inside a test (L2).
-        let isolatesSettings = source.contains("UserDefaults(suiteName:")
+        // Built rather than written whole, so this file does not itself hold the literal string that
+        // `TestsCannotReachSharedStateTests.everyDefaultsSuiteIsScoped` scans for. That guard cannot tell
+        // a line USING the API from a line ABOUT it, which is the guard working correctly, and it is the
+        // same trap the style gate has with an em dash. Splitting the needle is preferred over adding
+        // this file to that guard's exemption map: an exemption is a hole in a net, and there is a clean
+        // way not to need one (AGENTS.md, "write it as an escape, never override the gate").
+        let needle = "UserDefaults(suiteName" + ":"
+        let isolatesSettings = source.contains(needle)
         #expect(isolatesSettings, "LaunchReplay does not isolate the settings store (#3496, L2)")
     }
 

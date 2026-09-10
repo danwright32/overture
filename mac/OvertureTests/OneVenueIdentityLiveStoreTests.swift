@@ -111,6 +111,12 @@ final class OneVenueIdentityLiveStoreTests {
                 seen["\(titleKey)|\(date)|\(venueKey)", default: []].append(p)
             }
             let duplicates = seen.filter { $0.value.count > 1 }
+            // #3496: what this actually examined. Replaying a launch is what makes the assertion below
+            // honest, and it is also what makes it nearly always true, so without this a store whose
+            // candidate population has fallen to zero passes forever while testing nothing, which is the
+            // very failure this issue is about (L182, L98, L11).
+            print("One venue identity corpus: \(repaired.count) live row(s) folded into \(seen.count) "
+                  + "identity bucket(s) after the launch replay")
             #expect(duplicates.isEmpty,
                     "#1761/#1764: \(duplicates.count) show(s) are stored more than once under one identity: \(duplicates.keys.sorted().prefix(3))")
             await RealStoreTestLock.shared.release()

@@ -29,11 +29,11 @@ enum LaunchReplay {
     // because a caller asserting anything date-relative needs to pin both ends of it (L130).
     @discardableResult
     static func run(in context: ModelContext, handoffDirectory: URL, now: Date = Date()) -> Bool {
-        let suiteName = "overture-launch-replay-\(UUID().uuidString)"
         // Force-unwrapped deliberately: `UserDefaults(suiteName:)` returns nil only for a name that
         // collides with a reserved domain, and a fresh UUID cannot. A silent fallback to `.standard`
         // here would reintroduce exactly the live write this isolation exists to prevent, so failing
         // loudly is the safe direction (L42).
+        let suiteName = "overture-launch-replay-\(UUID().uuidString)"
         let isolated = UserDefaults(suiteName: suiteName)!
         defer { isolated.removePersistentDomain(forName: suiteName) }
 
