@@ -28,10 +28,13 @@ import Foundation
 // nothing, and sitting there it reads as binding (L407).
 final class MainThreadWatchdog: @unchecked Sendable {
 
-    // Every 250ms. Fast enough that a stall Dan can perceive is caught by several pings and slow enough
-    // that the enqueue cost is nothing. It is also the source of `StallLog.floorSeconds`: a ping late by
-    // less than one interval has missed no more than one turn of the run loop.
-    static let pingInterval: TimeInterval = 0.25
+    // #3752: the interval lives on `StallLog` now and this reads it, rather than each holding the number.
+    //
+    // It was declared here as 0.25 and copied into `StallLog.floorSeconds` as another 0.25, with a comment
+    // in each naming the other. That is one fact in two places, and the day the interval moved the floor
+    // would have stayed behind with nothing saying so (L41, L70). The floor is DERIVED from this, so they
+    // cannot part.
+    static var pingInterval: TimeInterval { StallLog.pingIntervalSeconds }
 
     // What the MAIN thread stamps and this only ever READS.
     //

@@ -57,8 +57,15 @@ struct TheAppReportsItsOwnFreezesTests {
     // and reporting none would say it was clean when what happened is that nothing crossed a line (L98).
     @Test("a session whose worst stall is under the floor still has one")
     func theHighWaterIsJudgedBeforeTheFloor() {
-        let kept = StallLog.adding(stall(0.1), to: empty)
-        #expect(kept.highWater?.seconds == 0.1)
+        // #3752: DERIVED from the floor, like the test above it, rather than a literal. This said `0.1`,
+        // which was comfortably under a floor of 0.25 and is exactly AT a floor of 0.1, so lowering the
+        // floor turned the fixture into the opposite case and the test failed for a reason that had
+        // nothing to do with what it asserts (L401: a fixture whose meaning is its relationship to a
+        // configurable threshold must be derived from that threshold, not written as a literal chosen to
+        // sit under it).
+        let under = StallLog.floorSeconds / 2
+        let kept = StallLog.adding(stall(under), to: empty)
+        #expect(kept.highWater?.seconds == under)
         #expect(kept.records.isEmpty)
     }
 

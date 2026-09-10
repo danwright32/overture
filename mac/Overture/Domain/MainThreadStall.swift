@@ -90,14 +90,37 @@ struct StallRecord: Codable, Equatable, Sendable {
 // never that the largest was among them (L63).
 enum StallLog {
 
+    // How often the watchdog pings, and therefore what it can see.
+    //
+    // #3752: 0.1s, DOWN FROM 0.25s, so that a stall over 100 ms is a record with its real duration.
+    //
+    // WHY IT MOVED. Milestone 80's bar is "no baseline-load main-thread stall over 100 ms, measured by
+    // the in-app watchdog". At 0.25s the watchdog could not see a 100 ms stall AT ALL: the floor was two
+    // and a half times the bar, so an empty log would have read as the bar being met when it meant only
+    // that nothing crossed 250 ms. That is the emptiest possible failure reading as the cleanest possible
+    // pass, inside the milestone's own success criterion (L98). Measured on Dan's real log 2026-09-10:
+    // 504 records, smallest 0.251s, so 100% of them exceeded the bar by construction and the entire
+    // sub-250ms population was invisible.
+    //
+    // WHAT IT COSTS, measured rather than argued: `WatchdogCostTests` had one ping at 0.0058 ms of the
+    // main thread, which was 0.0023% of a 250ms interval and is 0.0058% of a 100ms one. The guard's
+    // ceiling is 1%, so this is still two orders of magnitude inside it, and the guard scales with the
+    // interval so it would say if that stopped being true.
+    //
+    // A ping in flight is still never doubled (#3635), so a freeze longer than the interval queues one
+    // ping rather than one per interval, and shortening the interval does not multiply the records a
+    // single freeze writes.
+    static let pingIntervalSeconds: TimeInterval = 0.1
+
     // Below this a stall is COUNTED and not stored as its own record.
     //
-    // The source of the number, which #3435 requires be stated: it is one ping interval plus a margin.
-    // `MainThreadWatchdog.pingInterval` is 0.25s, so a ping that runs late by less than that has been
-    // delayed by no more than one missed turn of the run loop, which is ordinary scheduling on a busy
-    // machine and not a freeze. Anything Dan could perceive is several times this: the shortest thing
-    // this milestone has measured him waiting for is a 378 ms rebuild.
-    static let floorSeconds: Double = 0.25
+    // DERIVED from the interval rather than restated as a number, which is #3752's other half. It was
+    // `0.25` written out, with a comment saying "`MainThreadWatchdog.pingInterval` is 0.25s", so the two
+    // were one fact in two places and changing the interval would have silently left the floor behind
+    // (L41, L70). The reason is unchanged: a ping late by less than one interval has been delayed by no
+    // more than one missed turn of the run loop, which is ordinary scheduling on a busy machine and not
+    // a freeze.
+    static var floorSeconds: Double { pingIntervalSeconds }
 
     // How many individual records the file keeps.
     //
