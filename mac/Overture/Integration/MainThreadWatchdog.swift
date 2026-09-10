@@ -56,6 +56,27 @@ final class MainThreadWatchdog: @unchecked Sendable {
 
     let surface = SurfaceBox()
 
+    // #3760: how many render passes the main thread has run, on the SurfaceBox's precedent exactly.
+    //
+    // The main thread is the only writer and the watchdog the only reader, for the reason above it: a
+    // value the watchdog has to ask the main actor for is unavailable at exactly the moment a record is
+    // being written (L345). A lock rather than an actor, because an actor hop is the thing that cannot
+    // happen here.
+    //
+    // It starts at NOTHING rather than at zero, and that is what makes "the surface did not rebuild"
+    // and "nobody was counting" different answers rather than one (L98, L11). See
+    // `StallLog.passesSpanned`.
+    final class PassCountBox: @unchecked Sendable {
+        private let lock = NSLock()
+        private var value: Int?
+        // Called by the MAIN thread. The only writer.
+        func bump() { lock.withLock { value = (value ?? 0) + 1 } }
+        // Called by the watchdog. The only reader.
+        var current: Int? { lock.withLock { value } }
+    }
+
+    let passes = PassCountBox()
+
     private let queue = DispatchQueue(label: "com.danwright.overture.main-thread-watchdog", qos: .utility)
     private let interval: TimeInterval
     private let now: @Sendable () -> Date
@@ -133,10 +154,16 @@ final class MainThreadWatchdog: @unchecked Sendable {
         guard claimed else { return }
 
         let posted = now()
+        // #3760: read BEFORE the ping is posted, and again below when it finally runs, which is the
+        // instant the main thread became free again. Reading the second one on the watchdog's queue
+        // afterwards would also work and would be less exact: it could include a pass that happened
+        // after the freeze had already ended.
+        let passesAtPost = passes.current
         let sequence = nextSequence()
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
             let ran = self.now()
+            let passesAtRun = self.passes.current
             let delay = ran.timeIntervalSince(posted) - self.interval
             // Back on the watchdog's queue to judge and write, because everything after this point must
             // be able to happen while the main thread is wedged.
@@ -146,18 +173,20 @@ final class MainThreadWatchdog: @unchecked Sendable {
                 // of the session on the very first on-time ping. The watchdog would then record one thing
                 // and go quiet, and silence is exactly what a healthy session looks like (L98).
                 self.keptLock.withLock { self.pingOutstanding = false }
-                self.recordIfStalled(delay, sequence: sequence, at: ran)
+                self.recordIfStalled(delay, sequence: sequence, at: ran,
+                                     passes: StallLog.passesSpanned(from: passesAtPost, to: passesAtRun))
             }
         }
     }
 
-    private func recordIfStalled(_ delay: TimeInterval, sequence: Int, at: Date) {
+    private func recordIfStalled(_ delay: TimeInterval, sequence: Int, at: Date, passes: Int?) {
         // A ping that ran EARLY or on time is not a stall. Clamped rather than recorded as a negative,
         // which would be a measurement of the timer's own jitter dressed as a freeze.
         guard delay > 0 else { return }
         let reading = loadReading()
         let stall = StallRecord(session: session, sequence: sequence, at: at, seconds: delay,
-                                surface: surface.current, load: reading.0, loadAverage: reading.1)
+                                surface: surface.current, load: reading.0, loadAverage: reading.1,
+                                passes: passes)
         let shouldWrite = keptLock.withLock { () -> Bool in
             let before = kept.records.count
             kept = StallLog.adding(stall, to: kept)

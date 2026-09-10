@@ -59,6 +59,14 @@ final class FreezeWatch {
     // Called by the MAIN thread whenever the surface changes. The only writer.
     func stamp(_ surface: StallSurface) { watchdog?.surface.stamp(surface) }
 
+    // #3760: called by the MAIN thread every time it runs a render pass. The only writer.
+    //
+    // Silently does nothing while the watch is stood down, which is correct rather than a swallow: with
+    // no watchdog there is no stall being measured for a pass to belong to. What must not be silent is a
+    // pass that happens WHILE the watch is running and is never counted, and that is what
+    // `EveryRenderPassIsCountedTests` holds, derived from the source rather than from a rule in prose.
+    func recordPass() { watchdog?.passes.bump() }
+
     // #3439's reader, exposed here so the gate can ask rather than open a file: the longest stall of this
     // session, as the watchdog itself has it, which includes the ones below the storage floor.
     var longestStallThisSession: StallRecord? { watchdog?.snapshot.highWater }

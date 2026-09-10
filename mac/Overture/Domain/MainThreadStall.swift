@@ -75,6 +75,17 @@ struct StallRecord: Codable, Equatable, Sendable {
     // "elevated" cannot be re-examined against a different line, which is the shape #3464 had to go back
     // and fix for the freeze tool's own threshold (L316, L107).
     let loadAverage: Double?
+    // #3760: how many render passes the main thread ran while this stall lasted.
+    //
+    // THREE VALUES, and `nil` is never folded into `0`. `nil` is UNMEASURED: no pass has ever been
+    // counted in this process, so this record cannot say. `0` means the surface did not rebuild during
+    // the freeze, which is the reading that REFUTES "a burst of store changes did this" and sends the
+    // work somewhere else. `N` is the count. A zero standing for both would make the refutation
+    // indistinguishable from the instrument being absent (L98, L11).
+    //
+    // OPTIONAL also because the log on Dan's Mac holds hundreds of records written before this shipped,
+    // and those are the "before" half of milestone 80's own reading. They decode with this absent.
+    let passes: Int?
 
     // The whole identity, as one string, because a reader that remembers what it has said has to remember
     // BOTH halves: the sequence restarts at 1 in every process, so it is not an identity on its own.
@@ -89,6 +100,21 @@ struct StallRecord: Codable, Equatable, Sendable {
 // small stalls flushes the one long entry out, and an eviction count tells you some were dropped but
 // never that the largest was among them (L63).
 enum StallLog {
+
+    // #3760: how many render passes happened between two readings of the pass counter.
+    //
+    // PURE and here rather than inside the watchdog, so all four outcomes can be PRODUCED by a test
+    // rather than reasoned about (L151). Every one is reachable in the running app.
+    //
+    // The counter has one writer (the main thread) and only ever increases, so a reading that went
+    // BACKWARDS is a fault in the instrument rather than a stall that un-rendered itself, and it is
+    // reported as unmeasured rather than as a negative number of passes (L11).
+    static func passesSpanned(from before: Int?, to after: Int?) -> Int? {
+        guard let after else { return nil }
+        let start = before ?? 0
+        guard after >= start else { return nil }
+        return after - start
+    }
 
     // How often the watchdog pings, and therefore what it can see.
     //

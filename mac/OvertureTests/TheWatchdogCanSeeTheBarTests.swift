@@ -70,6 +70,7 @@ struct TheWatchdogCanSeeTheBarTests {
 
     private func record(seconds: Double) -> StallRecord {
         StallRecord(session: "s", sequence: 1, at: Date(timeIntervalSince1970: 1_000_000),
-                    seconds: seconds, surface: .queue, load: .baseline, loadAverage: 1)
+                    seconds: seconds, surface: .queue, load: .baseline, loadAverage: 1,
+                    passes: nil)
     }
 }

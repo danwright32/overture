@@ -783,6 +783,30 @@ already drifting from the Swift version it mirrored.
     treated ordinary CoreData `Error:` noise as the suite finishing and reported a suite that was still
     running. Wait on the run's own end marker, never on a substring that routine noise can produce.
 
+- **Asking what a freeze actually was: `scripts/what-froze-the-queue.sh` (#3760).** Reads
+  `freeze-log.ndjson` and prints, per stall, the duration beside the number of RENDER PASSES it spanned.
+  It exists because on 2026-09-10 the queue froze for 16.73s at baseline load on a build carrying every
+  fix in milestone 80, and nothing could say what it was: one store change costs 350.7 ms end to end,
+  measured the same day, so that freeze is forty-eight of them or it is something else entirely, and
+  those call for opposite work.
+  The count reaches the record the way `surface` already does, which is the part to understand before
+  changing it: the MAIN THREAD stamps and the watchdog only READS, because a value the watchdog has to
+  ask the main actor for is unavailable at exactly the moment a record is being written (L345). A
+  surface that runs the pass and never bumps is caught by `EveryRenderPassIsCountedTests`, derived from
+  the source rather than from a list, because a behaviour each call site must opt into is enforced by
+  nothing (L27, L621).
+  It REPORTS and judges nothing against a cost figure, deliberately: a per-pass cost written into the
+  script would be a dated number that rots silently and reads as more trustworthy the older it gets
+  (L316, #3487). The decisive reading needs none. A long stall spanning many passes is the render pass
+  run over and over; a long stall spanning NONE is something else.
+  Read its answer correctly. Three exit codes, and the third is the one that matters: `2` is UNMEASURED,
+  because a record written before #3760 is installed carries no count at all, and a log that has not
+  turned over must not read as a clean bill (L98, L11). `1` means a stall over a second spanned no pass,
+  which is the finding that sends the next diagnosis elsewhere. `0` is attributed. Records it cannot
+  judge are REPORTED as unjudged rather than folded into either verdict.
+  Its judging half rides along on every push through `scripts/what-froze-the-queue.test.sh`, which builds
+  its own logs rather than reading the live one.
+
 - **Asking what a contact check actually searched for: `scripts/what-the-check-searched.sh <show>` (#2996).**
   Takes a group name or a natural key and prints, per archived run, the show AS THE RUN WAS GIVEN IT
   beside every web call that run made. Both halves matter and the defect is only ever visible in their

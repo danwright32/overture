@@ -10,7 +10,7 @@ struct TheAppReportsItsOwnFreezesTests {
                        surface: StallSurface = .queue, load: MachineLoad = .baseline,
                        at: Date = Date(timeIntervalSince1970: 1_785_000_000)) -> StallRecord {
         StallRecord(session: "s", sequence: sequence, at: at, seconds: seconds,
-                    surface: surface, load: load, loadAverage: 1.0)
+                    surface: surface, load: load, loadAverage: 1.0, passes: nil)
     }
 
     private var empty: StallLog.Kept { StallLog.Kept(records: [], highWater: nil, evicted: 0, belowFloor: 0) }
@@ -264,7 +264,7 @@ struct TheAppReportsItsOwnFreezesTests {
         afterRelaunch.records.append(StallRecord(session: "second", sequence: 1,
                                                  at: Date(timeIntervalSince1970: 1_785_009_999),
                                                  seconds: 3.0, surface: .queue, load: .baseline,
-                                                 loadAverage: 1))
+                                                 loadAverage: 1, passes: nil))
         let said = FreezeReport.newlyReported(in: URL(fileURLWithPath: "/tmp"), watchdogRan: true,
                                               defaults: d, read: { _ in afterRelaunch })
 

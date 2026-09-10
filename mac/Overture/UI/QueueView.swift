@@ -14,6 +14,10 @@ struct QueueView: View {
     // year ahead. Optional for the same reason undoStack is, and `.none` when absent, which holds every
     // show to the ordinary window rather than crashing.
     @Environment(ClientRoster.self) private var clientRoster: ClientRoster?
+    // #3760: the app's own freeze instrument, so this surface can say it ran a render pass. Optional for
+    // exactly the reason `undoStack` above is: a non-optional Observable lookup fatal errors when the
+    // object is absent, and a missed injection must cost a count rather than the whole app.
+    @Environment(FreezeWatch.self) private var freezeWatch: FreezeWatch?
     @Environment(ActionFeedback.self) private var feedback   // #285: shared acknowledgment surface
     @Environment(DayOffOfferRequest.self) private var dayOffOffer   // #924: dismiss-to-day-off picker request
 
@@ -345,6 +349,10 @@ struct QueueView: View {
     }
 
     private func makeRenderData() -> RenderData {
+        // #3760: the main thread stamps, the watchdog reads. Here rather than inside `QueueRenderPass`
+        // because that is a pure static derivation and this is a side effect on the app's own instrument;
+        // the guard that keeps every future call site honest is a source test, not this comment.
+        freezeWatch?.recordPass()
         let now = Date()
         // Asked ONCE: three of the inputs below are decided from it, and it reads marker files.
         let inFlight = PrepQueueService.runInFlight(now: now)
