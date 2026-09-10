@@ -57,17 +57,12 @@ struct TheWatchdogCanSeeTheBarTests {
                         + "constant small delays is invisible rather than being one number"))
     }
 
-    // And the two constants are ONE fact. #3752's other half: the floor was a literal 0.25 beside an
-    // interval of 0.25, each comment naming the other, so moving the interval would have left the floor
-    // behind with nothing saying so (L41, L70).
-    @Test("the floor is the ping interval, not a copy of it")
-    func theFloorIsDerivedFromTheInterval() {
-        #expect(StallLog.floorSeconds == StallLog.pingIntervalSeconds)
-        #expect(MainThreadWatchdog.pingInterval == StallLog.pingIntervalSeconds,
-                Comment(rawValue: "the watchdog pings on a different clock from the one the floor is "
-                        + "derived from, so a stall shorter than one ping could be recorded or one "
-                        + "longer counted away"))
-    }
+    // The floor and the interval being ONE fact is #3752's other half, and it is asserted by
+    // `TheAppReportsItsOwnFreezesTests.theFloorIsOnePingInterval`, which already existed. It is NOT
+    // repeated here: that assertion passed the whole time the two were separate literals both equal to
+    // 0.25, because equality catches drift AFTER it happens and deriving prevents it. The derivation is
+    // the fix; the existing test remains the guard, and a second copy of it here would be one more thing
+    // saying the same thing (L605).
 
     private var empty: StallLog.Kept {
         StallLog.Kept(records: [], highWater: nil, evicted: 0, belowFloor: 0)
