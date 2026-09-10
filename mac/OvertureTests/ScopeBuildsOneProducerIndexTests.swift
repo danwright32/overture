@@ -190,6 +190,50 @@ struct ScopeBuildsOneProducerIndexTests {
                         + "spellings of one plus one other is two"))
     }
 
+    // #3742: the same fold-per-row shape, in the OTHER whole-corpus function that counts by organisation.
+    //
+    // `QueueModel.organisationRowCounts` is handed one entry per show in the store and folded every one,
+    // where an organisation presents many of them. It is a third of the size of the index's version of
+    // this (10.0 ms against 27.9) and is the same defect, so it is guarded the same way.
+    @Test("counting an organisation's rows folds each distinct name once")
+    func organisationRowCountsFoldsEachNameOnce() {
+        // Few names over many rows, for the reason the index's own test gives: where every row carries a
+        // distinct presenter the two behaviours produce the same count and the test proves nothing (L101).
+        let presenters = ["Roaming Presenters Co", "Downtown Music Inc", "Carnegie Hall Presents"]
+        let rows: [String?] = (0..<120).map { presenters[$0 % presenters.count] }
+
+        let work = QueueRenderPass.WorkTally.measure { _ = QueueModel.organisationRowCounts(rows) }
+
+        #expect(work.producerKeyFolds == presenters.count,
+                Comment(rawValue: "counting folded \(work.producerKeyFolds) names over \(rows.count) rows "
+                        + "carrying \(presenters.count) distinct ones. One per row would be \(rows.count), "
+                        + "and each fold is a regex plus a Unicode fold (#3742)."))
+    }
+
+    // The count it returns is unchanged, which the fold count cannot see. Asserted over rows where two
+    // spellings fold to ONE key, which is the case a memo keyed on the raw string has to get right: they
+    // must be counted together, and the second must not read the first's cache entry.
+    @Test("counting is unchanged by folding once")
+    func organisationRowCountsGivesTheSameAnswer() {
+        let rows: [String?] = ["The Roaming Presenters Co", "Roaming Presenters Co",
+                               "Roaming Presenters Co (touring)", "Downtown Music Inc", nil, ""]
+
+        let counts = QueueModel.organisationRowCounts(rows)
+
+        let key = try! #require(ProducerGate.key("Roaming Presenters Co"))
+        #expect(counts[key] == 3,
+                Comment(rawValue: "the three spellings counted as \(counts[key] ?? 0) rows; they fold to "
+                        + "one key, so they are one organisation with three"))
+        let other = try! #require(ProducerGate.key("Downtown Music Inc"))
+        #expect(counts[other] == 1)
+        // A nil and an empty presenter are counted under no key at all, never under an empty one, which
+        // is what `ProducerGate.key` returning nil means and what a memo could quietly turn into a "" key.
+        #expect(counts[""] == nil)
+        #expect(counts.count == 2,
+                Comment(rawValue: "the table holds \(counts.count) organisations; three spellings of one "
+                        + "plus one other is two"))
+    }
+
     // MARK: - The two VenueBrands initialisers give one answer
 
     // A corpus-taking initialiser that disagreed with the shows-taking one would change which presenters
