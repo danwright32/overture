@@ -56,11 +56,15 @@ struct QueueRenderPassLiveStoreCostTests {
         FileManager.default.fileExists(atPath: liveStoreURL.path)
     }
 
-    // #3660 Phase 10: how many rows a frame draws, as a STATED figure rather than a guess at the size
-    // of Dan's window. Twelve is above what a laptop window shows and below what a tall one does, so the
-    // narrowed reading is a conservative one: a real viewport is more likely to be smaller than this than
-    // larger, which makes the measured saving a floor rather than a best case.
-    private static let viewportRows = 12
+    // #3660 Phase 10: how many rows a frame draws.
+    //
+    // #3751: MEASURED now rather than assumed. It was 12, chosen as "above what a laptop window shows and
+    // below what a tall one does", which was a guess nothing had checked, and everything this milestone
+    // claims about the shipping pass is measured through it. `ViewportSizeTests` lays Archive out at the
+    // tallest window its own frame allows and counts the rows realized, and asserts this number covers
+    // that one. It lives on `QueueViewportAssumption` so the guard and the instrument read ONE value
+    // rather than two that have to be kept in step (L70).
+    private static var viewportRows: Int { QueueViewportAssumption.rows }
 
     private let sandboxes = TemporarySandboxes()
 
