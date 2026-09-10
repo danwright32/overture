@@ -1986,8 +1986,24 @@ enum QueueModel {
     // prospect for every prospect, which is the cost #1687 and #1121 record freezing the machine.
     static func organisationRowCounts(_ presenters: [String?]) -> [String: Int] {
         var counts: [String: Int] = [:]
+        // #3742: each distinct NAME folded once, not once per row, the same fix #3746 made to
+        // `ProducerGate.Corpus`. `ProducerGate.key` runs a regex plus a Unicode fold plus several trims,
+        // and this is handed one entry per show in the store while an organisation presents many of them.
+        //
+        // The memo is LOCAL to this call rather than a static, for #3746's reason: a shared cache would be
+        // mutable state every test in the process contends for (#3270), and it would need invalidating.
+        // A local one needs neither, because `key` is pure.
+        var folded: [String: String?] = [:]
         for presenter in presenters {
-            guard let key = ProducerGate.key(presenter) else { continue }
+            guard let presenter else { continue }
+            let cached: String?
+            if let hit = folded[presenter] {
+                cached = hit
+            } else {
+                cached = ProducerGate.key(presenter)
+                folded[presenter] = cached
+            }
+            guard let key = cached else { continue }
             counts[key, default: 0] += 1
         }
         return counts

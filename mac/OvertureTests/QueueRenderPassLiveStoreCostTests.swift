@@ -240,6 +240,23 @@ struct QueueRenderPassLiveStoreCostTests {
         // other way the four lines each rebuilt the table and their sum exceeded the floor they are
         // components of, which is the arithmetic saying the split was wrong rather than the floor (L118).
         let placeTerm = medianSeconds { _ = StageNavigation.placements(in: inQueue.all, context: resolved) }
+        // #3742: the SCOUT arm of the stage rule, which is 32.3 ms of the placement's 59.1 ms, measured by
+        // reducing `countedFocuses` to one focus at a time. It walks no recipients; what it does is ask
+        // whether each show is inside the lead-time window, and that runs `EasternDate.daysUntil`, which
+        // is TWO `DateFormatter` parses per show. One of the two is `today`, the same string every time.
+        //
+        // Timed here so the claim is a number rather than a reading of the code (L107).
+        let leadTimeTerm = medianSeconds {
+            for p in inQueue.all {
+                _ = QueueModel.isWithinOrdinaryLeadTime(performanceDate: p.performanceDate,
+                                                        today: resolved.today)
+            }
+        }
+        // And one parse on its own, over the same count, so the term above can be read as parses rather
+        // than as an unexplained cost.
+        let dayParseTerm = medianSeconds {
+            for p in inQueue.all { _ = EasternDate.date(from: p.performanceDate ?? "2027-01-01") }
+        }
         let placement = StageNavigation.placements(in: inQueue.all, context: resolved)
         let stageTerm = medianSeconds {
             _ = StageNavigation.queueKeys(in: placement, reachedOutKeys: reachedOutKeys)
@@ -405,6 +422,10 @@ struct QueueRenderPassLiveStoreCostTests {
             QueueModel.scope, no cards \(ms(scopeTerm.median)) ms   \(spread(scopeTerm))
             reached-out sweep          \(ms(reachedOutTerm.median)) ms   \(spread(reachedOutTerm))
             place every show's stages \(ms(placeTerm.median)) ms   \(spread(placeTerm))
+              of which the lead-time window, over every row:
+                                       \(ms(leadTimeTerm.median)) ms   \(spread(leadTimeTerm))
+              and one day-string parse each, for comparison:
+                                       \(ms(dayParseTerm.median)) ms   \(spread(dayParseTerm))
             masthead membership        \(ms(stageTerm.median)) ms   \(spread(stageTerm))
             possible-match fan-out     \(ms(fanOutTerm.median)) ms   \(spread(fanOutTerm))
             pill counts, from the table \(ms(agentTerm.median)) ms   \(spread(agentTerm))
