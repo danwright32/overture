@@ -42,6 +42,11 @@ enum FreezeHousekeepingCopy {
             sentences.append(pruneRefused(lines: lines))
         case .removed(let count, let earliest, let latest):
             sentences.append(pruned(count: count, earliest: earliest, latest: latest))
+            // ITS OWN SENTENCE, appended here rather than interpolated into the one above. Glued in as
+            // `\(kept)` it reached `docs/copy-inventory.md` as a line of Swift, so the cold read that file
+            // exists for could not be done on it, which is the finding #2570 and #2548 already recorded
+            // about exactly this shape.
+            sentences.append(keepsAMonth)
         }
         return sentences.isEmpty ? nil : sentences.joined(separator: " ")
     }
@@ -59,12 +64,13 @@ enum FreezeHousekeepingCopy {
 
     // ONE and SEVERAL are different sentences. A single record has no span, and "1 records" reads as a
     // plural somebody forgot to fix.
+    static let keepsAMonth = "Overture keeps a month of them."
+
     static func pruned(count: Int, earliest: Date, latest: Date) -> String {
-        let kept = "Overture keeps a month of them."
         if count == 1 {
-            return "One freeze record was deleted from the archive, recorded on \(EasternDate.dayLabelWithYear(earliest)). \(kept)"
+            return "One freeze record was deleted from the archive, recorded on \(EasternDate.dayLabelWithYear(earliest))."
         }
         return "\(count) freeze records were deleted from the archive, recorded between "
-            + "\(EasternDate.dayLabelWithYear(earliest)) and \(EasternDate.dayLabelWithYear(latest)). \(kept)"
+            + "\(EasternDate.dayLabelWithYear(earliest)) and \(EasternDate.dayLabelWithYear(latest))."
     }
 }

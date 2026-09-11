@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1554 sentences**.
+Every sentence Overture can say to Dan: **1560 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -14,7 +14,7 @@ What is not, and why:
   sentences under tokens nobody reads.
 - **Nothing, if it is written as two literals joined with `+`.** Those ARE joined here, into the
   one sentence the running app says (#3155). What is still only part of what Dan reads is a
-  sentence carrying a VALUE: 561 of the 1554 below hold a
+  sentence carrying a VALUE: 564 of the 1560 below hold a
   `\(...)` where a number or a name goes, so what is printed is the template. They are counted
   here rather than listed again, because the hole is visible in the line itself; what was missing
   was any statement of how much of this document is templates.
@@ -445,6 +445,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/BlockedCalendar.swift`
 "A later night of this run is out: you're already shooting on \(day)."
     `Domain/BlockedCalendar.swift`
+"A line in the freeze archive could not be read, so nothing was deleted from the archive."
+    `Domain/FreezeHousekeepingCopy.swift`
 "A message bounced in the conversation you linked for \(p.replyWatchDisplayName). Overture didn't send that message, so it cannot tell which address failed. Check it in Gmail"
     `Integration/BounceService.swift`
 "A nudge will arrive as a new email"
@@ -1474,6 +1476,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/CardDivergenceReport.swift`
 "One email to everyone"
     `UI/SendConfirmSheet.swift`
+"One freeze record was deleted from the archive, recorded on \(EasternDate.dayLabelWithYear(earliest))."
+    `Domain/FreezeHousekeepingCopy.swift`
 "One of the addresses is blank"
     `App/ActionFeedback.swift`
 "One of the addresses is blank. No contact was added"
@@ -1556,6 +1560,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/PrepRunArchive.swift`
 "Overture could not save the records of what this run searched for on each show, so they will be lost when the next run starts: \(reason)"
     `App/PrepRunArchive.swift`
+"Overture could not set aside the oldest freeze records, so it left the log alone rather than lose them. The log will keep growing until that works."
+    `Domain/FreezeHousekeepingCopy.swift`
 "Overture could not update"
     `Domain/UpdateAttempt.swift`
 "Overture couldn't find the message you picked, so it linked nothing. Try picking it again."
@@ -1626,6 +1632,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ScoutStartGate.swift`
 "Overture isn't connected to Gmail, so it can't read your inbox. Connect it in Settings and try again."
     `Domain/ProposedConversation.swift`
+"Overture keeps a month of them."
+    `Domain/FreezeHousekeepingCopy.swift`
 "Overture knows of no upcoming shoots from Downbeat, so it can't keep clear of them. Block those days here."
     `Domain/DaysOffAttention.swift`
 "Overture knows of no upcoming shoots from Downbeat, so the only days it keeps clear are the ones you add here."
@@ -2844,6 +2852,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/HandoffShortfall.swift`
 "\(count) earlier records could not be read."
     `Domain/CardDivergenceReport.swift`
+"\(count) freeze records were deleted from the archive, recorded between \(EasternDate.dayLabelWithYear(earliest)) and \(EasternDate.dayLabelWithYear(latest))."
+    `Domain/FreezeHousekeepingCopy.swift`
 "\(count) more shows stored a reason like these, but their own answers say they can be reached, so their cards never say it."
     `UI/EmptyAnswerSection.swift`
 "\(count) of those are shows that name their producing organisation."
@@ -2942,6 +2952,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/RunBoundaryViolations.swift`
 "\(lines) earlier records could not be read, which is what force quitting Overture while it is frozen leaves behind."
     `Domain/FreezeReport.swift`
+"\(lines) lines in the freeze archive could not be read, so nothing was deleted from the archive."
+    `Domain/FreezeHousekeepingCopy.swift`
 "\(list(runs)) run past \(dateLabel), so dismissing them takes their later nights too."
     `Domain/BulkDismiss.swift`
 "\(list) has listed shows before and came back with nothing this run. Its page format may have changed."
