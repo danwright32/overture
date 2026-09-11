@@ -439,6 +439,33 @@ final class TheFreezeLogKeepsItsOldestRecordsTests {
                 Comment(rawValue: "the real log lost records: \(before.records.count) in, "
                 + "\(kept.records.count) kept, \(archived.records.count) archived"))
         #expect(kept.records.count <= FreezeLog.fileCap, "the real log was left over its own cap")
+
+        // The PRUNE against the same real content, which the compaction half above does not exercise.
+        // Worth having even though it will report nothing to remove for about a month after #3763 ships:
+        // the archive is created by that first compaction, so everything in it is recent by construction,
+        // and the first real deletion is therefore a month out and otherwise unobserved. This at least
+        // proves the path runs over real records rather than only over records this suite composed.
+        //
+        // Its expectation is the INVARIANT rather than a verdict, because which verdict is correct depends
+        // on the age of whatever is in Dan's archive on the day it runs, and a test asserting "removed
+        // nothing" would quietly become wrong the first time it had something to remove (L130).
+        let pruneResult = FreezeLog.pruneArchive(besideLogAt: copy, now: Date())
+        let afterPrune = FreezeLog.read(at: FreezeLog.archiveURL(besideLogAt: copy))
+        switch pruneResult {
+        case .nothingToRemove:
+            print("freeze-compaction-rehearsal: the prune found nothing outside the retention window, "
+                  + "which is expected while the archive is newer than \(FreezeLog.archiveRetentionDays) days.")
+            #expect(afterPrune.records.count == archived.records.count,
+                    "the prune removed records while reporting that it removed none")
+        case .refused(let lines):
+            Issue.record(Comment(rawValue: "the prune refused on the real archive: \(lines) unreadable "
+                                 + "line(s). That is the guard working, and it means the real archive is damaged."))
+        case .removed(let count, let earliest, let latest):
+            print("freeze-compaction-rehearsal: the prune removed \(count) record(s) from "
+                  + "\(earliest) to \(latest).")
+            #expect(afterPrune.records.count == archived.records.count - count,
+                    "the prune's count and what the file actually lost disagree")
+        }
     }
 
     // MARK: - the retention rule itself, pinned where #3763 changed how it is computed
