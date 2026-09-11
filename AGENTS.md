@@ -33,6 +33,22 @@ already drifting from the Swift version it mirrored.
 
 ## Working here
 
+Five things are stated here IN FULL, because they have to arrive on every turn. Everything else
+is a POINTER: the rule is given below in one or two lines, carrying its condition and its
+instruction, and routinely dropping the clause saying what the failure looked like. The whole
+entry, with the measurement it came from, lives in one of the six files under `docs/agents/`.
+Read the whole entry whenever a rule is about to decide something. The line in the index is
+enough to tell you a rule APPLIES; it is not enough to apply it.
+
+Nothing moved into `docs/agents/` was reworded when it moved, and nothing there should be
+reworded now. Those paragraphs are dated measurements, and rewriting one destroys the record.
+
+Add a new rule to the topic file, not to this index, unless it genuinely has to reach every
+session. This file is loaded automatically into every session and has a 150,000 character
+ceiling that nothing in the project measured until #3640: it crossed on 2026-09-06 and was
+found because Dan happened to see an editor warning. `scripts/check-always-loaded-size.sh`
+rides along in `scripts/test-all.sh` and reports how close it is, advisory, never blocking.
+
 - **Before opening any PR, enumerate these five in the PR body. Not "checked": the actual list.**
   This exists because on 2026-08-10 two defects shipped from this repo and were filed as new issues
   within hours of the change that introduced them, both catchable in that same change. The rules were
@@ -149,951 +165,11 @@ already drifting from the Swift version it mirrored.
   deliberately stay ahead of the build, `check-pure-suite-imports.sh` (its whole value is saving a doomed
   build, which only works before one starts) and `check-pbxproj-fresh.sh` (it regenerates and restores
   the project file, which must not happen while xcodebuild is reading it).
-- One-time per CLONE: run `scripts/install-git-hooks.sh` once (#1251 Phase 3). Once per clone is the
-  whole of it: `core.hooksPath` lives in the shared git config (this repo sets no
-  `extensions.worktreeConfig`), so every worktree, including ones made later, inherits it without
-  running anything. Measured on 2026-08-09 across 11 worktrees, all of which had it.
-  It points git at `scripts/hooks`, which holds two hooks. `post-merge` regenerates a stale
-  `mac/Overture.xcodeproj/project.pbxproj` after a merge that combined Mac source changes and
-  stages it for you to commit. It is only a convenience (it cannot fire after a conflicted merge
-  finished by a manual commit); `scripts/check-pbxproj-fresh.sh` remains the real gate.
-  `pre-push` (#2291) refuses a push whose destination is `main`, including a deletion of it. Work
-  reaches main by pull request, and the checks that make a merge safe run on that path only, so a
-  direct push skips every one of them at once: one did on 2026-08-07, and the only sign was
-  `HEAD -> main` in the push output. A deliberate direct push is still possible with
-  `ALLOW_PUSH_TO_MAIN=1 git push ...`, which announces itself rather than passing silently.
-  #2291 also proposed GitHub branch protection as the stronger half, since a server side rule cannot be
-  absent the way a local hook can. **Dan's call, 2026-08-09: declined, and not an open to-do.** It needs
-  GitHub Pro on a private repo (both the branch protection and rulesets APIs answer 403 Upgrade to
-  GitHub Pro, measured 2026-08-08), and what it would buy was measured rather than assumed: the direct
-  push that caused the issue came from an ordinary working clone, which has the hook, and all 11 agent
-  worktrees on this Mac have it too, because `core.hooksPath` lives in the shared config (there is no
-  `extensions.worktreeConfig` here), so every future worktree inherits it without running the installer.
-  What remains uncovered is only a FRESH CLONE elsewhere whose owner skips `scripts/install-git-hooks.sh`
-  and then pushes straight to main. Revisit if this ever becomes a repo more than one machine clones.
-  Since #2557 that same installer also registers a MERGE DRIVER, for the same per-clone reason
-  (`merge.<name>.driver` lives in the git config, which is not tracked, and which every worktree shares).
-  `.gitattributes` sends this repo's GENERATED files to `scripts/lib/merge-generated.sh`: all three
-  generated copy documents (`docs/copy-inventory.md`, and since #3221 `docs/outbound-copy.md` and
-  `docs/copy-surfaces.md`, which arrived with #2946 and had never been registered) plus
-  `mac/Overture.xcodeproj/project.pbxproj`. Any two branches that
-  touch the app's wording or its file list conflict on those by construction, and the conflict carries no
-  decision: neither side's text is anybody's to write. Measured 2026-08-11, two branches in a row cost a
-  manual resolve plus two full suite runs each, roughly twelve minutes apiece, for nothing.
-  The driver keeps one side and DOES NOT regenerate, which is the part to understand before changing it.
-  Git runs a merge driver per file while the merge is still in progress, so the worktree it would read is
-  not the merged tree, and a generator run at that moment produces output derived from a state that never
-  existed while looking exactly as authoritative as a correct one. The freshness gates settle the content
-  afterwards, on the complete tree, and they are unchanged: `scripts/check-pbxproj-fresh.sh` blocks on a
-  stale project file (measured: it blocks on the auto-resolved commit, naming the file), and
-  `CopyInventoryTests` fails the Swift suite on a stale inventory. Both ride along in
-  `scripts/test-all.sh`. The driver REFUSES any path outside those two rather than resolving what it is
-  handed, so a mistyped `.gitattributes` line leaves a conflict to read instead of silently dropping
-  somebody's work. A clone that never runs the installer just gets git's ordinary text merge, which is
-  what this repo had before, so skipping it is no worse than the old behaviour.
-- **Asking whether the suite cares what year it is: `scripts/check-fixtures-do-not-age.sh` (#2669).** A
-  fixture pinned to a literal date and read against the live clock silently changes which state it stands
-  for as real time passes it: written as a show two months out, it becomes a show in the past, and the test
-  goes on asserting about a case nobody chose. That bit four times in one session while building #2645, and
-  one of those tests had spent months asserting that a show 27 days in the past should still be chased.
-  The check shifts every dated fixture in `mac/` forward three years, runs the Swift suite, restores the
-  tree, and compares the tests that changed verdict against `fixtures/year-sensitive-tests.txt`, which it
-  writes itself with `--record`.
-  It is OPT IN and not in `scripts/test-all.sh`, because it costs a second full suite run. Run it after
-  adding dated fixtures, and periodically.
-  Read its answer correctly, which is the part to understand before using it. It does NOT demand that
-  nothing is year-sensitive: 39 tests are, measured 2026-08-14, almost all for good reasons (a weekday
-  name, an Eastern calendar day, business-day arithmetic, a comparison against a checked-in fixture the
-  shift cannot move). Demanding zero would be a gate nobody could go green on. What it asserts is that the
-  SET has not changed, and the set grows on its own: a fixture dated ahead of today is unaffected by the
-  shift, and the day real time walks past it the same shift starts changing its state, so it joins the set
-  and the check names it. **A new entrant is not a defect, it is a test to look at**, which is the whole of
-  what #2669 asked for. Either it still asserts what it meant to, and you re-record, or real time walked it
-  into a different case.
-  **Since #2994 it also sees a date written as a NUMBER, and it reports the tests it cannot shift at all.**
-  `Date(timeIntervalSince1970: 1_754_400_000)` is a date, and the string shifter could not see one, which
-  is why #2986 (a pinned clock compared against live data that moves every day) was invisible to the tool
-  built for exactly that. Only values landing inside the same 1980..2100 window move, so the `0`, `1` and
-  `9_999` used as arbitrary instants are left alone, and the shift is CALENDAR arithmetic rather than a
-  fixed number of seconds so an epoch literal and a dated string in the same test land on the same day.
-  Separately it PRINTS, before the run, every test that reads the LIVE store while pinning a clock. Those
-  cannot be shifted at all (their data comes from the real store, which no rewrite of `mac/` touches), so
-  a list for a person to read is the honest answer rather than a gate. It names the TEST, or the SUITE
-  when the clock is a property beside the tests, never just the file.
 
-  Two approaches were measured and rejected before this one, and both are worth knowing because they look
-  reasonable. The issue's own proposal, a source-text guard flagging a file that pairs a literal
-  `performanceDate` with a bare `Date()`, matches 70 of 783 test files, so it would fire on the common case
-  and be switched off in a day (L93). Shifting only the already-past `performanceDate` literals produced 35
-  failures that were almost all its own doing, because a fixture date is often one half of a
-  literal-to-literal pair and moving one end breaks it for a reason unrelated to the clock. Shifting the
-  whole repo including the app's own source was worse again (69), because it moves constants that are not
-  fixtures at all.
-- **Asking whether a far-future fixture still asserts anything: `scripts/check-far-future-fixtures.sh`
-  (#2366).** A fixture dated `2099-09-19` was written to mean "always upcoming". Once #2359 gave the
-  queue a triage window it also came to mean "always OUTSIDE the window", so an assertion about triage on
-  that show went on passing while covering nothing. Measured 2026-08-09, 55 tests used that one date,
-  across at least twelve files, and nobody could tell which still asserted anything.
-  It is the MIRROR of `check-fixtures-do-not-age.sh` and shares its machinery through
-  `scripts/lib/fixture-date-shift.sh`: that one moves fixtures FORWARD and asks which tests read the
-  relationship between a stored date and the clock, this one pulls the far ones BACK and asks which were
-  relying on being outside every window. Both directions are findings: a test that goes RED was asserting
-  something true only of a far show, one that goes GREEN could never have fired at all, which is the
-  #2366 defect exactly.
-  **Read the limit of the instrument before reading its findings, because two of its three runs while
-  being built reported nothing but its own artefacts.** The shift is by whole YEARS, measured against the
-  clock the FILE ITSELF pins (`private let now = Date(timeIntervalSince1970: ...)`) rather than against
-  the year the run happens in, because a test judging from a pinned 2027 is asking about a show 72 years
-  ahead of THAT and pulling it back to today puts it behind its own clock. It moves dated strings and
-  epoch literals TOGETHER, for the reason `shift_dates` records: `WentByRetirementOnTheTickTests` pins
-  its opening night as a string and its clock as a number, and moving one end produced three failures
-  that were the check's own doing (L130). Even so, whole years cannot control the distance, so a show can
-  land a few days from its clock rather than a few months, and a test that breaks for THAT reason is the
-  instrument rather than a finding. `fixtures/far-future-sensitive-tests.txt` records the ones already
-  read, with a reason each, so the report is only ever what nobody has looked at.
-  **What the first full sweep found, 2026-08-23: nothing.** No test anywhere goes GREEN when its far
-  show is pulled near, which is the defect this exists for. The two that go RED are a deliberate
-  absurdly-long-range test and one whose show has to be ahead at all. It is OPT IN and not in
-  `scripts/test-all.sh`: it runs the whole Swift suite twice.
-
-- **Asking whether the suite cleans up after itself: `scripts/check-temp-dir-leaks.sh` (#3065).** The
-  Mac suite created scratch directories under the per-user temp folder and never removed them, and macOS
-  clears that folder only at boot. Measured on this Mac 2026-08-22, on an uptime of 8 days: 952
-  `debug-seed-test`, 560 `census`, 336 `prep-results`, 224 `prep-reply-cancel`, 224 `performer-failure`,
-  112 each of `scout-snapshot`, `scout-extract-cancel` and `overture-test`, and 56 each of
-  `venue-identity`, `no-repo`, `debug-seed-missing` and `debug-seed-gmail-missing`. Every count is a
-  multiple of 56, the number of suite runs, so the leak was about 52 directories per run, and this repo
-  amplifies the rate by running its suite from worktrees, many copies against one shared folder.
-  The fix is `mac/TestSupport/TemporarySandboxes.swift`, not a review: hold one as a property of a
-  `final class` suite and Swift Testing's per-test instance release makes its `deinit` real teardown that
-  no call site can forget. **Counting call sites will not find this defect**, which is worth knowing
-  before trying. Downbeat had it too and had 96 `createDirectory` calls against 95 `defer` cleanups,
-  which reads as balanced, while leaking 52 per run, because one private helper called by many tests
-  multiplies a single missing teardown. Overture has 166 such call sites across 136 files.
-  It is OPT IN and deliberately NOT in `scripts/test-all.sh`, for the same reason as
-  `check-fixtures-do-not-age.sh`: it runs the whole Mac suite to take its before and after. Its JUDGING
-  half rides along on every push through `scripts/check-temp-dir-leaks.test.sh`, which drives the
-  `--before/--after/--log-file` seam without paying for a run.
-  Read its answer correctly. It has THREE exit codes, not two, and the third is the one that matters: a
-  suite that cleans up perfectly and a suite that NEVER RAN leave the same empty before-and-after
-  difference, so judging on that difference alone reports the emptiest possible failure as the cleanest
-  possible pass (L98). Proof that tests ran comes from the run's own output, and 2 means unmeasured. The
-  prefixes it judges by are DERIVED from the test sources in four forms (`make(named:)`,
-  `reserve(named:)`, `inSandboxNamed:` and the not-yet-converted `appendingPathComponent` plus UUID
-  shape), because reading only the last would stop covering a suite at the exact moment that suite was
-  fixed (L96), and deriving none is reported as unmeasured rather than clean.
-  It found a real leak the moment it was first run, after every site #3065 named had been converted: six
-  `prep-results` files from `PrepResultsConsumedOnceTests`, which nothing in the issue mentioned. That is
-  the check working rather than the conversion having been careless.
-
-- **Asking whether test data names a real person: `scripts/check-test-identity-provenance.sh` (#3110,
-  #3131, #3140).** `TestDataEmailDomainGuardTests` judges an address by its DOMAIN, so anything on a reserved
-  TLD passes. That closes the deliverability half and leaves the identity half open, because
-  `arealpersonsname.example` is reserved and still names a real person in a PUBLIC repository. #2839's
-  scrub replaced only the domain, so a scrubbed person routinely survived as the LOCAL PART of the very
-  address that replaced them.
-  What it runs on is EVIDENCE, not a pattern, and the evidence was measured before it was built: a name
-  whose first appearance in this repository is a privacy SCRUB commit was minted by that scrub and is
-  invented, and one whose first appearance is an ordinary FEATURE commit was written by somebody with a
-  real page open. Measured 2026-08-22, `git log -S<name> --reverse` separated all eighteen names #2834
-  scrubbed from `Corin Hale` and `Nora Calder`, which were about to be scrubbed by mistake.
-  **#3110 named two other candidate answers and both were rejected, which is worth knowing before
-  reaching for either again.** Checking a domain label against the display names in the same test file
-  does not discriminate at all: an INVENTED personal-name domain appears as a display name in its own
-  test exactly as reliably as a real one, so the rule fires identically on the correct fix and gets
-  switched off within a day (L93). A periodic AI review over the corpus was rejected once the cheaper
-  answer above turned out to exist, and because a judgement nothing records is one the next sweep makes
-  again from scratch.
-  It REPORTS and does not refuse, deliberately. Plenty of feature-introduced names are perfectly
-  invented, so a gate on "introduced by a feature commit" would fire on the common case. What it
-  produces is the list of identities NOBODY HAS LOOKED AT YET, each carrying its introducing commit.
-  Read its answer correctly. Three exit codes, and the third is the one that matters: `2` is UNMEASURED,
-  because an extraction that found nothing and a tree with nothing to find leave the same empty result
-  and the emptiest possible failure must not read as the cleanest possible pass (L98). `1` means there
-  is something to triage, `0` that everything present is recorded.
-  Its baseline, `fixtures/test-identity-provenance.txt`, GROWS, which is the opposite of
-  `fixtures/test-data-email-domains.txt` beside it. That one is a ratchet over a defect being paid off
-  and may only shrink; this one is a triage log over identities somebody has read, and new invented
-  identities legitimately arrive with new tests. `--record` prints what it is about to add for that
-  reason: recording without reading the list is how a count driven to zero stops being a measurement
-  (L182).
-  **Since #3140 it reads a URL as well as an address**, which is the route neither privacy guard could
-  see. `TestDataEmailDomainGuardTests` judges an ADDRESS by its domain and this script reads the
-  identities inside a reserved-domain one; a URL was invisible to both, and a contact route in the live
-  store is a form on somebody's own site far more often than it is an address.
-  `PressContactFormGuardTests` says so in its own comment (its list is "every other form in the live
-  store, which must all stay usable"), so the data is a verbatim extract of Dan's real prospect contact
-  routes in a PUBLIC repository. Measured 2026-08-22: 201 distinct hosts, 102 on registrable domains,
-  and at least eight shaped like one private individual's own name.
-  Two details are the mirror of the address half rather than a copy of it, and both matter. A reserved
-  TLD is SKIPPED here and KEPT there, because a host on one cannot be anybody's real site while a
-  reserved-domain address is exactly where a half-finished scrub leaves a person's name as the local
-  part. And it emits EVERY label but the TLD rather than guessing the registrable one, because
-  `wraymoorhall.co.uk` puts the name two labels from the end and `pellingborne.org` puts it one: it
-  over-reports `tickets` and `co`, which the baseline absorbs once, rather than picking wrong and hiding
-  somebody. What it does NOT do is judge whether a label looks like a person's name, which #3110 measured
-  and rejected: the provenance lookup discriminates and the spelling does not.
-  Both extractions feed ONE `sort` at the end of the function, because the caller compares with `comm`,
-  and two locally sorted lists concatenated are not a sorted list: `comm` answers nonsense rather than
-  failing on that.
-
-  Two things it does that look like over-engineering and are not, both caught by its own fixture. The
-  token is kept VERBATIM apart from lowercasing, punctuation included, because `git log -S` searches for
-  a literal string and a normalised `margueriteeddowes` is in no commit anywhere, so the lookup answers
-  "no commit found" in wording that reads as a shrug. And the lookup is NOT scoped to the scanned roots,
-  even though scoping is faster, because a pathspec does not follow a rename and a fixture moved under a
-  root later has its MOVE reported as its origin, which is wrong in the direction that matters.
-  It is OPT IN and deliberately not in `scripts/test-all.sh`: it runs one `git log -S` over the whole
-  history per identity. Its judging half rides along on every push through
-  `scripts/check-test-identity-provenance.test.sh`, which drives it against a throwaway git repository
-  with real commits rather than a stub of `git log` (L52).
-
-- **Asking how much of the Swift suite runs on the main actor: `scripts/check-main-actor-share.sh`
-  (#3386).** The main actor is one serial executor, so under `-parallel-testing-enabled YES` two
-  `@MainActor` suites in one process cannot overlap however they are written: they queue, and a test
-  that awaits anything waits for everything ahead of it. Past its `.timeLimit` it is KILLED, which
-  truncates the whole run (#3266). Before this nobody could say how big that queue was.
-  It REPORTS and does not refuse, and rides along in `scripts/test-all.sh` as an advisory. Most
-  main-actor suites here are main-actor for a real reason: of the 462 files carrying the attribute when
-  this was written, 300 touch SwiftData, whose containers are main-actor bound, so a gate would fire on
-  the ordinary case and be switched off within a day (L93). What #3386 removed was the other kind, the
-  suites that carried it and did not need it: strip the attribute, build, and put it back wherever the
-  build says it was load bearing.
-  **Two things about that method are worth knowing before repeating it.** A normal build reports
-  isolation errors one BATCH at a time, so the loop finds one or two files per round and takes an hour;
-  `SWIFT_COMPILATION_MODE=wholemodule` passed through the wrapper reported 37 of them in a single build,
-  which is not exhaustive on its own but turns a dozen rounds into two. And the compiler is NOT a
-  sufficient guard: `ScrollPassthroughWebViewTests` compiled perfectly without its attribute and then
-  crashed the test process part way through a full run, which the short-run gate caught and correctly
-  refused to call a pass. A suite touching AppKit or WebKit keeps its isolation whatever the compiler
-  says, because the breakage there is at run time.
-  Read its answer correctly. Three exit codes, and the third is the one that matters: `2` is UNMEASURED,
-  because a tree where no suite could be read and a tree with no main-actor suites leave the same empty
-  result (L98). The unit is the SUITE rather than the file, since one file can declare several, and a
-  `@MainActor` on a nested helper inside a suite is not counted, because it isolates the helper rather
-  than the tests.
-  The record is `.overture-main-actor-share` beside the repo, gitignored and per machine, on
-  `.overture-hosted-suite-seen`'s precedent: a tracked file rewritten by every run is git noise on every
-  branch and a conflict on every merge.
-
-- **Asking which test harnesses hold state for the whole process: `scripts/check-test-shared-state.sh`
-  (#3270).** A stored `static var` in a test target is one variable per process, so two tests running at
-  once share it. That is the defect standing between this repo and parallel testing: every remaining
-  piece of it is a test that fails once in four runs rather than reliably, which is the shape that trains
-  people to re-run until green.
-  Four of them were found in #3234 by running the suite in parallel and reading which tests went red,
-  over four rounds. That costs a full run per round and only finds the ones that happened to collide that
-  time. A fifth (`StubURLProtocol` in `CarnegieExtractorTests`, #3269) was found afterwards by hand, by
-  listing the mutable statics, which took seconds. This is that listing, kept, so a new one arrives as a
-  line in a report rather than as an intermittent failure months later.
-  It REPORTS and does not refuse, and it rides along in `scripts/test-all.sh` as an advisory. A new
-  stored static is not automatically a defect (it may be covered by a lock, or unable to collide), so a
-  gate would fire on the ordinary case and be switched off within a day (L93). It rides along rather than
-  sitting behind a command nobody types, which is what #2773 cost: the tool shipped, nothing ran it, and
-  17 entries had accumulated by the time anybody looked. It is one grep.
-  Read its answer correctly. Three exit codes, and the third is the one that matters: `2` is UNMEASURED,
-  because a tree with no Swift read and a tree with no shared state in it leave the same empty result,
-  and only exit 2 fails the run (L98, L11). What it judges as a subject is a STORED mutable static; a
-  COMPUTED one derives its value on every read and holds nothing, and computed is by far the commoner
-  shape in these targets (a `liveStoreURL`, a source root, a lazily built fixture), so counting those
-  would fire on the ordinary case. Prose is not a declaration either: three files in the tree explain in
-  a comment why they are NOT a `static var`, and a reader that counted those would report the code that
-  fixed this defect as an instance of it. The one stored shape that LOOKS computed, a closure initialiser
-  (`static var x: T = { ... }()`), is treated as stored, which is what it is.
-  Its baseline, `fixtures/test-shared-state.txt`, GROWS, like `fixtures/test-identity-provenance.txt` and
-  unlike `fixtures/test-data-email-domains.txt`: it is a triage log over declarations somebody has read,
-  not a ratchet, and new harnesses legitimately arrive with new tests. Each line carries the REASON, which
-  is the point of the file: which named lock accounts for it. `--record` preserves a reason already
-  written and marks a new entry `NOT YET EXPLAINED`, and prints what it is adding, because recording
-  without reading is how a count driven to zero stops being a measurement (L182).
-  **The reason is prose, so a second guard checks it is still true.** `SharedStateWiringTests` asserts
-  that every suite MENTIONING one of the stubs carries that stub's trait, derived from the files rather
-  than from a list, so a suite that loses its lock in a refactor is red rather than intermittently red
-  months later. `.serialized` is deliberately not accepted as the answer: it orders a suite's own tests
-  and the interference comes from OTHER suites, which is why `SourceFetcherTests` carried `.serialized`
-  and still failed.
-
-- **Waiting for something in a Swift test: `waitUntil` in `mac/TestSupport/WaitUntil.swift`, and it
-  SUSPENDS rather than spins (#2576, #3277).** It is the one way this suite waits, and it carries a
-  deadline, because the obvious spelling (`while !condition { await Task.yield() }`) cannot fail: it can
-  only hang, and a hang takes the whole suite plus the machine-wide xcodebuild lock with it while being
-  indistinguishable from a slow machine (L110).
-  What #3277 changed is the poll. It used `Task.yield()`, which reschedules the waiter immediately, so
-  the loop ran as fast as a core allowed and one waiter burned that core for the length of the wait:
-  measured 2026-08-30, 12,322 polls in 200 milliseconds, on an idle machine, from a single test. Serially
-  that is invisible, because one spinner on an otherwise idle machine always gets its answer. Under
-  `-parallel-testing-enabled YES -parallel-testing-worker-count 12` there are twelve worker PROCESSES,
-  each with its own cooperative pool sized to the whole machine, and the spinners starve the work they
-  are waiting for (L241). Two of five consecutive full parallel runs went red and every failure in both
-  was a test that waits; the clearest was `LoopbackListener.start(timeout: 5)` reporting
-  `failed (45.464 seconds)`, which is a five second deadline that took forty five seconds to be noticed
-  rather than a bind that was refused.
-  `WaitUntilTests` guards it by POLL COUNT rather than by duration, because a duration compared against
-  a fixed number measures what else the machine is running (L224): a suspending wait can only poll about
-  as often as its sleep allows however fast the machine, while a spinner polls as fast as a core will
-  let it. It also guards the CLASS, flagging any `Task.yield()` whose nearest enclosing loop is a
-  `while`; a bounded `for _ in 0..<8 { await Task.yield() }` is deliberately left alone, since it returns
-  the thread after a fixed number of turns, which is what `SharedStateTestLockTests` uses.
-  The timeout message no longer says "This is a FAILURE, not a slow machine". That was true serially and
-  false under parallel, in the wording most likely to stop somebody looking further (L11).
-
-- **Before implementing a decision Dan has REVERSED, list the tests that assert the old one:
-  `scripts/find-tests-naming.sh <symbol> [<symbol> ...]` (#3163).** It prints every test in either Swift
-  test target that names any of the symbols, attributed to the `@Test func` that encloses the mention, or
-  to the SUITE when the mention sits in a helper or a comment outside any test, which it labels rather
-  than folds in.
-  Why the test rather than the file, which is all `grep -rl` gives: 14 files name `isAwaitingNudge` here,
-  and the unit somebody has to decide about is each test inside them. A test asserting a decision that has
-  since been reversed is not stale coverage, it is the guard DEFENDING the rejected behaviour, so it is
-  deleted rather than adjusted (L252).
-  It exists because that went wrong on 2026-08-23 with #2968. Dan reversed the rule so a show dismissed
-  after being emailed owes no nudge; two tests asserted the opposite, in two files, both written the same
-  day. One was found by reading and replaced, the other was MISSED and surfaced only by a full suite run
-  twenty minutes later.
-  A TOOL, never a gate, and #3163 says why: most tests naming a symbol are legitimately untouched by a
-  reversal, so anything that refused would fire on the common case. Three exit codes, and the third is the
-  one to read: `1` means NO test names any of the symbols, which is usually a symbol spelled differently
-  in the tests than in the app, and a reversal implemented against an empty list is one nothing was
-  checked for (L98). A COMMENT naming the rule is reported exactly like an assertion, because a comment
-  asserting the old rule misleads the next reader just as much.
-
-- Keeping the checkout tidy: `scripts/tidy-checkout.sh` (#2234) removes local branches and agent
-  worktrees whose work has provably shipped. It is a DRY RUN by default and needs `--apply` to
-  delete anything. Note WHY it exists rather than the one-line idiom: this repo squash-merges, so a
-  shipped branch is never an ancestor of main and `git branch --merged main -d` recognises almost
-  none of them (39 of 496, measured 2026-08-06). It proves containment by a merged PR or by
-  `git cherry`, keeps anything with an open PR, anything a worktree has checked out, and any
-  worktree holding uncommitted work, and answers every unanswerable question in the keep direction.
-  From #2234 both merge scripts also delete the local branch they just merged, since
-  `gh pr merge --delete-branch` only removes it on GitHub, which is where the backlog came from.
-  What that does NOT cover is every path that is not a merge script (a branch made by hand and
-  abandoned, an agent worktree, the bare one-line merge the next-issue shortcut uses), so since #2302
-  `scripts/check-branch-backlog.sh` rides along inside `scripts/test-all.sh` and prints one line when
-  the count of local refs has climbed past its threshold. Advisory only, never blocking, and it
-  counts REFS rather than dead ones: it says so, and hands the expensive question to the script
-  above, because the tidy's own counting pass reads every merged PR head branch from GitHub and then
-  computes a patch-id per commit, which is far too slow to sit inside every push. The reason it
-  exists at all is that nothing counted: the 496 accumulated with the obvious command agreeing all
-  was well the whole way up. The other repos named in #2302 (nursedex, playedit, PostRoll, Downbeat)
-  were NOT measured or covered here; that half of the issue is still open.
-- Reclaiming Xcode's build output: `scripts/reclaim-orphan-derived-data.sh` (#2585) deletes the
-  DerivedData folders belonging to worktrees that no longer exist. It runs by itself inside every
-  `scripts/test-all.sh`, so there is nothing to remember; run it by hand only to act immediately.
-  Worth knowing WHY it is separate from the tidy script above. Every other toolchain here caches
-  INSIDE the project directory (`node_modules`, `.next`, `venv`, `__pycache__`), so deleting a
-  worktree reclaims all of it for free. Xcode is the exception: its cache lives outside the checkout
-  and is keyed by the checkout's PATH, so every worktree that is ever built mints a fresh folder of
-  roughly 1.6 GB that nothing reclaimed. This repo used to mint those paths constantly (one throwaway
-  worktree per pre-merge verification, one per parallel agent; since #2601 verification reuses one
-  fixed slot, so agents are the remaining minters), so the growth is proportional to how
-  much the workflow is used and its ceiling is the disk. It reached that ceiling on 2026-08-12: 148 GB
-  across 105 folders, 101 of them pointing at directories already deleted, and 132 MiB free on a
-  926 GiB volume, at which point no command could run at all, including `df`, because the harness
-  could not write the command's own output file. The rule it reclaims by is narrow on purpose: a
-  folder whose `WorkspacePath` no longer EXISTS can never be reused, so deleting it costs nobody a
-  rebuild, and that is a far safer question than how old is too old. Anything it cannot settle is
-  kept, including a workspace on a volume that is merely unmounted. The three SHARED caches
-  (`ModuleCache.noindex`, `CompilationCache.noindex`, `SDKStatCaches.noindex`, another 44 GB when
-  measured) are only counted, never swept, because clearing them costs every project on the Mac one
-  slow build; `--clear-shared-caches` does it when that is what you want. `verify-and-merge-branch.sh`
-  stopped minting folders altogether (#2601): it verifies in one persistent worktree at
-  `~/.overture-verify-worktree`, scrubbed to a fresh checkout per run, whose single build folder is
-  kept warm on purpose (a cold path cost 75s more than a warm one, measured 2026-08-12) and survives
-  the sweep because its workspace exists. Agent worktrees under `.claude/worktrees/` are torn down by
-  the Claude Code harness, which this repo cannot hook, so those are what the sweep is for.
-  `tidy-checkout.sh` reports the same thing in its dry run and reclaims it under `--apply`, following
-  its own mode rather than carrying a second one. It DELEGATES to the script above rather than
-  reimplementing the rule, so there is one definition of what can never be used again instead of two
-  that can drift apart.
 - Importer: `pnpm test`, `pnpm typecheck`, `pnpm import-history <csv-path>` (one-shot booking
   history import, see `docs/import-history.md`). The scout itself is entirely native; see
   `docs/scout-runbook.md`.
-- Mac app: `cd mac && xcodegen generate`, then `./scripts/run-tests-locked.sh` (wraps
-  `xcodebuild -scheme Overture -destination 'platform=macOS' test` in a lock so it can't
-  collide with another test run on this Mac; use it instead of raw `xcodebuild test`). A
-  scoped `-only-testing:OvertureTests/<Suite>/<test>` run prints `** TEST SUCCEEDED **` with 0
-  tests executed if the path doesn't match anything (for example a `@Suite("...")` display name
-  that differs from its Swift type name), and raw `xcodebuild` exits 0 on it, indistinguishable
-  at a glance from a real pass.
-  Since #2317 that is caught rather than watched for: pass the scope to the WRAPPER
-  (`mac/scripts/run-tests-locked.sh -only-testing:OvertureTests/<Suite>`) and a run that reported
-  success while executing no tests at all fails with `NOTHING RAN`, naming the scope as the likely
-  cause. That is the reason to scope through the wrapper rather than around it; a raw `xcodebuild`
-  still has no gate on it. A scoped run is also exempt from the short-run baseline, and cannot move
-  it: the baseline is a full-suite number, so a handful of tests would otherwise read as a 99%
-  truncation and then quietly become the bar every later run is measured against.
-  Since #2577 the wrapper also says whether the run is still MOVING, which `NOTHING RAN` cannot,
-  because that gate can only speak once a run has ended and the run it exists for never ends. On
-  2026-08-12 a hang inside a test's untimed wait loop (#2576) went unnoticed for over an hour while a
-  second run sat blocked behind the shared lock, and three consecutive status reports said "waiting on
-  the suite" when the work had been dead throughout. So the wrapper watches its own log for lines
-  REPORTING a test or suite starting or finishing, and prints a loud `NO TEST HAS FINISHED FOR ...`
-  once nothing has reported for the stall limit, repeating on that cadence and withdrawing itself if
-  progress resumes. It never judges by the log GROWING: that hang wrote 21MB of repeated CoreData
-  errors while standing still, so every byte-based or mtime-based signal called it healthy the whole
-  time. It WARNS rather than kills, because a wrong kill throws a whole suite's work away and reports
-  as a failure nobody caused; the cost of warning is that somebody still has to act on it, and the
-  lock stays held until they do.
-  Waiting for the shared lock is deliberately NOT a stall and can never trip it. That distinction is
-  the whole guard: with several worktrees on this Mac contending for one lock, a run that has not
-  started yet is the ordinary case, and a guard that called it a stall would be switched off within a
-  day. It is told apart by evidence rather than by a threshold, since flock prints nothing until it
-  hands the lock over, so a queued run's log is EMPTY and that is proof rather than inference. That
-  state gets its own `STILL WAITING for the shared xcodebuild lock` notice, and a `Got the shared
-  xcodebuild lock after ...` line when the wait ends, so a queued run is no longer silently
-  indistinguishable from a hung one. The build phase is exempt for the same evidential reason: no run
-  has been observed to hang there, so there is no measured number to set a limit from. Retune with
-  `OVERTURE_TEST_STALL_LIMIT_SECONDS`, `OVERTURE_TEST_STALL_CHECK_SECONDS` and
-  `OVERTURE_TEST_LOCK_NOTICE_SECONDS`.
-  A red run that named no failing test is one of THREE things, not two, since #2322. A crashed app
-  host is retried once as the known #1331 flake. Code that did not compile is not (#1465). And a run
-  that never reached this Mac's TEST SERVICE, whose tell is the daemon's own wording plus a total of
-  zero tests executed, is now `test-service-wedged`: it is neither retried nor followed by the pure
-  suite probe, because both go through the same `testmanagerd` and would meet the same wedge after
-  another full build, and it says so and hands over `pkill -x testmanagerd`. On 2026-08-08 that
-  cause spent three full cycles being reported as a crashed app host, which was blameless.
-  The same daemon's AGE is read before the lock and mentioned when it is implausibly old (#2323),
-  advisory only, never blocking, in the way `prune-stale-registrations.sh` already rides along.
-  Retune the threshold in `TESTMANAGERD_OLD_DAYS`; it is set above a healthy reading measured on
-  this Mac rather than at a round number, so it does not fire on the ordinary case.
-  How long a full run takes is deliberately NOT written down here. It moved as the suite grew and
-  the stated figure was wrong by minutes, which matters because the paragraph above tells you to
-  check a suspiciously fast run against what a full one costs: an understated number weakens the
-  very warning it was there to support (#2532, L32). Every run ends with its own `Suite shape:`
-  line giving the wall clock it actually took, so read that.
-- **Measuring two runs going at once: `scripts/measure-concurrent-runs.sh` (#2762).** Starts a reachability
-  check and a Prep run together and counts what the machine really does, which is the session that unblocks
-  the rest of #2620. It spends REAL usage, so it plans and launches nothing without `--yes`, and it is a
-  Dan-at-the-machine job rather than an agent one. It refuses three ways before anything is spent: a support
-  directory that is or is inside the live one, two queues that share a show (#2765 is what would make an
-  overlap safe and it does not exist yet), and a check queue too small to fan out, since
-  `split_queue_into_chunks` makes `min(items, OVERTURE_PREP_MAX_PARALLEL)` chunks and a three-show run is
-  three claudes rather than the case in question (L101). The evidence it produces is an observed COUNT of
-  concurrent processes sampled throughout, not only a wall clock, because two halves that never actually
-  overlapped still produce a perfectly good duration. `docs/measure-concurrent-runs.md` is the runbook and
-  says how to read what it prints.
 
-- **Seeing a guard fail, which every guard here is supposed to have been (L1): `scripts/mutate.sh`
-  (#2755).** `scripts/mutate.sh [--at <text> | --at-regex <re>] [--breaks-the-build] <file>
-  <perl-expression> [test-scope ...]` breaks the code on purpose,
-  runs the suite, restores the file through a trap, and reports which tests went red. Roughly 1600 of the
-  suite's declarations are source-text guards, so this is done constantly, and it was hand-rolled every
-  time. Use it rather than a fresh one-liner, for the two reasons the hand-rolled version has already
-  lied: a substitution that matched NOTHING leaves the suite green for the ordinary reason and reads as a
-  surviving guard, and a run piped through anything reports the PIPE's status. It keeps ELEVEN outcomes
-  apart, and only the first two are results: CAUGHT, SURVIVED, NOT APPLIED, NOTHING RAN, LANDED
-  ELSEWHERE, NOT PROOF, NO RUNNER, DID NOT BUILD, MISPLACED FLAG, PERL VARIABLE and SCOPE MISSED THE
-  FILE.
-  `OVERTURE_MUTATE_RUNNER` swaps the runner, which is how to drive the shell fixtures or vitest instead
-  of the Swift suite. Since #2972 the run's FULL log is KEPT at a named path and printed as `full log:`
-  (`/tmp/overture-mutate-run.log`, moved with `OVERTURE_MUTATE_LOG`): only the last 25 lines go to the
-  screen, and the exact failure text this file demands in a PR body routinely sits just above that cut,
-  which used to mean running the whole mutation again for evidence the run had already produced.
-  **Since #3240 every proof also says how much of itself was BUILD rather than tests.** That issue asked
-  whether the one to four proofs a PR body carries could share one build, and the measurement says there
-  is nothing to share: each proof mutates a different file, each is already incremental on top of the
-  build the author's own `scripts/test-all.sh` just made, and what is left is Swift re-typechecking a
-  large module for one changed file. Measured 2026-08-31 on this Mac, scoped to a five-test suite whose
-  tests take 0.05s: 23.4s with nothing changed at all, 93.6s with one TEST file changed, 145.2s with one
-  APP file changed, and 199.2s for the same proof on the pure `OvertureCore` scheme, which is SLOWER and
-  so is not the lever either. A proof is therefore 75% to 84% build. The line is printed rather than
-  written down here for this document's own standing reason: a measured number in a sentence goes stale
-  silently, and one the tool takes on every run cannot (L32, L316).
-  The last two are #2820 and are the ones that lied in the CAUGHT direction, which is the worse one,
-  since CAUGHT is the verdict quoted as proof for each of those ~1600 guards. Measured 2026-08-16: an
-  expression using a pipe as its perl delimiter had its `\|` read as an escaped DELIMITER, reached the
-  regex as an alternation with an empty branch, matched the EMPTY STRING at offset 0, and prepended text
-  ahead of a shebang. The file stopped parsing, every fixture went red, and mutate.sh said CAUGHT. So it
-  now confirms the change landed where it was aimed BEFORE it will run anything. A match that consumed no
-  characters is refused outright, which needs nothing declared and catches that incident exactly where a
-  diff-based rule cannot (the prepend happened on the first line, so the diff reads as an ordinary
-  one-line change). `--at <text>` declares the aim explicitly and refuses a mutation touching any line
-  the text does not name, which is the only way the tool can know where a mutation was SUPPOSED to
-  land. Since #3080 that aim is LITERAL, because an aim is a LOCATOR rather than a pattern: it used to be
-  a regex and said so nowhere at the point of use, so `--at 'Text(SendConfirmCopy.openReview)'` reported
-  LANDED ELSEWHERE naming a line nobody wrote, its parentheses having grouped rather than matched. That
-  happened six times in one session, each costing a rerun of a scoped Swift suite. `--at-regex` is the
-  opt in for an aim that genuinely wants a pattern; it is a separate flag rather than a mode on `--at`
-  so which reading is in force is visible at the call site.
-  **Since #3344 `--at` may be given MORE THAN ONCE**, each naming one line, and a touched line has to be
-  named by one of them. That is for the ordinary two-line shape one aim cannot state: a `set -m` above
-  the line it protects, a `return` under the message explaining it. Measured 2026-08-30 while proving
-  #3292 and #3264, five correctly aimed mutations came back LANDED ELSEWHERE naming a line one above or
-  below the aim, and two were then worked around by hand-editing the file with perl, which is the exact
-  sequence this tool exists to stop anybody doing. The two flags MIX and each aim is read the way its own
-  flag says. One thing to know before using it: an aim that names NO line is refused on its own, rather
-  than being carried by a neighbour that does match. With a single aim a typo could only ever refuse,
-  since every touched line fell outside it, so the wrong aim announced itself; with two it would be
-  silently covered and a line you believe you named would be uncovered (L98). The perl expression is still genuinely perl
-  and is unchanged, but a `NOT APPLIED` whose search text IS in the file literally now NAMES the
-  metacharacters being read as a regex, the way `PERL VARIABLE` already names `$0`. It says that only
-  with that evidence, never on the mere presence of a metacharacter, so the ordinary typo (text that is
-  simply absent) is not blamed on escaping. And a run in which nearly everything went red reads as the instrument misfiring rather than as
-  proof. A SCOPED run is exempt from that last one on purpose: a scope naming the one suite holding the
-  guard is expected to go entirely red, and a rule condemning it would fire on the common case and be
-  switched off within a day (L93).
-  The last three are #2995, #2859 and #2993, and all three are one thing: a MALFORMED INSTRUCTION being
-  reported as a verdict. A build failure used to be folded into CAUGHT, on the reasoning that the
-  compiler caught something, which is true of a mutation whose POINT is that the code stops type-checking
-  and false of every other one, where it means the guard never ran at all. That is `DID NOT BUILD` now,
-  and the deliberate case declares itself with `--breaks-the-build` rather than silently borrowing
-  another outcome's name. `PERL VARIABLE` refuses an unescaped `$0`, `$&` or a `$1` with no capture
-  group, which is how the build failures were produced twice in one session on #2988: in a `s///`
-  replacement `$0` is perl's own program-name variable, so `isCandidate($0, ...)` interpolates away.
-  Write `\$0` when you mean the characters. **Since #3109 it refuses the other sigil too**, an unescaped
-  `@` followed by a name, because `@name` is a perl ARRAY and is interpolated in the REPLACEMENT and in
-  the PATTERN alike. That one lied in the SURVIVED direction, which is the worse one: measured
-  2026-08-22 proving #2839's guard, the expression asked for `"someone@arealpersonsite.com"`,
-  `@arealpersonsite` interpolated away, the text that landed was `"someone.com"`, a guard that judges an
-  address by its DOMAIN correctly said nothing about a string holding no `@`, and the verdict printed
-  was SURVIVED for a guard that works. The aim check structurally cannot catch it, since the
-  substitution lands on exactly the line it was aimed at. E-mail addresses are ordinary test data here,
-  so write `\@` whenever you mean the character. And `MISPLACED FLAG` refuses a `--` argument sitting where a
-  test scope goes: **put `--at` FIRST**, because after the expression it used to fall into the trailing
-  scopes, reach xcodebuild as an unrecognised option and send the runner to the PURE suite, so the aim
-  check was off and a targeted proof became a full-suite run.
-
-  **`SCOPE MISSED THE FILE` is #3098, and it is the one that lied in the SURVIVED direction.** Hit for
-  real on 2026-08-21 while proving #2726: a sentence in `ScoutService.swift` was reworded, scoped to
-  `-only-testing:OvertureTests/ScoutStartGateTests`, and mutate.sh reported SURVIVED. The guard was
-  fine. The test lives in a SECOND suite in that same FILE, `ScoutStartGateWiringTests`, so the scope
-  ran nine real, unrelated tests and never the one under test; re-run against the right suite, CAUGHT.
-  `NOTHING RAN` structurally cannot catch that, because something did run, and the caution mutate.sh
-  used to print about it was a rule living only in prose (L27). Before believing a SURVIVED, mutate.sh
-  now asks whether any suite that NAMES the mutated file actually ran, refuses when none did, and lists
-  the suites that do name it so the right scope is in front of you (capped at 15, saying how many of how
-  many it dropped, because ScoutService is named by 65 suites and StoreRelocation by 1). The unit is the
-  SUITE and not the file, which is the whole of why it works: both suites in that incident live in one
-  file, and a per-file rule would have passed it. The other signature #3098 floated, a scope naming a
-  suite whose file declares more than one `@Suite`, was measured and rejected: it fires just as hard when
-  the scope named the RIGHT suite of the two, which is the common case (L93). Three states are
-  deliberately NOT refusals, and each says which it was rather than letting silence stand for a
-  measurement (L11): an unscoped run (it ran everything there is), a file no suite anywhere names
-  (SURVIVED is then a real finding about the code), and a log with no suite lines at all, which is what
-  `OVERTURE_MUTATE_RUNNER` pointed at the shell fixtures or vitest produces.
-
-  **A SURVIVED also says whether the needle is still in the file (#3157).** Four source-text guards
-  written on 2026-08-23 passed while the code they guard was deleted, all the same shape: the needle
-  also occurs somewhere harmless in the SAME file, so the assertion is answered by that second
-  occurrence rather than by the code (L135). `DetachConversationCopy.control` is a PREFIX of
-  `.controlHelp` on the next line (#2797); `DraftedDeadEndCopy.line` survived inside an `if false`
-  branch (#2674); `onConnectGmail: connectGmail` reaches ArchiveView as well as FollowUpsView (#2967).
-  Every one was found the same way, by hand, after the SURVIVED, by grepping the file. So the SURVIVED
-  now carries that reading, in three states kept apart because an unmeasured check and a passed one
-  look identical from silence (L11): the text is STILL in the file, at named line numbers; it is not,
-  which rules that explanation out; or it could not be read as literal text that was in the file, in
-  which case nothing was measured and it says so. It is a REPORT on a SURVIVED and deliberately not a
-  rule over every guard: a needle that legitimately recurs is common, so a gate on it would fire on
-  the ordinary case and be switched off within a day (L93).
-
-- **Which test entry points refuse to call an empty run a pass, and which cannot (#2541).** Zero subjects
-  examined is its own outcome and must never read as "everything passed", because the empty result
-  arrives exactly when the work has not started (L98). Where each entry point stands, measured
-  2026-08-15:
-  - `mac/scripts/run-tests-locked.sh`: GATED since #2317. A run that reported success while executing no
-    tests fails with `NOTHING RAN`, naming the scope as the likely cause.
-  - `pnpm test` (vitest): GATED already, by vitest itself. A filter matching nothing prints
-    `No test files found, exiting with code 1` and exits 1. Nothing was added here; it was checked.
-    Its SCOPE is a different question and had the opposite defect (#3120): with no config file vitest
-    took its default include, which descends into the agent worktrees under `.claude/worktrees/`, so
-    the run collected this repo's 16 test files fifteen times over, one copy per nested checkout, and
-    reported `Test Files  240 passed (240)` (measured 2026-08-22, 14 worktrees). Not a coverage gap,
-    but a half finished branch in a worktree could fail the verdict on a change that never touched it,
-    and the count read as thorough while moving with how many agents happened to be running.
-    `vitest.config.ts` now names an include anchored inside `src/`, which a nested checkout cannot be
-    reached by whatever it is called, and `src/lib/testDiscoveryScope.test.ts` guards both that anchor
-    and the other half, that no test file of this repo's own is left outside where the include looks.
-  - **A fixture that leaves a PROCESS running: GATED since #3254.** The runner had checked for leaked
-    FILES since #2850 and never looked at what was still running, and a leaked process is the worse of
-    the two: it holds the run's stdout open so anything capturing that output waits for it (L235), it
-    can hold the shared xcodebuild lock, and macOS reaps nothing until the next boot. #3248 found one
-    fixture that had been leaking two `sleep 300` per run for as long as it had existed and three
-    helpers that orphaned a child per stop, none of it visible to the runner that gates every push.
-    ATTRIBUTION is the hard half, not detection: eight fixtures run at once, so a stray in the process
-    table belongs to nobody in particular. Each fixture now runs as a background job under `set -m`, so
-    it and everything it starts get a process GROUP of their own, and the group answers the question.
-    `scripts/lib/fixture-process-leak.sh` holds one implementation, sourced by the runner AND by the
-    per-fixture wrapper it writes, so the two cannot drift (L263). Strays are ENDED as well as named,
-    because reporting one and walking past it is how they accumulate; the guard that matters there is
-    that `fixture_end_process_group` reads its OWN group independently and refuses to end it, since a
-    `set -m` that did not take would otherwise have the runner kill itself (L70).
-    Since #3292 the fourth of those is fixed rather than declared, and the fix was in PRODUCTION code:
-    `heartbeat_stop` was `kill "$1"`, which ends the heartbeat subshell and leaves the `sleep` inside it
-    running, on every stop of every detached run. It now ends the process GROUP, and the three runners
-    start their heartbeat (and prep's stuck-tool-call watchdog) under `set -m` so there is a group to
-    end. The group kill is CONDITIONAL on the pid being its own group leader, which is what `set -m`
-    makes it and what nothing else does: `heartbeat_stop` is also called on pids that were not started
-    that way, and a group kill on one of those would take down the runner and its claude (L70, L321).
-    On its first sweep it found FOUR fixtures leaking, which is the check working rather than the
-    conversion having been careless: `run-heartbeat.test.sh` (four `sleep 5`), `sleep-guard.test.sh`
-    (one `sleep 1`), `stuck-tool-call.test.sh` (one `sleep 1` per watchdog case) and
-    `prep-run-chunking.test.sh` (two `sleep 15`). The first three create their stray deliberately, to
-    demonstrate that a bare `kill` on a subshell leaves the `sleep` inside it, and are right to create
-    one and wrong to walk away from it: they now use `fixture_run_in_own_group`.
-    The fourth is DECLARED rather than fixed, with `shell-fixture-leaks-process: sleep (#3292)`, because
-    its stray is created by the production code it runs end to end (`heartbeat_stop` ends the heartbeat
-    subshell and not the `sleep` inside it, which is #3248's class unconverted in `run-heartbeat.sh`).
-    The declaration is the same shape as `shell-fixture-expects-missing-command:` and for the same
-    reason: a rule whose only answers are pass and fail gets switched off the first time somebody meets
-    a case it cannot express. It names the COMMAND, so an undeclared stray in a declaring fixture is
-    still caught, and it MUST carry an issue number, so it is a debt with an owner rather than a
-    permanent exemption (L523, L65). A declared leak is still ended.
-  - `scripts/run-shell-fixtures.sh`: GATED since #2541. A fixture that exits 0 having printed no passing
-    assertion fails, because that is what a fixture looks like when its body did not run (an early
-    return, a loop over an empty list, a guard that skipped every case). All 61 fixtures print at least
-    one, so the rule costs nothing and only fires on a fixture that stopped working.
-    Since #3245 it also RUNS THE FIXTURES IT IS GIVEN: `scripts/run-shell-fixtures.sh <path> ...` runs
-    only those, and no arguments still sweeps everything, which is what `scripts/test-all.sh` calls. Use
-    the scoped form to prove one fixture through the runner's own rules, which are the only place those
-    rules exist; running the fixture directly gets none of them. Before this the entry point globbed and
-    ignored its arguments entirely, so a scoped proof cost the whole sweep (#3237 measures that at 65.7s)
-    and said nothing about the path it was handed, which is worse than the cost: an argument that is
-    silently ignored is indistinguishable from one that was honoured. A named path matching no fixture is
-    REFUSED rather than falling back to the sweep, and a sweep that finds no fixture at all now says
-    UNMEASURED and exits nonzero, where it used to print `No *.test.sh fixtures found.` and exit 0 (L98).
-    Since #2929 it also says when the run has STOPPED MOVING, which that gate cannot: it can only speak
-    once a run has ended, and the run this exists for never ends. Output does not stream here (each
-    fixture's block prints after it finishes), so a fixture that hangs used to leave the runner silent
-    forever: measured 2026-08-17, one was still alive after roughly 8 minutes holding up the whole
-    parallel run and had to be killed by hand. `scripts/lib/fixture-stall-guard.sh` warns on a cadence
-    once nothing has STARTED OR FINISHED for the limit, and NAMES the fixtures still going. It reuses the
-    Swift runner's rules (`notice_due`, `humanize_seconds` from `mac/scripts/lib/test-progress-watch.sh`)
-    and deliberately not its WORDS, which are about xcodebuild and a shared lock this runner does not
-    have. Both ends are counted, not just finishes: with eight lanes, seven fast ones would otherwise mask
-    a hung one for as long as work remained. It WARNS rather than kills, for #2577's reason. Retune with
-    `OVERTURE_FIXTURE_STALL_LIMIT_SECONDS` and `OVERTURE_FIXTURE_STALL_CHECK_SECONDS`.
-  - **Anything asking a yes or no question with `cmd | grep -q`: WRONG under `pipefail`, and it fails
-    in the direction that reads as a clean answer (#3275).** `grep -q` exits on its first match, which
-    kills the producer with SIGPIPE, and `set -o pipefail` makes that 141 the pipeline's status, so the
-    condition reads FALSE. Measured 2026-08-30 against a real 1.2MB run log: an EARLY match gave 141, a
-    LATE match 0, and no match 1, so an early match and no match are indistinguishable. It had been
-    live in `hosted_suites_ran` (the screens readout), where it looked correct only because a SERIAL run
-    puts the app-hosted bundle LAST so the match lands near the end; under
-    `-parallel-testing-enabled YES` the hosted lines start at line 1406 and four consecutive runs
-    reported the screens as NOT VERIFIED having just passed all 49 of them.
-    The remedy is a herestring (`grep -q ... <<< "${text}"`), or `grep` with no `-q` redirected to
-    `/dev/null` where the file must stay POSIX for `scripts/check-runner-posix.sh`. Since #3275
-    `scripts/run-shell-fixtures.sh` scans the PRODUCTION scripts for this shape as well as the
-    fixtures, which it had never done, and its needle matches a `-q` anywhere in grep's option cluster
-    rather than the one spelling `grep -q`, because `grep -aqF` is what the real defect was written as.
-  - **A raw `xcodebuild`: NOT GATED, and cannot be.** It has no wrapper to hold the rule, which is the
-    reason to scope through `mac/scripts/run-tests-locked.sh` rather than around it. A raw run also exits
-    0 on a `-only-testing:` path that matches nothing.
-  - **A hand-written wait loop watching a log: NOT GATED, and the trap is specific.** One on 2026-08-11
-    treated ordinary CoreData `Error:` noise as the suite finishing and reported a suite that was still
-    running. Wait on the run's own end marker, never on a substring that routine noise can produce.
-
-- **Asking what a freeze actually was: `scripts/what-froze-the-queue.sh` (#3760).** Reads
-  `freeze-log.ndjson` and prints, per stall, the duration beside the number of RENDER PASSES it spanned.
-  It exists because on 2026-09-10 the queue froze for 16.73s at baseline load on a build carrying every
-  fix in milestone 80, and nothing could say what it was: one store change costs 350.7 ms end to end,
-  measured the same day, so that freeze is forty-eight of them or it is something else entirely, and
-  those call for opposite work.
-  The count reaches the record the way `surface` already does, which is the part to understand before
-  changing it: the MAIN THREAD stamps and the watchdog only READS, because a value the watchdog has to
-  ask the main actor for is unavailable at exactly the moment a record is being written (L345). A
-  surface that runs the pass and never bumps is caught by `EveryRenderPassIsCountedTests`, derived from
-  the source rather than from a list, because a behaviour each call site must opt into is enforced by
-  nothing (L27, L621).
-  It REPORTS and judges nothing against a cost figure, deliberately: a per-pass cost written into the
-  script would be a dated number that rots silently and reads as more trustworthy the older it gets
-  (L316, #3487). The decisive reading needs none. A long stall spanning many passes is the render pass
-  run over and over; a long stall spanning NONE is something else.
-  Read its answer correctly. Three exit codes, and the third is the one that matters: `2` is UNMEASURED,
-  because a record written before #3760 is installed carries no count at all, and a log that has not
-  turned over must not read as a clean bill (L98, L11). `1` means a stall over a second spanned no pass,
-  which is the finding that sends the next diagnosis elsewhere. `0` is attributed. Records it cannot
-  judge are REPORTED as unjudged rather than folded into either verdict.
-  Its judging half rides along on every push through `scripts/what-froze-the-queue.test.sh`, which builds
-  its own logs rather than reading the live one.
-
-- **Asking what a contact check actually searched for: `scripts/what-the-check-searched.sh <show>` (#2996).**
-  Takes a group name or a natural key and prints, per archived run, the show AS THE RUN WAS GIVEN IT
-  beside every web call that run made. Both halves matter and the defect is only ever visible in their
-  difference: #2983 was diagnosed exactly this way, by extracting one run's 22 web calls and seeing that
-  not one of them named the company whose contact page publishes an address, which turned a vague "the
-  check missed it" into a precise defect. It took an afternoon of hand-querying JSONL; it is now one
-  command.
-  A READER over evidence that already exists, never a new recording. It reads the archived queue
-  (#1878, #2760) and the archived event streams (#3446), which share a run stamp.
-  Three exit codes, and the third is the one that matters: `0` found, `1` the show appears in no
-  archived run, `2` UNMEASURED, meaning there are no archives to look in at all. An empty support
-  directory and a show nobody checked leave the same empty result, and the emptiest possible failure
-  must not read as the cleanest possible answer (L98, L11).
-  Read its answer correctly in one more place. A run whose streams were NOT archived says exactly that,
-  rather than reporting no searches: streams have only been kept per run since #3446, so every run
-  before that has none, and "no searches" there would be a claim about the check that nobody measured.
-  Only routes that reach the WEB are listed; a `Read` or a network-free `Bash` is not a search and
-  would pad the list this exists to make readable. And where a run covered more shows than it has
-  streams, one stream carries several shows, so the calls are the whole chunk's rather than that show's
-  and it says so: per item attribution is milestone 61 Phase 1.3 and does not exist yet.
-
-- **Asking whether the producer rule's calibration has fallen behind the live feed:
-  `scripts/check-producer-corpus-drift.sh` (#2680).** #2554 pinned the producer rule's boundary against
-  the real VenueTix feed, committed as `fixtures/venuetix-supertitles/2026-08-13.json`, and
-  `SuperTitleCalibrationTests` asserts the exact set of phrases the rule calls a producer. Nothing
-  re-measured, so that guard would have stayed green against August's world indefinitely, which is L48
-  and L56 exactly: a rule calibrated on a snapshot and then trusted as a contract.
-  It fetches the feed with the venue's own Origin header (the same one `VenueTixCalendar.feedRequest`
-  sends), and judges both sides with the app's OWN rule, compiled straight from
-  `mac/Overture/Domain/ProducerShapedName.swift` rather than reimplemented in the script, because a
-  second definition of the producer rule drifts in whichever direction flatters the person who wrote it
-  (L107).
-  It NEVER rewrites the fixture, on `docs/copy-inventory.md`'s rule since #1994: a new corpus is always
-  a change somebody read, and a check that regenerates its own subject defends whatever it produced.
-  Read its answer correctly. Three exit codes, and the third is the one that matters: `2` is UNMEASURED
-  (the fetch failed, the feed did not parse, it carried events but no supertitle at all, the corpus is
-  missing, or the rule would not compile), because a failed fetch and a feed that changed nothing leave
-  the same empty difference (L98, L11). `1` is DRIFTED and is ADVISORY: the feed turns over every week,
-  so a gate on ordinary churn has its threshold raised until it catches nothing (L93). `0` is in step.
-  **Read the BOUNDARY MOVED block, not just the counts.** Arrivals and departures are ordinary; a
-  supertitle the rule now calls a producer that the calibration does not carry is the thing to look at,
-  because silent over-matching is the failure this area actually has. On its first real run, 2026-09-06,
-  the corpus was 24 days old: 28 supertitles had arrived, 42 had gone, and 13 of the arrivals the rule
-  accepts (three explicit `Produced by` credits, eight possessive self-producers and two companies).
-  The names themselves are deliberately not repeated here: they are real people's, this repository is
-  public, and the fixture is where that evidence already lives (L155).
-  It is OPT IN and not in `scripts/test-all.sh`: it reaches the network. Its judging half rides along on
-  every push through `scripts/check-producer-corpus-drift.test.sh`, which drives all three outcomes
-  through the `OVERTURE_VENUETIX_FEED_FILE` seam without a single request.
-
-- **Asking whether a fixture sized against the live store has fallen behind it:
-  `scripts/check-fixture-corpus-drift.sh` (#3426).** Two cost guards sized their corpus with a number
-  measured against the live store once and never moved, and by 2026-08-31 both were exercising a store
-  between a fifth and a third smaller than the one that ships. Nothing reported it and nothing could: a
-  cost guard sized BELOW the live store stays green the whole time, because it is exercising a smaller
-  world rather than failing (L354). It fails in the direction that hides a problem.
-  What it checks is DERIVED from the source rather than listed in the script (L96): any declaration
-  carrying a `// LIVE-SHAPE: <dimension>` comment on the line above it joins the check automatically.
-  What the script does hold is the definition of each dimension against the store, which is the one
-  thing a source scan cannot supply, and a tag naming a dimension it cannot measure is REFUSED rather
-  than skipped, because a silently ignored tag is a declaration nobody is checking while it reads as
-  covered (L100).
-  It reads the store through a WAL-inclusive copy, never the bare `.store` file, since recent writes
-  live in the `-wal` beside it. Measured 2026-09-02 at 0.06 to 0.09s for the copy and the counts
-  together, which is what makes it affordable on the mandatory pre-push gate rather than opt in.
-  Read its answer correctly, because it has FOUR outcomes and only one of them fails the run. `1` is
-  DRIFTED and is ADVISORY: the store grows every night, so a gate firing on ordinary growth has its
-  threshold raised until it catches nothing (L36, L93). `2` is UNMEASURED and DOES fail: a store that is
-  present and unreadable, a tag it cannot measure, or a scan that found no declarations at all, each of
-  which is a failed measurement rather than a clean one (L98). `3` is a machine with no live store,
-  which is the ordinary state on a clone, in CI and in an agent worktree, so it says so and passes; it
-  is kept apart from `0` because a run that measured nothing must not read as one that measured and was
-  happy. Widen the tolerance for one run with `OVERTURE_CORPUS_DRIFT_TOLERANCE=<percent>`.
-
-- **Asking where the freeze tool's busy threshold actually lands: `scripts/analyse-freeze-load.sh`
-  (#3464).** `scripts/freeze-measure.sh` calls a process unusually busy at 25% CPU. That number was
-  CHOSEN when it was written and said so, because there was no distribution of this Mac's idle CPU to set
-  it from. This is the command that reads the one Phase 0 produced, so the premise is re-runnable rather
-  than a dated sentence somebody has to believe (L316, L32).
-  It reads the `.processes.txt` files beside each measurement rather than the `.json` records, and that
-  is the point: the tables hold every process, the records hold only what already crossed the threshold,
-  and a reading taken THROUGH the threshold cannot say whether the threshold is well placed (L70).
-  Three exit codes, and the third is the one that matters: `2` is UNMEASURED, because no recordings and
-  recordings with nothing unusual in them leave the same empty result, and a pile of unreadable files is
-  a failed read rather than a quiet machine (L98, L11). `1` is INSIDE THE BULK, meaning more than one row
-  in twenty crosses the line so it is naming the ordinary case (L172). `0` is discriminating.
-  **Read the per-measurement list, not just the verdict.** The percentile cannot say whether the line is
-  in the right place; WHICH processes cross it can. That is how #3464's real finding surfaced: WindowServer
-  crossed 25% in six of the first eleven recordings, and those six were exactly the six taken while
-  Overture had a window on screen, so every genuine measurement read as contaminated by the compositor
-  drawing the frames the measurement exists to time. It is on `fixtures/resting-baseline.txt` now, with
-  what that exemption gives up written beside it (L324).
-  It is OPT IN and not in `scripts/test-all.sh`: it reads a directory that exists only on Dan's Mac. Its
-  judging half rides along on every push through `scripts/analyse-freeze-load.test.sh`, which builds its
-  own recordings with a known distribution rather than reading the real ones.
-
-- **Scrolling the running app from a script: `scripts/scroll-wheel.sh` (#3503).** `cliclick` on this Mac
-  has move, click and wait and no wheel at all, so until this the measurement scripts could not scroll
-  anything: `scripts/freeze-measure.sh` samples a live process and had no way to make it scroll, which
-  left #3439's decision gate able to measure a keystroke and a render pass and not the third thing it is
-  specified to compare. `RealScrollInvalidationTests` could already drive a wheel event, but only into an
-  `NSScrollView` its own process owns, which settles the SwiftUI mechanism question and nothing else.
-  **It DRIVES DAN'S MACHINE, so it refuses without `--yes`** and says what it would do first. It is a
-  Dan-at-the-machine job rather than an agent one.
-  Two things it does are the two #3480 learned the hard way, and both are the reason to use it rather
-  than a fresh `CGEvent` one-liner. It CONFIRMS the scroll landed, by reading the target's vertical
-  scroll bar through the accessibility API before and after, because a scroll that did nothing and a
-  surface that does not rebuild on scroll produce identical readings and the second is the thing being
-  measured (L159). And it posts to the PROCESS by pid rather than to the session tap, so it does not
-  need the app to be frontmost, which is what defeated the accessibility route before: Overture is
-  `LSUIElement` and never becomes frontmost.
-  It targets by EXECUTABLE PATH and refuses when the lookup finds more than one, which is this
-  repository's standing rule after a Release app was quit in place of a Debug one (L70); the other
-  build being up is a note naming both pids rather than a refusal.
-  Read its answer correctly: three outcomes, and the third is the one that matters. `0` LANDED (or SENT,
-  under `--no-confirm`, which says so rather than claiming a landing), `1` DID NOT MOVE, which is a real
-  finding about the surface and is also what a list already scrolled to its end looks like, and `2`
-  UNMEASURED, which is no app, two candidates, an unreadable window tree, or the refusal. UNMEASURED is
-  never folded into either of the others, because a scroll that did nothing and a tree that could not be
-  read call for opposite next steps (L98, L11).
-  The event construction is Swift, in `mac/scripts/lib/post-scroll-wheel.swift`, compiled by `swift` on
-  each run rather than built: a tool that needs building before it can be used is a tool nobody uses.
-  Its judging half rides along on every push through `scripts/scroll-wheel.test.sh`, which drives every
-  refusal and all three outcomes through named seams, so nothing in the suite posts a real event or
-  needs an app on screen.
-
-- **Asking whether the app itself froze: it records that now, and says so (#3435 Phase 2e, #3442).**
-  `MainThreadWatchdog` posts a sequenced ping to the main queue every 250 ms from its own Dispatch queue
-  and records how late it runs. The record is written by the WATCHDOG and never by the main thread, or it
-  could not be written during the freeze it records, and it lands in `freeze-log.ndjson` beside the store
-  (catalogued in `docs/contracts.md`). `RootView` reads it at launch and says once, in the app's own
-  voice, what the last session found.
-  Four things about it are load bearing before changing it. The SURFACE is a closed enum with no
-  associated values, so a case that could carry a show's name is impossible to write rather than
-  forbidden: the natural spelling of "the surface on screen" is the sheet plus the row that raised it,
-  which carries a `groupName`, and it would land in a durable file no repository scanner inspects (L230,
-  L222). The main thread STAMPS it and the watchdog only READS it, because asking the main actor at write
-  time makes the field unavailable at exactly the moment a record is being written (L345). The retention
-  keeps a per-session HIGH WATER entry that is never evicted, because the single reading this exists to
-  support is the worst stall of a session and a count cap discards precisely that: an evening of small
-  stalls flushes the one long entry out and the eviction count cannot say the largest was among them
-  (L191, L63). And a session with NO WATCHDOG says something different from a session with no freezes,
-  because an empty file is both (L98, L11).
-  It is on a Dispatch queue and never the cooperative pool: it blocks by design, waiting on the main
-  thread, and Swift's pool is bounded and does not grow (L241).
-  What it costs is MEASURED on every run rather than written down here, for this document's own standing
-  reason (#2532, L32): `WatchdogCostTests` prints a `watchdog-cost:` line giving the per-ping share of one
-  interval, and `anIdleAppPostsNoMoreThanOnePingPerInterval` bounds how many pings there can be. Read
-  those rather than any number in prose.
-  #3442's half is the load: each record carries a class (baseline, elevated, unmeasured) AND the one
-  minute load average as a number, so a later reader can re-judge the line without the classification
-  being the only thing kept (L316). It cannot say WHAT was busy; `scripts/freeze-measure.sh` reads the
-  process table and remains what says that.
-
-- **Judging whether a script succeeded: capture its status directly, never through a pipe.**
-  `some-script.sh | tail -5` reports `tail`'s exit status, not the script's, so a script that died
-  instantly on an unbound variable and printed nothing at all reads as a clean pass. That happened
-  on 2026-08-11 to a merge-script fixture and sent the next twenty minutes in the wrong direction
-  (#2502). It is the same shape as the `NOTHING RAN` trap above, and the habit that hides it (piping
-  through `tail` or `rg` to keep the output short) is exactly the habit anyone working at speed
-  reaches for. Two tells worth knowing: NO OUTPUT AT ALL from something that normally prints a line
-  per check means it died rather than passed, and `set -o pipefail` or `${PIPESTATUS[0]}` is what
-  makes the reading honest when a pipe is genuinely wanted.
-- **A script that changes its own working directory captures its location FIRST: `scripts/script-self-location.test.sh`
-  (#3481).** `$0`, and `BASH_SOURCE[0]` for a top level script, are the path the script was INVOKED by,
-  which is usually relative. Re-deriving a directory from either AFTER a `cd` resolves against the new
-  working directory, so the same expression works for one invocation and silently misses for another
-  (L372). Write `DIR="$(cd "$(dirname "$0")" && pwd)"` above the `cd`, and use `${DIR}` everywhere after.
-  Hit for real on 2026-09-02: `mac/build-install.sh` cds into `mac/` and then sourced
-  `"$(dirname "$0")/scripts/lib/build-provenance.sh"`, so invoked the way this file documents
-  (`mac/build-install.sh` from the repo root) it resolved to `mac/mac/scripts/lib/...` and missed. The
-  install SUCCEEDED, the bundle was replaced and correctly signed, and only the provenance record the
-  freshness panel reads was skipped, which is the worst shape for this.
-  It was not one instance: seven sibling scripts had it too, four of them production
-  (`analyse-freeze-load.sh`, `check-fixture-corpus-drift.sh`, `check-temp-dir-leaks.sh`,
-  `freeze-measure.sh`), each capturing `SCRIPT_DIR` one line AFTER cding to the repo root. That happens
-  to resolve when they are run from the repo root, which is how everyone runs them, and does not when
-  they are run from inside `scripts/`. Measured 2026-09-04: `cd scripts && ./check-fixture-corpus-drift.sh`
-  answered `/…/lib/scratch.sh: No such file or directory` and then `UNMEASURED`. The guard is derived
-  from the tree rather than a list somebody maintains, and it exempts only itself, because it has to
-  name the forbidden spellings in order to search for them (L245, L96).
-
-- **`find` in a SCRIPT is the real find; only a command typed into a session is shimmed
-  (#2860/#2959, measured, `scripts/find-is-not-shimmed.test.sh`).** Inside a Claude Code session `find`
-  is a shell function running `bfs`, which refuses the relative timestamp form both BSD and GNU find
-  accept (`-newermt "-60 minutes"` answers `Invalid timestamp`). Both issues assumed that split reached
-  scripts. It does not: the shim is a shell FUNCTION and is not exported, so it never reaches a script
-  run as a subprocess. Measured 2026-09-04 in one session on one machine, inline versus from a
-  `#!/usr/bin/env bash` script: `command -v find` answers the function and REFUSES the relative form
-  inline, and answers `/usr/bin/find` and ACCEPTS it from the script.
-  So no script needed changing, and a rule making every script spell `/usr/bin/find` would have been
-  noise guarding nothing (L93). What is genuinely exposed is an ad-hoc `find` typed into a session, by
-  an agent or by Dan with the `!` prefix, which no repo convention can reach: prefer an ISO stamp there,
-  which is what `scripts/tidy-checkout.sh` computes with `date` (#2842).
-  The fixture exists because that is a PREMISE about the environment rather than a fact about this code,
-  and a premise written down as a dated sentence is one nobody re-measures (L316, L336). It carries its
-  own positive control, a stand-in on PATH that refuses the relative form the way bfs does, so it can
-  tell "no shim" from "measured nothing" (L171). If the harness ever exports the shim, it goes red and
-  names what changed.
-
-- **Scratch in any script: `overture_scratch_dir` / `overture_scratch_file` from
-  `scripts/lib/scratch.sh` (#3258), or `fixture_scratch_dir` / `fixture_scratch_file` in a fixture.**
-  On macOS `mktemp -d` and `mktemp -t NAME` IGNORE `TMPDIR` unless the path is spelled out in the
-  template, so a bare one writes to the shared per-user temp folder, which macOS clears only at boot and
-  which no check in this repository can see into. #3249 converted the 81 fixtures; #3258 converted the
-  production scripts, 13 call sites across 10 files, and the guard in
-  `scripts/lib/shell-assertions.test.sh` now scans every tracked `*.sh` rather than the fixtures alone.
-  Read what the measurement said, because it changes what this is FOR: on this Mac after 16 days of
-  uptime the shared folder held 52,515 entries and ZERO matched any shape these scripts make. They clean
-  up. This is not reclaiming disk, and saying it were would be a number nobody checked. It is about
-  VISIBILITY, so a script whose cleanup stops working leaks where something can see it rather than
-  silently, which is #3065 measured at 52 directories a run on the Swift side before anybody noticed.
-  Two files are exempt by name, `shell-assertions.sh` and `scratch.sh`, because they DOCUMENT the
-  forbidden forms in order to forbid them and a scan condemning them would be condemning its own remedy.
-
-- **Writing a shell fixture: the assertions come from `scripts/lib/shell-assertions.sh`, which every
-  `*.test.sh` sources.** It gives one vocabulary (`pass`, `fail`, `assert_contains`,
-  `assert_not_contains`, `assert_equals`, `assert_eq`, `assert_empty`), all reporting through
-  `FAILURES` and none exiting early, so a fixture runs every check it has and reports the total.
-  Before #2501 each of the 48 fixtures defined its own, and which names existed varied file to file
-  (22 had `assert_contains`, 13 `assert_equals`, 10 `assert_eq`), so reaching for the wrong one printed
-  `command not found` to stderr, checked nothing, and the fixture still reported every assertion
-  passing. `scripts/run-shell-fixtures.sh` now fails any fixture whose output shows bash could not
-  resolve a command, which is the half that holds even if a fixture forgets to source the library. A
-  fixture that drives a missing dependency ON PURPOSE (`models.test.sh` runs `record_model` with `PATH`
-  pointing at nothing) prints `shell-fixture-expects-missing-command: <name>` to declare it; that
-  exempts the one command named and nothing else. A fixture keeping its own definition of a helper is
-  fine and deliberately still supported: two fixtures read `assert_contains` as
-  (desc, needle, haystack), and a definition after the source line wins.
-  **Since #3408 the runner also fails a fixture holding a line bash could not PARSE.** It is the same
-  defect as the unresolved-command rule wearing different words, and that rule structurally cannot see
-  it, because nothing was ever looked up: a line that does not parse was never a command. Found by
-  accident on 2026-08-31, and it had been live in two places. `suite-stats.test.sh` held a needle with
-  `$(` inside single quotes inside a command substitution on a continued line, which bash 3.2
-  mis-parses, so its assertion that a scoped run never writes the duration series had printed nothing at
-  all on every sweep since it was written. `pr-completeness-guard.test.sh` held a COMMENT between two
-  stages of a pipeline inside a command substitution, which bash 3.2 also refuses: it dropped the `awk`
-  stage, left the variable holding the whole lowercased script, and both assertions under it then passed
-  on any file containing the word "author" anywhere in it (L135). Both are fixed, and the rule is what
-  finds the next one. Two shapes are matched, `: bad substitution` and
-  `: syntax error near unexpected token`, each carrying its leading colon so a fixture that merely
-  QUOTES the words still passes.
-- **When a decision is recorded on an issue, edit the BODY in the same action (#3077).** Say which of
-  its open questions are now settled, what the answer was, and point at the comment. The thread stays
-  untouched: it is the record of HOW a decision was reached and must not be rewritten. The body is what
-  anybody triaging actually reads, and nothing carries the outcome back to it.
-  Measured on #2915, 2026-08-21. Its body listed five things that had to be settled. Dan settled three
-  of them in a comment on 2026-08-18. The overnight review of 2026-08-20 read the body, reported the
-  issue as needing "five product decisions", and set it aside as blocked on him. It was one decision
-  away from buildable, and a whole session's triage went at a stale sentence.
-  `scripts/check-issue-open-questions.sh` is the advisory half, because a rule living only in prose is
-  a hope (L27). It lists open issues whose body names open questions AND that carry a comment, for a
-  person to reconcile. Deliberately NOT a gate and deliberately not clever: a comment on such an issue
-  is usually not a decision, so anything that judged would be wrong in the direction that hides the
-  real ones (L93). Measured before it was built: 16 open bodies name open questions under its
-  phrasings and 4 of those carry a comment, which is a list somebody reads. It is OPT IN rather than in
-  `scripts/test-all.sh`, since it needs the network and answers about the backlog rather than the code;
-  its judging half rides along on every push through `scripts/check-issue-open-questions.test.sh`.
-
-- **A store-wide COUNT quoted in prose either carries its date or is not quoted at all (#3487).** Two
-  readings were quoted across the tree as if current: `724` (measured 2026-08-01) in roughly 20 places
-  and `702` (2026-07-29) in about 8. The store held 1,142 rows when this was written, so the
-  explanations were wrong by more than half, and a figure with a date on it reads as MORE trustworthy
-  the older it gets (L316, L210).
-  The distinction that decides what to do with one, applied to all 28: a figure standing in for "the
-  whole store" (`re-derives all 724 prospects`) says nothing the sentence does not already say and rots,
-  so it is written as `every prospect in the store` and can never be wrong again. A figure that IS a
-  dated measurement (`0 of 724 shows inheriting on 2026-07-29`) is evidence and stays exactly as it is,
-  because rewriting it would destroy the record.
-  #3426's `LIVE-SHAPE` tag and `scripts/check-fixture-corpus-drift.sh` cover the DECLARATIONS, the
-  numbers a program can compare. A sentence cannot carry that tag, so this half is a convention rather
-  than a check, and it is written here rather than left as a habit. The TAGGED figures, the ones
-  carrying a `verified=` stamp that `scripts/check-live-store-claims.sh` reads, are a third case again:
-  they carry a date AND a re-derivable measure, and re-verifying rather than restamping them is #2517.
-  (The tag itself is deliberately not spelled out in this paragraph. That scanner reads every tracked
-  Markdown file, so writing it here makes this sentence a malformed claim and fails the check, which is
-  the scanner working: it cannot tell a line USING the tag from a line ABOUT it, exactly as the style
-  gate cannot for an em dash.)
-
-- **Quoting a character the style gate forbids: write it as an escape, never override the gate.**
-  The pre-push style gate blocks any new line holding an em dash, en dash or emoji, and it cannot
-  tell a line that USES one from a line that must QUOTE one, which is the gate working correctly.
-  The answer is to build the character rather than type it, so the file holds no literal one:
-  `mac/scripts/lib/suite-stats.test.sh` is the worked example (#2193), where a fixture legitimately
-  needed the marks Swift Testing prints and builds them from their UTF-8 bytes with `printf`. In
-  Swift the same trick is a unicode escape (`\u{2014}`). `SKIP_STYLE_CHECK=1` is visible and
-  tempting and skips past a clean solution, so it is the wrong tool here (#2312).
 - **This repo turns four Claude Code plugins off, in a TRACKED settings file.** `.claude/settings.json`
   gives `vercel-plugin@vercel-vercel-plugin`, `cloudflare@cloudflare`, `figma@claude-plugins-official`
   and `stripe@claude-plugins-official` a `false` under `enabledPlugins`, and
@@ -1113,437 +189,168 @@ already drifting from the Swift version it mirrored.
   stay ON deliberately, since all three are in use here, which the same test asserts so a later sweep
   cannot quietly take them out. Hooks only load at session start, so a change here cannot be verified in
   the session that makes it.
-- Since #1967 the Swift tests live in TWO targets, and which one a new test belongs in is decided
-  by one question: does it need the app RUNNING?
-  - `OvertureTests` (`mac/OvertureTests/`) holds almost everything and is where a new test goes
-    unless it renders a view. It is UNHOSTED: it reaches the app's code by compiling it in, not by
-    linking a host, so it has no `TEST_HOST` and no dependency on the app target at all.
-  - `OvertureHostedTests` (`mac/OvertureHostedTests/`) is only the ViewInspector ones, which render
-    a real SwiftUI view and so genuinely need the host process. It is a small fraction of the total.
-  - `mac/TestSupport/` holds the helpers both compile (`SourceGuardHelper`, `SwiftSource`,
-    `CopyInventory`), in one place so a guard helper cannot drift between the two targets.
-  This exists because every test used to run inside the launched app, so one launch fault took all
-  of them: on 2026-08-01 a crowded menu bar removed the status item, which terminates a
-  `MenuBarExtra` app, and nothing in the Mac app could be verified at all. Measured ON 2026-08-02
-  with a deliberate `fatalError()` in `OvertureApp.init`: the pure suite reported
-  `Test run with 4802 tests in 690 suites passed`, `** TEST SUCCEEDED **`, exit 0, while the app
-  could not start. That figure is what the suite was THAT DAY and is deliberately not updated: it
-  is the record of an experiment, not a claim about the suite's current size. For the current size,
-  see the readout below.
-- **The suite states its own size, every run, unless it cannot honestly state one.**
-  `run-tests-locked.sh` ends with a
-  `Suite shape:` line giving the tests and suites actually executed, the wall clock, the ratio of
-  test Swift to app Swift, and how many test declarations are source-text guards (#2193, #2232).
-  Use that line, never a number written in this file, as the reference for "did this run execute
-  the whole suite?".
-  Since #2821 there is one state in which it deliberately states NOTHING: a run whose test process
-  RESTARTED. xcodebuild relaunches the process after an unexpected exit, crash or `.timeLimit`
-  timeout, and the totals it then prints are totals of the REMAINDER. Measured 2026-08-16 while
-  re-checking #2808's mutations, the line read `Suite shape: 12 tests in 2 suites` for a run that
-  had really started 70 across 8 suites. A plausible small number is precisely the answer this line
-  must never give, since the reading it exists to support is "was this run short?", so it prints
-  `Suite shape: NOT REPORTED` and names the restart instead of summing across a crash, and such a
-  run can no longer record its own count as the baseline the short-run gate measures against.
-  **Since #3233 the readout also understands a PARALLEL run, which prints no totals line at all.**
-  Under `-parallel-testing-enabled YES` xcodebuild stops printing `Test run with N tests in M suites`
-  and reports each test on its own line instead (`Test case 'Suite/test()' passed on 'My Mac - xctest
-  (63822)' (N seconds)`). Nothing read that, so the whole chain downstream of the count went blind at
-  once: the readout said it could not tell, the short-run gate had nothing to compare against a
-  baseline and therefore could not fire, and the screens readout (#1995), which looks for
-  `Suite "..." passed`, reported the screens as unverified. Measured 2026-08-29 on the audit
-  experiment behind milestone 60: barely more than half the suite executed, one of its two workers
-  printed 58 lines before its entire share vanished with no crash line anywhere, and the only thing on
-  screen was a list of 12 failing tests offered as the whole story. The gate was intact throughout. It
-  was blind, not broken (L98, L11). The counts are deliberately not written here, for this document's
-  own standing reason: a hand-written suite size drifts and then weakens the very warning it is quoted
-  in support of (L32). They are in #3233 and in the fixture's own header. Three things to know about the parallel reading. The count is by
-  test NAME rather than by line, because a parameterised test prints one line per case and a retried
-  one prints its line again, and an over-count makes a truncated run look longer than it was. The
-  DURATION never comes from those per-test seconds, which are elapsed since that WORKER began rather
-  than what the test cost (in the real log a one-line boolean reported 64.4s, and the trimmed fixture's
-  lines sum to 338.423s for a run that took 95.447): it comes from the run's own elapsed line, or the
-  readout says the duration was not reported. And a log carrying BOTH a summary and per-test lines is a
-  MIXED run, where the two are SUMMED rather than one preferred (#3266, reversing what #3233 wrote here).
-  That is the shape the parallel work produces: one testable parallel, printing per-test lines and no
-  summary, and the app-hosted one left serial, printing a summary and no per-test lines. Preferring the
-  summary read the hosted suite's 300 as the whole run, so a COMPLETE run of 8,623 was reported as 300
-  and refused by the short-run gate (measured 2026-08-30). Note which way that fails: under-reporting by
-  96% makes the gate block a healthy push, which is the failure that gets a gate switched off rather
-  than trusted. Summing cannot double count, and that is measured rather than assumed: a wholly serial
-  run prints no `Test case ... on 'My Mac - xctest (N)'` lines at all. The DURATION is the one number
-  not summed, since the parallel reading already takes the run's own elapsed line, which spans both
-  testables. The fixtures are those runs' own output, trimmed, at
-  `mac/scripts/lib/fixtures/parallel-run-20260829.log` and `mac/scripts/lib/fixtures/mixed-run-20260830.log`;
-  the full 839KB parallel log is kept at `~/.overture-mac-test-diagnostics/parallel-experiment-20260829.log`.
-  **Since #3243 the COUNT on that line, and the count the short run gate is judged by, come from the
-  run's own RESULT BUNDLE rather than from the log text.** Two reasons, and the second is the sharper
-  one. A parallel run's stdout is written by several worker processes at once and their per-test lines
-  can collide: in the 2026-08-29 experiment log exactly one line was corrupted that way, which is why
-  the readable count was 4,874 against the bundle's 4,875. One test is immaterial against a 10 percent
-  tolerance; what is not is that the only thing bounding the error is how often two workers write in
-  the same instant, which nothing measures and which gets worse with more workers. And the gate
-  compares this number against a baseline a SERIAL run recorded, which used to be produced a different
-  way (#3265): 8,612 by distinct name in parallel against a serial 8,618, with `CityFromAddressTests`
-  alone printing 17 case lines under 6 distinct names. Two numbers being CLOSE is worse than their
-  being obviously different, because it reads as trustworthy while comparing two things that are not
-  the same quantity.
-  `totalTestCount` is ONE quantity however the run was parallelised, and it is by test NAME. Measured
-  2026-08-30 on a real serial run: `totalTestCount` 8,626 against a summary line of 8,626, while the
-  same bundle's per-configuration figures come to 8,801, because 45 tests ran with dynamic parameters
-  over 220 runs. Names on both sides of the comparison, which is what the gate needs.
-  Three things to know. Every way the read can FAIL comes back empty rather than zero, because zero is
-  a real measurement that the empty-run gate acts on, so a failed read arriving as zero would fail a
-  healthy run and name the wrong cause (L98, L11); the log parsers stay as the fallback and the readout
-  SAYS so when it fell back, which is a warning only in the case that needs one. A RESTARTED run is
-  refused the bundle count deliberately: its text totals are the totals of the remainder after the
-  relaunch (#2821), and whether the bundle counts the whole run or the remainder is not something
-  anybody has measured, so substituting an unmeasured whole-run count there is the one direction that
-  disarms the gate (L82). And it costs one `xcresulttool` call, measured at 6.2s against a suite of
-  about 330s; `OVERTURE_XCRESULTTOOL` is the seam the fixture drives it through.
-
-  **Since #3165 the first of those two invariants is measured by a different number.** It used to be the
-  rows whose reply is still OPEN, which #2985 narrowed it to for a correct reason (`ReplyIdentity.answering`
-  short-circuits once a reply is handled, and asserting through it fired when Dan answered one, which is the
-  workflow succeeding). What that left was a rule whose corpus empties whenever he is up to date, which is
-  most of the time: measured 2026-08-27, 1018 shows, 5 replied rows, ZERO still open, so it had asserted
-  nothing about his data for as long as this clone had recorded. The claim that still holds for a handled
-  row is the one `answering` is BUILT from, that the contact holding the writer's address is a PEER of the
-  row that recorded the reply, and asking the peers directly survives the reply being answered because it is
-  a fact about how contacts are grouped rather than about the reply's state. It runs over 4 rows today where
-  it ran over 0, and a mutation removing the peer requirement goes red on Dan's real data. The readout and
-  the record's key were renamed with it (`writer=`, not `open=`), because a key named `open` counting
-  something else is how one word comes to name two units (L118); no history was lost, since the old count
-  was zero on every machine that ever wrote that file.
-
-  **Since #1995 a third line says whether THIS run verified the SCREENS.** The app-hosted tests are the
-  only ones that render a real SwiftUI view, and since #1967 a launch fault costs them alone: the pure
-  suite passes, the runner says so, and work carries on correctly. What nothing recorded is when they last
-  actually ran, so a host broken across a stretch of UI work leaves the screens unverified for as long as
-  that lasts, silently, and the work most likely to be happening in that window is exactly the work they
-  cover. It is judged by the hosted suites' OWN `@Suite` display names, derived from
-  `mac/OvertureHostedTests/` rather than listed anywhere, and by a run reporting one of them as PASSED
-  rather than merely naming it: a run that started that bundle and died in it names those suites exactly
-  as a passing run does. The count of test BUNDLES was considered and is a proxy rather than evidence, so
-  it is not used: it says two bundles ran, never which two.
-  Four states, and only one of them is good: `verified by this run`, `NOT VERIFIED ... last passed on
-  <date> (<n> days ago)`, `NOT VERIFIED ... no run on this clone has ever verified them`, and `UNMEASURED`
-  when no suite name could be read at all, which must never be folded into the second (L11). The record is
-  `.overture-hosted-suite-seen` beside the repo, gitignored, with the date INSIDE the file, all three on
-  `.overture-live-corpus-seen`'s precedent and for its reasons. A run that did not verify them LEAVES IT
-  ALONE, which is the whole mechanism: stamping every run would move the date forward while the host
-  stayed broken and the age would always read zero.
-
-  **Since #2991 a second line beside it says whether the LIVE STORE invariants measured anything.**
-  `ReplyInvariantsLiveStoreTests` prints a corpus line every run giving how many rows each of its
-  invariants could examine, and measured 2026-08-19 it read `0 whose writer a contact holds, 0 reached-out
-  rows in play`: both passed having asserted nothing about anything, and the only thing separating that
-  from a clean bill of health was a printed line thousands of lines up a log nobody reads. That is L182
-  exactly, and this one goes to zero precisely when Dan finishes his outreach work, so it can sit there
-  for months. What is dormant is not the RULE (the synthetic suite still has teeth, confirmed by
-  mutation) but the ability to notice an unforeseen SHAPE in his real data, which is the whole reason
-  the live suite exists (#2150). Four states, kept apart because an unmeasured check and a passed one
-  look identical from silence (L11): `measuring` with both counts, `PARTLY DORMANT` naming WHICH half
-  had no rows and giving the other's real count, `DORMANT` when neither did, and `NOT REPORTED` when
-  the run carried no corpus line at all. That last one is the one to read carefully: it is what a
-  SCOPED run produces, and treating its absence as nothing to report would make the emptiest possible
-  failure look like the cleanest possible pass (L98).
-  **It also says HOW LONG**, which is the half worth acting on: "both measured nothing today" is much
-  weaker than "neither has measured anything since May (114 days)", because only the second says
-  whether to care. That needs a record, `.overture-live-corpus-seen` beside the repo, gitignored and
-  per machine on the exact precedent of `.overture-eval-last-run` (#1867). Two things about it are
-  load bearing. The DATE lives INSIDE the file rather than being its mtime, because a clone rewrites
-  every mtime and would reset the dormancy to zero, which is the one number this must never get wrong.
-  And a run only WRITES the invariant it actually measured: a dormant run leaves the record alone, and
-  a run with no corpus line leaves it alone too, or the last real measurement would be stamped over
-  every run and the duration would always read zero, which is the defect wearing a date. Both refusals
-  are pure (`live_corpus_seen_update` returns the new contents, the caller only writes them) and both
-  were seen to fail.
-  Since #2600 a FAILING run then reprints xcodebuild's own `Failing tests:` block, with a count, as
-  the last thing on screen. Read that rather than searching the log: a failure raised by
-  `Issue.record` prints only `recorded an issue` while an `#expect` prints `Expectation failed:`, so
-  grepping for the second phrase under-counts. On 2026-08-12 a branch read that way was reported as
-  having two failures and had eight. The counts here used to be hand-written and both had drifted badly, which
-  quietly weakened the warning two paragraphs up: a stated total is exactly what someone checks a
-  suspicious scoped run against, so a wrong one is worse than none (L32). `AgentsDocSuiteCountsTests`
-  fails if a hand-written count is ever put back.
-- The pure suite has its own scheme, `OvertureCore`, which does NOT build the app. Use it
-  (`xcodebuild -scheme OvertureCore -destination 'platform=macOS' test`) to verify domain logic while
-  the app is broken or mid-refactor; it does not even need the app to compile. This matters because
-  `-only-testing:OvertureTests` on the combined `Overture` scheme does NOT avoid the app: xcodebuild
-  still prepares and launches the host, and a crash there decided the exit code even though every one
-  of the pure tests passed. `run-tests-locked.sh` falls back to this scheme automatically on a CRASH, so
-  a dead host reports "the PURE suite PASSED, the failure above is the APP HOST, not your code"
-  instead of one undifferentiated red. `PureSchemeExcludesTheAppTests` fails if the app is ever put
-  back into that scheme.
-- To actually LOOK at the app, use `mac/scripts/run-debug.sh` (#567): it regenerates the
-  project, quits any Debug instance still running (a stale one silently holds the Debug store's
-  single-writer lock, so a fresh launch comes up in the degraded "another copy is using its data"
-  state and the change under test looks broken), builds Debug, verifies the built bundle really
-  carries the Debug identity, and only then launches it, printing the exact `.app` path and the
-  store it will touch. It refuses to launch a bundle claiming the Release identity, which would
-  open the LIVE store. Release has its own installer, `mac/build-install.sh`. That installer signs the
-  bundle with a stable local identity so macOS keeps its TCC grants (calendar, Gmail/automation,
-  reminders) across reinstalls instead of dropping them, which an ad-hoc signature silently did because
-  its cdhash changes every rebuild (#1425). Run `mac/scripts/setup-signing-identity.sh` ONCE per Mac
-  first (it creates and trusts a dedicated "Overture Local Signing" certificate, the one manual step is
-  a trust-settings password dialog); after that every build signs automatically. Since #2537 that setup
-  proves its own work the same way `build-install.sh` does, by trial signing a throwaway bundle, rather
-  than asking the cheaper question of whether an identity is LISTED. It was the script that answered that
-  question wrongly first: on 2026-07-26 it printed `Done. Created and trusted ...` for a certificate
-  codesign refused outright, and only `build-install.sh` found out, after a full Release build and after
-  `/Applications/Overture.app` had already been replaced. Its early exit asks the same question, so an
-  identity that is present and refused is recreated rather than reported as already set up. Every call in
-  it that touches the real keychain or trust store sits behind a named function, which is what lets
-  `mac/scripts/setup-signing-identity.test.sh` drive the whole decision path without the password dialog
-  that made it untestable before. `build-install.sh` fails loud if that identity is missing rather than
-  falling back to ad-hoc. The one-time switch to this identity re-prompts for permissions on the first
-  install after it, then they persist.
-  Signing reads the USER's keychain search list, which is a persistent OS resource shared with every
-  other tool on this Mac, and something once left a THROWAWAY keychain under a temp directory in it
-  (#2611). `mac/scripts/prune-stale-keychains.sh` removes any entry whose file is gone and keeps
-  every entry that exists, in the order it was in; `--dry-run` reports and changes nothing. It is
-  deliberately NOT in `scripts/test-all.sh`, unlike the two advisories that ride along there: those
-  read or clear something this repo created, while this WRITES a list shared with the whole machine,
-  so it stays behind a command somebody typed. It refuses outright when no entry survives, because
-  an unreadable listing and an empty list look identical and the only way to change the list is to
-  write the whole of it back. If a fixture ever needs its own keychain it must pass it by
-  `--keychain` scope; a guard in `mac/scripts/prune-stale-keychains.test.sh` fails if any `*.test.sh`
-  writes the search list instead.
-- `build-install.sh` builds WHATEVER IS CHECKED OUT, which is what you want when installing a branch build
-  deliberately. The freshness panel's Update button does NOT run it directly: it runs
-  `mac/scripts/update-overture.sh`, which brings the checkout up to origin/main first and only then
-  installs, refusing (and installing nothing) when it cannot do that safely. Pressing Update means "get me
-  what has shipped"; running the installer by hand means "build this". They were the same command until
-  2026-08-04, and Dan hit the loop that follows from it: the panel compares the installed commit against
-  origin/main, so a checkout parked on an already-merged branch reinstalled the same commit and stayed
-  behind forever.
-  **Since #2923 the ONLY move it will make is fast-forwarding main onto its own remote**, and that is the
-  paragraph to read before changing it. It used to switch a checkout standing anywhere else onto main, and
-  on 2026-08-17 it did that to a working checkout in the middle of a session, off an in-progress feature
-  branch, silently. The cost was not the inconvenience: the `scripts/test-all.sh` run made straight
-  afterwards verified main while everyone believed it was verifying the branch, and that pass was written
-  into a PR body as evidence for code it had never compiled; the `git push -u origin <branch>` after it
-  pushed main's HEAD at the feature branch's name and was refused only by luck of the ref ordering. So the
-  three refusals are now uncommitted work, a local main the remote does not contain, and **HEAD standing
-  anywhere other than main**, each with its own sentence in the Terminal and in the app's panel, and the
-  last of them naming the branch it left alone. What that gives up is the automatic rescue of the parked
-  checkout above: telling a parked branch from a live one cannot be done cheaply or honestly (a
-  squash-merged branch is neither an ancestor of main nor patch-equal to it, so "already shipped" needs
-  `gh`, and even a branch carrying nothing of its own may be one a session is standing in). The loop it
-  leaves is LOUD rather than silent, which is the difference that mattered.
-  A corollary for anyone working here, and it is now what clears that refusal: leave the checkout on main
-  when you finish, because a session that parks it on a branch is what puts the Update button in front of
-  that state.
-  The same issue covered the CLASS rather than that one instance. `scripts/lib/worktree-safety.sh` holds
-  one answer to "is this directory mine to scrub", and both remaining places that move a checkout's HEAD
-  ask it before they touch anything: `setup_worktree` in `scripts/verify-and-merge-branch.sh` (which
-  force-detaches the verify slot, runs `git clean -ffdx` over it and on its fallback path deletes the
-  directory outright, at a path that comes from `OVERTURE_VERIFY_WORKTREE`) and
-  `gate_branch_project_freshness` in `scripts/lib/project-freshness.sh` (which walks a caller's directory
-  through every ref it is given and restores it to a bare SHA). It tells them apart by evidence rather
-  than by a name: the verify slot is created with `worktree add --detach` and is detached for its whole
-  life, so a directory standing on a NAMED branch is somebody's working checkout, whatever it is called.
-  It asks that independently of "is this the checkout I am running from", so neither side answers for the
-  other.
-- Changing what the app SAYS: `docs/copy-inventory.md` is every sentence Overture can say to Dan
-  (#915), generated from the source and checked in. The test suite fails when it is stale, so a PR
-  that changes the app's wording shows that change in the diff, in the words Dan will read rather
-  than as a line of Swift. Since #1994 a failing run **writes nothing**: it names the sentences that
-  moved and stops, because a run that was not asked to change the repo must not change it. (It used
-  to rewrite the file in place, and on 2026-08-02 that put a `fatalError` string, added only to break
-  the app on purpose, into the checked-in list of what Overture says to Dan, where a `git add -A`
-  would have shipped it.) When the difference IS your copy change, regenerate and commit it:
-
-  ```
-  TEST_RUNNER_REGENERATE_COPY_INVENTORY=1 mac/scripts/run-tests-locked.sh
-  ```
-
-  The `TEST_RUNNER_` prefix is load-bearing, not decoration: xcodebuild does not pass its own
-  environment to the test process, it forwards only variables with that prefix and strips it. The
-  bare name is silently ignored. Copy that is NOT the app's own voice (an outbound email body, an RFC822 header,
-  AppleScript, the draft lint's search terms) is marked at the source with
-  `// copy-inventory:ignore-start  <why>`, and every such region is listed in the inventory itself.
-  **The outbound email half of that has its own document and its own cold read (#2650):
-  `docs/outbound-copy.md`**, generated the same way and kept fresh by the same suite, from the ignore
-  regions tagged `outbound-email:`. It exists because an exclusion that is CORRECT still leaves its
-  content with no reviewer unless one is named (L129): the inventory is rightly the app's voice to Dan,
-  which left the sentences going to strangers under his name as the only copy in the product nobody read
-  cold. #2643 is the proof, a closing note telling people who had never replied that it was good to be in
-  touch, which survived a rewrite of the sentence beside it three days earlier. Read its diff in the same
-  pass as the inventory's, and ask the question that list exists for, which is NOT the inventory's
-  question: what state is this sentence ONLY ever sent in, and is every clause true of that state? A
-  region that reads like outbound email and carries no tag fails `OutboundCopyTests`, so a new one cannot
-  quietly arrive without a reader.
-  Before opening a PR that adds or changes any of these sentences, read the new and changed ones
-  COLD (#843/#844): open `git diff docs/copy-inventory.md`, read each added or reworded line in the
-  order a person meets it on screen (the row title before its subtitle, the section heading before
-  its body, the pill name before its detail, the concept summary before the live line shown beside
-  it), with no memory of why the code produces it, and ask of each: does this tell Dan anything the
-  line next to it did not? If not, cut it, or show the second line only in the edge case where the
-  two genuinely differ. The whole class of defect (#840, #841, the third in #840's comment, and the
-  nine #843 fixed) is invisible from inside the code and obvious the instant a person reads the
-  screen, and no test can catch any of it; this cold read is the only thing that does, so it is a
-  required step, not a good intention. A distinction that is real in the code ("checked" versus
-  "read", #803) still collapses to the same sentence twice in the common case, which is exactly what
-  the read has to catch.
-  Read a section in EVERY BRANCH it can render, not just the populated one (#1547). The coverage box's
-  explaining sentence was correct, tested and inside the has-gaps branch, so the state Dan was actually
-  in (no gaps, some clients set aside) rendered the heading over a bare count and nothing else, reading
-  as the exact opposite of what it meant. He asked what the section was for. A cold read of the diff
-  cannot catch that, because the sentence it would have him read is the one that never appeared: the
-  question to ask of each conditional is what this surface says when the list is EMPTY, when it holds
-  one, and when the branch that carries the explanation is the one not taken.
-  **Since #2945 that document has a second half, keyed to where a sentence RENDERS rather than where its
-  words are written.** Both generated documents key a sentence to the file holding its LITERAL text, so
-  moving an EXISTING sentence onto a BRAND NEW surface produced no diff at all and therefore got no cold
-  read, which is exactly when placement most needs reading. Measured while building #2816: "Source
-  listing" and "Venue calendar" arrived on three rows they had never appeared on and both documents came
-  out byte for byte identical. `copy-surfaces.md` now also lists, per file, the copy CONSTANTS that file
-  names, so a view that renders words it does not contain shows up in the diff. What it still cannot see
-  is copy that reaches a view as a VALUE rather than as a symbol, which is the #2816 case itself: the
-  sentence is returned by a private function, put on a struct and handed to the row that draws it, so no
-  file outside the declaring one names anything a source-text reader can match. That gap is #3118 rather
-  than something to discover by trusting the section.
-  Read the OTHER generated diff in the same pass: `docs/copy-surfaces.md` (#2210) says which surfaces
-  each file renders into, so the cold read answers where a new sentence LANDS as well as what it says.
-  A message in a toolbar item, a menu bar item, an OS alert or an info block can be correct, tested,
-  and still fail to do its job (the platform relocates or covers it, or it arrives somewhere Dan
-  cannot act on it), and that report names those four surfaces and why each one is a risk. Three of
-  the eight defects found on 2026-08-06 were exactly that shape and none was visible in the sentence
-  alone.
-- Changing the AI drafting instructions: those rules live in two places that must stay in sync,
-  `docs/prep-runbook.md` §2 inside this repo and the `dan-wright-brand-voice` skill at
-  `~/.claude/skills/dan-wright-brand-voice/` (which is NOT tracked by this repo, and is the
-  authoritative source, "the skill always wins"). `scripts/check-brand-voice-drift.sh` (#731) warns
-  when the two drift apart on the concrete facts they both state (the citable credentials, marquee
-  venues, portfolio link, the four opener shapes, the soft close). It rides along in
-  `scripts/test-all.sh`, and skips cleanly on any machine without the skill installed, so edit a
-  drafting rule in one place and a local pre-push run flags the other side going stale.
-- Regression harness for the runbook's JUDGMENT (#591). The runbook is a prompt, not code, so a rule
-  it encodes (never the host venue, never a press inbox, both named performers, strict confidence) can
-  be silently broken by an unrelated edit. Two layers guard it. The ALWAYS-ON free layer runs on every
-  `pnpm test`: `src/lib/prepRunbookRules.test.ts` asserts each guarded rule stays in the runbook text,
-  and `src/lib/prepEval.test.ts` scores recorded outputs against `fixtures/prep-eval/` expectations. The
-  OPT-IN real-AI layer, `scripts/eval-prep-runbook.sh --yes`, runs the CURRENT runbook against those
-  fixtures through the same headless `claude -p` mechanism as `prep-run.sh` and scores each real output
-  with the SAME engine (`src/lib/prepEval.ts`). It SPENDS TOKENS and is wired into no CI job: run it by
-  hand before shipping a runbook edit. See `fixtures/prep-eval/README.md`.
-  Remembering to run it was the whole mechanism, and it did not hold: the harness could not start at all
-  from 2026-07-28 to 2026-07-31 (#1862) with nobody noticing, and two runbook edits (#1856, #1817) shipped
-  before it had scored either. So `scripts/check-prep-eval-freshness.sh` (#1867) rides along in
-  `scripts/test-all.sh` and WARNS when `docs/prep-runbook.md` has changed since the eval last completed.
-  It never blocks (the eval spends tokens, so a gate would either be overridden every time or spend money
-  by itself), it keeps "never run here" and "stale since a date" as separate messages, and it skips
-  cleanly where the eval could not run anyway (no `claude` CLI, so CI and a fresh clone). What it reads is
-  `.overture-eval-last-run`, written by the eval only AFTER its last fixture is scored and naming the
-  runbook's content hash rather than any mtime: the dated `.overture-eval-runs/` directory is created
-  before the first AI call, so a run that died there would leave one indistinguishable from a finished
-  run's, and a clone rewrites every mtime.
-- Running multiple Claude agents on this repo at once: give each agent its own git
-  worktree so file edits and branches never collide, but xcodebuild itself must stay
-  serialized across all of them. `run-tests-locked.sh`'s lock file lives at one fixed
-  path outside any checkout, so every worktree contends for the same lock instead of
-  each locking its own copy (since #1347 there is no longer a CI run contending for it;
-  the Swift tests run only locally). The current verification model is a hybrid:
-  each agent builds and tests its own worktree under that shared lock and stops after
-  opening a PR (it never merges and never launches the live app); the coordinating
-  session then independently re-runs the full suite on every branch under the same
-  lock before merging, rather than trusting each agent's self report.
-  That re-run is against CURRENT main, not against the base the branch was cut from (#2353):
-  `verify-and-merge-branch.sh` merges `origin/main` into its verify worktree before the suite
-  is allowed to judge anything, and refuses (verifying nothing, merging nothing) when that combine
-  conflicts. An agent's own green run only ever proves the branch works beside the code it was cut
-  from, and when several branches land at once that is the one thing it needs to prove and cannot:
-  PR #2345 was green on its own branch and red on the main that already carried #1575 and #1940
-  (measured 2026-08-09). If you merge some other way, combine current main into the branch and
-  re-run `scripts/test-all.sh` on the combined tree yourself before merging.
-  For SEVERAL PRs at once use `scripts/verify-and-merge-batch.sh <pr> <pr> ...` (#2602), which does that
-  combination once instead of once per PR: it refuses every PR up front that cannot be in a batch (an
-  unresolvable identifier, a GitHub-side conflict, a PR named twice, a body missing the completeness
-  enumeration), sets the persistent verify worktree to current `origin/main`, merges each branch in,
-  runs `scripts/test-all.sh` ONCE, and merges them all only on green. It reuses
-  `verify-and-merge-branch.sh`'s own functions rather than copying them, so the two paths cannot
-  disagree about what a mergeable PR looks like. Two things to know before reading its output. On red it
-  says the failure belongs to the COMBINATION and names every branch in it, because a combined run
-  genuinely cannot attribute a failure to one branch, so do not read it as the last branch named. And
-  the merges themselves happen one at a time on GitHub, so one can be refused after the others land;
-  it attempts all of them and its summary says which merged and which did not, rather than stopping at
-  the first refusal and leaving the rest unreported.
-  **A refusal on GitHub's CONFLICTING flag now says WHICH KIND of collision it is (#3210).** Both merge
-  paths ask `check_mergeable_locally` (`scripts/lib/generated-conflict.sh`) rather than
-  `check-pr-ci.sh`'s `check_mergeable`, and it still refuses every CONFLICTING PR. What it adds, in
-  seconds, is the half nobody could see: GitHub computes that flag with a plain text merge and cannot
-  see this repo's `.gitattributes` merge driver, so a PR whose only collisions are the generated files
-  is flagged while a trial `git merge-tree` here resolves it and exits 0. Any two branches touching the
-  app's wording or its file list collide that way by construction, which is the whole reason the driver
-  exists, and telling that apart from a real conflict used to cost a full extra suite cycle (measured
-  2026-08-28 on PR #3196). The cheap kind now names itself and hands over the three commands that bring
-  the branch up to main; the real kind names the files that actually collide. Those commands include a
-  `git commit` step and say why: bringing main in fires `scripts/hooks/post-merge`, which regenerates a
-  stale project file and leaves it STAGED, so a push without that commit arrives carrying the staleness
-  the merge gate then refuses. The same block says `scripts/test-all.sh` JUDGES the generated documents
-  rather than regenerating them, and names `TEST_RUNNER_REGENERATE_COPY_INVENTORY=1` for the one that
-  does. A remedy naming a step that does not change the state the reader is stuck in is worse than none
-  (L111), and the first version of this message had both halves wrong.
-  **It does not carry on, and that is deliberate.** GitHub will not merge a PR it reports as CONFLICTING
-  whatever this Mac resolves, so carrying on would buy a full suite run and then fail at the merge. The
-  evidence is PR #3196's own commits, which carry a pushed merge of main AND a pushed
-  `Regenerate project.pbxproj` before it would go in. Automating that means pushing a regenerated file
-  to somebody's branch, which is exactly the property #2812's safety argument leans on not being true,
-  so it is #3216 rather than a detail of this.
-  The three outcomes are kept apart on purpose: resolved, really conflicted, and NOT MEASURED (the fetch
-  failed, or git refused the trial merge). A trial merge git declined to attempt exits 1 exactly as a
-  conflicted one does, so what separates them is evidence rather than a status code, the tree OID a real
-  merge writes (L98, L11).
-  **Both merge paths now judge each side's project file BEFORE merging, and COMMIT the regeneration the
-  post-merge hook makes afterwards (#2812).** Read the pair together, because either half alone is
-  wrong. The hook regenerates a stale `mac/Overture.xcodeproj/project.pbxproj` after a merge and leaves
-  it STAGED, so the batch's SECOND combine used to die on `Your local changes to the following files
-  would be overwritten by merge` and the script refused, verifying nothing and merging nothing. Measured
-  2026-08-16 combining #2809 and #2810. Two branches that each add a Swift file is the ordinary case, so
-  the batch gave up exactly where one suite run instead of several is worth the most, and the
-  `.gitattributes` merge driver never got a chance at it, because an uncommitted change blocking a merge
-  is not a content conflict. What makes committing that regeneration DIFFERENT from the blind
-  `xcodegen generate` of #1368, which is the whole distinction: #1368 regenerated the tree AS CHECKED
-  OUT, before any merge and before the gate looked, so it corrected staleness the BRANCH carried and
-  would land on main, and `check-pbxproj-fresh.sh` then compared the file to a version of itself that
-  had already been fixed. This commit can only ever record a regeneration OF A MERGE RESULT, for a tree
-  that exists nowhere but the verify worktree and is pushed nowhere, and every ref going into it
-  (`main` and each branch) has already had its OWN committed file judged, unmodified, on its own tip.
-  So the gate keeps its teeth: a branch carrying a stale project file is still refused, and it is
-  refused before anything regenerates, naming the branch rather than letting the failure surface later
-  as a stale file on main. A genuine content conflict still refuses exactly as before. The commit is
-  also refused, rather than made, if anything OTHER than the file the hook owns is staged.
-  **Since #2946 both merge paths also REBUILD the three generated copy documents on the combined tree**
-  (`docs/copy-inventory.md`, `docs/outbound-copy.md`, `docs/copy-surfaces.md`), through
-  `scripts/lib/copy-docs-rebuild.sh`, before the suite runs. Same shape and same reason as the project
-  file above: the instant any change adding a Dan-facing sentence merges, every other open branch holding
-  those files is stale, and the rebuild carries no decision because neither side's text is anybody's to
-  write. Measured 2026-08-18 across ten issues: three extra full suite runs plus two hand rebuilds. The
-  per-branch gate it leans on is NOT weakened and is not moved: a branch whose author changed the app's
-  wording and did not regenerate could never have had a green local `scripts/test-all.sh`, which is
-  mandatory before a push, so the only staleness that can survive to the combine is staleness another
-  branch caused. It commits ONLY those three paths and refuses when the run left any other TRACKED file
-  modified. An untracked stray is deliberately not a refusal, since only those three are ever staged and
-  refusing would block a merge over a log file a run happened to drop. And the cold read is untouched:
-  reading the new sentences is the author's step, on their own branch, where the change is theirs.
-
-  **A merge is confirmed with GitHub, never assumed, and that is one shared implementation**
-  (`scripts/lib/pr-merge.sh`, used by all three merge paths). Both halves of that come from the same
-  incident, on the batch script's first real run, 2026-08-13: `gh pr merge 2609` exited 1 with
-  `GraphQL: Something went wrong while executing your query`, a transient GitHub fault, and the run
-  printed `merged   PR #2609`, deleted the local branch of a PR that was still open, and exited 0.
-  Nothing had looked at the merge command's status (the steps after it ran unconditionally and the last
-  two end in `|| true`, so the function returned 0; errexit cannot help, because every caller invokes it
-  where errexit is suspended), and a zero status would only have been a claim about the command anyway,
-  not about the PR. So `merge_pr` now fails loud on the command AND asks GitHub whether the PR reads as
-  MERGED, and nothing destructive runs until it does. `pr-merge.test.sh` asserts no other script invokes
-  `gh pr merge` itself, because the reason this needed fixing twice is that two scripts each had their
-  own copy.
 
 The pieces hand off through fixed-shape JSON files, not direct calls. `docs/contracts.md`
 catalogs every one (writer, reader, version, and its `fixtures/` guard); read it before changing
 any cross-boundary file shape.
+
+## Where the rest of the rules live
+
+One line per rule, grouped by the file holding its body. Read the entry, not the line, before the
+rule decides anything. Each topic file carries a heading per entry, so search it for the script or
+the subject named below.
+
+### `docs/agents/testing.md`
+
+- **Running the Mac suite**: use
+  `mac/scripts/run-tests-locked.sh`, never a raw `xcodebuild`, which has no gate on it and exits
+  0 on a `-only-testing:` path that matches nothing. Scope THROUGH the wrapper so `NOTHING RAN`
+  can fire. Judge a run by its own `Suite shape:` line, never by a count written down anywhere.
+  A red run naming no failing test is one of three causes, and the wrapper says which.
+- **The two Swift test targets**: a new test goes in `OvertureTests` (unhosted) unless it renders
+  a view, in which case it goes in `OvertureHostedTests`. Helpers both targets compile live in
+  `mac/TestSupport/`.
+- **The `OvertureCore` pure scheme** does not build the app, so use it to verify domain logic
+  while the app is broken or mid refactor.
+- **The suite states its own size, every run**, and states nothing at all rather than a plausible
+  small number when it cannot state one honestly. Read that line and the two beside it: whether
+  this run verified the SCREENS, and whether the live store invariants measured anything.
+- **Seeing a guard fail** (every guard here is supposed to have been, L1): use `scripts/mutate.sh`,
+  never a fresh one liner, which has already lied in both directions. Put `--at` FIRST. It keeps
+  eleven outcomes apart and only the first two are results.
+- **Which test entry points refuse to call an empty run a pass, and which cannot.** Zero subjects
+  examined is its own outcome and must never read as everything passed. A raw `xcodebuild` and a
+  hand written wait loop watching a log are the two that cannot be gated.
+- **Waiting for something in a Swift test**: `waitUntil` in `mac/TestSupport/WaitUntil.swift`, which
+  SUSPENDS and carries a deadline. Never `while !condition { await Task.yield() }`, which cannot
+  fail, only hang, and which starves the work it is waiting for under parallel testing.
+- **Before implementing a decision Dan has REVERSED**, list the tests asserting the old one with
+  `scripts/find-tests-naming.sh <symbol>`. Such a test is the guard DEFENDING the rejected
+  behaviour, so it is deleted rather than adjusted.
+- **Does the suite care what year it is**: `scripts/check-fixtures-do-not-age.sh` shifts every dated
+  fixture forward three years and names the tests that change verdict. Opt in, runs the suite twice.
+  A new entrant is not a defect, it is a test to look at.
+- **Does a far future fixture still assert anything**: `scripts/check-far-future-fixtures.sh` pulls
+  the far ones back and asks which were relying on being outside every window. Opt in, runs the
+  suite twice. Read the limits of the instrument before reading its findings.
+- **Does the suite clean up after itself**: `scripts/check-temp-dir-leaks.sh`. Opt in. Hold a
+  `TemporarySandboxes` sandbox as a property of a `final class` suite rather than counting call
+  sites, which cannot find this defect.
+- **Does test data name a real person**: `scripts/check-test-identity-provenance.sh` separates an
+  invented identity from a real one by the commit that introduced it. Opt in, reports, never refuses.
+  Its baseline GROWS; it is a triage log, not a ratchet.
+- **How much of the Swift suite runs on the main actor**: `scripts/check-main-actor-share.sh`, an
+  advisory riding along in `scripts/test-all.sh`. The compiler is not a sufficient guard: a suite
+  touching AppKit or WebKit keeps its isolation whatever the build says.
+- **Which test harnesses hold state for the whole process**: `scripts/check-test-shared-state.sh`,
+  an advisory riding along in `scripts/test-all.sh`. Its baseline records the REASON each stored
+  static is safe, and `SharedStateWiringTests` checks that reason is still true.
+
+### `docs/agents/diagnostics.md`
+
+- **Asking what a freeze actually was**: `scripts/what-froze-the-queue.sh` prints each stall beside
+  the number of render passes it spanned. A long stall spanning no pass is something else entirely.
+- **Asking whether the app itself froze**: `MainThreadWatchdog` records it, and `RootView` says at
+  launch what the last session found. The watchdog WRITES and the main thread only stamps.
+- **Asking what a contact check actually searched for**: `scripts/what-the-check-searched.sh <show>`
+  prints the show as the run was given it beside every web call that run made. The defect is only
+  ever visible in the difference between those two.
+- **Has the producer rule's calibration fallen behind the live feed**:
+  `scripts/check-producer-corpus-drift.sh`. Opt in, reaches the network, advisory. Read the
+  BOUNDARY MOVED block, not the arrival and departure counts.
+- **Has a fixture sized against the live store fallen behind it**:
+  `scripts/check-fixture-corpus-drift.sh`, riding along on every push. Tag a declaration with
+  `LIVE-SHAPE` to enrol it. Four outcomes, and only UNMEASURED fails the run.
+- **Where the freeze tool's busy threshold actually lands**: `scripts/analyse-freeze-load.sh`. Read
+  the per measurement list rather than the verdict; which processes cross the line is what says
+  whether the line is in the right place.
+- **Scrolling the running app from a script**: `scripts/scroll-wheel.sh`, which DRIVES DAN'S MACHINE
+  and refuses without `--yes`. It confirms the scroll landed, because a scroll that did nothing and
+  a surface that does not rebuild on scroll read identically.
+- **Measuring two runs going at once**: `scripts/measure-concurrent-runs.sh`. It spends REAL usage,
+  plans and launches nothing without `--yes`, and is a Dan at the machine job rather than an agent one.
+
+### `docs/agents/merging.md`
+
+- **Once per CLONE**, run `scripts/install-git-hooks.sh`. It installs the `post-merge` project file
+  regeneration, the `pre-push` refusal of a push whose destination is `main` (work reaches main by
+  pull request), and the merge driver for this repo's generated files.
+- **Merging a branch**: `scripts/verify-and-merge-branch.sh`, or `scripts/verify-and-merge-batch.sh
+  <pr> <pr> ...` for several at once. Both combine current `origin/main` into the branch before the
+  suite is allowed to judge anything, because an agent's own green run only proves the branch works
+  beside the code it was cut from. Never a bare `gh pr merge` for a change touching the Mac project.
+- **A merge is confirmed with GitHub, never assumed.** One shared implementation in
+  `scripts/lib/pr-merge.sh`, and nothing destructive runs until GitHub reads the PR as MERGED.
+- **A CONFLICTING flag is one of two very different things**, and `check_mergeable_locally` says
+  which in seconds: a collision only in the generated files, which the merge driver resolves, or a
+  real one. Read the three commands it hands you rather than guessing.
+- **Running several agents at once**: give each its own git worktree, but xcodebuild stays
+  serialized across all of them through one lock file outside any checkout.
+- **Keeping the checkout tidy**: `scripts/tidy-checkout.sh`, a dry run by default. This repo squash
+  merges, so a shipped branch is never an ancestor of main and `git branch --merged` recognises
+  almost none of them. `scripts/check-branch-backlog.sh` rides along and prints one advisory line.
+- **When a decision is recorded on an issue, edit the BODY in the same action.** The thread is the
+  record of HOW it was reached and must not be rewritten; the body is what anybody triaging reads.
+  `scripts/check-issue-open-questions.sh` is the advisory half. Opt in.
+- **The committed `mac/Overture.xcodeproj/project.pbxproj` is generated**, nothing in CI checks it,
+  and `scripts/check-pbxproj-fresh.sh` is that gate. It judges against HEAD, never the index.
+
+### `docs/agents/copy.md`
+
+- **Changing what the app SAYS**: `docs/copy-inventory.md` is every sentence Overture can say to
+  Dan, generated and checked in, and the suite fails when it is stale. A failing run writes nothing.
+  Regenerate with `TEST_RUNNER_REGENERATE_COPY_INVENTORY=1 mac/scripts/run-tests-locked.sh`, where
+  the `TEST_RUNNER_` prefix is load bearing rather than decoration.
+- **Read the new and changed sentences COLD before opening the PR**, in the order a person meets
+  them on screen, and in EVERY branch a section can render, including the one where the explaining
+  sentence is not the branch taken. No test catches this class of defect; the cold read is the only
+  thing that does, so it is a required step rather than a good intention.
+- **Read the other two generated diffs in the same pass**: `docs/outbound-copy.md` (what goes to
+  strangers under Dan's name, which asks a different question from the inventory's) and
+  `docs/copy-surfaces.md` (where each sentence LANDS, which a correct sentence can still get wrong).
+- **Changing the AI drafting instructions**: they live in `docs/prep-runbook.md` and in the
+  `dan-wright-brand-voice` skill, which is authoritative and always wins.
+  `scripts/check-brand-voice-drift.sh` rides along and warns when the two drift.
+- **The regression harness for the runbook's JUDGMENT**: the free layer runs on every `pnpm test`;
+  `scripts/eval-prep-runbook.sh --yes` is the real AI layer, spends tokens, and is in no CI job.
+  `scripts/check-prep-eval-freshness.sh` rides along and warns when the runbook has changed since
+  the eval last completed.
+- **A store wide COUNT quoted in prose either carries its date or is not quoted at all.** A figure
+  standing in for the whole store is written as words and can never be wrong; a figure that IS a
+  dated measurement is evidence and stays exactly as it is.
+
+### `docs/agents/shell.md`
+
+- **Judge a command by its EXIT CODE, captured directly, never through a pipe.** No output at all
+  from something that normally prints a line per check means it died rather than passed.
+- **A script that changes its own working directory captures its location FIRST**, above the `cd`.
+  `scripts/script-self-location.test.sh` is the guard, derived from the tree rather than a list.
+- **Scratch space**: `overture_scratch_dir` / `overture_scratch_file` from `scripts/lib/scratch.sh`,
+  or `fixture_scratch_dir` in a fixture. On macOS a bare `mktemp -d` ignores `TMPDIR` and writes
+  where no check in this repository can see.
+- **Writing a shell fixture**: the assertions come from `scripts/lib/shell-assertions.sh`, which
+  every `*.test.sh` sources. The runner fails a fixture whose output shows bash could not resolve a
+  command, or could not PARSE a line.
+- **Never ask a yes or no question with `cmd | grep -q` under `pipefail`**: an early match and no
+  match are indistinguishable. Use a herestring, or `grep` without `-q` redirected to `/dev/null`.
+- **Quoting a character the style gate forbids**: build it as an escape so the file holds no literal
+  one. `SKIP_STYLE_CHECK=1` skips past a clean solution and is the wrong tool here.
+- **`find` in a SCRIPT is the real find**; only a command typed into a session is shimmed. Prefer an
+  ISO stamp for an ad hoc `find` typed into a session, which no repo convention can reach.
+
+### `docs/agents/building.md`
+
+- **To actually LOOK at the app**: `mac/scripts/run-debug.sh`, which refuses to launch a bundle
+  claiming the Release identity and so can never open the LIVE store.
+- **Installing a Release build**: `mac/build-install.sh`, after `mac/scripts/setup-signing-identity.sh`
+  once per Mac. It builds WHATEVER IS CHECKED OUT. The freshness panel's Update button runs
+  `mac/scripts/update-overture.sh` instead, which only ever fast forwards main onto its own remote
+  and refuses three ways rather than moving a checkout somebody is standing in.
+- **Leave the checkout on main when you finish**, because a session that parks it on a branch is
+  what puts the Update button in front of that state.
+- **Reclaiming Xcode's build output**: `scripts/reclaim-orphan-derived-data.sh` runs by itself inside
+  every `scripts/test-all.sh`. Xcode is the one toolchain here that caches OUTSIDE the checkout, so
+  every worktree that is ever built mints roughly 1.6 GB that nothing else reclaims.
 
 ## Restoring Overture from a backup
 
@@ -1606,71 +413,6 @@ Mac suite before any push). This means a merge's Swift verification comes from h
 `mac/scripts/run-tests-locked.sh` (or `scripts/test-all.sh`) locally and SEEN it pass, not
 from CI. Do not merge a Swift change without that local pass in hand.
 
-That one check runs on PULL REQUESTS ONLY. There is no push trigger, and
-`src/lib/ciWorkflow.test.ts` fails if one comes back. The reason is DUPLICATED WORK, measured
-2026-08-16: 440 workflow runs over seven days, 209 of them push and 227 pull_request, so about half
-of every run this repository made was a second look at code that had already passed.
-This paragraph used to give the reason as MONEY, and that half was wrong (#3233, L32). It said
-the 209 push runs were roughly 1,890 billed minutes a month against the 2,000 a PRIVATE repo gets
-on a free personal plan, and that crossing it would stop CI rather than bill. This repository is
-PUBLIC (`gh repo view --json visibility` answers PUBLIC, checked 2026-08-29) and GitHub does not
-bill a public repository for standard hosted runners, so no run here has ever cost money. It does
-NOT follow that a duplicate run is free, which is the same mistake pointing the other way (L307):
-on a free public repository the budget is the RUNNER CONCURRENCY LIMIT, a job is priced in the
-slots it holds times how long it holds them whoever is waiting, and every job over the limit
-delays every other. Dropping half the runs is therefore worth more here than the old paragraph
-claimed, in queue time rather than dollars. It is corrected rather than removed because it was
-load bearing in the direction that matters: anybody weighing whether to add a job read it as a
-measurement saying there was no room for one.
-What the push run was FOR is the one thing a PR run cannot do, judge the MERGED result rather
-than the branch beside the base it was cut from (L85). That is kept, and more strongly: both
-merge scripts already combine current `origin/main` into the branch and run the FULL suite,
-Swift included, before anything merges. A push to main can only ever BE a merge anyway, since
-`scripts/hooks/pre-push` refuses a push whose destination is main.
-A paths filter was considered instead and REJECTED as unsafe (L88). The job looks like it covers
-only the TypeScript importer, but its tests read `docs/prep-runbook.md`,
-`docs/scout-extract-runbook.md`, `AGENTS.md`, `package.json` and `fixtures/scout-extract-corpus/`,
-and `src/lib/docsCommands.test.ts` asserts that every path AGENTS.md mentions still exists. So
-renaming a script anywhere in the tree can turn this job red: its real input set is the whole
-repository, a filter would make it skip precisely the change that breaks it, and a skipped job
-is indistinguishable from a passing one.
-
-The committed `mac/Overture.xcodeproj/project.pbxproj` is generated by xcodegen (see
-`docs/contracts.md`), and nothing in CI checks it. `scripts/check-pbxproj-fresh.sh` (#1368) is that
-gate: it compares the committed pbxproj against a fresh `xcodegen generate` and BLOCKS on any drift
-(a xcodegen version other than `XCODEGEN_PINNED_VERSION` in `scripts/ci-config.sh` says "cannot
-verify" rather than a false "stale"). It judges against HEAD, never against the index (#2817): the bare
-`git diff` it used until 2026-08-16 compares the working tree to the INDEX, so a regeneration that was
-staged and not committed, which is exactly what `scripts/hooks/post-merge` leaves behind, read as FRESH
-while the commit a merge would carry was stale. That state was already named in the script's own header
-as a BLOCK outcome and was the one state no test had ever built (L151). It now blocks with its own
-message, because a staged regen is already in the index and only needs committing, where an unstaged one
-still needs staging first.
-It also stopped destroying uncommitted work while it looks (#2355). It has to regenerate in order to
-compare, which overwrites the working tree, so it now snapshots `mac/Overture.xcodeproj` first and puts
-THAT back rather than running `git checkout --`, which restores from the INDEX and so silently discarded
-a deliberate uncommitted regeneration. Measured 2026-08-09 during #1571: a regenerated project file was
-reverted that way and a new test file consequently sat outside the build for a full suite run that
-passed green with those tests absent, and on a FRESH verdict nothing is printed at all, so the loss left
-no trace anywhere (L5). A snapshot it cannot take REFUSES (exit 2) rather than regenerating over work it
-could not put back. It rides along inside `scripts/test-all.sh`, and both merge
-scripts run it: `verify-and-merge-branch.sh` checks BEFORE its worktree regen (the old blind
-pre-`xcodegen generate` used to silently rebuild a stale file and ship it), and
-`merge-when-green.sh` fetches the branch and checks only when the PR touches the Mac app. The one
-path this does NOT structurally cover is a bare `gh pr merge` (the `next-issue` shortcut): a merge
-that touches the Mac project MUST go through `scripts/test-all.sh` (then `merge-when-green.sh`) or
-`scripts/verify-and-merge-branch.sh`, never a bare `gh pr merge`, or a stale pbxproj can still reach
-main.
-
-For the one remaining check, a pending run and a stuck one still look identical in GitHub's
-PR view, so do not merge on "it hasn't failed yet". `scripts/check-pr-ci.sh <pr-number>`
-reports every check's real state, and `scripts/merge-when-green.sh <pr-number>` polls and
-merges only once it reports a genuine pass (stopping on a real failure or its own timeout).
-Both still work. #1352 removed their self-hosted-runner stall detection (dead since #1347
-retired the runner) along with the runner scripts, launchd plist, and setup doc; a pending
-GitHub-hosted check now just reads as "Pending", which blocks the merge, and there is no
-runner left that could silently swallow a job forever. The `overture-mac` self-hosted runner
-itself may still be left registered-but-idle on GitHub, and unloading its launchd agent
-(`com.danwright.overture.ci-runner`) on Dan's Mac is a separate manual cleanup (the plist is
-gone from the repo, so the tear-down is `launchctl bootout gui/$(id -u)/com.danwright.overture.ci-runner`
-plus removing `~/Library/LaunchAgents/com.danwright.overture.ci-runner.plist` if present).
+The rest of what CI does and does not cover is in `docs/agents/merging.md`: why there is no push
+trigger and no paths filter, the project file freshness gate, and how to read the one remaining
+check before merging.
