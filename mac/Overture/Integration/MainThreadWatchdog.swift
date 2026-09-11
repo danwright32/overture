@@ -20,7 +20,11 @@ import Foundation
 //
 // AND IT STANDS DOWN when the scene goes to the background, which for a menu bar app is most of the day,
 // so an idle Overture posts nothing at all. That is the bound: the watchdog's total contribution is one
-// ping per interval WHILE A WINDOW IS ON SCREEN and zero otherwise. `RootView` drives it off `scenePhase`
+// ping per interval while the watch is RUNNING and zero otherwise. `RootView` drives it off `scenePhase`,
+// and that is NOT the same as "while a window is on screen", which is what this comment claimed until
+// #3788 measured it: with zero windows on screen the watch had been running for two hours, because Overture
+// is resident in the menu bar so the scene never reaches `.background`. Each record now carries its own
+// `windows` reading rather than the file's meaning resting on this premise
 // and `TheWatchdogStandsDownTests` holds that something really does.
 //
 // The first version of this note claimed a `pause()` that did not exist and that nothing called, and the
@@ -199,7 +203,12 @@ final class MainThreadWatchdog: @unchecked Sendable {
         let reading = loadReading()
         let stall = StallRecord(session: session, sequence: sequence, at: at, seconds: delay,
                                 surface: surface.current, load: reading.0, loadAverage: reading.1,
-                                passes: passes)
+                                passes: passes,
+                                // #3788: read from the box the main thread stamped, never asked of AppKit
+                                // here. This runs on the watchdog's own queue during a freeze, and a value
+                                // the main actor has to supply is unavailable at exactly the moment a record
+                                // is being written (L345).
+                                windows: windows.current)
         let shouldWrite = keptLock.withLock { () -> Bool in
             let before = kept.records.count
             kept = StallLog.adding(stall, to: kept)

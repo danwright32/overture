@@ -1281,6 +1281,12 @@ struct RootView: View {
             .onChange(of: presentedSurface, initial: true) { _, surface in
                 freezeWatch.stamp(surface)
             }
+            // #3788: whether any window is on screen, from the window COUNT rather than from `scenePhase`.
+            // The phase below stands the watch down on `.background`, and its comment claims that means the
+            // window is gone; measured 2026-09-11 that is false here, because Overture is resident in the
+            // menu bar so the scene outlives the window. One observation, registered once, so there is no
+            // per-site stamp for anybody to forget (L621).
+            .task { await WindowCensus.observeUntilCancelled { freezeWatch.stampWindows($0) } }
             // #3435: the watch follows the window. `.inactive` keeps it running deliberately, because a
             // window that has merely lost focus is still on screen and still drawing, and a freeze there
             // is one Dan can see. Only `.background`, which for this scene means the window is gone,
