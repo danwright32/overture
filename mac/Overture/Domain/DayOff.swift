@@ -11,6 +11,7 @@ import SwiftData
 // nothing has ever written: there was no editor, no settings screen, and no writer anywhere in the app,
 // so the one conflict source that could have worked was inert for the app's whole life (#901).
 @Model
+// survivor-inheritance-exempt: deletes DayOff, because it deletes a DayOff row, never a Prospect; it fetches Prospects only to judge which days are in use (#3597)
 final class DayOff {
     // Not `id`: PersistentModel already refines Identifiable through persistentModelID, and a stored
     // `var id` collides with that conformance (the same convention as Prospect.naturalKey and

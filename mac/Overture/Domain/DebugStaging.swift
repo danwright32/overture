@@ -8,6 +8,7 @@ import SwiftData
 // hand-editing the SwiftData store. Wrapped in #if DEBUG so it is compiled out of release
 // builds entirely and can never fake data in normal use.
 #if DEBUG
+// survivor-inheritance-exempt: deletes Prospect, because a debug only teardown that removes its own seeded rows by key prefix, so there is no survivor to carry anything onto (#3597)
 enum DebugStaging {
     // Mark a prospect as an approved-and-sent lead. sentAt + the .approved status are exactly
     // what wasContacted reads, and priorRelationshipAtSend is snapshotted just as SendService
