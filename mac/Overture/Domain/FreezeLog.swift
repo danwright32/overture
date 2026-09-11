@@ -129,32 +129,40 @@ enum FreezeLog {
 
     static func compacted(_ records: [StallRecord], cap: Int = fileCap) -> Compacted {
         guard records.count > cap else { return Compacted(records: records, droppedRecords: []) }
-        let newest = Array(records.suffix(cap))
-        guard let worst = records.max(by: { $0.seconds < $1.seconds }) else {
-            return Compacted(records: newest, droppedRecords: dropping(records, keeping: newest))
-        }
+        // Split once, and work in POSITIONS from here on. #3763's first version asked which records were
+        // dropped by taking the identities it kept and filtering the rest out, and a log can hold the same
+        // record twice: a file half written by a process killed mid-freeze is the ordinary case here, which
+        // is why `read` counts unreadable lines rather than discarding them. An identity surviving in the
+        // kept window then answered for its own older copy, so that copy was neither kept nor archived and
+        // went nowhere. Measured in the test beside this: wrote 10 lines, kept 4, archived 5.
+        let splitAt = records.count - cap
+        let prefix = Array(records[..<splitAt])
+        let newest = Array(records[splitAt...])
+
         // ONLY a stall STRICTLY longer than everything already kept earns the slot. Written as "keep the
         // maximum" it shuffled ties: with every record the same length the oldest one is a maximum, so it
         // was promoted over a newer one for no reason. What this exists to save is a genuinely
         // exceptional freeze, not an arbitrary member of a tie.
+        //
+        // Searched in the PREFIX and held as an INDEX. The prefix is where a promotable record has to be:
+        // anything in `newest` is at most `longestKept`, so the strict test below could never admit it.
+        // An index rather than the value, because two records of the same length are indistinguishable by
+        // value and removing "the worst" from the dropped list could then remove its twin instead.
         let longestKept = newest.map(\.seconds).max() ?? 0
-        guard worst.seconds > longestKept else {
-            return Compacted(records: newest, droppedRecords: dropping(records, keeping: newest))
+        guard let worstIndex = prefix.indices.max(by: { prefix[$0].seconds < prefix[$1].seconds }),
+              prefix[worstIndex].seconds > longestKept else {
+            return Compacted(records: newest, droppedRecords: prefix)
         }
-        // Keeping the worst must not grow the file past its cap, so it takes the oldest slot rather than
-        // being added to the end: it IS the oldest thing worth keeping.
-        var kept = Array(newest.dropFirst())
-        kept.insert(worst, at: 0)
-        return Compacted(records: kept, droppedRecords: dropping(records, keeping: kept))
-    }
 
-    // What a compaction did NOT keep. By IDENTITY, because the keep-the-longest rule means the kept set is
-    // not a suffix: one survivor is pulled out of the middle, so a positional difference would name the
-    // wrong records. Identity is session plus sequence, which is what `StallRecord` has always said its
-    // identity is.
-    private static func dropping(_ all: [StallRecord], keeping kept: [StallRecord]) -> [StallRecord] {
-        let keptIds = Set(kept.map(\.identity))
-        return all.filter { !keptIds.contains($0.identity) }
+        // Keeping the worst must not grow the file past its cap, so it takes the oldest slot rather than
+        // being added to the end: it IS the oldest thing worth keeping. The record it displaces is dropped
+        // and therefore archived, and it is appended last because it is chronologically last.
+        var kept = Array(newest.dropFirst())
+        kept.insert(prefix[worstIndex], at: 0)
+        var dropped = prefix
+        dropped.remove(at: worstIndex)
+        if let displaced = newest.first { dropped.append(displaced) }
+        return Compacted(records: kept, droppedRecords: dropped)
     }
 
     // Run at LAUNCH and never on the freeze path. An append is safe to do while the main thread is

@@ -74,4 +74,71 @@ final class TheFreezeLogKeepsItsOldestRecordsTests {
                 Comment(rawValue: "the live log was truncated to \(live.records.count) records even though "
                 + "the archive could not be written, so those records are gone and nothing holds them"))
     }
+
+    // A file half written by a process killed mid-freeze is the ORDINARY case for this log, which is why
+    // `read` counts unreadable lines rather than dropping them. The same file can hold one record twice,
+    // and an identity that appears in the kept window then answers for its own older copy, so that copy is
+    // neither kept nor archived. Counted rather than compared by identity, because identity is the very
+    // thing that collides here.
+    @Test("a log holding the same record twice still archives every line it drops")
+    func aDuplicatedRecordIsNotLostByIdentity() throws {
+        let dir = try sandboxes.make(named: "freeze-archive-duplicate")
+        let log = FreezeLog.url(in: dir)
+        // The FIRST line repeats the identity of one that will survive in the kept window, which is the
+        // shape a duplicated append leaves behind.
+        var written = (0..<9).map { stall(Double($0) * 0.1 + 0.2, sequence: $0 + 1) }
+        written.insert(stall(0.15, sequence: 9), at: 0)
+        writeLog(written, to: log)
+
+        FreezeLog.compact(at: log, cap: 4)
+
+        let live = FreezeLog.read(at: log)
+        let archived = FreezeLog.read(at: FreezeLog.archiveURL(besideLogAt: log))
+        #expect(live.records.count + archived.records.count == written.count,
+                Comment(rawValue: "wrote \(written.count) lines, kept \(live.records.count) and archived "
+                + "\(archived.records.count), so \(written.count - live.records.count - archived.records.count) "
+                + "went nowhere"))
+    }
+
+    // MARK: - the retention rule itself, pinned where #3763 changed how it is computed
+
+    // #3763 moved the search for a promotable freeze from the WHOLE file to the part being dropped, on the
+    // reasoning that a long freeze already inside the kept window is kept anyway and the strict test could
+    // never admit it. That reasoning was not covered by any test: the three before this one pin keeping the
+    // newest, rescuing an old long freeze, and leaving a small file alone. This is the case the change
+    // actually touched, and it decides which freeze survives, which is the one reading this file exists for.
+    @Test("the longest freeze already in the kept window promotes nothing and the oldest are dropped")
+    func nothingIsPromotedWhenTheWorstIsAlreadyKept() {
+        // Ascending, so the longest stall is the NEWEST record and sits inside the kept window.
+        let records = (0..<10).map { stall(Double($0) * 0.1 + 0.2, sequence: $0 + 1) }
+
+        let result = FreezeLog.compacted(records, cap: 4)
+
+        #expect(result.records.map(\.identity) == records.suffix(4).map(\.identity),
+                "a record was promoted even though the longest stall was already being kept")
+        #expect(result.droppedRecords.map(\.identity) == records.prefix(6).map(\.identity),
+                "the dropped records are not exactly the oldest six")
+        #expect(result.dropped == 6)
+    }
+
+    // The other side of the same rule. Rescuing an old long freeze costs a slot, and the record it pushes
+    // out has to be archived like any other dropped one. Nothing pinned that, and a displaced record is the
+    // easiest of all of them to lose: it is the only one that leaves the kept window rather than never
+    // having been in it.
+    @Test("the record displaced by a rescued freeze is dropped rather than vanishing")
+    func theDisplacedRecordIsAccountedFor() {
+        // One very long stall FIRST, then short ones, so the rescue branch is the one taken.
+        var records = [stall(58.0, sequence: 1)]
+        records += (1..<10).map { stall(0.3, sequence: $0 + 1) }
+
+        let result = FreezeLog.compacted(records, cap: 4)
+
+        #expect(result.records.first?.identity == "s#1", "the 58 second stall was not rescued at all")
+        #expect(result.records.count == 4, "the rescue grew the file past its cap")
+        #expect(result.records.count + result.dropped == records.count,
+                Comment(rawValue: "\(records.count) in, \(result.records.count) kept and \(result.dropped) "
+                + "dropped, so the record the rescue displaced is in neither"))
+        #expect(result.droppedRecords.map(\.identity).contains("s#7"),
+                "the record displaced to make room for the rescue is not among the dropped ones")
+    }
 }
