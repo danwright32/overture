@@ -100,6 +100,59 @@ final class TheFreezeLogKeepsItsOldestRecordsTests {
                 + "went nowhere"))
     }
 
+    // MARK: - the rehearsal against the real log
+
+    // L7: rehearse a destructive operation against a COPY of the real thing, never only against data you
+    // built. Every other test here feeds this code logs it composed itself, so they all agree with my idea
+    // of what a freeze log looks like. Dan's real one does not: 675 records on 2026-09-11, spanning two
+    // build generations, most of them carrying no `passes` field at all, six sessions, and already 175
+    // over the cap, so the first real compaction moves a population whose shape this code has never seen.
+    //
+    // OPT IN, and UNMEASURED rather than passing when it cannot run, because a machine with no live log and
+    // a compaction that loses nothing must not print the same thing (L98). Set
+    // TEST_RUNNER_REHEARSE_FREEZE_COMPACTION=1 to run it.
+    //
+    // READ ONLY on the real file. It is copied into this suite's own sandbox first and the compaction runs
+    // on the copy, so the rehearsal can never be the thing that destroys the records it is checking.
+    @Test("compacting a copy of the real freeze log loses nothing")
+    func rehearseAgainstTheRealLog() throws {
+        // Read WITHOUT the prefix. xcodebuild passes a `TEST_RUNNER_<NAME>` variable into the test process
+        // as `<NAME>`, which is why that prefix is load bearing rather than decoration, and why the message
+        // below names the variable the CALLER sets rather than the one read here. Setting the prefixed name
+        // and reading the prefixed name looks right and is never true, and the test then prints "not
+        // measured" while the caller believes it ran (caught 2026-09-11 doing exactly that).
+        guard ProcessInfo.processInfo.environment["REHEARSE_FREEZE_COMPACTION"] != nil else {
+            print("freeze-compaction-rehearsal: not measured. Set TEST_RUNNER_REHEARSE_FREEZE_COMPACTION=1 to run it.")
+            return
+        }
+        let live = URL(fileURLWithPath: NSHomeDirectory())
+            .appendingPathComponent("Library/Application Support/Overture")
+            .appendingPathComponent(FreezeLog.fileName)
+        guard FileManager.default.fileExists(atPath: live.path) else {
+            let why = "freeze-compaction-rehearsal: UNMEASURED. No live log at \(live.path), so this "
+                + "rehearsal verified nothing. That is not the same as a compaction that lost nothing."
+            Issue.record(Comment(rawValue: why))
+            return
+        }
+
+        let dir = try sandboxes.make(named: "freeze-rehearsal")
+        let copy = FreezeLog.url(in: dir)
+        try FileManager.default.copyItem(at: live, to: copy)
+        let before = FreezeLog.read(at: copy)
+
+        FreezeLog.compact(at: copy)
+
+        let kept = FreezeLog.read(at: copy)
+        let archived = FreezeLog.read(at: FreezeLog.archiveURL(besideLogAt: copy))
+        print("freeze-compaction-rehearsal: \(before.records.count) real records in, "
+              + "\(kept.records.count) kept, \(archived.records.count) archived, "
+              + "\(before.unreadableLines) unreadable line(s) in the source.")
+        #expect(kept.records.count + archived.records.count == before.records.count,
+                Comment(rawValue: "the real log lost records: \(before.records.count) in, "
+                + "\(kept.records.count) kept, \(archived.records.count) archived"))
+        #expect(kept.records.count <= FreezeLog.fileCap, "the real log was left over its own cap")
+    }
+
     // MARK: - the retention rule itself, pinned where #3763 changed how it is computed
 
     // #3763 moved the search for a promotable freeze from the WHOLE file to the part being dropped, on the
