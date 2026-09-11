@@ -100,6 +100,125 @@ final class TheFreezeLogKeepsItsOldestRecordsTests {
                 + "went nowhere"))
     }
 
+    // MARK: - the archive's own retention (#3763, Dan's call 2026-09-11)
+
+    // Dan's words, this session: "I don't think we need it that long do we? Probably could keep it for a
+    // month and then drop it." So the archive is not forever. That makes the prune the second destructive
+    // operation in this file, and it gets the same treatment as the first: it SAYS what it removed, because
+    // a retention policy that deletes silently is indistinguishable from a quiet month (L9, L98).
+    //
+    // Every date here is derived from `archiveRetentionDays` rather than written as a literal beside it, so
+    // the day that constant changes these fixtures still mean what their names say (L401).
+    @Test("archived records older than the retention window are dropped and newer ones kept")
+    func theArchiveKeepsOnlyTheRetentionWindow() {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let day: TimeInterval = 60 * 60 * 24
+        let window = Double(FreezeLog.archiveRetentionDays) * day
+        let inside = [stall(0.3, sequence: 1, at: now.addingTimeInterval(-day)),
+                      stall(0.4, sequence: 2, at: now.addingTimeInterval(-window + day))]
+        let outside = [stall(0.5, sequence: 3, at: now.addingTimeInterval(-window - day)),
+                       stall(0.6, sequence: 4, at: now.addingTimeInterval(-window - 90 * day))]
+
+        let result = FreezeLog.pruned(outside + inside, now: now)
+
+        #expect(result.records.map(\.identity) == inside.map(\.identity),
+                "the retention window kept the wrong records")
+        #expect(result.dropped == outside.count,
+                Comment(rawValue: "expected \(outside.count) records outside the window to be dropped, "
+                + "got \(result.dropped)"))
+    }
+
+    // The report half. A prune that removed 200 records and one that removed none must not print the same
+    // thing, and the DATE RANGE is what makes the difference readable: "it dropped 200 records from
+    // 2026-09-07 to 2026-09-10" is a fact somebody can act on, where a bare count is not (L11).
+    @Test("a prune says how many it dropped and over what date range")
+    func thePruneSaysWhatItRemoved() {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let day: TimeInterval = 60 * 60 * 24
+        let window = Double(FreezeLog.archiveRetentionDays) * day
+        let oldest = now.addingTimeInterval(-window - 90 * day)
+        let newestDropped = now.addingTimeInterval(-window - day)
+        let records = [stall(0.6, sequence: 1, at: oldest),
+                       stall(0.5, sequence: 2, at: newestDropped),
+                       stall(0.3, sequence: 3, at: now.addingTimeInterval(-day))]
+
+        let result = FreezeLog.pruned(records, now: now)
+
+        #expect(result.dropped == 2)
+        #expect(result.earliestDropped == oldest, "the prune cannot say how far back it reached")
+        #expect(result.latestDropped == newestDropped, "the prune cannot say how recent its newest loss was")
+    }
+
+    // Nothing dropped is its own outcome, and it must be distinguishable from a prune that never ran. The
+    // two read identically if the only signal is a count of zero (L98).
+    @Test("a prune with nothing old enough to drop names no date range at all")
+    func aPruneThatRemovedNothingSaysSo() {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let records = [stall(0.3, sequence: 1, at: now.addingTimeInterval(-60 * 60 * 24))]
+
+        let result = FreezeLog.pruned(records, now: now)
+
+        #expect(result.dropped == 0)
+        #expect(result.earliestDropped == nil)
+        #expect(result.latestDropped == nil)
+    }
+
+    // The file half. `pruned` decides; this writes, and writing is where the record is actually destroyed.
+    @Test("pruning the archive file leaves only the retention window")
+    func thePruneRewritesTheArchiveFile() throws {
+        let dir = try sandboxes.make(named: "freeze-prune")
+        let log = FreezeLog.url(in: dir)
+        let archive = FreezeLog.archiveURL(besideLogAt: log)
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let day: TimeInterval = 60 * 60 * 24
+        let window = Double(FreezeLog.archiveRetentionDays) * day
+        writeLog([stall(0.5, sequence: 1, at: now.addingTimeInterval(-window - day)),
+                  stall(0.3, sequence: 2, at: now.addingTimeInterval(-day))], to: archive)
+
+        let result = FreezeLog.pruneArchive(besideLogAt: log, now: now)
+
+        #expect(result.dropped == 1, "the prune did not remove the record outside the window")
+        let left = FreezeLog.read(at: archive)
+        #expect(left.records.map(\.identity) == ["s#2"], "the archive file was not rewritten to the window")
+    }
+
+    // THE ONE THAT MATTERS HERE. A prune rewrites the archive from what its READ returned, so any line the
+    // read could not decode is destroyed by the rewrite without ever being counted. A log half written by a
+    // process killed mid-freeze is the ordinary case for this file, so that is not a rare path. A cleanup
+    // that deletes whatever its read failed to mention must refuse on a SHORT read, not only on a failed
+    // one (L211, L105).
+    @Test("a prune refuses to rewrite an archive holding lines it could not read")
+    func aPruneRefusesOnAnUnreadableArchive() throws {
+        let dir = try sandboxes.make(named: "freeze-prune-damaged")
+        let log = FreezeLog.url(in: dir)
+        let archive = FreezeLog.archiveURL(besideLogAt: log)
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let day: TimeInterval = 60 * 60 * 24
+        let window = Double(FreezeLog.archiveRetentionDays) * day
+        // Built as ONE write, with the truncated line in the MIDDLE, which is where a process killed
+        // mid-append leaves it. Written in one go deliberately: composing it by appending after a
+        // `String.write` would OVERWRITE the record before it, and the fixture would then be a damaged line
+        // plus one good one rather than the sandwich this case is about.
+        let good = [stall(0.5, sequence: 1, at: now.addingTimeInterval(-window - day)),
+                    stall(0.3, sequence: 2, at: now.addingTimeInterval(-day))]
+        let damaged = "{\"session\":\"s\",\"sequence\":99,\"at\":\"2026-09-10T17:4"
+        let lines = [FreezeLog.line(for: good[0]), damaged, FreezeLog.line(for: good[1])].compactMap { $0 }
+        #expect(lines.count == 3, "the fixture could not encode its own records, so it tests nothing")
+        try (lines.joined(separator: "\n") + "\n").write(to: archive, atomically: true, encoding: .utf8)
+        let before = try String(contentsOf: archive, encoding: .utf8)
+        #expect(FreezeLog.read(at: archive).unreadableLines == 1,
+                "the fixture's damaged line decoded after all, so this case was never reached")
+
+        let result = FreezeLog.pruneArchive(besideLogAt: log, now: now)
+
+        #expect(result.dropped == 0, "the prune removed records from an archive it could not fully read")
+        #expect(result.refusedUnreadableLines == 1,
+                "the prune did not report the unreadable line as its reason for refusing")
+        let after = try String(contentsOf: archive, encoding: .utf8)
+        #expect(after == before,
+                "the archive was rewritten despite holding a line the read could not decode, so that line is gone")
+    }
+
     // MARK: - the rehearsal against the real log
 
     // L7: rehearse a destructive operation against a COPY of the real thing, never only against data you

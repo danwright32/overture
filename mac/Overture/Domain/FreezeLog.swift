@@ -165,6 +165,92 @@ enum FreezeLog {
         return Compacted(records: kept, droppedRecords: dropped)
     }
 
+    // MARK: - the archive's retention (#3763)
+
+    // How long an archived record is kept. Dan's call, 2026-09-11: a month, not forever.
+    //
+    // DAYS rather than calendar months, because a month is not a fixed length and nothing here needs it to
+    // be: this bounds a diagnostic archive, and one expressed in days has no timezone or month-length edge
+    // for a reader to get wrong (L39).
+    static let archiveRetentionDays = 31
+
+    // What a prune keeps and what it removed. The count and both ends of the range are DERIVED from the
+    // dropped records rather than stored beside them, so a report cannot describe a different set from the
+    // one actually removed (L53, L83).
+    struct Pruned: Equatable, Sendable {
+        var records: [StallRecord]
+        var droppedRecords: [StallRecord]
+        var dropped: Int { droppedRecords.count }
+        // nil when nothing was dropped, never a sentinel date: a prune that removed nothing and one that
+        // removed a record stamped at the epoch must not read the same (L98, L11).
+        var earliestDropped: Date? { droppedRecords.map(\.at).min() }
+        var latestDropped: Date? { droppedRecords.map(\.at).max() }
+    }
+
+    // A month means a month, with NO exception for the longest stall, and that is worth stating because the
+    // two layers above this one both have such an exception. `compacted` promotes the single longest stall
+    // into the live file and keeps it there however old it is, and `StallLog` does the same in memory, both
+    // because the MAXIMUM is the reading those exist to support. Repeating the rule here would protect
+    // nothing: a record only reaches the archive by being dropped from the live file, and the all-time worst
+    // stall is precisely the one the live file refuses to drop. So the archive's oldest month can go without
+    // putting the maximum at risk, and an exception here would be a second copy of a rule whose single copy
+    // already works (L274).
+    static func pruned(_ records: [StallRecord], now: Date,
+                       retentionDays: Int = archiveRetentionDays) -> Pruned {
+        let cutoff = now.addingTimeInterval(-Double(retentionDays) * 60 * 60 * 24)
+        // Order preserved on both sides, so the archive stays roughly chronological after a prune and the
+        // reported range reads in the direction the records were written.
+        var kept: [StallRecord] = []
+        var dropped: [StallRecord] = []
+        for record in records {
+            if record.at < cutoff { dropped.append(record) } else { kept.append(record) }
+        }
+        return Pruned(records: kept, droppedRecords: dropped)
+    }
+
+    // The file half of the retention, stubbed so the tests beside it fail on behaviour rather than on a
+    // missing symbol. `refusedUnreadableLines` is its own field rather than a flag, because how many lines
+    // could not be read is what a person would need to act on it.
+    struct ArchivePrune: Equatable, Sendable {
+        var dropped: Int = 0
+        var earliestDropped: Date?
+        var latestDropped: Date?
+        var refusedUnreadableLines: Int = 0
+    }
+
+    static func pruneArchive(besideLogAt url: URL, now: Date,
+                            retentionDays: Int = archiveRetentionDays) -> ArchivePrune {
+        let archive = archiveURL(besideLogAt: url)
+        let read = read(at: archive)
+        // No archive is the ordinary state: most installs have never compacted. Nothing to report.
+        guard !read.fileWasAbsent else { return ArchivePrune() }
+
+        // REFUSE on a short read, not only on a failed one. This function rewrites the file from what the
+        // read returned, so every line the read could not decode would be destroyed by the rewrite without
+        // ever being counted, and a file half written by a process killed mid-freeze is the ORDINARY case
+        // here rather than a rare one (L211, L105). The count is reported rather than a bare flag, because
+        // how many lines are unreadable is what somebody would act on.
+        guard read.unreadableLines == 0 else {
+            return ArchivePrune(refusedUnreadableLines: read.unreadableLines)
+        }
+
+        let result = pruned(read.records, now: now, retentionDays: retentionDays)
+        guard result.dropped > 0 else { return ArchivePrune() }
+
+        // Atomically, so a failed write leaves the archive as it was rather than half of it. And the result
+        // is only reported as a drop once the write has actually happened: saying records were removed when
+        // the write failed would be a report of a deletion nobody performed, which is the mirror of the
+        // silence this whole issue is about (L12).
+        let text = result.records.compactMap(line(for:)).joined(separator: "\n")
+        let payload = result.records.isEmpty ? "" : text + "\n"
+        guard (try? payload.write(to: archive, atomically: true, encoding: .utf8)) != nil else {
+            return ArchivePrune()
+        }
+        return ArchivePrune(dropped: result.dropped,
+                            earliestDropped: result.earliestDropped,
+                            latestDropped: result.latestDropped)
+    }
+
     // Run at LAUNCH and never on the freeze path. An append is safe to do while the main thread is
     // wedged; a read, modify, write is not, and one whose read fails erases the record at exactly the
     // moment it is worth having (L105).
