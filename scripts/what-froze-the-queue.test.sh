@@ -64,6 +64,32 @@ assert_contains "and says how many it could not judge" "${out}" "1 carry no pass
 out="$("${READER}" --log "${WORK}/empty.ndjson" 2>&1)"; status=$?
 assert_equals "an empty log is UNMEASURED" "2" "${status}"
 
+# 7. #3763: the archive beside the live log is part of the population, and the tool SAYS what it read.
+#    A compaction moves records out of the live file, so a reader that opens only that file silently
+#    reports on the recent window while looking exactly like a reader of the whole history. The archive
+#    is where the "before" half of milestone 80's comparison lives, so that narrowing would be invisible
+#    and would quietly wreck the one reading it exists for (L46, L98).
+#    Its own directory, and case 8's too. The archive is found by its FIXED name beside the log, so a case
+#    that writes one into the shared work directory leaves it there for every case after it: case 8's
+#    premise is that no archive exists, and sharing the directory silently removed that premise while the
+#    case still read as passing (L447).
+mkdir -p "${WORK}/with-archive" "${WORK}/without-archive"
+record 16.73 48 > "${WORK}/with-archive/both.ndjson"
+record 0.31 1 >> "${WORK}/with-archive/both.ndjson"
+record 10.84 2 > "${WORK}/with-archive/freeze-log-archive.ndjson"
+record 7.77 3 >> "${WORK}/with-archive/freeze-log-archive.ndjson"
+out="$("${READER}" --log "${WORK}/with-archive/both.ndjson" 2>&1)"; status=$?
+assert_equals "a log with an archive beside it still reports" "0" "${status}"
+assert_contains "and the archived records are in the population" "${out}" "of 4 record(s)"
+assert_contains "and it names the archive it read, so one file cannot pass for two" "${out}" "freeze-log-archive.ndjson"
+
+# 8. The archive is OPTIONAL, and its absence must read as absent rather than as an error. Most installs
+#    have never compacted, so this is the ordinary state rather than the edge case.
+record 16.73 48 > "${WORK}/without-archive/alone.ndjson"
+out="$("${READER}" --log "${WORK}/without-archive/alone.ndjson" 2>&1)"; status=$?
+assert_equals "no archive beside the log is not a failure" "0" "${status}"
+assert_contains "and the reading is still the live file's own" "${out}" "of 1 record(s)"
+
 if [ "${FAILURES}" -eq 0 ]; then
   echo "what-froze-the-queue.test.sh: all passed"
 else
