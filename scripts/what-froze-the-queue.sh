@@ -39,20 +39,46 @@ if [ ! -f "${LOG}" ]; then
   exit 2
 fi
 
-python3 - "${LOG}" <<'PY'
-import json, sys
+# #3763: the archive beside the live log is part of the population. A compaction moves the oldest records
+# out of the live file, and the archive is where the "before" half of milestone 80's comparison lives, so a
+# reader that opened only the live file would report on the recent window while looking exactly like a
+# reader of the whole history (L46, L98). Derived from the live log's own directory, the same way
+# `FreezeLog.archiveURL(besideLogAt:)` derives it, rather than taken as a second argument nobody passes.
+ARCHIVE="$(dirname "${LOG}")/freeze-log-archive.ndjson"
 
-path = sys.argv[1]
+python3 - "${LOG}" "${ARCHIVE}" <<'PY'
+import json, os, sys
+
+path, archive_path = sys.argv[1], sys.argv[2]
 rows, unreadable = [], 0
-with open(path) as handle:
-    for line in handle:
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            rows.append(json.loads(line))
-        except ValueError:
-            unreadable += 1
+sources = []
+
+
+def plural(n, word):
+    return f"{n} {word}" if n == 1 else f"{n} {word}s"
+
+
+def load(p):
+    global unreadable
+    added = 0
+    with open(p) as handle:
+        for line in handle:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                rows.append(json.loads(line))
+                added += 1
+            except ValueError:
+                unreadable += 1
+    return added
+
+
+# The ARCHIVE first, so the combined list is roughly chronological: a compaction only ever moves records
+# OLDER than everything the live file kept.
+if os.path.exists(archive_path):
+    sources.append(f"{os.path.basename(archive_path)} ({plural(load(archive_path), 'record')})")
+sources.append(f"{os.path.basename(path)} ({plural(load(path), 'record')})")
 
 # A record written before #3760 shipped has no `passes` key at all. That is not a zero: it is a record
 # this tool cannot judge, and folding it into either verdict is the whole thing this exit code exists
@@ -74,6 +100,9 @@ if not counted:
 
 counted.sort(key=lambda r: -r.get("seconds", 0))
 print(f"what-froze-the-queue: {len(counted)} stall(s) with a pass count, of {len(rows)} record(s).")
+# Named rather than assumed: a reading built from the live file alone and one built from the whole history
+# are different populations, and without this line they print identically (L11).
+print(f"  read from: {', '.join(sources)}")
 print()
 print("  when                  seconds  passes  surface        load")
 for r in counted[:25]:

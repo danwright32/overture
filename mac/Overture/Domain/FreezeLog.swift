@@ -14,9 +14,21 @@ import Foundation
 enum FreezeLog {
     // copy-inventory:ignore-start  a filename, not a sentence Overture says
     static let fileName = "freeze-log.ndjson"
+    // #3763: the archive's name lives HERE, beside the live log's, inside the one exemption region. Given
+    // its own region lower down it produced a second, identical exemption line in `docs/copy-inventory.md`,
+    // which is a generated document saying the same thing twice.
+    static let archiveFileName = "freeze-log-archive.ndjson"
     // copy-inventory:ignore-end
 
     static func url(in support: URL) -> URL { support.appendingPathComponent(fileName) }
+
+    // #3763: where a compaction puts what it would otherwise have discarded.
+    //
+    // Derived from the LIVE url rather than taken as a parameter, so no caller can compact without
+    // archiving: a behaviour every call site has to opt into is enforced by nothing (L621).
+    static func archiveURL(besideLogAt url: URL) -> URL {
+        url.deletingLastPathComponent().appendingPathComponent(archiveFileName)
+    }
 
     // What the reader has told Dan about already. Session-independent, on `RunBoundaryViolations`'s
     // precedent and for its reason: a freeze recorded in a session that then crashed still has to be said
@@ -107,28 +119,50 @@ enum FreezeLog {
     // reading this file exists to support is the MAXIMUM (L191, L63).
     struct Compacted: Equatable, Sendable {
         var records: [StallRecord]
-        var dropped: Int
+        // #3763: the records themselves, not only how many. A count is enough to REPORT a loss and not
+        // enough to PREVENT one, and preventing it is what this milestone's own before-and-after reading
+        // depends on. `dropped` is derived from this rather than stored beside it, so the number and the
+        // records it describes cannot drift apart (L53, L83).
+        var droppedRecords: [StallRecord]
+        var dropped: Int { droppedRecords.count }
     }
 
     static func compacted(_ records: [StallRecord], cap: Int = fileCap) -> Compacted {
-        guard records.count > cap else { return Compacted(records: records, dropped: 0) }
-        let newest = Array(records.suffix(cap))
-        guard let worst = records.max(by: { $0.seconds < $1.seconds }) else {
-            return Compacted(records: newest, dropped: records.count - cap)
-        }
+        guard records.count > cap else { return Compacted(records: records, droppedRecords: []) }
+        // Split once, and work in POSITIONS from here on. #3763's first version asked which records were
+        // dropped by taking the identities it kept and filtering the rest out, and a log can hold the same
+        // record twice: a file half written by a process killed mid-freeze is the ordinary case here, which
+        // is why `read` counts unreadable lines rather than discarding them. An identity surviving in the
+        // kept window then answered for its own older copy, so that copy was neither kept nor archived and
+        // went nowhere. Measured in the test beside this: wrote 10 lines, kept 4, archived 5.
+        let splitAt = records.count - cap
+        let prefix = Array(records[..<splitAt])
+        let newest = Array(records[splitAt...])
+
         // ONLY a stall STRICTLY longer than everything already kept earns the slot. Written as "keep the
         // maximum" it shuffled ties: with every record the same length the oldest one is a maximum, so it
         // was promoted over a newer one for no reason. What this exists to save is a genuinely
         // exceptional freeze, not an arbitrary member of a tie.
+        //
+        // Searched in the PREFIX and held as an INDEX. The prefix is where a promotable record has to be:
+        // anything in `newest` is at most `longestKept`, so the strict test below could never admit it.
+        // An index rather than the value, because two records of the same length are indistinguishable by
+        // value and removing "the worst" from the dropped list could then remove its twin instead.
         let longestKept = newest.map(\.seconds).max() ?? 0
-        guard worst.seconds > longestKept else {
-            return Compacted(records: newest, dropped: records.count - cap)
+        guard let worstIndex = prefix.indices.max(by: { prefix[$0].seconds < prefix[$1].seconds }),
+              prefix[worstIndex].seconds > longestKept else {
+            return Compacted(records: newest, droppedRecords: prefix)
         }
+
         // Keeping the worst must not grow the file past its cap, so it takes the oldest slot rather than
-        // being added to the end: it IS the oldest thing worth keeping.
+        // being added to the end: it IS the oldest thing worth keeping. The record it displaces is dropped
+        // and therefore archived, and it is appended last because it is chronologically last.
         var kept = Array(newest.dropFirst())
-        kept.insert(worst, at: 0)
-        return Compacted(records: kept, dropped: records.count - cap)
+        kept.insert(prefix[worstIndex], at: 0)
+        var dropped = prefix
+        dropped.remove(at: worstIndex)
+        if let displaced = newest.first { dropped.append(displaced) }
+        return Compacted(records: kept, droppedRecords: dropped)
     }
 
     // Run at LAUNCH and never on the freeze path. An append is safe to do while the main thread is
@@ -140,6 +174,15 @@ enum FreezeLog {
         guard !read.fileWasAbsent else { return 0 }
         let result = compacted(read.records, cap: cap)
         guard result.dropped > 0 else { return 0 }
+        // #3763: archived BEFORE the live file is rewritten, and the truncation is ABANDONED if that
+        // failed. These two writes have no transaction around them, so the order is the whole safeguard:
+        // doing the destructive half first leaves a failed archive indistinguishable from a clean
+        // compaction, with the records already gone (L5).
+        //
+        // ONE write rather than one per record. This runs at launch on the same thread the rest of this
+        // milestone is trying to get off, and the real case is the 186 records measured on 2026-09-10, so a
+        // file opened and closed per record would be 186 opens added to exactly the path under repair.
+        guard archive(result.droppedRecords, besideLogAt: url) else { return 0 }
         let text = result.records.compactMap(line(for:)).joined(separator: "\n") + "\n"
         guard (try? text.write(to: url, atomically: true, encoding: .utf8)) != nil else { return 0 }
         return result.dropped
@@ -149,7 +192,26 @@ enum FreezeLog {
     // cannot be a read-modify-write whose read failing erases the record (L105).
     @discardableResult
     static func append(_ record: StallRecord, to url: URL) -> Bool {
-        guard let line = line(for: record), let data = (line + "\n").data(using: .utf8) else { return false }
+        guard let line = line(for: record) else { return false }
+        return appending(line + "\n", to: url)
+    }
+
+    // #3763: every dropped record into the archive, in one write, answering whether ALL of them landed.
+    //
+    // A record that will not ENCODE counts as a failure rather than being quietly skipped, because a
+    // compactMap here would drop it from the archive and then let the truncation proceed, which is the
+    // exact loss this whole guard exists to prevent, arriving through the guard itself (L387).
+    static func archive(_ records: [StallRecord], besideLogAt url: URL) -> Bool {
+        guard !records.isEmpty else { return true }
+        let lines = records.compactMap(line(for:))
+        guard lines.count == records.count else { return false }
+        return appending(lines.joined(separator: "\n") + "\n", to: archiveURL(besideLogAt: url))
+    }
+
+    // The one place either caller touches the filesystem, so the archive cannot acquire a different
+    // durability story from the live log by being written somewhere else (L263).
+    private static func appending(_ text: String, to url: URL) -> Bool {
+        guard let data = text.data(using: .utf8) else { return false }
         if let handle = try? FileHandle(forWritingTo: url) {
             defer { try? handle.close() }
             guard (try? handle.seekToEnd()) != nil else { return false }
