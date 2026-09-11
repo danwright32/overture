@@ -125,9 +125,13 @@ final class TheFreezeLogKeepsItsOldestRecordsTests {
             print("freeze-compaction-rehearsal: not measured. Set TEST_RUNNER_REHEARSE_FREEZE_COMPACTION=1 to run it.")
             return
         }
-        let live = URL(fileURLWithPath: NSHomeDirectory())
-            .appendingPathComponent("Library/Application Support/Overture")
-            .appendingPathComponent(FreezeLog.fileName)
+        // The APP's own definition of where the log lives, never a path this test builds. Two reasons, and
+        // the suite enforces the first: `TestsCannotReachSharedStateTests` forbids a test reaching a shared
+        // location through `NSHomeDirectory()`, and it caught this written that way (L2). The second is that
+        // a hand-built path is a second definition of where the log is, free to drift from where the app
+        // actually writes it, which would make this rehearse a file nobody uses (L70, L263).
+        let live = FreezeLog.url(in: StoreLocation.dataDirectory(appSupport: StoreLocation.appSupport,
+                                                                isDebugBuild: false))
         guard FileManager.default.fileExists(atPath: live.path) else {
             let why = "freeze-compaction-rehearsal: UNMEASURED. No live log at \(live.path), so this "
                 + "rehearsal verified nothing. That is not the same as a compaction that lost nothing."
