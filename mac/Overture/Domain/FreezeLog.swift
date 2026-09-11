@@ -14,6 +14,10 @@ import Foundation
 enum FreezeLog {
     // copy-inventory:ignore-start  a filename, not a sentence Overture says
     static let fileName = "freeze-log.ndjson"
+    // #3763: the archive's name lives HERE, beside the live log's, inside the one exemption region. Given
+    // its own region lower down it produced a second, identical exemption line in `docs/copy-inventory.md`,
+    // which is a generated document saying the same thing twice.
+    static let archiveFileName = "freeze-log-archive.ndjson"
     // copy-inventory:ignore-end
 
     static func url(in support: URL) -> URL { support.appendingPathComponent(fileName) }
@@ -22,10 +26,6 @@ enum FreezeLog {
     //
     // Derived from the LIVE url rather than taken as a parameter, so no caller can compact without
     // archiving: a behaviour every call site has to opt into is enforced by nothing (L621).
-    // copy-inventory:ignore-start  a filename, not a sentence Overture says
-    static let archiveFileName = "freeze-log-archive.ndjson"
-    // copy-inventory:ignore-end
-
     static func archiveURL(besideLogAt url: URL) -> URL {
         url.deletingLastPathComponent().appendingPathComponent(archiveFileName)
     }
