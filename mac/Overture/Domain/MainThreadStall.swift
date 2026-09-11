@@ -61,6 +61,17 @@ enum MachineLoad: String, Codable, Sendable {
 // WHOSE DATA IT TOUCHES, enforced rather than promised: a duration, an instant, a surface CASE, a load
 // class and a load figure. Never a prospect name, a venue, an address, a subject or a draft body. There
 // is no field here that could carry one and no initialiser that takes a model.
+// #3788: whether any window was open when the stall happened.
+//
+// THREE VALUES. `unknown` is not "no": it is what a record written before this field shipped says, and what a
+// build that never stamped says, and folding it into either answer would make "nobody was looking" and
+// "nothing was recording whether anybody was looking" one claim (L98, L11).
+enum WindowPresence: String, Codable, Equatable, Sendable {
+    case open
+    case none
+    case unknown
+}
+
 struct StallRecord: Codable, Equatable, Sendable {
     // The process this was recorded in, so a retry or a crash mid-write cannot double count: a record is
     // identified by its session and its sequence, and both are assigned by the watchdog.
@@ -87,9 +98,43 @@ struct StallRecord: Codable, Equatable, Sendable {
     // and those are the "before" half of milestone 80's own reading. They decode with this absent.
     let passes: Int?
 
+    // #3788: decoded as `.unknown` when absent, which is every record in Dan's log written before this
+    // shipped. A custom decode rather than an optional, because the ABSENT case already has a name here and
+    // two ways of spelling it (nil and .unknown) would be two spellings of one fact (L544).
+    let windows: WindowPresence
+
     // The whole identity, as one string, because a reader that remembers what it has said has to remember
     // BOTH halves: the sequence restarts at 1 in every process, so it is not an identity on its own.
     var identity: String { "\(session)#\(sequence)" }
+
+    init(session: String, sequence: Int, at: Date, seconds: Double, surface: StallSurface,
+         load: MachineLoad, loadAverage: Double?, passes: Int?, windows: WindowPresence = .unknown) {
+        self.session = session
+        self.sequence = sequence
+        self.at = at
+        self.seconds = seconds
+        self.surface = surface
+        self.load = load
+        self.loadAverage = loadAverage
+        self.passes = passes
+        self.windows = windows
+    }
+
+    // The absent field becomes `.unknown` rather than failing the whole record. Dan's log holds 500 records
+    // written before this existed and they are milestone 80's own "before" half, so a decode that rejected
+    // them would destroy the comparison this field exists to enable (L133).
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        session = try c.decode(String.self, forKey: .session)
+        sequence = try c.decode(Int.self, forKey: .sequence)
+        at = try c.decode(Date.self, forKey: .at)
+        seconds = try c.decode(Double.self, forKey: .seconds)
+        surface = try c.decode(StallSurface.self, forKey: .surface)
+        load = try c.decode(MachineLoad.self, forKey: .load)
+        loadAverage = try c.decodeIfPresent(Double.self, forKey: .loadAverage)
+        passes = try c.decodeIfPresent(Int.self, forKey: .passes)
+        windows = try c.decodeIfPresent(WindowPresence.self, forKey: .windows) ?? .unknown
+    }
 }
 
 // The retention rule, which is the half #3435 names as its own defect.

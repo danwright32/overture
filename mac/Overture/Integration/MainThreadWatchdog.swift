@@ -56,6 +56,19 @@ final class MainThreadWatchdog: @unchecked Sendable {
 
     let surface = SurfaceBox()
 
+    // #3788: whether a window is open, on SurfaceBox's precedent and for its reason exactly. Asking the main
+    // actor would make the answer unavailable at the one moment a record is being written (L345).
+    final class WindowBox: @unchecked Sendable {
+        private let lock = NSLock()
+        private var value: WindowPresence = .unknown
+        // Called by the MAIN thread. The only writer.
+        func stamp(_ presence: WindowPresence) { lock.withLock { value = presence } }
+        // Called by the watchdog. The only reader.
+        var current: WindowPresence { lock.withLock { value } }
+    }
+
+    let windows = WindowBox()
+
     // #3760: how many render passes the main thread has run, on the SurfaceBox's precedent exactly.
     //
     // The main thread is the only writer and the watchdog the only reader, for the reason above it: a
