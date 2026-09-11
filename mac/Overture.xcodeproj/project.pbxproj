@@ -1139,6 +1139,7 @@
 		87258FE39A6B9C5201345588 /* VoiceFeedbackContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9F7EDB806B788E4A5BE8BC4 /* VoiceFeedbackContractTests.swift */; };
 		8731D0389B199836DA43CE6D /* AnsweredElsewhere.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA52247EAB492451DBE9BA20 /* AnsweredElsewhere.swift */; };
 		8741FC9863F492F38372D198 /* ContactFormResultMigration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F7289D02B17154567BAF295 /* ContactFormResultMigration.swift */; };
+		87549A0A413468812FCA4608 /* FreezeHousekeepingCopy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 21D4BC837007B2607A9BE788 /* FreezeHousekeepingCopy.swift */; };
 		87A409DC0DF82B31A250BE41 /* ContactRowControls.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3D13B8CEC5D5DBCD9EC2D6A /* ContactRowControls.swift */; };
 		87D170CCEEF8B3363F920C2B /* AnsweringAReplyMarksItAnsweredTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3607211B9223AB5C5387C39 /* AnsweringAReplyMarksItAnsweredTests.swift */; };
 		87EF923801F9804529CDFB7A /* ReconcileSchedulerSaveGuardTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4052F504E575FB21B90A9DA /* ReconcileSchedulerSaveGuardTests.swift */; };
@@ -1375,6 +1376,7 @@
 		A70D4DBED678C1437C4888A3 /* Inquiry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0457F6A49E31C124F1FD40B1 /* Inquiry.swift */; };
 		A71BD417F07AA6D986878502 /* SelfBookingConfirmSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B698E5CAE41AFFFC111EF7F /* SelfBookingConfirmSheet.swift */; };
 		A73735AAC6D8860F7A922812 /* ProbeSelection.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF00343367BE6C23A0E5D2C4 /* ProbeSelection.swift */; };
+		A761B17DC1E589FE228EFC07 /* FreezeHousekeepingCopy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 21D4BC837007B2607A9BE788 /* FreezeHousekeepingCopy.swift */; };
 		A779999C2D31A5D2B10A6D73 /* AgentLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D0F0A9BA325F5B61AAF2444 /* AgentLog.swift */; };
 		A7C435CEE3C7E719A5830B64 /* ReachedOutActionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1BCFBE30295599884DE2AFE /* ReachedOutActionTests.swift */; };
 		A7D6662B6437B36A6C5E0A1A /* ProspectRowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D9834539BA47D783475B28C /* ProspectRowView.swift */; };
@@ -2365,6 +2367,7 @@
 		2172CE8354CB41DD0815A77C /* SendDelightTiming.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SendDelightTiming.swift; sourceTree = "<group>"; };
 		21B494FF28FAA214F72C6F75 /* ConflictScope.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConflictScope.swift; sourceTree = "<group>"; };
 		21B962D795CA15C9996FA57F /* ProspectRowViewOrgDoNotContactTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProspectRowViewOrgDoNotContactTests.swift; sourceTree = "<group>"; };
+		21D4BC837007B2607A9BE788 /* FreezeHousekeepingCopy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FreezeHousekeepingCopy.swift; sourceTree = "<group>"; };
 		21E61D4E3018F1962ABE8602 /* AlgoliaCalendar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AlgoliaCalendar.swift; sourceTree = "<group>"; };
 		221F1B6BE1CC25DDD326C9AA /* ScoutCancelWiringGuardTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScoutCancelWiringGuardTests.swift; sourceTree = "<group>"; };
 		222C532AE99A11AF3A2E4FC0 /* ReprepRequestTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReprepRequestTests.swift; sourceTree = "<group>"; };
@@ -5189,6 +5192,7 @@
 				45D46431A6EB08AEBB73E8A8 /* FollowUp.swift */,
 				6B4B07AEBF70B38D0A2CD8E1 /* FormOutreach.swift */,
 				0D2EC0C3AF5FD514ACFD478E /* FragmentMatchCorrection.swift */,
+				21D4BC837007B2607A9BE788 /* FreezeHousekeepingCopy.swift */,
 				D79160C46172E2B99FF4E9CE /* FreezeLog.swift */,
 				231BCEDEE0AA2E4D577AD060 /* FreezeReport.swift */,
 				941E66F15A01E3DF1A3E2E73 /* GenreCorrection.swift */,
@@ -5801,6 +5805,7 @@
 				95FA968A34EE5F74D750A3F0 /* FollowUpsView.swift in Sources */,
 				B74E50F8F416A9A966957517 /* FormOutreach.swift in Sources */,
 				1C34862741BD75B9D16DEAE1 /* FragmentMatchCorrection.swift in Sources */,
+				A761B17DC1E589FE228EFC07 /* FreezeHousekeepingCopy.swift in Sources */,
 				4CD2E3CB6586AF72C8E92D71 /* FreezeLog.swift in Sources */,
 				DF01B6B778CD30B6039C2F2E /* FreezeReport.swift in Sources */,
 				BFEEDE3F37F93BDFC2116D59 /* FreezeWatch.swift in Sources */,
@@ -6662,6 +6667,7 @@
 				C01F5671B2C61251B1D2E837 /* FragmentMatchCorrection.swift in Sources */,
 				4E99882142CA3E5B2DC7BDB1 /* FragmentMatchCorrectionLiveStoreTests.swift in Sources */,
 				6FE6A17D7E4140B62DEEBBBB /* FragmentMatchCorrectionTests.swift in Sources */,
+				87549A0A413468812FCA4608 /* FreezeHousekeepingCopy.swift in Sources */,
 				8E67F2ECAC9F619F94ECDDEF /* FreezeLog.swift in Sources */,
 				2A33247C317864BDB901CA4D /* FreezeReport.swift in Sources */,
 				CE15332F3105EB6AC611DE7C /* FreezeWatch.swift in Sources */,

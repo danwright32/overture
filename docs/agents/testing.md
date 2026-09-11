@@ -363,8 +363,18 @@ the measurement it came from lives here. Read the entry before the rule decides 
   lied: a substitution that matched NOTHING leaves the suite green for the ordinary reason and reads as a
   surviving guard, and a run piped through anything reports the PIPE's status. It keeps ELEVEN outcomes
   apart, and only the first two are results: CAUGHT, SURVIVED, NOT APPLIED, NOTHING RAN, LANDED
-  ELSEWHERE, NOT PROOF, NO RUNNER, DID NOT BUILD, MISPLACED FLAG, PERL VARIABLE and SCOPE MISSED THE
-  FILE.
+  ELSEWHERE, NOT PROOF, NO RUNNER, DID NOT BUILD, MISPLACED FLAG, PERL VARIABLE, SCOPE MISSED THE FILE
+  and, since #3792, UNCOMMITTED.
+  **COMMIT THE TARGET FIRST.** UNCOMMITTED refuses, before the file is touched, when the target carries
+  changes that are not committed, because this script breaks that file and restores it: if a run is
+  interrupted the broken copy stays, and the cleanup anybody reaches for is a revert of that file, which
+  takes the uncommitted work with it. The leftover and the work share one fate and only one of them is
+  meant to go. It is a refusal in the tool rather than a rule to remember because the rule was measured
+  and failed, three times in one session on 2026-09-11, the second and third after it had been stated out
+  loud (L27, L462). A target in NO repository is allowed, deliberately: nothing can be reverted, and this
+  script's own fixture mutates a file under the temp folder. `OVERTURE_MUTATE_ALLOW_DIRTY=1` is the way
+  through for a deliberate mutation of work you do not intend to keep, and it ANNOUNCES itself in the
+  output rather than passing silently.
   `OVERTURE_MUTATE_RUNNER` swaps the runner, which is how to drive the shell fixtures or vitest instead
   of the Swift suite. Since #2972 the run's FULL log is KEPT at a named path and printed as `full log:`
   (`/tmp/overture-mutate-run.log`, moved with `OVERTURE_MUTATE_LOG`): only the last 25 lines go to the
