@@ -61,6 +61,30 @@ enum MachineLoad: String, Codable, Sendable {
 // WHOSE DATA IT TOUCHES, enforced rather than promised: a duration, an instant, a surface CASE, a load
 // class and a load figure. Never a prospect name, a venue, an address, a subject or a draft body. There
 // is no field here that could carry one and no initialiser that takes a model.
+// #3788: whether any window was open when the stall happened.
+//
+// THREE VALUES. `unknown` is not "no": it is what a record written before this field shipped says, and what a
+// build that never stamped says, and folding it into either answer would make "nobody was looking" and
+// "nothing was recording whether anybody was looking" one claim (L98, L11).
+enum WindowPresence: String, Codable, Equatable, Sendable {
+    case open
+    case none
+    case unknown
+
+    // Derived from the window COUNT rather than from `scenePhase`. `RootView` stands the watchdog down on
+    // `.background`, whose own comment says that for this scene "the window is gone", and measured
+    // 2026-09-11 that is not true of this app: with zero windows on screen the watchdog had been running for
+    // two hours. Overture is resident in the menu bar, so the scene outlives the window.
+    //
+    // A NEGATIVE count is not a count and cannot come from AppKit. It reads as `.unknown` rather than being
+    // folded into `.none`, because a value the system never produces reaching a real answer would be this
+    // field inventing a measurement (L11).
+    static func from(visibleWindowCount count: Int) -> WindowPresence {
+        if count < 0 { return .unknown }
+        return count == 0 ? WindowPresence.none : .open
+    }
+}
+
 struct StallRecord: Codable, Equatable, Sendable {
     // The process this was recorded in, so a retry or a crash mid-write cannot double count: a record is
     // identified by its session and its sequence, and both are assigned by the watchdog.
@@ -87,9 +111,54 @@ struct StallRecord: Codable, Equatable, Sendable {
     // and those are the "before" half of milestone 80's own reading. They decode with this absent.
     let passes: Int?
 
+    // #3788: decoded as `.unknown` when absent, which is every record in Dan's log written before this
+    // shipped. A custom decode rather than an optional, because the ABSENT case already has a name here and
+    // two ways of spelling it (nil and .unknown) would be two spellings of one fact (L544).
+    let windows: WindowPresence
+
     // The whole identity, as one string, because a reader that remembers what it has said has to remember
     // BOTH halves: the sequence restarts at 1 in every process, so it is not an identity on its own.
     var identity: String { "\(session)#\(sequence)" }
+
+    init(session: String, sequence: Int, at: Date, seconds: Double, surface: StallSurface,
+         load: MachineLoad, loadAverage: Double?, passes: Int?, windows: WindowPresence = .unknown) {
+        self.session = session
+        self.sequence = sequence
+        self.at = at
+        self.seconds = seconds
+        self.surface = surface
+        self.load = load
+        self.loadAverage = loadAverage
+        self.passes = passes
+        self.windows = windows
+    }
+
+    // The absent field becomes `.unknown` rather than failing the whole record. Dan's log holds 500 records
+    // written before this existed and they are milestone 80's own "before" half, so a decode that rejected
+    // them would destroy the comparison this field exists to enable (L133).
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        session = try c.decode(String.self, forKey: .session)
+        sequence = try c.decode(Int.self, forKey: .sequence)
+        at = try c.decode(Date.self, forKey: .at)
+        seconds = try c.decode(Double.self, forKey: .seconds)
+        surface = try c.decode(StallSurface.self, forKey: .surface)
+        load = try c.decode(MachineLoad.self, forKey: .load)
+        loadAverage = try c.decodeIfPresent(Double.self, forKey: .loadAverage)
+        passes = try c.decodeIfPresent(Int.self, forKey: .passes)
+        // Decoded as a STRING and mapped, never as the enum directly. `decodeIfPresent` on an enum THROWS on
+        // a value it does not know, which fails the WHOLE record rather than one field, so a later build
+        // adding a fourth state would make every record it writes unreadable to this one. This file's own
+        // encoder pins its date strategy for exactly that reason, because a file read by a later version has
+        // to decode what an earlier one wrote (L26, L255).
+        //
+        // An unrecognised spelling folds into `.unknown`, and that is right rather than merely convenient:
+        // `.unknown` means "this reader cannot say", and "written before the field existed" and "written by a
+        // build that knows more than I do" are both exactly that. No fourth case to tell them apart, because
+        // nothing downstream would act differently on them.
+        let spelling = try c.decodeIfPresent(String.self, forKey: .windows)
+        windows = spelling.flatMap(WindowPresence.init(rawValue:)) ?? .unknown
+    }
 }
 
 // The retention rule, which is the half #3435 names as its own defect.

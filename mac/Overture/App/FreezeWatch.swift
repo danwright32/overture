@@ -59,6 +59,14 @@ final class FreezeWatch {
     // Called by the MAIN thread whenever the surface changes. The only writer.
     func stamp(_ surface: StallSurface) { watchdog?.surface.stamp(surface) }
 
+    // #3788: called by the MAIN thread whenever a window appears or disappears. The only writer.
+    //
+    // Unlike the surface, this is stamped even while the watch is STOOD DOWN, by assigning through to the box
+    // only when there is a watchdog: a presence stamped into nothing is simply lost, and the census takes a
+    // fresh reading at every start, so a watch that begins after the last window closed still learns the
+    // truth rather than inheriting a stale one.
+    func stampWindows(_ presence: WindowPresence) { watchdog?.windows.stamp(presence) }
+
     // #3760: called by the MAIN thread every time it runs a render pass. The only writer.
     //
     // Silently does nothing while the watch is stood down, which is correct rather than a swallow: with
