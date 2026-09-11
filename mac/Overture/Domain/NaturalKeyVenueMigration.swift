@@ -134,17 +134,12 @@ enum NaturalKeyVenueMigration {
                 members.first(where: { hasRecordBeyondADismissal($0, countingFoundAddresses: false) })
                 ?? richestContactList(candidates.sorted { freshest($1, $0) })
                 ?? candidates.max(by: freshest)!
-            // The show was first seen when the EARLIEST of these rows first saw it. Carried across before
-            // the losers go, or the merge would silently move the funnel's opening node (#16) forward to
-            // whenever the duplicate happened to appear.
-            let firstSightings = members.compactMap(\.firstSeenAt)
-            if let earliest = firstSightings.min(),
-               survivor.firstSeenAt == nil || earliest < survivor.firstSeenAt! {
-                survivor.firstSeenAt = earliest
-            }
-            // #3124: and his DECISIONS, before the rows holding them go. Same place and same reason as
-            // `firstSeenAt` above: whatever only a loser knew is gone the moment it is deleted (L5).
-            carryDansDecisions(onto: survivor, from: members)
+            // #3597: all of it, in one place, rather than the two carries this pass happened to have.
+            // The returned key is DISCARDED here on purpose: this pass re-keys to the key it COMPUTES
+            // below, not to the one the feed publishes, which is what it exists to do. The feed identity
+            // FIELDS are still carried, which this pass was not doing at all, so a survivor kept for what
+            // it holds no longer keeps a listing URL the source has stopped publishing.
+            _ = SurvivorInheritance.carry(onto: survivor, from: members)
             for loser in members where loser !== survivor {
                 context.delete(loser)
                 summary.duplicatesDeleted += 1

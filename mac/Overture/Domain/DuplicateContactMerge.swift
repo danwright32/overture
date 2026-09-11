@@ -18,6 +18,7 @@ import SwiftData
 //     the case the store actually held: Ilan Rooke's form-only row carried no role while his address row
 //     carried "Creator & Host, Broadway Sessions", and Sabine's Instagram row carried a role her booking
 //     page row did not (L5: a blank must never beat real data in a merge).
+// survivor-inheritance-exempt: deletes Recipient, because it deletes a Recipient, never a Prospect; the show survives and only a duplicate contact on it goes (#2422, #3597)
 enum DuplicateContactMerge {
 
 

@@ -173,8 +173,8 @@ enum SameNightTitleVariantMerge {
                 // #3379: whatever only the LIVE row knew, before that row goes. Same place and same
                 // reason as the room name and the title above: what only a loser holds is gone the
                 // moment it is deleted (L5).
-                let keyToAdopt = NaturalKeyVenueMigration.carryTheFeedIdentity(onto: survivor,
-                                                                               from: cluster)
+                // #3597: the feed identity AND the two carries this pass was missing, in one place.
+                let keyToAdopt = SurvivorInheritance.carry(onto: survivor, from: cluster)
                 for loser in cluster where loser.persistentModelID != survivor.persistentModelID {
                     context.delete(loser)
                     summary.duplicatesDeleted += 1

@@ -67,20 +67,23 @@ enum DriftedRunMerge {
                 ?? NaturalKeyVenueMigration.richestContactList(freshestFirst)
                 ?? candidates.max(by: { $0.ingestedAt < $1.ingestedAt })!
 
+            // #3597: whatever only a loser knew, before the losers go (L5). This pass carried NOTHING,
+            // so a merge here silently dropped the earliest sighting, any rename Dan had made, and the
+            // identity the feed is currently publishing. The miss count reset below used to be the one
+            // thing it did carry, and it is now part of this, which is why it has moved up.
+            let keyToAdopt = SurvivorInheritance.carry(onto: survivor, from: members)
+
             for loser in members where loser.persistentModelID != survivor.persistentModelID {
                 context.delete(loser)
                 summary.duplicatesDeleted += 1
             }
 
-            // The survivor inherited the miss count of a row the feed stopped listing, so it would render
-            // struck through as "No longer in the feed, may be cancelled" for a run still weeks from
-            // closing. The run IS still listed; only its opening night moved.
-            survivor.missedScoutCount = 0
-
-            // Deliberately NOTHING else. The key and the date are left exactly as they are: the next scout
-            // re-keys the survivor through #1528's own match, and rewriting a key here is the only step
-            // that could throw against the unique index, inside a launch save shared with every other
-            // migration whose failure is currently discarded.
+            // AFTER the delete loop, for the reason SurvivorInheritance.carry records: a key a loser still
+            // holds cannot be taken while that loser is there, and SwiftData does not throw on the
+            // collision, it merges the rows (#2754). The date is still left exactly as it is.
+            if let keyToAdopt, survivor.naturalKey != keyToAdopt {
+                survivor.naturalKey = keyToAdopt
+            }
         }
 
         return summary
