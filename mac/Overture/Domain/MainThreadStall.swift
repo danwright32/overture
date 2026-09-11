@@ -70,6 +70,19 @@ enum WindowPresence: String, Codable, Equatable, Sendable {
     case open
     case none
     case unknown
+
+    // Derived from the window COUNT rather than from `scenePhase`. `RootView` stands the watchdog down on
+    // `.background`, whose own comment says that for this scene "the window is gone", and measured
+    // 2026-09-11 that is not true of this app: with zero windows on screen the watchdog had been running for
+    // two hours. Overture is resident in the menu bar, so the scene outlives the window.
+    //
+    // A NEGATIVE count is not a count and cannot come from AppKit. It reads as `.unknown` rather than being
+    // folded into `.none`, because a value the system never produces reaching a real answer would be this
+    // field inventing a measurement (L11).
+    static func from(visibleWindowCount count: Int) -> WindowPresence {
+        if count < 0 { return .unknown }
+        return count == 0 ? WindowPresence.none : .open
+    }
 }
 
 struct StallRecord: Codable, Equatable, Sendable {
@@ -133,7 +146,18 @@ struct StallRecord: Codable, Equatable, Sendable {
         load = try c.decode(MachineLoad.self, forKey: .load)
         loadAverage = try c.decodeIfPresent(Double.self, forKey: .loadAverage)
         passes = try c.decodeIfPresent(Int.self, forKey: .passes)
-        windows = try c.decodeIfPresent(WindowPresence.self, forKey: .windows) ?? .unknown
+        // Decoded as a STRING and mapped, never as the enum directly. `decodeIfPresent` on an enum THROWS on
+        // a value it does not know, which fails the WHOLE record rather than one field, so a later build
+        // adding a fourth state would make every record it writes unreadable to this one. This file's own
+        // encoder pins its date strategy for exactly that reason, because a file read by a later version has
+        // to decode what an earlier one wrote (L26, L255).
+        //
+        // An unrecognised spelling folds into `.unknown`, and that is right rather than merely convenient:
+        // `.unknown` means "this reader cannot say", and "written before the field existed" and "written by a
+        // build that knows more than I do" are both exactly that. No fourth case to tell them apart, because
+        // nothing downstream would act differently on them.
+        let spelling = try c.decodeIfPresent(String.self, forKey: .windows)
+        windows = spelling.flatMap(WindowPresence.init(rawValue:)) ?? .unknown
     }
 }
 
