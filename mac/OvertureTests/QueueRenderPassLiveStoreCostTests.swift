@@ -899,4 +899,54 @@ struct QueueRenderPassLiveStoreCostTests {
                 "a group built in no measurable time, so nothing here was timed (L98)")
     }
 
+
+    // #3647: what the bounce scan in RootView's ARGUMENT LIST costs, which neither existing instrument can
+    // see. `QueueRenderPass.Corpus` counts sweeps over rows the pass was handed and this happens outside the
+    // pass; `WorkTally` counts `QueueItem` construction and this builds none. So the shape sits in the one
+    // position both are structurally blind to, which is why it is measured here before anything is built:
+    // three premises in this milestone have already reversed under measurement.
+    //
+    // Reported against the SAME pass cost the rest of this file measures, because 4 ms matters or does not
+    // depending entirely on what it is 4 ms of, and against the per-evaluation frequency, because the issue's
+    // claim is about how OFTEN this runs rather than what one run costs.
+    @Test func measureTheBounceScanInTheArgumentList() throws {
+        guard ProcessInfo.processInfo.environment["MEASURE_QUEUE_LIVE_STORE"] != nil else {
+            print("queue-live-store-bounces: not measured. Set TEST_RUNNER_MEASURE_QUEUE_LIVE_STORE=1 to run it.")
+            return
+        }
+
+        let clone = try cloneLiveStore()
+        let container = try openContainer(at: clone)
+        let ctx = ModelContext(container)
+        let rows = (try? ctx.fetch(FetchDescriptor<Prospect>())) ?? []
+        guard rows.count > 100 else {
+            print("queue-live-store-bounces: UNMEASURED. The clone holds \(rows.count) rows, which is not the store.")
+            return
+        }
+
+        // WARMED FIRST, deliberately. RootView's body runs many times over one store state, so every
+        // evaluation after the first meets an already-faulted relationship. Measuring the cold case would
+        // report the fetch's cost a second time and credit it to this scan (L102).
+        for r in rows { _ = r.recipients.isEmpty }
+
+        let warm = medianSeconds { _ = BounceDetection.unresolvedBounces(in: rows) }
+        let found = BounceDetection.unresolvedBounces(in: rows).count
+
+        print("""
+        queue-live-store-bounces: the scan RootView runs as an argument (#3647)
+          rows                      \(rows.count)
+          bounces it finds          \(found)
+          per evaluation, warm      \(String(format: "%.1f", warm.median * 1000)) ms \
+        (5 runs, \(String(format: "%.1f", warm.low * 1000)) to \(String(format: "%.1f", warm.high * 1000)))
+          RootView evaluations in one scout run, from #3647's own reading: 60 to 130, so the run pays
+          \(String(format: "%.2f", warm.median * 60)) to \(String(format: "%.2f", warm.median * 130)) seconds of this.
+        """)
+
+        // Not a threshold. A cost test that refuses above a number becomes a dated constant nobody re-reads,
+        // and this file deliberately reports instead (L316). What IS asserted is that the measurement happened
+        // over a real population, so a clone that came back empty cannot print a reassuring 0.0 ms.
+        #expect(found >= 0)
+        #expect(warm.median > 0, "the scan measured as taking no time at all, which means it ran over nothing")
+    }
+
 }
