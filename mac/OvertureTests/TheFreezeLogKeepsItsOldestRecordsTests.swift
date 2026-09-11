@@ -177,7 +177,10 @@ final class TheFreezeLogKeepsItsOldestRecordsTests {
 
         let result = FreezeLog.pruneArchive(besideLogAt: log, now: now)
 
-        #expect(result.dropped == 1, "the prune did not remove the record outside the window")
+        #expect(result == .removed(count: 1,
+                                   earliest: now.addingTimeInterval(-window - day),
+                                   latest: now.addingTimeInterval(-window - day)),
+                Comment(rawValue: "the prune did not remove the record outside the window: got \(result)"))
         let left = FreezeLog.read(at: archive)
         #expect(left.records.map(\.identity) == ["s#2"], "the archive file was not rewritten to the window")
     }
@@ -211,12 +214,174 @@ final class TheFreezeLogKeepsItsOldestRecordsTests {
 
         let result = FreezeLog.pruneArchive(besideLogAt: log, now: now)
 
-        #expect(result.dropped == 0, "the prune removed records from an archive it could not fully read")
-        #expect(result.refusedUnreadableLines == 1,
-                "the prune did not report the unreadable line as its reason for refusing")
+        #expect(result == .refused(unreadableLines: 1),
+                Comment(rawValue: "the prune did not refuse on the unreadable line: got \(result)"))
         let after = try String(contentsOf: archive, encoding: .utf8)
         #expect(after == before,
                 "the archive was rewritten despite holding a line the read could not decode, so that line is gone")
+    }
+
+    // MARK: - what Dan is told about it (#3763's "say how many and over what date range")
+
+    // FOUR STATES, one sentence each, on `FreezeNoticeCopy`'s precedent: two outcomes sharing a message are
+    // one outcome in practice (L11, L260).
+    //
+    // Housekeeping is deliberately SEPARATE from the freeze notice rather than a fifth state inside it. The
+    // freeze notice answers "did Overture stop responding", and this answers "what happened to the record of
+    // that", which is a different subject; folding them together would let a routine bookkeeping line
+    // displace a warning, which is the defect milestone #54 exists for.
+    // The twin of the prune's own defect, found by reading the file after fixing that one and filed nowhere
+    // because it belongs in the same change (L30). `archived: Int` beside `archiveFailed: Bool` can express
+    // "archived 200 records AND could not write the archive", which `compact` cannot produce: a failed
+    // archive returns before anything is trimmed. One discriminated value, same reason as `ArchivePrune`
+    // (L544).
+    @Test("a compaction cannot report a count and a failure at the same time")
+    func theCompactionOutcomeIsOneFact() {
+        // Constructing the contradiction has to be impossible rather than merely unused, so this asserts on
+        // the TYPE's cases rather than on a value, by exhausting them. A fourth case added later fails to
+        // compile here, which is the point.
+        let outcomes: [FreezeLog.CompactionOutcome] = [.nothingToArchive, .archived(count: 200), .archiveFailed]
+        for outcome in outcomes {
+            switch outcome {
+            case .nothingToArchive, .archived, .archiveFailed: continue
+            }
+        }
+        #expect(FreezeHousekeepingCopy.notice(FreezeLog.Housekeeping(compaction: .archived(count: 200))) == nil,
+                "archiving records without losing any still spoke")
+        #expect(FreezeHousekeepingCopy.notice(FreezeLog.Housekeeping(compaction: .archiveFailed)) != nil,
+                "a failed archive said nothing")
+    }
+
+    @Test("an ordinary launch with nothing removed says nothing at all")
+    func quietHousekeepingSaysNothing() {
+        #expect(FreezeHousekeepingCopy.notice(FreezeLog.Housekeeping()) == nil,
+                "a launch that removed nothing still spoke, which is how a notice becomes noise")
+    }
+
+    // A compaction that ARCHIVED is routine and silent: nothing was lost, so there is nothing to act on.
+    @Test("archiving records without losing any is not worth saying")
+    func archivingAloneSaysNothing() {
+        let done = FreezeLog.Housekeeping(compaction: .archived(count: 200))
+        #expect(FreezeHousekeepingCopy.notice(done) == nil)
+    }
+
+    // THE SERIOUS ONE. If the archive could not be written the compaction refuses to trim, by design, so the
+    // live log keeps growing past its cap for as long as that lasts. Silence there would leave a file nobody
+    // is bounding and no way to know (L98).
+    @Test("an archive that could not be written is said plainly")
+    func aFailedArchiveIsSaid() {
+        let failed = FreezeLog.Housekeeping(compaction: .archiveFailed)
+        let notice = FreezeHousekeepingCopy.notice(failed)
+        #expect(notice != nil, "a failed archive said nothing, so the log grows unbounded in silence")
+        #expect(notice?.contains("could not") == true, "the sentence does not say what went wrong")
+    }
+
+    // The prune is the only operation here that DESTROYS a record, so it is the one that has to account for
+    // itself, with the date range rather than a bare count: "412 records from 7 August to 11 September" is
+    // something a person can judge, and "412 records" is not (L11).
+    @Test("a prune says how many records went and the span they covered")
+    func aPruneIsAccountedFor() {
+        let earliest = Date(timeIntervalSince1970: 1_754_000_000)
+        let latest = Date(timeIntervalSince1970: 1_757_000_000)
+        let pruned = FreezeLog.ArchivePrune.removed(count: 412, earliest: earliest, latest: latest)
+        let notice = FreezeHousekeepingCopy.notice(FreezeLog.Housekeeping(prune: pruned))
+
+        #expect(notice?.contains("412") == true, "the count is missing")
+        #expect(notice?.contains(EasternDate.dayLabelWithYear(earliest)) == true,
+                "the oldest date removed is missing, so the span cannot be judged")
+        #expect(notice?.contains(EasternDate.dayLabelWithYear(latest)) == true,
+                "the newest date removed is missing")
+    }
+
+    // ONE record and SEVERAL are different sentences, not one sentence with a number in it. Written the
+    // obvious way the singular reads "1 records were deleted, recorded between Aug 1 and Aug 1", which is
+    // wrong twice over and is exactly what the cold read on `FreezeNoticeCopy.report` caught.
+    @Test("one record removed reads as one record, not as a count of one")
+    func oneRecordRemovedReadsProperly() {
+        let when = Date(timeIntervalSince1970: 1_754_000_000)
+        let pruned = FreezeLog.ArchivePrune.removed(count: 1, earliest: when, latest: when)
+        let notice = FreezeHousekeepingCopy.notice(FreezeLog.Housekeeping(prune: pruned))
+
+        #expect(notice?.contains("1 records") == false, "the singular reads as a plural with a 1 in it")
+        #expect(notice?.contains("between") == false,
+                "a single record was given a span, which is a range over a set of one")
+    }
+
+    // A refusal is NOT a quiet prune. The archive holds lines that could not be read, so nothing was
+    // removed and nothing will be until somebody looks (L11).
+    @Test("a prune that refused because it could not read the archive says so")
+    func aRefusedPruneIsSaid() {
+        let refused = FreezeLog.ArchivePrune.refused(unreadableLines: 3)
+        let notice = FreezeHousekeepingCopy.notice(FreezeLog.Housekeeping(prune: refused))
+        #expect(notice != nil, "a refused prune said nothing, so a damaged archive is never noticed")
+        #expect(notice?.contains("3") == true, "the sentence does not say how many lines could not be read")
+    }
+
+    // THE TEST THAT WAS MISSING, and its absence is why a contradiction sat behind a green suite. Every
+    // sentence above was read alone and each was fine; COMPOSED, the notice said nothing was deleted and
+    // then that 412 records were, in consecutive sentences. Both were true, of different files, and a reader
+    // had no way to know that. A component correct in isolation explains itself, so a surface made of
+    // several states every fact twice and sometimes states its own opposite, and only the composition shows
+    // it (L605).
+    @Test("the composed notice never says nothing was deleted beside a count of what was")
+    func theComposedNoticeDoesNotContradictItself() {
+        let earliest = Date(timeIntervalSince1970: 1_754_000_000)
+        let latest = Date(timeIntervalSince1970: 1_757_000_000)
+        // The pair that can ACTUALLY coexist: the live log's archive write failed, and separately the
+        // existing archive had its oldest month removed. A refusal beside a removal is no longer
+        // constructible, which is the enum doing its job rather than this test being relaxed.
+        let everything = FreezeLog.Housekeeping(
+            compaction: .archiveFailed,
+            prune: .removed(count: 412, earliest: earliest, latest: latest))
+        let notice = FreezeHousekeepingCopy.notice(everything)
+        let text = notice ?? ""
+
+        #expect(notice != nil, "the worst case said nothing at all")
+        // Each claim about a deletion has to name WHICH file it is about, or the two read as one subject.
+        // Asserted on the rule rather than on the exact wording, so a rewrite that keeps the rule passes
+        // and one that drops it does not (L103).
+        let deletionClaims = text.components(separatedBy: "deleted").count - 1
+        #expect(deletionClaims == 1, "this no longer exercises the composed case it was written for")
+        #expect(text.contains("left the log alone"), "the failed archive's sentence is missing")
+        for fragment in text.components(separatedBy: "deleted").dropLast() {
+            #expect(fragment.contains("archive") || fragment.contains("log"),
+                    Comment(rawValue: "a sentence claims something about deleting without naming the file "
+                    + "it means, so it reads as contradicting its neighbour: \(text)"))
+        }
+    }
+
+    // MARK: - the one launch entry point
+
+    // ONE call that compacts and then prunes, because a caller able to do one and forget the other
+    // eventually will, and a behaviour every call site has to opt into is enforced by nothing (L621). The
+    // order matters and is asserted: compacting first can CREATE the archive this prune then bounds, so
+    // pruning first would leave the records it just wrote unbounded for a whole launch.
+    @Test("one launch call compacts and then prunes, and reports both")
+    func housekeepingDoesBothInOneCall() throws {
+        let dir = try sandboxes.make(named: "freeze-housekeeping")
+        let log = FreezeLog.url(in: dir)
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let day: TimeInterval = 60 * 60 * 24
+        let window = Double(FreezeLog.archiveRetentionDays) * day
+        // Over the cap, so the compaction archives, and the records it archives are themselves far older
+        // than the window, so the prune in the same call has something to remove. That pairing is the whole
+        // point: a prune that ran BEFORE the compaction would find nothing and report nothing.
+        let old = (0..<6).map { stall(Double($0) * 0.1 + 0.2, sequence: $0 + 1,
+                                      at: now.addingTimeInterval(-window - Double(90 - $0) * day)) }
+        let recent = (0..<4).map { stall(0.9 + Double($0) * 0.1, sequence: $0 + 7,
+                                         at: now.addingTimeInterval(-day)) }
+        writeLog(old + recent, to: log)
+
+        let done = FreezeLog.housekeeping(at: log, now: now, cap: 4)
+
+        #expect(done.compaction == .archived(count: 6), "the compaction half did not run or did not report")
+        guard case .removed(let count, _, _) = done.prune else {
+            Issue.record(Comment(rawValue: "the prune half did not run in the same call: \(done.prune)"))
+            return
+        }
+        #expect(count == 6, "the prune did not reach the records the compaction had just archived")
+        #expect(FreezeLog.read(at: FreezeLog.archiveURL(besideLogAt: log)).records.isEmpty,
+                "the archive still holds records older than the retention window")
     }
 
     // MARK: - the rehearsal against the real log

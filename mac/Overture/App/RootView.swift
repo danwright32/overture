@@ -1052,7 +1052,14 @@ struct RootView: View {
                 // #3435: bounded HERE rather than on the freeze path, which stays a pure append. An
                 // append is safe to do while the main thread is wedged and a read, modify, write is not
                 // (L105). The file only grows when the app really freezes, so once per launch is plenty.
-                FreezeLog.compact(at: FreezeLog.url(in: StoreLocation.handoffDirectory))
+                // #3763: ONE call, so the archive's own month-long retention cannot be forgotten beside the
+                // compaction that fills it. What it did is reported by `reportAnyFreezes` below.
+                // The report is DISCARDED here, deliberately and with its reader named: #3793 is the issue
+                // that puts it on a surface. Written as an explicit discard rather than an ignored return,
+                // because a returned value nobody reads is how six other logs in this app came to lose
+                // content in silence (#3789), and a deliberately inactive half needs the issue that
+                // activates it filed in the same change rather than left to be rediscovered (L65).
+                _ = FreezeLog.housekeeping(at: FreezeLog.url(in: StoreLocation.handoffDirectory), now: Date())
                 reportAnyFreezes()
                 reportAnyCardDivergences()
                 // #1035: the same reattach, for the scout's detached read. A scout-extract run outlives

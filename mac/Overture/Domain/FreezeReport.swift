@@ -48,8 +48,14 @@ enum FreezeReport {
         // first session.
         //
         // The set written back is the identities of every record the file STILL HOLDS, so it is bounded
-        // by the file's own cap rather than growing forever, and a record compaction has dropped can
-        // never be reported again anyway because it is not there to read.
+        // by the file's own cap rather than growing forever, and a record compaction has moved out of the
+        // live file can never be reported here anyway because this reader does not open the archive.
+        //
+        // #3763 made that distinction real. Before it, a compacted record was DELETED, so "not there to
+        // read" was true of the world; now it is in `freeze-log-archive.ndjson` and this reader
+        // deliberately ignores it, because the launch notice wants the last session's shape while the
+        // archive exists for the population. `scripts/what-froze-the-queue.sh` is the reader that wants
+        // both. The consequence for this set is unchanged; the reason for it is not.
         let alreadySaid = Set(defaults.stringArray(forKey: FreezeLog.reportedIdsKey) ?? [])
 
         // An install upgrading FROM the version keyed on the sequence carries a backlog nothing could
