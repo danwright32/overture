@@ -123,7 +123,7 @@ enum QueueRenderPass {
                               oracleCards: 0, oracleSendGroupBuilds: 0, oracleDraftLintRuns: 0,
                               oracleRecipientReaches: 0, nightTimeMapBuilds: 0,
                               stagePlacements: 0, producerIndexes: 0,
-                              producerKeyFolds: 0)
+                              producerKeyFolds: 0, clientNameMatches: 0)
 
         // #3654 step 4c: the in-app divergence check is a SECOND WRITER of this tally, and that is
         // settled here rather than discovered in a red run.
@@ -196,6 +196,19 @@ enum QueueRenderPass {
         // distinct name, which is the same number of builds and five times the work (L63).
         var producerKeyFolds: Int { lock.withLock { counts.producerKeyFolds } }
 
+        // #3645: how many times an org name was matched against the WHOLE Downbeat roster in one pass.
+        //
+        // This tally is named for the queue and this counter is the Sources sheet's, which is
+        // deliberate: the work is done in shared domain code (`ClientHorizon.matchesClientName`), and a
+        // second tally class would be a second answer to "what did this render pass spend" that the two
+        // surfaces could drift apart on. There is one of these for the same reason there is one `Corpus`.
+        //
+        // THE QUANTITY, not a proxy. A count of `ClientWindow` constructions reads 1 whether the window
+        // is built from 73 sources or from 730, which is the shape #2033 used to triple per-card work
+        // without moving a counter (L63). Each match runs a token-set fold over every name the roster
+        // carries, and `SourcesRenderPassCostTests` pins a Sources pass at zero of them.
+        var clientNameMatches: Int { lock.withLock { counts.clientNameMatches } }
+
         // What the divergence check itself spent, held apart from every number above so the pass's own
         // pins mean what their names say.
         var oracleCards: Int { lock.withLock { counts.oracleCards } }
@@ -213,6 +226,10 @@ enum QueueRenderPass {
         static func recordProducerKeyFold() {
             guard let t = current else { return }
             t.lock.withLock { t.counts.producerKeyFolds += 1 }
+        }
+        static func recordClientNameMatch() {
+            guard let t = current else { return }
+            t.lock.withLock { t.counts.clientNameMatches += 1 }
         }
         static func recordProducerIndex() {
             guard let t = current else { return }

@@ -12,12 +12,17 @@ import Foundation
 //
 // DERIVED FROM THE SOURCE rather than from a list of the call sites somebody maintains, because a
 // hand-written list only ever checks what its author remembered (L96).
+//
+// #3645 WIDENED IT FROM ONE PASS TO EVERY PASS, and the widening is what this issue cost. The guard named
+// `QueueRenderPass.make(` literally, so it was a rule about the QUEUE rather than about render passes, and
+// `SourcesRenderPass` arrived counted only because somebody happened to be holding this file open. That is
+// the class rather than the instance (L30): the passes are ENUMERATED from the app's own declarations, so
+// the third one joins the guard on the day it is declared.
 @Suite("Every render pass is counted (#3760)")
 struct EveryRenderPassIsCountedTests {
 
     // The call the counter is bumped through. One spelling, so this guard and the app cannot drift.
     private static let bump = "freezeWatch?.recordPass()"
-    private static let pass = "QueueRenderPass.make("
 
     private static func appSources() -> [(name: String, text: String)] {
         AppSourceWalk.urls(under: RepoRoot.mac.appendingPathComponent("Overture"))
@@ -27,25 +32,50 @@ struct EveryRenderPassIsCountedTests {
             }
     }
 
+    // Every render pass the app DECLARES, read off the declaration rather than off a file name, so a pass
+    // that lives somewhere unexpected is still enumerated and a file named like one but declaring nothing
+    // is not.
+    private static func declaredPasses(in sources: [(name: String, text: String)]) -> [String] {
+        var names: Set<String> = []
+        for file in sources {
+            for line in file.text.components(separatedBy: "\n") {
+                let trimmed = line.trimmingCharacters(in: .whitespaces)
+                guard trimmed.hasPrefix("enum "), trimmed.hasSuffix("RenderPass {") else { continue }
+                names.insert(String(trimmed.dropFirst("enum ".count).dropLast(" {".count)))
+            }
+        }
+        return names.sorted()
+    }
+
     // UNMEASURED is its own outcome. A walk that read nothing and an app with no render pass in it leave
     // the same empty result, and the emptiest possible failure must not read as the cleanest possible
     // pass (L98).
     @Test func theGuardActuallyReadsTheApp() {
         let sources = Self.appSources()
         #expect(sources.count > 50, "the walk read \(sources.count) app files, so nothing below was measured")
-        let callers = sources.filter { $0.text.contains(Self.pass) }
-        #expect(!callers.isEmpty, "no file calls \(Self.pass), so this guard measured nothing")
+        let passes = Self.declaredPasses(in: sources)
+        #expect(!passes.isEmpty, "no file declares a render pass, so this guard enumerated nothing")
+        // And each declared pass has a caller. A pass nobody runs satisfies the check below vacuously,
+        // which reads exactly like a pass that is properly counted.
+        for pass in passes {
+            let callers = sources.filter { $0.text.contains("\(pass).make(") }
+            #expect(!callers.isEmpty, "no file calls \(pass).make(, so it was not measured below")
+        }
     }
 
-    @Test func everyFileThatRunsTheRenderPassAlsoCountsIt() {
-        let offenders = Self.appSources()
-            .filter { $0.text.contains(Self.pass) }
-            .filter { !$0.text.contains(Self.bump) }
-            .map(\.name)
+    @Test func everyFileThatRunsARenderPassAlsoCountsIt() {
+        let sources = Self.appSources()
+        var offenders: [String] = []
+        for pass in Self.declaredPasses(in: sources) {
+            for file in sources
+            where file.text.contains("\(pass).make(") && !file.text.contains(Self.bump) {
+                offenders.append("\(file.name) (\(pass))")
+            }
+        }
         #expect(offenders.isEmpty, """
-            \(offenders.joined(separator: ", ")) runs the queue render pass and never calls \
+            \(offenders.joined(separator: ", ")) runs a render pass and never calls \
             \(Self.bump). A freeze on that surface would report zero passes, which means "it did not \
-            rebuild" rather than "nobody counted" (#3760).
+            rebuild" rather than "nobody counted" (#3760, #3645).
             """)
     }
 

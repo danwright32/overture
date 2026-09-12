@@ -57,6 +57,18 @@ struct ClientWindow: Equatable, Sendable {
         self.init(clientSourceIds: ClientHorizon.clientSourceIds(sources: sources, clients: clients))
     }
 
+    // #3645: the same window, folded out of a verdict already decided, so a surface that already holds
+    // `ClientHorizon.clientFlags` does not run the O(clients x sources) match a second time to get it.
+    //
+    // A source is in the window exactly when its flag is true, and `WatchedSource.sourceId` is unique at
+    // the store layer, so this is the SAME set rather than a cheaper approximation of it.
+    // `ClientHorizonTests.clientWindowFromFlagsMatchesTheOneBuiltFromSources` pins the two equal across
+    // the shapes that could disagree (a name match, no match, and a tag forcing each direction), because
+    // two ways of answering one question is exactly the drift this type exists to prevent (L263, L70).
+    init(clientFlags: [String: Bool]) {
+        self.init(clientSourceIds: Set(clientFlags.filter(\.value).map(\.key)))
+    }
+
     func isPastClientShow(_ p: Prospect) -> Bool {
         ClientHorizon.isPastClientShow(p, clientSourceIds: clientSourceIds)
     }

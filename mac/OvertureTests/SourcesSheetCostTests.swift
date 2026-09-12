@@ -44,6 +44,26 @@ import SwiftData
 // pays 64% of the price it exists to avoid. `ClientCoverage`'s is the one doing its job: 0.47 ms to
 // gate an O(clients x sources) match.
 //
+// #3645 RE-TOOK THIS READING WITH THE FOURTH THING IN IT, AND IT CHANGES THE ANSWER BELOW.
+//
+// Every number above times a CHANGE KEY or its recompute. None of them times `SourcesView.roomContext`,
+// which was evaluated at the call site on every body pass exactly like the keys were, and which
+// constructs a `ClientWindow`. Measured 2026-09-12 on a quiet Mac (load average 2.06 to 3.12 throughout),
+// medians of five runs over 1,238 prospects, 73 sources and 31 clients:
+//
+//   ClientWindow(sources:clients:)   69.01 ms   (68.55 to 69.31 over five runs)
+//   everything else per redraw        7.87 ms   (7.67 to 8.42)
+//
+// So one body evaluation of this sheet cost about **76.9 ms**, not the 8.98 ms recorded above, and the
+// fuzzy roster match was NINE TENTHS of it. The reading above is not wrong; it is a reading of the three
+// things somebody thought to time, and the expensive one was the one nobody did (L102).
+//
+// That also revises the conclusion in the paragraph below, which is left standing rather than rewritten
+// because it is a dated measurement and the argument it makes from its own numbers is sound. At 76.9 ms a
+// redraw, seventeen body evaluations reach 1.3 seconds, so the per-redraw derivation cost CAN account for
+// the freezes #3645 recorded, where 9 ms could not. #3645 takes the match off the render path: it is
+// decided when its inputs change and handed to `SourcesRenderPass` as a value.
+//
 // **And this is NOT what freezes the sheet.** #3645 measured 30 real freezes on this surface in one day
 // at a median of 1.34 seconds. 6.88 ms per body evaluation cannot produce that on its own, so the change
 // keys are not the cause and converting them would not fix it. What turns milliseconds into a freeze is
@@ -181,6 +201,16 @@ struct SourcesSheetCostTests {
                 _ = ClientCoverage.signature(sources: l.sources, clients: l.clients,
                                              dismissedIds: l.dismissedIds)
             }
+            // #3645: the FOURTH thing a redraw used to pay for, and the one that issue is about.
+            // `SourcesView.roomContext` built this as an ARGUMENT to the room derivation, so every body
+            // evaluation ran it; since #3645 it is decided when its inputs change and handed to
+            // `SourcesRenderPass` as a value. Timed here so what the removal SAVED is a measured number
+            // rather than an argument, and timed with a warm pass of its own first for the same reason
+            // every reading above has one.
+            _ = ClientWindow(sources: l.sources, clients: l.clients)
+            let clientWindow = Self.milliseconds(rounds: rounds) {
+                _ = ClientWindow(sources: l.sources, clients: l.clients)
+            }
             let perRedraw = yieldRecompute + roomsRecompute + coverSig
             // The roster is a FILE, so it is the one input that can silently go missing and make the
             // coverage timing a measurement of the sources half alone. Reported with the number rather
@@ -194,6 +224,11 @@ struct SourcesSheetCostTests {
                          + "the first two are paid outright rather than gated on a hash of the store.",
                          l.prospects.count, l.sources.count, rosterNote, perRedraw,
                          yieldRecompute, roomsRecompute, coverSig))
+            print(String(format: "sources-sheet-cost: and the fuzzy client match #3645 took OFF the "
+                         + "render path, ClientWindow(sources:clients:), costs %.2f ms, which is %.0f%% "
+                         + "of the %.2f ms above. It was paid on every body evaluation and is now paid "
+                         + "only when a source name, a client tag or the roster changes.",
+                         clientWindow, clientWindow / perRedraw * 100, perRedraw))
 
             #expect(l.prospects.count > 0, "the clone holds no prospects, so nothing here was measured")
             #expect(l.sources.count > 0,
