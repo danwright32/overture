@@ -158,14 +158,51 @@ final class FreezeHousekeepingReachesDanTests {
         let rootView = SourceGuardHelper.source("Overture/App/RootView.swift")
         let wasRead = !rootView.isEmpty
         let stillDiscarded = rootView.contains("_ = FreezeLog.housekeeping")
-        let kept = rootView.contains("freezeHousekeeping = FreezeLog.housekeeping")
+        let kept = rootView.contains("freezeHousekeeping = FreezeLog.kept(")
         let handedOn = rootView.contains("freezeHousekeeping: freezeHousekeeping")
 
         #expect(wasRead, "RootView.swift could not be read, so these guards protect nothing")
         #expect(!stillDiscarded,
                 "the launch call still throws the report away, so none of these sentences can be said")
-        #expect(kept, "nothing in the launch keeps what the housekeeping did")
+        #expect(kept, "nothing keeps what the housekeeping did")
         #expect(handedOn,
                 "the report is kept and never handed to the masthead, which is the same silence")
+    }
+
+    // MARK: - what a LATER run may do to an earlier report
+
+    // #3796 made housekeeping run hourly as well as at launch, and #3793 keeps what it reports. Those two
+    // compose into a hazard neither carries alone: a quiet run replacing a report that had something to
+    // say. A quiet run is the overwhelmingly common one, so without this rule the launch report that
+    // recorded a permanent deletion would be wiped an hour later, unread. That is #3830's defect arriving
+    // as a side effect of fixing a different issue (L387).
+    private var quiet: FreezeLog.Housekeeping { FreezeLog.Housekeeping() }
+
+    private var loud: FreezeLog.Housekeeping {
+        FreezeLog.Housekeeping(compaction: .nothingToArchive,
+                               prune: .removed(count: 2,
+                                               earliest: Date(timeIntervalSince1970: 1_700_000_000),
+                                               latest: Date(timeIntervalSince1970: 1_700_086_400)))
+    }
+
+    @Test("a quiet run does not wipe a report that had something to say")
+    func aQuietRunKeepsTheEarlierReport() {
+        #expect(FreezeLog.kept(loud, after: quiet) == loud,
+                "an hourly run with nothing to say erased the record of a permanent deletion")
+    }
+
+    @Test("a run with something to say replaces what was held")
+    func aLoudRunReplacesIt() {
+        #expect(FreezeLog.kept(quiet, after: loud) == loud)
+        #expect(FreezeLog.kept(nil, after: loud) == loud, "the first thing to say never reached the state")
+    }
+
+    // The other direction, asserted in the SAME fixture: a rule that kept the current value whatever
+    // arrived would satisfy the case above perfectly and never show Dan anything at all (L159).
+    @Test("a quiet run over nothing stays nothing, rather than inventing a notice")
+    func aQuietRunOverNothingIsStillNothing() {
+        #expect(FreezeLog.kept(nil, after: quiet) == nil)
+        #expect(quiet.isQuiet)
+        #expect(!loud.isQuiet, "a permanent deletion read as nothing worth saying")
     }
 }

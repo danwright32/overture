@@ -2288,8 +2288,21 @@ struct RootView: View {
     // The VALUE is stored, never a sentence composed here, because what it means on screen is
     // `AppNotices`' decision and belongs beside every other fault it draws.
     private func runFreezeLogHousekeeping() {
-        freezeHousekeeping = FreezeLog.housekeeping(at: FreezeLog.url(in: StoreLocation.handoffDirectory),
-                                                    now: Date())
+        let done = FreezeLog.housekeeping(at: FreezeLog.url(in: StoreLocation.handoffDirectory),
+                                          now: Date())
+
+        // A QUIET run never replaces a report that had something to say.
+        //
+        // The obvious assignment is wrong here and it took writing it to see why. Housekeeping runs at
+        // launch and then hourly, and the overwhelmingly common outcome is `nothingToArchive` plus
+        // `nothingToRemove`, which draws no notice at all. So a launch that DID permanently delete
+        // records would put its sentence on the masthead and the very next hourly tick would replace it
+        // with a quiet one, taking the only account of that deletion off the screen before Dan had any
+        // particular reason to have read it. That is #3830's defect, which this session filed an hour
+        // before writing this line, reintroduced by the fix for a different issue (L387).
+        //
+        // The rule itself is `FreezeLog.kept`, where a test can reach it.
+        freezeHousekeeping = FreezeLog.kept(freezeHousekeeping, after: done)
     }
 
     private func autoScoutIfDue() {
