@@ -725,6 +725,122 @@ struct QueueRenderPassLiveStoreCostTests {
         #expect(fourth.rows >= 0, "the kept-to-prep descriptor could not be run at all")
     }
 
+    // #3764: what an OPEN ARCHIVE adds to every store change.
+    //
+    // `QueueView` holds `@Query private var allProspects: [Prospect]` and `ArchiveView` holds
+    // `@Query private var prospects: [Prospect]`. Both are BARE, so they are the IDENTICAL descriptor over
+    // the whole table. Archive is presented as a `.sheet` over the queue (`RootView.swift:1201`), so while
+    // it is open both views exist and both queries are live, and SwiftData satisfies each descriptor
+    // independently.
+    //
+    // The prospect table read is the largest single term in a store change, so the plausible reading is
+    // that opening the Archive doubles it for as long as the sheet is up. Nobody had measured whether it
+    // does, and no existing instrument could: every cost test here drives ONE derivation at a time.
+    //
+    // WHY MEASURE RATHER THAN FIX. The obvious fix, one query shared between the two, is not obviously
+    // right: #1598 records why the queue's query deliberately reads the WHOLE store including dismissed
+    // rows, and Archive's scope is different. Pricing first is what the rest of this milestone has done
+    // and it has changed the answer three times (#3742 went 40.6 ms to 10.4 ms, #3750's question 1 closed
+    // on a measurement that reversed its premise).
+    //
+    // MEASURED 2026-09-12 on the live store of 1,238 rows, and the answer is that it doubles:
+    //
+    //   the queue's prospect read alone            159.5 ms   1238 rows
+    //   what the second prospect query adds        158.8 ms
+    //   the sheet's five other tables                6.2 ms
+    //   so an open Archive adds, per store change   165.0 ms
+    //
+    // 158.8 against 159.5 is 99.6%, so SwiftData shares nothing between two identical descriptors held by
+    // two live views, exactly as #3507 found for two held by one. Against an end-to-end store change of
+    // 350.7 ms with the sheet closed, an open Archive makes it about 516 ms, and the figure is a FLOOR
+    // rather than the whole cost: this prices the fetches and not the Archive's own derivation.
+    //
+    // THE ARCHIVE'S OTHER FIVE QUERIES ARE MEASURED TOO, and that is the half reading 3 above could never
+    // answer. The sheet holds six `@Query` properties, enumerated from its source rather than from memory
+    // (`grep -n "@Query" mac/Overture/UI/ArchiveView.swift`), and every one of them is re-satisfied on a
+    // store change. A reading that priced only the prospect table would understate what the sheet costs
+    // while looking like the whole answer (L146).
+    @Test(.enabled(if: liveStoreExists, "no live store on this machine"))
+    func measureWhatAnOpenArchiveAddsToAStoreChange() throws {
+        guard ProcessInfo.processInfo.environment["MEASURE_QUEUE_LIVE_STORE"] != nil else {
+            print("queue-live-store-archive-open: not measured. Set TEST_RUNNER_MEASURE_QUEUE_LIVE_STORE=1 to run it.")
+            return
+        }
+
+        let clone = try cloneLiveStore()
+        let ctx = ModelContext(try openContainer(at: clone))
+
+        // Spelled as the two views spell them, so this measures the descriptors that actually run rather
+        // than a pair written beside them (L107).
+        let queueQuery = FetchDescriptor<Prospect>()
+        let archiveQuery = FetchDescriptor<Prospect>()
+
+        struct Reading { var rows = 0; var seconds = 0.0 }
+
+        func read(_ descriptor: FetchDescriptor<Prospect>) -> Reading {
+            var r = Reading()
+            var rows: [Prospect] = []
+            r.seconds = seconds {
+                rows = (try? ctx.fetch(descriptor)) ?? []
+                // TOUCHED, never merely fetched. A fetch that returns unfaulted objects costs a fraction
+                // of one whose fields are read, and the app reads them, so an untouched reading would
+                // price a query the app never makes (L102).
+                for row in rows where row.statusRaw.isEmpty == false { r.rows += 1 }
+            }
+            return r
+        }
+
+        // ARM A: the queue alone, which is what a store change costs with no sheet up.
+        let queueAlone = read(queueQuery)
+        // ARM B: the same change with the Archive open, so BOTH live queries are satisfied.
+        let withArchive = read(queueQuery).seconds + read(archiveQuery).seconds
+
+        // And the sheet's five other tables, which are live for as long as it is.
+        func count<T: PersistentModel>(_ type: T.Type) -> (rows: Int, seconds: Double) {
+            var n = 0
+            let taken = seconds { n = ((try? ctx.fetch(FetchDescriptor<T>())) ?? []).count }
+            return (n, taken)
+        }
+        let orgAnswers = count(OrgReachabilityAnswer.self)
+        let refused = count(RefusedContactAddress.self)
+        let promoted = count(PromotedProducer.self)
+        let demoted = count(DemotedHouse.self)
+        let sources = count(WatchedSource.self)
+        let others = orgAnswers.seconds + refused.seconds + promoted.seconds + demoted.seconds + sources.seconds
+
+        func ms(_ v: Double) -> String { String(format: "%7.1f", v * 1000) }
+
+        print("""
+        queue-live-store-archive-open: what an open Archive adds to one store change (#3764)
+          the queue's prospect read alone          \(ms(queueAlone.seconds)) ms   \(queueAlone.rows) rows
+          the same read with Archive open (2x)     \(ms(withArchive)) ms
+          what the second prospect query adds      \(ms(withArchive - queueAlone.seconds)) ms
+          the sheet's five other tables            \(ms(others)) ms
+            OrgReachabilityAnswer                  \(ms(orgAnswers.seconds)) ms   \(orgAnswers.rows) rows
+            RefusedContactAddress                  \(ms(refused.seconds)) ms   \(refused.rows) rows
+            PromotedProducer                       \(ms(promoted.seconds)) ms   \(promoted.rows) rows
+            DemotedHouse                           \(ms(demoted.seconds)) ms   \(demoted.rows) rows
+            WatchedSource                          \(ms(sources.seconds)) ms   \(sources.rows) rows
+          so an open Archive adds, per store change \(ms(withArchive - queueAlone.seconds + others)) ms
+
+          Read the second line against the first. Both descriptors are BARE and therefore identical, so
+          if SwiftData shared the read this would be near the first figure and the sheet is nearly free;
+          if it satisfies each independently it is near twice it and the sheet doubles the largest term
+          in a store change for as long as it is open.
+
+          The five other tables are small by row count and are reported anyway, because "small" is the
+          claim this milestone has had to withdraw three times.
+        """)
+
+        // About the measurement being REAL, never about the numbers, which move with whatever else this
+        // Mac is running (L224).
+        #expect(queueAlone.rows > 0, "the queue's read touched no rows, so nothing was materialised")
+        #expect(queueAlone.seconds > 0, "the queue's read took no measurable time, so it never ran")
+        #expect(withArchive > queueAlone.seconds,
+                Comment(rawValue: "two reads of the table cost no more than one, which cannot be true "
+                        + "and means this measured one of them twice or neither of them at all"))
+    }
+
     // #3501: does loading each card's contacts in one go help, now that a fixture with real contacts
     // exists to measure it against?
     //
