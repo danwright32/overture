@@ -1078,18 +1078,23 @@ struct RootView: View {
                 freezeWatch.start(support: StoreLocation.handoffDirectory)
                 // #3435: bounded HERE rather than on the freeze path, which stays a pure append. An
                 // append is safe to do while the main thread is wedged and a read, modify, write is not
-                // (L105). The file only grows when the app really freezes, so once per launch is plenty.
+                // (L105). The file only grows when the app really freezes, so it is cheap wherever it runs.
+                // That sentence used to read "so once per launch is plenty", and #3796 is what it cost.
                 // #3763: ONE call, so the archive's own month-long retention cannot be forgotten beside the
                 // compaction that fills it. What the FREEZES were is reported by `reportAnyFreezes` below.
-                // #3793: and what the bookkeeping DID is kept and handed to the masthead. It used to be
-                // discarded here, with this issue named beside it, so six written and tested sentences
-                // could never be said: a value nobody reads looks alive to every is-this-used check while
-                // the purpose it was added for silently never happens (L46, L3).
                 //
-                // The VALUE is kept, not a sentence composed here, because what it means on the masthead
-                // is `AppNotices`' decision and lives beside every other fault it draws.
-                freezeHousekeeping = FreezeLog.housekeeping(at: FreezeLog.url(in: StoreLocation.handoffDirectory),
-                                                            now: Date())
+                // #3796 moved the call into `runFreezeLogHousekeeping()` so the HOURLY tick can make it
+                // too, because once per launch turned out to mean once per LOGIN: Overture is a login
+                // agent that stays resident, and measured 2026-09-11 the live log held 700 records
+                // against a cap of 500 while the process holding it was 23 hours old.
+                //
+                // #3793 needs what that call RETURNS, because six written and tested sentences about
+                // deleted or unarchivable records could otherwise never be said. The two compose rather
+                // than compete, and the report is kept inside the shared method rather than here, so the
+                // hourly run reaches the masthead on exactly the same terms as the launch one. Keeping it
+                // only at this call site would have left the hourly path discarding it, which is the
+                // defect #3793 exists to end, reintroduced one line away from its own fix (L46, L3).
+                runFreezeLogHousekeeping()
                 reportAnyFreezes()
                 reportAnyCardDivergences()
                 // #1035: the same reattach, for the scout's detached read. A scout-extract run outlives
@@ -1159,11 +1164,11 @@ struct RootView: View {
             }
             .task {
                 guard AppEnvironment.shouldStartBackgroundServices else { return }
-                // Keep the daily scout schedule honored while the app stays open (#33).
-                while !Task.isCancelled {
-                    try? await Task.sleep(nanoseconds: 60 * 60 * 1_000_000_000)  // hourly
-                    autoScoutIfDue()
-                }
+                // The hourly tick, for the work that is due on the clock rather than on something Dan
+                // did. #3796 lifted the loop itself into `HourlyMaintenance`: the cadence and the sleep
+                // are the ones this held inline, and being a value they can now be driven by a test
+                // instead of waited out for an hour.
+                await HourlyMaintenance.run { hourlyMaintenance() }
             }
     }
 
@@ -2245,6 +2250,46 @@ struct RootView: View {
     private func startReplyClassifyIfNeeded() {
         guard !ReplyClassifyService.isRunning(now: Date()) else { return }
         _ = try? ReplyClassifyService.startClassify(from: context, now: Date())
+    }
+
+    // Everything that comes due on the CLOCK rather than on something Dan did, once an hour while the
+    // window is open. It is a list rather than a single call because #3796 made it one: the scout
+    // schedule was the only thing here, and a resident app needs its bookkeeping on the same tick.
+    //
+    // The bookkeeping goes FIRST. Both halves are synchronous and neither throws, so the order changes
+    // nothing today, but a scout that is due is the expensive, conditional half of this tick and it must
+    // never be what stands between the log and its cap (L73).
+    private func hourlyMaintenance() {
+        runFreezeLogHousekeeping()
+        autoScoutIfDue()
+    }
+
+    // #3435/#3763: bound the freeze log and prune the archive it fills. ONE method, called from the
+    // launch task and from the hourly tick above, so the two cannot drift into doing different things
+    // (L613). It is the only place in this view that names the domain call.
+    //
+    // Idempotent, which is what makes it safe to run on a schedule at all: a second call over files a
+    // first has already compacted and pruned reports `.nothingToArchive` and `.nothingToRemove` and
+    // writes neither file, so a launch immediately after a scheduled run costs two reads.
+    //
+    // Never on the freeze path, which stays a pure append: an append is safe to do while the main thread
+    // is wedged and a read, modify, write is not (L105).
+    //
+    // The report is DISCARDED here, deliberately and with its reader named: #3793 is the issue that puts
+    // it on a surface. Written as an explicit discard rather than an ignored return, because a returned
+    // value nobody reads is how six other logs in this app came to lose content in silence (#3789), and a
+    // deliberately inactive half needs the issue that activates it filed in the same change rather than
+    // left to be rediscovered (L65).
+    // The ONE place the freeze log's bookkeeping runs, called from the launch task and from the hourly
+    // tick. It KEEPS what the run reports (#3793) rather than discarding it: the value is what
+    // `AppNotices` turns into a sentence on the masthead, and a report nobody reads looks alive to every
+    // is-this-used check while the thing it was added for silently never happens (L46).
+    //
+    // The VALUE is stored, never a sentence composed here, because what it means on screen is
+    // `AppNotices`' decision and belongs beside every other fault it draws.
+    private func runFreezeLogHousekeeping() {
+        freezeHousekeeping = FreezeLog.housekeeping(at: FreezeLog.url(in: StoreLocation.handoffDirectory),
+                                                    now: Date())
     }
 
     private func autoScoutIfDue() {

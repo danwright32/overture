@@ -399,10 +399,16 @@ enum PrepRunArchive {
 
     // One line per archived run, beside the archives themselves, exactly as backup.log sits beside the
     // store backups. Capped through the same copytruncate helper (#608) so it can never grow unbounded.
+    //
+    // #3789: a rotation of this log is written INTO it, with the same stamp as the run that triggered
+    // it. ONE previous generation is enough here and the reasoning is the same as the backup log's: one
+    // line per archived run against a 256 KB cap is thousands of runs, so what was missing was never
+    // the depth of the history, it was any record that a rotation had taken some of it away.
     private static func appendLog(stamp: String, note: String, archives: URL, fileManager: FileManager) {
         let logURL = archives.appendingPathComponent(logFilename)
-        LogRotation.cap(files: [logURL], maxBytes: maxLogBytes, fileManager: fileManager)
-        guard let data = (stamp + " " + note + "\n").data(using: .utf8) else { return }
+        let rotation = LogRotation.cap(files: [logURL], maxBytes: maxLogBytes, fileManager: fileManager)
+        let lines = (rotation.notes + [note]).map { stamp + " " + $0 + "\n" }.joined()
+        guard let data = lines.data(using: .utf8) else { return }
         if let handle = try? FileHandle(forWritingTo: logURL) {
             handle.seekToEndOfFile()
             handle.write(data)

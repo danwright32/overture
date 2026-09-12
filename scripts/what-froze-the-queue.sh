@@ -11,9 +11,20 @@ set -uo pipefail
 #
 # It REPORTS. It does not judge a stall against a cost figure, deliberately: a per-pass cost written into
 # this script would be a dated number that rots silently and reads as more trustworthy the older it gets
-# (L316, #3487). The decisive reading needs no such number. A long stall that spanned many passes is the
-# render pass being run over and over; a long stall that spanned NONE is something else, and which of the
-# two it is can be read straight off the count.
+# (L316, #3487). A long stall that spanned many passes is the render pass being run over and over.
+#
+# WHAT THE COUNT CANNOT SAY, which is #3783 and is the half this tool used to get wrong. The counter is
+# bumped by the first line of `QueueView.makeRenderData()`, so it counts BODY EVALUATIONS of one view.
+# Three kinds of main thread work sit outside it and every one of them reads as zero:
+#
+#   the `@Query` fetch that feeds that body, which is paid before the counting line runs and which #3750
+#     prices as its own arm of a store change;
+#   every other surface that runs its own derivation and bumps nothing (#3762);
+#   main thread work that is not a render pass at all, a save, a scout write, the launch task.
+#
+# So a zero is UNATTRIBUTED, never "the surface did not rebuild". That second sentence is a claim about a
+# quantity this counter never measured, and it was sending the next diagnosis away from the queue on the
+# strength of it (L11, L144, L440). Until one of the three above is instrumented, zero narrows nothing.
 #
 # WHAT IT WILL SAY TODAY, stated so nobody reads it as a finding: every record written before #3760 is
 # installed carries no pass count at all, so on a log that has not turned over it answers UNMEASURED. That
@@ -26,7 +37,7 @@ while [ $# -gt 0 ]; do
     -h|--help)
       echo "usage: $(basename "$0") [--log <freeze-log.ndjson>]"
       echo "  0  every stall carrying a count is accounted for by the passes it spans"
-      echo "  1  a stall spanned NO render pass, so the freeze is something else"
+      echo "  1  a stall over the floor counted NO render pass, so it is UNATTRIBUTED"
       echo "  2  UNMEASURED: no log, or no record in it carries a pass count"
       exit 0 ;;
     *) echo "what-froze-the-queue: unknown argument '$1'" >&2; exit 2 ;;
@@ -103,6 +114,12 @@ print(f"what-froze-the-queue: {len(counted)} stall(s) with a pass count, of {len
 # Named rather than assumed: a reading built from the live file alone and one built from the whole history
 # are different populations, and without this line they print identically (L11).
 print(f"  read from: {', '.join(sources)}")
+# #3783: said on EVERY reading rather than only when there is a finding, because the clean reading is the
+# one most likely to be quoted as "the render pass accounts for it" and the one where the terms outside
+# the count are easiest to forget (L440, L629).
+print("  the count covers one thing: it counts QueueView body evaluations. The @Query fetch that")
+print("  feeds them (#3750), the surfaces that bump nothing (#3762) and every main thread job that")
+print("  is not a render pass are all outside it, and all of them read as zero.")
 print()
 print("  when                  seconds  passes  surface        load")
 for r in counted[:25]:
@@ -112,8 +129,8 @@ for r in counted[:25]:
 if len(counted) > 25:
     print(f"  ... and {len(counted) - 25} more, shown longest first.")
 
-# The finding. A stall is "something else" when the surface did not rebuild during it at all: the render
-# pass cannot be what the main thread was doing, whatever the pass costs.
+# The finding. A stall over the floor that counted no pass is UNATTRIBUTED: this tool cannot say what the
+# main thread was doing, and #3783 is why it must not guess.
 FLOOR = 1.0
 silent = [r for r in counted if r["passes"] == 0 and r.get("seconds", 0) >= FLOOR]
 
@@ -123,17 +140,27 @@ if uncounted:
 if unreadable:
     print(f"  {unreadable} line(s) could not be read.")
 
+# #3783: printed on both exits, because "no stall ever spanned more than one pass" is the reading that
+# refutes a burst of re-derivations, and nothing printed it. Measured on Dan's live log 2026-09-11 it was
+# 1 across 576 records, a 29.35s stall among them.
+most = max(r["passes"] for r in counted)
+
 if silent:
     print()
-    print(f"  {len(silent)} stall(s) over {FLOOR:.0f}s spanned NO render pass, so the surface")
-    print("  did not rebuild during them. Whatever the main thread was doing, it was not the")
-    print("  render pass, and the next diagnosis belongs somewhere else.")
+    print(f"  {len(silent)} stall(s) over {FLOOR:.0f}s counted NO render pass. They are UNATTRIBUTED.")
+    print("  Zero is not evidence that the surface stayed still. It says only that nothing bumped the")
+    print("  counter, and the fetch before the body (#3750), the other surfaces (#3762) and every job")
+    print("  on the main thread that is not a render pass all fail to bump it. Narrowing these needs")
+    print("  one of those three instrumented, not a conclusion drawn from their shared silence.")
     for r in silent[:10]:
         when = str(r.get("at", ""))[:19].replace("T", " ")
         print(f"    {when}  {r.get('seconds', 0):.2f}s on {r.get('surface', '?')}")
+    print()
+    print(f"  Most passes spanned by any stall: {most}.")
     sys.exit(1)
 
 longest = counted[0]
 print(f"  Longest counted stall: {longest.get('seconds', 0):.2f}s spanning {longest['passes']} pass(es).")
+print(f"  Most passes spanned by any stall: {most}.")
 sys.exit(0)
 PY

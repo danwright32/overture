@@ -950,17 +950,59 @@ enum PrepQueueService {
     static func runInFlight(now: Date, support: URL = StoreLocation.handoffDirectory,
                             prepMarkerURL: URL? = nil, checkMarkerURL: URL? = nil,
                             defaults: UserDefaults = .standard) -> RunKind? {
-        if isRunning(slot: .prep, markerURL: prepMarkerURL ?? RunSlot.prep.markerURL(in: support),
-                     now: now) {
+        slotStatus(now: now, support: support, prepMarkerURL: prepMarkerURL,
+                   checkMarkerURL: checkMarkerURL, defaults: defaults).inFlight
+    }
+
+    // #3646: BOTH slots and the composed answer, from ONE reading of the two markers.
+    //
+    // `runInFlight` above folds the two slots into a single `RunKind?` and is right for a reader asking
+    // "is anything going". A SURFACE needs more than that: a control is greyed while the slot IT would
+    // start is busy, and since #3015 a prep run and a check can be going at once, so `inFlight == .prep`
+    // says nothing about whether a check is also live. Reading the two separately is what the queue used
+    // to do, once per rendered card and once per date heading, which is #3646.
+    //
+    // The composition of `inFlight` lives HERE and nowhere else, so a caller that needs the per-slot
+    // facts as well cannot end up with its own slightly different version of the same rule (L30). It is
+    // the rule #2614 and #2760 wrote, unchanged: the prep slot answers first and through the legacy
+    // `prepSlotRunKind`, and the check slot answers `.reachabilityCheck` outright because only checks are
+    // ever in it.
+    //
+    // It reads the check marker even when the prep slot is busy, which `runInFlight` used to skip. That
+    // is one extra `stat` per call in the one state where a prep run is live, and it is the whole point:
+    // the fact it buys (is a check running, right now, beside the prep run) is the fact the row's own
+    // "Check again" control is greyed by, and the only alternative is the per-row read this replaces.
+    struct SlotStatus {
+        /// The prep slot's marker is beating.
+        let prepSlotRunning: Bool
+        /// The check slot's marker is beating. NOT the same question as `inFlight == .reachabilityCheck`,
+        /// which is false while a prep run holds the prep slot beside a live check.
+        let checkSlotRunning: Bool
+        /// #2614's single answer: which run a surface that NAMES the run should name.
+        let inFlight: RunKind?
+    }
+
+    static func slotStatus(now: Date, support: URL = StoreLocation.handoffDirectory,
+                           prepMarkerURL: URL? = nil, checkMarkerURL: URL? = nil,
+                           defaults: UserDefaults = .standard) -> SlotStatus {
+        let prepRunning = isRunning(slot: .prep,
+                                    markerURL: prepMarkerURL ?? RunSlot.prep.markerURL(in: support),
+                                    now: now)
+        let checkRunning = isRunning(slot: .check,
+                                     markerURL: checkMarkerURL ?? RunSlot.check.markerURL(in: support),
+                                     now: now)
+        let inFlight: RunKind?
+        if prepRunning {
             let marker = (try? ReachabilityProbeMarker.read(from: probeRunURL(in: support))) ?? nil
-            return prepSlotRunKind(runStartedAt: lastRunStartedAt(slot: .prep, defaults: defaults),
-                                   probeMarkerStartedAt: marker?.startedAt)
+            inFlight = prepSlotRunKind(runStartedAt: lastRunStartedAt(slot: .prep, defaults: defaults),
+                                       probeMarkerStartedAt: marker?.startedAt)
+        } else if checkRunning {
+            inFlight = .reachabilityCheck
+        } else {
+            inFlight = nil
         }
-        if isRunning(slot: .check, markerURL: checkMarkerURL ?? RunSlot.check.markerURL(in: support),
-                     now: now) {
-            return .reachabilityCheck
-        }
-        return nil
+        return SlotStatus(prepSlotRunning: prepRunning, checkSlotRunning: checkRunning,
+                          inFlight: inFlight)
     }
 
     // #3013: record that these shows were left out, and clear the mark from the ones this run is carrying.
