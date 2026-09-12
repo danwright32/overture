@@ -302,7 +302,9 @@ struct ReplyInvariantsLiveStoreTests {
     // It NAMES NOTHING. A count is the whole finding, and a test that printed the show or the address
     // would put a real person's details into every transcript and every terminal scrollback that ever
     // runs the suite (L222).
-    @Test
+    // #3834: gated like every other test in this suite. It was the one that was not, so it was the one
+    // that went red on a machine with no live store while its siblings correctly skipped.
+    @Test(.enabled(if: liveStoreExists, "no live store on this machine"))
     func noConversationWasSilencedByWhatLooksLikeAnAutomaticReply() async throws {
         try await withLiveShows { shows in
             // #3694: judged by `AutomaticAnswerSignature`, which is a pure rule over three named instants
