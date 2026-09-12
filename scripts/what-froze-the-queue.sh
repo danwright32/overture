@@ -121,13 +121,54 @@ print("  the count covers one thing: it counts QueueView body evaluations. The @
 print("  feeds them (#3750), the surfaces that bump nothing (#3762) and every main thread job that")
 print("  is not a render pass are all outside it, and all of them read as zero.")
 print()
-print("  when                  seconds  passes  surface        load")
+print("  when                  seconds  passes  in passes  surface        load")
 for r in counted[:25]:
     when = str(r.get("at", ""))[:19].replace("T", " ")
-    print("  {:<20}  {:>7.2f}  {:>6}  {:<13}  {}".format(
-        when, r.get("seconds", 0), r["passes"], str(r.get("surface", "?")), str(r.get("load", "?"))))
+    cost = r.get("passSeconds")
+    shown = "{:>9.2f}".format(cost) if isinstance(cost, (int, float)) else "        ?"
+    print("  {:<20}  {:>7.2f}  {:>6}  {}  {:<13}  {}".format(
+        when, r.get("seconds", 0), r["passes"], shown,
+        str(r.get("surface", "?")), str(r.get("load", "?"))))
 if len(counted) > 25:
     print(f"  ... and {len(counted) - 25} more, shown longest first.")
+
+# #3815: what the count alone could never say, which is whether those passes ACCOUNT for the freeze.
+#
+# A 16.73s stall spanning one pass has two incompatible explanations and the count chooses neither: one
+# pass that ran for 16 seconds, so the pass IS the freeze, or one ordinary pass and 16 seconds spent
+# somewhere else. The duration beside it is what separates them. Converting the count with a cost figure
+# from a test would be arithmetic on somebody else's measurement, taken on a quiet machine on a healthy
+# pass, which is not the pass that faulted a relationship storm (L107).
+#
+# WHAT THE DURATION CANNOT SAY. It is added when a pass RETURNS and the count is bumped when it STARTS, so
+# a pass that never returned is in the count and not in the seconds. A record with a count and no duration
+# is therefore NOT a pass that took no time, and is not judged either way here: every record on Dan's Mac
+# today is one of those (L98, L11).
+ACCOUNTED = 0.5     # a stall whose passes are at least half of it is one the passes explain
+
+timed = [r for r in counted if isinstance(r.get("passSeconds"), (int, float))]
+untimed_count = len(counted) - len(timed)
+
+if timed:
+    print()
+    shares = [(r, r["passSeconds"] / r["seconds"]) for r in timed if r.get("seconds", 0) > 0]
+    explained = [r for r, share in shares if share >= ACCOUNTED]
+    unexplained = [(r, share) for r, share in shares if share < ACCOUNTED]
+    print(f"  {len(timed)} stall(s) carry how long their passes took.")
+    if explained:
+        longest = max(explained, key=lambda r: r["seconds"])
+        share = longest["passSeconds"] / longest["seconds"]
+        print(f"    {len(explained)} of them their passes account for, worst {longest['seconds']:.2f}s "
+              f"with {longest['passSeconds']:.2f}s in passes ({100 * share:.0f}%).")
+    if unexplained:
+        worst, share = max(unexplained, key=lambda pair: pair[0]["seconds"])
+        print(f"    {len(unexplained)} of them their passes do not account for, worst "
+              f"{worst['seconds']:.2f}s with {worst['passSeconds']:.2f}s in passes "
+              f"({100 * share:.0f}%). Whatever that time was, it was not a counted render pass.")
+if untimed_count:
+    print(f"  {untimed_count} carry no pass duration, so whether their passes account for them is")
+    print("  unknown. A pass that never RETURNED is one of these, and so is every record written")
+    print("  before the duration shipped.")
 
 # The finding. A stall over the floor that counted no pass is UNATTRIBUTED: this tool cannot say what the
 # main thread was doing, and #3783 is why it must not guess.

@@ -722,6 +722,7 @@
 		5286093075D80B48B2E8727B /* ContactScoreAdjustment.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC5BE05DF1C3A6C7254C6425 /* ContactScoreAdjustment.swift */; };
 		5299F217E3BACCDACC64A1D6 /* ManualDraftReviewTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 816BC07F4885F42DA93570F4 /* ManualDraftReviewTests.swift */; };
 		52CF1561762147D75C2C187F /* InquiryCopy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6CC75D6DE5336B18821F0437 /* InquiryCopy.swift */; };
+		52D4BBAF495A1A17894C6504 /* AStallSaysHowLongItsPassesTookTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29915DA13980C562F23CEB71 /* AStallSaysHowLongItsPassesTookTests.swift */; };
 		52E76A17AD9CE63A23EB2054 /* OvationTixCalendar.swift in Sources */ = {isa = PBXBuildFile; fileRef = F915CB57556CFB341F37BFEA /* OvationTixCalendar.swift */; };
 		534815A4119D1F98E4E5389D /* NotificationServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C10AA74775D09ADD6707F71F /* NotificationServiceTests.swift */; };
 		53A8B54030265D41423C9FC8 /* QueueScopeRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = B4091FB6E843EB7935872A5C /* QueueScopeRow.swift */; };
@@ -2436,6 +2437,7 @@
 		29142D7CC954AB5D8C0B6052 /* ReplyClassifyImporterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReplyClassifyImporterTests.swift; sourceTree = "<group>"; };
 		29444CAEC02973DC38FC0E88 /* HandoffDirectoryGuardTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HandoffDirectoryGuardTests.swift; sourceTree = "<group>"; };
 		295AFE7FD066E8FA04E4EC2D /* Ranker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Ranker.swift; sourceTree = "<group>"; };
+		29915DA13980C562F23CEB71 /* AStallSaysHowLongItsPassesTookTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AStallSaysHowLongItsPassesTookTests.swift; sourceTree = "<group>"; };
 		29B1B340C5C9A1E6B98D0D4C /* VoiceFeedbackService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceFeedbackService.swift; sourceTree = "<group>"; };
 		2A0FAE5EA1BE7B41DF0A534F /* ProspectStageReachabilityGuardTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProspectStageReachabilityGuardTests.swift; sourceTree = "<group>"; };
 		2A1C6F5F75CFD8917AC8EAC4 /* ScopedReplyDraftTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScopedReplyDraftTests.swift; sourceTree = "<group>"; };
@@ -4043,6 +4045,7 @@
 				8AACE9526CF7ED440AEE288D /* ASecondMessageIsFetchedTests.swift */,
 				E54DB46D246FFF8C44DDCE2A /* ASecondReplyReachesDanTests.swift */,
 				A5D911E2EE9EB1B377E8B46A /* AShowWhoseNameGrowsTests.swift */,
+				29915DA13980C562F23CEB71 /* AStallSaysHowLongItsPassesTookTests.swift */,
 				87867BEEB382989B200F5BAC /* AStallSaysHowManyPassesItSpansTests.swift */,
 				CC26B52A4FE9D42A65F27D63 /* AStallSaysWhetherAWindowWasOpenTests.swift */,
 				D200BD4B8164C75F4A8C70F3 /* AttachConversationTests.swift */,
@@ -6309,6 +6312,7 @@
 				372099F99DBADDE26972F6EF /* ASecondMessageIsFetchedTests.swift in Sources */,
 				EBD04D7341087364FC5FBAAD /* ASecondReplyReachesDanTests.swift in Sources */,
 				E1DBD2BFF83D5D88473115BF /* AShowWhoseNameGrowsTests.swift in Sources */,
+				52D4BBAF495A1A17894C6504 /* AStallSaysHowLongItsPassesTookTests.swift in Sources */,
 				1C0662105C319124DCED0606 /* AStallSaysHowManyPassesItSpansTests.swift in Sources */,
 				25BDAAEE8510C90A389B1725 /* AStallSaysWhetherAWindowWasOpenTests.swift in Sources */,
 				561F6A8CD42F99D4EC517FD7 /* AcknowledgeOnlyWhenSavedTests.swift in Sources */,

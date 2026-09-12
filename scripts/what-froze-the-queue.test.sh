@@ -18,9 +18,10 @@ WORK="$(fixture_scratch_dir)"
 MAIN_SHELL_PID="${BASHPID:-$$}"
 trap '[ "${BASHPID:-$$}" = "${MAIN_SHELL_PID}" ] && rm -rf "${WORK}"' EXIT
 
-record() { # seconds passes  -> one ndjson line, passes omitted entirely when "none"
-  local seconds="$1" passes="$2" tail=""
+record() { # seconds passes [passSeconds]  -> one ndjson line; "none" omits the field entirely
+  local seconds="$1" passes="$2" cost="${3:-none}" tail=""
   [ "${passes}" != "none" ] && tail=",\"passes\":${passes}"
+  [ "${cost}" != "none" ] && tail="${tail},\"passSeconds\":${cost}"
   printf '{"session":"s","sequence":1,"at":"2026-09-10T17:47:37Z","seconds":%s,"surface":"queue","load":"baseline","loadAverage":3.7%s}\n' "${seconds}" "${tail}"
 }
 
@@ -114,6 +115,36 @@ record 16.73 48 > "${WORK}/without-archive/alone.ndjson"
 out="$("${READER}" --log "${WORK}/without-archive/alone.ndjson" 2>&1)"; status=$?
 assert_equals "no archive beside the log is not a failure" "0" "${status}"
 assert_contains "and the reading is still the live file's own" "${out}" "of 1 record(s)"
+
+
+# #3815: the count alone cannot say whether the passes ACCOUNT for the freeze, and that is the question
+# this tool exists to answer. A 16.73s stall spanning one pass has two incompatible explanations, and the
+# duration beside the count is what chooses between them.
+
+# 9. A long stall whose one pass took almost none of it: the pass does NOT account for the freeze.
+mkdir -p "${WORK}/unaccounted"
+record 16.73 1 0.172 > "${WORK}/unaccounted/log.ndjson"
+out="$("${READER}" --log "${WORK}/unaccounted/log.ndjson" 2>&1)"; status=$?
+assert_equals "a stall its passes cannot account for still reports" "0" "${status}"
+assert_contains "and it says how much of the stall the passes were" "${out}" "1%"
+assert_contains "and it names the reading rather than leaving it to arithmetic" "${out}" "do not account"
+
+# 10. A long stall whose one pass took nearly all of it: the pass IS the freeze.
+mkdir -p "${WORK}/accounted"
+record 16.73 1 16.40 > "${WORK}/accounted/log.ndjson"
+out="$("${READER}" --log "${WORK}/accounted/log.ndjson" 2>&1)"; status=$?
+assert_equals "a stall its passes account for reports" "0" "${status}"
+assert_contains "and it says the passes account for it" "${out}" "account for"
+assert_not_contains "and does not also say they do not" "${out}" "do not account"
+
+# 11. A record carrying a count and NO duration is not judged either way. Every record on Dan's Mac is
+#     one of these today, and reading them as "the passes took no time" would be the instrument's
+#     absence reading as a finding (L98).
+mkdir -p "${WORK}/untimed"
+record 16.73 1 none > "${WORK}/untimed/log.ndjson"
+out="$("${READER}" --log "${WORK}/untimed/log.ndjson" 2>&1)"; status=$?
+assert_contains "an untimed stall is named as untimed" "${out}" "carry no pass duration"
+assert_not_contains "and is not read as a pass that took no time" "${out}" "do not account"
 
 if [ "${FAILURES}" -eq 0 ]; then
   echo "what-froze-the-queue.test.sh: all passed"

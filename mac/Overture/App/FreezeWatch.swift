@@ -75,6 +75,17 @@ final class FreezeWatch {
     // `EveryRenderPassIsCountedTests` holds, derived from the source rather than from a rule in prose.
     func recordPass() { watchdog?.passes.bump() }
 
+    // #3815: called by the MAIN thread when a render pass RETURNS, with how long it took. The only writer.
+    //
+    // A separate call from `recordPass()` because the two happen at different moments and that difference
+    // is load bearing: the count is bumped when a pass starts, so a pass still running during a freeze is
+    // counted, and the cost is added when it returns, so a pass that never returns is in the count and not
+    // in the seconds. Reporting both from one call would lose exactly the case this instrument exists for.
+    //
+    // `EveryRenderPassIsCountedTests` keeps the bump honest and `AStallSaysHowLongItsPassesTookTests`
+    // keeps this one honest, both derived from the app's own render-pass declarations.
+    func recordPassCost(seconds: Double) { watchdog?.passCost.add(seconds: seconds) }
+
     // #3439's reader, exposed here so the gate can ask rather than open a file: the longest stall of this
     // session, as the watchdog itself has it, which includes the ones below the storage floor.
     var longestStallThisSession: StallRecord? { watchdog?.snapshot.highWater }

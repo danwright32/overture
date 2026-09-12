@@ -361,6 +361,17 @@ struct QueueView: View {
         // because that is a pure static derivation and this is a side effect on the app's own instrument;
         // the guard that keeps every future call site honest is a source test, not this comment.
         freezeWatch?.recordPass()
+        // #3815: how long this pass takes, reported when it returns. `defer` so every return path pays it,
+        // including a future early one, rather than the single return this function happens to have today
+        // (L515 is the other direction of the same care).
+        //
+        // `DispatchTime` rather than `Date`, because this measures a DURATION and the wall clock can be
+        // adjusted underneath it; the uptime clock cannot go backwards.
+        let passStarted = DispatchTime.now().uptimeNanoseconds
+        defer {
+            freezeWatch?.recordPassCost(
+                seconds: Double(DispatchTime.now().uptimeNanoseconds - passStarted) / 1_000_000_000)
+        }
         let now = Date()
         // Asked ONCE: five of the inputs below are decided from it, and it reads marker files.
         // #3646: `slotStatus` rather than `runInFlight`, because the surfaces need each SLOT as well as

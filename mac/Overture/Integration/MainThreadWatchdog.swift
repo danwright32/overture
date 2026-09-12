@@ -95,6 +95,31 @@ final class MainThreadWatchdog: @unchecked Sendable {
 
     let passes = PassCountBox()
 
+    // #3815: how long those passes took, as a running total of seconds.
+    //
+    // A SECOND box rather than a field on the first, because the two are written at different moments: the
+    // count is bumped when a pass STARTS so a pass in flight during a freeze is counted, and the cost is
+    // added when it RETURNS. One box with two writes would read as one fact taken at one instant.
+    //
+    // Nothing rather than zero, for `PassCountBox`'s reason: a process where nothing has ever been timed
+    // must be distinguishable from one where no pass ran during this stall (L98, L11).
+    final class PassCostBox: @unchecked Sendable {
+        private let lock = NSLock()
+        private var seconds: Double?
+        // Called by the MAIN thread, when a pass returns. The only writer.
+        func add(seconds delta: Double) {
+            // A negative delta cannot come from a clock that only goes forward, so it is refused rather
+            // than subtracted: accepting one would let the total go backwards, which the span rule then
+            // correctly reports as unmeasured, turning one bad reading into a silent hole (L11).
+            guard delta >= 0 else { return }
+            lock.withLock { self.seconds = (self.seconds ?? 0) + delta }
+        }
+        // Called by the watchdog. The only reader.
+        var current: Double? { lock.withLock { seconds } }
+    }
+
+    let passCost = PassCostBox()
+
     private let queue = DispatchQueue(label: "com.danwright.overture.main-thread-watchdog", qos: .utility)
     private let interval: TimeInterval
     private let now: @Sendable () -> Date
@@ -177,11 +202,13 @@ final class MainThreadWatchdog: @unchecked Sendable {
         // afterwards would also work and would be less exact: it could include a pass that happened
         // after the freeze had already ended.
         let passesAtPost = passes.current
+        let costAtPost = passCost.current
         let sequence = nextSequence()
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
             let ran = self.now()
             let passesAtRun = self.passes.current
+            let costAtRun = self.passCost.current
             let delay = ran.timeIntervalSince(posted) - self.interval
             // Back on the watchdog's queue to judge and write, because everything after this point must
             // be able to happen while the main thread is wedged.
@@ -192,12 +219,15 @@ final class MainThreadWatchdog: @unchecked Sendable {
                 // and go quiet, and silence is exactly what a healthy session looks like (L98).
                 self.keptLock.withLock { self.pingOutstanding = false }
                 self.recordIfStalled(delay, sequence: sequence, at: ran,
-                                     passes: StallLog.passesSpanned(from: passesAtPost, to: passesAtRun))
+                                     passes: StallLog.passesSpanned(from: passesAtPost, to: passesAtRun),
+                                     passSeconds: StallLog.passSecondsSpanned(from: costAtPost,
+                                                                             to: costAtRun))
             }
         }
     }
 
-    private func recordIfStalled(_ delay: TimeInterval, sequence: Int, at: Date, passes: Int?) {
+    private func recordIfStalled(_ delay: TimeInterval, sequence: Int, at: Date, passes: Int?,
+                                 passSeconds: Double?) {
         // A ping that ran EARLY or on time is not a stall. Clamped rather than recorded as a negative,
         // which would be a measurement of the timer's own jitter dressed as a freeze.
         guard delay > 0 else { return }
@@ -205,6 +235,7 @@ final class MainThreadWatchdog: @unchecked Sendable {
         let stall = StallRecord(session: session, sequence: sequence, at: at, seconds: delay,
                                 surface: surface.current, load: reading.0, loadAverage: reading.1,
                                 passes: passes,
+                                passSeconds: passSeconds,
                                 // #3788: read from the box the main thread stamped, never asked of AppKit
                                 // here. This runs on the watchdog's own queue during a freeze, and a value
                                 // the main actor has to supply is unavailable at exactly the moment a record
