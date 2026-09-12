@@ -151,10 +151,18 @@ struct SourcesSheetLeadsWithAttentionTests {
 
     // The guard and its wiring are two claims (#887): all of the above is true on screen only if the sheet
     // actually renders this section, ahead of the graded ones, from this split.
+    //
+    // #3645 SPLIT THE WIRING IN TWO, and the guard follows it rather than being relaxed. The split is
+    // DECIDED in `SourcesRenderPass`, where a cost test can count what a redraw spends, and RENDERED by
+    // the sheet from what the pass handed back. Both halves are asserted: dropping either one takes the
+    // section off the screen, and a guard that only looked at the view would have gone quiet the moment
+    // the derivation moved one file over (which is exactly what it did).
     @Test func theSheetRendersTheAttentionSectionFirst() {
         let view = SourceGuardHelper.source("Overture/UI/SourcesView.swift")
+        let pass = SourceGuardHelper.source("Overture/UI/SourcesRenderPass.swift")
 
-        #expect(view.contains("SourceAttention.split"))
+        #expect(pass.contains("SourceAttention.split"))
+        #expect(view.contains("attentionSection(data.needsALook"))
         #expect(view.contains("SourceAttention.sectionLabel"))
     }
 }

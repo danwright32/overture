@@ -54,7 +54,10 @@ struct SourcesSheetHasNoStaleCacheTests {
     @Test func theWholeStoreScansAreNotInThePerRowPath() throws {
         let body = try #require(SourceGuardHelper.bodyOfFunction(named: "row", in: Self.view),
                                 "SourcesView.row(_:) is gone, so this guard is standing over nothing")
-        for scan in ["SourceYield.tallies(", "UnplacedRooms.from("] {
+        // #3645: the render PASS joins the list, because the same mistake is now one call away. A
+        // `SourcesRenderPass.make(` inside `row(_:)` would run both scans below once per source row, and
+        // it reads as the tidier spelling of exactly the defect this guard exists for.
+        for scan in ["SourceYield.tallies(", "UnplacedRooms.from(", "SourcesRenderPass.make("] {
             #expect(!body.contains(scan),
                     Comment(rawValue: "row(_:) calls \(scan), so the whole-store scan runs once per "
                             + "source row rather than once per body evaluation. That is #1429 exactly, "
