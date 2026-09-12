@@ -98,21 +98,6 @@ jobs:
     runs-on: macos-26
     timeout-minutes: 60
 
-    env:
-      # The app runs in exactly one timezone: Dan's. Making the runner match PRODUCTION is the point,
-      # not a way of dodging a red.
-      #
-      # Measured on this job's first run, which is what it was for. 18 tests failed on a UTC runner and
-      # the dominant cause was the clock, not the code: `BackupLogHonestyTests` expected a backup folder
-      # named `20231114-171320` and got `20231114-221320`, exactly five hours apart, and the calendar
-      # feed tests compare dates that fall at `04:00:00 +0000`, which is midnight Eastern. The suite has
-      # never been run outside America/New_York, so a slice of it silently asserts local time behaviour
-      # (L504, L39).
-      #
-      # Setting it here does NOT fix that, and #3834 is filed for the tests that should set their
-      # own. What this line buys is that this job reports on the app rather than rediscovering the
-      # suite's timezone coupling on every run, which is noise that would teach everyone to skip it.
-      TZ: America/New_York
 
     steps:
       - uses: actions/checkout@v4
@@ -121,14 +106,6 @@ jobs:
       # than trusting the checked-in copy means this job cannot be made green by a stale one.
       # `scripts/check-pbxproj-fresh.sh` is the guard that they agree; this is the run that proves the
       # generator works on a machine that is not Dan's.
-      # The SYSTEM timezone, not just the shell's. `FeedReadersReadEasternTests` records the measured
-      # reason, from #1983: "TZ=UTC does not reach the test host". xcodebuild launches the app-hosted
-      # test process itself, and that process reads the machine's zone rather than this job's
-      # environment, so the `TZ` above is necessary and NOT sufficient. Acted on from that recorded
-      # measurement rather than after watching a second identical red (L27).
-      - name: Set the machine's timezone to the one the app runs in
-        run: sudo systemsetup -settimezone America/New_York || sudo ln -sf /usr/share/zoneinfo/America/New_York /etc/localtime
-
       - name: Install the toolchain this repo builds with
         run: brew install xcodegen flock
 

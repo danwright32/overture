@@ -20,7 +20,20 @@ struct TownKeyAlignmentLiveStoreTests {
     // leaves the critical section non-exclusive, so two suites can build a disk-backed container at
     // once and crash the whole process while reporting an innocent test (#2190/#2195). The first
     // version of this file did exactly that and `RealStoreLockPairingTests` refused it.
-    @Test func noStoredTownIsOutOfStepWithTheFoldThatBuildsIt() async throws {
+    // #3834: the gate its name already promised. This suite reads Dan's LIVE store, and without one it
+    // threw rather than skipping, so it was red on every machine that is not his. Its siblings across the
+    // repository all carry this and it did not, which is why the first hosted CI run found it (L411).
+    // `nonisolated` because this suite is `@MainActor` and `.enabled(if:)` takes a Sendable closure, so a
+    // main actor isolated property cannot be read from it. The sibling suites that already carry this gate
+    // are not `@MainActor` and so never needed the keyword; this one is, for the store lock above.
+    private nonisolated static var liveStoreExists: Bool {
+        FileManager.default.fileExists(
+            atPath: StoreLocation.storeURL(appSupport: StoreLocation.appSupport,
+                                           isDebugBuild: false).path)
+    }
+
+    @Test(.enabled(if: liveStoreExists, "no live store on this machine"))
+    func noStoredTownIsOutOfStepWithTheFoldThatBuildsIt() async throws {
         await RealStoreTestLock.shared.acquire()
         do {
             try await measureTownAlignment()
