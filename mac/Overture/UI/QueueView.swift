@@ -2105,8 +2105,17 @@ enum QueueRenderCounter {
         // Capped on WRITE rather than at launch, matching FeedMovementLog, because this log's whole
         // purpose is unattended observation over a long session, and a launch-only cap would let one
         // session grow without limit, which is the case that produced the issue.
-        LogRotation.cap(files: [url], maxBytes: maxBytes)
-        let stamped = "\(ISO8601DateFormatter().string(from: Date())) \(line)\n"
+        //
+        // #3789: and it says so, twice, because this log has two readers. The rotation note goes into
+        // the file itself, so whoever opens it later can see the record begins mid-session rather than
+        // at the first derivation. The masthead gets a marker too, but ONLY when something was actually
+        // lost, which is the second rotation onwards: the first moves everything into the `.1` beside
+        // it and costs nothing, and a marker on every roll of a log that rolls by design is the noise
+        // that teaches somebody to stop reading the masthead.
+        let rotation = LogRotation.cap(files: [url], maxBytes: maxBytes)
+        if rotation.lostSomething { lastReason += " (log rotated, older content gone)" }
+        let stamp = ISO8601DateFormatter().string(from: Date())
+        let stamped = rotation.notes.map { "\(stamp) \($0)\n" }.joined() + "\(stamp) \(line)\n"
         guard let data = stamped.data(using: .utf8) else { return }
         if let handle = try? FileHandle(forWritingTo: url) {
             defer { try? handle.close() }

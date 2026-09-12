@@ -220,3 +220,31 @@ the measurement it came from lives here. Read the entry before the rule decides 
   process table and remains what says that.
 
 
+
+## Asking what a rotating log lost
+
+- **Asking what a rotating log lost: `scripts/what-the-log-lost.sh` (#3789).** Reads a log and the `.1`
+  beside it, prints every rotation the app recorded in either, and says whether any of them destroyed
+  content. Defaults to the store backup log, which is the record of whether Dan's live store was copied
+  and the one whose loss costs something; `--log` points it at any of the other seven, and `--print`
+  dumps the whole retained history oldest first.
+  It exists because `LogRotation.cap` keeps exactly ONE previous generation and, until #3789, said
+  nothing and had no reader. It copies the live file to `.1`, deleting the `.1` the rotation before it
+  wrote, then empties the live file, so every second rotation destroyed a generation; the return value
+  was `@discardableResult` and all five call sites dropped it; and nothing in the app or the toolchain
+  ever opened a `.1`, which made the preserved copy write-only (L46, L98, L11). The reader ships in the
+  same change as the record, for the reason #3763's freeze archive shipped with its own.
+  BOTH FILES, always. The rotation AFTER a loss moves that loss's note into the `.1`, so a reader of the
+  live file alone would report a clean log while looking exactly like a reader of the whole history.
+  Read its answer correctly. `2` is UNMEASURED: there is no log at that path, and a log never written
+  and a log deleted are different facts it can tell you neither of. `1` is content GONE, or a rotation
+  REFUSED, which are separate findings printed separately: a refusal destroyed nothing and means the log
+  is over its cap and still growing, which is the one that needs somebody to look at why. `1` is also
+  what a `.1` with no note beside it gets, because that is a rotation from before the app said anything
+  and what it cost cannot be recovered. `0` is a log that has never rotated, or one whose rotations each
+  kept what they moved.
+  The words it greps for and the words `LogRotation.note` writes are a cross-language contract with one
+  thing holding them together, `theReaderLooksForTheWordsTheAppActuallyWrites` in
+  `ARotatedLogSaysWhatItLostTests`: a reworded note would otherwise leave this matching nothing and
+  reporting every log clean (L58). Its own half rides along on every push through
+  `scripts/what-the-log-lost.test.sh`, which builds its own logs rather than reading Dan's.
