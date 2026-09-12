@@ -288,6 +288,16 @@ enum QueueRenderPass {
         // the pair had a corner the app can never be in, and the roster was handed only the first of them.
         // #2267's per-card re-check state is derived from it below, so the card and the pill read one fact.
         var runInFlight: RunKind? = nil
+        // #3646: each SLOT's own marker, read ONCE by the caller for the whole pass.
+        //
+        // `runInFlight` above folds the two slots into one answer and so cannot describe both: it asks
+        // the prep slot first, so with a prep run live beside a check (which #3015 allows) it says
+        // `.prep` while a check really is going. A control is greyed by whether the slot IT would start
+        // is busy, so the queue asked the slot itself instead, once per rendered card and once per date
+        // heading, which is #3646. Both arrive from one `PrepQueueService.slotStatus` call in the
+        // caller, on the same rule as everything else here: this pass may not reach the filesystem.
+        var prepSlotRunning: Bool = false
+        var checkSlotRunning: Bool = false
         // #3186: the check's start and size, for the row's own re-check label.
         var checkRunSince: Date? = nil
         var checkLookups: Int? = nil
@@ -380,6 +390,10 @@ enum QueueRenderPass {
                                           placement: placement),
             gmailConnected: i.gmailConnected,
             probeRunning: i.runInFlight == .reachabilityCheck,
+            // #3646: each slot's own marker, carried through unchanged, so every surface that greys a
+            // control reads this pass's one answer rather than asking the disk per card and per heading.
+            checkRunning: i.checkSlotRunning,
+            prepRunning: i.prepSlotRunning,
             checkRunSince: i.checkRunSince,
             checkLookups: i.checkLookups,
             reachedOut: reachedOut,
