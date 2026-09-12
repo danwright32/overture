@@ -15,10 +15,80 @@ import Foundation
 @MainActor
 enum WindowCensus {
 
-    // Every window this app has that is actually on screen. A panel, a sheet and the main window all count,
-    // because the question is whether anything could be looked at rather than which thing it is.
+    // One window as this census reads it. Three properties, because those are the three the answer turns
+    // on, and they are the three #334 already chose.
+    //
+    // A value type rather than `NSWindow`, so the rule below can be exhausted by a test. A hosted test
+    // cannot produce a VISIBLE `NSWindow` at all: a window becomes visible by being ordered front, and
+    // ordering one front crashes the shared app host (#3480), so a test driving real windows could only
+    // ever see `isVisible == false` and would agree with any rule whatsoever (L196, L159).
+    struct Window: Equatable, Sendable {
+        let isVisible: Bool
+        let canBecomeMain: Bool
+        let isTitled: Bool
+
+        // `nonisolated` for the same reason as the predicate below: three Bools, no AppKit. The
+        // `NSWindow` initialiser beside it is NOT, because reading a window's properties is main actor
+        // work, and that is exactly the line this split exists to keep separate.
+        nonisolated init(isVisible: Bool, canBecomeMain: Bool, isTitled: Bool) {
+            self.isVisible = isVisible
+            self.canBecomeMain = canBecomeMain
+            self.isTitled = isTitled
+        }
+
+        init(_ window: NSWindow) {
+            self.init(isVisible: window.isVisible,
+                      canBecomeMain: window.canBecomeMain,
+                      isTitled: window.styleMask.contains(.titled))
+        }
+    }
+
+    // A window a person could be LOOKING AT, and the ONE definition of that in this app.
+    //
+    // `nonisolated`, here and on the two below, because none of them touches AppKit: they read three
+    // Bools off a value type. Only the adapter that asks `NSApplication` for its window list is
+    // main actor work, and leaving the rule isolated with it would have made every test of the rule
+    // main actor too, on a suite that already measures its own main actor share.
+    //
+    // NOT every visible window, and that correction is #3788's. `MenuBarExtra` is backed by an
+    // `NSStatusItem`, and its `NSStatusBarWindow` is in `NSApplication.shared.windows` reporting
+    // `isVisible == true` for the whole life of the process. Overture inserts its `MenuBarExtra` on every
+    // real launch (`AppEnvironment.showsMenuBarExtra` is false only under test), so a census of visible
+    // windows was never zero and `WindowPresence.none` was UNREACHABLE in the shipped app. Every one of
+    // the 77 records written by the first build carrying that field says `windows: open`, while System
+    // Events reported zero windows for the same process.
+    //
+    // THE RULE IS NOT NEW, and that is the part worth keeping. #334 needed this exact separation for the
+    // Dock presence decision and got it right, in `AppDelegate.isMainContentWindow`, whose comment says in
+    // so many words that it excludes "the menu-bar item". This census was written beside it and asked the
+    // same question a second, weaker way. So the predicate moved here and `AppDelegate` calls it: finding
+    // the right place to put a rule is not the same as checking whether it already exists, and the second
+    // copy is the one that was wrong (L655, L263).
+    //
+    // MEASURED rather than reasoned: `scripts/what-counts-as-a-window.sh` builds a bare AppKit process and
+    // reads its window list. A status item is `visible=true canBecomeMain=false titled=false`; an ordinary
+    // content window is `visible=true canBecomeMain=true titled=true`. Run it rather than trusting this
+    // sentence (L316).
+    //
+    // NOT filtered by window LEVEL, though a level filter also separates today's two cases. The level says
+    // where a window is stacked; these three say what it IS, and the question here is whether a person
+    // could be reading something, which is a property of the window rather than of its z-order.
+    nonisolated static func isContentWindow(_ window: Window) -> Bool {
+        window.isVisible && window.canBecomeMain && window.isTitled
+    }
+
+    nonisolated static func visibleCount(among windows: [Window]) -> Int {
+        windows.filter(isContentWindow).count
+    }
+
+    // The adapter, and the only line that touches AppKit. Deliberately one expression: everything it could
+    // get wrong is in the predicate above, where a test can reach it.
     static func visibleCount(in app: NSApplication = .shared) -> Int {
-        app.windows.filter(\.isVisible).count
+        visibleCount(among: app.windows.map(Window.init))
+    }
+
+    nonisolated static func presence(among windows: [Window]) -> WindowPresence {
+        WindowPresence.from(visibleWindowCount: visibleCount(among: windows))
     }
 
     static func presence(in app: NSApplication = .shared) -> WindowPresence {
