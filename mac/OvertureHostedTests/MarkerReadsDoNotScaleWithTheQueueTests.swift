@@ -15,15 +15,19 @@ import SwiftData
 //
 // The rig is `ADrawnRowReallyAsksTheStoreTests`', for its reason. The borderless window the other hosted
 // queue tests use realizes no rows at all (`FeltWaitCostTests` prints `felt-wait-cards-drawn: 0` every
-// run), so it cannot answer a per-row question. `ImageRenderer` has no viewport, so it renders the WHOLE
-// content and realizes every row, which is exactly wrong for asking what a scroll costs and exactly right
-// for asking whether the cost grows with the queue.
+// run), so it cannot answer a per-row question. `ImageRenderer` renders into a frame rather than a
+// viewport, so it realizes many rows rather than a screenful, which is exactly wrong for asking what a
+// scroll costs and right for asking whether a cost grows with the queue. How many it realizes is NOT
+// assumed: the positive control below asserts the large corpus built more cards than the small one, and
+// the run prints both counts beside the reads, so a rig that stops realizing rows says so rather than
+// reporting a flat cost it never exercised.
 //
 // The claim is a COMPARISON rather than a pinned number, deliberately. What a pass legitimately reads is
 // the two run markers plus the reply run's, and how many times SwiftUI evaluates a body is not this
 // suite's business; a pinned total would go red for a reason unrelated to the rule (L103). What must be
-// true is that four times the shows over four times the dates cost the same reads. Before this issue the
-// large corpus paid one extra `stat` per card and one per date heading.
+// true is that four times the shows over four times the dates cost the same reads. Measured by putting
+// the defect back (the #3646 proof, 2026-09-11): the small draw read 9 markers and the large one 27,
+// against an equal reading once the per-card read is gone.
 @MainActor
 @Suite("Drawing the queue costs the same marker reads however many shows it holds (#3646)")
 struct MarkerReadsDoNotScaleWithTheQueueTests {
@@ -111,12 +115,17 @@ struct MarkerReadsDoNotScaleWithTheQueueTests {
             "the large queue built no more cards than the small one, so its rows are not being realized "
             + "and this rig has stopped being able to answer the question it exists for"))
 
-        // THE claim. 96 shows over 12 dates cost what 6 shows over 3 dates cost. Before this, the large
-        // one paid 96 extra reads for the cards and 12 more for the headings, every pass.
+        // THE claim. 96 shows over 12 dates cost what 6 shows over 3 dates cost. Before this, every card
+        // this rig realized and every date heading it drew paid its own `stat`, every pass.
         #expect(large.markerReads == small.markerReads, Comment(rawValue:
             "drawing 96 shows read \(large.markerReads) marker files and drawing 6 read "
             + "\(small.markerReads), so a marker is being read per card or per date heading again (#3646)"))
         // And a pass really does read its markers, so the equality above is not two zeros agreeing.
         #expect(small.markerReads > 0)
+
+        // The reading itself, printed the way `FeltWaitCostTests` prints its own, so the figure lives in
+        // every run's output rather than in a sentence here that would go stale silently (L32, L316).
+        print("marker-reads-per-drawn-queue: \(small.markerReads) reads drawing "
+              + "\(small.cardsBuilt) cards, \(large.markerReads) reads drawing \(large.cardsBuilt)")
     }
 }
