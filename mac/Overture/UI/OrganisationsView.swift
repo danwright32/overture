@@ -22,6 +22,9 @@ struct OrganisationsView: View {
     // behind it; the row below is drawn as a control only when there is somewhere to go.
     var onShowShows: ((OrganisationListing.Entry) -> Void)?
     @Environment(\.dismiss) private var dismiss
+    // #3762: the app's own freeze instrument, read as an OPTIONAL on the same footing as every other
+    // environment object here, so a missed injection is a pass nobody counted rather than a crash.
+    @Environment(FreezeWatch.self) private var freezeWatch: FreezeWatch?
     // Bound, so a correction made on a row while this is open redraws it rather than showing a stale
     // verdict: the gate reads these two sets, so the listing must be rebuilt when either changes.
     @Query private var prospects: [Prospect]
@@ -48,6 +51,12 @@ struct OrganisationsView: View {
     }
 
     var body: some View {
+        // #3762: this surface counts its own rebuild. Without it a stall recorded while this sheet is on
+        // top reads `passes: 0`, and `0` is not a blank there: it says the surface did not rebuild, which
+        // is the reading that refutes "a burst of store changes did this" (L11). Bound to `_` rather than
+        // called as a statement because `body` is a ViewBuilder, which takes a declaration and not a bare
+        // void expression.
+        let _ = freezeWatch?.recordPass()
         VStack(alignment: .leading, spacing: 0) {
             header
             Divider().overlay(OVColor.line)

@@ -9,6 +9,9 @@ struct FollowUpsView: View {
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
     @Environment(ActionFeedback.self) private var feedback   // #285
+    // #3762: the app's own freeze instrument, read as an OPTIONAL on the same footing as every other
+    // environment object here, so a missed injection is a pass nobody counted rather than a crash.
+    @Environment(FreezeWatch.self) private var freezeWatch: FreezeWatch?
     @Query private var prospects: [Prospect]
     // #2816: the watchlist, so a row's link back to the show can say whether it reaches the show's own
     // page or only the source's calendar (#1680). A @Query on the same precedent QueueView follows: a
@@ -90,6 +93,10 @@ struct FollowUpsView: View {
     private var replyRunAlive: Bool { replyRunAliveOverride ?? ReplyClassifyService.isRunning(now: Date()) }
 
     var body: some View {
+        // #3762: this surface counts its own rebuild, so a stall recorded here says how many passes it
+        // spanned. `passes: 0` on a surface that never counts is a positive claim that it did not
+        // rebuild, which is the reading that sends the next diagnosis elsewhere (L11).
+        freezeWatch?.recordPass()
         // #2878: ONE derivation for the whole sheet, so the header, the empty test and the three lists
         // are three readings of one answer rather than three sweeps of the store that could disagree.
         // It used to be derived up to three times in this body (#1121's rule, in the other direction).
