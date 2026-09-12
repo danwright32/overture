@@ -146,9 +146,9 @@ rides along in `scripts/test-all.sh` and reports how close it is, advisory, neve
 - Before pushing anything that touches a cross-language contract (`fixtures/`,
   `docs/contracts.md`), or really before pushing anything at all, run `scripts/test-all.sh`
   from the repo root. It runs `pnpm typecheck`, `pnpm test`, and the Swift suite in one
-  command (#595). This matters even more since #1347: CI no longer runs the Swift tests at
-  all (only `typecheck-and-test`, on GitHub-hosted ubuntu-latest), so a local run is the ONLY
-  thing that verifies the Mac app before it reaches main. The mandatory local pre-push gate
+  command (#595). Still run it before every push even though CI runs the Swift suite again
+  (`swift-tests`, on a GitHub-hosted `macos-26` runner): a local red costs one command, and the
+  same red found in CI costs a push, a wait and a second push. The mandatory local pre-push gate
   judges that each change carries a test (and enforces the style rules); it does NOT itself run
   the suites, so `test-all.sh` is what actually runs the full Mac suite plus the TypeScript side
   that CI would otherwise only surface minutes later. Run it before every push.
@@ -405,14 +405,24 @@ guard remains the net under it.
 
 ## CI status before merging
 
-Since #1347 the ONLY CI check is `typecheck-and-test` (the TypeScript importer, on
-GitHub-hosted ubuntu-latest). The Swift tests no longer run in CI: they were on a
-self-hosted runner on Dan's Mac that kept going offline mid-job and stalling every merge,
-so they were retired in favour of the mandatory local pre-push gate (which runs the full
-Mac suite before any push). This means a merge's Swift verification comes from having run
-`mac/scripts/run-tests-locked.sh` (or `scripts/test-all.sh`) locally and SEEN it pass, not
-from CI. Do not merge a Swift change without that local pass in hand.
+There are TWO CI checks, both on GitHub-hosted runners: `typecheck-and-test` (the TypeScript
+importer, on `ubuntu-latest`) and `swift-tests` (the whole Mac suite, on `macos-26`).
+
+The Swift half was absent between #1347 (2026-07-22) and its return. #1347 retired a SELF-HOSTED
+runner on Dan's Mac that kept going offline mid-job and forcing admin-merges, which was right about
+that runner, and it offered "(b) moving Swift tests onto a GitHub-hosted macOS runner" as the
+alternative. That was never taken and no reason for rejecting it was recorded. The premise that
+would have justified it is false: this repository is PUBLIC, and standard GitHub-hosted runners,
+macOS included, are free for public repositories. So for seven weeks the Mac app's only
+verification was a local run, on the word of whoever ran it.
+
+**A green `swift-tests` does not replace the local run, and neither replaces the merge scripts.**
+A pull request run proves the branch works beside the code it was CUT FROM, never beside what
+landed since (L85). `verify-and-merge-branch.sh` and `verify-and-merge-batch.sh` merge current
+`origin/main` into the branch and run the full suite on the combined tree, and going through one of
+them is still mandatory. What CI adds is the INDEPENDENT check that the local run happened and
+passed, which nothing provided before.
 
 The rest of what CI does and does not cover is in `docs/agents/merging.md`: why there is no push
-trigger and no paths filter, the project file freshness gate, and how to read the one remaining
-check before merging.
+trigger and no paths filter, the project file freshness gate, and how to read the checks before
+merging.
