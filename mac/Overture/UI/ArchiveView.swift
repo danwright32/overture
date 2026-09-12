@@ -35,6 +35,9 @@ struct ArchiveView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(ActionFeedback.self) private var feedback
     @Environment(DayOffOfferRequest.self) private var dayOffOffer   // #924
+    // #3762: the app's own freeze instrument, read as an OPTIONAL on the same footing as every other
+    // environment object here, so a missed injection is a pass nobody counted rather than a crash.
+    @Environment(FreezeWatch.self) private var freezeWatch: FreezeWatch?
 
     @Query private var prospects: [Prospect]
     // #1598 Phase 5: the organisation answer ledger, so an archived row reads the same as it does in the
@@ -128,6 +131,12 @@ struct ArchiveView: View {
     }
 
     var body: some View {
+        // #3762: this surface counts its own rebuild. Without it a stall recorded while this sheet is on
+        // top reads `passes: 0`, and `0` is not a blank there: it says the surface did not rebuild, which
+        // is the reading that refutes "a burst of store changes did this" (L11). Bound to `_` rather than
+        // called as a statement because `body` is a ViewBuilder, which takes a declaration and not a bare
+        // void expression.
+        let _ = freezeWatch?.recordPass()
         // #3492: derived ONCE per render pass and handed down, the same shape #1774 established for
         // the queue. A second reason beyond cost: two independent derivations of one query can in
         // principle disagree, so the count beside the title and the list beneath it were computed

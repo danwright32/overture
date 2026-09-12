@@ -17,6 +17,9 @@ struct SourcesView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var context
     @Environment(ActionFeedback.self) private var feedback
+    // #3762: the app's own freeze instrument, read as an OPTIONAL on the same footing as every other
+    // environment object here, so a missed injection is a pass nobody counted rather than a crash.
+    @Environment(FreezeWatch.self) private var freezeWatch: FreezeWatch?
     @Query(sort: \WatchedSource.orgName) private var sources: [WatchedSource]
     // #794: read to compute each source's lifetime yield (found/kept/sent/booked). The tally and its
     // sentence both live in SourceYield, a tested pure function, so this view has no counting of its own.
@@ -120,6 +123,12 @@ struct SourcesView: View {
     @State private var sourcesBeingReadNow: Set<String> = []
 
     var body: some View {
+        // #3762: this surface counts its own rebuild. Without it a stall recorded while this sheet is on
+        // top reads `passes: 0`, and `0` is not a blank there: it says the surface did not rebuild, which
+        // is the reading that refutes "a burst of store changes did this" (L11). Bound to `_` rather than
+        // called as a statement because `body` is a ViewBuilder, which takes a declaration and not a bare
+        // void expression.
+        let _ = freezeWatch?.recordPass()
         VStack(alignment: .leading, spacing: 0) {
             header
             Divider().overlay(OVColor.line)

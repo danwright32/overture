@@ -27,8 +27,17 @@ struct OmniFocusSettingsView: View {
     @AppStorage(OmniFocusSyncStatus.completedReadTakenKey) private var readTaken = false
     @AppStorage(OmniFocusSyncStatus.completedReadTasksKey) private var readTasks = 0
     @AppStorage(OmniFocusSyncStatus.completedReadSecondsKey) private var readSeconds: Double = 0
+    // #3762: the app's own freeze instrument, read as an OPTIONAL on the same footing as every other
+    // environment object here, so a missed injection is a pass nobody counted rather than a crash.
+    @Environment(FreezeWatch.self) private var freezeWatch: FreezeWatch?
 
     var body: some View {
+        // #3762: this surface counts its own rebuild. Without it a stall recorded while this sheet is on
+        // top reads `passes: 0`, and `0` is not a blank there: it says the surface did not rebuild, which
+        // is the reading that refutes "a burst of store changes did this" (L11). Bound to `_` rather than
+        // called as a statement because `body` is a ViewBuilder, which takes a declaration and not a bare
+        // void expression.
+        let _ = freezeWatch?.recordPass()
         VStack(alignment: .leading, spacing: OVSpacing.md) {
             Text("OmniFocus sync").font(OVType.dateHeading).foregroundStyle(OVColor.ink)
             if omniFocusEnabled {
