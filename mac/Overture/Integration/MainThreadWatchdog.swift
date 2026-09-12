@@ -101,6 +101,7 @@ final class MainThreadWatchdog: @unchecked Sendable {
     private let record: @Sendable (StallRecord) -> Void
     private let loadReading: @Sendable () -> (MachineLoad, Double?)
     private let session: String
+    private let cap: Int
 
     private var timer: DispatchSourceTimer?
     private var sequence = 0
@@ -112,15 +113,22 @@ final class MainThreadWatchdog: @unchecked Sendable {
 
     // Every collaborator is injected, so the suite can drive the whole decision path with no timer, no
     // file and no clock of its own (L196, L284).
+    //
+    // #3812: the CAP is injected for the same reason. The retention rule only does anything once the kept
+    // set is FULL, so at the shipped cap of 200 a test would have to drive 201 real freezes to reach the
+    // branch, which is the shape that leaves the branch that ships the one never exercised (L101). With
+    // the cap injectable a test reaches it in two.
     init(session: String = UUID().uuidString,
          interval: TimeInterval = MainThreadWatchdog.pingInterval,
          now: @escaping @Sendable () -> Date = { Date() },
          loadReading: @escaping @Sendable () -> (MachineLoad, Double?) = MachineLoadReading.take,
+         cap: Int = StallLog.cap,
          record: @escaping @Sendable (StallRecord) -> Void) {
         self.session = session
         self.interval = interval
         self.now = now
         self.loadReading = loadReading
+        self.cap = cap
         self.record = record
     }
 
@@ -210,12 +218,15 @@ final class MainThreadWatchdog: @unchecked Sendable {
                                 // the main actor has to supply is unavailable at exactly the moment a record
                                 // is being written (L345).
                                 windows: windows.current)
-        let shouldWrite = keptLock.withLock { () -> Bool in
-            let before = kept.records.count
-            kept = StallLog.adding(stall, to: kept)
-            return kept.records.count > before
+        // #3812: the decision is the PURE rule's, taken whole. This used to compare the kept set's count
+        // before and after, which tied "what is held in memory" to "what is written to the file" and made
+        // the session stop recording at its 200th stall.
+        let admission = keptLock.withLock { () -> StallLog.Admission in
+            let result = StallLog.adding(stall, to: kept, cap: cap)
+            kept = result.kept
+            return result
         }
-        guard shouldWrite else { return }
+        guard admission.write else { return }
         record(stall)
     }
 

@@ -74,6 +74,11 @@ out="$("${READER}" --log "${WORK}/capped/log.ndjson" 2>&1)"; status=$?
 assert_equals "a censored session still reports" "0" "${status}"
 assert_contains "and it says the figures are understated" "${out}" "UNDERSTATED"
 assert_contains "and it names the issue rather than describing a coincidence" "${out}" "#3812"
+# #3812's fix makes a session at the cap AMBIGUOUS rather than censored: a build carrying it writes every
+# stall, so exactly 200 there is an ordinary count, and nothing in a record says which build wrote it. A
+# reader that went on asserting censorship would be claiming something it cannot measure (L11, L440).
+assert_contains "and it says the two readings cannot be told apart" "${out}" "cannot be told"
+assert_not_contains "and it no longer says the write still stops there" "${out}" "stops a session writing"
 
 # 7. A session one record short of the cap is NOT censored, which is the other half: a warning that
 #    fires on every session says nothing, and one that fires on none is the defect it exists to catch

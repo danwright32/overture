@@ -44,13 +44,13 @@ struct TheWatchdogCanSeeTheBarTests {
         let atTheBar = record(seconds: Self.barSeconds)
         let wellUnder = record(seconds: Self.barSeconds / 4)
 
-        let afterBar = StallLog.adding(atTheBar, to: empty)
+        let afterBar = StallLog.adding(atTheBar, to: empty).kept
         #expect(afterBar.records.count == 1,
                 Comment(rawValue: "a \(Self.barSeconds)s stall was not kept as a record, so the bar cannot "
                         + "be read off the file"))
         #expect(afterBar.belowFloor == 0)
 
-        let afterSmall = StallLog.adding(wellUnder, to: empty)
+        let afterSmall = StallLog.adding(wellUnder, to: empty).kept
         #expect(afterSmall.records.isEmpty, "a stall well under the bar was stored rather than counted")
         #expect(afterSmall.belowFloor == 1,
                 Comment(rawValue: "a stall under the floor must still be COUNTED, or a session of "
