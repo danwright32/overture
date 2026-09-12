@@ -246,7 +246,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
 
     // The main Overture window only (#334 chose to exclude the onboarding window): a visible,
     // titled window that can become main, and isn't the onboarding window or the menu-bar item.
+    //
+    // #3788: "a window a person could be looking at" is now stated ONCE, in `WindowCensus`, because a
+    // second copy of it was written there and got the menu bar item wrong. This one keeps its own extra
+    // exclusion and nothing else: the onboarding window is genuinely something Dan is looking at, so the
+    // census counts it, and only THIS question (whether to show a Dock icon) wants it left out. Two
+    // callers, one definition, one of them narrowing it for a stated reason.
     private func isMainContentWindow(_ w: NSWindow) -> Bool {
-        w.isVisible && w !== onboardingWindow && w.canBecomeMain && w.styleMask.contains(.titled)
+        w !== onboardingWindow && WindowCensus.isContentWindow(WindowCensus.Window(w))
     }
 }
