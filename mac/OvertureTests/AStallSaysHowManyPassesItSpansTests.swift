@@ -10,9 +10,9 @@ import Foundation
 // it could choose between them.
 //
 // THE THREE VALUES ARE THE POINT, and only one of them is a number anybody expected to see. `nil` is
-// UNMEASURED and is never folded into `0`: a zero standing for both "the surface did not rebuild" and
-// "nobody was counting" makes the finding that REFUTES the burst reading indistinguishable from the
-// instrument being absent (L98, L11).
+// UNMEASURED and is never folded into `0`: a zero standing for both "no pass was counted" and "nobody
+// was counting" makes the two most different answers available read alike (L98, L11). What a counted
+// zero may then be CONCLUDED from is narrower than it first looked, and #3783 is where that is set out.
 //
 // The counter is read on the MAIN thread at the moment the ping finally runs, which is the instant the
 // main thread became free again, rather than on the watchdog's queue afterwards. Both are correct; this
@@ -148,5 +148,28 @@ struct TheWatchdogCountsPassesTests {
         watchdog.stop()
 
         #expect(records.all.allSatisfy { $0.passes == nil })
+    }
+
+    // #3783: what a counted `0` is allowed to be read as.
+    //
+    // This is a guard on the field's own DEFINITION rather than on any behaviour, because the defect it
+    // came from was entirely in what the number was taken to mean: the comment said `0` means the
+    // surface did not rebuild, `scripts/what-froze-the-queue.sh` printed that sentence, and 146 of 576
+    // counted records on Dan's live log carried it. The counter's only writer is the first line of
+    // `QueueView.makeRenderData()`, so the `@Query` fetch that feeds that body (#3750), every surface
+    // that bumps nothing (#3762) and every main thread job that is not a render pass all read as `0`.
+    //
+    // The reader has its OWN half of this in `scripts/what-froze-the-queue.test.sh`, checked against the
+    // same rule and not against this file. Two guards over one lookup would only prove the lookup is
+    // self consistent (L70); what has to hold is that each artefact states its own limits.
+    @Test func theFieldsDefinitionNamesWhatTheCountDoesNotCover() {
+        let source = SourceGuardHelper.source("Overture/Domain/MainThreadStall.swift")
+        // Bound before asserting, so a failure prints the missing reference rather than the file (L445).
+        let namesTheFetch = source.contains("#3750")
+        let namesTheOtherSurfaces = source.contains("#3762")
+        let namesTheCorrection = source.contains("#3783")
+        #expect(namesTheFetch, "StallRecord.passes does not name the fetch outside the count (#3750)")
+        #expect(namesTheOtherSurfaces, "StallRecord.passes does not name the surfaces that bump nothing (#3762)")
+        #expect(namesTheCorrection, "StallRecord.passes does not name what narrowed the reading (#3783)")
     }
 }

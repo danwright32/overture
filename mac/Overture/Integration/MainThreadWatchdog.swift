@@ -80,8 +80,9 @@ final class MainThreadWatchdog: @unchecked Sendable {
     // being written (L345). A lock rather than an actor, because an actor hop is the thing that cannot
     // happen here.
     //
-    // It starts at NOTHING rather than at zero, and that is what makes "the surface did not rebuild"
-    // and "nobody was counting" different answers rather than one (L98, L11). See
+    // It starts at NOTHING rather than at zero, and that is what makes "no pass was counted" and
+    // "nobody was counting" different answers rather than one (L98, L11). What a counted zero may be
+    // read as is narrower than it looks and is set out on `StallRecord.passes` (#3783). See
     // `StallLog.passesSpanned`.
     final class PassCountBox: @unchecked Sendable {
         private let lock = NSLock()
