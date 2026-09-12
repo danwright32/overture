@@ -240,13 +240,31 @@ struct RootView: View {
     // `body` would register no dependency on it and leave the line frozen.
     @State private var failingResponses: [ResponseDecodeFailures.Health] = []
 
-    // Reads an in-memory dictionary under a lock, no filesystem and no derivation, and assigns only on a
-    // real change so an app with nothing wrong redraws nothing (#1774: an idle surface must pay nothing).
+    // #3647: the bounced pitches, held here for the same reason as the two registers above. It was passed as
+    // an ARGUMENT to the notices view, so it was derived in `body` on every evaluation, while reading as
+    // though it belonged to the view it was handed to.
+    @State private var bouncedPitches: [AppNotices.BouncedPitch] = []
+
+    // Reads two in-memory dictionaries under a lock, and ONE derivation over the prospect table, and assigns
+    // only on a real change so an app with nothing wrong redraws nothing (#1774: an idle surface must pay
+    // nothing).
+    //
+    // THE DERIVATION IS NEW AND THIS COMMENT USED TO SAY THERE WAS NONE (#3647). It is here rather than in
+    // `body` because `body` runs far more often than the store changes: a single scout run drives 60 to 130
+    // evaluations from `@State` alone, and the scan measured 1.9 ms warm on the live store of 1,238 rows, so
+    // the argument form cost 0.11 to 0.24 seconds per scout run against 1.9 ms a minute here. That trade is
+    // what justifies breaking this function's "no derivation" property, and the cost of the minute tick is
+    // stated rather than left for somebody to rediscover: 1.9 ms every 60 s, for an app that stays resident.
+    //
+    // A bounce therefore surfaces up to a minute late, which is the same latency the two registers above
+    // already accept for the same reason.
     private func refreshUnreadableFiles() {
         let current = HandoffReadFailures.shared.current()
         if current != unreadableFiles { unreadableFiles = current }
         let responses = ResponseDecodeFailures.shared.failing()
         if responses != failingResponses { failingResponses = responses }
+        let bounces = BounceDetection.unresolvedBounces(in: allProspects)
+        if bounces != bouncedPitches { bouncedPitches = bounces }
     }
 
     // The ONE place the file is read for this line, so the launch load and the notice's own re-read
@@ -606,7 +624,7 @@ struct RootView: View {
                                               // follow-ups and the reached-out queue, which is precisely
                                               // why nothing else on this screen would ever mention it
                                               // again.
-                                              bouncedPitches: BounceDetection.unresolvedBounces(in: allProspects),
+                                              bouncedPitches: bouncedPitches,
                                               // #3298: and an export Overture cannot read at all, which
                                               // is upstream of every other line here: while it stands,
                                               // nothing in the queue is known to be a free night.
