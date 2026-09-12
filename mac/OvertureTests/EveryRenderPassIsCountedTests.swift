@@ -7,8 +7,9 @@ import Foundation
 // it a behaviour every future call site has to OPT INTO, and a rule each site is asked to follow is
 // enforced by nothing and reaches nothing in exactly the case it matters (L27, L621). A second surface
 // that starts running the pass without bumping does not fail: it makes a freeze on THAT surface report
-// zero passes, which is the reading that means "the surface did not rebuild" and would send the next
-// diagnosis in the wrong direction with nothing saying so (L11).
+// zero passes, and a zero is read as the surface having been quiet. #3783 narrowed how far that may be
+// taken, and this guard is what keeps the narrowing from growing: every surface outside it widens the
+// population a zero cannot speak for, with nothing saying so (L11).
 //
 // DERIVED FROM THE SOURCE rather than from a list of the call sites somebody maintains, because a
 // hand-written list only ever checks what its author remembered (L96).
@@ -44,8 +45,9 @@ struct EveryRenderPassIsCountedTests {
             .map(\.name)
         #expect(offenders.isEmpty, """
             \(offenders.joined(separator: ", ")) runs the queue render pass and never calls \
-            \(Self.bump). A freeze on that surface would report zero passes, which means "it did not \
-            rebuild" rather than "nobody counted" (#3760).
+            \(Self.bump). A freeze on that surface would report zero passes, which reads as "nothing \
+            bumped it" rather than "nobody counted", and widens the population a zero cannot speak \
+            for (#3760, #3783).
             """)
     }
 

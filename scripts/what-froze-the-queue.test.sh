@@ -43,13 +43,38 @@ out="$("${READER}" --log "${WORK}/attributed.ndjson" 2>&1)"; status=$?
 assert_equals "a fully attributed log has nothing to triage" "0" "${status}"
 assert_contains "and it reports the count beside the duration" "${out}" "48"
 
-# 4. A stall that spanned NO pass. This is the finding: the surface did not rebuild, so the freeze is
-#    something other than the render pass and the next diagnosis goes elsewhere.
+# 4. A stall that counted NO pass. This is still the finding, and it is still worth exit 1, but #3783
+#    changed what it is allowed to CONCLUDE. The counter is bumped by the first line of
+#    QueueView.makeRenderData(), so it covers the body and nothing else. The @Query fetch that feeds
+#    that body is paid BEFORE that line runs (#3750 prices it as its own arm), every other surface runs
+#    its own derivation and bumps nothing (#3762), and plenty of main thread work is not a render pass
+#    at all. Each of those reads as zero here, so zero cannot carry the claim "the surface did not
+#    rebuild": that is a statement about a quantity this counter never measured (L11, L144, L440).
 record 16.73 0 > "${WORK}/unexplained.ndjson"
 record 0.31 2 >> "${WORK}/unexplained.ndjson"
 out="$("${READER}" --log "${WORK}/unexplained.ndjson" 2>&1)"; status=$?
-assert_equals "a stall spanning no pass is something to look at" "1" "${status}"
-assert_contains "and it says the surface did not rebuild" "${out}" "did not rebuild"
+assert_equals "a stall counting no pass is something to look at" "1" "${status}"
+assert_contains "and it calls the stall unattributed" "${out}" "UNATTRIBUTED"
+assert_contains "and it names the fetch the counter cannot see" "${out}" "#3750"
+assert_contains "and it names the surfaces that bump nothing" "${out}" "#3762"
+assert_not_contains "and it no longer claims the surface did not rebuild" "${out}" "did not rebuild"
+
+# 4b. #3783: the counter's REACH is stated whenever a reading is printed, not only when there is a
+#     finding. A fully attributed log is the reading most likely to be quoted as "the render pass
+#     accounts for it", and it is the one where the unmeasured terms are easiest to forget.
+out="$("${READER}" --log "${WORK}/attributed.ndjson" 2>&1)"; status=$?
+assert_equals "an attributed log still reports cleanly" "0" "${status}"
+assert_contains "and it states what the count covers" "${out}" "counts QueueView"
+
+# 4c. #3783: the MOST passes any stall spanned is printed. Measured on Dan's live log 2026-09-11, no
+#     stall in 576 records ever spanned more than one, including a 29.35s one, and nothing printed that.
+#     A single long stall reported as "spanning 1 pass(es)" reads as the pass accounting for it, which is
+#     the reading this milestone would act on and the one the data refutes (L216, L629).
+record 29.35 1 > "${WORK}/one-pass.ndjson"
+record 0.31 1 >> "${WORK}/one-pass.ndjson"
+out="$("${READER}" --log "${WORK}/one-pass.ndjson" 2>&1)"; status=$?
+assert_equals "a log where every stall spans exactly one pass still reports" "0" "${status}"
+assert_contains "and the most any stall spanned is stated" "${out}" "Most passes spanned by any stall: 1"
 
 # 5. A mixed log. The counted records are judged; the uncounted ones are REPORTED as unjudged rather
 #    than folded in either direction.
