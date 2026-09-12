@@ -179,16 +179,22 @@ struct TheRenderPassReadsNoMarkersTests {
             focusedStage: .scout, focusedKeys: nil)
         onlyCheck.checkSlotRunning = true
         onlyCheck.prepSlotRunning = false
+        // Bound to locals before asserting: a failing `#expect` renders its operands, and the whole
+        // `RenderData` buries the one word that went wrong (L445).
         let checking = QueueRenderPass.make(onlyCheck)
-        #expect(checking.checkRunning)
-        #expect(!checking.prepRunning)
+        let checkingSaysCheck = checking.checkRunning
+        let checkingSaysPrep = checking.prepRunning
+        #expect(checkingSaysCheck)
+        #expect(!checkingSaysPrep)
 
         var onlyPrep = onlyCheck
         onlyPrep.checkSlotRunning = false
         onlyPrep.prepSlotRunning = true
         let prepping = QueueRenderPass.make(onlyPrep)
-        #expect(!prepping.checkRunning)
-        #expect(prepping.prepRunning)
+        let preppingSaysCheck = prepping.checkRunning
+        let preppingSaysPrep = prepping.prepRunning
+        #expect(!preppingSaysCheck)
+        #expect(preppingSaysPrep)
     }
 }
 
