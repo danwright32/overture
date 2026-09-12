@@ -102,10 +102,23 @@ struct StallRecord: Codable, Equatable, Sendable {
     // #3760: how many render passes the main thread ran while this stall lasted.
     //
     // THREE VALUES, and `nil` is never folded into `0`. `nil` is UNMEASURED: no pass has ever been
-    // counted in this process, so this record cannot say. `0` means the surface did not rebuild during
-    // the freeze, which is the reading that REFUTES "a burst of store changes did this" and sends the
-    // work somewhere else. `N` is the count. A zero standing for both would make the refutation
-    // indistinguishable from the instrument being absent (L98, L11).
+    // counted in this process, so this record cannot say. `0` means NO PASS WAS COUNTED. `N` is the
+    // count. A zero standing for both would make "nothing bumped it" indistinguishable from the
+    // instrument being absent (L98, L11).
+    //
+    // #3783 NARROWED WHAT `0` MAY BE READ AS, and this is the correction rather than a gloss on it. This
+    // comment used to say `0` means "the surface did not rebuild", which is a claim about a quantity the
+    // counter never measures (L11, L144, L440). The only writer is the first line of
+    // `QueueView.makeRenderData()`, so what is counted is BODY EVALUATIONS of one view. Outside it:
+    //
+    //   the `@Query` fetch that feeds that body, paid before the counting line runs and priced as its
+    //     own arm of a store change by #3750;
+    //   every other surface that runs its own derivation and bumps nothing (#3762);
+    //   main thread work that is not a render pass at all, a save, a scout write, the launch task.
+    //
+    // Each of those reads as `0` here, so `0` REFUTES nothing on its own. Measured on Dan's live log
+    // 2026-09-11, 146 of 576 counted records carried it, and reading them as the surface standing still
+    // would have sent this milestone's next diagnosis away from the queue on no evidence.
     //
     // OPTIONAL also because the log on Dan's Mac holds hundreds of records written before this shipped,
     // and those are the "before" half of milestone 80's own reading. They decode with this absent.

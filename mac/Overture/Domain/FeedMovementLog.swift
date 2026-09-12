@@ -54,11 +54,20 @@ enum FeedMovementLog {
 
     // Best-effort append (create the dir/file if missing, rotate when oversized). A diagnostic log that
     // cannot be written must never break a scout, so every step is `try?`.
+    //
+    // #3789: a rotation writes its own ISO-stamped line into this file, in the same shape every other
+    // line here has, so #913's reader can see that the window it is measuring over begins at a
+    // rotation rather than at the start of the record. ONE previous generation is enough: this log
+    // exists to retune `minReBaselineFraction` against RECENT movement, which is a rolling question,
+    // and the 5 MB cap is thousands of scouts of it. What it could not do before was say that the
+    // window it hands back had been cut, which turned a truncated sample into an ordinary one (L350).
     private static func write(_ text: String, to url: URL) {
         let fm = FileManager.default
         try? fm.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-        LogRotation.cap(files: [url], maxBytes: AgentLogLocation.defaultMaxLogBytes)
-        guard let data = (text + "\n").data(using: .utf8) else { return }
+        let rotation = LogRotation.cap(files: [url], maxBytes: AgentLogLocation.defaultMaxLogBytes)
+        let stamp = ISO8601DateFormatter().string(from: Date())
+        let lines = rotation.notes.map { stamp + " " + $0 + "\n" }.joined() + text + "\n"
+        guard let data = lines.data(using: .utf8) else { return }
         if let handle = try? FileHandle(forWritingTo: url) {
             defer { try? handle.close() }
             _ = try? handle.seekToEnd()

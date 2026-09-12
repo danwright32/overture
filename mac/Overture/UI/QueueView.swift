@@ -222,21 +222,19 @@ struct QueueView: View {
 
     private var today: String { QueueModel.easternToday() }
 
-    // #1129: a Prep run is in flight. The discoverable Prep button hides while one runs (RootView's
-    // canStartPrep gates the start too); read from the same source AgentInputs.from uses.
-    // #2760: EITHER slot, because the exclusion between a prep and a check is still in force. Reading only
-    // the prep slot would offer the Prep button while a check holds the machine and every press would be
-    // refused. #2765 is what makes the two independent; #2761 is where the wording follows.
+    // #1129: whether a Prep run, or a check, is in flight. The discoverable Prep button hides while a prep
+    // runs (RootView's canStartPrep gates the start too); the row's "Check again" and the date heading's
+    // check control grey while a check does.
+    // #2760: EITHER slot, because the exclusion between a prep and a check was still in force then.
     // #3015: TWO questions, because the two runs no longer exclude each other. `anyRunIsRunning` was the
     // right answer while either run blocked the other; asking it now hides the Prep button whenever a
     // check is going, and greys the Check control whenever a prep is, which is the whole feature not
     // happening. Each control asks about the slot it would actually start.
-    private var prepRunning: Bool {
-        PrepQueueService.isRunning(slot: .prep, markerURL: RunSlot.prep.markerURL(in: StoreLocation.handoffDirectory), now: Date())
-    }
-    private var checkRunning: Bool {
-        PrepQueueService.isRunning(slot: .check, markerURL: RunSlot.check.markerURL(in: StoreLocation.handoffDirectory), now: Date())
-    }
+    // #3646: and both are on `RenderData`, read once per pass in `makeRenderData` below. They were two
+    // computed properties here, each a marker file read off disk, and a computed property reads as free
+    // at the call site: one of them was being called once per date heading (235 of them on the live
+    // store) and once per rendered card. `MarkerReadsDoNotScaleWithTheQueueTests` is what holds a drawn
+    // queue's marker reads flat now, and `DetachedRunner.MarkerReadTally` is what lets it.
 
     // #1121: every heavy derived collection, built ONCE per render and threaded down, instead of a
     // half-dozen computed properties each re-running QueueModel.items(from:) (a full map that faults
@@ -272,6 +270,16 @@ struct QueueView: View {
         // same reason as the line above. Both read a marker file, and a per-card read would be a disk
         // read per row per scroll frame, which is the #1770 defect exactly.
         let probeRunning: Bool
+        // #3646: and the two SLOT facts, which is the half that was missing. The comment above says "read
+        // ONCE for the pass" and `probeRunning` was; `checkRunning` was not here at all, so the date
+        // heading and every card read the check slot's marker off disk themselves, once each, every pass.
+        //
+        // Two fields rather than one because the controls they grey start different runs: the Prep button
+        // starts a prep, the row's "Check again" starts a check, and since #3015 either can be live while
+        // the other is. Neither is `probeRunning`, which is `runInFlight == .reachabilityCheck` and so is
+        // false whenever a prep run holds the prep slot beside a live check.
+        let checkRunning: Bool
+        let prepRunning: Bool
         // #3186: the check's start and size, for the row's own re-check label. Read only when a check is
         // actually in flight, so an idle queue pays nothing for a control it is merely offering.
         let checkRunSince: Date?
@@ -354,8 +362,12 @@ struct QueueView: View {
         // the guard that keeps every future call site honest is a source test, not this comment.
         freezeWatch?.recordPass()
         let now = Date()
-        // Asked ONCE: three of the inputs below are decided from it, and it reads marker files.
-        let inFlight = PrepQueueService.runInFlight(now: now)
+        // Asked ONCE: five of the inputs below are decided from it, and it reads marker files.
+        // #3646: `slotStatus` rather than `runInFlight`, because the surfaces need each SLOT as well as
+        // the single composed answer, and this is the one place in a pass that may go to disk for them.
+        // Same two marker reads either way: `runInFlight` is this call now.
+        let runStatus = PrepQueueService.slotStatus(now: now)
+        let inFlight = runStatus.inFlight
         return QueueRenderPass.make(QueueRenderPass.Inputs(
             allProspects: QueueRenderPass.Corpus(allProspects),
             inquiries: inquiries,
@@ -369,6 +381,9 @@ struct QueueView: View {
             // #1770: read once for the whole pass, from the cache rather than from the token file.
             gmailConnected: GmailConnection.shared.isConnected,
             runInFlight: inFlight,
+            // #3646: the two slot facts, from the same single reading above.
+            prepSlotRunning: runStatus.prepSlotRunning,
+            checkSlotRunning: runStatus.checkSlotRunning,
             // #3186: asked ONLY while a check is really running. Both read a marker from disk, and this
             // runs once per render pass, so an idle queue must not pay for them (#1770).
             checkRunSince: inFlight == .reachabilityCheck
@@ -537,7 +552,7 @@ struct QueueView: View {
             today: today, stage: focusedStage,
             overrides: ProducerOverrides(promotedRows: promotedProducers, demotedRows: demotedHouses),
             geo: geo,
-            checkRunning: checkRunning,
+            checkRunning: data.checkRunning,
             onRun: { keys, title, message in
                 sheets.pendingProbe = ProbeConfirm(keys: keys, dateLabel: "", title: title, message: message)
             })
@@ -662,7 +677,7 @@ struct QueueView: View {
                     // #1129: the discoverable Prep button, only on the Prep stage with kept shows and no
                     // run already in flight. Starts the run through RootView's existing selection sheet.
                     if PrepQueueButton.shouldShow(stage: focusedStage, keptToPrep: rows.count,
-                                                  prepRunning: prepRunning) {
+                                                  prepRunning: data.prepRunning) {
                         Button(PrepQueueButton.label(count: rows.count)) { onStartPrep() }
                             .buttonStyle(.borderedProminent)
                             .tint(OVColor.forestText)
@@ -816,7 +831,7 @@ struct QueueView: View {
                 ReachabilityProbeControl(
                     items: group.items, dateLabel: group.monthDay,
                     geo: geo,
-                    isRunning: checkRunning,
+                    isRunning: data.checkRunning,
                     onTap: { keys, label in sheets.pendingProbe = ProbeConfirm(keys: keys, dateLabel: label) })
             }
             .padding(.bottom, OVSpacing.xxs)
@@ -1567,7 +1582,7 @@ struct QueueView: View {
                                           // through the SAME confirm sheet the date selection raises,
                                           // rather than a second sentence about the same spend.
                                           onRecheckNow: { requestRecheckNow($0) },
-                                          checkRunning: checkRunning,
+                                          checkRunning: data.checkRunning,
                                           probeRunning: data.probeRunning,
                                           checkRunSince: data.checkRunSince,
                                           checkLookups: data.checkLookups,
@@ -2105,8 +2120,17 @@ enum QueueRenderCounter {
         // Capped on WRITE rather than at launch, matching FeedMovementLog, because this log's whole
         // purpose is unattended observation over a long session, and a launch-only cap would let one
         // session grow without limit, which is the case that produced the issue.
-        LogRotation.cap(files: [url], maxBytes: maxBytes)
-        let stamped = "\(ISO8601DateFormatter().string(from: Date())) \(line)\n"
+        //
+        // #3789: and it says so, twice, because this log has two readers. The rotation note goes into
+        // the file itself, so whoever opens it later can see the record begins mid-session rather than
+        // at the first derivation. The masthead gets a marker too, but ONLY when something was actually
+        // lost, which is the second rotation onwards: the first moves everything into the `.1` beside
+        // it and costs nothing, and a marker on every roll of a log that rolls by design is the noise
+        // that teaches somebody to stop reading the masthead.
+        let rotation = LogRotation.cap(files: [url], maxBytes: maxBytes)
+        if rotation.lostSomething { lastReason += " (log rotated, older content gone)" }
+        let stamp = ISO8601DateFormatter().string(from: Date())
+        let stamped = rotation.notes.map { "\(stamp) \($0)\n" }.joined() + "\(stamp) \(line)\n"
         guard let data = stamped.data(using: .utf8) else { return }
         if let handle = try? FileHandle(forWritingTo: url) {
             defer { try? handle.close() }

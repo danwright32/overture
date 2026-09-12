@@ -17,9 +17,12 @@ struct SourcesView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var context
     @Environment(ActionFeedback.self) private var feedback
-    // #3645: the app's freeze watchdog, so this sheet's render passes are COUNTED like the queue's.
-    // Optional for the reason `QueueView`'s is: a preview or a test renders this view with no watch in the
-    // environment, and a sheet that could not be drawn at all without one would be worse than uncounted.
+    // #3645 and #3762 both reached for this, from opposite directions, and it is one property.
+    //
+    // The app's own freeze instrument, so this sheet's render passes are COUNTED like the queue's.
+    // Read as an OPTIONAL on the same footing as every other environment object here: a preview or a
+    // test renders this view with no watch injected, and a sheet that could not be drawn at all without
+    // one would be worse than an uncounted pass.
     @Environment(FreezeWatch.self) private var freezeWatch: FreezeWatch?
     @Query(sort: \WatchedSource.orgName) private var sources: [WatchedSource]
     // #794: read to compute each source's lifetime yield (found/kept/sent/booked). The tally and its
@@ -167,6 +170,11 @@ struct SourcesView: View {
     }
 
     var body: some View {
+        // The pass is counted INSIDE `makeRenderData()`, on its first line, exactly where `QueueView`
+        // counts its own. #3762 added a second bump here in the body while #3645 was lifting the
+        // derivation, and keeping both would count every rebuild of this sheet TWICE: `passes` would
+        // read 2 for one evaluation, and the field's whole job is to say how many times the surface
+        // really rebuilt during a stall (#3760). One bump, at the top of the derivation.
         let data = makeRenderData()
         VStack(alignment: .leading, spacing: 0) {
             header
