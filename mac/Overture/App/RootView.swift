@@ -2288,8 +2288,27 @@ struct RootView: View {
     // The VALUE is stored, never a sentence composed here, because what it means on screen is
     // `AppNotices`' decision and belongs beside every other fault it draws.
     private func runFreezeLogHousekeeping() {
-        let done = FreezeLog.housekeeping(at: FreezeLog.url(in: StoreLocation.handoffDirectory),
-                                          now: Date())
+        // #3828: OFF the main actor. Measured at 12.75 ms in the hour it compacts and 4.71 ms in every
+        // other hour, which is 76% and 28% of one 60Hz frame, paid for the whole life of a resident
+        // process on the thread this milestone exists to shorten.
+        //
+        // Through `FreezeLogHousekeeper` rather than a bare detached task, because the main actor was
+        // providing the serialisation for free and moving off it takes that away: the launch call and
+        // the hourly tick can overlap, and two concurrent compactions of one file would archive the same
+        // dropped records twice. The actor makes that impossible rather than unlikely.
+        //
+        // An UNSTRUCTURED task deliberately, unlike the watchers above, which are `async let` so the
+        // window's teardown cancels them. This is a short file job that must finish: cancelling it
+        // half way through a compaction is the one outcome worse than paying for it, since the archive
+        // write and the live rewrite are two steps with nothing around them (L5).
+        let url = FreezeLog.url(in: StoreLocation.handoffDirectory)
+        Task {
+            let done = await FreezeLogHousekeeper.shared.run(at: url, now: Date())
+            apply(housekeeping: done)
+        }
+    }
+
+    private func apply(housekeeping done: FreezeLog.Housekeeping) {
 
         // A QUIET run never replaces a report that had something to say.
         //
