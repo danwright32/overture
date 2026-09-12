@@ -188,7 +188,9 @@ struct AgentLogLocationTests {
 
         let rotated = AgentLogLocation.capLogs(maxBytes: 1_024, files: [file])
 
-        #expect(rotated == [file])
+        // #3789: a REPORT rather than a list of URLs, so a caller can say what the rotation cost.
+        #expect(rotated.rotated.map(\.file) == [file])
+        #expect(rotated.rotated.first?.movedBytes == 4_096)
         #expect((try Data(contentsOf: file)).isEmpty)   // live file truncated
         let backup = dir.appendingPathComponent("overture-agent.err.log.1")
         #expect(try String(contentsOf: backup, encoding: .utf8) == contents)   // old contents preserved
@@ -220,7 +222,7 @@ struct AgentLogLocationTests {
         try String(repeating: "x", count: 4_096).write(to: file, atomically: true, encoding: .utf8)
         let inodeBefore = try FileManager.default.attributesOfItem(atPath: file.path)[.systemFileNumber] as? Int
 
-        AgentLogLocation.capLogs(maxBytes: 1_024, files: [file])
+        _ = AgentLogLocation.capLogs(maxBytes: 1_024, files: [file])
 
         let inodeAfter = try FileManager.default.attributesOfItem(atPath: file.path)[.systemFileNumber] as? Int
         #expect(inodeBefore != nil)

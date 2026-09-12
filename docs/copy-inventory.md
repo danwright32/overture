@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1560 sentences**.
+Every sentence Overture can say to Dan: **1558 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -14,7 +14,7 @@ What is not, and why:
   sentences under tokens nobody reads.
 - **Nothing, if it is written as two literals joined with `+`.** Those ARE joined here, into the
   one sentence the running app says (#3155). What is still only part of what Dan reads is a
-  sentence carrying a VALUE: 564 of the 1560 below hold a
+  sentence carrying a VALUE: 562 of the 1558 below hold a
   `\(...)` where a number or a name goes, so what is printed is the template. They are counted
   here rather than listed again, because the hole is visible in the line itself; what was missing
   was any statement of how much of this document is templates.
@@ -23,6 +23,7 @@ What is not, and why:
 
 ## Excluded at the source
 
+- `App/LogRotation.swift`: lines written INTO a diagnostic log file, never the app's voice on screen
 - `App/PrepRunArchive.swift`: archive.log is a diagnostic record, not the app's voice on screen
 - `App/PrepRunArchive.swift`: archive.log is a diagnostic record, not the app's voice on screen
 - `App/StoreBackup.swift`: backup.log is a diagnostic record, not the app's voice on screen
@@ -3173,10 +3174,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ScoutWarningCopy.swift`
 "\(stamp(now)) \(message)\n"
     `App/AgentLog.swift`
-"\(stamp) \(nothingCopiedLogNote)"
-    `App/StoreBackup.swift`
-"\(stamp) \(outcome)"
-    `App/StoreBackup.swift`
 "\(startLabel) to \(endLabel)"
     `UI/QueueView+Model.swift`
 "\(status.name): \(status.detail)"

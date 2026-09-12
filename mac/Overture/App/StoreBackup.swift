@@ -106,7 +106,8 @@ enum StoreBackup {
         }
 
         guard copied > 0 else {
-            appendLog("\(stamp) \(nothingCopiedLogNote)", backupsDirectory: backups, fileManager: fileManager)
+            appendLog(stamp: stamp, note: nothingCopiedLogNote, backupsDirectory: backups,
+                      fileManager: fileManager)
             // Leaving the empty folder would put a directory holding nothing into the rotation, where it
             // would be counted as one of the ten kept and could push a real backup off the end.
             try? fileManager.removeItem(at: destination)
@@ -120,7 +121,7 @@ enum StoreBackup {
         case (.launch, true): outcome = "success"
         case (.launch, false): outcome = incompleteLogNote(copied: copied, of: present.count)
         }
-        appendLog("\(stamp) \(outcome)", backupsDirectory: backups, fileManager: fileManager)
+        appendLog(stamp: stamp, note: outcome, backupsDirectory: backups, fileManager: fileManager)
         return destination
     }
 
@@ -134,14 +135,30 @@ enum StoreBackup {
     // A small, self-contained log colocated with the backups themselves: there's no existing
     // app-wide event log to hook into, and this is more discoverable than a buried one would be
     // anyway, sitting right next to the thing it's recording the history of.
-    private static func appendLog(_ line: String, backupsDirectory: URL, fileManager: FileManager) {
+    //
+    // #3789: the stamp and the note are separate arguments so a rotation can be recorded with the same
+    // stamp as the launch that caused it, rather than arriving as an unstamped line in a file whose
+    // every other line is dated.
+    private static func appendLog(stamp: String, note: String, backupsDirectory: URL,
+                                  fileManager: FileManager) {
         let logURL = backupsDirectory.appendingPathComponent("backup.log")
         // Cap BEFORE appending, through the same copytruncate helper the agent's logs use (#608), so
         // the file can never sit above the cap between launches. A missing log (the first launch) is
         // a silent no-op.
-        LogRotation.cap(files: [logURL], maxBytes: maxLogBytes, fileManager: fileManager)
+        //
+        // #3789: and SAY what that cost, in this log, in the same write. This is the record of whether
+        // Dan's live store was copied, it is read after the fact (both of the incidents in AGENTS.md's
+        // restoring section were read days later), and a rotation that silently discarded the older
+        // half of it was discarding the evidence for the one question it exists to answer. ONE previous
+        // generation stays enough here now that the loss is recorded: at 256 KB and a few dozen bytes a
+        // launch the file holds thousands of launches, so a rotation is a once-in-years event, and what
+        // was actually missing was any record that it had happened (L98, L11).
+        let rotation = LogRotation.cap(files: [logURL], maxBytes: maxLogBytes, fileManager: fileManager)
 
-        let entry = line + "\n"
+        // Built by CONCATENATION rather than interpolation, the way PrepRunArchive's own log line is:
+        // a literal holding `\(stamp) \(note)` reaches docs/copy-inventory.md as a line of Swift, where
+        // the cold read that file exists for cannot be done on it (#2570, #2548).
+        let entry = (rotation.notes + [note]).map { stamp + " " + $0 + "\n" }.joined()
         guard let data = entry.data(using: .utf8) else { return }
         if let handle = try? FileHandle(forWritingTo: logURL) {
             handle.seekToEndOfFile()

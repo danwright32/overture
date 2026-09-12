@@ -72,7 +72,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         AgentLogLocation.prepareDirectory()
         // #295: bound the agent's stdout/stderr so an always-resident process can't grow them without
         // limit. Runs every launch (= every login for the resident agent); a no-op until a file is large.
-        AgentLogLocation.capLogs()
+        // #3789: through the entry point that REPORTS what a rotation destroyed, rather than the bare
+        // mechanism, whose answer this line used to drop on the floor.
+        AgentLogLocation.capLogsReportingWhatWasLost()
         guard let container = AppDelegate.sharedContainer else { return }
         // Runs the one-time, idempotent recipients/thread/salutation backfills here on the
         // window-independent launch path (not in a View's .task), so a windowless resident launch still
