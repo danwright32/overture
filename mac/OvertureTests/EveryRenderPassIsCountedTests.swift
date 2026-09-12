@@ -74,16 +74,10 @@ struct EveryRenderPassIsCountedTests {
             }
         }
         #expect(offenders.isEmpty, """
-<<<<<<< HEAD
             \(offenders.joined(separator: ", ")) runs a render pass and never calls \
-            \(Self.bump). A freeze on that surface would report zero passes, which means "it did not \
-            rebuild" rather than "nobody counted" (#3760, #3645).
-=======
-            \(offenders.joined(separator: ", ")) runs the queue render pass and never calls \
             \(Self.bump). A freeze on that surface would report zero passes, which reads as "nothing \
             bumped it" rather than "nobody counted", and widens the population a zero cannot speak \
-            for (#3760, #3783).
->>>>>>> origin/main
+            for (#3760, #3645, #3783).
             """)
     }
 
