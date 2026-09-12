@@ -375,6 +375,10 @@ enum AppNotices {
                         // #3298: the export's own health, so a file nobody could read says so here rather
                         // than only inside a sheet Dan has to open.
                         downbeatAvailability: DownbeatBridge.Health? = nil,
+                        // #3793: what one launch's bookkeeping on the freeze log did. The VALUE rather
+                        // than a finished sentence, so what it means on this surface is decided here
+                        // beside every other fault, not by whichever caller happened to run it.
+                        freezeHousekeeping: FreezeLog.Housekeeping? = nil,
                         status: StatusLine) -> [AppNotice] {
         var notices: [AppNotice] = []
         // First, and deliberately: while this is unresolved, every other line about the queue is being
@@ -395,6 +399,37 @@ enum AppNotices {
                                      tone: status.priority == .warning ? .warning : .receipt,
                                      action: status.action))
         }
+        // #3793: LAST, after the status line, and that is a placement rather than an accident. The freeze
+        // report itself is written into the status slot, and this says what happened to the RECORD of
+        // those freezes, so its subject has to have been read first. Reversed, the masthead opens by
+        // saying the oldest freeze records could not be set aside, before anything has said there were
+        // any (L609).
+        //
+        // AND ITS OWN LINE rather than a write into that slot. `StatusLine` holds ONE message and lets an
+        // equal-priority write replace what is there, so a housekeeping warning put in it would either
+        // erase the freeze report or be erased by it. Neither is recoverable: the freeze report is said
+        // once per record and remembers in defaults what it has said, so one it loses can never be said
+        // again, and a prune's sentence is the only account there will ever be of a permanent deletion
+        // (L11). This is the same defect #2204 found one level up, where the OmniFocus failure won the
+        // toolbar slot outright and an unattended scout's warning was simply not drawn.
+        if let freezeHousekeeping, let notice = freezeHousekeepingWarning(freezeHousekeeping) {
+            notices.append(notice)
+        }
         return notices
+    }
+
+    // #3793: what one launch's bookkeeping on the freeze log did, said only when something was LOST or
+    // REFUSED. A compaction that archived 200 records lost nothing and there is nothing to act on, so it
+    // says nothing: a notice that speaks on every launch is the noise that teaches a person to stop
+    // reading notices. `FreezeHousekeepingCopy` owns that rule and every sentence, so this adds no second
+    // wording of its own, for the reason the shoot-history warning gives about `ShootHistory.warningText`:
+    // one fault has one wording.
+    //
+    // A WARNING rather than a receipt in all three states it can speak in. Two of them mean the log has
+    // stopped being bounded or stopped being readable, and the third is the only account of records that
+    // were permanently deleted. None of those is safe to miss.
+    static func freezeHousekeepingWarning(_ done: FreezeLog.Housekeeping) -> AppNotice? {
+        guard let text = FreezeHousekeepingCopy.notice(done) else { return nil }
+        return AppNotice(text: text, tone: .warning)
     }
 }

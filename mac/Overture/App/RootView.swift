@@ -125,6 +125,10 @@ struct RootView: View {
     // of the day, and an idle surface must pay nothing (Dan's standing rule, and L353). The first version
     // of the watchdog claimed to stand down and nothing called anything.
     @Environment(\.scenePhase) private var scenePhase
+    // #3793: what this launch's housekeeping on that log did, so the masthead can say it. Optional, and
+    // nil means the housekeeping has not run yet rather than that it found nothing: a launch that has not
+    // reached the call must not be able to report a clean bill of health it never measured (L98).
+    @State private var freezeHousekeeping: FreezeLog.Housekeeping?
 
     @State private var showArchive = false
     @State private var archiveJumpKey: String?
@@ -629,6 +633,11 @@ struct RootView: View {
                                               // is upstream of every other line here: while it stands,
                                               // nothing in the queue is known to be a free night.
                                               downbeatAvailability: downbeatHealth,
+                                              // #3793: and what this launch's bookkeeping on the freeze
+                                              // log deleted or could not do. Silent unless something was
+                                              // lost or refused, and drawn after the status line, which
+                                              // is where the freezes themselves are reported.
+                                              freezeHousekeeping: freezeHousekeeping,
                                               status: status),
                   // #2250: the remedy a notice names, run from here where the sync lives.
                   onNoticeAction: { action in
@@ -1071,13 +1080,16 @@ struct RootView: View {
                 // append is safe to do while the main thread is wedged and a read, modify, write is not
                 // (L105). The file only grows when the app really freezes, so once per launch is plenty.
                 // #3763: ONE call, so the archive's own month-long retention cannot be forgotten beside the
-                // compaction that fills it. What it did is reported by `reportAnyFreezes` below.
-                // The report is DISCARDED here, deliberately and with its reader named: #3793 is the issue
-                // that puts it on a surface. Written as an explicit discard rather than an ignored return,
-                // because a returned value nobody reads is how six other logs in this app came to lose
-                // content in silence (#3789), and a deliberately inactive half needs the issue that
-                // activates it filed in the same change rather than left to be rediscovered (L65).
-                _ = FreezeLog.housekeeping(at: FreezeLog.url(in: StoreLocation.handoffDirectory), now: Date())
+                // compaction that fills it. What the FREEZES were is reported by `reportAnyFreezes` below.
+                // #3793: and what the bookkeeping DID is kept and handed to the masthead. It used to be
+                // discarded here, with this issue named beside it, so six written and tested sentences
+                // could never be said: a value nobody reads looks alive to every is-this-used check while
+                // the purpose it was added for silently never happens (L46, L3).
+                //
+                // The VALUE is kept, not a sentence composed here, because what it means on the masthead
+                // is `AppNotices`' decision and lives beside every other fault it draws.
+                freezeHousekeeping = FreezeLog.housekeeping(at: FreezeLog.url(in: StoreLocation.handoffDirectory),
+                                                            now: Date())
                 reportAnyFreezes()
                 reportAnyCardDivergences()
                 // #1035: the same reattach, for the scout's detached read. A scout-extract run outlives
