@@ -39,9 +39,17 @@ struct PrepProgressWiringGuardTests {
         #expect(nearby.contains("PrepProgressDecoder.progressURL(for: slot)"))
         #expect(nearby.contains("LiveRunLabel("))
         #expect(nearby.contains("RunProgressCopy.title(isProbe ? .probing : .prepping)"))
-        // #2760: which run is in flight comes from `runInFlight`, which asks BOTH slots, so a check is
-        // named a check whether it is in the check slot or (during the upgrade window) the prep slot.
-        #expect(nearby.contains("PrepQueueService.runInFlight(now: Date())"))
+        // #2760: which run is in flight is the BOTH-SLOTS question, so a check is named a check whether
+        // it is in the check slot or (during the upgrade window) the prep slot.
+        //
+        // #3837 RE-AIMED THIS, and it is not a reversal of #2760. The label used to ask
+        // `PrepQueueService.runInFlight(now: Date())`, and this guard pinned that spelling. It now takes
+        // one `slotStatus` reading and uses its `inFlight`, which is the SAME question answered from the
+        // same two marker reads, with the second and third reads on the next line removed. So the guard
+        // keeps #2760's claim and stops pinning a spelling that expressed it more expensively. A guard
+        // deleted here would have taken #2760's requirement with it (L430, L252 is the other direction).
+        #expect(nearby.contains("PrepQueueService.slotStatus(now: Date())"))
+        #expect(nearby.contains("status.inFlight ?? .prep"))
         #expect(nearby.contains("PrepProgressDecoder.label(for: PrepProgressDecoder.loadCurrent("))
     }
 
