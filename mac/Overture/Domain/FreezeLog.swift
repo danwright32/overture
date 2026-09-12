@@ -285,6 +285,23 @@ enum FreezeLog {
     struct Housekeeping: Equatable, Sendable {
         var compaction: CompactionOutcome = .nothingToArchive
         var prune: ArchivePrune = .nothingToRemove
+
+        // Nothing happened that Dan needs telling about. The overwhelmingly common outcome, because the
+        // cap is rarely reached and the month rarely elapses between two runs.
+        var isQuiet: Bool { self == Housekeeping() }
+    }
+
+    // Which report the app should still be HOLDING, given what it was holding and what a run just
+    // reported. Pure, and here rather than inside `RootView`, so the rule can be exercised rather than
+    // reasoned about from a view nothing can drive (L196).
+    //
+    // WHY IT IS NOT JUST AN ASSIGNMENT. Housekeeping runs at launch and then hourly (#3796), and a quiet
+    // run draws no notice at all. A plain assignment therefore lets the next hourly tick REPLACE a launch
+    // report that permanently deleted records, taking the only account of that deletion off the screen
+    // an hour later, before Dan had any particular reason to have read it. That is #3830's defect exactly,
+    // and it would have arrived here as a side effect of fixing a different issue (L387).
+    static func kept(_ current: Housekeeping?, after done: Housekeeping) -> Housekeeping? {
+        done.isQuiet ? current : done
     }
 
     // COMPACT THEN PRUNE, in that order, and the order is load bearing rather than incidental: compacting

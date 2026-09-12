@@ -125,6 +125,10 @@ struct RootView: View {
     // of the day, and an idle surface must pay nothing (Dan's standing rule, and L353). The first version
     // of the watchdog claimed to stand down and nothing called anything.
     @Environment(\.scenePhase) private var scenePhase
+    // #3793: what this launch's housekeeping on that log did, so the masthead can say it. Optional, and
+    // nil means the housekeeping has not run yet rather than that it found nothing: a launch that has not
+    // reached the call must not be able to report a clean bill of health it never measured (L98).
+    @State private var freezeHousekeeping: FreezeLog.Housekeeping?
 
     @State private var showArchive = false
     @State private var archiveJumpKey: String?
@@ -629,6 +633,11 @@ struct RootView: View {
                                               // is upstream of every other line here: while it stands,
                                               // nothing in the queue is known to be a free night.
                                               downbeatAvailability: downbeatHealth,
+                                              // #3793: and what this launch's bookkeeping on the freeze
+                                              // log deleted or could not do. Silent unless something was
+                                              // lost or refused, and drawn after the status line, which
+                                              // is where the freezes themselves are reported.
+                                              freezeHousekeeping: freezeHousekeeping,
                                               status: status),
                   // #2250: the remedy a notice names, run from here where the sync lives.
                   onNoticeAction: { action in
@@ -1072,12 +1081,19 @@ struct RootView: View {
                 // (L105). The file only grows when the app really freezes, so it is cheap wherever it runs.
                 // That sentence used to read "so once per launch is plenty", and #3796 is what it cost.
                 // #3763: ONE call, so the archive's own month-long retention cannot be forgotten beside the
-                // compaction that fills it. What it did is reported by `reportAnyFreezes` below.
-                // #3796: and again every hour from `hourlyMaintenance`, through the same method, because
-                // once per launch turned out to mean once per LOGIN. Overture is a login agent that stays
-                // resident in the menu bar, so nothing enforced the cap or the archive's month-long
-                // retention between one login and the next: measured 2026-09-11, the live log held 700
-                // records against a cap of 500 and the process holding it was 23 hours old.
+                // compaction that fills it. What the FREEZES were is reported by `reportAnyFreezes` below.
+                //
+                // #3796 moved the call into `runFreezeLogHousekeeping()` so the HOURLY tick can make it
+                // too, because once per launch turned out to mean once per LOGIN: Overture is a login
+                // agent that stays resident, and measured 2026-09-11 the live log held 700 records
+                // against a cap of 500 while the process holding it was 23 hours old.
+                //
+                // #3793 needs what that call RETURNS, because six written and tested sentences about
+                // deleted or unarchivable records could otherwise never be said. The two compose rather
+                // than compete, and the report is kept inside the shared method rather than here, so the
+                // hourly run reaches the masthead on exactly the same terms as the launch one. Keeping it
+                // only at this call site would have left the hourly path discarding it, which is the
+                // defect #3793 exists to end, reintroduced one line away from its own fix (L46, L3).
                 runFreezeLogHousekeeping()
                 reportAnyFreezes()
                 reportAnyCardDivergences()
@@ -2264,8 +2280,29 @@ struct RootView: View {
     // value nobody reads is how six other logs in this app came to lose content in silence (#3789), and a
     // deliberately inactive half needs the issue that activates it filed in the same change rather than
     // left to be rediscovered (L65).
+    // The ONE place the freeze log's bookkeeping runs, called from the launch task and from the hourly
+    // tick. It KEEPS what the run reports (#3793) rather than discarding it: the value is what
+    // `AppNotices` turns into a sentence on the masthead, and a report nobody reads looks alive to every
+    // is-this-used check while the thing it was added for silently never happens (L46).
+    //
+    // The VALUE is stored, never a sentence composed here, because what it means on screen is
+    // `AppNotices`' decision and belongs beside every other fault it draws.
     private func runFreezeLogHousekeeping() {
-        _ = FreezeLog.housekeeping(at: FreezeLog.url(in: StoreLocation.handoffDirectory), now: Date())
+        let done = FreezeLog.housekeeping(at: FreezeLog.url(in: StoreLocation.handoffDirectory),
+                                          now: Date())
+
+        // A QUIET run never replaces a report that had something to say.
+        //
+        // The obvious assignment is wrong here and it took writing it to see why. Housekeeping runs at
+        // launch and then hourly, and the overwhelmingly common outcome is `nothingToArchive` plus
+        // `nothingToRemove`, which draws no notice at all. So a launch that DID permanently delete
+        // records would put its sentence on the masthead and the very next hourly tick would replace it
+        // with a quiet one, taking the only account of that deletion off the screen before Dan had any
+        // particular reason to have read it. That is #3830's defect, which this session filed an hour
+        // before writing this line, reintroduced by the fix for a different issue (L387).
+        //
+        // The rule itself is `FreezeLog.kept`, where a test can reach it.
+        freezeHousekeeping = FreezeLog.kept(freezeHousekeeping, after: done)
     }
 
     private func autoScoutIfDue() {
