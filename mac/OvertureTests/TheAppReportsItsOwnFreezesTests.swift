@@ -106,6 +106,24 @@ struct TheAppReportsItsOwnFreezesTests {
 
     // MARK: - the reader, and its four states
 
+    // #3851: a reader that answers the LIVE log and reports NO ARCHIVE beside it.
+    //
+    // These fixtures used to pass `read: liveOnly(read)`, a double that ignores the URL it is given. That
+    // was harmless while the reader opened one file and became wrong the moment it opened two: the same
+    // records answered for both, so every freeze was counted twice. A double that ignores its argument
+    // describes no file in particular, and it stops being a double at all when the thing under test starts
+    // asking a second question (L143).
+    //
+    // Named rather than inlined at seventeen call sites, so the next file this reader learns to open is
+    // one change here rather than seventeen.
+    private func liveOnly(_ live: FreezeLog.Read, support: URL = URL(fileURLWithPath: "/tmp"))
+        -> (URL) -> FreezeLog.Read {
+        var absent = FreezeLog.Read()
+        absent.fileWasAbsent = true
+        let archive = FreezeLog.archiveURL(besideLogAt: FreezeLog.url(in: support))
+        return { $0 == archive ? absent : live }
+    }
+
     private func defaults(_ name: String) -> UserDefaults {
         let d = UserDefaults(suiteName: "freeze-report-\(name)-\(UUID().uuidString)")!
         return d
@@ -117,7 +135,7 @@ struct TheAppReportsItsOwnFreezesTests {
     func noWatchdogIsItsOwnSentence() {
         let said = FreezeReport.newlyReported(in: URL(fileURLWithPath: "/tmp"), watchdogRan: false,
                                               defaults: defaults("nowatchdog"),
-                                              read: { _ in FreezeLog.Read() })
+                                              read: liveOnly(FreezeLog.Read()))
         #expect(said == FreezeNoticeCopy.watchdogDidNotRun)
         // And it is not a count of nothing, which is the fold this state exists to avoid.
         #expect(said?.contains("stopped responding for") == false)
@@ -127,7 +145,7 @@ struct TheAppReportsItsOwnFreezesTests {
     func aCleanSessionSaysNothing() {
         let said = FreezeReport.newlyReported(in: URL(fileURLWithPath: "/tmp"), watchdogRan: true,
                                               defaults: defaults("clean"),
-                                              read: { _ in FreezeLog.Read() })
+                                              read: liveOnly(FreezeLog.Read()))
         #expect(said == nil)
     }
 
@@ -138,7 +156,7 @@ struct TheAppReportsItsOwnFreezesTests {
         read.records = [stall(0.8, sequence: 1), stall(6.6, sequence: 2, surface: .archive)]
 
         let first = FreezeReport.newlyReported(in: URL(fileURLWithPath: "/tmp"), watchdogRan: true,
-                                               defaults: d, read: { _ in read })
+                                               defaults: d, read: liveOnly(read))
         let said = try! #require(first)
         // "2 times" rather than "twice", matching `RunBoundaryViolations`'s existing "once / N times"
         // idiom: this notice sits in the same slot as that one, and two ways of counting in one place is
@@ -150,8 +168,95 @@ struct TheAppReportsItsOwnFreezesTests {
 
         // ONCE. A message that reappears on every launch teaches him to skim past it.
         let second = FreezeReport.newlyReported(in: URL(fileURLWithPath: "/tmp"), watchdogRan: true,
-                                                defaults: d, read: { _ in read })
+                                                defaults: d, read: liveOnly(read))
         #expect(second == nil)
+    }
+
+    // MARK: - #3851: the archive is part of what Dan is told about
+
+    // WHAT WAS RECORDED AND WHY IT IS OVERTURNED, because this reverses a decision written into
+    // `FreezeReport` itself rather than filling a gap nobody had considered (L61, L249, #3077).
+    //
+    // That comment said the reader "deliberately ignores" the archive, "because the launch notice wants
+    // the last session's shape while the archive exists for the population". That reasoning held while a
+    // session could not fill the live file on its own: the records a compaction moved out had been
+    // reported at an earlier launch, so ignoring them lost nothing.
+    //
+    // #3812 ended that. Before it a session stopped writing at its 200th stall, so 500 records spanned
+    // several sessions. Writing every stall means ONE heavy session can write past the cap, and its own
+    // records are then compacted into the archive before any launch has ever read them. They are lost to
+    // the notice permanently, and the loss is worst in exactly the sessions that froze most (L216, L350).
+    //
+    // MEASURED on Dan's own files, 2026-09-12: 700 records live against a cap of 500, and 780 already in
+    // the archive. Every one of those 780 is invisible to this reader.
+    //
+    // What the recorded decision got RIGHT is kept: the notice is still about what has not been said, not
+    // about the whole history, and `scripts/what-froze-the-queue.sh` is still the reader for the
+    // population. The only change is that a record's having been archived no longer counts as having been
+    // said.
+    private func archiveURL(besideLogIn support: URL) -> URL {
+        FreezeLog.archiveURL(besideLogAt: FreezeLog.url(in: support))
+    }
+
+    @Test("a freeze that was archived before it could be reported is still reported")
+    func anArchivedFreezeIsStillReported() throws {
+        let d = defaults("archived")
+        let support = URL(fileURLWithPath: "/tmp")
+        var live = FreezeLog.Read()
+        live.records = [stall(0.8, sequence: 900)]
+        var archived = FreezeLog.Read()
+        archived.records = [stall(9.9, sequence: 1, surface: .archive)]
+
+        let said = try #require(FreezeReport.newlyReported(
+            in: support, watchdogRan: true, defaults: d,
+            read: { $0 == self.archiveURL(besideLogIn: support) ? archived : live }))
+
+        #expect(said.contains("2 times"),
+                Comment(rawValue: "the archived freeze was not counted, so a compaction takes freezes "
+                        + "off what Dan is ever told (#3851). Said: \(said)"))
+        #expect(said.contains("9.9 seconds"),
+                Comment(rawValue: "the LONGEST freeze was the archived one and the notice named a "
+                        + "shorter one, so the worst thing that happened went unsaid (#3851)."))
+    }
+
+    // AND ONCE. This is the half that makes the change safe rather than noisy: if the identities written
+    // back covered only the live file, every archived record would be fresh again at the next launch and
+    // the notice would repeat for ever, which teaches Dan to skim past it (L36).
+    @Test("an archived freeze is reported once, not at every launch")
+    func anArchivedFreezeIsNotRepeated() throws {
+        let d = defaults("archived-once")
+        let support = URL(fileURLWithPath: "/tmp")
+        var live = FreezeLog.Read()
+        live.records = [stall(0.8, sequence: 900)]
+        var archived = FreezeLog.Read()
+        archived.records = [stall(9.9, sequence: 1, surface: .archive)]
+        let reader: (URL) -> FreezeLog.Read = { $0 == self.archiveURL(besideLogIn: support) ? archived : live }
+
+        _ = try #require(FreezeReport.newlyReported(in: support, watchdogRan: true, defaults: d, read: reader))
+        let second = FreezeReport.newlyReported(in: support, watchdogRan: true, defaults: d, read: reader)
+
+        #expect(second == nil,
+                Comment(rawValue: "the archived freeze was reported a second time, so the notice repeats "
+                        + "at every launch (#3851, L36). Said: \(second ?? "nil")"))
+    }
+
+    // The ORDINARY state, which is most installs: no archive beside the log at all, because nothing has
+    // ever compacted. It must read as absent rather than as an error or an empty finding (L98).
+    @Test("no archive beside the log changes nothing")
+    func noArchiveIsTheOrdinaryState() throws {
+        let d = defaults("no-archive")
+        let support = URL(fileURLWithPath: "/tmp")
+        var live = FreezeLog.Read()
+        live.records = [stall(3.3, sequence: 1)]
+        var absent = FreezeLog.Read()
+        absent.fileWasAbsent = true
+
+        let said = try #require(FreezeReport.newlyReported(
+            in: support, watchdogRan: true, defaults: d,
+            read: { $0 == self.archiveURL(besideLogIn: support) ? absent : live }))
+
+        #expect(said.contains("3.3 seconds"),
+                Comment(rawValue: "the one live freeze was not reported. Said: \(said)"))
     }
 
     @Test("a freeze after the last report is reported, and the earlier ones are not repeated")
@@ -160,12 +265,12 @@ struct TheAppReportsItsOwnFreezesTests {
         var read = FreezeLog.Read()
         read.records = [stall(0.8, sequence: 1)]
         _ = FreezeReport.newlyReported(in: URL(fileURLWithPath: "/tmp"), watchdogRan: true,
-                                       defaults: d, read: { _ in read })
+                                       defaults: d, read: liveOnly(read))
 
         read.records.append(stall(2.0, sequence: 2))
         let said = try! #require(FreezeReport.newlyReported(in: URL(fileURLWithPath: "/tmp"),
                                                            watchdogRan: true, defaults: d,
-                                                           read: { _ in read }))
+                                                           read: liveOnly(read)))
         #expect(!said.contains("times"), "the earlier freeze was reported a second time")
         #expect(said.contains("stopped responding for 2.0 seconds"),
                 "a single freeze does not read as one: it borrows the plural sentence's wording")
@@ -178,7 +283,7 @@ struct TheAppReportsItsOwnFreezesTests {
         read.records = [stall(1.0, surface: .notRecorded)]
         let said = try! #require(FreezeReport.newlyReported(in: URL(fileURLWithPath: "/tmp"),
                                                             watchdogRan: true, defaults: defaults("nosurface"),
-                                                            read: { _ in read }))
+                                                            read: liveOnly(read)))
         #expect(said.contains("Nothing recorded which screen was open."))
         // And it is NOT the same sentence as any surface that IS known, which is the fold L11 forbids.
         #expect(FreezeNoticeCopy.surfaceSentence(.notRecorded) != FreezeNoticeCopy.surfaceSentence(.queue))
@@ -202,7 +307,7 @@ struct TheAppReportsItsOwnFreezesTests {
         read.unreadableLines = 3
         let said = try! #require(FreezeReport.newlyReported(in: URL(fileURLWithPath: "/tmp"),
                                                             watchdogRan: true, defaults: defaults("unreadable"),
-                                                            read: { _ in read }))
+                                                            read: liveOnly(read)))
         #expect(said.contains("3 earlier records could not be read"))
     }
 
@@ -214,7 +319,7 @@ struct TheAppReportsItsOwnFreezesTests {
     func aFailedWriteIsSaidFirst() {
         let said = FreezeReport.newlyReported(in: URL(fileURLWithPath: "/tmp"), watchdogRan: true,
                                               writesThatFailed: 2, defaults: defaults("failed"),
-                                              read: { _ in FreezeLog.Read() })
+                                              read: liveOnly(FreezeLog.Read()))
         #expect(said == FreezeNoticeCopy.writesFailed(2))
         #expect(said?.contains("could not write") == true)
     }
@@ -227,7 +332,7 @@ struct TheAppReportsItsOwnFreezesTests {
         read.records = [stall(1.0, sequence: 1)]
         let said = FreezeReport.newlyReported(in: URL(fileURLWithPath: "/tmp"), watchdogRan: true,
                                               writesThatFailed: 1, defaults: defaults("outranks"),
-                                              read: { _ in read })
+                                              read: liveOnly(read))
         #expect(said?.contains("could not write") == true)
         #expect(said?.contains("1.0 seconds") == false)
     }
@@ -257,7 +362,7 @@ struct TheAppReportsItsOwnFreezesTests {
             stall(2.0, sequence: 2, at: Date(timeIntervalSince1970: 1_785_000_001)),
         ])
         _ = FreezeReport.newlyReported(in: URL(fileURLWithPath: "/tmp"), watchdogRan: true,
-                                       defaults: d, read: { _ in firstSession })
+                                       defaults: d, read: liveOnly(firstSession))
 
         // A NEW launch. Its own sequence starts at 1 again, and its records are LATER in time.
         var afterRelaunch = firstSession
@@ -266,7 +371,7 @@ struct TheAppReportsItsOwnFreezesTests {
                                                  seconds: 3.0, surface: .queue, load: .baseline,
                                                  loadAverage: 1, passes: nil))
         let said = FreezeReport.newlyReported(in: URL(fileURLWithPath: "/tmp"), watchdogRan: true,
-                                              defaults: d, read: { _ in afterRelaunch })
+                                              defaults: d, read: liveOnly(afterRelaunch))
 
         #expect(said != nil,
                 Comment(rawValue: "a freeze from a later session was not reported, because its sequence "
@@ -292,7 +397,7 @@ struct TheAppReportsItsOwnFreezesTests {
         let read = FreezeLog.Read(records: [stall(9.0, sequence: 1), stall(4.0, sequence: 2)])
 
         let said = FreezeReport.newlyReported(in: URL(fileURLWithPath: "/tmp"), watchdogRan: true,
-                                              defaults: d, read: { _ in read })
+                                              defaults: d, read: liveOnly(read))
         #expect(said?.contains("2 times") == true,
                 Comment(rawValue: "the backlog from the broken version was not reported, so the first "
                         + "build able to speak says nothing, which is what the defect looked like"))
@@ -300,7 +405,7 @@ struct TheAppReportsItsOwnFreezesTests {
 
         // Once. The upgrade is a backlog like any other, never a notice that repeats.
         #expect(FreezeReport.newlyReported(in: URL(fileURLWithPath: "/tmp"), watchdogRan: true,
-                                           defaults: d, read: { _ in read }) == nil)
+                                           defaults: d, read: liveOnly(read)) == nil)
     }
 
     // The OTHER wrong answer, and the reason the identity is not simply the timestamp: two stalls can
@@ -314,11 +419,11 @@ struct TheAppReportsItsOwnFreezesTests {
         let at = Date(timeIntervalSince1970: 1_785_000_000)
         var read = FreezeLog.Read(records: [stall(1.0, sequence: 1, at: at)])
         _ = FreezeReport.newlyReported(in: URL(fileURLWithPath: "/tmp"), watchdogRan: true,
-                                       defaults: d, read: { _ in read })
+                                       defaults: d, read: liveOnly(read))
 
         read.records.append(stall(4.0, sequence: 2, at: at))
         let said = FreezeReport.newlyReported(in: URL(fileURLWithPath: "/tmp"), watchdogRan: true,
-                                              defaults: d, read: { _ in read })
+                                              defaults: d, read: liveOnly(read))
         #expect(said?.contains("4.0 seconds") == true,
                 Comment(rawValue: "a stall sharing its instant with an already reported one was never "
                         + "said, so whatever identifies a record is the clock rather than the record"))
@@ -330,7 +435,7 @@ struct TheAppReportsItsOwnFreezesTests {
     func theFloorCanBeAskedFor() {
         var read = FreezeLog.Read()
         read.records = [stall(0.4, sequence: 1), stall(58.0, sequence: 2), stall(1.1, sequence: 3)]
-        let worst = FreezeReport.floor(in: URL(fileURLWithPath: "/tmp"), read: { _ in read })
+        let worst = FreezeReport.floor(in: URL(fileURLWithPath: "/tmp"), read: liveOnly(read))
         #expect(worst?.seconds == 58.0)
     }
 
