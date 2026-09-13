@@ -232,8 +232,16 @@ struct StalledReplyDraftSectionTests {
         #expect(SourceGuardHelper.containsCode(
             "ForEach(listed.stalledReplyDrafts, id: \\.recipient.id)", in: source),
                 "the stalled section no longer iterates the shared rows (#2878)")
-        #expect(source.contains("DueWork.rows("),
-                "FollowUpsView no longer takes its rows from DueWork, so it can derive them a second way")
+        // #3814: the derivation moved into `FollowUpsRenderPass`, so the claim is checked THERE. The rule
+        // is unchanged and is the same one: this sheet's rows come from `DueWork` and are never derived a
+        // second way. Following the code rather than pinning the file, because a guard that breaks on a
+        // legitimate move teaches the next person to edit it until it is quiet (L103).
+        let pass = SourceGuardHelper.source("Overture/UI/FollowUpsRenderPass.swift")
+        #expect(!pass.isEmpty, "FollowUpsRenderPass could not be read, so nothing below was measured")
+        #expect(pass.contains("DueWork.rows("),
+                "the Follow-ups pass no longer takes its rows from DueWork, so it can derive them a second way")
+        #expect(!source.contains("DueWork.rows("),
+                "FollowUpsView derives the rows itself as well as through the pass, which is two derivations")
         // The view holds no predicate of its own. Two definitions of "is this stalled" is the shape that
         // let the count and the list disagree, and the fix is worth nothing if the view reintroduces one.
         #expect(!source.contains("isReplyDraftStalled"),
