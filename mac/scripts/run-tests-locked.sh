@@ -884,6 +884,32 @@ main() {
     printf '%s' "${HOSTED_STAMP_NEXT}" > "${HOSTED_STAMP_RECORD}" 2>/dev/null || true
   fi
 
+  # #3842: tests that could not be DRIVEN, because this Mac's screen was locked while they ran.
+  #
+  # A locked session means the WindowServer never lays out the borderless window the scroll tests host, so
+  # a real wheel turn has nothing to move. Those tests now say UNMEASURED and return rather than failing,
+  # because a red there is indistinguishable from a real regression in the scroll mechanism and it blocked
+  # every merge in this repository while naming four scroll tests rather than the lock.
+  #
+  # SAID HERE, LOUDLY, and that is the whole point: a skip nobody is told about is the silent skip this
+  # replaced a red with, and it would let a run report "Screen tests: verified by this run" while the one
+  # mechanism no other test covers went unchecked (L98, L11). The count and the names both, so a reader can
+  # see WHICH went unmeasured rather than only that something did.
+  SCREEN_LOCKED_SKIPS="$(grep -o 'screen-locked-unmeasured: [A-Za-z.]*' <<< "${last_output}" \
+                         | sed 's/screen-locked-unmeasured: //' | sort -u || true)"
+  if [[ -n "${SCREEN_LOCKED_SKIPS}" ]]; then
+    SCREEN_LOCKED_COUNT="$(wc -l <<< "${SCREEN_LOCKED_SKIPS}" | tr -d ' ')"
+    echo >&2
+    echo "run-tests-locked.sh: ${SCREEN_LOCKED_COUNT} test(s) were NOT MEASURED because this Mac's" >&2
+    echo "screen was LOCKED. They drive a real window, and a locked session never lays one out, so they" >&2
+    echo "could not be run rather than having passed. Unlock the screen and run again to cover them." >&2
+    echo "Waking the display is NOT enough: a woken display on a locked session still shows the lock" >&2
+    echo "screen (#3842)." >&2
+    while IFS= read -r skipped; do
+      [[ -n "${skipped}" ]] && echo "  ${skipped}" >&2
+    done <<< "${SCREEN_LOCKED_SKIPS}"
+  fi
+
   # #2322: no test started at all, and the evidence says the machine rather than the change. Said
   # before the crash branch below, and INSTEAD of it, because a crashed host and a machine that
   # cannot start any test want different actions and must never share one message.

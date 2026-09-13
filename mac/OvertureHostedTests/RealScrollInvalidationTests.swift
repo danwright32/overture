@@ -143,6 +143,14 @@ struct RealScrollInvalidationTests {
     // makes every quiet reading below meaningless, and quiet is exactly what the fixed shape is supposed
     // to look like (L98, L159).
     @Test func theDriverReallyScrolls() async throws {
+        // #3842: a LOCKED session never lays this window out, so the wheel turn below has nothing to
+        // scroll and this test can measure nothing. Reported as UNMEASURED rather than left to fail: a red
+        // here is indistinguishable from a real regression in the mechanism #3431 and #3437 rest on, and
+        // it blocked every merge in the repository while naming four scroll tests rather than the lock.
+        guard !ScreenSession.isLocked else {
+            ScreenSession.reportUnmeasured("RealScrollInvalidationTests.theDriverReallyScrolls")
+            return
+        }
         let counter = BodyCounter()
         let (window, hosting) = host(OwnStateHarness(counter: counter))
         defer { window.close() }
@@ -161,6 +169,14 @@ struct RealScrollInvalidationTests {
 
     // The claim #3431 and #3437 rest on, measured rather than read off the code.
     @Test func aScrollInvalidatesABodyThatOwnsThePosition() async throws {
+        // #3842: a LOCKED session never lays this window out, so the wheel turn below has nothing to
+        // scroll and this test can measure nothing. Reported as UNMEASURED rather than left to fail: a red
+        // here is indistinguishable from a real regression in the mechanism #3431 and #3437 rest on, and
+        // it blocked every merge in the repository while naming four scroll tests rather than the lock.
+        guard !ScreenSession.isLocked else {
+            ScreenSession.reportUnmeasured("RealScrollInvalidationTests.aScrollInvalidatesABodyThatOwnsThePosition")
+            return
+        }
         let counter = BodyCounter()
         let (window, hosting) = host(OwnStateHarness(counter: counter))
         defer { window.close() }
@@ -183,6 +199,14 @@ struct RealScrollInvalidationTests {
     // The other half, and the reason the pair is worth having: #1774's holder shape suppresses exactly
     // the invalidation above, over the same rows driven by the same wheel event.
     @Test func aScrollThroughAHolderLeavesTheEnclosingBodyAlone() async throws {
+        // #3842: a LOCKED session never lays this window out, so the wheel turn below has nothing to
+        // scroll and this test can measure nothing. Reported as UNMEASURED rather than left to fail: a red
+        // here is indistinguishable from a real regression in the mechanism #3431 and #3437 rest on, and
+        // it blocked every merge in the repository while naming four scroll tests rather than the lock.
+        guard !ScreenSession.isLocked else {
+            ScreenSession.reportUnmeasured("RealScrollInvalidationTests.aScrollThroughAHolderLeavesTheEnclosingBodyAlone")
+            return
+        }
         let counter = BodyCounter()
         let (window, hosting) = host(HolderHarness(counter: counter))
         defer { window.close() }

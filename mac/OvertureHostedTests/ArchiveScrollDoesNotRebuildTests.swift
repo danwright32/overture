@@ -112,6 +112,14 @@ struct ArchiveScrollDoesNotRebuildTests {
     // version has (L98, L11).
 
     @Test func aScrollBuildsNoCards() async throws {
+        // #3842: a LOCKED session never lays this window out, so the wheel turn below has nothing to
+        // scroll and this test can measure nothing. Reported as UNMEASURED rather than left to fail: a red
+        // here is indistinguishable from a real regression in the mechanism #3431 and #3437 rest on, and
+        // it blocked every merge in the repository while naming four scroll tests rather than the lock.
+        guard !ScreenSession.isLocked else {
+            ScreenSession.reportUnmeasured("ArchiveScrollDoesNotRebuildTests.aScrollBuildsNoCards")
+            return
+        }
         let c = try container()
         seed(ContextHolder.make(c))
 

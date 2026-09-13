@@ -571,11 +571,41 @@ assert_contains "a run that died with nothing named is still retried once" \
 assert_contains "a run that died with nothing named still says so" \
   "the test run CRASHED" "${CRASH_RUN}"
 
+# #3842: a run whose tests could not be DRIVEN says so, loudly, and still passes.
+#
+# A locked screen means the WindowServer never lays out the window the scroll tests host, so those tests
+# report UNMEASURED and return rather than failing. That is the right outcome and it is also the dangerous
+# one: a skip nobody is told about would let a run report "Screen tests: verified by this run" while the
+# one mechanism no other test covers went unchecked (L98, L11).
+SCREEN_LOCKED_OUTPUT="screen-locked-unmeasured: RealScrollInvalidationTests.theDriverReallyScrolls
+screen-locked-unmeasured: ArchiveScrollDoesNotRebuildTests.aScrollBuildsNoCards
+Test run with 2400 tests in 348 suites passed after 19.462 seconds.
+** TEST SUCCEEDED **"
+SCREEN_LOCKED_RUN="$(run_wrapper_with_stub_xcodebuild "${SCREEN_LOCKED_OUTPUT}" 0)"
+
+assert_equals "a run with unmeasured screen tests still exits 0" \
+  "exit=0" "$(tail -n 1 <<< "${SCREEN_LOCKED_RUN}")"
+assert_contains "and it says they were not measured" \
+  "NOT MEASURED" "${SCREEN_LOCKED_RUN}"
+assert_contains "and it says why, in terms of the state that caused it" \
+  "screen was LOCKED" "${SCREEN_LOCKED_RUN}"
+assert_contains "and it counts them" \
+  "2 test(s) were NOT MEASURED" "${SCREEN_LOCKED_RUN}"
+assert_contains "and it NAMES them, so a reader can see which went uncovered" \
+  "RealScrollInvalidationTests.theDriverReallyScrolls" "${SCREEN_LOCKED_RUN}"
+assert_contains "and it says waking the display is not enough, which is the wrong fix somebody will try" \
+  "Waking the display is NOT enough" "${SCREEN_LOCKED_RUN}"
+
+# The other half, and it is what keeps the notice meaningful: an ordinary run says NOTHING about it. A
+# notice on every run is the noise that teaches a reader to skip the whole block (L36).
 # And a pass still passes, silently.
 PASSING_RUN="$(run_wrapper_with_stub_xcodebuild "${PASSING_OUTPUT}" 0)"
 
 assert_equals "a passing run exits 0" \
   "exit=0" "$(tail -n 1 <<< "${PASSING_RUN}")"
+
+assert_not_contains "an ordinary passing run says nothing about unmeasured screen tests" \
+  "NOT MEASURED" "${PASSING_RUN}"
 
 assert_not_contains "a passing run is never retried" \
   "Retrying once" "${PASSING_RUN}"
