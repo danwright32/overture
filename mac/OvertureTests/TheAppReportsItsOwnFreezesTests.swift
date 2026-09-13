@@ -22,9 +22,9 @@ struct TheAppReportsItsOwnFreezesTests {
     // decides the whole deferred-architecture escalation from it (L191, L63).
     @Test("a run of small stalls after one big one still reports the big one")
     func theWorstStallSurvivesACapFullOfSmallOnes() {
-        var kept = StallLog.adding(stall(58.0, sequence: 1), to: empty)
+        var kept = StallLog.adding(stall(58.0, sequence: 1), to: empty).kept
         for n in 0..<(StallLog.cap * 3) {
-            kept = StallLog.adding(stall(0.3, sequence: n + 2), to: kept)
+            kept = StallLog.adding(stall(0.3, sequence: n + 2), to: kept).kept
         }
 
         #expect(kept.records.count == StallLog.cap, "the detail log is not bounded")
@@ -39,7 +39,7 @@ struct TheAppReportsItsOwnFreezesTests {
     @Test("how many were dropped is recorded rather than merely happening")
     func theEvictionCountIsKept() {
         var kept = empty
-        for n in 0..<(StallLog.cap + 7) { kept = StallLog.adding(stall(0.5, sequence: n), to: kept) }
+        for n in 0..<(StallLog.cap + 7) { kept = StallLog.adding(stall(0.5, sequence: n), to: kept).kept }
         #expect(kept.evicted == 7)
     }
 
@@ -47,7 +47,7 @@ struct TheAppReportsItsOwnFreezesTests {
     // silently discarded them would make a session of constant small delays invisible.
     @Test("a stall under the floor is counted, not stored")
     func aStallUnderTheFloorIsCountedNotStored() {
-        let kept = StallLog.adding(stall(StallLog.floorSeconds / 2), to: empty)
+        let kept = StallLog.adding(stall(StallLog.floorSeconds / 2), to: empty).kept
         #expect(kept.records.isEmpty)
         #expect(kept.belowFloor == 1)
     }
@@ -64,7 +64,7 @@ struct TheAppReportsItsOwnFreezesTests {
         // configurable threshold must be derived from that threshold, not written as a literal chosen to
         // sit under it).
         let under = StallLog.floorSeconds / 2
-        let kept = StallLog.adding(stall(under), to: empty)
+        let kept = StallLog.adding(stall(under), to: empty).kept
         #expect(kept.highWater?.seconds == under)
         #expect(kept.records.isEmpty)
     }

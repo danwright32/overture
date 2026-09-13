@@ -162,17 +162,29 @@ print("  bar, so 100 percent of these are over it by construction and that says 
 print("  Watched time is a LOWER bound, because a ping is not posted while one is outstanding, so")
 print("  fewer are issued during a long freeze. The per hour figure is therefore an upper bound.")
 
-# A session sitting exactly on the cap stopped writing rather than went quiet (#3812), and a reading
-# that did not say so would be computed over the first N stalls of that session while looking like a
-# reading of all of them.
+# A session sitting exactly on the cap is AMBIGUOUS, and the two readings call for different treatment
+# of every figure above.
+#
+# Before #3812's fix the watchdog wrote a record only when its in-memory kept set GREW, so a session
+# stopped writing at its 200th stall and said nothing. A session written by such a build holds the FIRST
+# 200 stalls of that session and no more. Measured on Dan's own log 2026-09-12, three of ten sessions sat
+# on exactly 200, which is the cap rather than the app.
+#
+# A build carrying the fix writes every stall at or above the floor whatever the kept set does, so there
+# exactly 200 is an ordinary count and nothing is missing. NOTHING IN A RECORD SAYS WHICH BUILD WROTE IT,
+# so this reader cannot tell the two apart and says so rather than choosing (L11, L440). The mirror of
+# `StallLog.cap` below is held against the app's own constant by `TheCapThisReaderNamesTests`.
 CAP = 200
-censored = [n for n, g in sessions.items() if len(g) == CAP]
-if censored:
+at_the_cap = [n for n, g in sessions.items() if len(g) == CAP]
+if at_the_cap:
     print()
-    print(f"  {plural(len(censored), 'session')} hold exactly {CAP} records, which is the write cap, not")
-    print("  a coincidence: #3812 stops a session writing once its kept set is full. Every figure")
-    print(f"  above counts only the first {CAP} stalls of those, so they are UNDERSTATED.")
-    for name in censored:
+    verb = "holds" if len(at_the_cap) == 1 else "hold"
+    print(f"  {plural(len(at_the_cap), 'session')} {verb} exactly {CAP} records, the in-memory cap.")
+    print(f"  Written before #3812 that means the session STOPPED recording at its {CAP}th stall, and")
+    print(f"  every figure above for it is UNDERSTATED. Written after it, {CAP} is an ordinary count")
+    print("  and nothing is missing. No record says which build wrote it, so the two cannot be told")
+    print("  apart from this file.")
+    for name in at_the_cap:
         print(f"    {name[:8]}  last record {max(r.get('at', '') for r in sessions[name])[:19]}")
 
 if unreadable:

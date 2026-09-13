@@ -252,8 +252,21 @@ enum StallLog {
         var belowFloor: Int
     }
 
+    // What one stall does: what is KEPT in memory, and whether it is WRITTEN to the durable file.
+    //
+    // #3812 SPLIT THESE, and they were one comparison before it. The watchdog wrote a record only when
+    // the kept set GREW, so once the set was full nothing was ever written again and the session went
+    // quiet with nothing saying so. They are separate decisions and this type is what keeps them apart
+    // (L53): a bounded in-memory set is a reading of the session's shape, and the file is the durable
+    // record milestone 80's bar is read off.
+    struct Admission: Equatable, Sendable {
+        var kept: Kept
+        // Whether the caller is to write this stall to the file. The in-memory cap has no say in it.
+        var write: Bool
+    }
+
     static func adding(_ stall: StallRecord, to kept: Kept,
-                       floor: Double = floorSeconds, cap: Int = cap) -> Kept {
+                       floor: Double = floorSeconds, cap: Int = cap) -> Admission {
         var next = kept
         // The HIGH WATER is judged BEFORE the floor, deliberately. A session whose worst stall is under
         // the floor still has a worst stall, and reporting none would say a session was clean when what
@@ -265,7 +278,7 @@ enum StallLog {
         }
         guard stall.seconds >= floor else {
             next.belowFloor += 1
-            return next
+            return Admission(kept: next, write: false)
         }
         next.records.append(stall)
         if next.records.count > cap {
@@ -273,6 +286,8 @@ enum StallLog {
             next.records.removeFirst(dropped)
             next.evicted += dropped
         }
-        return next
+        // WRITTEN, whatever the kept set did with it. A stall at or above the floor is a record; whether
+        // the in-memory list had room for it is a different question and is answered above (#3812).
+        return Admission(kept: next, write: true)
     }
 }
