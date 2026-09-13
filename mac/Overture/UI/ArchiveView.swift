@@ -32,7 +32,6 @@ struct ArchiveView: View {
     // is absent, which would turn a missed injection into a crash of the whole app (and does crash any
     // test that builds this view directly). Nil simply means this surface records nothing.
     @Environment(QueueUndoStack.self) private var undoStack: QueueUndoStack?
-    @Environment(\.dismiss) private var dismiss
     @Environment(ActionFeedback.self) private var feedback
     @Environment(DayOffOfferRequest.self) private var dayOffOffer   // #924
     // #3762: the app's own freeze instrument, read as an OPTIONAL on the same footing as every other
@@ -212,12 +211,31 @@ struct ArchiveView: View {
         highlightedRecipientId = recipientId
     }
 
+    // #3876: the Done button OWNS the dismiss read, and that is the whole fix rather than tidying.
+    //
+    // `@Environment(\.dismiss)` was read by `ArchiveView` itself, and SwiftUI revises that value when the
+    // window's key status changes, so every focus change invalidated this view's body. The body derives
+    // the whole store (`makeScope()` below), so clicking away from Overture and back cost two whole-store
+    // passes over the Archive for no data change. Measured at 120 rows of 120 on each transition, against
+    // 385.3 ms per pass over the live store's 1,224 rows.
+    //
+    // Reading it HERE keeps the dependency on the one view that actually uses it, whose body is a button.
+    // `QueueView` is the control that made this findable: same store-to-screen path, no dismiss read, and
+    // it does not rebuild on focus (measured, with its own warm-up and positive control).
+    private struct DoneButton: View {
+        @Environment(\.dismiss) private var dismiss
+
+        var body: some View {
+            Button("Done") { dismiss() }
+        }
+    }
+
     private func header(filtered: [QueueScopeRow]) -> some View {
         HStack {
             Text("Archive").font(OVType.dateHeading).foregroundStyle(OVColor.ink)
             Text("\(filtered.count)").font(.system(size: 12)).foregroundStyle(OVColor.inkFaint)
             Spacer()
-            Button("Done") { dismiss() }
+            DoneButton()
         }
         .padding(OVSpacing.lg)
     }
