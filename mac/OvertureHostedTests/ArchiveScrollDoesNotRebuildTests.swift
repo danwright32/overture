@@ -123,7 +123,9 @@ struct ArchiveScrollDoesNotRebuildTests {
         let c = try container()
         seed(ContextHolder.make(c))
 
-        let view = ArchiveView()
+        // #3846: the Archive takes its rows rather than querying the whole table a second time, so
+        // this harness plays RootView's part and the path measured below is still store to screen.
+        let view = RowsFromStore { (rows: [Prospect]) in ArchiveView(prospects: rows) }
             .modelContainer(c)
             .environment(ActionFeedback())
             .environment(DayOffOfferRequest())

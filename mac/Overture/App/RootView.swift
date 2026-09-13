@@ -609,7 +609,14 @@ struct RootView: View {
     }
 
     private var queueSurface: some View {
-        QueueView(deepLinkedKey: $deepLinkedKey, deepLinkedKeys: $deepLinkedKeys, onConnectGmail: connectGmail,
+        QueueView(deepLinkedKey: $deepLinkedKey, deepLinkedKeys: $deepLinkedKeys,
+                  // #3846: THIS view's whole-table read, handed down. QueueView held a bare @Query
+                  // over Prospect identical to the one above, and two identical bare descriptors in
+                  // two live views share nothing: the second cost 99.6% of the first, measured
+                  // 2026-09-12 over 1,238 rows. Both views are always on screen, so the app read the
+                  // whole prospect table twice on every store change.
+                  allProspects: allProspects,
+                  onConnectGmail: connectGmail,
                   // #2204: out of the toolbar's status slot, which macOS hides in the overflow chevron at
                   // Dan's ordinary window width, and onto the masthead he reads.
                   // #2478: and the Downbeat export that has lost every shoot it was carrying, which is
@@ -1251,8 +1258,12 @@ struct RootView: View {
                 }
             }
             .sheet(isPresented: $showArchive) {
-                ArchiveView(initialHighlightKey: archiveJumpKey, initialHighlightRecipientId: archiveJumpRecipientId,
-                           initialQuery: archiveOpeningQuery, onConnectGmail: connectGmail)
+                // #3846: the sheet's rows come from here rather than from a second whole-table query
+                // of its own, which added 165.0 ms to every store change for as long as it was open.
+                ArchiveView(prospects: allProspects,
+                            initialHighlightKey: archiveJumpKey,
+                            initialHighlightRecipientId: archiveJumpRecipientId,
+                            initialQuery: archiveOpeningQuery, onConnectGmail: connectGmail)
             }
             .sheet(isPresented: $showPatterns) { OutcomePatternsView() }
             .sheet(isPresented: $showInquiryIntake) { InquiryIntakeSheet() }

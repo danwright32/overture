@@ -43,7 +43,18 @@ struct QueueView: View {
     // Dan dismisses could silently change which organisations qualify and evaporate an answer he paid
     // for, with nothing on screen to say so.
     @Query private var orgAnswers: [OrgReachabilityAnswer]
-    @Query private var allProspects: [Prospect]
+    // #3846: the whole store, HANDED DOWN by RootView rather than queried again here.
+    //
+    // It was `@Query private var allProspects: [Prospect]`, a bare descriptor over the whole table, and
+    // RootView holds one of exactly the same shape. Measured 2026-09-12 on the live store: two identical
+    // bare descriptors held by two live views share NOTHING, the second costing 99.6% of the first
+    // (158.8 ms against 159.5 ms over 1,238 rows), which is what #3507 found for two held by one view.
+    // Both of these views are always on screen, so the app read the whole prospect table TWICE on every
+    // single store change, against an end-to-end change of 350.7 ms.
+    //
+    // NO DEFAULT, deliberately. An empty default would let a caller that forgot it render an empty queue
+    // that looks exactly like a store with nothing in it, which is a missing value presented as a
+    // measurement (L168, L67).
     // #1719: Dan's own producer/house corrections. @Query rather than a context read, so applying one
     // re-derives the queue immediately instead of at the next relaunch.
     @Query private var promotedProducers: [PromotedProducer]
@@ -151,6 +162,8 @@ struct QueueView: View {
     // focused mode showing exactly those leads (a flat list, ignoring the pipeline split and filters so
     // even a booked lead that falls out of both pipelines still appears), with a "Show all" exit.
     @Binding var deepLinkedKeys: LeadsDeepLink?
+    // #3846: see the note beside `orgAnswers`. RootView's single whole-table read, handed down.
+    let allProspects: [Prospect]
     @State private var focusedKeys: [String]?
     // #1140: which STAGE the focused view is showing, when it was entered by tapping a stage pill (nil
     // for the #308 away-alert leads path). Set, the focused list re-derives its membership and heading
