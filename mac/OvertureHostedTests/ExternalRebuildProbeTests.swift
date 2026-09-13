@@ -190,7 +190,14 @@ struct ExternalRebuildProbeTests {
         readings.append(("window appearance changed", rowsProvokedBy {
             window.appearance = NSAppearance(named: .darkAqua)
         }))
-        window.appearance = nil
+        // The RESET is itself one of the candidate triggers, so it is measured and DISCARDED rather than
+        // left loose above the positive control. `rowsProvokedBy` returns the moment a row appears, so a
+        // rebuild provoked by the reset would otherwise be counted as the WRITE's, which is this file's
+        // own named hazard: a positive control that passes for the wrong reason licenses every zero
+        // above it (L98, L159).
+        _ = rowsProvokedBy { window.appearance = nil }
+        let resetSettleBy = Date().addingTimeInterval(10)
+        while Date() < resetSettleBy && rowsProvokedBy({}, seconds: 0.3) != 0 { }
 
         // POSITIVE CONTROL, LAST because it is the only arm that changes the store. If this reads zero
         // the probe cannot see a re-derivation at all and nothing above means anything.
@@ -250,8 +257,23 @@ struct ExternalRebuildProbeTests {
             .modelContainer(c)
             .environment(ActionFeedback())
             .environment(DayOffOfferRequest())
-        let (window, hosting) = host(view)
+        let (window, _) = host(view)
         defer { window.close() }
+
+        // PROVE IT DREW, before anything is concluded from a quiet counter. Settling only requires one
+        // 0.3s window with no rows, which a surface whose first pass has not STARTED satisfies instantly.
+        // A late first render then lands in the become-key window, reads 120, and this guard reports the
+        // defect it exists to catch while the positive control afterwards still passes. `whetherTheMain
+        // QueueDoesItToo` calls its own warm-up not optional for the mirror-image reason, and this is the
+        // only test here that runs on every push (L98, L159).
+        let drew = rowsProvokedBy({
+            let all = (try? ctx.fetch(FetchDescriptor<Prospect>())) ?? []
+            all.last?.fitScore = 8
+            try? ctx.save()
+        }, seconds: 60)
+        #expect(drew >= Self.seededRows, Comment(rawValue:
+                "the Archive built \(drew) rows out of \(Self.seededRows) from a real write, so it never "
+                + "drew and every reading below would come from an empty surface rather than a quiet one"))
 
         // Settle on the CONDITION of being quiet, never on a duration: a fixed wait here would be an
         // assertion about how loaded the Mac is (L290).
@@ -365,6 +387,18 @@ struct ExternalRebuildProbeTests {
         let withAField = focusReading { rows in
             ScopeProbe(prospects: rows) { TextField("q", text: .constant("")) }
         }
+        // THE SIBLING, added after code review on #3878 found the PR's own sweep too narrow to see it.
+        // `FollowUpsView` has the identical shape: `@Environment(\\.dismiss)` at view level (`:10`), a
+        // whole-table `@Query prospects` (`:15`), `makeRenderData()` called from `body` (`:128`), and one
+        // `dismiss()` call site (`:138`). It also carries #3861's measured, unattributed freezes.
+        //
+        // IT READS UNMEASURED, and that is the instrument refusing rather than failing. `WorkTally` counts
+        // QUEUE rows; `FollowUpsRenderPass` increments none of its counters, so this harness cannot see a
+        // follow-ups pass at all. Its own positive control does not fire, so the arm reports UNMEASURED
+        // instead of the false all clear a bare zero would have been (L98). Measuring it needs a counter
+        // on that pass, which is app instrumentation and belongs with the sibling fix, not here. The arm
+        // is kept deliberately: an absent arm and an unmeasurable one read alike, and this one says which.
+        let followUps = focusReading { _ in FollowUpsView() }
         // THE SECOND SUSPECT, after the banner came back quiet. Comparing the two screens' property
         // wrappers, `ArchiveView` reads `@Environment(\\.dismiss)` and `QueueView` does not, which is
         // the kind of value a presentation context can revise when focus moves.
@@ -395,6 +429,7 @@ struct ExternalRebuildProbeTests {
         \(line("scope plus a text field", withAField))
         \(line("scope plus the feedback banner", withTheBanner))
         \(line("scope plus a dismiss read", readingDismiss))
+        \(line("FollowUpsView, the sibling", followUps))
         \(line("the real ArchiveView", theArchive))
         """)
 
@@ -482,12 +517,23 @@ struct ExternalRebuildProbeTests {
     // of the test harness, and guessing it is exactly the leap that was wrong twice already tonight.
     //
     // The first probe hosts `RowsFromStore`, a `@Query` playing RootView's part (#3846). So a whole-store
-    // pass on becoming key is either the QUERY re-fetching and handing down a new array, or `ArchiveView`
-    // re-evaluating whatever it was given. This runs the SAME trigger against rows handed in as a plain
-    // value, with no `@Query` anywhere in the tree.
+    // pass on becoming key is either the PROSPECT QUERY re-fetching and handing down a new array, or the
+    // view re-evaluating what it was already given. This runs the SAME trigger against rows handed in as
+    // a plain array, fetched once, here.
     //
-    //   this arm reads 0    the query is what re-fires, and the real app has one in the same place
-    //   this arm reads 120  the view re-evaluates whatever it holds, and the query is innocent
+    // WHAT THIS ARM CANNOT SETTLE, corrected after code review on #3878 and worth stating precisely,
+    // because the earlier wording claimed more than the fixture supports. Removing `RowsFromStore`
+    // removes the PROSPECT query only: `ArchiveView` still declares five of its own
+    // (`orgAnswers`, `refusedAddresses`, `promotedProducers`, `demotedHouses`, `watchedSources`,
+    // `ArchiveView.swift:66` onward), so the tree is not query-free and a 120 here does not by itself
+    // acquit every query.
+    //
+    //   this arm reads 0    the prospect query re-fetching is the whole story
+    //   this arm reads 120  something OTHER than the prospect query re-fires, and which is not said here
+    //
+    // What DOES settle it is the `scope plus a dismiss read` variant in `whichPartOfTheScreenReactsToFocus`:
+    // `DismissProbe` holds no `@Query` at all and still rebuilds, so the trigger is an environment read
+    // rather than any query. Read that arm for the conclusion and this one only for the prospect query.
     @Test func whetherItIsTheQueryOrTheView() throws {
         guard ProcessInfo.processInfo.environment["PROBE_EXTERNAL_REBUILD"] != nil else {
             print("external-rebuild-probe: not measured. Set TEST_RUNNER_PROBE_EXTERNAL_REBUILD=1 to run it.")
@@ -505,12 +551,13 @@ struct ExternalRebuildProbeTests {
         #expect(rows.count == Self.seededRows,
                 "the fixture did not seed, so this arm would read zero for the wrong reason")
 
-        // No `RowsFromStore` and so no `@Query`: the rows are a plain array, fetched once, right here.
+        // No `RowsFromStore`, so no PROSPECT query. The view's own five queries remain, which is why the
+        // header above is careful about what this can conclude.
         let view = ArchiveView(prospects: rows)
             .modelContainer(c)
             .environment(ActionFeedback())
             .environment(DayOffOfferRequest())
-        let (window, hosting) = host(view)
+        let (window, _) = host(view)
         defer { window.close() }
 
         let settle = QueueRenderPass.WorkTally.measure {
@@ -525,16 +572,28 @@ struct ExternalRebuildProbeTests {
             NotificationCenter.default.post(name: NSWindow.didBecomeKeyNotification, object: window)
         }
 
+        // POSITIVE CONTROL, which this arm was missing. Without it a surface that never drew reads 0 for
+        // the trigger, 0 for the null control, and passes, while the table above reports a conclusion
+        // drawn from a window that rendered nothing. Every other arm in this file runs one (L98, L159).
+        let onARealWrite = rowsProvokedBy({
+            rows.first?.fitScore = 9
+            try? ctx.save()
+        }, seconds: 20)
+
         print("""
-        external-rebuild-probe, no @Query in the tree (#3805)
+        external-rebuild-probe, no PROSPECT query in the tree (#3805)
           settle, the first pass          \(settle.queueRows) rows
           NULL control, no trigger        \(quiet) rows
           window became key               \(onBecomingKey) rows\
         \(onBecomingKey >= Self.seededRows ? "   <-- A WHOLE STORE PASS" : "")
+          POSITIVE control, a write       \(onARealWrite) rows
         """)
 
         #expect(quiet == 0, Comment(rawValue:
                 "the harness built \(quiet) rows with no trigger, so the reading beside it is noise"))
+        #expect(onARealWrite >= Self.seededRows, Comment(rawValue:
+                "a real store write provoked \(onARealWrite) rows out of \(Self.seededRows), so this arm "
+                + "never drew and its reading is unmeasured rather than informative (L98)"))
     }
 }
 
