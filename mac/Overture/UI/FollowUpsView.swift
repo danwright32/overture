@@ -73,8 +73,32 @@ struct FollowUpsView: View {
     //
     // #2397: the post-event prompts arrive already ordered by urgency then soonest event, and the silent
     // follow-ups oldest pitch first; both orderings live in DueWork.rows now.
-    private var rows: DueWork.Rows {
-        DueWork.rows(prospects: prospects, now: Date(), replyRunAlive: replyRunAlive)
+    // #3814: everything this redraw derives, worked out ONCE, in a pure function a test can run.
+    //
+    // The bump and the timing live here rather than inside `FollowUpsRenderPass` for the same reason
+    // `QueueView` and `SourcesView` keep theirs at their own call sites: the pass is a pure static
+    // derivation and these are side effects on the app's own instrument. `EveryRenderPassIsCountedTests`
+    // is what keeps the bump here.
+    //
+    // #3815: the count is paired with a DURATION, which this sheet did not have. A count with no duration
+    // beside it cannot say whether the passes account for a freeze, and this is the one surface outside
+    // the queue with measured freezes against its name (#3827: 97 records, worst 21.38 s at baseline
+    // load).
+    private func makeRenderData() -> FollowUpsRenderPass.RenderData {
+        freezeWatch?.recordPass()
+        let passStarted = DispatchTime.now().uptimeNanoseconds
+        defer {
+            freezeWatch?.recordPassCost(
+                seconds: Double(DispatchTime.now().uptimeNanoseconds - passStarted) / 1_000_000_000)
+        }
+        return FollowUpsRenderPass.make(FollowUpsRenderPass.Inputs(
+            prospects: FollowUpsRenderPass.Corpus(prospects),
+            sources: watchedSources,
+            // ONE instant for the whole drawing. This body used to take two, `Date()` here and a second
+            // `Date()` inside the scroll holder, so a row's sentence and the rule that put the row there
+            // were dated a moment apart (#2919's own rule, broken eight lines below where it is stated).
+            now: Date(),
+            replyRunAlive: replyRunAlive))
     }
 
     // #1770: the cached flag, not the disk read. As written before, this re-opened and JSON-decoded the
@@ -93,14 +117,16 @@ struct FollowUpsView: View {
     private var replyRunAlive: Bool { replyRunAliveOverride ?? ReplyClassifyService.isRunning(now: Date()) }
 
     var body: some View {
-        // #3762: this surface counts its own rebuild, so a stall recorded here says how many passes it
-        // spanned. `passes: 0` on a surface that never counts is a positive claim that it did not
-        // rebuild, which is the reading that sends the next diagnosis elsewhere (L11).
-        freezeWatch?.recordPass()
         // #2878: ONE derivation for the whole sheet, so the header, the empty test and the three lists
         // are three readings of one answer rather than three sweeps of the store that could disagree.
         // It used to be derived up to three times in this body (#1121's rule, in the other direction).
-        let listed = rows
+        //
+        // #3814: the pass is counted INSIDE `makeRenderData()`, on its first line, exactly where
+        // `QueueView` and `SourcesView` count theirs. One bump per evaluation: a second one here would
+        // make `passes` read 2 for one rebuild, and that field's whole job is to say how many times the
+        // surface really rebuilt during a stall (#3760, #3836).
+        let data = makeRenderData()
+        let listed = data.rows
         return VStack(alignment: .leading, spacing: 0) {
             HStack {
                 Text("Due").font(OVType.dateHeading).foregroundStyle(OVColor.ink)
@@ -127,11 +153,14 @@ struct FollowUpsView: View {
                 // granularity that holds up when a run reshuffles the rows within one.
                 PinnedScrollHolder { (_: ScrollViewProxy, _: Binding<ScrollSection?>) in
                     VStack(alignment: .leading, spacing: OVSpacing.lg) {
-                        // #2816: built ONCE for both sections rather than per row (#1121).
-                        let sourceCalendars = QueueModel.sourceCalendarIndex(watchedSources)
+                        // #2816: built ONCE for every section rather than per row (#1121). #3814 moved
+                        // the building itself into the pass, because a derivation inside a
+                        // `@ViewBuilder` is somewhere no counter and no test can reach it.
+                        let sourceCalendars = data.sourceCalendars
                         // #2919: one clock for the whole list, on the same rule, rather than each row
-                        // reading `Date()` for itself and dating its own sentence a moment apart.
-                        let now = Date()
+                        // reading `Date()` for itself and dating its own sentence a moment apart. #3814:
+                        // it is now the SAME instant the rules above were judged at, which it was not.
+                        let now = data.now
                         // #2878: first, because it is the only one of the three that says something
                         // has gone WRONG. The other two are work arriving on schedule.
                         if !listed.stalledReplyDrafts.isEmpty {

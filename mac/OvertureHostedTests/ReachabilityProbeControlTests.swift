@@ -13,9 +13,43 @@ struct ReachabilityProbeControlTests {
     // #3654: a ROW. This control sits on a date heading and asks only which shows under it a paid check
     // could still be about, which is answerable without a card, so the heading does not force one for
     // every show beneath it.
+    // #3864: DERIVED from the clock, never written out, and this whole suite went red overnight for want
+    // of it.
+    //
+    // It read `"2026-09-12"`. Every test here renders `ReachabilityProbeControl`, whose body draws NOTHING
+    // when `QueueModel.reachabilityProbeCandidateKeys` comes back empty, and that rule asks
+    // `OpenForDecision.isOpen(..., today:)` against `QueueModel.easternToday()`, the real clock. So at
+    // Eastern midnight on 2026-09-13 the fixture's show became yesterday's, every candidate dropped out,
+    // the control rendered nothing, and all five tests failed with "Search did not find a match" and
+    // `texts == []`. Reproduced on unchanged `main` at b8e91fae before anything was blamed on a branch
+    // (L464), and it blocked every Swift merge in the repository until this line changed.
+    //
+    // A fixture whose meaning is a RELATIONSHIP between a stored date and the clock has to pin both ends,
+    // or real time walks the pair into a different state (L130). This control takes no clock of its own,
+    // so the end this suite can pin is the fixture's: thirty days ahead of whenever it runs, which is
+    // inside every window the candidacy rule asks about and cannot age.
+    //
+    // `scripts/check-fixtures-do-not-age.sh` exists for exactly this class and would have named this
+    // suite, and it is opt-in, so nothing ran it.
+    private static var upcomingDate: String {
+        EasternDate.today(Date().addingTimeInterval(60 * 60 * 24 * 30))
+    }
+
     private func item(_ key: String, status: ReviewStatus = .new) -> QueueScopeRow {
         QueueScopeRow(id: key, groupName: key, discipline: "music", venue: "Weill Recital Hall",
-                      performanceDate: "2026-09-12", fitScore: 6, status: status)
+                      performanceDate: Self.upcomingDate, fitScore: 6, status: status)
+    }
+
+    // The suite's own premise, asserted rather than assumed. Every test below renders a control that
+    // draws nothing when the date is past, so a fixture that has aged makes all of them fail for a reason
+    // none of their names mention, which is what happened. This one says WHICH thing is wrong.
+    @Test func theFixturesShowIsStillAhead() {
+        let keys = QueueModel.reachabilityProbeCandidateKeys([item("a")])
+        #expect(keys == ["a"], """
+        the fixture's show is no longer a probe candidate, so every test in this suite is about to fail \
+        for a reason that has nothing to do with the control. The date is \(Self.upcomingDate) against \
+        an Eastern today of \(QueueModel.easternToday()).
+        """)
     }
 
     @Test func showsAndTapReportsTheCandidateKeys() throws {
