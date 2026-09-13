@@ -37,17 +37,22 @@ struct StruckAddressesView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
+        // #3852: bound ONCE. `entries` is a computed property that maps the whole prospect store, and it
+        // was read twice here, once to ask whether it was empty and once to draw it, so one question
+        // walked the store twice. A computed property reads as a free field access at the call site and
+        // nothing there says what it costs (L383).
+        let listed = entries
+        return VStack(alignment: .leading, spacing: 0) {
             header
             Divider().overlay(OVColor.line)
             CappedScrollView(maxHeight: 460) {
                 VStack(alignment: .leading, spacing: OVSpacing.sm) {
-                    if entries.isEmpty {
+                    if listed.isEmpty {
                         Text(StruckAddressCopy.emptyState)
                             .font(.system(size: 12)).foregroundStyle(OVColor.inkSoft)
                             .fixedSize(horizontal: false, vertical: true)
                     } else {
-                        ForEach(entries) { entry in row(entry) }
+                        ForEach(listed) { entry in row(entry) }
                     }
                 }
                 .padding(OVSpacing.lg)

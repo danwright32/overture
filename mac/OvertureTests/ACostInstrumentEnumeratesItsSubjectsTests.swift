@@ -56,14 +56,25 @@ struct ACostInstrumentEnumeratesItsSubjectsTests {
         // as an exemption with the reason rather than by narrowing the walk, because a walk that tried to
         // exclude closures would also exclude derivations that legitimately live in one (L362).
         "WatchlistEditing": "reached only from a control's action closure, never from a redraw",
+        // #3852: THE FIVE THIS GUARD COULD NOT SEE UNTIL THE WALK WAS FIXED.
+        //
+        // The walk appended " {" to a declaration line to build the marker for a property body, so a line
+        // already ending in an open brace produced a marker ending "{ {" and matched nothing. Not one
+        // `var` in this view ever resolved, which means this guard has been reading FUNCTIONS ONLY since
+        // #3829 shipped, while its header claimed "every private property and function the body reaches"
+        // (L400). These five became visible the moment that was fixed, and each is judged here rather
+        // than left to make the list look clean.
+        "SourceSearch": "its derivation half (isSearching, filter) runs inside the pass, timed by the pass; the rest is copy",
+        "GeoRefusals": "a struct init over two small tables the view already holds, walking no prospect",
+        "SourcesSheetClose": "a struct init over four booleans of this view's own editing state, plus copy",
+        "CoverageCopy": "copy, not a derivation",
+        "CoverageDismissEditing": "reached only from a control's action closure, never from a redraw",
     ]
 
-    private static func code(_ source: String) -> String {
-        source.split(separator: "\n", omittingEmptySubsequences: false).map { line -> Substring in
-            guard let range = line.range(of: "//") else { return line }
-            return line[line.startIndex..<range.lowerBound]
-        }.joined(separator: "\n")
-    }
+    // #3852 lifted this and the walk below into `RedrawRegion`, so the two guards that ask questions of
+    // a redraw's region share one implementation rather than each holding a copy that can learn a new
+    // declaration shape without the other (L41, L370). Behaviour here is unchanged.
+    private static func code(_ source: String) -> String { RedrawRegion.code(source) }
 
     // Every type the app declares under Domain, read off the declarations rather than from a list, so a
     // type added next month is enumerated by the same code that judges it.
@@ -90,43 +101,7 @@ struct ACostInstrumentEnumeratesItsSubjectsTests {
     // The region ONE REDRAW evaluates: the view's `body`, plus every private property and function the
     // body reaches, transitively. That transitive step is the whole point: `roomContext` is not named in
     // `body` at all, it is reached through `makeRenderData()`, which is exactly how it stayed invisible.
-    static func redrawRegion(of view: String) -> String {
-        let source = code(view)
-        var region = SourceGuardHelper.propertyBody("var body: some View {", in: source) ?? ""
-        guard !region.isEmpty else { return "" }
-
-        // Declarations this file holds, by name, so a reference in the region can be followed.
-        var declarations: [String: String] = [:]
-        for line in source.components(separatedBy: "\n") {
-            let trimmed = line.trimmingCharacters(in: .whitespaces)
-            for prefix in ["private var ", "private func ", "var ", "func "] where trimmed.hasPrefix(prefix) {
-                let rest = trimmed.dropFirst(prefix.count)
-                let name = String(rest.prefix { $0.isLetter || $0.isNumber || $0 == "_" })
-                guard !name.isEmpty, declarations[name] == nil else { continue }
-                if trimmed.hasPrefix("private func ") || trimmed.hasPrefix("func ") {
-                    declarations[name] = SourceGuardHelper.bodyOfFunction(named: name, in: source) ?? ""
-                } else {
-                    declarations[name] = SourceGuardHelper.propertyBody(trimmed + " {", in: source) ?? ""
-                }
-                break
-            }
-        }
-
-        // Followed to a FIXED POINT rather than one level deep. One level would have found
-        // `makeRenderData()` and stopped above `roomContext`, which is the defect this exists to catch.
-        var seen: Set<String> = []
-        var changed = true
-        while changed {
-            changed = false
-            for (name, body) in declarations
-            where !seen.contains(name) && !body.isEmpty && region.contains(name) {
-                seen.insert(name)
-                region += "\n" + body
-                changed = true
-            }
-        }
-        return region
-    }
+    static func redrawRegion(of view: String) -> String { RedrawRegion.of(view) }
 
     @Test func thesourcesSheetInstrumentNamesEveryDerivationARedrawRuns() {
         let view = SourceGuardHelper.source("Overture/UI/SourcesView.swift")
