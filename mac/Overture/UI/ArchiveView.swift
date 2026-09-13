@@ -39,7 +39,29 @@ struct ArchiveView: View {
     // environment object here, so a missed injection is a pass nobody counted rather than a crash.
     @Environment(FreezeWatch.self) private var freezeWatch: FreezeWatch?
 
-    @Query private var prospects: [Prospect]
+    // #3846: the whole store, HANDED DOWN by RootView rather than queried again here.
+    //
+    // It was `@Query private var prospects: [Prospect]`, a bare descriptor identical to the one RootView
+    // already holds. Measured 2026-09-12 by #3764 on the live store, an open Archive added 165.0 ms to
+    // EVERY store change and 158.8 ms of that was this second read of the prospect table, against the
+    // first read's 159.5 ms over 1,238 rows: SwiftData shares nothing between two identical descriptors
+    // held by two live views.
+    //
+    // The sheet is presented over the queue, which already holds the whole table, so handing the rows
+    // down costs nothing and makes this list a DERIVATION rather than a second fetch. What it gives up,
+    // stated rather than assumed: this view no longer updates independently of RootView. That costs
+    // nothing here, because the sheet cannot be on screen without RootView being on screen, and RootView
+    // re-renders on every prospect change.
+    //
+    // Narrowing the query instead was the other option and is closed in both directions: by FIELD,
+    // because #3750 measured `propertiesToFetch` over the 23 fields a row is built from at 20% SLOWER
+    // than reading the whole row; and by ROW, because `QueueModel.scope` below is judged against the
+    // WHOLE store on purpose (#1598), so a show Dan dismisses cannot silently change which organisations
+    // the producer gate admits.
+    //
+    // NO DEFAULT, for the reason QueueView's carries: an empty default renders an empty Archive that
+    // looks exactly like an empty store (L168, L67).
+    let prospects: [Prospect]
     // #1598 Phase 5: the organisation answer ledger, so an archived row reads the same as it does in the
     // queue. Unlike QueueView this query is already the WHOLE store, so it doubles as the gate's corpus.
     @Query private var orgAnswers: [OrgReachabilityAnswer]

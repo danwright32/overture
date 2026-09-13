@@ -40,7 +40,7 @@ struct QueueViewMastheadLayoutTests {
     }
 
     @Test func aMastheadRendersWithHeight() {
-        let view = QueueView(deepLinkedKey: .constant(nil), deepLinkedKeys: .constant(nil))
+        let view = QueueView(deepLinkedKey: .constant(nil), deepLinkedKeys: .constant(nil), allProspects: [])
         let items = [longshotItem(id: "a"), longshotItem(id: "b")]
 
         #expect(renderedHeight(view.masthead(visible: items, items: items, fanOutLine: nil, notices: [], pendingBookings: QueueModel.pendingBookingCount(items),
@@ -52,7 +52,7 @@ struct QueueViewMastheadLayoutTests {
     // be somewhere he actually looks. Asserted by height, because a masthead that swallowed the line would
     // otherwise pass every test that only checked the sentence itself.
     @Test func aFanOutWarningMakesTheMastheadTaller() {
-        let view = QueueView(deepLinkedKey: .constant(nil), deepLinkedKeys: .constant(nil))
+        let view = QueueView(deepLinkedKey: .constant(nil), deepLinkedKeys: .constant(nil), allProspects: [])
         let items = [longshotItem(id: "a"), longshotItem(id: "b")]
 
         let quiet = renderedHeight(view.masthead(visible: items, items: items, fanOutLine: nil, notices: [], pendingBookings: QueueModel.pendingBookingCount(items),
@@ -71,7 +71,7 @@ struct QueueViewMastheadLayoutTests {
     // must no longer make the masthead taller: with the breakdown line gone, the height is the same whether
     // or not a high-fit item is present. If someone re-introduced the breakdown line, this would fail.
     @Test func aHighFitItemNoLongerAddsABreakdownLine() {
-        let view = QueueView(deepLinkedKey: .constant(nil), deepLinkedKeys: .constant(nil))
+        let view = QueueView(deepLinkedKey: .constant(nil), deepLinkedKeys: .constant(nil), allProspects: [])
         let withoutHighFit = [longshotItem(id: "a"), longshotItem(id: "b")]
         let withHighFit = [highFitItem(id: "a"), longshotItem(id: "b")]
 

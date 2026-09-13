@@ -105,12 +105,31 @@ struct ARepeatedDerivationIsFoundTests {
     /// indistinguishable from a scan that examined nothing (L90, L98).
     static func findings(inFileNamed name: String, text: String) -> [Finding] {
         let stripped = RedrawRegion.code(text)
-        // The whole-store queries this file holds. A declaration naming one of these sweeps the store.
+        // The WHOLE-STORE CORPUS this file holds, however it came by it. A declaration naming one of
+        // these sweeps the store.
+        //
+        // #3846 RE-AIMED THIS, and it is worth reading before narrowing it back. Until then a corpus was
+        // recognised only as `@Query ... [Prospect]`, which was every way a view could have one. That
+        // issue took the queue's and the Archive's own queries away, because RootView already held an
+        // identical bare one and two of them share nothing (158.8 ms measured over 1,238 rows), and the
+        // rows are handed down as a plain stored property instead. Recognising only the query shape would
+        // have left this scan unable to see a corpus in the two views it was written against, and its
+        // findings there would have gone to zero while reading as a clean result (L220, L98). The stale
+        // exemption for `QueueView.items` was what said so.
         let storeQueries = stripped.components(separatedBy: "\n").compactMap { line -> String? in
             let trimmed = line.trimmingCharacters(in: .whitespaces)
-            guard trimmed.hasPrefix("@Query"), trimmed.contains("[Prospect]"),
-                  let varRange = trimmed.range(of: "var ") else { return nil }
-            let rest = trimmed[varRange.upperBound...]
+            if trimmed.hasPrefix("@Query"), trimmed.contains("[Prospect]"),
+               let varRange = trimmed.range(of: "var ") {
+                let rest = trimmed[varRange.upperBound...]
+                let named = String(rest.prefix { $0.isLetter || $0.isNumber || $0 == "_" })
+                return named.isEmpty ? nil : named
+            }
+            // A corpus HANDED IN: `let allProspects: [Prospect]`, a stored property with no initializer.
+            // The trailing-value case (`let x: [Prospect] = ...`) is deliberately not matched, because a
+            // local inside a function is not a corpus this view holds for the life of a draw.
+            guard trimmed.hasSuffix(": [Prospect]"),
+                  trimmed.hasPrefix("let ") || trimmed.hasPrefix("var ") else { return nil }
+            let rest = trimmed.dropFirst(4)
             let named = String(rest.prefix { $0.isLetter || $0.isNumber || $0 == "_" })
             return named.isEmpty ? nil : named
         }

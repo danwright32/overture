@@ -43,7 +43,7 @@ struct ArchiveViewSendStateTests {
     }
 
     @Test func noOutboundSendShowsTheSendButton() throws {
-        let view = ArchiveView()
+        let view = ArchiveView(prospects: [])
 
         let item = approvedItemWithDraft()
 
@@ -53,7 +53,7 @@ struct ArchiveViewSendStateTests {
     }
 
     @Test func anInFlightOutboundSendShowsTheLiveLabelInsteadOfTheButton() throws {
-        let view = ArchiveView()
+        let view = ArchiveView(prospects: [])
         let since = Date(timeIntervalSince1970: 1000)
 
         let item = approvedItemWithDraft()

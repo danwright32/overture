@@ -790,9 +790,12 @@ struct QueueRenderPassLiveStoreCostTests {
             return r
         }
 
-        // ARM A: the queue alone, which is what a store change costs with no sheet up.
+        // ARM A: ONE whole-table read, which since #3846 is what the app holds while the Archive is open.
         let queueAlone = read(queueQuery)
-        // ARM B: the same change with the Archive open, so BOTH live queries are satisfied.
+        // ARM B: what it cost BEFORE #3846, when the sheet held a second live query of its own. Kept as a
+        // measurement rather than deleted with the defect, because it is the evidence the rule rests on:
+        // a second live whole-table query is a whole second table read, and the eight sheets still holding
+        // one (#3871) each pay this the moment they are opened.
         let withArchive = read(queueQuery).seconds + read(archiveQuery).seconds
 
         // And the sheet's five other tables, which are live for as long as it is.
@@ -812,21 +815,25 @@ struct QueueRenderPassLiveStoreCostTests {
 
         print("""
         queue-live-store-archive-open: what an open Archive adds to one store change (#3764)
-          the queue's prospect read alone          \(ms(queueAlone.seconds)) ms   \(queueAlone.rows) rows
-          the same read with Archive open (2x)     \(ms(withArchive)) ms
-          what the second prospect query adds      \(ms(withArchive - queueAlone.seconds)) ms
+          one whole-table prospect read            \(ms(queueAlone.seconds)) ms   \(queueAlone.rows) rows
+          two of them, as the app held before #3846 \(ms(withArchive)) ms
+          what a SECOND live query adds            \(ms(withArchive - queueAlone.seconds)) ms
           the sheet's five other tables            \(ms(others)) ms
             OrgReachabilityAnswer                  \(ms(orgAnswers.seconds)) ms   \(orgAnswers.rows) rows
             RefusedContactAddress                  \(ms(refused.seconds)) ms   \(refused.rows) rows
             PromotedProducer                       \(ms(promoted.seconds)) ms   \(promoted.rows) rows
             DemotedHouse                           \(ms(demoted.seconds)) ms   \(demoted.rows) rows
             WatchedSource                          \(ms(sources.seconds)) ms   \(sources.rows) rows
-          so an open Archive adds, per store change \(ms(withArchive - queueAlone.seconds + others)) ms
+          so an open Archive added, before #3846    \(ms(withArchive - queueAlone.seconds + others)) ms
+          and adds now                              \(ms(others)) ms
 
           Read the second line against the first. Both descriptors are BARE and therefore identical, so
-          if SwiftData shared the read this would be near the first figure and the sheet is nearly free;
-          if it satisfies each independently it is near twice it and the sheet doubles the largest term
-          in a store change for as long as it is open.
+          if SwiftData shared the read this would be near the first figure and a second live query is
+          nearly free; if it satisfies each independently it is near twice it and every extra live
+          whole-table query doubles the largest term in a store change for as long as it is held.
+
+          #3846 took the Archive's own query away, and the queue's: RootView holds the one read and hands
+          the rows to both. What an open Archive costs now is the five small tables alone.
 
           The five other tables are small by row count and are reported anyway, because "small" is the
           claim this milestone has had to withdraw three times.

@@ -56,7 +56,7 @@ struct ArchiveContactDeepLinkGuardTests {
         #expect(!rootView.isEmpty)
         #expect(rootView.contains("archiveJumpRecipientId"),
                 "RootView doesn't track a recipient id alongside archiveJumpKey (#685).")
-        guard let sheetSite = rootView.range(of: "ArchiveView(initialHighlightKey:") else {
+        guard let sheetSite = rootView.range(of: "ArchiveView(") else {
             Issue.record("ArchiveView call site not found in RootView")
             return
         }

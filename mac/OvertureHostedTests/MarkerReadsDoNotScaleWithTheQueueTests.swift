@@ -70,10 +70,16 @@ struct MarkerReadsDoNotScaleWithTheQueueTests {
         @State private var dayOffOffer = DayOffOfferRequest()
 
         var body: some View {
-            QueueView(deepLinkedKey: $deepLinkedKey, deepLinkedKeys: $deepLinkedKeys)
-                .modelContainer(container)
-                .environment(feedback)
-                .environment(dayOffOffer)
+            // #3846: QueueView takes its rows rather than querying the table itself, because RootView
+            // already holds an identical bare query and two of them share nothing. This harness plays
+            // RootView's part, so what is measured below is still the store-to-screen path.
+            RowsFromStore { (rows: [Prospect]) in
+                QueueView(deepLinkedKey: $deepLinkedKey, deepLinkedKeys: $deepLinkedKeys,
+                          allProspects: rows)
+            }
+            .modelContainer(container)
+            .environment(feedback)
+            .environment(dayOffOffer)
         }
     }
 

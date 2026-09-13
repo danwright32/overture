@@ -164,21 +164,50 @@ struct OneQueryPerEntityGuardTests {
     func theReaderStillFindsQueries() {
         let all = appFiles.flatMap(QueryPairAudit.declarations(in:))
         #expect(all.count > 20, "found only \(all.count) @Query declarations, so the reader is broken")
-        #expect(all.contains(where: { $0.file == "QueueView.swift" && $0.entity == "Prospect" }),
-                "the queue's own prospect query was not seen, so nothing here was measured")
-        #expect(all.contains(where: { $0.file == "ArchiveView.swift" && $0.entity == "Prospect" }))
+        // #3846 RE-AIMED THIS POSITIVE CONTROL. It named the queue's and the Archive's own prospect
+        // queries, which were the two the issue was about, and both are gone: RootView holds the app's one
+        // whole-table read and hands the rows down, because two identical bare descriptors in two live
+        // views share nothing (158.8 ms against 159.5 ms over 1,238 rows, measured 2026-09-12). A control
+        // naming a declaration the app no longer has fails on the correct code while measuring nothing
+        // (L220, L252), so it names the OWNER instead, which is the declaration that must still be there.
+        #expect(all.contains(where: { $0.file == "RootView.swift" && $0.entity == "Prospect" }),
+                "the owner's prospect query was not seen, so nothing here was measured")
+        #expect(all.contains(where: { $0.file == "QueueView.swift" && $0.entity == "OrgReachabilityAnswer" }),
+                "the queue's other queries were not seen either, so the reader is not reading this file")
     }
 
     // #3507's own change, asserted directly rather than only through the absence of a finding: an absence
     // is what a broken reader also produces.
-    @Test("the queue reads the prospect table exactly once")
-    func theQueueHoldsOneProspectQuery() {
-        let queue = appFiles.filter { $0.name == "QueueView.swift" }
-        #expect(queue.count == 1, "QueueView.swift was not found, so this asserted nothing")
-        let prospectQueries = queue.flatMap(QueryPairAudit.declarations(in:))
+    //
+    // #3846 took the number from ONE to NONE. #3507 removed the queue's second prospect query because
+    // SwiftData satisfied each independently; #3846 found that RootView holds a third of the same shape
+    // and the queue renders inside it, so the app read the whole table twice on every store change with no
+    // sheet open at all. The queue now takes the rows from RootView. The claim is unchanged in kind and
+    // its number has moved, which is what a change that splits or moves work does to every guard
+    // calibrated against the old one (L220).
+    @Test("the queue and the Archive read the prospect table through the owner, not themselves")
+    func theQueueHoldsNoProspectQuery() {
+        for name in ["QueueView.swift", "ArchiveView.swift"] {
+            let file = appFiles.filter { $0.name == name }
+            #expect(file.count == 1, "\(name) was not found, so this asserted nothing")
+            let prospectQueries = file.flatMap(QueryPairAudit.declarations(in:))
+                .filter { $0.entity == "Prospect" }
+            #expect(prospectQueries.isEmpty, Comment(rawValue:
+                "\(name) holds \(prospectQueries.map(\.property)) over Prospect. RootView already holds "
+                + "one and presents this view, so each of these is a second whole table read on every "
+                + "store change"))
+        }
+
+        let root = appFiles.filter { $0.name == "RootView.swift" }
+        let owned = root.flatMap(QueryPairAudit.declarations(in:))
             .filter { $0.entity == "Prospect" }
-        #expect(prospectQueries.map(\.property) == ["allProspects"],
-                "the queue holds \(prospectQueries.map(\.property)) over Prospect")
+            .map(\.property)
+        // `toPrep` is the FILTERED one (#367's needsPrep predicate), which reads a fraction of the table
+        // and is not what this rule is about; `allProspects` is the whole-table read this change made the
+        // only one of its kind on the always-visible path.
+        #expect(owned.contains("allProspects"), Comment(rawValue:
+            "RootView holds \(owned) over Prospect, and the whole-table read the queue and the Archive "
+            + "now depend on is not among them"))
     }
 
     @Test("every accepted pair carries a reason")
