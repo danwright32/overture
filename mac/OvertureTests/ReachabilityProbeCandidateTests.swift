@@ -7,10 +7,25 @@ import Foundation
 // when two or more such candidates share a date (the whole value is comparing several).
 @Suite("Reachability probe candidates (#1308)")
 struct ReachabilityProbeCandidateTests {
+    // #3864: the show's date and the DAY IT IS JUDGED AGAINST, pinned as a pair.
+    //
+    // Every candidacy question here is a relationship between the two, and `reachabilityProbeCandidateKeys`
+    // defaults `today` to `QueueModel.easternToday()`, the real clock. So a call that passed `now:` and
+    // left `today:` alone pinned one end and let the other walk, and at Eastern midnight on 2026-09-13 the
+    // fixture's show became yesterday's and five tests here went red (L130). The three calls that already
+    // passed `today:` explicitly were the three that did not.
+    //
+    // The sibling suite `ReachabilityProbeControlTests` had the same defect the same night and could not be
+    // fixed the same way, because the CONTROL takes no `today` of its own; it derives a date thirty days
+    // out instead. Where the function under test accepts the day, pinning both ends is the stronger answer,
+    // because it asserts about a fixed pair rather than about whenever the suite happens to run.
+    private static let showDate = "2026-09-12"
+    private static let beforeTheShow = "2026-09-01"
+
     private func item(_ key: String, status: ReviewStatus = .new, booked: Bool = false,
                       sent: Bool = false, probed: Bool = false) -> QueueItem {
         var i = QueueItem(id: key, groupName: key, discipline: "music", venue: "Weill Recital Hall",
-                          performanceDate: "2026-09-12", sourceListingURL: nil,
+                          performanceDate: Self.showDate, sourceListingURL: nil,
                           priorRelationship: "none", production: "self", profile: "strong",
                           coverage: "likely_uncovered", fitScore: 6, tier: "mid", fitReason: "r",
                           matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil, status: status)
@@ -56,10 +71,10 @@ struct ReachabilityProbeCandidateTests {
         var fresh = item("t"); fresh.reachabilityProbedAt = probedAt
 
         let afterWindow = probedAt.addingTimeInterval(Reachability.probeFreshness + 1)
-        #expect(QueueModel.reachabilityProbeCandidateKeys([stale], now: afterWindow) == ["s"])
+        #expect(QueueModel.reachabilityProbeCandidateKeys([stale], now: afterWindow, today: Self.beforeTheShow) == ["s"])
 
         let withinWindow = probedAt.addingTimeInterval(1)
-        #expect(QueueModel.reachabilityProbeCandidateKeys([fresh], now: withinWindow) == [])
+        #expect(QueueModel.reachabilityProbeCandidateKeys([fresh], now: withinWindow, today: Self.beforeTheShow) == [])
     }
 
     // #1595, then Dan's walk (2026-07-27): both the visibility rule and the headline selector are gone.
@@ -71,7 +86,7 @@ struct ReachabilityProbeCandidateTests {
     @Test func aBookedSiblingIsNotACandidate() {
         #expect(QueueModel.reachabilityProbeCandidateKeys(
             [item("a"), item("x", booked: true)],
-            now: Date(timeIntervalSince1970: 1_780_000_100)) == ["a"])
+            now: Date(timeIntervalSince1970: 1_780_000_100), today: Self.beforeTheShow) == ["a"])
     }
 
     // #1609: a show somewhere Dan has refused to travel must never be offered a PAID check.
@@ -104,17 +119,18 @@ struct ReachabilityProbeCandidateTests {
     // Both halves, so the test fails if the refusal set stops reaching this rule.
     @Test func aShowInARefusedTownIsNeverOfferedAPaidCheck() {
         let show = [placed("refused", "Larchmont, NY")]
-        #expect(QueueModel.reachabilityProbeCandidateKeys(show, now: now) == ["refused"],
+        #expect(QueueModel.reachabilityProbeCandidateKeys(show, now: now, today: Self.beforeTheShow) == ["refused"],
                 "with no refusal, a theater show up the line is worth checking")
         #expect(QueueModel.reachabilityProbeCandidateKeys(
-            show, now: now, geo: GeoRefusals(userExcludedTowns: ["larchmont"])) == [],
+            show, now: now, today: Self.beforeTheShow,
+            geo: GeoRefusals(userExcludedTowns: ["larchmont"])) == [],
                 "once he has refused the town, paying to research it is money on a show he will not take")
     }
 
     // A place Overture judges out of range on its own, with no refusal from Dan at all.
     @Test func aShowOverturePlacesOutOfRangeIsNotACandidate() {
         #expect(QueueModel.reachabilityProbeCandidateKeys(
-            [placed("here", "New York, NY"), placed("abroad", "Beijing, China")], now: now) == ["here"])
+            [placed("here", "New York, NY"), placed("abroad", "Beijing, China")], now: now, today: Self.beforeTheShow) == ["here"])
     }
 
     // The asymmetry that keeps this from losing him a show (#970): a positive placement out of range
@@ -123,7 +139,8 @@ struct ReachabilityProbeCandidateTests {
     @Test func aShowWithNoReadablePlaceStaysACandidate() {
         #expect(QueueModel.reachabilityProbeCandidateKeys(
             [placed("unknown", nil), placed("blank", ""), placed("vague", "the usual spot")],
-            now: now, geo: GeoRefusals(userExcludedTowns: ["larchmont"])) == ["unknown", "blank", "vague"])
+            now: now, today: Self.beforeTheShow,
+            geo: GeoRefusals(userExcludedTowns: ["larchmont"])) == ["unknown", "blank", "vague"])
     }
 
     // A SEED town (one of the built-in far places, not a refusal of Dan's) is excluded by default and
@@ -132,10 +149,11 @@ struct ReachabilityProbeCandidateTests {
     // taken back would never be offered one.
     @Test func aSeedTownIsExcludedUntilHeAllowsItBack() {
         let show = [placed("buffalo", "Buffalo, NY")]
-        #expect(QueueModel.reachabilityProbeCandidateKeys(show, now: now) == [],
+        #expect(QueueModel.reachabilityProbeCandidateKeys(show, now: now, today: Self.beforeTheShow) == [],
                 "a built-in far town is not worth paying to research")
         #expect(QueueModel.reachabilityProbeCandidateKeys(
-            show, now: now, geo: GeoRefusals(allowedSeedTowns: ["buffalo"])) == ["buffalo"],
+            show, now: now, today: Self.beforeTheShow,
+            geo: GeoRefusals(allowedSeedTowns: ["buffalo"])) == ["buffalo"],
                 "once he takes a seed town back, its shows are worth checking again")
     }
 
