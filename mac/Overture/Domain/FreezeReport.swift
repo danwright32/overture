@@ -47,15 +47,27 @@ enum FreezeReport {
         // sequence alone is not one, and keying on it made the notice go permanently silent after the
         // first session.
         //
-        // The set written back is the identities of every record the file STILL HOLDS, so it is bounded
-        // by the file's own cap rather than growing forever, and a record compaction has moved out of the
-        // live file can never be reported here anyway because this reader does not open the archive.
+        // The set written back is the identities of every record CONSIDERED, so it is bounded by the live
+        // file's cap plus the archive's own 31 day retention rather than growing forever.
         //
-        // #3763 made that distinction real. Before it, a compacted record was DELETED, so "not there to
-        // read" was true of the world; now it is in `freeze-log-archive.ndjson` and this reader
-        // deliberately ignores it, because the launch notice wants the last session's shape while the
-        // archive exists for the population. `scripts/what-froze-the-queue.sh` is the reader that wants
-        // both. The consequence for this set is unchanged; the reason for it is not.
+        // #3851 OVERTURNED THE DECISION THIS COMMENT USED TO RECORD, and the old reasoning is kept here
+        // rather than deleted, because it was right for the world it was written in (L61, L249, #3077).
+        // It said this reader "deliberately ignores" the archive, "because the launch notice wants the
+        // last session's shape while the archive exists for the population". That held while a session
+        // could not fill the live file on its own: the records a compaction moved out had been reported at
+        // an earlier launch, so ignoring them lost nothing.
+        //
+        // #3812 ended it. Before that, a session stopped writing at its 200th stall, so 500 records spanned
+        // several sessions. Writing every stall means ONE heavy session can write past the cap, and its own
+        // records are compacted into the archive before any launch has read them. They were then lost to
+        // this notice permanently, and the loss was worst in exactly the sessions that froze most (L216).
+        //
+        // Measured on Dan's own files 2026-09-12: 700 records live against a cap of 500, and 780 already
+        // archived, every one of them invisible here.
+        //
+        // What the old decision got RIGHT is kept: this is still a notice about what has not been SAID,
+        // never about the whole history, and `scripts/what-froze-the-queue.sh` is still the reader for the
+        // population. The only change is that having been archived no longer counts as having been said.
         let alreadySaid = Set(defaults.stringArray(forKey: FreezeLog.reportedIdsKey) ?? [])
 
         // An install upgrading FROM the version keyed on the sequence carries a backlog nothing could
@@ -64,15 +76,24 @@ enum FreezeReport {
         // that could speak saying NOTHING is indistinguishable from the defect that silenced it, which is
         // the state this whole change exists to end (L98). Dan's call, 2026-09-06, in this session,
         // reversing the suppression this shipped with.
-        let fresh = found.records.filter { !alreadySaid.contains($0.identity) }
-        defaults.set(found.records.map(\.identity), forKey: FreezeLog.reportedIdsKey)
+        // #3851: the archive FIRST, so the combined list is roughly chronological, on the same reasoning
+        // `scripts/what-froze-the-queue.sh` already uses: a compaction only ever moves records OLDER than
+        // everything the live file kept. An absent archive is the ordinary state, because most installs
+        // have never compacted, and `FreezeLog.read` reports that as `fileWasAbsent` with no records.
+        let archived = read(FreezeLog.archiveURL(besideLogAt: FreezeLog.url(in: support)))
+        let considered = archived.records + found.records
+
+        let fresh = considered.filter { !alreadySaid.contains($0.identity) }
+        defaults.set(considered.map(\.identity), forKey: FreezeLog.reportedIdsKey)
 
         guard let worst = fresh.max(by: { $0.seconds < $1.seconds }) else { return nil }
         return FreezeNoticeCopy.report(count: fresh.count,
                                        longestSeconds: worst.seconds,
                                        surface: worst.surface,
                                        load: worst.load,
-                                       unreadableLines: found.unreadableLines)
+                                       // Both files' unreadable lines, because a line this reader could
+                                       // not decode is the same fact whichever file held it.
+                                       unreadableLines: found.unreadableLines + archived.unreadableLines)
     }
 
     // #3439's reader: the longest stall this file holds, asked for rather than found by opening a file.
