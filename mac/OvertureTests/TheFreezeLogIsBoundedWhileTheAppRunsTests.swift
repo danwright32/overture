@@ -109,14 +109,24 @@ final class TheFreezeLogIsBoundedWhileTheAppRunsTests {
     // view that names the domain call.
     @Test("there is one housekeeping implementation, not one per caller")
     func bothCallersShareOneImplementation() {
-        let named = rootView.components(separatedBy: "FreezeLog.housekeeping(").count - 1
+        // #3828 RE-AIMED THIS, and it is not a reversal of #3796. The claim is unchanged: the launch task
+        // and the hourly tick must reach ONE implementation, so they cannot drift into doing different
+        // things. What changed is where that implementation lives. The work is no longer done on the main
+        // actor (it cost 12.75 ms of a frame in the hour it compacts), so `RootView` now names the
+        // housekeeper and the housekeeper names the domain call.
+        let named = rootView.components(separatedBy: "FreezeLogHousekeeper.shared.run(").count - 1
         #expect(named == 1,
-                "RootView names FreezeLog.housekeeping \(named) times, so its callers can drift apart")
+                Comment(rawValue: "RootView names the housekeeper \(named) times, so its callers can "
+                        + "drift apart (#3796, #3828)"))
+        let doesItOnTheMainActor = rootView.components(separatedBy: "FreezeLog.housekeeping(").count - 1
+        #expect(doesItOnTheMainActor == 0,
+                Comment(rawValue: "RootView calls FreezeLog.housekeeping directly \(doesItOnTheMainActor) "
+                        + "time(s), which is the read, modify, write #3828 took off the main actor"))
         guard let body = SourceGuardHelper.bodyOfFunction(named: "runFreezeLogHousekeeping", in: rootView) else {
             Issue.record("runFreezeLogHousekeeping body not found in RootView"); return
         }
-        #expect(body.contains("FreezeLog.housekeeping(at:"),
-                "the shared method does not actually run the housekeeping")
+        #expect(body.contains("FreezeLogHousekeeper.shared.run(at:"),
+                "the shared method does not actually hand the housekeeping to the housekeeper")
     }
 
     // MARK: - running it more often has to be harmless
