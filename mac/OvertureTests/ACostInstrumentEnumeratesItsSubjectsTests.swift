@@ -56,6 +56,19 @@ struct ACostInstrumentEnumeratesItsSubjectsTests {
         // as an exemption with the reason rather than by narrowing the walk, because a walk that tried to
         // exclude closures would also exclude derivations that legitimately live in one (L362).
         "WatchlistEditing": "reached only from a control's action closure, never from a redraw",
+        // #3852: THE FIVE THIS GUARD COULD NOT SEE UNTIL THE WALK WAS FIXED.
+        //
+        // The walk appended " {" to a declaration line to build the marker for a property body, so a line
+        // already ending in an open brace produced a marker ending "{ {" and matched nothing. Not one
+        // `var` in this view ever resolved, which means this guard has been reading FUNCTIONS ONLY since
+        // #3829 shipped, while its header claimed "every private property and function the body reaches"
+        // (L400). These five became visible the moment that was fixed, and each is judged here rather
+        // than left to make the list look clean.
+        "SourceSearch": "its derivation half (isSearching, filter) runs inside the pass, timed by the pass; the rest is copy",
+        "GeoRefusals": "a struct init over two small tables the view already holds, walking no prospect",
+        "SourcesSheetClose": "a struct init over four booleans of this view's own editing state, plus copy",
+        "CoverageCopy": "copy, not a derivation",
+        "CoverageDismissEditing": "reached only from a control's action closure, never from a redraw",
     ]
 
     // #3852 lifted this and the walk below into `RedrawRegion`, so the two guards that ask questions of

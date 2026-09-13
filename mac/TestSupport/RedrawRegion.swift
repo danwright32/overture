@@ -94,7 +94,13 @@ enum RedrawRegion {
         let declarations = declarations(in: source)
 
         // Followed to a FIXED POINT rather than one level deep. See the header.
-        var seen: Set<String> = []
+        //
+        // `body` IS THE REGION, so it is marked as already followed. Without this it is a declaration
+        // like any other, its name appears in the region (in `.body`, or in any word containing it), and
+        // the whole body is appended a SECOND time. That is harmless to a reader asking only whether a
+        // type is named, which is why #3829 never saw it, and it doubles the answer for a reader COUNTING
+        // references, which is what #3852 needed and what found it.
+        var seen: Set<String> = ["body"]
         var changed = true
         while changed {
             changed = false

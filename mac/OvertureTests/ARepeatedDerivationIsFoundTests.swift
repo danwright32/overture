@@ -69,6 +69,15 @@ struct ARepeatedDerivationIsFoundTests {
         header calls case 1, and it is the reason the rule is per body evaluation rather than per \
         reference.
         """,
+        "QueueView.items": """
+        read five times, and every one of the five is an ACTION path this text scan cannot tell from draw \
+        code: two scroll-jump handlers, a send that snapshots one card, and the finish-missed-shows \
+        control. Checked one at a time on 2026-09-12, not assumed. The body itself never reads it: \
+        `data.items` is what every draw uses, and #1771 and #1772 are the two issues that made it so, \
+        each naming the word difference. The remaining reads reach the region only because the body names \
+        the functions those actions live in, which is the same limit #3829 recorded for `WatchlistEditing` \
+        and settled the same way (L362).
+        """,
     ]
 
     private static func appViewFiles() -> [(name: String, text: String)] {
@@ -107,9 +116,25 @@ struct ARepeatedDerivationIsFoundTests {
         }
 
         let lines = stripped.components(separatedBy: "\n")
+        let allDeclarations = RedrawRegion.declarations(in: stripped)
+        // THE REGION ONE DRAW EVALUATES, and counting inside it rather than across the whole file is what
+        // makes this "per draw" rather than "per mention". `QueueView.items` counted eleven after every
+        // other exclusion, and all eleven were reads from ACTION paths: a send confirm, a jump, a probe
+        // sweep. The body itself deliberately reads `data.items` and never the property (#1771, #1772), so
+        // the file's own fix was being reported as the defect it fixed.
+        let region = RedrawRegion.of(text)
         var found: [Finding] = []
-        for (_, declaration) in RedrawRegion.declarations(in: stripped) {
+        for (_, declaration) in allDeclarations {
             guard !declaration.body.isEmpty, declaration.name != "body" else { continue }
+            // A VALUE somebody reads, never an ACTION somebody presses, and this is the distinction the
+            // first real run of this scan got wrong. It reported `RootView.runScout` as "read 6x" because
+            // six buttons name it, which is six controls rather than six derivations: an action runs when
+            // Dan presses it and a computed property runs every time its name is evaluated. Ten of the
+            // fifteen it first reported were actions (L147: measure how often a guard fires on the REAL
+            // values before believing it).
+            guard isAValueRatherThanAnAction(declaration.name, in: lines, at: declaration.line) else {
+                continue
+            }
 
             let reachedReaders = Self.filesystemReaders.filter { declaration.body.contains($0) }
             let sweptQueries = storeQueries.filter { references(to: $0, in: declaration.body) > 0 }
@@ -123,11 +148,20 @@ struct ARepeatedDerivationIsFoundTests {
             // with a body and once returning `[:]` for Release. Counting the release declaration as a
             // read reported a DEBUG-only diagnostic as a repeated derivation, which is the noise that
             // makes a finding unreadable (L412).
-            var reads = 0
-            for (index, line) in lines.enumerated() {
-                guard index < declaration.line || index >= declaration.line + declaration.span else { continue }
-                guard !declares(declaration.name, on: line) else { continue }
-                reads += references(to: declaration.name, in: line)
+            // Counted in the region, then the declaration's OWN body taken back off, because the region
+            // contains that body whenever a draw reaches it and a recursive mention is not a call site.
+            var reads = references(to: declaration.name, in: region)
+            if region.contains(declaration.body) {
+                reads -= references(to: declaration.name, in: declaration.body)
+            }
+            // And any body where the name is a PARAMETER rather than this property. `missedByACheckKeys(in
+            // items:)` is the measured case (L412).
+            for other in allDeclarations.values where other.name != declaration.name {
+                guard other.line < lines.count, !other.body.isEmpty else { continue }
+                let header = lines[other.line]
+                guard header.contains("\(declaration.name):") else { continue }
+                guard region.contains(other.body) else { continue }
+                reads -= references(to: declaration.name, in: other.body)
             }
             guard reads > 1 else { continue }
 
@@ -143,7 +177,29 @@ struct ARepeatedDerivationIsFoundTests {
     /// `items` never matches `archiveItems`. The first crude version of this scan counted substrings and
     /// reported `QueueView.items` twenty-five times, which is the noise that makes a finding unreadable
     /// (L412).
-    private static func references(to name: String, in text: String) -> Int {
+    private static func references(to name: String, in source: String) -> Int {
+        // STRING LITERALS ARE NOT CODE, through the repo's own scanner rather than a second stripper of
+        // my own (L41). `DaysOffView` draws `sectionHeading("Days you blocked", systemImage: "calendar")`,
+        // and the word inside that literal was being counted as a read of its `calendar` property.
+        //
+        // `codeLines` and NOT `scannableLines`, and the difference is the whole point rather than a
+        // detail: `scannableLines` leaves literals INTACT on purpose, because the copy guards it was
+        // written for have to read the words inside a `Text(`. `codeLines` is the same scan with the
+        // string contents removed, which its own comment says is "what you want when counting braces".
+        // Reaching for the better known of the two is what left this counting a word inside a label.
+        //
+        // AND THE INTERPOLATIONS PUT BACK, because neither of the repo's two views is the one counting
+        // reads needs. `Text("\(listed.count) waiting")` IS a read of `listed`, and `codeLines` removes
+        // it along with the words around it. Taking only `codeLines` made this scan report an empty app
+        // AND fail its own positive control in the same run, which is the control doing exactly its job:
+        // a scan that can no longer find a planted repeat says nothing by finding none in the app (L90,
+        // L171). The interpolated spans come off `scan.literals`, whose text keeps them intact by
+        // contract, so this is still one scan of the source rather than a second stripper.
+        let scan = SwiftSource.tokenize(source)
+        var text = scan.codeLines.keys.sorted().compactMap { scan.codeLines[$0] }.joined(separator: "\n")
+        for literal in scan.literals {
+            for span in interpolatedSpans(in: literal.text) { text += "\n" + span }
+        }
         var count = 0
         var searchFrom = text.startIndex
         while let range = text.range(of: name, range: searchFrom..<text.endIndex) {
@@ -151,24 +207,76 @@ struct ARepeatedDerivationIsFoundTests {
                 || !isNameCharacter(text[text.index(before: range.lowerBound)])
             let afterOK = range.upperBound == text.endIndex
                 || !isNameCharacter(text[range.upperBound])
-            if beforeOK && afterOK { count += 1 }
+            // A MEMBER OF SOMETHING ELSE is not this property. `group.items` and `data.items` are the
+            // whole reason `QueueView.items` first counted twenty-five: the body deliberately reads
+            // `data.items` (#1771, #1772) precisely so it does NOT read the property, and the scan was
+            // counting each of those as a read of the thing they exist to avoid. `self.items` is kept,
+            // because that IS a read of the property.
+            let precededByDot = range.lowerBound > text.startIndex
+                && text[text.index(before: range.lowerBound)] == "."
+            let throughSelf = precededByDot && text[..<range.lowerBound].hasSuffix("self.")
+            // AN ARGUMENT LABEL is not a read either: `items: group.items` names a parameter.
+            let isALabel = range.upperBound < text.endIndex && text[range.upperBound] == ":"
+            if beforeOK && afterOK && !isALabel && (!precededByDot || throughSelf) { count += 1 }
             searchFrom = range.upperBound
         }
         return count
+    }
+
+    /// The `\(...)` spans inside one string literal's text, which are code and not words.
+    ///
+    /// Nesting is counted rather than stopping at the first `)`, because `\(a.map { f($0) })` is one span
+    /// and stopping early would cut a read in half.
+    private static func interpolatedSpans(in literal: String) -> [String] {
+        var spans: [String] = []
+        let characters = Array(literal)
+        var index = 0
+        while index < characters.count - 1 {
+            guard characters[index] == "\\", characters[index + 1] == "(" else {
+                index += 1
+                continue
+            }
+            var depth = 0
+            var cursor = index + 1
+            var span = ""
+            while cursor < characters.count {
+                let c = characters[cursor]
+                if c == "(" { depth += 1 } else if c == ")" {
+                    depth -= 1
+                    if depth == 0 { break }
+                }
+                if depth > 0, cursor > index + 1 { span.append(c) }
+                cursor += 1
+            }
+            spans.append(span)
+            index = cursor + 1
+        }
+        return spans
     }
 
     private static func isNameCharacter(_ c: Character) -> Bool {
         c.isLetter || c.isNumber || c == "_"
     }
 
-    /// Whether this line DECLARES the named property or function, rather than reading it.
-    private static func declares(_ name: String, on line: String) -> Bool {
-        let trimmed = line.trimmingCharacters(in: .whitespaces)
-        for prefix in ["private var ", "private func ", "var ", "func "] where trimmed.hasPrefix(prefix) {
-            let rest = trimmed.dropFirst(prefix.count)
-            return String(rest.prefix { isNameCharacter($0) }) == name
-        }
-        return false
+    /// Whether the declaration on `line` produces a VALUE a draw can read, rather than performing an
+    /// action a control invokes.
+    ///
+    /// COMPUTED PROPERTIES ONLY, and that is a MEASURED narrowing rather than a convenient one. #3852's
+    /// own text says "a computed property or zero-argument function", so both were tried. Every
+    /// zero-argument function the scan then flagged was reached only from actions, checked one at a time
+    /// rather than assumed: `ArchiveView.actionRows` (a reveal and a send, and its own comment says "a
+    /// reveal is an action outside any render pass"), `RootView.ingestScoutExtract` and
+    /// `watchScoutExtractRun` (both from run-handling paths) and `RootView.readDownbeatHealth` (a control
+    /// press and a launch `.task`). Every one of the six instances on record is a computed property.
+    ///
+    /// So a function arm would contribute nothing but exemptions, and a finding list that is mostly
+    /// exemptions is one nobody reads (L172). WHAT THAT GIVES UP, stated rather than left implicit: a
+    /// zero-argument function genuinely evaluated twice per draw is invisible here. Nothing in this app
+    /// is one today, and this comment is what a future reader needs to know before trusting an empty list.
+    private static func isAValueRatherThanAnAction(_ name: String, in lines: [String], at index: Int) -> Bool {
+        guard index < lines.count else { return false }
+        let trimmed = lines[index].trimmingCharacters(in: .whitespaces)
+        return trimmed.hasPrefix("var ") || trimmed.hasPrefix("private var ")
     }
 
     // UNMEASURED is its own outcome, and here it is the likeliest failure by far: a walk that read no
