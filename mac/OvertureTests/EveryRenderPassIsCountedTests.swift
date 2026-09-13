@@ -162,6 +162,126 @@ struct EveryRenderPassIsCountedTests {
             """)
     }
 
+    // MARK: - #3836: counting it TWICE is the more dangerous direction, and nothing failed it.
+
+    // The guard above fails a surface that never bumps. Nothing failed one that bumps twice, and an
+    // OVERCOUNT is worse than an undercount here: `passes` is how a stall record says whether a freeze
+    // was ONE slow rebuild or a burst of them, so a surface counting itself twice reports `passes: 2` for
+    // a single evaluation and the reading that comes out is "a burst of store changes did this", which is
+    // precisely the explanation this milestone's evidence has spent weeks ruling out (#3659, L467).
+    //
+    // IT WAS ONE MERGE AWAY. #3645 lifted the Sources sheet's derivation into a `SourcesRenderPass` that
+    // bumps on its first line. #3762, in parallel, added `let _ = freezeWatch?.recordPass()` to the same
+    // view's body. Each was correct alone and each passed every check here. Combined, every rebuild of
+    // that sheet would have been counted twice and nothing in the suite would have said so. It was caught
+    // by reading the conflict by hand, which is not a method (L27, L96).
+    //
+    // THE RULE IS ONCE PER SURFACE, and it is implemented as once per FILE because the enumerations above
+    // resolve a surface to the file declaring its view. That is not the same as "one view per file", and
+    // the difference is load bearing: `QueueView.swift` declares three `View` structs today and bumps
+    // once, correctly, because the counter counts evaluations of the queue's own body and counting its
+    // subviews would redefine the unit every record already written is in (#3783, #3813, L683). So the
+    // premise that makes "once per file" sound is that no file carries TWO surfaces, and that is asserted
+    // below rather than assumed (L27).
+    //
+    // COUNTED OVER CODE LINES, because a comment naming the call is not a call, and matching source text
+    // over a whole file is satisfied by any occurrence anywhere in it (L135).
+    private static func bumps(in text: String) -> Int {
+        let code = text.split(separator: "\n", omittingEmptySubsequences: false).map { line -> Substring in
+            guard let range = line.range(of: "//") else { return line }
+            return line[line.startIndex..<range.lowerBound]
+        }.joined(separator: "\n")
+        return code.components(separatedBy: Self.bump).count - 1
+    }
+
+    // Every file this suite holds to the rule, from the two enumerations above rather than a list: the
+    // files that RUN a declared render pass, and the files that DRAW an attributable surface.
+    private static func countedFiles() -> [(name: String, text: String, why: String)] {
+        let sources = appSources()
+        let rootView = SourceGuardHelper.source(attributingView)
+        var found: [String: (text: String, why: [String])] = [:]
+
+        for pass in declaredPasses(in: sources) {
+            for file in sources where file.text.contains("\(pass).make(") {
+                found[file.name, default: (file.text, [])].why.append(pass)
+            }
+        }
+        for entry in surfaceFlags(in: rootView) {
+            guard let type = sheetRootView(flag: entry.flag, in: rootView),
+                  let file = fileDeclaring(type, in: sources) else { continue }
+            found[file.name, default: (file.text, [])].why.append(".\(entry.surface)")
+        }
+        return found.map { (name: $0.key, text: $0.value.text, why: $0.value.why.sorted().joined(separator: " and ")) }
+            .sorted { $0.name < $1.name }
+    }
+
+    // The premise of the rule, as a PURE function over the mapping, so the finding can be PRODUCED by a
+    // test rather than waited for (L151). The real source is fed to it below.
+    static func filesDrawingTwoSurfaces(_ byFile: [String: [String]]) -> [String] {
+        byFile.filter { $0.value.count > 1 }
+            .map { "\($0.key) draws \($0.value.sorted().joined(separator: ", "))" }
+            .sorted()
+    }
+
+    static func surfacesByFile() -> [String: [String]] {
+        let rootView = SourceGuardHelper.source(attributingView)
+        let sources = appSources()
+        var byFile: [String: [String]] = [:]
+        for entry in surfaceFlags(in: rootView) {
+            guard let type = sheetRootView(flag: entry.flag, in: rootView),
+                  let file = fileDeclaring(type, in: sources) else { continue }
+            byFile[file.name, default: []].append(entry.surface)
+        }
+        return byFile
+    }
+
+    // The rule SEEN to fire, on an input that produces the condition. Without this the assertion below
+    // could only ever be watched not to happen, and a guard nobody has seen fail is not a guard (L1,
+    // L151). The live source cannot produce this case without a mutation the SwiftUI type-checker
+    // refuses (tried: presenting one enumerated sheet's view behind another's flag; the build fails with
+    // "value of type 'some View' has no member 'sheet(isPresented:)'" long before any guard runs).
+    @Test func thetwoSurfacesInOneFileRuleFindsOne() {
+        let found = Self.filesDrawingTwoSurfaces(["Both.swift": ["organisations", "settings"],
+                                                  "One.swift": ["archive"]])
+        #expect(found == ["Both.swift draws organisations, settings"],
+                Comment(rawValue: "the rule reported \(found) for a file drawing two surfaces, so the "
+                        + "assertion beside it is watching for something it cannot detect (#3836, L1)."))
+    }
+
+    // The premise of the once-per-file rule, asserted against the app. A file drawing two SURFACES would
+    // need two bumps while the rule below demands one, so the day that happens this fails with the file
+    // named rather than the rule quietly becoming wrong (L27, L96).
+    @Test func nofileDrawsTwoAttributableSurfaces() {
+        let byFile = Self.surfacesByFile()
+        #expect(!byFile.isEmpty, "no surface resolved to a file, so this measured nothing (L98)")
+        let doubled = Self.filesDrawingTwoSurfaces(byFile)
+        #expect(doubled.isEmpty, """
+            \(doubled.joined(separator: "; ")). The once-per-file rule below is really once per
+            SURFACE, and a file carrying two of them needs two bumps while that rule demands one (#3836).
+            """)
+    }
+
+    @Test func nosurfaceCountsItsOwnRebuildTwice() {
+        let files = Self.countedFiles()
+        // UNMEASURED is its own outcome: an enumeration that resolved nothing leaves an empty list, and
+        // a guard with nothing to check reads exactly like a guard that found nothing wrong (L98).
+        #expect(files.count >= 5, """
+            this guard enumerated \(files.count) file(s) that run a pass or draw an attributable
+            surface, which is fewer than the app has, so nothing below was measured (#3836, L98).
+            """)
+        // Reduced to SENTENCES before the assertion, never the files themselves. A failing `#expect`
+        // renders its own operands, and these carry whole source files, so asserting over them prints
+        // several thousand lines on top of the message saying what went wrong (L445). Seen: the first
+        // mutation proving this guard printed the whole of `SourcesView.swift` above its own message.
+        let overcounting = files.filter { Self.bumps(in: $0.text) > 1 }
+            .map { "\($0.name) calls \(Self.bump) \(Self.bumps(in: $0.text)) times (\($0.why))" }
+        #expect(overcounting.isEmpty, """
+            \(overcounting.joined(separator: "; ")). One rebuild would report as several passes, and a
+            stall spanning it would read as a BURST of store changes rather than one slow rebuild, which
+            is the explanation this milestone's evidence has been ruling out (#3836, #3659, L467).
+            """)
+    }
+
     @Test func everySurfaceAStallCanBeAttributedToCountsItsRenderPasses() {
         let rootView = SourceGuardHelper.source(Self.attributingView)
         let sources = Self.appSources()
