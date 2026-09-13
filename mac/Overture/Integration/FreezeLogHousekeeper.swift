@@ -29,4 +29,20 @@ actor FreezeLogHousekeeper {
     func run(at url: URL, now: Date) -> FreezeLog.Housekeeping {
         FreezeLog.housekeeping(at: url, now: now)
     }
+
+    // #3811: the CARD DIVERGENCE log's bookkeeping, through the same actor and for every reason above.
+    //
+    // Here rather than in an actor of its own, which was the other option and is the worse one. These two
+    // are the same kind of work over two files in the same folder, run from the same two moments, and a
+    // second actor would serialise each against itself while letting the two run together, which is
+    // precisely the main-actor contention this type was created to take off that thread. One queue for the
+    // app's log bookkeeping means one answer to "is any of this running now" (L369, L613).
+    //
+    // It carries no `now`, unlike the freeze log's, and that is the design rather than an omission: this
+    // archive is bounded by KIND rather than by age, so nothing in its housekeeping reads a clock. See
+    // `CardDivergenceLog.prunedArchive` for why an age-based bound would delete the rare record the
+    // compaction exists to rescue.
+    func runCardDivergence(at url: URL) -> CardDivergenceLog.Housekeeping {
+        CardDivergenceLog.housekeeping(at: url)
+    }
 }
