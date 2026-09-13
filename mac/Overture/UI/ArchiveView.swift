@@ -211,27 +211,10 @@ struct ArchiveView: View {
         highlightedRecipientId = recipientId
     }
 
-    // #3876: the Done button OWNS the dismiss read, and that is the whole fix rather than tidying.
-    //
-    // `@Environment(\.dismiss)` was read by `ArchiveView` itself, and SwiftUI revises that value when the
-    // window's key status changes, so every focus change invalidated this view's body. The body derives
-    // the whole store (`makeScope()` below), so clicking away from Overture and back cost two whole-store
-    // passes over the Archive for no data change. Measured at 120 rows of 120 on each transition. What a
-    // pass COSTS is deliberately not copied in here: `run-tests-locked.sh` reports it on every run and
-    // read 385.3 ms at its own last measurement on 2026-09-09, and that line is the figure to trust over
-    // any number pasted into a comment, which cannot go stale loudly (L107).
-    //
-    // Reading it HERE keeps the dependency on the one view that actually uses it, whose body is a button.
-    // `QueueView` is the control that made this findable: same store-to-screen path, no dismiss read, and
-    // it does not rebuild on focus (measured, with its own warm-up and positive control).
-    private struct DoneButton: View {
-        @Environment(\.dismiss) private var dismiss
-
-        var body: some View {
-            Button("Done") { dismiss() }
-        }
-    }
-
+    // #3876: `DoneButton` owns the dismiss read so this view does not, which is what stops every focus
+    // change re-deriving the whole store through `makeScope()` below. The reasoning, the measurement and
+    // the one surface this approach cannot reach are all on the component (`DoneButton.swift`) rather
+    // than repeated at each of its six call sites.
     private func header(filtered: [QueueScopeRow]) -> some View {
         HStack {
             Text("Archive").font(OVType.dateHeading).foregroundStyle(OVColor.ink)

@@ -15,7 +15,6 @@ import SwiftData
 // EVERY RULE IS OUTSIDE THE VIEW (#863): what the list holds is `StruckAddressListing`, putting one back
 // is `StruckAddressMutations`, and the words are `StruckAddressCopy`. The view draws.
 struct StruckAddressesView: View {
-    @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var context
     @Environment(ActionFeedback.self) private var feedback
     // Bound, so putting one back redraws this sheet the instant the row is gone.
@@ -73,7 +72,7 @@ struct StruckAddressesView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             Spacer()
-            Button("Done") { dismiss() }.keyboardShortcut(.defaultAction)
+            DoneButton(isDefaultAction: true)
         }
         .padding(OVSpacing.lg)
     }
