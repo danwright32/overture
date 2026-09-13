@@ -255,3 +255,107 @@ struct TheQueueReadsItsMarkersOncePerPassTests {
         #expect(body.contains("checkRunning: data.checkRunning"))
     }
 }
+
+// #3837: the sibling #3646 did not reach.
+//
+// #3646 removed exactly this shape from `QueueView`, where `checkRunning` was read once per card and once
+// per date heading, and it introduced `PrepQueueService.slotStatus` precisely so ONE reading answers both
+// slots. `QueueView` uses it. `RootView.prepToolbarLabel` was left on the older pair and made three marker
+// reads where one reading answers all of it:
+//
+//     let kind = PrepQueueService.runInFlight(now: Date())              // reads BOTH markers
+//     let slot: RunSlot = PrepQueueService.isRunning(slot: .check, ...)  // reads the CHECK marker again
+//
+// `prepToolbarLabel` is a computed `View` property, so it runs on EVERY RootView body evaluation, and
+// RootView re-evaluates far more often than the queue does: `traceRootRender()` exists because #1930
+// measured idle re-derivations there.
+//
+// THE SECOND DEFECT, which the issue did not name and which reading it found. Those were two separate
+// `Date()` calls, so the two questions were asked about two different instants. A marker that stops
+// beating between them makes the label name a run in one slot and time it from another, which is a wrong
+// label rather than a slow one.
+//
+// A SOURCE GUARD rather than a measurement, and the reason is worth stating: the property is private to a
+// `View`, so no test can call it, and the runtime half already exists one level down
+// (`anIdleMachineCostsOneReadPerSlot` prices the reading itself). What is left to guard is the CALL SITE,
+// which is a spelling.
+@Suite("The prep toolbar label reads its markers once (#3837)")
+struct ThePrepToolbarLabelReadsItsMarkersOnceTests {
+    private var rootView: String { SourceGuardHelper.source("Overture/App/RootView.swift") }
+
+    // Line comments stripped, so a guard counting occurrences counts CODE. Seen twice while writing this:
+    // the comment explaining the fix names the very thing being counted, and the guard went red on the
+    // prose describing the repair (L135). Block comments are not handled and are not used here.
+    private static func code(_ source: String) -> String {
+        source.split(separator: "\n", omittingEmptySubsequences: false).map { line -> Substring in
+            guard let range = line.range(of: "//") else { return line }
+            return line[line.startIndex..<range.lowerBound]
+        }.joined(separator: "\n")
+    }
+
+    private var label: String? {
+        SourceGuardHelper.propertyBody("private var prepToolbarLabel: some View {", in: rootView)
+    }
+
+    @Test func thelabelTakesOneSlotReading() throws {
+        let body = try #require(label, "prepToolbarLabel was not found, so nothing here was measured")
+        #expect(body.components(separatedBy: "PrepQueueService.slotStatus(").count - 1 == 1,
+                Comment(rawValue: "the label takes "
+                        + "\(body.components(separatedBy: "PrepQueueService.slotStatus(").count - 1) "
+                        + "slot readings. One reading answers both slots and the composed in-flight "
+                        + "answer, which is what #3646 introduced it for (#3837)."))
+    }
+
+    @Test func thelabelMakesNoSeparateMarkerRead() throws {
+        let body = try #require(label)
+        // Bound to Bools before the assertion: `#expect` renders its operands, and this one is a whole
+        // computed property (L445).
+        let readsASlotDirectly = body.contains("PrepQueueService.isRunning(")
+        let asksWhichIsInFlight = body.contains("PrepQueueService.runInFlight(")
+        #expect(!readsASlotDirectly,
+                "a second marker read, one line after a reading that already answered it (#3837)")
+        #expect(!asksWhichIsInFlight,
+                "runInFlight reads both markers, and slotStatus already carries its answer (#3837)")
+    }
+
+    // THE SIBLING, found by the sweep this fix required rather than by the issue, and it is the same shape
+    // one region over. `prepRefusal` is a computed property whose body reads a run marker, and it is read
+    // FOUR times in the toolbar menu: `.disabled`, `.accessibilityHint`, `.help` and `ControlRefusalLine`.
+    // So four `stat` calls where one answer was wanted, which is #3646's own sentence about a computed
+    // property reading as free at the call site. Its own comment says "this reads it twice", which was
+    // already two behind the code.
+    @Test func therefusalIsReadOncePerDraw() {
+        let source = rootView
+        #expect(!source.isEmpty)
+        let mentions = Self.code(source).components(separatedBy: "prepRefusal").count - 1
+        // The declaration plus ONE read. Counted over the whole file because the four call sites sit in
+        // different modifiers of one control and no single enclosing region contains just them.
+        #expect(mentions <= 2,
+                Comment(rawValue: "prepRefusal appears \(mentions) times. Its body reads a run marker off "
+                        + "disk, so every read is a `stat`, and a computed property reads as free at the "
+                        + "call site, which is exactly #3646 (#3837)."))
+    }
+
+    // The two questions have to be asked about ONE instant. Two `Date()` calls in the setup let a marker
+    // stop beating between them, and the label then names a run in one slot and times it from another,
+    // which is a WRONG label rather than a slow one.
+    //
+    // SCOPED TO THE SETUP, never the whole property, and this is the correction that reading it produced.
+    // The `heartbeat:` closure reads the clock too and MUST: #1003 made it a closure precisely so it is
+    // re-read on every tick rather than captured whenever RootView last happened to re-render. A guard
+    // over the whole body would have demanded that closure be broken (L361).
+    @Test func thelabelAsksItsTwoQuestionsAboutOneInstant() throws {
+        let body = try #require(label)
+        let setup = body.components(separatedBy: "return LiveRunLabel(").first ?? ""
+        #expect(!setup.isEmpty, "the setup could not be separated from the label, so this measured nothing")
+        // COMMENTS STRIPPED before counting. Seen: the comment written to explain this very fix names
+        // `Date()` three times, and the guard counted all three and went red on the prose describing the
+        // repair (L135). A guard matching source text over a region is satisfied by any occurrence in it,
+        // including the one talking ABOUT the thing.
+        let clockReads = Self.code(setup).components(separatedBy: "Date()").count - 1
+        #expect(clockReads <= 1,
+                Comment(rawValue: "the label's setup reads the clock \(clockReads) times, so its slot "
+                        + "questions are about different instants and a marker that stops beating "
+                        + "between them makes the label name one run and time another (#3837)."))
+    }
+}

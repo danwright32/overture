@@ -429,8 +429,13 @@ struct RootView: View {
     }
 
     // #2546: why "Prep kept" is refusing, from the same call that decides whether it is. The rule moved
-    // to PrepStartGate so it is reachable from a test at all (#863); this reads it twice, for the
-    // sentence in the menu and for the item's disabled state, and both are the same answer (L109).
+    // to PrepStartGate so it is reachable from a test at all (#863), and the sentence in the menu and the
+    // item's disabled state are the same answer (L109).
+    //
+    // #3837: READ ONCE at its call site, into a local, rather than four times. This comment used to say
+    // "this reads it twice", which was two behind the code: the four reads were `.disabled`,
+    // `.accessibilityHint`, `.help` and `ControlRefusalLine`, and the body below reaches the filesystem
+    // every time. `ThePrepToolbarLabelReadsItsMarkersOnceTests` is what keeps it at one.
     private var prepRefusal: String? {
         // #3015: the PREP slot's own question. It used to ask the whole-app one, which refuses for ANY
         // live run, so a check going meant the menu item was disabled and Cmd+P refused. That is one of
@@ -727,6 +732,11 @@ struct RootView: View {
                         Button("Log an inquiry...") { showInquiryIntake = true }
                         Toggle("Auto-scout daily", isOn: $autoScoutEnabled)
                         Divider()
+                        // #3837: read ONCE. `prepRefusal` reads a run marker off disk, and it was read
+                        // four times here, by `.disabled`, `.accessibilityHint`, `.help` and the refusal
+                        // line, so one question cost four `stat` calls. A computed property reads as free
+                        // at the call site, which is #3646's own sentence about the shape.
+                        let refusal = prepRefusal
                         // #953: opens the per-run picker rather than prepping every kept show at once, so
                         // Dan can hold a long lead-time show out of this run. The sheet defaults the
                         // selection by performance date and hands back exactly the rows he chose.
@@ -736,14 +746,14 @@ struct RootView: View {
                             Label("Prep kept", systemImage: "envelope.badge")
                         }
                         .keyboardShortcut("p", modifiers: .command)
-                        .disabled(prepRefusal != nil)
-                        .accessibilityHint(prepRefusal ?? "")
-                        .help(prepRefusal ?? "")
+                        .disabled(refusal != nil)
+                        .accessibilityHint(refusal ?? "")
+                        .help(refusal ?? "")
                         // #2546: the reason as its own row directly under the item it explains, rather
                         // than only as a tooltip. A menu item has no room beside it for a sentence, but
                         // the greyed item is only ever visible while this menu is open, which is exactly
                         // when this row is on screen too, so the reason is there at rest (L49).
-                        ControlRefusalLine(reason: prepRefusal)
+                        ControlRefusalLine(reason: refusal)
                         // #367: re-prep everything already drafted/approved in one go; each choice
                         // just flags the eligible prospects and they ride along in the next
                         // "Prep kept" run above, no separate run/launch of its own.
@@ -2573,12 +2583,24 @@ struct RootView: View {
     // #1822: lifted out of the toolbar's `label:` builder, which the added arguments pushed past the Swift
     // type-checker's limit for one expression. Nothing about the label changed in the move.
     private var prepToolbarLabel: some View {
-        // #2760: the run really in flight, whichever slot holds it. `runInFlight` asks both, so the label
-        // names a check whether it is in the check slot or (during the upgrade window) still in the prep
-        // slot. The exclusion means at most one of them is live, so there is one label to draw.
-        let kind = PrepQueueService.runInFlight(now: Date()) ?? .prep
+        // #2760: the run really in flight, whichever slot holds it, so the label names a check whether it
+        // is in the check slot or (during the upgrade window) still in the prep slot. The exclusion means
+        // at most one of them is live, so there is one label to draw.
+        //
+        // #3837: ONE reading of the markers, and one instant, which is what `slotStatus` exists for. This
+        // was `runInFlight(now: Date())` (which reads both markers) followed one line later by
+        // `isRunning(slot: .check, now: Date())` (which reads the check marker a third time), and this is
+        // a computed `View` property, so all of it ran on every RootView body evaluation. #3646 removed
+        // exactly this shape from `QueueView` and introduced `slotStatus` for it; this call site was left
+        // on the older pair.
+        //
+        // The two `Date()` calls were the worse half. They asked the two questions about two different
+        // instants, so a marker that stopped beating between them made the label NAME a run in one slot
+        // and TIME it from another, which is a wrong label rather than a slow one.
+        let status = PrepQueueService.slotStatus(now: Date())
+        let kind = status.inFlight ?? .prep
         let isProbe = kind == .reachabilityCheck
-        let slot: RunSlot = PrepQueueService.isRunning(slot: .check, now: Date()) ? .check : .prep
+        let slot: RunSlot = status.checkSlotRunning ? .check : .prep
         return LiveRunLabel(
             base: RunProgressCopy.title(isProbe ? .probing : .prepping),
             since: PrepQueueService.lastRunStartedAt(slot: slot),
