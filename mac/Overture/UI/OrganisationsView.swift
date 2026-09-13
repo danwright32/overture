@@ -109,19 +109,26 @@ struct OrganisationsView: View {
     // MARK: - #1768: one name spelled two ways
 
     private var sameNameTwice: some View {
-        VStack(alignment: .leading, spacing: OVSpacing.xs) {
-            sectionHeading("Possibly one name twice", systemImage: "doc.on.doc", count: nearMisses.count)
+        // #3852: bound ONCE, and this is the most expensive instance the scan found. `nearMisses` walks
+        // the whole prospect store TWICE (every presenter, then every venue) and then runs
+        // `NearMissNames.pairs`, which compares every distinct folded name against every other and runs
+        // an edit-distance check on each surviving pair. It was read three times in this one section,
+        // once for the heading's count, once to ask whether it was empty and once to draw it, so opening
+        // this sheet paid all of that three times over for one answer (L383).
+        let pairs = nearMisses
+        return VStack(alignment: .leading, spacing: OVSpacing.xs) {
+            sectionHeading("Possibly one name twice", systemImage: "doc.on.doc", count: pairs.count)
             // Says the COST, which the heading does not, and admits the list is a guess. Overture cannot
             // merge these itself: the same closeness that catches a typo also catches two names that are
             // genuinely different, and merging those would put one company's contact on another's shows.
             Text("Each pair counts as two organisations, so nothing found for one is ever reused for the other. Some are real typos and some are simply different names.")
                 .font(.system(size: 11)).foregroundStyle(OVColor.inkSoft)
                 .fixedSize(horizontal: false, vertical: true)
-            if nearMisses.isEmpty {
+            if pairs.isEmpty {
                 Text("No names look duplicated right now.")
                     .font(.system(size: 12)).foregroundStyle(OVColor.inkSoft)
             } else {
-                ForEach(nearMisses) { pair in
+                ForEach(pairs) { pair in
                     VStack(alignment: .leading, spacing: 1) {
                         Text(pair.a).font(.system(size: 12, weight: .medium)).foregroundStyle(OVColor.ink)
                         Text(pair.b).font(.system(size: 12, weight: .medium)).foregroundStyle(OVColor.ink)

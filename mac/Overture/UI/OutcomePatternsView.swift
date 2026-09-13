@@ -20,7 +20,14 @@ struct OutcomePatternsView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
+        // #3852: bound ONCE. `rows` is a computed property that tallies the whole prospect store, and it
+        // was read twice in this body, once to ask whether it was empty and once to draw it, so opening
+        // this sheet ran the tally twice for one question. A computed property reads as a free field
+        // access at the call site and nothing there says what it costs (L383). Bound here rather than
+        // pushed into a render pass because this view declares none, which is the rule
+        // `ARepeatedDerivationIsFoundTests` states in its own failure message.
+        let listed = rows
+        return VStack(alignment: .leading, spacing: 0) {
             HStack {
                 Text("What converts").font(OVType.dateHeading).foregroundStyle(OVColor.ink)
                 Spacer()
@@ -45,13 +52,13 @@ struct OutcomePatternsView: View {
             // a conditional and absent from the state Dan is actually in.
             ScrollView {
                 VStack(alignment: .leading, spacing: OVSpacing.xs) {
-                    if rows.isEmpty {
+                    if listed.isEmpty {
                         Text("No outcomes yet. Once you've sent and recorded results, booking and response rates show up here.")
                             .font(OVType.body).foregroundStyle(OVColor.inkSoft)
                             .fixedSize(horizontal: false, vertical: true)
                             .padding(.bottom, OVSpacing.lg)
                     } else {
-                        ForEach(rows, id: \.name) { row in
+                        ForEach(listed, id: \.name) { row in
                             patternRow(name: row.name, tally: row.tally)
                             Divider()
                         }
