@@ -124,6 +124,23 @@ struct StallRecord: Codable, Equatable, Sendable {
     // and those are the "before" half of milestone 80's own reading. They decode with this absent.
     let passes: Int?
 
+    // #3815: how long this stall's render passes took, in seconds, or nothing where no pass has ever
+    // been timed in this process.
+    //
+    // BESIDE the count and never divided into it. A ratio would hide a stall that spanned no pass at all,
+    // and `0` on the count is already the reading that needs care (#3783). Two terms let a reader say
+    // which of the two explanations a long stall has: 29s spanning one pass of 0.17s is a freeze the
+    // render pass does not account for, and 29s spanning one pass of 29s is one the pass IS.
+    //
+    // WHAT IT CANNOT SAY. The cost is added when a pass RETURNS and the count is bumped when it STARTS,
+    // so a pass that never returns, which is the wedged main thread this instrument exists for, is in the
+    // count and not in the seconds. That is the signal rather than a gap, and it is why these are not
+    // asserted to agree.
+    //
+    // OPTIONAL because Dan's log holds a thousand records written before it shipped, and those are
+    // milestone 80's own "before" half (L133).
+    let passSeconds: Double?
+
     // #3788: decoded as `.unknown` when absent, which is every record in Dan's log written before this
     // shipped. A custom decode rather than an optional, because the ABSENT case already has a name here and
     // two ways of spelling it (nil and .unknown) would be two spellings of one fact (L544).
@@ -134,7 +151,8 @@ struct StallRecord: Codable, Equatable, Sendable {
     var identity: String { "\(session)#\(sequence)" }
 
     init(session: String, sequence: Int, at: Date, seconds: Double, surface: StallSurface,
-         load: MachineLoad, loadAverage: Double?, passes: Int?, windows: WindowPresence = .unknown) {
+         load: MachineLoad, loadAverage: Double?, passes: Int?, passSeconds: Double? = nil,
+         windows: WindowPresence = .unknown) {
         self.session = session
         self.sequence = sequence
         self.at = at
@@ -143,6 +161,7 @@ struct StallRecord: Codable, Equatable, Sendable {
         self.load = load
         self.loadAverage = loadAverage
         self.passes = passes
+        self.passSeconds = passSeconds
         self.windows = windows
     }
 
@@ -159,6 +178,7 @@ struct StallRecord: Codable, Equatable, Sendable {
         load = try c.decode(MachineLoad.self, forKey: .load)
         loadAverage = try c.decodeIfPresent(Double.self, forKey: .loadAverage)
         passes = try c.decodeIfPresent(Int.self, forKey: .passes)
+        passSeconds = try c.decodeIfPresent(Double.self, forKey: .passSeconds)
         // Decoded as a STRING and mapped, never as the enum directly. `decodeIfPresent` on an enum THROWS on
         // a value it does not know, which fails the WHOLE record rather than one field, so a later build
         // adding a fourth state would make every record it writes unreadable to this one. This file's own
@@ -192,6 +212,18 @@ enum StallLog {
     // BACKWARDS is a fault in the instrument rather than a stall that un-rendered itself, and it is
     // reported as unmeasured rather than as a negative number of passes (L11).
     static func passesSpanned(from before: Int?, to after: Int?) -> Int? {
+        guard let after else { return nil }
+        let start = before ?? 0
+        guard after >= start else { return nil }
+        return after - start
+    }
+
+    // #3815: how long the render passes inside a stall took, between two readings of the cost total.
+    //
+    // The MIRROR of `passesSpanned` above and deliberately its own function rather than a generic one:
+    // the two answer different questions and their absent cases mean different things, so folding them
+    // would make one message answer for both (L11).
+    static func passSecondsSpanned(from before: Double?, to after: Double?) -> Double? {
         guard let after else { return nil }
         let start = before ?? 0
         guard after >= start else { return nil }

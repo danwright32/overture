@@ -162,6 +162,13 @@ struct SourcesView: View {
     // never rebuilt" reads as (L11). `EveryRenderPassIsCountedTests` is what keeps this call here.
     private func makeRenderData() -> SourcesRenderPass.RenderData {
         freezeWatch?.recordPass()
+        // #3815: the same pairing as `QueueView.makeRenderData`, and for the same reason: a count with no
+        // duration beside it cannot say whether the passes account for a freeze.
+        let passStarted = DispatchTime.now().uptimeNanoseconds
+        defer {
+            freezeWatch?.recordPassCost(
+                seconds: Double(DispatchTime.now().uptimeNanoseconds - passStarted) / 1_000_000_000)
+        }
         return SourcesRenderPass.make(SourcesRenderPass.Inputs(
             prospects: SourcesRenderPass.Corpus(prospects),
             sources: sources,
