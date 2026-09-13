@@ -2312,9 +2312,22 @@ struct RootView: View {
         // half way through a compaction is the one outcome worse than paying for it, since the archive
         // write and the live rewrite are two steps with nothing around them (L5).
         let url = FreezeLog.url(in: StoreLocation.handoffDirectory)
+        // #3811: the card divergence log's own bookkeeping, from the SAME method and therefore the same
+        // two moments, through the same actor. Its `compact` had no caller anywhere in the app while
+        // `docs/contracts.md` said the file was compacted at launch, so the rule that keeps one example of
+        // each distinct field set had never run once. Called here rather than given a call site of its own
+        // because two bookkeeping calls somebody has to remember to keep together is how this one came to
+        // be forgotten (L621, L613).
+        let divergenceURL = CardDivergenceLog.url(in: StoreLocation.handoffDirectory)
         Task {
             let done = await FreezeLogHousekeeper.shared.run(at: url, now: Date())
             apply(housekeeping: done)
+            // Its report is DISCARDED, deliberately and with the reason: there is no surface for it yet.
+            // #3793 is the issue that put the freeze log's report on the masthead, and this one joins it
+            // there rather than inventing a second notice here. An explicit discard rather than an ignored
+            // return, because a value nobody reads is how six other logs in this app came to lose content
+            // in silence (#3789, L46, L65).
+            _ = await FreezeLogHousekeeper.shared.runCardDivergence(at: divergenceURL)
         }
     }
 

@@ -1104,6 +1104,7 @@
 		818A07AEE708FC65CC971A37 /* WentByRetirementTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9E886654D5B23418A170F61 /* WentByRetirementTests.swift */; };
 		8195568F096C0ADF38D242E2 /* VenueNormalization.swift in Sources */ = {isa = PBXBuildFile; fileRef = 422C242A9E6B8403B9686C1C /* VenueNormalization.swift */; };
 		819EB598B563364C9BF0DC0E /* ProducerShapedName.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3C268F21CDD3FF275F2965CD /* ProducerShapedName.swift */; };
+		81A5D2E4BBD512D20D11FD0D /* TheDivergenceLogIsCompactedTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 87673B91FD2858EF5A66A0D1 /* TheDivergenceLogIsCompactedTests.swift */; };
 		81CEDAF6D222396B818D657F /* NaturalKeyRemap.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF5399E8357B99E3A474E5A0 /* NaturalKeyRemap.swift */; };
 		81DAF1147CCD9A15893A1FB1 /* CoverageGuardDoesNotCryWolfTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A924DC793A62AD0921147A78 /* CoverageGuardDoesNotCryWolfTests.swift */; };
 		8216C08DA8DF9B2C19A47096 /* QueueShowableIsOneFilterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2DC69005FAB202973E48392 /* QueueShowableIsOneFilterTests.swift */; };
@@ -3064,6 +3065,7 @@
 		86E9985DF8496E2A3DC6DBB8 /* ReprepReleaseTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReprepReleaseTests.swift; sourceTree = "<group>"; };
 		872550E24D634A020D3F5D6D /* GmailConnectReentrancyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GmailConnectReentrancyTests.swift; sourceTree = "<group>"; };
 		874CEEF347ABEF0CFEDC2444 /* SleepObserver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SleepObserver.swift; sourceTree = "<group>"; };
+		87673B91FD2858EF5A66A0D1 /* TheDivergenceLogIsCompactedTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TheDivergenceLogIsCompactedTests.swift; sourceTree = "<group>"; };
 		876B90EE70DAE261E8D1317D /* StoreReaderRefusalSweepTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StoreReaderRefusalSweepTests.swift; sourceTree = "<group>"; };
 		8774B5142CE0F8A243D95320 /* RunSlotTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunSlotTests.swift; sourceTree = "<group>"; };
 		87867BEEB382989B200F5BAC /* AStallSaysHowManyPassesItSpansTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AStallSaysHowManyPassesItSpansTests.swift; sourceTree = "<group>"; };
@@ -4973,6 +4975,7 @@
 				94862782A45D447258573F7F /* TestWindowsAreNotReleasedOnCloseGuardTests.swift */,
 				47F020A9B04BAAC18175B38A /* TheAppChecksItsOwnCardsTests.swift */,
 				84B7054F8DD240778478BB82 /* TheAppReportsItsOwnFreezesTests.swift */,
+				87673B91FD2858EF5A66A0D1 /* TheDivergenceLogIsCompactedTests.swift */,
 				5413D4478D3B1F70EC7D5358 /* TheFreezeLogIsBoundedWhileTheAppRunsTests.swift */,
 				3D5D1C4AC4B0559A6EC8D312 /* TheFreezeLogKeepsItsOldestRecordsTests.swift */,
 				1CE7CADF0428B1F66C603052 /* TheMissedCheckSentenceIsTrueOfBothCausesTests.swift */,
@@ -7780,6 +7783,7 @@
 				5A37DA62AC233D7E0B2C34EB /* TestsNeverTouchTheRealStoreTests.swift in Sources */,
 				33725B65203DA56E5F5C6A78 /* TheAppChecksItsOwnCardsTests.swift in Sources */,
 				A301FEC3D3D116DFE7554174 /* TheAppReportsItsOwnFreezesTests.swift in Sources */,
+				81A5D2E4BBD512D20D11FD0D /* TheDivergenceLogIsCompactedTests.swift in Sources */,
 				025A7F0495B66B2ED30BD39F /* TheFreezeLogIsBoundedWhileTheAppRunsTests.swift in Sources */,
 				CD58E47DD6204CC2BB5FF787 /* TheFreezeLogKeepsItsOldestRecordsTests.swift in Sources */,
 				A1C02463F2F9E167348A7119 /* TheMissedCheckSentenceIsTrueOfBothCausesTests.swift in Sources */,
