@@ -14,6 +14,10 @@ struct RootView: View {
     // (a Prep summary, an OmniFocus receipt, a reply-classify note) cannot silently erase an unattended
     // scout's warning that landed first on the same launch. Every writer below goes through status.set.
     @State private var status = StatusLine()
+    // #3808: the last freeze notice this SESSION actually put up, so an hourly tick cannot repeat a
+    // sentence that has not changed. See `reportAnyFreezes` for why two of the three sentences it can say
+    // have no identity of their own to be remembered by.
+    @State private var lastFreezeNoticeSaid: String?
     // #346: the scout outcome ("N found · N unsure", or a failure status) gets its own state so
     // it can render next to the Scout control instead of the unrelated center status slot.
     @State private var scoutSummary: String?
@@ -1131,8 +1135,7 @@ struct RootView: View {
                 // only at this call site would have left the hourly path discarding it, which is the
                 // defect #3793 exists to end, reintroduced one line away from its own fix (L46, L3).
                 runFreezeLogHousekeeping()
-                reportAnyFreezes()
-                reportAnyCardDivergences()
+                reportWhatWasRecorded()
                 // #1035: the same reattach, for the scout's detached read. A scout-extract run outlives
                 // the app, so one can still be going at launch (a relaunch over a live run, or the window
                 // scene torn down and rebuilt mid-read). Reopen the takeover and follow it to completion
@@ -1982,24 +1985,49 @@ struct RootView: View {
     // A message that reappears on every launch is what teaches somebody to skim the whole panel (#884).
     // #3654 step 4c: what the queue's own check of its cards found, said once per record.
     //
-    // Said at LAUNCH rather than on the render that found it, deliberately. The check runs inside a render
-    // pass, and a notice raised from there would arrive while Dan is scrolling, about a card the app has
-    // already corrected before drawing it (CORRECTION C1). Nothing is waiting on him: what he can do with
-    // it is report it, and a launch is when he can.
-    private func reportAnyCardDivergences() {
+    // Never raised from the render that FOUND it, deliberately. The check runs inside a render pass, and
+    // a notice raised from there would arrive while Dan is scrolling, about a card the app has already
+    // corrected before drawing it (CORRECTION C1). Nothing is waiting on him: what he can do with it is
+    // report it.
+    //
+    // #3808 moved it off "at launch" and onto the hourly tick as well, which does NOT touch the decision
+    // above: the tick is not a render pass, so the reason that rules out the render path is untouched
+    // while the reason for launch-only (that a launch is when he can act on it) stopped being true the
+    // day this app became resident (L61, L542).
+    //
+    // Returns whether a notice was actually put up, so the pairing above can tell a notice that landed
+    // from one there was nothing to say about.
+    @discardableResult
+    private func reportAnyCardDivergences() -> Bool {
         guard let message = CardDivergenceReport.newlyReported(in: StoreLocation.handoffDirectory) else {
-            return
+            return false
         }
-        status.set(message, priority: .warning)
+        return status.set(message, priority: .warning)
     }
 
-    private func reportAnyFreezes() {
+    @discardableResult
+    private func reportAnyFreezes() -> Bool {
         guard let message = FreezeReport.newlyReported(in: StoreLocation.handoffDirectory,
                                                        watchdogRan: freezeWatch.isWatching,
                                                        writesThatFailed: freezeWatch.writesThatFailed) else {
-            return
+            return false
         }
-        status.set(message, priority: .warning)
+        // #3808: never the SAME sentence twice running. This is not a nicety and it is the one thing the
+        // move to an hourly tick could have got badly wrong.
+        //
+        // Two of the three things this reader can say are not about records and so have no identity to be
+        // remembered by: "the watchdog did not run" and "N writes failed". Their own comments say the
+        // first is "said once per session", and that was true only because the single caller ran once per
+        // session. It was a property of the CALL SITE and not of the rule, which is exactly the shape that
+        // breaks the first time somebody adds a second caller (L281), and an hourly repeat of a sentence
+        // Dan can do nothing about is what teaches him to stop reading the slot (L36, L523).
+        //
+        // The third thing it says, a count of freezes, is keyed on record identity already, so a genuinely
+        // new freeze produces a different sentence and is never suppressed by this.
+        guard message != lastFreezeNoticeSaid else { return false }
+        let landed = status.set(message, priority: .warning)
+        if landed { lastFreezeNoticeSaid = message }
+        return landed
     }
 
     // #802: the scout's reading half. The extract run is detached, so without this the pages it read
@@ -2307,7 +2335,38 @@ struct RootView: View {
     // never be what stands between the log and its cap (L73).
     private func hourlyMaintenance() {
         runFreezeLogHousekeeping()
+        // #3808: and SAY what was recorded, on the same tick. Both of these used to be called from the
+        // launch task alone, which meant once per LOGIN: Overture is a login agent that stays resident, so
+        // a freeze or a card divergence recorded at 10am was not told until the next day. That is the same
+        // premise #3796 found stale one line above, and it stopped holding for the same reason.
+        //
+        // Dan's call, 2026-09-14 (this session, in chat): ride the hourly tick. What that buys is being
+        // told within the hour; what it does not buy is being told somewhere that cannot be missed, and
+        // #3593 is the open issue for that, which is in another milestone. It is worth stating rather than
+        // leaving implied: until #3593 lands, this notice goes to the status slot, which lives in the
+        // toolbar and which macOS folds into an overflow chevron at the window sizes Dan uses. Hourly and
+        // collapsible is still strictly more than once a day and collapsible.
+        reportWhatWasRecorded()
         autoScoutIfDue()
+    }
+
+    // #3808: the two things a resident session records and must be told about, in ONE method with two
+    // callers, for the reason `runFreezeLogHousekeeping` above it is one: two lists of the same pair
+    // would drift, and the half that drifted quietly would be the one that stopped being said (L613).
+    //
+    // THE ORDER IS LOAD BEARING, and so is the early return. Both write the status slot at `.warning`,
+    // and `StatusLine.set` applies an equal priority write over a showing message, so two notices in one
+    // tick means the second REPLACES the first. That would be a silent loss rather than a cosmetic one:
+    // both readers mark every record they CONSIDERED as said, so the replaced notice is never offered
+    // again (L98, L152). So the freeze notice goes first, because an app that stopped answering is worse
+    // than a card that was briefly wrong, and the divergence reader is not CALLED at all when the freeze
+    // notice landed, leaving its records unmarked for the next tick an hour later.
+    //
+    // That is a real cost, stated rather than glossed: on a tick carrying both, the divergence waits an
+    // hour. It was previously a whole login, and before this pairing it was lost outright.
+    private func reportWhatWasRecorded() {
+        if reportAnyFreezes() { return }
+        reportAnyCardDivergences()
     }
 
     // #3435/#3763: bound the freeze log and prune the archive it fills. ONE method, called from the
