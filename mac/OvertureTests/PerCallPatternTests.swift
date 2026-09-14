@@ -86,6 +86,36 @@ struct PerCallPatternTests {
         #expect(site?.code.contains("replacingOccurrences") == true)
     }
 
+    // The scanner's first version skipped marked regions, because that is the default everything else
+    // here uses, and it reported CompiledPattern.swift and GmailMessage.swift as holding no per-call
+    // pattern when each holds one. A pattern inside a `#if DEBUG` block or a copy-inventory marked region
+    // is still compiled on every call (L98).
+    @Test func readsInsideAMarkedRegion() {
+        let source = """
+            enum Fold {
+                // copy-inventory:ignore-start  outbound HTML, never a sentence Dan reads
+                static func tidy(_ s: String) -> String {
+                    s.replacingOccurrences(of: "x+", with: " ", options: .regularExpression)
+                }
+                // copy-inventory:ignore-end
+            }
+            """
+        #expect(PerCallPattern.sites(in: source).count == 1)
+    }
+
+    @Test func readsInsideADebugBlock() {
+        let source = """
+            enum Fold {
+                #if DEBUG
+                static func tidy(_ s: String) -> String {
+                    s.replacingOccurrences(of: "x+", with: " ", options: .regularExpression)
+                }
+                #endif
+            }
+            """
+        #expect(PerCallPattern.sites(in: source).count == 1)
+    }
+
     @Test func findsEverySiteRatherThanTheFirst() {
         let source = """
             enum Fold {

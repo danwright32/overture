@@ -67,7 +67,7 @@ struct PatternsCompiledOnceGuardTests {
         .init(file: "TicketTailor.swift", sites: 1,
               reason: "PARAMETER: the pattern is an argument to the JSON field reader."),
         .init(file: "VenueParser.swift", sites: 1,
-              reason: "PARAMETER: the pattern is an argument."),
+              reason: "PARAMETER: the pattern is an argument to the venue field reader, chosen per field."),
         .init(file: "VenuePlaces.swift", sites: 1,
               reason: "COLD: an address newline folded to a comma, once per venue parsed."),
         .init(file: "VoiceGuidanceGuard.swift", sites: 1,

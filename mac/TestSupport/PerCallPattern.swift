@@ -42,7 +42,14 @@ enum PerCallPattern {
     }
 
     static func sites(in source: String) -> [Site] {
-        SwiftSource.scannableLines(in: source, skipping: .all).compactMap { line in
+        // `skipping: []` rather than the usual `.all`, and it is load bearing. Comments are stripped
+        // either way, which is the part this needs; what `.all` ADDS is blanking `#if DEBUG` blocks,
+        // previews and copy-inventory marked regions, and a pattern compiled per call inside one of
+        // those is still compiled per call. It was measured rather than reasoned about: with `.all` this
+        // scanner reported CompiledPattern.swift and GmailMessage.swift as holding none, because the one
+        // construction in each sits inside a marked region, and a scanner that finds nothing is how a
+        // guard comes to report a clean app (L98).
+        SwiftSource.scannableLines(in: source, skipping: []).compactMap { line in
             let code = line.code
             // `.regularExpression` rather than `options: .regularExpression`, because the option can
             // travel in an ARRAY with another one (`options: [.regularExpression, .caseInsensitive]`)
