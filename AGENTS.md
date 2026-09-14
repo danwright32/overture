@@ -252,6 +252,9 @@ the subject named below.
   the number of render passes it spanned. A long stall spanning no pass is something else entirely.
 - **Asking whether the app itself froze**: `MainThreadWatchdog` records it, and `RootView` says at
   launch what the last session found. The watchdog WRITES and the main thread only stamps.
+- **Looking at Overture while it is frozen**: `scripts/sample-overture.sh`, which resolves the pid from
+  the full executable path and refuses when two copies match. It has THREE outcomes and the middle one
+  is the point: a sample naming none of the app's own frames is a reading to look at, not a pass.
 - **Asking what a rotating log lost**: `scripts/what-the-log-lost.sh`, the `.1` file's reader. It reads
   the live file AND the `.1`, prints every rotation the app recorded, and tells content that is GONE
   apart from a rotation that was REFUSED. Defaults to the store backup log.

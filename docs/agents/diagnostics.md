@@ -248,3 +248,27 @@ the measurement it came from lives here. Read the entry before the rule decides 
   `ARotatedLogSaysWhatItLostTests`: a reworded note would otherwise leave this matching nothing and
   reporting every log clean (L58). Its own half rides along on every push through
   `scripts/what-the-log-lost.test.sh`, which builds its own logs rather than reading Dan's.
+
+
+## Looking at Overture while it is frozen
+
+- **Looking at Overture while it is frozen: `scripts/sample-overture.sh` (#3424).** Sampling is the only
+  thing that has ever named an Overture freeze correctly, and reading the code first has been wrong
+  twice in one week: on 2026-08-30 the source pointed at the Gmail calls in the reconcile tick and the
+  sample put every one of 2,646 samples in `NSAppleScript.executeAndReturnError` (#3419), and on
+  2026-08-31 two live samples settled the archive freeze in seconds. By hand it is five steps, done
+  under time pressure, because the evidence disappears when the app unfreezes: about a minute, measured
+  2026-08-30.
+  It resolves the pid from the FULL EXECUTABLE PATH and REFUSES when two copies match, through
+  `scripts/lib/overture-pid.sh`, which `scripts/freeze-measure.sh` also sources so the two cannot come
+  to disagree about which Overture they mean (L263). That rule is the one the global CLAUDE.md was
+  amended for, after a Cmd+W meant for a Debug build quit Dan's live app.
+  Read its answer correctly, because it has THREE outcomes and the middle one is the point. `0` means
+  the sample names frames of Overture's own and they are printed. `1` means the sample was taken and
+  names NONE of them, which is a reading to look at rather than a pass: an app genuinely waiting in the
+  run loop and a sample whose symbols could not be resolved produce the same empty list (L98, L11). `2`
+  is UNMEASURED, meaning no sample exists to read at all. The full file is kept under
+  `~/.overture-mac-test-diagnostics/` rather than cited where `sample` puts it, since its own default
+  lands in a temp directory macOS clears at boot and this evidence is routinely read days later.
+  Only the app's own frames reach the screen; everything else is in the saved file, and a screenful is
+  capped with the cap and the real count named, so a truncation never reads as the whole answer.
