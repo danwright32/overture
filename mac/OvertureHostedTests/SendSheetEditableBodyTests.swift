@@ -13,9 +13,7 @@ import ViewInspector
 struct SendSheetEditableBodyTests {
 
     private func passedShow() throws -> (Prospect, Recipient) {
-        let ctx = ModelContext(try ModelContainer(
-            for: Schema([Prospect.self, Recipient.self]),
-            configurations: [ModelConfiguration(isStoredInMemoryOnly: true)]))
+        let ctx = ModelContext(try TestModelContainer.inMemory([Prospect.self, Recipient.self]))
         let key = Prospect.makeNaturalKey(groupName: "Devin Marlowe",
                                           performanceDate: "2026-08-01", venue: "54 Below")
         let p = Prospect(naturalKey: key, groupName: "Devin Marlowe", discipline: "music",

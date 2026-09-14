@@ -58,7 +58,10 @@ struct ManualPrepSheet: View {
 
     private var recipientField: some View {
         VStack(alignment: .leading, spacing: OVSpacing.xs) {
-            TextField("Send to", text: $email).textFieldStyle(.roundedBorder)
+            // #2896: "Write to" rather than "Send to". The field takes a link now, and on one there is
+            // nothing to send: he opens their form or profile and writes there. "Write to" is true
+            // of both routes, where "Send to" was true of only one of them.
+            TextField("Write to", text: $email).textFieldStyle(.roundedBorder)
             // #2023: this field takes as many people as he needs, and it looks exactly like the box that
             // took one, so the line says so until there IS a second address and then says what the ones he
             // typed will do. Which of the two it is belongs to ManualPrepCopy, not to this view.
@@ -67,7 +70,7 @@ struct ManualPrepSheet: View {
                 .fixedSize(horizontal: false, vertical: true)
             // #2034: the choice, offered only once a second address makes it one. The line above says
             // what it is currently set to, so the two read as one statement rather than two.
-            if case .addresses(let list) = EmailAddressList.parse(email), list.count > 1 {
+            if ManualPrepEditing.offersSendModeChoice(email: email) {
                 Picker(SendModeCopy.label, selection: $sendsTogether) {
                     Text(SendModeCopy.together).tag(true)
                     Text(SendModeCopy.separately).tag(false)

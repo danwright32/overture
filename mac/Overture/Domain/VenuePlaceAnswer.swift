@@ -55,24 +55,11 @@ enum UnplacedRooms {
         var id: String { key }
     }
 
-    // Cheap to evaluate on every redraw, unlike `from` itself, which builds a dictionary and canonicalises
-    // every room name. The Sources sheet re-evaluates its body on every keystroke and every scroll tick,
-    // and computing the list there directly is the defect #1356 and #1429 already fixed twice on this very
-    // sheet (the coverage list, then the per-source tallies), each time after it froze the sheet.
-    //
-    // Built from `waitingShows` rather than from a rule of its own, so a show leaving the list for ANY
-    // reason moves it. It used to combine a hand-picked pair (the show count, and the room each unplaced
-    // show names), which caught a fill and an arrival and nothing else: a show Dan cut, or one he pitched,
-    // left the list without moving the signature, and the panel went on asking about it (L40).
-    static func signature(_ prospects: [Prospect], context: StageContext) -> Int {
-        var acc = prospects.count
-        for p in waitingShows(prospects, context: context) {
-            var h = Hasher()
-            h.combine(p.venue ?? "")
-            acc = acc &+ h.finalize()
-        }
-        return acc
-    }
+    // #3656: `signature(_:context:)` was here and is DELETED. It gated the unplaced-room list's
+    // recompute on a hash of the store, and a collision meant the sheet showed a room list the store
+    // disagreed with. Measured 2026-09-08: the key cost 2.46 ms per redraw to avoid a 2.64 ms recompute,
+    // so the gate was saving about 7% and carrying a collision risk for it. `SourcesView` now builds the
+    // list where it renders it, once per body evaluation.
 
     // The half of the question that is about the ROOM rather than about the show: this show has no
     // location of its own, and it names a room there is something to ask about. A show with NO venue is

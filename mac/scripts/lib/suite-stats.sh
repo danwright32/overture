@@ -887,6 +887,89 @@ queue_cost_seen_update() {
 }
 
 # ---------------------------------------------------------------------------
+# #3508: how old the measured LIVE STORE pass cost is
+# ---------------------------------------------------------------------------
+# `QueueRenderPassLiveStoreCostTests` is opt in for the same reason the rebuild figure above is: it
+# clones the store and runs a stopwatch. It arrived in the same change (#1992) as the freshness record
+# above and got none of it, which is #2597's defect one instrument over, introduced by the change that
+# fixed it.
+#
+# It matters MORE here than for the fixture figure, because this one is the reference the fixture is
+# judged against: it reads Dan's actual data rather than a corpus matching its shape, and #3506 exists
+# precisely because the two disagreed. That comparison is only meaningful while the live reading is
+# recent.
+#
+# Its OWN record file rather than a second key in the rebuild one, which #3508 allows and which is the
+# safer of the two: `queue_cost_seen_update` returns the file's whole contents, so a run that measured
+# only one of the two would have to be careful not to erase the other, and the property this design rests
+# on is precisely that a run which measured nothing writes nothing.
+#
+# ADVISORY, with no staleness threshold, for the reason the rebuild figure records.
+live_store_cost_report() {
+  local today="$1" seen="${2:-}" output="${3:-}" date ms rows days fresh
+  # This run's OWN reading wins over the stored one, the way `queue_cost_report` and `live_corpus_report`
+  # both do: without it the single run that actually took the measurement reports "NEVER measured on this
+  # clone", which is the most misleading moment that sentence has.
+  fresh="$(live_store_cost_seen_update "${output}" "${today}" "")"
+  if [[ -n "${fresh}" ]]; then
+    echo "Live store pass cost: $(queue_cost_field ms "${fresh}") ms over $(queue_cost_field rows "${fresh}") rows, measured by THIS run."
+    return 0
+  fi
+  if [[ -z "${seen}" ]]; then
+    echo "Live store pass cost: NEVER measured on this clone. Run TEST_RUNNER_MEASURE_QUEUE_LIVE_STORE=1 to take it."
+    return 0
+  fi
+  date="$(queue_cost_field date "${seen}")"
+  ms="$(queue_cost_field ms "${seen}")"
+  rows="$(queue_cost_field rows "${seen}")"
+  if [[ -z "${date}" || -z "${ms}" || -z "${rows}" ]]; then
+    echo "Live store pass cost: UNREADABLE record. It carries a date but no figure, so nothing here says what the last measurement was."
+    return 0
+  fi
+  days="$(days_since "${date}" "${today}")"
+  echo "Live store pass cost: ${ms} ms over ${rows} rows, last measured ${date} (${days} days ago)."
+}
+
+# What gets REMEMBERED, pure, so the call site only ever writes what this hands back.
+#
+# It reads the END TO END total, which is the fetch plus the pass, and NOT the pass alone. That block is
+# the one the test itself labels as what Dan waits for, and it is the only figure in the readout that
+# cannot be misread as one of the parts: the parts are printed under headings saying which is which, and
+# a reader summing them without the headings has already been caught once (the test's own comment records
+# it, 985 against a stated 813).
+#
+# The case the whole thing rests on is the last one in the fixture: a run that did not take the
+# measurement must change NOTHING, or the date is stamped forward on every push and the age always reads
+# zero, which is the defect wearing a date.
+live_store_cost_seen_update() {
+  local output="$1" today="$2" seen="${3:-}" parsed rows ms
+  # ONE awk over a herestring, with no pipeline at all, for the reason `queue_cost_seen_update` records:
+  # a `grep | head` pipeline under `set -o pipefail` makes an EARLY match and NO match indistinguishable,
+  # because `head` kills the producer with SIGPIPE and the 141 becomes the pipeline status (L183, #3275).
+  #
+  # The row count and the total are many lines apart in this readout, unlike the rebuild one, so this
+  # holds the rows while it walks forward to the `total` under the END TO END heading. The heading is
+  # matched rather than the first `total`, because the block above it also carries one.
+  parsed="$(awk '
+    /queue-live-store-cost: one pass over the live store/ { seen_block = 1; rows = ""; end_to_end = 0 }
+    seen_block && rows == "" && /^ *rows +[0-9]+/ {
+      if (match($0, /[0-9]+/)) { rows = substr($0, RSTART, RLENGTH) }
+    }
+    seen_block && /END TO END/ { end_to_end = 1 }
+    seen_block && end_to_end && /^ *total +[0-9]+\.[0-9]+ ms/ {
+      if (match($0, /[0-9]+\.[0-9]+/)) { ms = substr($0, RSTART, RLENGTH) }
+      if (rows != "" && ms != "") { print rows " " ms; exit }
+    }' <<< "${output}")"
+  [[ -z "${parsed}" ]] && { printf '%s' "${seen}"; return 0; }
+  read -r rows ms <<< "${parsed}"
+  if [[ -z "${rows}" || -z "${ms}" ]]; then
+    printf '%s' "${seen}"
+    return 0
+  fi
+  printf 'date=%s\nms=%s\nrows=%s' "${today}" "${ms}" "${rows}"
+}
+
+# ---------------------------------------------------------------------------
 # Below this line the functions read the repository. Everything above is pure.
 # ---------------------------------------------------------------------------
 

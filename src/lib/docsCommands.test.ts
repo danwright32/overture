@@ -6,6 +6,7 @@ import {
   scriptPathsIn,
   docPathsIn,
   candidatePathsFor,
+  agentInstructionFiles,
 } from "./docsCommands";
 
 // #553: the guard on AGENTS.md itself. It is the file that steers every agent session, and until now
@@ -17,8 +18,17 @@ import {
 // cost of stale instructions is paid by every future session, silently.
 
 const repoRoot = join(__dirname, "..", "..");
-const agentsMd = readFileSync(join(repoRoot, "AGENTS.md"), "utf8");
 const packageJson = JSON.parse(readFileSync(join(repoRoot, "package.json"), "utf8"));
+
+// #3640 split the bodies of AGENTS.md into docs/agents/, leaving an index behind. Reading only
+// AGENTS.md after that move would keep this guard green while covering a fraction of what it did:
+// most of the script paths it exists to check now live in the moved files (L129, L96). The corpus
+// is DERIVED from the directory rather than listed here, so a seventh topic file joins the check
+// by existing rather than by somebody remembering to add it.
+const instructionFiles = agentInstructionFiles(repoRoot);
+const agentsMd = instructionFiles
+  .map((relative) => readFileSync(join(repoRoot, relative), "utf8"))
+  .join("\n");
 
 describe("extractors", () => {
   it("finds the pnpm scripts a doc names", () => {
@@ -59,6 +69,27 @@ describe("AGENTS.md documents only commands that actually exist", () => {
     expect(pnpmScriptsIn(agentsMd).length).toBeGreaterThan(0);
     expect(scriptPathsIn(agentsMd).length).toBeGreaterThan(0);
   });
+
+  // The corpus and the coverage are two separate claims, and the second is the one #3640 puts at
+  // risk. A run that read AGENTS.md alone satisfies every assertion below it while saying nothing
+  // about the moved bodies, so assert the files are IN, and that each moved file really carries
+  // script paths rather than being an empty file that reads as covered (L98).
+  it("scans AGENTS.md and every topic file under docs/agents/", () => {
+    expect(instructionFiles[0]).toBe("AGENTS.md");
+    const topics = instructionFiles.slice(1);
+    expect(topics.length).toBeGreaterThan(0);
+    for (const topic of topics) {
+      expect(topic.startsWith("docs/agents/")).toBe(true);
+    }
+  });
+
+  it.each(agentInstructionFiles(repoRoot).slice(1))(
+    "`%s` carries script paths this guard then checks",
+    (relative) => {
+      const body = readFileSync(join(repoRoot, relative), "utf8");
+      expect(scriptPathsIn(body).length).toBeGreaterThan(0);
+    },
+  );
 
   it.each(pnpmScriptsIn(agentsMd))(
     "`pnpm %s` resolves to a real script in package.json",

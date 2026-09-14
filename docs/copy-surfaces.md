@@ -12,7 +12,7 @@ stripped. **What it deliberately does not claim:** which container a given sente
 That is not knowable from one file, since a sentence declared in one view routinely surfaces
 through another, and a wrong label would be worse than none.
 
-17 files render at least one container.
+18 files render at least one container.
 
 ## Surfaces where a message can go astray
 
@@ -52,13 +52,14 @@ macOS may relocate this into the overflow menu or drop it entirely at a narrow w
 
 A sentence written as a constant is read here at the file that RENDERS it, not only at the file that declares it. That is the case the rest of this document and `copy-inventory.md` cannot show: moving an existing sentence onto a new screen changes no literal anywhere, so it produces no diff and gets no cold read, which is exactly when placement most needs reading.
 
-51 files render a sentence declared as a constant.
+53 files render a sentence declared as a constant.
 
 `App/OvertureApp.swift`
     StoreLaunchOutcome.defaultUnavailableReason  "Overture's data is unavailable."
 `App/RootView.swift`
     CancelledReadCopy.title  "Scout stopped"
     RunProgressCopy.diedLineForReplies  "Drafting replies"
+    StruckAddressCopy.heading  "Addresses you removed"
 `Domain/DebugStaging.swift`
     SendIdentity.danWright  "Dan Wright"
 `Domain/EmptyState.swift`
@@ -73,8 +74,8 @@ A sentence written as a constant is read here at the file that RENDERS it, not o
     ActionAck.manualPrepGreetingHint  "Emails are held at send unless the body opens with a greeting"
     ActionAck.manualPrepNeedsBody  "Write the email before saving it. Nothing was saved"
     ActionAck.manualPrepNeedsBodyReason  "Write the email before saving it"
-    ActionAck.manualPrepNeedsRecipient  "Add an address to send to. Nothing was saved"
-    ActionAck.manualPrepNeedsRecipientReason  "Add an address to send to"
+    ActionAck.manualPrepNeedsRecipient  "Add someone to write to. Nothing was saved"
+    ActionAck.manualPrepNeedsRecipientReason  "Add someone to write to"
     ActionAck.manualPrepNeedsSubject  "Add a subject line. Nothing was saved"
     ActionAck.manualPrepNeedsSubjectReason  "Add a subject line"
 `Domain/OmniFocusFailureKind.swift`
@@ -98,6 +99,9 @@ A sentence written as a constant is read here at the file that RENDERS it, not o
 `Domain/SendGate.swift`
     GmailCopy.notConnected  "Connect Gmail first"
     SendGate.noAddressReason  "No email address for this contact"
+`Domain/StruckAddressListing.swift`
+    StruckAddressCopy.unnamedOrganisation  "an organisation no show names any more"
+    StruckAddressCopy.unnamedShow  "a show no longer in the queue"
 `Domain/UpdateAttempt.swift`
     BuildFreshnessCopy.dismiss  "Not now"
     BuildFreshnessCopy.update  "Update Overture"
@@ -128,6 +132,7 @@ A sentence written as a constant is read here at the file that RENDERS it, not o
     BuildFreshnessCopy.update  "Update Overture"
     BuildFreshnessCopy.updateNote  "This opens Terminal and runs the install. Overture quits partway through and comes back on its own."
 `UI/CloseOutMenu.swift`
+    LinkReplyFromAnotherThread.menuLabel  "Link a reply from another thread"
     ReachedOutClose.menuLabel  "Close this out"
 `UI/DaysOffView.swift`
     CancelledShootCopy.restoreHelp  "Keep this night clear for this shoot again."
@@ -136,6 +141,7 @@ A sentence written as a constant is read here at the file that RENDERS it, not o
     CancelledShootCopy.unblockTitle  "Not happening"
     CancelledShootCopy.unblockedLabel  "You said it isn't happening"
 `UI/DraftReviewView.swift`
+    ContactRoleCopy.characterisationNote  "Overture's words, not the page's"
     FormOutreachCopy.copyAndOpen  "Copy pitch and open form"
     FormOutreachCopy.didNotSend  "Didn't send"
     FormOutreachCopy.sentIt  "I sent it"
@@ -208,6 +214,7 @@ A sentence written as a constant is read here at the file that RENDERS it, not o
     ReachabilityCopy.checkAgain  "Check again"
     ReachabilityCopy.checkAgainRetry  "Try again"
     ReachabilityCopy.checkMissedItBadge  "A check missed this show"
+    ReachabilityCopy.confirmProfileControl  "This is them"
     ReachabilityCopy.contactFormOnlyBadge  "Contact form only"
     ReachabilityCopy.emailFoundBadge  "Email found"
     ReachabilityCopy.emailFoundHelp  "A reachability check found a contact you can email for this show."
@@ -293,6 +300,10 @@ A sentence written as a constant is read here at the file that RENDERS it, not o
 `UI/StoreShrinkNoticeSheet.swift`
     StoreShrinkCopy.dismiss  "Continue anyway"
     StoreShrinkCopy.reveal  "Show me the backups"
+`UI/StruckAddressesView.swift`
+    StruckAddressCopy.everyShowBy  "every show by"
+    StruckAddressCopy.heading  "Addresses you removed"
+    StruckAddressCopy.restoreControl  "Put back"
 `UI/UpdateFailureSheet.swift`
     UpdateAttemptCopy.title  "Overture could not update"
 `UI/WatchlistMutations.swift`
@@ -324,8 +335,10 @@ A sentence written as a constant is read here at the file that RENDERS it, not o
     Sheet
 `UI/ProspectRowView.swift`
     Popover, Sheet
+`UI/QueueSheets.swift`
+    Sheet
 `UI/QueueView.swift`
-    Menu, Sheet
+    Menu
 `UI/ReplySheet.swift`
     Sheet
 `UI/ScoutSummaryView.swift`

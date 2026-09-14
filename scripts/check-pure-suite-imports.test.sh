@@ -124,6 +124,67 @@ else
   echo "ok - the hosted tests are left alone, where the import is legitimate"
 fi
 
+# ONE grep for the whole check, not one per file, and this is measured rather than read off the source.
+#
+# It forked a grep per file until 2026-09-08. Alone that is three seconds and looks fine, which is why it
+# stood: the cost was only ever measured with the expensive case switched off (L102). Under
+# `scripts/run-shell-fixtures.sh`, where eight lanes fork at once, 1,031 forks exhaust the per-user
+# process table, `fork` starts failing, and this fixture sits at 100% CPU making no progress. It wedged
+# three times in a row at exactly the same point and passed every time it was run on its own, which is
+# the shape that reads as a flaky machine rather than as a defect.
+#
+# COUNTED THROUGH A STUB ON PATH rather than asserted about the source text, because the claim is about
+# how many processes are forked and a source guard can only ever check a spelling (L63). The stub records
+# a line per call and then does the real work, so the function's own behaviour is unchanged and the
+# assertions below still mean what they say.
+grep_calls="${TMP}/grep-calls"
+: > "${grep_calls}"
+mkdir -p "${TMP}/stub"
+real_grep="$(command -v grep)"
+cat > "${TMP}/stub/grep" <<STUB
+#!/usr/bin/env bash
+echo call >> "${grep_calls}"
+exec "${real_grep}" "\$@"
+STUB
+chmod +x "${TMP}/stub/grep"
+counted=()
+for f in "${TMP}"/many-*.swift; do :; done
+for n in 1 2 3 4 5 6 7 8; do
+  printf 'import Foundation\n' > "${TMP}/many-${n}.swift"
+  counted+=("${TMP}/many-${n}.swift")
+done
+PATH="${TMP}/stub:${PATH}" app_module_import_violations "${counted[@]}" > /dev/null
+calls="$(wc -l < "${grep_calls}" | tr -d ' ')"
+if [[ "${calls}" -le 1 ]]; then
+  echo "ok - eight files cost ${calls} grep, not one each"
+else
+  echo "FAIL - eight files forked ${calls} greps. One per file exhausts the process table when eight"
+  echo "  fixture lanes fork at once, and the symptom is this fixture wedging at 100% CPU (2026-09-08)."
+  FAILURES=$((FAILURES + 1))
+fi
+
+# THREE OUTCOMES from the grep, not two, and the third is the one that matters. grep exits 0 when it
+# matched, 1 when it did not, and 2 or more when it FAILED. Folding 1 and 2 together would make a check
+# that could not run report the same clean answer as one that ran and found nothing, and this guard's
+# whole job is to be believed when it says the pure suite will compile (L11, L98).
+grep_fail="${TMP}/failing"
+mkdir -p "${grep_fail}"
+cat > "${grep_fail}/grep" <<'STUB'
+#!/usr/bin/env bash
+exit 2
+STUB
+chmod +x "${grep_fail}/grep"
+failed_output="$(PATH="${grep_fail}:${PATH}" app_module_import_violations "${counted[@]}" 2>&1)"
+failed_status=$?
+if [[ ${failed_status} -eq 2 ]]; then
+  echo "ok - a grep that FAILED is unmeasured, not clean"
+else
+  echo "FAIL - grep failing reported status ${failed_status}, which a clean tree also reports."
+  echo "  A check that could not run must not answer the same as one that ran and found nothing."
+  FAILURES=$((FAILURES + 1))
+fi
+assert_contains "and it says so" "${failed_output}" "UNMEASURED"
+
 # And the real thing: every file actually compiled into the pure suite.
 real=()
 for dir in "${PURE_SUITE_DIRS[@]}"; do

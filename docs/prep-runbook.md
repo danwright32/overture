@@ -20,12 +20,12 @@ these files (see `RunSlot`), so a written path can name the other, still-running
 destroy the drafts it has already paid for.
 
 - **Read:** the WORK-LIST the prompt names
-  (`PrepQueue` version `13`: a run-level `houses[]` (see "The queue names the houses" in §1),
+  (`PrepQueue` version `14`: a run-level `houses[]` (see "The queue names the houses" in §1),
   plus `items[]` each with `naturalKey`, `groupName`, `venue`,
   `performanceDate`, `runEndDate`, `discipline`, `sourceListingURL`,
   `possibleMatchName`, `priorRelationship`, `production`, `reprepMode`,
   `openingNightPassed`, `experimentArmInstruction`, `alsoAnswersFor`, `showListing`, `onlyTheActIsNamed`,
-  `venueHistory`, `organisationNamedOnListing`, `refusedEmails`, `presenterOnRecord`). `production` is `self` / `agency` / `unknown`; a v1 item omits it
+  `venueHistory`, `organisationNamedOnListing`, `refusedEmails`, `alreadyFoundEmails`, `presenterOnRecord`). `production` is `self` / `agency` / `unknown`; a v1 item omits it
   (treat as `unknown`). `reprepMode` is `draft_only` / `contacts_only`; absent (the normal case
   for a fresh, never-drafted prospect) means do both, exactly as today. See "Re-prep mode" under
   "Per prospect" below for what each value means for that item. `runEndDate` is the run's closing
@@ -43,7 +43,7 @@ destroy the drafts it has already paid for.
   the houses" is the rule, and it applies to every item in the run.
   `showListing` (v8, #1824) is what the show's OWN listing page says, rendered by the APP and handed
   to you as text, because your tools cannot render a JavaScript-drawn page. It carries a `status` of
-  `read` (with the page's `text`, plus `truncated` when the page had to be cut at 4000 characters) or
+  `read` (with the page's `text`, plus `truncated` and `droppedCharacters` when the page had to be cut at 4000 characters) or
   `unreadable`, and is ABSENT when there was no page to look at. See §2's step on grounding a draft in the
   listing; the three states are three different answers and you say a different thing about each.
   `onlyTheActIsNamed` (v9, #1856) is `true` on a show that reached the app with NO producing organisation
@@ -64,6 +64,15 @@ destroy the drafts it has already paid for.
   you still read the text yourself. On a rental room this is the common case: measured across 54 Below's 61 listings on
   2026-08-11, 17 bill a producer and 16 of those name an individual, whom the app's rule does not accept
   as a company and leaves for you. See §1's route.
+  **The value may carry a role in front of the name, and the name is what you search** (#2681). The app
+  stores whatever the page put between the credit and the name, so a page reading "Produced and directed
+  by Showpeople Resident Artist Colby Thompson" hands you that whole phrase. Search the PERSON, here
+  "Colby Thompson", not the phrase: an over-qualified query is the failure that once buried a real
+  company under an unrelated foreign firm. It may also name TWO people joined by "and", and then both are
+  research targets, not one name to be trimmed down. The app deliberately does not cut the role off for
+  you, and that was measured rather than assumed: across 133 real archived listings the rule reads 13
+  credits, exactly ONE carries a role in front of the name, and FOUR are two people joined by "and", so
+  every mechanical rule tried on that corpus destroyed more real credits than it repaired.
   `presenterOnRecord` (v13, #2983) is the producing organisation THE APP ALREADY HOLDS for this show, by
   name. It is the same fact `onlyTheActIsNamed` is the flag for, and the two always agree: a name here
   means that flag is `false` or absent, and `onlyTheActIsNamed: true` means there is no name to give you.
@@ -92,6 +101,15 @@ destroy the drafts it has already paid for.
   not an empty list you need to reason about. The app refuses these addresses again when it reads your
   results, so ignoring this field costs Dan money rather than reaching anybody, which is exactly why it is
   worth honouring.
+  `alreadyFoundEmails` (v14, #2990) is a list of addresses THIS SHOW ALREADY HOLDS, found by an earlier
+  run. It is CONTEXT, NOT A TARGET LIST AND NOT A LIST OF PEOPLE WHO ARE DONE. You are being asked to
+  research this show again because Dan wants somebody he does not already have, so spend the item's
+  allowance on people who are NOT on this list: a different performer, the producer, the presenting
+  company. Reporting an address from it back is not wrong, and it is not a find either, so it must never
+  be the whole of your answer for the item. ABSENT (the normal case) means nothing has been found here
+  yet. It NEVER overlaps `refusedEmails` above: a struck address is one Dan refused and is not something
+  the show holds. Measured across every archived run on 2026-09-06: of 49 routes returned on a re-run, 18
+  were already held and 5 re-runs came home with nothing new at all, which is what this exists to stop.
   `venueHistory` (v10, #1887) is how well Dan already knows the ROOM this show plays in, as one of
   `shot_before` / `a_few` / `regularly`. It is a BAND and carries NO COUNT, deliberately: the app
   holds the number and never sends it, so there is nothing for you to state. ABSENT means say
@@ -99,7 +117,7 @@ destroy the drafts it has already paid for.
   must not guess between (no history there, no history imported at all, or a Carnegie show, where
   the tenure credential already covers that exact room). See §2's rule on saying Dan knows the room.
 - **Write:** the RESULTS FILE the prompt names
-  (`PrepResults` version `11`: `results[]` each with `naturalKey`, `contacts[]`, `draft`, an
+  (`PrepResults` version `12`: `results[]` each with `naturalKey`, `contacts[]`, `draft`, an
   optional `alreadyCoveredNote` (see the already-covered fit-risk flag in §1 below), an
   optional `emptyReason` REQUIRED on any entry whose `contacts` is absent, see "Say WHY an
   entry has no contacts" in §1, and (v8, #1824) an optional `showSummary` with a
@@ -112,14 +130,14 @@ destroy the drafts it has already paid for.
   an optional `nameMatchOnly` saying the only thing tying this route to that party is the NAME,
   see step 3(c) in §1, and (v11, #2895) an optional `performanceCorroborated` saying whether the page
   in `sourceUrl` ties that PERSON to THIS performance, see "Say whether the page you cited
-  corroborates the performance" in §1. Emit either
+  corroborates the performance" in §1, and (v12, #3078) an optional `roleQuoted` saying whether `role`
+  is a phrase that page carries or your own summary of it. Emit either
   the act OR its named lead performer(s), never both, see §1 below, plus at most one
-  real presenting org; the app sends one separate email per contact. A `provenance:
-  "performer"` contact MAY also carry its own `overrideBody`, a direct second-person
-  draft for that specific contact (see §2's "Drafting for a performer contact directly"),
-  used instead of the shared `draft.body` when the app sends to them. (The legacy v1
-  shape carried a single `contact` object; the app still reads it, but new runs MUST
-  write `contacts[]`.)
+  real presenting org. A show has ONE letter, `draft.body`, addressed to whoever its
+  contacts turn out to be (see §2's "Address the one letter to the people it reaches").
+  #3549 retired the per-contact `overrideBody`: a contact carrying a second copy of the
+  pitch is now a defect, and the app ignores the key. (The legacy v1 shape carried a
+  single `contact` object; the app still reads it, but new runs MUST write `contacts[]`.)
 - **Read (optional, #119 voice learning):** the VOICE FEEDBACK file the prompt names (`VoiceFeedback`:
   `pairs[]`, each the AI draft vs. what Dan actually sent). Absent or empty on a fresh
   setup. Skip the learning step when so. See "Once per run" below.
@@ -254,9 +272,9 @@ item's `production` field first:
   - If it does, pursue EACH named performer directly: run the SAME waterfall below once
     per performer, emitting one `contacts[]` entry per performer actually found, with
     `provenance: "performer"` and `name` set to that person. Never emit `act` for this
-    show. Each performer entry ALSO gets its own `overrideBody` (see §2's "Drafting for a
-    performer contact directly"), since you are emailing them directly, not describing
-    them to a third party. A performer NAMED on the authoritative listing is ALWAYS
+    show. The show still has ONE letter, and §2's "Address the one letter to the people it
+    reaches" says how to word it once you know how many contacts came back. A performer
+    NAMED on the authoritative listing is ALWAYS
     surfaced as her own `provenance: "performer"` entry, even when you cannot corroborate
     her against this performance or find a contact for her: in that case still emit a
     contact for her, `provenance: "performer"`, her `name` and `confidence: "low"`, leaving
@@ -319,9 +337,33 @@ item's `production` field first:
   - Read the item's `showListing.text` for the PEOPLE too. On these shows the app has rendered the
     show's own page for you precisely because the act's name is often nowhere else. Take the
     performer or ensemble names from that text.
+  - **Read the BILLED HIERARCHY off the page first, and where there is one, those people ARE the
+    target** (#2258, Dan's call 2026-08-07). A listing that names who produced, directed, music
+    directed, created or curated the show, and then presents a cast separately under "Featuring" or
+    "Starring", is telling you exactly who is in charge. Research the billed leads, surface them, and
+    **do not research the cast at all**. Fall back to the cast only when the page names nobody in charge,
+    or when no billed lead yields any way in whatsoever, and that fallback is the no-ceiling rule below,
+    unchanged. Where the page draws no hierarchy (a genuine bill of peers), nothing changes.
+    The measured case is a 54 Below cabaret, 2026-08-07: the page named a producer and a music director
+    above a "Featuring:" list of fifteen, and the run pursued all seventeen as one flat pool, so the two
+    people who could actually hire Dan were researched no harder than the cast and the card surfaced two
+    cast members. That show alone was 17 of the run's 20 parties. The page also said the cast was subject
+    to change, which is a second reason not to spend on them.
+  - **A lead you emit carries a `role`.** It is what says you read the hierarchy off the page rather than
+    inferring one, and a lead entry without it is a demotion nothing reports.
+  - **Rank from how THIS SHOW bills them, never from what their own site says they do in general**
+    (#3347). `primary` means whoever could actually hire Dan FOR THIS SHOW. A person billed only under
+    "Featuring" is cast: a page of theirs showing they produce things elsewhere is not evidence they are
+    producing this one, and a role string you have already written for somebody else on the bill is not
+    evidence about the next person. Overture checks this: a `primary` on somebody the show's own listing
+    bills only as cast and credits nowhere is DROPPED at ingest, so the rank is simply lost rather than
+    used. The measured case is a 2026-08-30 show where two people were emitted with the identical role
+    "Producer and performer" at `primary`, while the page billed both of them under a bare "Featuring:"
+    and credited neither. The names are deliberately not repeated here: this runbook is a prompt sent on
+    every run and the people are real.
   - Pursue EVERY performer the listing names, however many that is, exactly as the
     `production == "self"` route above does: `provenance: "performer"`, one entry per person,
-    each with its own `overrideBody`, and each named performer surfaced even where you found no
+    and each named performer surfaced even where you found no
     contact for her (at `confidence: "low"` with a `method`, per that route's own rule). **There
     is NO headcount ceiling here**, unlike the `self` route above, and the difference is
     deliberate (Dan's call, 2026-07-31): a self-produced show has a real act name in `groupName`
@@ -652,6 +694,21 @@ contact with `confidence: "low"` and `performanceCorroborated: false`, exactly a
 says. Saying nothing is also allowed and is what an older run did, so it changes nothing, but it means
 the check cannot help you.
 
+**Say whose words the role is (`roleQuoted`, v12, #3078).** On any contact carrying BOTH a `role` and a
+`sourceUrl`, add `roleQuoted: true` when the role is a phrase that page actually carries, and
+`roleQuoted: false` when it is your own summary of what the page says. Both are legitimate and neither is
+better: a page that says "she produces and directs the company's season" supports `Producer` perfectly
+well as YOUR words, and the app is not asking you to stop summarising. It is asking which it is.
+
+It is the OTHER HALF of the same live case. `performanceCorroborated` asks whether the page ties that
+person to this performance, and it is not the question of whether the page supports the ROLE: on
+2026-08-17 the run answered the first and nobody asked the second, and `Playwright` reached the card
+reading exactly like a quote. Overture prints the role either way, because a role you summarised is
+still useful, and adds "Overture's words, not the page's" when you say it is yours.
+
+Saying nothing is allowed and is what every older run did, so it changes nothing and no role is marked.
+It also means Dan cannot tell your summary from a quote, which is the whole cost.
+
 **`confidence` and `nameMatchOnly` (v10, #2912) answer two different questions, and only one of them
 is about the PERSON.** `confidence` says how good the ROUTE is, and it is close to mechanical: a form
 or a DM is `low` whether or not anybody established whose it is, so it cannot carry "I could not tell
@@ -676,6 +733,13 @@ because a role is unbounded free text and cannot tell those two apart; you have 
 If the page does not support any of the three, OMIT the field. An absent tier reads as "nobody has said",
 which is honest, and it scores exactly what a found address has always scored. A guessed tier is worse
 than none: `primary` moves a show up into what Dan looks at first, and `tertiary` moves it down.
+
+**A contact with no `name` gets no tier at all** (#2625). All three answers are about a PERSON, and a
+shared inbox you could not put a person behind (`info@`, `bookings@`) is not somebody who could say yes;
+it is a door. Omit the field rather than reaching for the nearest of the three. Measured across every
+archived run on 2026-09-06: 22 of 447 contacts carried no name and THIRTEEN of those carried `primary`,
+every one a generic inbox, so the strongest answer was being given about the weakest finding on 13 real
+shows. Overture drops a tier on a nameless contact at ingest, so one emitted anyway is simply lost.
 
 **Already-covered fit-risk flag (#611).** While reading the act/presenter's own site for the
 waterfall above, also watch for an EXPLICIT statement that they already have their own
@@ -709,6 +773,12 @@ different answers:
   the grounding discipline that applies everywhere else here. What you read NEVER becomes a
   description in the email; it keeps the email from being wrong, and it fills `showSummary` for Dan.
   If `truncated` is `true`, the page was cut at 4000 characters and what you hold may not be all of it.
+  `droppedCharacters` says how many characters of readable text fell past that cut. **A cut page cannot
+  support a finished negative.** Where you were about to report that the page names no producer, no
+  director and no music director, and `truncated` is `true`, say instead that no such credit appears in
+  the part of the page you were given, and name the count. The credit is often the last block on a
+  listing, which is precisely what a cut removes, so an unqualified "no producer credited" on a cut page
+  is a claim about a search that only half ran.
 - **`status: "unreadable"`.** The app could not read that page. You do not know what this show is
   beyond the queue's own fields. Do not go hunting for the page, and do not infer the show from its
   title: "Don't Be So Hard on Yourself" tells you nothing about what happens on stage.
@@ -816,8 +886,17 @@ Anatomy:
 
   Nothing else counts as a greeting. "I hope this finds you well" is not one (and is separately
   forbidden as a tell), and neither is diving straight into the first sentence.
-- **Subject:** specific, low-key. "Photographing [group]'s [performance] at [venue]."
+- **Subject:** specific, low-key. "Photographing [group]'s [performance] at [venue]"
   This formula stays fixed across drafts; the variety budget below goes into the body.
+  **A subject NEVER ends in punctuation (#3677, Dan 2026-09-07: "email subjects shouldn't end in
+  punctuation").** It is a label, not a sentence, and it is the one thing in the pitch a stranger
+  sees before opening anything. The rule is about the LAST character only: an apostrophe, an
+  ampersand or a comma INSIDE a subject is ordinary and fine ("Photographing Bargemusic's Bach &
+  Beyond at the Boathouse"). A question mark or an exclamation point at the end is the same
+  finding as a full stop. The one exception is a mark belonging to the show's own name, which the
+  drafter did not add ("Photographing Nihao Broadway!").
+  The stop used to sit INSIDE the quotes on the line above, so the formula being copied ended in
+  one and the drafter reproduced the example rather than the rule (L562).
 - **Sentence one always introduces Dan, by name and by trade (Dan, 2026-07-31).** A cold
   reader does not know who is writing, so nothing else may come first: not a credential,
   not an observation, not the reason. Dan's own proven pitch opens "My name is Dan and I'm
@@ -830,6 +909,26 @@ Anatomy:
   **The exception is `priorRelationship` `booked` or `warm` (#1215):** they already know
   him, the cold self-introduction is wrong for them, and the register bullet above governs
   instead.
+
+  **What "reword it every time" licenses, and what it does not (#3683).** The licence is over
+  the WORDING. It is not a licence over the grammar, and the two worked examples above happen
+  to keep the grammar fixed without saying that is the invariant, which is the gap a drafter
+  finds. **Dan stays the SUBJECT of the clause that states his trade, in the first person.**
+  Free: which words name the trade, and how the sentence around them is built (an appositive,
+  a compound, a second sentence). Fixed: he is the one that clause is about.
+
+  A rewrite can name his name and name his trade and still break this, which is why naming
+  both is not enough on its own. Drafted 2026-09-07 and read by Dan the same day: "I'm Dan
+  Wright, and live performance is the whole of my photography work here in NYC." His words
+  were "it's so awkward". He is introduced by name, and then the sentence changes subject
+  underneath him, so the clause whose whole job is to say what Dan does is about *live
+  performance* instead. Write "I'm Dan Wright, a live performance photographer here in NYC".
+
+  Two more faults in that same sentence, neither of them this rule. "The whole of my
+  photography work" is formal and faintly literary sitting beside the "I'm" and "I've"
+  everywhere else in the same email, which is the register rule. And it makes an exclusivity
+  claim nobody asked for (this is ALL I shoot) in place of the plain job title the rule wants,
+  which is a claim about Dan that nothing established.
 - **Always "New York City" or "NYC", never bare "New York" (Dan, 2026-07-31).** Where Dan
   works is the CITY, and the city is a different place from the state. Every reference to
   it in a draft, in his self-introduction and anywhere else, says "New York City" or "NYC"
@@ -948,6 +1047,16 @@ Anatomy:
 
   A draft MAY acknowledge they might be covered already ("if you don't have someone on it
   already"), Dan's call 2026-07-31: it is honest about how often a show is already booked.
+  **The hedge NAMES what it is about rather than pointing at it (#3685).** Its pronoun needs a
+  noun to reach for, and on a MULTI NIGHT RUN there is none: the run is referenced as a
+  singular "run" and the individual nights are never a noun phrase in the email at all, so a
+  plural pronoun agrees with something nobody wrote. Drafted 2026-09-07: "If you don't already
+  have someone covering **them**, I'd be glad to talk about your photography plans for the
+  run." Walking back from "them", the nearest nouns are "my portfolio" and a domain name.
+  Write the noun instead, whatever the night count: "if you don't already have someone
+  covering the run", "if nobody is on these performances yet". That is the seam of two rules
+  that are each right, since the multi-night rule is exactly what puts a plural pronoun within
+  reach of a singular antecedent.
 - **Credential + portfolio link (#365):** work in one of Dan's citable credentials
   (Carnegie Hall tenure of nearly 10 years, or the Madison Square Garden / Lincoln
   Center / Radio City Music Hall venues) plus the portfolio link
@@ -1088,30 +1197,68 @@ overrides the block:
 - **An unfilled placeholder**, like `[VENUE]` or `[NAME]`. Fill every slot from the work-list, or
   rewrite the sentence without it. Square brackets never appear in a finished draft.
 
-This lint reads the text that will ACTUALLY be mailed, which for a `provenance: "performer"` contact
-is that contact's own `overrideBody` (below), not the shared `draft.body`. Both are held to it.
+This lint reads the text that will ACTUALLY be mailed, which is the show's one `draft.body`. Since
+#3549 there is nothing else it could be, so what is CHECKED cannot differ from what is SENT.
 
-**Drafting for a performer contact directly (#634, #639-643).** The shared `draft.body`
-above is written in the third person because it was designed for a third party being
-told about the act (the act's own marketing contact, a presenter), and it still serves
-that audience unchanged. A `provenance: "performer"` contact is different: the email
-goes directly to the person the draft would otherwise be describing, so writing about
-them in the third person ("I saw Virgile Roche and Nora Calder are making their
-debut...") reads like a mail-merge mistake to the one person reading it. For every
-`provenance: "performer"` contact, ALSO write that contact's own `overrideBody`,
-addressing them directly in second person ("you"/"your") instead: "I saw you and Anna
-Pierre are making your U.S. debut..." not "I saw Virgile Roche and Nora Calder are
-making their debut...". Everything else about it follows the SAME rules as the shared
-body above, INCLUDING the greeting rule (#2545): this contact receives their own email, so
-its `overrideBody` opens with its own greeting naming them, "Hi Virgile," then a blank line
-then the first sentence. It is a one-person email whatever else is on the show, so the
-two-or-more "Hello," case never applies to it. Everything else follows the shared body too:
-no performative enthusiasm, no em dashes, no price and no turnaround (the Offer rule
-above), the same portfolio link, and the same "never ask for a known
-fact" rule. The subject line stays shared and unchanged, third-person subjects read
-fine regardless of recipient. When two named performers are pursued for the same
-show (§1), each gets their OWN `overrideBody` naming their co-performer correctly,
-never a copy-pasted version naming the wrong person.
+**Address the one letter to the people it reaches (#634, #639-643, #3549).** A show has ONE
+`draft.body`. You know its `contacts[]` by the time you write it, so address it to them
+rather than writing a generic third-person body and a second copy beside it.
+
+The rule has two cases, and it is the CONTACT COUNT that picks between them, matching the
+greeting rule (#2545) exactly:
+
+- **ONE contact.** The letter goes to that person alone, so write it to them. Open with a
+  greeting naming them, "Hi Corin," then a blank line then the first sentence. Where that
+  contact is a `provenance: "performer"`, they are the person the pitch is about, so address
+  them in the second person: "I saw you and Corin Hale are making your U.S. debut..." and
+  NEVER "I saw Wren Halloway and Corin Hale are making their debut...", which reads like a
+  mail-merge mistake to the one person reading it. Where that contact is a presenter or an
+  act's marketing desk, they are a third party being told about the act, so the third person
+  is correct and the performers are NAMED.
+- **TWO OR MORE contacts.** They all receive the SAME email, so no one of them can be "you".
+  Open with a plain "Hello," naming nobody (#2545), and write about the performers in the
+  third person, naming each of them correctly. This is the case for a show with several
+  named performers, and for a show carrying both a performer and a presenter.
+
+#3549 retired the alternative, which was a second copy of the pitch per performer
+(`overrideBody`). Do not write one: the app ignores the key, and the eval FAILS a run that
+emits it. What it cost was measured before it went: of 199 shows carrying any contact, 30 held
+more than one performer and NOT ONE had ever had a per-performer letter written, so the
+personalisation it described had never actually happened. What it cost while it existed was
+real, on the other hand: the app's own Edit button wrote the shared body while the send
+composed from the copy, so an edit was reported as applied and reached nobody.
+
+Everything else follows the body rules above: no performative enthusiasm, no em dashes, no
+price and no turnaround (the Offer rule above), the same portfolio link, and the same "never
+ask for a known fact" rule. The subject line is third person in both cases, which reads fine
+whoever receives it.
+
+**A direct message is not an email (#2630).** Some shows have no address at all: the only route you
+found is a contact form on the act's own site, or a social profile Dan will DM by hand. You know which,
+because you found the routes yourself in step 1 and they are the routes you are about to emit. Where the
+ONLY route is one of those, write the body for THAT, not for an inbox.
+
+The pitch is the same pitch and every rule above still holds. What changes is its SHAPE, because a DM is
+read in a narrow column on a phone and stops being read long before a fourth paragraph:
+
+- **No subject line.** There is nowhere to put one, and an opening line that is really a subject wearing
+  a sentence's clothes is worse than none.
+- **Roughly 60 to 80 words**, against the 150 an email runs to.
+- **Two short paragraphs at most**, and one is often right.
+- **The same three things and nothing else:** who Dan is, that he is writing about THIS show (named, not
+  described), and the ask. The credential compresses to one clause rather than a list of venues, and the
+  portfolio link goes on its own short line at the end.
+
+What gets cut is elaboration, never the ask and never the introduction: a DM that arrives without saying
+who Dan is reads as spam, which is the one thing a shorter format must not become. Everything forbidden
+in an email is forbidden here too (no price, no turnaround, no gallery path, no invented count).
+
+Measured 2026-08-13 on the Song & Word card (Vivace Arts Collective, The Green Room 42, 2026-08-16): the
+run found only an Instagram profile for the presenter and still produced a 150 word body under the
+subject "Photographing Vivace Arts Collective's Song & Word at The Green Room 42."
+
+Still emit a `subject`, because the app requires one and Dan reads it on the review card; it is simply
+never sent. Keep it short and third person, as everywhere else here.
 
 **Answering "what do you charge": Dan's own two paragraphs, VERBATIM (#2874).** This governs a
 REPLY to someone who asked, and nothing else. A cold pitch still carries no rate and no turnaround
@@ -1141,7 +1288,7 @@ a thin answer, it reproduced the thin answer it was given, faithfully. The same 
 
 ### 3. Validate before writing (deterministic guard, Phase C / #39)
 
-Applies to the shared `draft.body` AND every contact's `overrideBody`, if any. Reject or
+Applies to the show's one `draft.body`. Reject or
 fix a draft body that:
 - contains "discount", "flexible", "free", or "complimentary" (no concession language
   in a cold email);

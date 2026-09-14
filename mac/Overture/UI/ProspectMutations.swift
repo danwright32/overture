@@ -9,8 +9,36 @@ import AppKit
 // methods always did; nothing here changes existing behavior, it only relocates it.
 @MainActor
 enum ProspectMutations {
+
+    // #1778: the show behind the row Dan pressed, or nil HAVING SAID SO.
+    //
+    // Fifty row actions found it inline and returned silently when it came back empty, so the control
+    // was offered, pressed, and did nothing with nothing said. That is this issue's own test answered
+    // yes by a route it did not name: it expected a DOMAIN rule refusing, and this is the lookup. One
+    // helper rather than fifty guards, because the lookup is the one thing every action shares (L30).
+    //
+    // It speaks only for its OWN failure. A guard that carries domain conditions beside this still
+    // refuses those on its own terms, and those refusals already say their piece (ShowOutcome
+    // .refusedLine is the worked example). Nothing here changes what any action DOES.
+    static func model(for item: QueueItem, in prospects: [Prospect],
+                      feedback: ActionFeedback) -> Prospect? {
+        model(forKey: item.id, org: item.groupName, in: prospects, feedback: feedback)
+    }
+
+    // The same question where the caller holds a key rather than a row (the reply actions). `org` is
+    // optional because those callers genuinely do not know it, and the message says so rather than
+    // naming the wrong show.
+    static func model(forKey naturalKey: String, org: String?, in prospects: [Prospect],
+                      feedback: ActionFeedback) -> Prospect? {
+        guard let found = prospects.first(where: { $0.naturalKey == naturalKey }) else {
+            feedback.acknowledge(ActionAck.couldNotFindShow(org: org), tone: .warning)
+            return nil
+        }
+        return found
+    }
+
     static func toggleVoiceLearning(_ item: QueueItem, prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
-        guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
+        guard let model = model(for: item, in: prospects, feedback: feedback) else { return }
         model.excludedFromVoiceLearning.toggle()
         if context.saveOrWarn(org: item.groupName, feedback: feedback) {
             feedback.acknowledge(ActionAck.voiceLearning(excluded: model.excludedFromVoiceLearning, org: item.groupName))
@@ -23,7 +51,7 @@ enum ProspectMutations {
     static func requestReachabilityRecheck(_ item: QueueItem, prospects: [Prospect],
                                            context: ModelContext, feedback: ActionFeedback,
                                            now: Date = Date()) {
-        guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
+        guard let model = model(for: item, in: prospects, feedback: feedback) else { return }
         // Idempotent. Pressing twice must not move the request's timestamp, which is what the row reads to
         // decide it has already been acknowledged.
         guard model.reachabilityRecheckRequestedAt == nil else { return }
@@ -36,7 +64,7 @@ enum ProspectMutations {
     // Dan marked an auto-detected Gmail reply as not real (#219): revert it and remember that
     // reply so it does not re-flag, while a genuinely new reply still will.
     static func dismissReply(_ item: QueueItem, prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
-        guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
+        guard let model = model(for: item, in: prospects, feedback: feedback) else { return }
         model.dismissAutoReply(now: Date())
         context.saveOrWarn(org: item.groupName, feedback: feedback)
     }
@@ -45,7 +73,7 @@ enum ProspectMutations {
     // Booked, never sets the lead booking). Stamps the manual source so detection will not overwrite it.
     static func markContact(_ item: QueueItem, _ recipientId: String, _ resolution: RecipientResolution?, _ bounced: Bool,
                             prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
-        guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
+        guard let model = model(for: item, in: prospects, feedback: feedback) else { return }
         model.updateRecipient(id: recipientId) { $0.markOutcomeManually(resolution: resolution, bounced: bounced) }
         model.resumePausedRecipients()
         context.saveOrWarn(org: item.groupName, feedback: feedback)
@@ -68,7 +96,7 @@ enum ProspectMutations {
     static func recordOutcome(_ item: QueueItem, _ outcome: ShowOutcome,
                               prospects: [Prospect], context: ModelContext,
                               feedback: ActionFeedback) -> Bool {
-        guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return false }
+        guard let model = model(for: item, in: prospects, feedback: feedback) else { return false }
         guard ShowOutcome.menu(wasPitched: model.wasPitched).contains(outcome) else {
             feedback.acknowledge(ShowOutcome.refusedLine(outcome, org: item.groupName,
                                                          wasPitched: model.wasPitched),
@@ -115,7 +143,7 @@ enum ProspectMutations {
     @discardableResult
     static func reopenOutcome(_ item: QueueItem, prospects: [Prospect], context: ModelContext,
                               feedback: ActionFeedback) -> Bool {
-        guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return false }
+        guard let model = model(for: item, in: prospects, feedback: feedback) else { return false }
         guard let had = model.showOutcome else { return false }
         model.showOutcome = nil
         // #2915: and its stamp, or the next close-out inherits this one's moment and a reply is compared
@@ -136,7 +164,7 @@ enum ProspectMutations {
     static func detachConversation(_ item: QueueItem, _ recipientId: String, prospects: [Prospect],
                                    context: ModelContext, feedback: ActionFeedback,
                                    now: Date = Date()) {
-        guard let model = prospects.first(where: { $0.naturalKey == item.id }),
+        guard let model = model(for: item, in: prospects, feedback: feedback),
               let recipient = model.recipients.first(where: { $0.id == recipientId }) else { return }
         switch DetachConversation.detach(recipient, on: model, now: now) {
         case .refused(let reason):
@@ -153,7 +181,7 @@ enum ProspectMutations {
     // only ride along in the confirmation banner.
     static func addRecipientManually(_ item: QueueItem, email: String, name: String?,
                                      prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
-        guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
+        guard let model = model(for: item, in: prospects, feedback: feedback) else { return }
 
         // #2629: a ROUTE. An address still behaves exactly as it did; a contact form or a social profile
         // is now accepted too, because those are the ways in Dan actually has on the shows this control's
@@ -273,7 +301,7 @@ enum ProspectMutations {
     static func prepManually(_ item: QueueItem, email: String, name: String?,
                              subject: String, body: String, sendsTogether: Bool = true,
                              prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
-        guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
+        guard let model = model(for: item, in: prospects, feedback: feedback) else { return }
 
         // #3369: #901's gate stood here too, refusing Dan's OWN hand-written pitch for a night carrying a
         // clash. It is the clearest case for the decision of 2026-09-01: he is typing the email himself,
@@ -287,8 +315,32 @@ enum ProspectMutations {
             feedback.acknowledge(refusal, tone: .warning)
             return
         }
-        guard case .addresses(let addresses) = EmailAddressList.parse(email) else { return }
         let trimmedBody = body.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedSubject = subject.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        // #2896: the recipients this save writes, as ROUTES. Addresses first, which is
+        // `ManualContactRoute`'s own order and matters for its reason: an address is a plausible-looking
+        // host, so filing one as a link would silently lose the one route that can be emailed.
+        //
+        // A LINK is a recipient here now, and what saving one MEANS is decided explicitly rather than
+        // left to fall out (Dan's call, 2026-09-06). On a show whose only route is a contact form or a
+        // profile there is nothing to send, so the saved draft is the text he pastes: the show lands in
+        // `.drafted` exactly as an addressed one does, the route is stored on the same field a FOUND
+        // route uses, and the existing form-pitch flow (`FormPitch`, #2612) is what he opens, writes on
+        // and marks sent.
+        //
+        // It can never be emailed, and that is structural rather than a rule somebody has to keep:
+        // `isSendablePending` requires an address, so a link recipient is in no send group anywhere.
+        let routes: [ManualContactRoute]
+        if case .addresses(let addresses) = EmailAddressList.parse(email) {
+            routes = addresses.map { .email($0) }
+        } else if let link = ManualContactRoute.parse(email), case .link = link {
+            routes = [link]
+        } else {
+            // Unreachable: the refusal above already covers every other reading of the field. Returning
+            // rather than writing, because a save that reached here would be one nothing had judged.
+            return
+        }
 
         // One Recipient per person, each through the same path the Add-contact control uses, so a
         // `.blocked` result still means what it always did: that address is already a live contact on this
@@ -297,17 +349,13 @@ enum ProspectMutations {
         //
         // The name is only ever applied when he named ONE person, since a single typed name cannot belong
         // to several addresses.
-        let trimmedName = (addresses.count == 1) ? name?.trimmingCharacters(in: .whitespacesAndNewlines) : nil
-        for address in addresses {
-            // #2629: these come from `EmailAddressList`, so every one is already an address. Routed
-            // through the same `.email` case rather than re-parsed, because the manual-prep sheet writes
-            // an email he types himself and a link would have nothing to send.
-            applyManualRecipient(route: .email(address), name: trimmedName, to: model)
+        let trimmedName = (routes.count == 1) ? name?.trimmingCharacters(in: .whitespacesAndNewlines) : nil
+        for route in routes {
+            applyManualRecipient(route: route, name: trimmedName, to: model)
         }
         // #2034: the choice he made on the sheet, recorded with the draft it belongs to.
         model.sendsTogetherOverride = sendsTogether
-        model.writeManualDraft(subject: subject.trimmingCharacters(in: .whitespacesAndNewlines),
-                               body: trimmedBody)
+        model.writeManualDraft(subject: trimmedSubject, body: trimmedBody)
 
         guard context.saveOrWarn(org: model.groupName, feedback: feedback) else { return }
         feedback.acknowledge(ActionAck.manualPrepSaved(org: model.groupName))
@@ -333,7 +381,7 @@ enum ProspectMutations {
     // triage card and the draft-review panel), so a strike means the same thing wherever Dan makes it.
     static func removeRecipientManually(_ item: QueueItem, _ recipientId: String, _ name: String?,
                                         prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
-        guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
+        guard let model = model(for: item, in: prospects, feedback: feedback) else { return }
         // #2438: recorded for a form-only contact too. It used to require an address, so striking one
         // whose only handle is a form fell straight through to the hard delete below, and a deleted
         // pending row is indistinguishable from one never found, so the next run put it back. Dan struck
@@ -361,7 +409,7 @@ enum ProspectMutations {
     static func removeInheritedAddress(_ item: QueueItem, email: String,
                                        prospects: [Prospect], context: ModelContext,
                                        feedback: ActionFeedback) {
-        guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
+        guard let model = model(for: item, in: prospects, feedback: feedback) else { return }
         // No organisation to attach it to means the address cannot have been inherited in the first
         // place, so there is nothing this could truthfully record. Refuse rather than guess at a nearby
         // scope (L75): a strike written against the wrong key silently spares the address it names and
@@ -380,7 +428,7 @@ enum ProspectMutations {
 
     static func dismissContactReply(_ item: QueueItem, _ recipientId: String,
                                     prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
-        guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
+        guard let model = model(for: item, in: prospects, feedback: feedback) else { return }
         model.updateRecipient(id: recipientId) { $0.dismissAutoReply() }
         model.resumePausedRecipients()
         context.saveOrWarn(org: item.groupName, feedback: feedback)
@@ -390,7 +438,7 @@ enum ProspectMutations {
     // message so it does not re-flag, while a genuinely new bounce still will.
     static func dismissContactBounce(_ item: QueueItem, _ recipientId: String,
                                      prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
-        guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
+        guard let model = model(for: item, in: prospects, feedback: feedback) else { return }
         model.updateRecipient(id: recipientId) { $0.dismissAutoBounce() }
         context.saveOrWarn(org: item.groupName, feedback: feedback)
     }
@@ -399,15 +447,34 @@ enum ProspectMutations {
     // contact, unblocking it from sending.
     static func dismissVenueMatch(_ item: QueueItem, _ recipientId: String,
                                   prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
-        guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
+        guard let model = model(for: item, in: prospects, feedback: feedback) else { return }
         model.updateRecipient(id: recipientId) { $0.looksLikeVenueDismissed = true }
+        context.saveOrWarn(org: item.groupName, feedback: feedback)
+    }
+
+    // #2937: Dan says the profile the check guessed by name IS the person. Since #2912 the card shows
+    // such a handle and says nobody established whose it is, and he is the one who can tell in seconds.
+    //
+    // The same shape as the four guard dismissals around it, and for the reason #2937 names: the run's
+    // own doubt (`nameMatchOnly`) is re-derived on every ingest by design, so his answer has to live on
+    // a field of its own or the next check takes it with the doubt.
+    //
+    // Everything else follows from the one write, because four readers ask one list: the profile rejoins
+    // `Prospect.socialRouteURLs`, the verdict becomes `socialOnly`, the pill says so, and the
+    // record-a-DM path opens. Nothing here loosens #2147: the app still never CLAIMS a route nobody tied
+    // to the show, it now knows when somebody did.
+    static func confirmGuessedProfile(_ item: QueueItem, _ recipientId: String,
+                                      prospects: [Prospect], context: ModelContext,
+                                      feedback: ActionFeedback) {
+        guard let model = model(for: item, in: prospects, feedback: feedback) else { return }
+        model.updateRecipient(id: recipientId) { $0.nameMatchOnlyDismissed = true }
         context.saveOrWarn(org: item.groupName, feedback: feedback)
     }
 
     // #722: same shape as dismissVenueMatch above, for a suspected press/media contact.
     static func dismissPressContactMatch(_ item: QueueItem, _ recipientId: String,
                                          prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
-        guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
+        guard let model = model(for: item, in: prospects, feedback: feedback) else { return }
         model.updateRecipient(id: recipientId) { $0.looksLikePressContactDismissed = true }
         context.saveOrWarn(org: item.groupName, feedback: feedback)
     }
@@ -416,7 +483,7 @@ enum ProspectMutations {
     // for this one contact, unblocking it from sending.
     static func dismissDuplicateContactMatch(_ item: QueueItem, _ recipientId: String,
                                              prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
-        guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
+        guard let model = model(for: item, in: prospects, feedback: feedback) else { return }
         model.updateRecipient(id: recipientId) { $0.looksLikeDuplicateContactDismissed = true }
         context.saveOrWarn(org: item.groupName, feedback: feedback)
     }
@@ -426,7 +493,7 @@ enum ProspectMutations {
     // unverified. The three above unblock a send; this one corrects a claim, which is the only difference.
     static func dismissConfidenceHeldDown(_ item: QueueItem, _ recipientId: String,
                                           prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
-        guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
+        guard let model = model(for: item, in: prospects, feedback: feedback) else { return }
         model.updateRecipient(id: recipientId) { $0.heldDownToUnverifiedDismissed = true }
         context.saveOrWarn(org: item.groupName, feedback: feedback)
     }
@@ -437,7 +504,7 @@ enum ProspectMutations {
     static func dismissAddressInAnotherName(_ item: QueueItem, _ recipientId: String,
                                             prospects: [Prospect], context: ModelContext,
                                             feedback: ActionFeedback) {
-        guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
+        guard let model = model(for: item, in: prospects, feedback: feedback) else { return }
         model.updateRecipient(id: recipientId) { $0.looksLikeAnotherPersonsDismissed = true }
         context.saveOrWarn(org: item.groupName, feedback: feedback)
     }
@@ -485,7 +552,7 @@ enum ProspectMutations {
                            // #2975: wrapped rather than named directly, because `launchReplyDrafter`
                            // now carries its own defaulted seams and no longer has this narrower shape.
                            start: ReplyDraftLaunch = { launchReplyDrafter($0, $1) }) {
-        guard let model = prospects.first(where: { $0.naturalKey == naturalKey }) else { return }
+        guard let model = model(forKey: naturalKey, org: nil, in: prospects, feedback: feedback) else { return }
         model.updateRecipient(id: recipientId) { $0.replyDraftRequestedAt = Date() }
         context.saveOrWarn(org: model.groupName, feedback: feedback)
         start(context, ReplyClassifyService.Target(naturalKey: naturalKey, recipientId: recipientId))
@@ -493,13 +560,13 @@ enum ProspectMutations {
 
     static func editReplyDraft(_ item: QueueItem, _ recipientId: String, _ body: String,
                                prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
-        guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
+        guard let model = model(for: item, in: prospects, feedback: feedback) else { return }
         model.updateRecipient(id: recipientId) { $0.applyReplyDraftEdit(body) }
         context.saveOrWarn(org: item.groupName, feedback: feedback)
     }
 
     static func copyReply(_ item: QueueItem, _ recipientId: String, prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
-        guard let model = prospects.first(where: { $0.naturalKey == item.id }),
+        guard let model = model(for: item, in: prospects, feedback: feedback),
               let recipient = model.recipients.first(where: { $0.id == recipientId }),
               let body = recipient.replyDraftBody, !body.isEmpty else { return }
         NSPasteboard.general.clearContents()
@@ -526,7 +593,7 @@ enum ProspectMutations {
     static func confirmCopiedReplySent(_ item: QueueItem, _ recipientId: String,
                                        prospects: [Prospect], context: ModelContext,
                                        feedback: ActionFeedback) {
-        guard let model = prospects.first(where: { $0.naturalKey == item.id }),
+        guard let model = model(for: item, in: prospects, feedback: feedback),
               let recipient = model.recipients.first(where: { $0.id == recipientId }),
               recipient.replyCopiedAt != nil else { return }
         // #2191: the same routine the in-app send runs, so answering by pasting into Gmail clears the
@@ -544,7 +611,7 @@ enum ProspectMutations {
     // yet, and claiming otherwise here is exactly the lie the confirm step exists to prevent.
     static func beginFormPitch(_ item: QueueItem, _ recipientId: String, _ formURL: String,
                                prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
-        guard let model = prospects.first(where: { $0.naturalKey == item.id }),
+        guard let model = model(for: item, in: prospects, feedback: feedback),
               let recipient = model.recipients.first(where: { $0.id == recipientId }),
               let pitch = OutgoingPitch.text(for: recipient, of: model) else { return }
         NSPasteboard.general.clearContents()
@@ -560,7 +627,7 @@ enum ProspectMutations {
     // Step two: he says he sent it. This is the moment the outreach becomes real.
     static func recordFormPitch(_ item: QueueItem, _ recipientId: String,
                                 prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
-        guard let model = prospects.first(where: { $0.naturalKey == item.id }),
+        guard let model = model(for: item, in: prospects, feedback: feedback),
               let recipient = model.recipients.first(where: { $0.id == recipientId }),
               model.recordFormOutreach(recipient, now: Date(), formURL: recipient.contactFormURL) else { return }
         guard context.saveOrWarn(org: item.groupName, feedback: feedback) else { return }
@@ -571,7 +638,7 @@ enum ProspectMutations {
     // half state he has to come back to.
     static func cancelFormPitch(_ item: QueueItem, _ recipientId: String,
                                 prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
-        guard let model = prospects.first(where: { $0.naturalKey == item.id }),
+        guard let model = model(for: item, in: prospects, feedback: feedback),
               let recipient = model.recipients.first(where: { $0.id == recipientId }) else { return }
         // ONE direction, and #3069 is why. This button is drawn only on `.awaitingConfirmation`, which
         // proves the record has not been made yet, so backing out is all there ever is to do here. The
@@ -650,7 +717,7 @@ enum ProspectMutations {
     static func setStatus(_ item: QueueItem, _ status: ReviewStatus, _ reason: ShowOutcome?,
                           prospects: [Prospect], context: ModelContext, feedback: ActionFeedback,
                           undo: QueueUndoStack? = nil, undoLabel: String? = nil) {
-        guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
+        guard let model = model(for: item, in: prospects, feedback: feedback) else { return }
         // Read BEFORE the mutation, so the entry records where the row actually came from rather than
         // an inverse guessed at undo time.
         let priorStatus = model.status
@@ -1003,7 +1070,7 @@ enum ProspectMutations {
 
     static func saveDraft(_ item: QueueItem, _ subject: String, _ body: String,
                          prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
-        guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
+        guard let model = model(for: item, in: prospects, feedback: feedback) else { return }
         model.applyEdit(subject: subject, body: body)
         context.saveOrWarn(org: item.groupName, feedback: feedback)
     }
@@ -1013,7 +1080,7 @@ enum ProspectMutations {
     // decision he made.
     static func setSendsTogether(_ item: QueueItem, _ together: Bool,
                                  prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
-        guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
+        guard let model = model(for: item, in: prospects, feedback: feedback) else { return }
         model.sendsTogetherOverride = together
         context.saveOrWarn(org: item.groupName, feedback: feedback)
     }
@@ -1030,7 +1097,7 @@ enum ProspectMutations {
                        startPrep: @MainActor (ModelContext, Date, Set<String>) async throws -> Void = { ctx, now, keys in
                            _ = try await PrepQueueService.startPrep(from: ctx, now: now, includedKeys: keys)
                        }) async {
-        guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
+        guard let model = model(for: item, in: prospects, feedback: feedback) else { return }
 
         // #3369: the clash guard that stood here is gone with the gate it enforced. It existed because
         // `needsPrep` refused a clashed show before reading the re-prep flags, so a request set here would
@@ -1117,7 +1184,7 @@ enum ProspectMutations {
 
     static func correctClassification(_ item: QueueItem, discipline: Discipline,
                                       prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
-        guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
+        guard let model = model(for: item, in: prospects, feedback: feedback) else { return }
         // #2688: the context is passed, so the correction is RECORDED as well as applied. Without it
         // every correction Dan makes is spent on the row he is looking at and the same unreadable title
         // comes back next week.
@@ -1134,7 +1201,7 @@ enum ProspectMutations {
     // finds this row and never inserts a duplicate.
     static func renameGroup(_ item: QueueItem, to newName: String,
                             prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
-        guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
+        guard let model = model(for: item, in: prospects, feedback: feedback) else { return }
         let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         if model.scoutGroupName == nil { model.scoutGroupName = model.groupName }
@@ -1148,7 +1215,7 @@ enum ProspectMutations {
     // #1274: hand the name back to the scout. Restore the latest tracked scout name (kept current by
     // ScoutService.apply) and clear the override so future scouts own the name again.
     static func resetGroupName(_ item: QueueItem, prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
-        guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
+        guard let model = model(for: item, in: prospects, feedback: feedback) else { return }
         if let scoutName = model.scoutGroupName { model.groupName = scoutName }
         model.groupNameOverriddenByDan = false
         if context.saveOrWarn(org: model.groupName, feedback: feedback) {
@@ -1160,13 +1227,13 @@ enum ProspectMutations {
     // "Remind me later" for ONE contact: steps just that contact's reminder forward, without sending.
     static func remindRecipientLater(_ item: QueueItem, _ recipientId: String,
                                      prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
-        guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
+        guard let model = model(for: item, in: prospects, feedback: feedback) else { return }
         model.updateRecipient(id: recipientId) { $0.remindLater(now: Date()) }
         context.saveOrWarn(org: item.groupName, feedback: feedback)
     }
 
     static func confirmBooking(_ item: QueueItem, prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
-        guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
+        guard let model = model(for: item, in: prospects, feedback: feedback) else { return }
         model.outcome = .booked
         model.outcomeSourceRaw = OutcomeSource.manual.rawValue
         model.outcomeAt = Date()
@@ -1176,7 +1243,7 @@ enum ProspectMutations {
     }
 
     static func dismissBookingSuggestion(_ item: QueueItem, prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
-        guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
+        guard let model = model(for: item, in: prospects, feedback: feedback) else { return }
         model.bookingSuggested = false
         model.bookingSuggestionDismissed = true
         context.saveOrWarn(org: item.groupName, feedback: feedback)
@@ -1192,7 +1259,7 @@ enum ProspectMutations {
     // night he cannot work, so a mis-click has to be reversible from the banner it happened in, rather
     // than needing him to find the row again and work out how to put the flag back.
     static func clearConflict(_ item: QueueItem, prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
-        guard let model = prospects.first(where: { $0.naturalKey == item.id }),
+        guard let model = model(for: item, in: prospects, feedback: feedback),
               model.hasUnclearedConflict else { return }   // nothing to clear, and nothing to pre-approve
         model.clearConflict()
         if context.saveOrWarn(org: item.groupName, feedback: feedback) {
@@ -1205,7 +1272,7 @@ enum ProspectMutations {
     }
 
     static func dismissAlreadyCoveredFlag(_ item: QueueItem, prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
-        guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
+        guard let model = model(for: item, in: prospects, feedback: feedback) else { return }
         model.alreadyCoveredDismissed = true
         context.saveOrWarn(org: item.groupName, feedback: feedback)
     }
@@ -1216,7 +1283,7 @@ enum ProspectMutations {
     // be a feature that looks like it works and still sends the email.
     static func setOrgDoNotContact(_ item: QueueItem, _ on: Bool, prospects: [Prospect],
                                    context: ModelContext, feedback: ActionFeedback) {
-        guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
+        guard let model = model(for: item, in: prospects, feedback: feedback) else { return }
         // #802: the refusal now also takes the org off the WATCHLIST, or a standing watchlist would
         // re-check their calendar every run forever and keep putting their shows in front of Dan.
         // Nothing would send, but that is not what "we'll leave you alone" means. The sources are
@@ -1241,14 +1308,14 @@ enum ProspectMutations {
     // it is what an undo stack (#1413) must consult before offering to reverse one of these.
     @discardableResult
     static func confirmPerformerMatch(_ item: QueueItem, prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) -> Bool {
-        guard let model = prospects.first(where: { $0.naturalKey == item.id }),
+        guard let model = model(for: item, in: prospects, feedback: feedback),
               model.confirmPerformerMatch() else { return false }
         return context.saveOrWarn(org: item.groupName, feedback: feedback)
     }
 
     @discardableResult
     static func dismissPerformerMatch(_ item: QueueItem, prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) -> Bool {
-        guard let model = prospects.first(where: { $0.naturalKey == item.id }),
+        guard let model = model(for: item, in: prospects, feedback: feedback),
               model.dismissPerformerMatch() else { return false }
         return context.saveOrWarn(org: item.groupName, feedback: feedback)
     }
@@ -1262,7 +1329,7 @@ enum ProspectMutations {
     // a performer with their own letter can be held while the shared body is fine, and a show-level flag
     // would wave through text nobody looked at (L83).
     static func overrideGreeting(_ item: QueueItem, prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
-        guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
+        guard let model = model(for: item, in: prospects, feedback: feedback) else { return }
         for r in model.recipients where r.sendState == .pending && r.isBlockedByGreeting {
             r.greetingOverriddenBody = r.effectiveBody
         }
@@ -1276,7 +1343,7 @@ enum ProspectMutations {
     // are actually blocked and still pending are touched: a clean recipient gains no stale override,
     // and one already sent is left alone.
     static func overrideDraftLint(_ item: QueueItem, prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
-        guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
+        guard let model = model(for: item, in: prospects, feedback: feedback) else { return }
         for r in model.recipients where r.sendState == .pending && r.isBlockedByDraftLint {
             r.lintOverriddenBody = r.effectiveBody
         }
@@ -1284,13 +1351,13 @@ enum ProspectMutations {
     }
 
     static func rejectBooking(_ item: QueueItem, prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
-        guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
+        guard let model = model(for: item, in: prospects, feedback: feedback) else { return }
         model.rejectAutoBooking(bookingId: model.autoBookedFromBookingId, now: Date())
         context.saveOrWarn(org: item.groupName, feedback: feedback)
     }
 
     static func setLostReason(_ item: QueueItem, _ reason: String, prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
-        guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
+        guard let model = model(for: item, in: prospects, feedback: feedback) else { return }
         model.lostReason = QueueModel.normalizedLostReason(reason)
         context.saveOrWarn(org: item.groupName, feedback: feedback)
     }
@@ -1328,7 +1395,7 @@ enum ProspectMutations {
                                clearSending: @escaping (String) -> Void,
                                onNeedsReconnect: @escaping () -> Void,
                                onSent: @escaping (_ naturalKey: String, _ fullySent: Bool) -> Void = { _, _ in }) {
-        guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
+        guard let model = model(for: item, in: prospects, feedback: feedback) else { return }
         if model.status == .drafted {
             // Through the same setter every other status change uses, so approving here cannot quietly
             // skip the bookkeeping (the dismissal fields, the conflict rules) that setter owns.
@@ -1351,7 +1418,7 @@ enum ProspectMutations {
                            // left). The queue plays its leaving delight only when the row actually departs, so a
                            // partial send on a multi-recipient show (still someone pending) does not trigger it.
                            onSent: @escaping (_ naturalKey: String, _ fullySent: Bool) -> Void = { _, _ in }) {
-        guard let model = prospects.first(where: { $0.naturalKey == naturalKey }) else { return }
+        guard let model = model(forKey: naturalKey, org: nil, in: prospects, feedback: feedback) else { return }
         // Written at the COMMIT, not as he flips it, so cancelling the sheet changes nothing about the show.
         if let together { model.sendsTogetherOverride = together }
         let chosen = selecting.map { SendGroup.sendableFor(model, ids: $0) }
@@ -1376,7 +1443,7 @@ enum ProspectMutations {
                           sender: MailSender = liveSender(),
                           markSending: @escaping (String) -> Void, clearSending: @escaping (String) -> Void,
                           onNeedsReconnect: @escaping () -> Void) {
-        guard let model = prospects.first(where: { $0.naturalKey == item.id }),
+        guard let model = model(for: item, in: prospects, feedback: feedback),
               let recipient = model.recipients.first(where: { $0.id == recipientId }) else { return }
         markSending(recipientId)
         Task {
@@ -1403,7 +1470,7 @@ enum ProspectMutations {
                              sender: MailSender = liveSender(), body: String? = nil,
                              now: Date = Date(),
                              markSending: @escaping (String) -> Void, clearSending: @escaping (String) -> Void) {
-        guard let model = prospects.first(where: { $0.naturalKey == naturalKey }),
+        guard let model = model(forKey: naturalKey, org: nil, in: prospects, feedback: feedback),
               let recipient = model.recipients.first(where: { $0.id == recipientId }) else { return }
         let org = model.groupName
         markSending(recipientId)

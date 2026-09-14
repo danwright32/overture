@@ -4,13 +4,34 @@ import Foundation
 // own search field: org/act name, venue, and every recipient's name/email, so Dan can find a show
 // whether he remembers who he pitched, where it was, or who replied. Case insensitive substring
 // match; an empty (or all whitespace) query matches everything.
+// #3655 Phase 5: what a show has to be able to answer to be searchable.
+//
+// A ROW CAN ANSWER ALL OF IT, which is the whole point of the phase. Archive used to build a full card
+// for every show in the store on every keystroke, purely so the search could reach each card's contacts;
+// `PinnedScrollHolder.swift:9-10` records #3437's profile putting `ArchiveView.items` at 65% of the main
+// thread while typing. Written over this protocol, the search reaches the ~24 answers a `QueueScopeRow`
+// carries and nothing else, so nothing about search can be the reason a card exists for a show nobody is
+// looking at.
+//
+// It REFINES `QueueScopeFacts` rather than restating its fields, so `results` can keep sorting by
+// `performanceDate` and keep its `id`, and so both conformers are the two that already exist.
+//
+// `QueueItem` conforms too, and that is not a loophole: it is what lets the parity oracle hand a card
+// where a row is expected and get the same answer out.
+protocol ShowSearchFacts: QueueScopeFacts {
+    var searchableContacts: [SearchableContact] { get }
+}
+
 enum ShowSearch {
-    static func matches(_ item: QueueItem, query: String) -> Bool {
+    static func matches(_ item: some ShowSearchFacts, query: String) -> Bool {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return true }
         if contains(item.groupName, trimmed) { return true }
         if let venue = item.venue, contains(venue, trimmed) { return true }
-        for contact in item.contacts {
+        // #3655: through the SAME `contains` below that the two lines above use, over a VALUE ARRAY.
+        // Reading a pre-joined, pre-lowercased haystack instead would make the joining separator
+        // matchable (L555) and would silently drop the diacritic folding this helper does (L107).
+        for contact in item.searchableContacts {
             if let name = contact.name, contains(name, trimmed) { return true }
             if let email = contact.email, contains(email, trimmed) { return true }
         }
@@ -38,8 +59,8 @@ extension ShowSearch {
     // sort that decides WHICH ones survive it.
     static let resultLimit = 8
 
-    static func results(in items: @autoclosure () -> [QueueItem], query: String,
-                        limit: Int = resultLimit) -> [QueueItem] {
+    static func results<Show: ShowSearchFacts>(in items: @autoclosure () -> [Show], query: String,
+                                               limit: Int = resultLimit) -> [Show] {
         guard isSearching(query) else { return [] }
         return Array(
             items()
@@ -54,7 +75,7 @@ extension ShowSearch {
 
     // #1580's "the show is in Archive" count. Counted, never listed, and never built on a blank query for
     // the same reason as above: with nothing typed there is nothing for it to say.
-    static func matchCount(in items: @autoclosure () -> [QueueItem], query: String) -> Int {
+    static func matchCount(in items: @autoclosure () -> [some ShowSearchFacts], query: String) -> Int {
         guard isSearching(query) else { return 0 }
         return items().filter { matches($0, query: query) }.count
     }

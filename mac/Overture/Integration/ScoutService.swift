@@ -1507,6 +1507,19 @@ enum ScoutService {
             possibleMatchName: p.possibleMatchName,
             runEndDate: p.runEndDate, partOfRelatedRun: p.partOfRelatedRun, runSourceURLs: p.runSourceURLs,
             runNights: p.runNights)
+        // #3495: anchored on the way IN, exactly as `apply` anchors on every re-ingest. These two fields
+        // are what `Prospect.scoutAnchoredNaturalKey` reads, and `NaturalKeyVenueMigration` re-keys every
+        // row from that at launch, so a row minted without them is re-keyed from whatever its card ends up
+        // DISPLAYING. That is the precise thing #1886 added them to prevent, and two shipped features
+        // rewrite a display field on purpose (#1274 a rename, #1846 a merged card taking the watchlist's
+        // room name).
+        //
+        // Set here rather than left to the first re-ingest, for the reason the `genreDecidedBy` stamp one
+        // line down already records: a row that acquires the field only when something else happens spends
+        // its whole first life unprotected, and the population that can never be reached by a
+        // forward-only writer is the NEWEST rows (L389).
+        prospect.scoutGroupName = p.groupName
+        prospect.scoutVenue = p.venue
         prospect.setPresenter(p.presenter, from: .scout)       // #2453
         prospect.presenterWasTheRoom = p.presenterWasTheRoom   // #1788
         prospect.performanceStartTimes = p.startTimes          // #1699

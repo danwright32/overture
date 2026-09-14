@@ -138,12 +138,15 @@ struct ClosingAPitchOutFromTheRowTests {
     // the reader-side mapping that replaced the contact-level copy this phase removed.
     // #2863 added a sixth, "They said the price was too high", which reads as `lostDoorOpen`: an org that
     // wanted the work and could not pay this time is not one to stop pitching.
-    @Test func themenuOffersTheSixWaysAPitchEnds() {
+    // #3674 added a seventh, "The email bounced", which reads as `lostDoorOpen` for the sharper version of
+    // the same reason: nobody refused anything, the message did not arrive.
+    @Test func themenuOffersTheSevenWaysAPitchEnds() {
         #expect(ShowOutcome.pitched.map(\.label)
-                == ["Booked", "Never heard back", "They said not now", "They said no",
+                == ["Booked", "Never heard back", "The email bounced", "They said not now", "They said no",
                     "They said the price was too high", "I turned them down"])
         #expect(ShowOutcome.pitched.map(\.asPerformanceStatus)
-                == [.booked, .lostDoorOpen, .lostDoorOpen, .lostNotInterested, .lostDoorOpen, .stoodDown])
+                == [.booked, .lostDoorOpen, .lostDoorOpen, .lostDoorOpen, .lostNotInterested,
+                    .lostDoorOpen, .stoodDown])
     }
 
     // MARK: - recording it
@@ -253,13 +256,24 @@ struct ReachedOutCloseWiringTests {
         // `propertyBody(` and its literal hid the call from a scan that reads raw text.
         let row = try #require(SourceGuardHelper.bodyOfFunction(named: "reachedOutRow", in: source))
         #expect(row.contains("ReachedOutClose.passedHint(hasOpened: p.hasOpened(today: today)"))
-        #expect(row.contains("CloseOutMenu(outcomes: ShowOutcome.menu(wasPitched: p.wasPitched))"))
+        // #3707: the closing paren went with it. The menu grew a second argument (the reply link, which
+        // rides inside it rather than as a fourth control on the row), so pinning the call's exact
+        // rendering would fail the first legitimate refinement of it, which is the trap the comment on
+        // the assertion below already records (L103). What this claims is unchanged: the endings offered
+        // here come from the one vocabulary, for the half that is possible on this show.
+        #expect(row.contains("CloseOutMenu(outcomes: ShowOutcome.menu(wasPitched: p.wasPitched)"))
         // #2417: the menu now hands the ending to `closeOut`, which marks the row leaving BEFORE it
         // writes, so the screen answers on the press. The claim this guard exists to make is unchanged
         // (an ending picked here reaches the one write), so it follows the ending one hop further
         // rather than pinning the call that used to sit inline: a guard that pins a rendering instead
         // of the rule fails the first legitimate refinement of it, which is what happened here (L103).
-        #expect(row.contains("closeOut(p, as: outcome)"))
+        // #3651: the RULE, not one spelling of it. This pinned `closeOut(p, as: outcome)`, and the
+        // argument became a value snapshot rather than a live model, so the guard went red while the
+        // claim it makes was untouched. Its own comment above already warned against exactly this and
+        // the assertion did it anyway (L103).
+        #expect(row.contains("closeOut(") && row.contains(", as: outcome)"),
+                Comment(rawValue: "the ending picked in the menu no longer reaches `closeOut`, so this "
+                        + "guard can no longer say it reaches the one write."))
     }
 
     // And the hop lands where it claims to. Asserted separately from the row so a `closeOut` that

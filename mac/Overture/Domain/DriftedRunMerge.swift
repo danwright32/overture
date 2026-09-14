@@ -67,20 +67,35 @@ enum DriftedRunMerge {
                 ?? NaturalKeyVenueMigration.richestContactList(freshestFirst)
                 ?? candidates.max(by: { $0.ingestedAt < $1.ingestedAt })!
 
+            // #3597: whatever only a loser knew, before the losers go (L5). This pass carried NOTHING,
+            // so a merge here silently dropped the earliest sighting, any rename Dan had made, and the
+            // identity the feed is currently publishing. The miss count reset below used to be the one
+            // thing it did carry, and it is now part of this, which is why it has moved up.
+            //
+            // #3778: the returned KEY is DISCARDED here, as `NaturalKeyVenueMigration` already discards
+            // it, and this is the one caller where adopting it produces a broken row. The key is
+            // `title|date|venue` and this pass's members differ in exactly that date, because its whole
+            // subject is a run whose opening night MOVED. So the adopted key names one night while the
+            // survivor's own `performanceDate` names another, and a key derived from a record's fields
+            // is only as good as its agreement with them (L15). Everything else `carry` does is assigned
+            // inside it and is kept: the first sighting, Dan's decisions, the feed's listing URLs and
+            // source ids, and the miss count reset.
+            //
+            // Safe to discard rather than merely less wrong, and that is the half worth checking before
+            // changing this back. #3379 adopts the key because a survivor holding a key the source can
+            // never produce again is unmatchable, so the next scout mints a twin and the loop has no end.
+            // That reasoning is about a row reachable ONLY by its natural key. This pass's rows are not:
+            // `ScoutService.matchByConcertIdentity` finds them by `seriesId` plus venue, title and run
+            // overlap, never by key, and its update arm then writes `naturalKey` and `performanceDate`
+            // together, so the next sweep re-keys the survivor and re-dates it in one consistent write.
+            // That is what the code this replaced meant by "the next scout re-keys the survivor through
+            // #1528's own match", checked against ScoutService rather than taken from the comment (L61).
+            SurvivorInheritance.carry(onto: survivor, from: members)
+
             for loser in members where loser.persistentModelID != survivor.persistentModelID {
                 context.delete(loser)
                 summary.duplicatesDeleted += 1
             }
-
-            // The survivor inherited the miss count of a row the feed stopped listing, so it would render
-            // struck through as "No longer in the feed, may be cancelled" for a run still weeks from
-            // closing. The run IS still listed; only its opening night moved.
-            survivor.missedScoutCount = 0
-
-            // Deliberately NOTHING else. The key and the date are left exactly as they are: the next scout
-            // re-keys the survivor through #1528's own match, and rewriting a key here is the only step
-            // that could throw against the unique index, inside a launch save shared with every other
-            // migration whose failure is currently discarded.
         }
 
         return summary

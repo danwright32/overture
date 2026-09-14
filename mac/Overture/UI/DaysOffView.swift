@@ -169,6 +169,12 @@ struct DaysOffView: View {
         // which booking a row stands for, so a sheet with fifteen bookings opened and decoded the export
         // fifteen times to draw itself. That is #1960's defect on this same sheet and #1731's on the
         // Presenters one, which is why it is fixed here rather than filed.
+        //
+        // #3852: AND THIS COMMENT WAS THREE READS OUT OF DATE. It said the calendar was worked out once
+        // and handed down while three later lines in this same function still read `calendar` directly,
+        // so drawing this section decoded the whole export FOUR times. Found by the scan rather than by
+        // reading, which is the point of the scan: the same shape as #3837's `prepRefusal`, whose own
+        // docstring said "this reads it twice" over code that read it four times.
         let cal = calendar
         let bookings = DownbeatBridge.loadedExport().bookings
         let cancelled = cancelledRows
@@ -185,7 +191,7 @@ struct DaysOffView: View {
             // snooze silences the toolbar mark, and only that. Hiding this sentence too would put the
             // empty list straight back to reading as "you have nothing booked", which is a different
             // claim and a false one, and it is the exact misreading this whole feature exists to stop.
-            if !calendar.hasUpcomingBookedShoot(today: QueueModel.easternToday()) {
+            if !cal.hasUpcomingBookedShoot(today: QueueModel.easternToday()) {
                 Text(DaysOffAttention.noBookedShootsExplanation)
                     .font(.system(size: 11)).foregroundStyle(OVColor.rust)
                     .fixedSize(horizontal: false, vertical: true)
@@ -193,7 +199,7 @@ struct DaysOffView: View {
                 // Putting a warning away should cost Dan the ten seconds of having read what he is putting
                 // away; a one-click silence from the masthead is how a warning gets dismissed reflexively
                 // and then forgotten. Offered only while the mark is actually up.
-                if DaysOffAttention.needsALook(calendar) {
+                if DaysOffAttention.needsALook(cal) {
                     Button(DaysOffAttention.snoozeButtonTitle) { snooze() }
                         .buttonStyle(.plain).font(.system(size: 11)).foregroundStyle(OVColor.forestText)
                         .padding(.top, 2)
@@ -206,7 +212,7 @@ struct DaysOffView: View {
                     Text(DaysOffAttention.feedStalledExplanation)
                         .font(.system(size: 11)).foregroundStyle(OVColor.rust)
                         .fixedSize(horizontal: false, vertical: true)
-                    if DaysOffAttention.needsALook(calendar, feedStalled: true) {
+                    if DaysOffAttention.needsALook(cal, feedStalled: true) {
                         Button(DaysOffAttention.snoozeButtonTitle) { snooze() }
                             .buttonStyle(.plain).font(.system(size: 11)).foregroundStyle(OVColor.forestText)
                             .padding(.top, 2)

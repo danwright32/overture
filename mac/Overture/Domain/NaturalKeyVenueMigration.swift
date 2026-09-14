@@ -64,10 +64,9 @@ enum NaturalKeyVenueMigration {
         // that rewrite a display field precisely so the key can stay put (#1274's rename, #1846's merged
         // room name): the row came back holding Dan's spelling, and the next scout, arriving with the
         // listing's spelling, computed a key that matched nothing and inserted a second card.
-        var groups: [String: [Prospect]] = [:]
-        for p in prospects {
-            groups[p.scoutAnchoredNaturalKey, default: []].append(p)
-        }
+        // #3615: and then the groups that are ONE SHOW under two anchored keys, which the anchor alone
+        // cannot see. See `groupsOfOneShow`.
+        let groups = Self.groupsOfOneShow(prospects)
 
         for (newKey, members) in groups {
             if members.count == 1 {
@@ -135,17 +134,12 @@ enum NaturalKeyVenueMigration {
                 members.first(where: { hasRecordBeyondADismissal($0, countingFoundAddresses: false) })
                 ?? richestContactList(candidates.sorted { freshest($1, $0) })
                 ?? candidates.max(by: freshest)!
-            // The show was first seen when the EARLIEST of these rows first saw it. Carried across before
-            // the losers go, or the merge would silently move the funnel's opening node (#16) forward to
-            // whenever the duplicate happened to appear.
-            let firstSightings = members.compactMap(\.firstSeenAt)
-            if let earliest = firstSightings.min(),
-               survivor.firstSeenAt == nil || earliest < survivor.firstSeenAt! {
-                survivor.firstSeenAt = earliest
-            }
-            // #3124: and his DECISIONS, before the rows holding them go. Same place and same reason as
-            // `firstSeenAt` above: whatever only a loser knew is gone the moment it is deleted (L5).
-            carryDansDecisions(onto: survivor, from: members)
+            // #3597: all of it, in one place, rather than the two carries this pass happened to have.
+            // The returned key is DISCARDED here on purpose: this pass re-keys to the key it COMPUTES
+            // below, not to the one the feed publishes, which is what it exists to do. The feed identity
+            // FIELDS are still carried, which this pass was not doing at all, so a survivor kept for what
+            // it holds no longer keeps a listing URL the source has stopped publishing.
+            _ = SurvivorInheritance.carry(onto: survivor, from: members)
             for loser in members where loser !== survivor {
                 context.delete(loser)
                 summary.duplicatesDeleted += 1
@@ -162,6 +156,59 @@ enum NaturalKeyVenueMigration {
         // cost is the one this protects against (a paid answer that cannot be matched), not corruption.
         try? NaturalKeyRemap.record(renames, at: Date())
         return summary
+    }
+
+    // #3615: the rows that are ONE SHOW, which is not the same question as the rows that fold to one key.
+    //
+    // The anchored key reads `scoutGroupName ?? groupName`, and that pin is right and stays: a show Dan
+    // RENAMES must keep the key the scout can still find it by (#1886/#1274). What the pin does not
+    // survive is the SOURCE renaming its own show. The pin then holds a name the source no longer
+    // publishes, the next scout computes a key from the new one, matches nothing, and inserts a second
+    // row, which no future scout can ever reach either. Measured on the live store 2026-09-07: two
+    // Carnegie shows stored twice, all four rows pristine, one pair reading `bar harbor music festival`
+    // and `bar harbor music festival 60th anniversary gala` under one display name.
+    //
+    // So rows are grouped by the anchored key FIRST, exactly as before, and any groups that share a
+    // DISPLAY IDENTITY (the same show name, night and room as they appear on screen) are then combined.
+    // Two rows agreeing on all three are one show by the natural key's own definition.
+    //
+    // THE COMBINED GROUP TAKES AN ANCHORED KEY, never one computed from the display fields, and that
+    // distinction is #1886's whole warning: a key built from what the card shows undoes every feature
+    // that rewrites a display field precisely so the key can stay put. The key taken is the freshest
+    // member's own anchored key, because the freshest row is the one the scout saw most recently, so its
+    // anchor is the name the source publishes today and is the key the next scout will compute.
+    //
+    // Nothing about the MERGE changes: `mustDefer`, the survivor ladder and the refusal to reconcile two
+    // histories blind all run on the combined group exactly as they ran on the old one.
+    static func groupsOfOneShow(_ prospects: [Prospect]) -> [(key: String, members: [Prospect])] {
+        var byAnchor: [String: [Prospect]] = [:]
+        for p in prospects { byAnchor[p.scoutAnchoredNaturalKey, default: []].append(p) }
+
+        // Which anchored groups share one display identity. Only groups, never individual rows, so a
+        // group the anchor already found stays intact.
+        var byDisplay: [String: [String]] = [:]
+        for (anchor, members) in byAnchor {
+            guard let first = members.first else { continue }
+            let display = Prospect.makeNaturalKey(groupName: first.groupName,
+                                                  performanceDate: first.performanceDate,
+                                                  venue: first.venue)
+            byDisplay[display, default: []].append(anchor)
+        }
+
+        var out: [(key: String, members: [Prospect])] = []
+        var taken: Set<String> = []
+        for (_, anchors) in byDisplay where anchors.count > 1 {
+            let members = anchors.flatMap { byAnchor[$0] ?? [] }
+            // The freshest row's OWN anchored key. `ingestedAt` is rewritten on every re-scout, so it
+            // means LAST SEEN, which is exactly the question being asked here.
+            guard let freshest = members.max(by: { $0.ingestedAt < $1.ingestedAt }) else { continue }
+            out.append((key: freshest.scoutAnchoredNaturalKey, members: members))
+            taken.formUnion(anchors)
+        }
+        for (anchor, members) in byAnchor where !taken.contains(anchor) {
+            out.append((key: anchor, members: members))
+        }
+        return out
     }
 
     // #1780: the deferral decision, named once. Anything that predicts what this pass will do (the
@@ -202,6 +249,44 @@ enum NaturalKeyVenueMigration {
     // Every field here is one of `ProspectFieldClassificationTests.danDecisionsTheRuleCannotSee`, and a
     // guard there fails if that list grows a field this function does not name, so a new decision cannot
     // arrive without a carry rule (L96).
+    // #3582/#3379: the row the source is STILL listing, meaning the last sweep matched it. Named here,
+    // beside the other rungs the three deleting passes share, so "is this row in the feed" has one
+    // definition rather than one per pass (L263).
+    //
+    // `members` is ordered oldest first by every caller, so where several are live this keeps each
+    // ladder's existing age tie-break instead of introducing a second one.
+    static func stillInTheFeed(_ members: [Prospect]) -> Prospect? {
+        members.first { $0.missedScoutCount == 0 }
+    }
+
+    // #3379: whatever only the LIVE row knew, carried onto the survivor before that row is deleted, so a
+    // survivor kept for what it HOLDS still answers to the identity the feed publishes.
+    //
+    // Without this the loop has no end: the survivor's key is one the source can never produce again, so
+    // the next scout cannot match it, mints a twin, and the next launch deletes the twin. Measured across
+    // five launch backups on 2026-09-06, that cycle had already run twice in two days.
+    //
+    // Returns the key to ADOPT rather than assigning it, and the ordering is the whole of what makes this
+    // safe: `naturalKey` is `@Attribute(.unique)`, so the caller must assign it only AFTER deleting the
+    // row that currently holds it, exactly as this file's own pass does. Everything else is assigned here,
+    // because nothing else is unique and none of it can collide.
+    //
+    // Answers nil when there is nothing to adopt, which is a real state and not a failure: a cluster
+    // where every row has fallen out of the feed has no live identity to take, and inventing one would
+    // rewrite a unique key for no reason inside the launch save (L98).
+    static func carryTheFeedIdentity(onto survivor: Prospect, from members: [Prospect]) -> String? {
+        guard let live = stillInTheFeed(members) else { return nil }
+        // The survivor is about to stand for a show the feed IS listing, so it must not keep a miss count
+        // earned by a key the feed stopped matching, or it goes on rendering as "may be cancelled" on a
+        // live show. The same write DriftedRunMerge makes, for the reason its own comment gives.
+        survivor.missedScoutCount = 0
+        guard live !== survivor else { return nil }
+        survivor.sourceListingURL = live.sourceListingURL
+        survivor.runSourceURLs = live.runSourceURLs
+        survivor.sourceIds = live.sourceIds
+        return live.naturalKey
+    }
+
     static func carryDansDecisions(onto survivor: Prospect, from members: [Prospect]) {
         let losers = members.filter { $0 !== survivor }
 

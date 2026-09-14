@@ -155,22 +155,35 @@ struct ListingLinkLabelWiringTests {
         // broke the moment a parameter was added after `now:`, and a marker that stops matching returns
         // nil, which every `contains` below is quietly false against (#2192). The name is the thing this
         // guard is actually about.
-        guard let body = SourceGuardHelper.bodyOfFunction(named: "items", in: model) else {
-            Issue.record("QueueModel.items(from:) is gone, so this guard is asking nothing")
+        // #3653: `scope`, not `items`. See PresenterLineTests for why the rename moved this needle.
+        guard let body = SourceGuardHelper.bodyOfFunction(named: "scope", in: model) else {
+            Issue.record("QueueModel.scope(from:) is gone, so this guard is asking nothing")
             return
         }
-        #expect(body.contains("item.sourceCalendarURLs"))
+        // #3654: the table is built in the builder and READ in `QueueModel.card`, the one place a card
+        // is decorated. Both halves are asserted, because either alone is satisfied by the other being
+        // deleted: a table nothing reads, or a read of a table nobody builds.
+        #expect(body.contains("sourceCalendarIndex("))
+        let cardBody = SourceGuardHelper.bodyOfFunction(named: "card", in: model)
+        #expect(cardBody?.contains("item.sourceCalendarURLs") == true,
+                "QueueModel.card no longer resolves the row's source calendars, or is gone")
         // Resolved through the row's OWN sources, not "any watched source", so a row can never inherit a
         // calendar address from a source it was never found on.
-        #expect(body.contains("sourceIds.compactMap"))
+        #expect(cardBody?.contains("sourceIds.compactMap") == true)
     }
 
+    // #3655 Phase 5: the two surfaces build through DIFFERENT declarations now, so the marker is per
+    // surface rather than one spelling assumed to fit both. Archive asks `QueueModel.scope` for rows plus
+    // a narrowed card set; the queue's own `items` is unchanged. Written as a pair with the file, and a
+    // marker that matches nothing is still a recorded issue rather than a silent skip (L100).
     @Test func bothCardSurfacesPassTheWatchlistIn() {
-        for path in ["Overture/UI/QueueView.swift", "Overture/UI/ArchiveView.swift"] {
+        let markers = ["Overture/UI/QueueView.swift": "private var items: [QueueItem] {",
+                       "Overture/UI/ArchiveView.swift": "private func makeScope() -> QueueModel.Scope {"]
+        for (path, marker) in markers {
             let source = SourceGuardHelper.source(path)
-            guard let body = SourceGuardHelper.propertyBody("private var items: [QueueItem] {", in: source)
+            guard let body = SourceGuardHelper.propertyBody(marker, in: source)
             else {
-                Issue.record("\(path) no longer builds its rows through a `private var items: [QueueItem]`")
+                Issue.record("\(path) no longer builds its cards through `\(marker)`")
                 continue
             }
             #expect(body.contains("sources: watchedSources"),

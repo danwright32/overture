@@ -77,7 +77,17 @@ enum DetachConversation {
         // The enumerated list. Written out field by field rather than delegating to a general "clear the
         // reply" helper, because the point is that every one of them was checked: a compensating
         // operation that touches N minus 1 of N linked things is L38.
-        r.gmailThreadId = nil
+        // #3710: back to the thread the PITCH went out on, not to nothing. Nil where there was none,
+        // which is every form pitch and is the behaviour this line has always had. Without it an emailed
+        // pitch comes back holding no conversation at all: Overture stops watching the thread it sent on,
+        // and a follow-up has nothing to thread onto.
+        r.gmailThreadId = r.attachDisplacedThreadId
+        r.attachDisplacedThreadId = nil
+        // #3712: cleared with it, in the same write, because the two are one fact. It says the stored
+        // outgoing message is on the DISPLACED thread, and the line above has just made that thread the
+        // stored one again, so leaving it would go on reporting a conversation Overture did not send on
+        // about the conversation it did.
+        r.attachDisplacedMessageId = nil
         r.attachedThreadSubject = nil
         r.conversationAttachedAt = nil
         // `conversationEverAttachedAt` is deliberately NOT cleared. #3069 removed the undo it was built
@@ -87,9 +97,18 @@ enum DetachConversation {
         // Only the address this attach put there. One that was already on the contact was never the
         // detach's to remove, which is why the attach records which it was rather than leaving the two
         // indistinguishable.
+        //
+        // #3710: two arms now, because the attach has two. It either FILLED an empty address, which is
+        // nulled again, or it REPLACED a populated one, which is put back. They are mutually exclusive by
+        // construction on the attach side, and written as one if/else here so they cannot both run: an
+        // undo that restores fewer fields than the action changed is not the inverse of that action, and
+        // one that ran both arms would leave the pitched address on a row it had also just cleared (L574).
         if r.attachWroteAddress {
             r.email = nil
             r.attachWroteAddress = false
+        } else if let displaced = r.attachDisplacedEmail {
+            r.email = displaced
+            r.attachDisplacedEmail = nil
         }
 
         // Everything `ReplyService.detectReplies` wrote.

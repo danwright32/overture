@@ -41,15 +41,33 @@ on:
 # repository, and a filter would make it skip precisely the change that breaks it. A skipped job is
 # indistinguishable from a passing one (L88).
 
-# #1347: the Swift (Mac) tests no longer run in CI. They ran on a self-hosted runner on Dan's Mac
-# (the `swift-tests` job on a `[self-hosted, macOS, overture-mac]` label), which repeatedly went
-# offline mid-job (GitHub-side connection instability with no clean fix on our end), stalling every
-# merge and forcing admin-merges. Overture was the only project carrying a self-hosted runner.
+# THE SWIFT TESTS RUN HERE AGAIN, on a GitHub-hosted macOS runner, and the paragraph this replaces
+# was wrong about why they could not.
 #
-# The Swift suite is now verified by the MANDATORY local pre-push test gate (the same
-# `mac/scripts/run-tests-locked.sh` this job used to run), exactly as the sibling projects rely on
-# their local gate. A push cannot happen without the full Mac suite passing locally first, so CI
-# here covers only the TypeScript importer, which GitHub-hosted ubuntu-latest runs reliably.
+# #1347 retired a SELF-HOSTED runner on Dan's Mac (the `swift-tests` job on a
+# `[self-hosted, macOS, overture-mac]` label), which repeatedly went offline mid-job and forced
+# admin-merges. That was the right call about that runner. But the issue offered two ways out,
+# "(a) retiring swift-tests and relying on the local pre-push test gate ... or (b) moving Swift tests
+# onto a GitHub-hosted macOS runner", and (a) was taken with no reason recorded anywhere for
+# rejecting (b). For seven weeks the only verification the Mac app had was a local run on the word of
+# whoever ran it, on a repository whose own CI header says of the merge scripts "(Swift included,
+# which this job cannot)".
+#
+# It costs nothing. This repository is PUBLIC, and GitHub's billing documentation says "The use of
+# standard GitHub-hosted runners is free: In public repositories". `macos-26` is the standard arm64
+# image and is generally available; it matches the Mac this app is written on (macOS 26.6, Xcode
+# 26.6). The `-large` and `-xlarge` variants ARE billed even on a public repository and are
+# deliberately not used.
+#
+# What it does cost is a runner SLOT, which is the real budget here (L307), so the job carries a
+# timeout and `ciWorkflow.test.ts` fails if any job loses one.
+#
+# WHAT THIS DOES NOT REPLACE. A pull request run proves the branch works beside the code it was cut
+# from, never beside what landed since (L85). `verify-and-merge-branch.sh` and
+# `verify-and-merge-batch.sh` still merge current `origin/main` into the branch and run the whole
+# suite before anything merges, and going through one of them is still mandatory. This job is the
+# INDEPENDENT check that the local run actually happened and actually passed, which nothing provided
+# before.
 jobs:
   typecheck-and-test:
     runs-on: ubuntu-latest
@@ -72,3 +90,43 @@ jobs:
       - run: pnpm typecheck
 
       - run: pnpm test
+
+  # The name is load bearing: a branch ruleset keys on it and cannot be found by searching this repo
+  # (L305). It is deliberately the same `swift-tests` the self-hosted job used, so any ruleset written
+  # against the old one starts being satisfied again rather than silently naming nothing.
+  swift-tests:
+    runs-on: macos-26
+    timeout-minutes: 60
+
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # The committed project file is GENERATED from mac/project.yml, and regenerating it here rather
+      # than trusting the checked-in copy means this job cannot be made green by a stale one.
+      # `scripts/check-pbxproj-fresh.sh` is the guard that they agree; this is the run that proves the
+      # generator works on a machine that is not Dan's.
+      - name: Install the toolchain this repo builds with
+        run: brew install xcodegen flock
+
+      - name: Generate the Xcode project
+        working-directory: mac
+        run: xcodegen generate
+
+      # Ad-hoc signing. A hosted runner has no developer identity in its keychain, and the test host is
+      # a real app bundle that xcodebuild has to sign before it can launch it. Signing is not what this
+      # job is testing, and `run-tests-locked.sh` passes trailing arguments straight through to
+      # xcodebuild, so the settings go on the end rather than into the script.
+      - name: Run the Mac suite
+        run: mac/scripts/run-tests-locked.sh CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=YES
+
+      # The runner's own account of what happened, kept whether the suite passed or failed: a red run
+      # whose log has scrolled past is the one worth having the artifact for.
+      - name: Keep the run's diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mac-test-diagnostics
+          path: ~/.overture-mac-test-diagnostics
+          if-no-files-found: ignore
+          retention-days: 7

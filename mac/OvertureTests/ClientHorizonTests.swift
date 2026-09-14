@@ -92,6 +92,31 @@ struct ClientHorizonTests {
         }
     }
 
+    // #3645: the same verdict, asked the other way round. The Sources sheet holds the flag map already and
+    // the lead-time gate wants the set of client source ids, so the sheet folds one out of the other
+    // rather than running the O(clients x sources) match a second time for an answer it is holding.
+    //
+    // That is only safe while the two agree EXACTLY, and it is pinned here rather than reasoned about in a
+    // comment on the view. Over the same four shapes as the test above, because a tag forcing the verdict
+    // in either direction is the case a fold over "matched by name" would get wrong (L70, L263).
+    @Test func clientWindowFromFlagsMatchesTheOneBuiltFromSources() {
+        let nameMatch = source("Brooklyn Youth Chorus")
+        let noMatch = source("Some Random Venue")
+        let forcedOn = source("The Shared Venue", tag: true)
+        let forcedOff = WatchedSource(sourceId: "byc-off", orgName: "Brooklyn Youth Chorus",
+                                      listingsURL: "https://byc-off.example/e", kind: .html)
+        forcedOff.clientTagOverride = false
+        let sources = [nameMatch, noMatch, forcedOn, forcedOff]
+
+        let flags = ClientHorizon.clientFlags(sources: sources, clients: clients)
+
+        #expect(ClientWindow(clientFlags: flags) == ClientWindow(sources: sources, clients: clients))
+        // And that is not two empty sets agreeing, which is what a fold dropping every source would look
+        // like and would read as the cheap path working (L98).
+        #expect(ClientWindow(sources: sources, clients: clients).clientSourceIds
+                == ["Brooklyn Youth Chorus", "The Shared Venue"])
+    }
+
     // MARK: The Prep-run default window uses the same authority
 
     private func prospect(_ key: String, date: String, sourceIds: [String] = [],

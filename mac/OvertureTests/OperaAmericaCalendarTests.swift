@@ -173,8 +173,14 @@ struct OperaAmericaCalendarTests {
     }
 
     @Test func theFilteredRequestCarriesTheDateRangeAndPage() throws {
-        let from = Calendar(identifier: .gregorian).date(from: DateComponents(year: 2026, month: 7, day: 18))!
-        let to = Calendar(identifier: .gregorian).date(from: DateComponents(year: 2026, month: 11, day: 18))!
+        // #3834: a bare `Calendar(identifier:)` carries the HOST's zone, and `filteredRequest` renders the
+        // range through `FeedDates`, which is Eastern. So this built midnight in one zone and asserted the
+        // day it lands on in another: on a UTC runner `from` came back "2026-07-17". The code is right and
+        // the fixture was wrong, which is the direction that stays hidden on a Mac already set to Eastern.
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = FeedDates.defaultZone
+        let from = cal.date(from: DateComponents(year: 2026, month: 7, day: 18))!
+        let to = cal.date(from: DateComponents(year: 2026, month: 11, day: 18))!
         let req = OperaAmericaCalendar.filteredRequest(host: "www.operaamerica.org", from: from, to: to,
                                                        page: 2, pageSize: 100)
         #expect(req.url?.absoluteString == "https://www.operaamerica.org/umbraco/surface/calendar/filtered")

@@ -144,7 +144,7 @@ struct ManualPrepOnScreenTests {
                                     prefill: .init(filled: nil, suggestions: [], emptyReason: .nothingFound),
                                     onSave: { _, _, _, _, _ in })
 
-        #expect(try footerReasonLine(sheet) == "Add an address to send to")
+        #expect(try footerReasonLine(sheet) == "Add someone to write to")
     }
 
     // MARK: - What an idle card costs

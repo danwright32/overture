@@ -77,7 +77,7 @@ struct ManualPrepSaveReasonTests {
     // sit on the sheet, rather than the last rule that happened to run.
     @Test func anEmptySheetNamesTheAddressFirst() {
         let reason = ManualPrepEditing.reasonSaveIsDisabled(email: "", subject: "", body: "")
-        #expect(reason == "Add an address to send to")
+        #expect(reason == "Add someone to write to")
     }
 
     // The gate and the reason are one call, so a state that shows a reason is always a state where the

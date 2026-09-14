@@ -7,8 +7,10 @@ import SwiftData
 // replies, and a conversation reminder steps forward when Dan acts on it or resolves when booked/lost.
 struct FollowUpsView: View {
     @Environment(\.modelContext) private var context
-    @Environment(\.dismiss) private var dismiss
     @Environment(ActionFeedback.self) private var feedback   // #285
+    // #3762: the app's own freeze instrument, read as an OPTIONAL on the same footing as every other
+    // environment object here, so a missed injection is a pass nobody counted rather than a crash.
+    @Environment(FreezeWatch.self) private var freezeWatch: FreezeWatch?
     @Query private var prospects: [Prospect]
     // #2816: the watchlist, so a row's link back to the show can say whether it reaches the show's own
     // page or only the source's calendar (#1680). A @Query on the same precedent QueueView follows: a
@@ -34,6 +36,10 @@ struct FollowUpsView: View {
     // out row uses, and for the same reason: confirming reaches Gmail, so the control has to show three
     // visibly different states (at rest, working, failed) rather than one indefinite spinner.
     @State private var linkingConversationFor: String?
+    // #3707: the reply picker, opened from this row's own menu. Held here rather than handed up to
+    // RootView because the row that raises it is this sheet's, and #2967 already established that this
+    // surface presents its own Gmail work.
+    @State private var manualLinkTarget: ManualLinkTarget?
     @State private var showReconnect = false
     // #976: the section at the top of the scroll, bound so the list holds its place while its rows
     // rebuild. `prospects` is a @Query, so a reply-classify or Prep run re-emits it and rebuilds this
@@ -66,8 +72,32 @@ struct FollowUpsView: View {
     //
     // #2397: the post-event prompts arrive already ordered by urgency then soonest event, and the silent
     // follow-ups oldest pitch first; both orderings live in DueWork.rows now.
-    private var rows: DueWork.Rows {
-        DueWork.rows(prospects: prospects, now: Date(), replyRunAlive: replyRunAlive)
+    // #3814: everything this redraw derives, worked out ONCE, in a pure function a test can run.
+    //
+    // The bump and the timing live here rather than inside `FollowUpsRenderPass` for the same reason
+    // `QueueView` and `SourcesView` keep theirs at their own call sites: the pass is a pure static
+    // derivation and these are side effects on the app's own instrument. `EveryRenderPassIsCountedTests`
+    // is what keeps the bump here.
+    //
+    // #3815: the count is paired with a DURATION, which this sheet did not have. A count with no duration
+    // beside it cannot say whether the passes account for a freeze, and this is the one surface outside
+    // the queue with measured freezes against its name (#3827: 97 records, worst 21.38 s at baseline
+    // load).
+    private func makeRenderData() -> FollowUpsRenderPass.RenderData {
+        freezeWatch?.recordPass()
+        let passStarted = DispatchTime.now().uptimeNanoseconds
+        defer {
+            freezeWatch?.recordPassCost(
+                seconds: Double(DispatchTime.now().uptimeNanoseconds - passStarted) / 1_000_000_000)
+        }
+        return FollowUpsRenderPass.make(FollowUpsRenderPass.Inputs(
+            prospects: FollowUpsRenderPass.Corpus(prospects),
+            sources: watchedSources,
+            // ONE instant for the whole drawing. This body used to take two, `Date()` here and a second
+            // `Date()` inside the scroll holder, so a row's sentence and the rule that put the row there
+            // were dated a moment apart (#2919's own rule, broken eight lines below where it is stated).
+            now: Date(),
+            replyRunAlive: replyRunAlive))
     }
 
     // #1770: the cached flag, not the disk read. As written before, this re-opened and JSON-decoded the
@@ -89,7 +119,13 @@ struct FollowUpsView: View {
         // #2878: ONE derivation for the whole sheet, so the header, the empty test and the three lists
         // are three readings of one answer rather than three sweeps of the store that could disagree.
         // It used to be derived up to three times in this body (#1121's rule, in the other direction).
-        let listed = rows
+        //
+        // #3814: the pass is counted INSIDE `makeRenderData()`, on its first line, exactly where
+        // `QueueView` and `SourcesView` count theirs. One bump per evaluation: a second one here would
+        // make `passes` read 2 for one rebuild, and that field's whole job is to say how many times the
+        // surface really rebuilt during a stall (#3760, #3836).
+        let data = makeRenderData()
+        let listed = data.rows
         return VStack(alignment: .leading, spacing: 0) {
             HStack {
                 Text("Due").font(OVType.dateHeading).foregroundStyle(OVColor.ink)
@@ -98,7 +134,7 @@ struct FollowUpsView: View {
                 Text("\(listed.counts.total)")
                     .font(.system(size: 12)).foregroundStyle(OVColor.inkFaint)
                 Spacer()
-                Button("Done") { dismiss() }
+                DoneButton()
             }
             .padding(OVSpacing.lg)
             Divider()
@@ -116,11 +152,14 @@ struct FollowUpsView: View {
                 // granularity that holds up when a run reshuffles the rows within one.
                 PinnedScrollHolder { (_: ScrollViewProxy, _: Binding<ScrollSection?>) in
                     VStack(alignment: .leading, spacing: OVSpacing.lg) {
-                        // #2816: built ONCE for both sections rather than per row (#1121).
-                        let sourceCalendars = QueueModel.sourceCalendarIndex(watchedSources)
+                        // #2816: built ONCE for every section rather than per row (#1121). #3814 moved
+                        // the building itself into the pass, because a derivation inside a
+                        // `@ViewBuilder` is somewhere no counter and no test can reach it.
+                        let sourceCalendars = data.sourceCalendars
                         // #2919: one clock for the whole list, on the same rule, rather than each row
-                        // reading `Date()` for itself and dating its own sentence a moment apart.
-                        let now = Date()
+                        // reading `Date()` for itself and dating its own sentence a moment apart. #3814:
+                        // it is now the SAME instant the rules above were judged at, which it was not.
+                        let now = data.now
                         // #2878: first, because it is the only one of the three that says something
                         // has gone WRONG. The other two are work arriving on schedule.
                         if !listed.stalledReplyDrafts.isEmpty {
@@ -182,6 +221,14 @@ struct FollowUpsView: View {
                              // #2575: the words in the box are the words that send.
                              onSendEdited: { performNudge(p.id, p.recipientId, body: $0) })
         }
+        // #3707: the same picker the Reached out row opens, on the row where #3706's false ending is
+        // actually recorded: this is where PostEventPrompt asks how the show went, and a pitch that got a
+        // real answer on another thread is the one about to be filed as neverHeardBack.
+        .sheet(item: $manualLinkTarget) { target in
+            LinkReplyPicker(prospect: target.prospect, recipient: target.recipient) {
+                manualLinkTarget = nil
+            }
+        }
         // #2967: confirming reaches Gmail, so this sheet can meet a dead connection the same way the
         // Reached out row can. The SHARED alert (#631), never a second wording, and it carries the
         // Connect Gmail action rather than only the news, because a message naming what is wrong on a
@@ -216,7 +263,8 @@ struct FollowUpsView: View {
                 .font(.system(size: 10)).foregroundStyle(OVColor.inkSoft)
             // What confirming DOES, beside the control that does it, so what Dan approves is exactly
             // what happens including who it reaches (L64).
-            Text(ProposedConversationCopy.confirmDetail(address: candidate.fromAddress))
+            Text(ProposedConversationCopy.confirmDetail(address: candidate.fromAddress,
+                                                        replacing: d.recipient.email))
                 .font(.system(size: 10)).foregroundStyle(OVColor.inkSoft)
                 .fixedSize(horizontal: false, vertical: true)
             HStack(spacing: OVSpacing.sm) {
@@ -371,7 +419,14 @@ struct FollowUpsView: View {
                     // last thing Overture sends a silent contact, so what is left after the show is Dan
                     // recording how it ended, from the row he is standing on. The two differ only in the
                     // sentence beside them, which `PostEventPrompt.reason` decides.
-                    CloseOutMenu(outcomes: ShowOutcome.menu(wasPitched: p.wasPitched)) { outcome in
+                    // #3707: the sibling of the Reached out row's menu, covered with it rather than
+                    // left for a later sweep (the class, not the instance). This row is the one that
+                    // asks how the show ended, so it is where saying "a reply arrived elsewhere" is
+                    // worth the most.
+                    CloseOutMenu(outcomes: ShowOutcome.menu(wasPitched: p.wasPitched),
+                                 onLinkReply: LinkReplyFromAnotherThread.isOffered(r)
+                                     ? { manualLinkTarget = ManualLinkTarget(prospect: p, recipient: r) }
+                                     : nil) { outcome in
                         ProspectMutations.recordOutcome(QueueItem(p), outcome, prospects: prospects,
                                                         context: context, feedback: feedback)
                     }

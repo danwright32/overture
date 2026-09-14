@@ -8,8 +8,12 @@
 // These extractors are pure so the checking lives in a test (src/lib/docsCommands.test.ts), which
 // runs in `pnpm test` and therefore in CI, rather than in a script nobody remembers to run.
 
+import { existsSync, readdirSync } from "node:fs";
+import { join } from "node:path";
+
 // pnpm subcommands that are pnpm's OWN, not entries in package.json's "scripts". Documenting
 // `pnpm install` must not be read as a claim that an "install" script exists.
+
 const PNPM_BUILTINS = new Set([
   "install",
   "add",
@@ -47,9 +51,15 @@ export function scriptPathsIn(markdown: string): string[] {
   return [...found].sort();
 }
 
+// One nested directory level is allowed because #3640 put the bodies of AGENTS.md under
+// docs/agents/. Before that this pattern stopped at the first slash, so every pointer the new index
+// is MADE of (`docs/agents/testing.md` and its five siblings) was invisible to the guard whose whole
+// job is catching a doc path that no longer resolves.
 export function docPathsIn(markdown: string): string[] {
   const found = new Set<string>();
-  for (const m of markdown.matchAll(/(?:\.\/)?(docs\/[A-Za-z0-9._-]+\.md)/g)) {
+  for (const m of markdown.matchAll(
+    /(?:\.\/)?(docs\/(?:[A-Za-z0-9._-]+\/)?[A-Za-z0-9._-]+\.md)/g,
+  )) {
     found.add(m[1]);
   }
   return [...found].sort();
@@ -61,4 +71,22 @@ export function docPathsIn(markdown: string): string[] {
 // is the truthful reading, not a loophole. A path that resolves in neither is genuinely wrong.
 export function candidatePathsFor(scriptPath: string): string[] {
   return [scriptPath, `mac/${scriptPath}`];
+}
+
+// The files Claude Code loads automatically, in the order a reader meets them: AGENTS.md, which is
+// now an index, then the topic files holding the bodies #3640 moved out of it. This one is NOT a
+// pure extractor like the rest of this module, deliberately: the corpus is DERIVED from the
+// directory rather than listed in a constant, so a seventh topic file joins every check by existing
+// rather than by somebody remembering to add it to a registry (L96). A directory that is missing
+// entirely returns just AGENTS.md, which the caller's own coverage assertion then refuses.
+export function agentInstructionFiles(repoRoot: string): string[] {
+  const topicsDir = join(repoRoot, "docs", "agents");
+  let topics: string[] = [];
+  if (existsSync(topicsDir)) {
+    topics = readdirSync(topicsDir)
+      .filter((name) => name.endsWith(".md"))
+      .sort()
+      .map((name) => `docs/agents/${name}`);
+  }
+  return ["AGENTS.md", ...topics];
 }

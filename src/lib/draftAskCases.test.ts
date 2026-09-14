@@ -36,6 +36,16 @@ const REMOVED = " (ask sentence removed)";
 const REMOVED_AND_REWRITTEN = " (ask sentence removed) plus the rewrite named in the runbook";
 const DERIVATIONS = [REMOVED_AND_REWRITTEN, REMOVED];
 
+// #3549 retired the per-contact second copy of the pitch, and 24 of these bodies were copied from one.
+// The bodies are real compliant drafts and are the reason this corpus words the ask nine different ways,
+// so they are KEPT rather than deleted with their source (L104): a corpus cut by more than half would
+// stop protecting exactly the good drafts it exists for.
+//
+// The exemption PROVES ITSELF rather than being taken on trust. A marked case must name an issue, and
+// its original path must genuinely no longer resolve, so the marker cannot be used to silence a real
+// drift: the moment that path resolves again, the case fails and has to go back to being checked.
+const RETIRED = /^retired by (#\d+): /;
+
 function resolve(path: string): unknown {
   const [file, ...rest] = path.split(".json/");
   const source = JSON.parse(
@@ -61,10 +71,20 @@ function sentences(body: string): string[] {
 describe("every case still matches the fixture it was copied from (#2954)", () => {
   for (const testCase of fixture.cases) {
     it(`${testCase.name} still matches ${testCase.from}`, () => {
-      const derivation = DERIVATIONS.find((d) => testCase.from.endsWith(d));
+      const retired = RETIRED.exec(testCase.from);
+      const stated = retired === null ? testCase.from : testCase.from.slice(retired[0].length);
+      const derivation = DERIVATIONS.find((d) => stated.endsWith(d));
       const sourcePath =
-        derivation === undefined ? testCase.from : testCase.from.slice(0, -derivation.length);
+        derivation === undefined ? stated : stated.slice(0, -derivation.length);
       const source = resolve(sourcePath);
+
+      if (retired !== null) {
+        expect(
+          typeof source,
+          `${sourcePath} resolves again, so ${testCase.name} must go back to being checked against it rather than claiming ${retired[1]} retired it`,
+        ).not.toBe("string");
+        return;
+      }
 
       expect(typeof source, `${sourcePath} does not resolve to a body any more`).toBe("string");
 

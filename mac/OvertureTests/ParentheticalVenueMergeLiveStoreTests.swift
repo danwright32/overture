@@ -81,8 +81,12 @@ struct ParentheticalVenueMergeLiveStoreTests {
             let ctx = ModelContext(try openContainer(at: storeCopy))
             let before = try ctx.fetch(FetchDescriptor<Prospect>())
             let doubledBefore = nights(before).filter { $0.value.count > 1 }
-            // The defect is real on this store. Without this the test could pass on an empty store.
-            #expect(!doubledBefore.isEmpty, "the live store still holds a night held twice")
+            // #3496: this used to read `#expect(!doubledBefore.isEmpty)`, which REQUIRED the defect to
+            // still be present and so went red the day the launch passes left no doubled night at all,
+            // which is the state this work aims at. What replaces it is a corpus readout, on #2991's
+            // precedent in ReplyInvariantsLiveStoreTests: a suite that examined nothing must say so
+            // rather than reading as a clean bill of health (L182, L98, L11).
+            print("Parenthetical duplicates corpus: \(doubledBefore.count) doubled night(s) examined")
 
             // Two populations, and only one of them may be merged. A night whose rows are all pristine is
             // a duplicate to collapse; a night where two rows EACH carry a decision of Dan's is #1639's
@@ -101,16 +105,27 @@ struct ParentheticalVenueMergeLiveStoreTests {
             // them rather than against a number written here by hand.
             let bestScore = mergeable.mapValues { rows in rows.map(\.fitScore).max() ?? 0 }
 
-            let summary = NaturalKeyVenueMigration.run(in: ctx)
+            // #3496: a WHOLE launch, not this one pass. `DriftedRunMerge` and `SameNightTitleVariantMerge`
+            // both run after it and are what actually clear a same-night duplicate, so replaying only this
+            // pass asserted about a state the app never presents (L385).
+            let outsideBefore = before.filter {
+                NaturalKeyVenueMigration.hasRecordBeyondADismissal($0, countingFoundAddresses: false)
+            }.count
+            LaunchReplay.run(in: ctx, handoffDirectory: scratch.appendingPathComponent("handoff", isDirectory: true))
             try ctx.save()
 
             let after = try ctx.fetch(FetchDescriptor<Prospect>())
-            #expect(after.count == before.count - summary.duplicatesDeleted)
-            #expect(summary.conflictsDeferred == deferrable.count)
-            // Measured 2026-07-28 on the real store: 5 nights collapsed, 5 rows deleted, 1 re-keyed in
-            // place, 2 conflicts deferred (both pre-existing #1639 pairs, dismissed on both sides). The
-            // numbers are not asserted, since the store moves daily; the shape is.
-            #expect(summary.duplicatesDeleted == mergeable.count)
+            // #3496: the three assertions that used to sit here predicted this pass's OWN counters
+            // (`duplicatesDeleted`, `conflictsDeferred`) from a grouping written locally in `nights()`,
+            // while the pass groups by `scoutAnchoredNaturalKey`. Two definitions of one population, which
+            // diverge on any row lacking an anchor (#3495), and the local one then reported the pass as
+            // wrong (L263, L70). What is asserted now is the STATE LEFT BEHIND, which both definitions
+            // agree about and which is what Dan actually sees.
+            let outsideAfter = after.filter {
+                NaturalKeyVenueMigration.hasRecordBeyondADismissal($0, countingFoundAddresses: false)
+            }.count
+            #expect(outsideAfter == outsideBefore,
+                    "the launch dropped \(outsideBefore - outsideAfter) row(s) that reached the outside world")
 
             let nightsAfter = nights(after)
             // Every mergeable night is now one card, and it is the card carrying the best verdict its
@@ -146,10 +161,15 @@ struct ParentheticalVenueMergeLiveStoreTests {
             let storeCopy = try copyLiveStore(to: scratch)
 
             let ctx = ModelContext(try openContainer(at: storeCopy))
+            // launch-replay-exempt: this asserts THIS PASS's own idempotence, not an invariant a launch
+            // restores, so it runs the pass alone twice. A launch replay here would be measuring twenty
+            // five passes' combined idempotence and could not attribute a second deletion to this one
+            // (#1686, #3496).
             _ = NaturalKeyVenueMigration.run(in: ctx)
             try ctx.save()
 
             let reCtx = ModelContext(try openContainer(at: storeCopy))
+            // launch-replay-exempt: the second half of the same idempotence claim (#1686, #3496).
             let second = NaturalKeyVenueMigration.run(in: reCtx)
             #expect(second.duplicatesDeleted == 0)
             #expect(second.rekeyed == 0)

@@ -127,6 +127,71 @@ struct ShowListingReaderTests {
         #expect(listing?.truncated == true)
     }
 
+    // #2698: HOW MUCH was lost, not only that something was.
+    //
+    // `truncated: true` says the page continued and nothing else, so from inside the run a credit that
+    // fell past the cut is indistinguishable from a page that never named a producer, and the run then
+    // reports "no producer credited" with complete confidence. That is the #2554 failure exactly, and it
+    // is L11: a message may claim only what its check actually measured. The number is free at the cut.
+    @Test func anOverlongPageSaysHowMuchItLost() async {
+        let filler = (0..<2000).map { "Programme note \($0) on the evening's music. " }.joined()
+        let page = showPage(description: filler)
+        let listing = await ShowListingReader.read(
+            listingURL: "https://tickets.example/showdetails/abc",
+            render: { _ in page })
+
+        let kept = try! #require(listing?.text?.count)
+        let dropped = try! #require(listing?.droppedCharacters)
+        #expect(dropped > 0)
+        // The two halves account for the whole readable page, so the number is a measurement of what was
+        // lost rather than a guess sitting beside it. Read through the same normalise-and-strip the reader
+        // performs, because the raw HTML is not what was cut.
+        let whole = RepeatedBlockStripper.strip(
+            PageNormalizer.visibleText(PageNormalizer.normalize(page)))
+        #expect(kept + dropped == whole.count)
+    }
+
+    // The number is ABSENT, not zero, on a page that fitted. Zero is a real measurement ("the cut dropped
+    // nothing"), and a page nobody cut was never measured at all, so writing zero there would make the
+    // emptiest possible non-answer read as a finding (L98, L11).
+    @Test func aPageThatFittedReportsNoLoss() async {
+        let listing = await ShowListingReader.read(
+            listingURL: "https://tickets.example/showdetails/abc",
+            render: { _ in self.showPage(description: "A short programme note.") })
+
+        #expect(listing?.truncated == nil)
+        #expect(listing?.droppedCharacters == nil)
+    }
+
+    // An UNREADABLE page reports no loss either, and for a different reason worth keeping apart: nothing
+    // was read, so nothing was dropped, and a count there would be about a page that never arrived.
+    @Test func anUnreadablePageReportsNoLoss() async {
+        struct Dead: Error {}
+        let listing = await ShowListingReader.read(
+            listingURL: "https://tickets.example/showdetails/abc",
+            render: { _ in throw Dead() })
+
+        #expect(listing?.status == ShowListing.unreadable)
+        #expect(listing?.droppedCharacters == nil)
+    }
+
+    // The wire contract: additive and optional, so every queue file written before this still decodes and
+    // a reader that has never heard of the field is unaffected.
+    @Test func theCountRoundTripsAndIsAbsentWhenUnset() throws {
+        let cut = ShowListing(status: ShowListing.read, url: "https://tickets.example/a",
+                              text: "kept", truncated: true, droppedCharacters: 2_143)
+        let json = try JSONEncoder().encode(cut)
+        #expect(try JSONDecoder().decode(ShowListing.self, from: json) == cut)
+        #expect(String(data: json, encoding: .utf8)?.contains("\"droppedCharacters\":2143") == true)
+
+        let whole = ShowListing(status: ShowListing.read, url: "https://tickets.example/a", text: "kept")
+        let wholeJSON = try JSONEncoder().encode(whole)
+        #expect(String(data: wholeJSON, encoding: .utf8)?.contains("droppedCharacters") == false)
+        // A file written before this field existed still decodes, with the count absent.
+        let old = Data(#"{"status":"read","url":"https://tickets.example/a","text":"kept","truncated":true}"#.utf8)
+        #expect(try JSONDecoder().decode(ShowListing.self, from: old).droppedCharacters == nil)
+    }
+
     // Reading a whole run's worth of listings: every item that has a URL gets an answer keyed by its own
     // natural key, and progress is reported as it goes, because a launch that renders a dozen pages must
     // show working / still alive / failed as distinct states rather than one indefinite spinner.

@@ -14,8 +14,7 @@ import ViewInspector
 @Suite("The reply panel renders the draft waiting on the contact (#2143)")
 struct ReplyPanelShowsItsDraftTests {
     private func container() throws -> ModelContainer {
-        try ModelContainer(for: Schema([Prospect.self, Recipient.self]),
-                           configurations: [ModelConfiguration(isStoredInMemoryOnly: true)])
+        try TestModelContainer.inMemory([Prospect.self, Recipient.self])
     }
 
     // Dan's real row (#2151): Every Voice Choirs, answered by the contact he pitched.

@@ -44,6 +44,11 @@ enum ReachedOutRowSlots {
         case timing
         case answer
         // #2112/#2224: ending the pitch, from here rather than from the Archive card.
+        //
+        // #3707: and, under a separator inside the same menu, linking a reply that arrived on a thread
+        // Overture never watched. Deliberately NOT a slot of its own: Dan's call, 2026-09-08, was that
+        // most reached-out rows will never need it, so it rides inside a menu he already opens rather
+        // than standing on every row at rest. The ceiling is unchanged and that is the point.
         case closeOut
         // #2711: recording that a reply arrived on a channel Overture cannot watch, which until now was
         // the one thing about a DM pitch Dan could not tell it. Beside the close-out, because the two are

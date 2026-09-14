@@ -89,14 +89,23 @@ extension AgentInputs {
     // invisible on the third. A default would let a caller forget the distinction silently, which is how
     // the two sets came to disagree in the first place; a required argument makes every call site say
     // which it means.
+    // #3738: `placement` is every show's stages, already decided by the caller.
+    //
+    // DEFAULTED TO nil, which means decide them here, and that is a correctness-preserving default rather
+    // than one standing for absent data (L168): the answer is identical either way and only the cost
+    // differs. What stops the one call site that matters quietly losing it is not the signature but a
+    // COUNT: `StagePlacedOncePerPassTests` pins a render pass at exactly one placement, so a caller that
+    // stopped passing one is red rather than slow (L27).
     static func from(prospects: [Prospect], allProspects: [Prospect], inquiries: [Inquiry] = [],
                      context: StageContext,
-                     gmailConnected: Bool, runInFlight: RunKind?, replyRunAlive: Bool) -> AgentInputs {
+                     gmailConnected: Bool, runInFlight: RunKind?, replyRunAlive: Bool,
+                     placement: StageNavigation.Placement? = nil) -> AgentInputs {
         // Counted THROUGH StageNavigation, never alongside it, so a pill's number and the rows its tap
         // lands on come from one predicate and cannot answer the same question differently.
         // #1121: one traversal for every focus (StageNavigation.counts), not one traversal per focus, so
         // the send-related counts fault each prospect's `recipients` at most once instead of once each.
-        let focusCounts = StageNavigation.counts(in: prospects, context: context)
+        let focusCounts = StageNavigation.counts(
+            in: placement ?? StageNavigation.placements(in: prospects, context: context))
         // #1837: ONE derivation, read twice. The pill states `total` and its attention tone is now decided
         // by `conversationsToConfirm`, and those must be two readings of the same Counts rather than two
         // calls that could drift or disagree about the same store (L16). Hoisted rather than called twice

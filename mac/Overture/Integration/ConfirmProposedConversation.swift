@@ -29,13 +29,25 @@ struct ConfirmProposedConversation {
     }
     // copy-inventory:ignore-end
 
+    // #3712: `picked` is the candidate Dan chose in the manual picker, and it is passed rather than
+    // stored first. `LinkReplyPicker` used to write it onto the contact through
+    // `ProposedConversation.propose` and let this read it back, which is L100 exactly: that writer is
+    // guarded by `isAskable`, the FORM-pitch question, so on the emailed pitch this whole milestone
+    // exists for it stored nothing, matched nothing, and the read below found no proposal and refused a
+    // LINK with a sentence about unlinking. Nothing was measured to be wrong, because a store round trip
+    // between one function and the next carries no decision anybody has to see.
+    //
+    // Both routes still meet at the same guard and run the same attach, which is what the round trip was
+    // there for (L16). What is gone is the write, so a manual link that fails leaves the store exactly as
+    // it found it, including a standing automatic proposal the picker used to clear on its way past.
     func confirm(on r: Recipient, of p: Prospect, in context: ModelContext,
+                 picked: ProposedConversation.Candidate? = nil,
                  now: Date = Date(),
                  token: String? = nil,
                  save: (() throws -> Void)? = nil,
                  fetch: ((URLRequest) async throws -> (Data, URLResponse))? = nil) async -> Outcome {
-        guard let candidate = ProposedConversation.stored(on: r) else {
-            return .refused(reason: DetachConversationCopy.nothingLinked)
+        guard let candidate = picked ?? ProposedConversation.stored(on: r) else {
+            return .refused(reason: ProposedConversationCopy.nothingToLink)
         }
         let live: (URLRequest) async throws -> (Data, URLResponse) = { try await GmailNetworking.session.data(for: $0) }
         let fetcher = fetch ?? live

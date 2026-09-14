@@ -104,28 +104,17 @@ enum SourceYield {
         return out
     }
 
-    // The change-key the Sources sheet evaluates every redraw to decide whether the cached `tallies` map is
-    // stale (#1429), the same signature-then-recompute shape #1356/#1374 used for that sheet's coverage
-    // list. It captures exactly the four fields a tally reads (a prospect's status, whether it was
-    // contacted, its outcome, and which sources credited it), so it changes precisely when some tally would
-    // and never on a mere scroll or unrelated redraw.
+    // #3656: `signature(_:)` was here and is DELETED, not kept with its justification rewritten.
     //
-    // Order-independent (an overflow-add of each prospect's own hash, and sourceIds sorted within a
-    // prospect) so a re-fetch that returns the same prospects in a different order does not force a needless
-    // full-store recompute. A hash collision can only mean one stale redraw, never a wrong number, because
-    // the next real change re-fires; the funnel is refreshed from scratch each time the sheet opens.
-    static func signature(_ prospects: [Prospect]) -> Int {
-        var acc = prospects.count
-        for p in prospects {
-            var h = Hasher()
-            h.combine(p.status)
-            h.combine(p.wasContacted)
-            h.combine(p.outcome)
-            for sourceId in p.sourceIds.sorted() { h.combine(sourceId) }
-            acc = acc &+ h.finalize()
-        }
-        return acc
-    }
+    // It was the change-key the Sources sheet evaluated every redraw to decide whether the cached
+    // `tallies` map was stale, and its own docstring recorded the property that made it acceptable: a
+    // hash collision could only mean one stale redraw, never a wrong number. That is a screen disagreeing
+    // with the store, which Dan has ruled out. The sheet now builds the map once per body evaluation and
+    // threads it into each row, which keeps the O(1)-per-row property #1429 bought.
+    //
+    // Measured before it went (`SourcesSheetCostTests`, 2026-09-08, 1,226 prospects): the key cost
+    // 3.95 ms per redraw to avoid a 6.21 ms recompute, so it was saving 36% and the removal costs about
+    // 2.26 ms per redraw. Dan's call with those numbers in front of him.
 
     // A show Dan moved past `.new` toward a pitch, on its status alone (the `approved`/`sent` OR in
     // `tally` covers the cases where the status has since regressed). A show still `.new`, or `.dismissed`

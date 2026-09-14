@@ -30,8 +30,7 @@ struct ControlRefusalOnScreenTests {
     }
 
     private func container() throws -> ModelContainer {
-        try ModelContainer(for: Schema([Prospect.self, Recipient.self, Inquiry.self]),
-                           configurations: [ModelConfiguration(isStoredInMemoryOnly: true)])
+        try TestModelContainer.inMemory([Prospect.self, Recipient.self, Inquiry.self])
     }
 
     // MARK: - FollowUpsView's nudge and closing note

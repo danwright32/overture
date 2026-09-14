@@ -158,7 +158,7 @@ struct StoreBackupTests {
 
         let log = try String(contentsOf: StoreBackup.backupsDirectory(dataDirectory: dataDirectory)
             .appendingPathComponent("backup.log"), encoding: .utf8)
-        #expect(log.contains("20231114-171320"))
+        #expect(log.contains(DatedFolderRotation.stamp(now)))
         #expect(log.contains("success"))
     }
 
@@ -205,7 +205,7 @@ struct StoreBackupTests {
                                 atomically: true, encoding: .utf8)
         try makeDatedBackupFolders(["20200101-090000", "20200102-090000"],
                                    in: StoreBackup.backupsDirectory(dataDirectory: dataDirectory))
-        let now = Date(timeIntervalSince1970: 1_700_000_000)  // "20231114-171320", after both of the above
+        let now = Date(timeIntervalSince1970: 1_700_000_000)  // sorts after both of the above in any zone
 
         let result = StoreBackup.performLaunchBackup(dataDirectory: dataDirectory, now: now, keep: 1) {
             "opened"
@@ -215,7 +215,7 @@ struct StoreBackupTests {
         let remaining = try FileManager.default
             .contentsOfDirectory(atPath: StoreBackup.backupsDirectory(dataDirectory: dataDirectory).path)
             .filter { $0 != "backup.log" }
-        #expect(remaining == ["20231114-171320"])
+        #expect(remaining == [DatedFolderRotation.stamp(now)])
     }
 
     // #602 red-team fix: an undetected corrupted store must never cause its own last-good
@@ -227,7 +227,7 @@ struct StoreBackupTests {
                                 atomically: true, encoding: .utf8)
         try makeDatedBackupFolders(["20260101-090000", "20260102-090000"],
                                    in: StoreBackup.backupsDirectory(dataDirectory: dataDirectory))
-        let now = Date(timeIntervalSince1970: 1_700_000_000)  // "20231114-171320"
+        let now = Date(timeIntervalSince1970: 1_700_000_000)
 
         let result = StoreBackup.performLaunchBackup(dataDirectory: dataDirectory, now: now, keep: 1) {
             () -> String? in nil
@@ -239,6 +239,25 @@ struct StoreBackupTests {
         let remaining = try FileManager.default
             .contentsOfDirectory(atPath: StoreBackup.backupsDirectory(dataDirectory: dataDirectory).path)
             .filter { $0 != "backup.log" }.sorted()
-        #expect(remaining == ["20231114-171320", "20260101-090000", "20260102-090000"])
+        // Only the derived name moves with the zone: the two older ones are written by this test.
+        #expect(remaining == [DatedFolderRotation.stamp(now), "20260101-090000", "20260102-090000"])
+    }
+
+    // #3834: the FORMAT, pinned once and independently of any timezone.
+    //
+    // Every other assertion about a backup folder name now DERIVES its expected string from
+    // `DatedFolderRotation.stamp`, which is what stops them asserting one machine's clock. Derivation
+    // alone would leave both sides of those comparisons coming from a single lookup, which can only
+    // prove that lookup is self consistent (L70). This is the other side: the shape is checked against
+    // the documented format, and it holds in any zone because it asserts no digit values.
+    @Test func theStampFormatIsStillTheDocumentedOne() {
+        let rendered = DatedFolderRotation.stamp(Date(timeIntervalSince1970: 1_700_000_000))
+        let digits = rendered.allSatisfy { $0.isNumber || $0 == "-" }
+        let shape = rendered.count == 15 && Array(rendered)[8] == "-"
+
+        #expect(digits && shape,
+                "a backup folder is no longer named yyyyMMdd-HHmmss, it is '\(rendered)'")
+        #expect(DatedFolderRotation.stampFormat == "yyyyMMdd-HHmmss",
+                "the documented format changed, so every reader of an existing backup name needs checking")
     }
 }

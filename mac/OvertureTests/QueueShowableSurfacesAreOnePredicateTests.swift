@@ -243,7 +243,9 @@ struct QueueShowableSurfacesAreOnePredicateTests {
               answers: "whether an OmniFocus tap or a search pick opens the Queue or Archive",
               mustCall: ["opensInQueue"]),
         .init(path: "Overture/App/RootView.swift",
-              marker: "private var searchableItems: [QueueItem] {",
+              // #3655 Phase 5: ROWS. The scoping rule is unchanged; what it filters is a row rather
+              // than a card, so the surface this audit checks moved with the rename.
+              marker: "private var searchableRows: [QueueScopeRow] {",
               answers: "which shows the global search bar is allowed to find",
               mustCall: ["stagedKeys"]),
         .init(path: "Overture/UI/QueueRenderPass.swift",
@@ -255,7 +257,7 @@ struct QueueShowableSurfacesAreOnePredicateTests {
               answers: "which stage a deep-linked lead lands in",
               mustCall: ["stage"]),
         .init(path: "Overture/UI/QueueView.swift",
-              marker: "private func scoutRows(_ data: RenderData) -> [QueueItem] {",
+              marker: "private func scoutRows(_ data: RenderData) -> [QueueScopeRow] {",
               answers: "the Scout rows a night-dismiss acts on",
               mustCall: ["focusedKeys"]),
         .init(path: "Overture/UI/QueueView.swift",

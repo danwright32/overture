@@ -109,7 +109,6 @@ struct DraftReviewView: View {
             confidenceHeldDownWarnings
             addressInAnotherNameWarnings
             draftBlock
-            performerOverridePreviews
             actionRow
             conversationContactsSection
             if item.isLost { lostReasonField }
@@ -140,14 +139,23 @@ struct DraftReviewView: View {
     @ViewBuilder private var contactLine: some View {
         let primary = item.primaryContact
         let display = ContactDisplay.from(name: primary?.name, role: primary?.role,
-                                          email: primary?.email, formURL: primary?.contactFormURL)
+                                          email: primary?.email, formURL: primary?.contactFormURL,
+                                          // #3078: false when nobody has said, which is the same answer
+                                          // a run that quoted the page gives, so the note appears only on
+                                          // an explicit declaration.
+                                          roleQuoted: primary?.roleIsACharacterisation == true ? false : nil)
         HStack(spacing: OVSpacing.xs) {
             Image(systemName: "person.crop.circle")
                 .foregroundStyle(OVColor.inkFaint)
             switch display {
-            case let .person(name, role, _):
+            case let .person(name, role, roleIsACharacterisation, _):
                 Text(name).fontWeight(.medium).foregroundStyle(OVColor.ink)
                 if let role { Text(role).foregroundStyle(OVColor.inkFaint) }
+                // #3078: whose words the role is, said only when the run declared them its own. A role
+                // quoted from the page, and one nobody has spoken about, both read as they always did.
+                if roleIsACharacterisation {
+                    Text(ContactRoleCopy.characterisationNote).foregroundStyle(OVColor.inkFaint)
+                }
             // #2560: NOT the address. A contact with no name falls back to its address as its identity, and
             // the Contacts block below prints that same address again, as it must (#2015: "It should show
             // me every email it's going to send to"). Counting a rendered card on 2026-08-12 found it twice
@@ -363,22 +371,21 @@ struct DraftReviewView: View {
                                            // #2531: the ask rule is a COLD pitch rule. A returning client
                                            // reads a different register, and the real email Dan sent one
                                            // asks for nothing by this rule and is right not to.
-                                           isColdPitch: item.priorRelationship == "none")
+                                           isColdPitch: item.priorRelationship == "none",
+                                           // #2630: whether this pitch is pasted by hand into a narrow
+                                           // column rather than sent to an inbox, which is what decides
+                                           // whether an email-length body is too long.
+                                           routeIsHandDelivered: item.routeIsHandDelivered)
                 .filter { !$0.isBlocking })
-        }
-    }
-
-    // #642 (#634 Phase D): a directly-addressed performer's own draft, shown BEFORE Dan approves or
-    // sends, not just after (the per-recipient conversationContactsSection below only appears once
-    // isSent). Read-only for now; editing an override is deferred to a later phase.
-    @ViewBuilder private var performerOverridePreviews: some View {
-        ForEach(item.contacts.filter { $0.overrideBody?.isEmpty == false }) { c in
-            VStack(alignment: .leading, spacing: 2) {
-                Text(DraftReviewNotes.willInsteadReceive(name: c.displayName))
-                    .font(.system(size: 11)).foregroundStyle(OVColor.inkFaint)
-                Text(c.overrideBody ?? "")
-                    .font(OVType.body).foregroundStyle(OVColor.inkSoft)
-                    .lineLimit(4).fixedSize(horizontal: false, vertical: true)
+            // #3677: the subject line, which no check of any kind had ever read. Under the SAME voice
+            // suppression as the body findings above, on the same reasoning: a subject Dan typed himself
+            // is his, and the stop this catches is the drafter reproducing a formula.
+            //
+            // The REPLY path deliberately does not get this and must not: `FollowUp.replySubject` passes
+            // the original subject through verbatim because Gmail threads a reply by MATCHING subject, so
+            // a pitch already sent with a stop has to keep it or the nudge arrives as a separate email.
+            if let subject = item.draftSubject {
+                issueFlags(DraftCheck.subjectFindings(in: subject, title: item.groupName))
             }
         }
     }
@@ -788,15 +795,6 @@ struct DraftReviewView: View {
                 Text(c.statusLabel).font(OVType.meta).foregroundStyle(contactStatusColor(c))
             }
             .font(.system(size: 12))
-            // #642 (#634 Phase D): a performer's direct-address draft, shown read-only so Dan can see
-            // exactly what THIS contact will receive instead of the shared (third-person) draft above.
-            // Editing this override is not built yet (deferred to a later phase).
-            if let overrideBody = c.overrideBody, !overrideBody.isEmpty {
-                Text(DraftReviewNotes.willReceive(body: overrideBody))
-                    .font(OVType.meta).foregroundStyle(OVColor.inkSoft)
-                    .lineLimit(3).fixedSize(horizontal: false, vertical: true)
-                    .padding(.leading, 20)
-            }
             if let reply = c.lastReplyText, !reply.isEmpty {
                 Text(reply)
                     .font(OVType.body).foregroundStyle(OVColor.inkSoft)
