@@ -33,6 +33,11 @@ set -uo pipefail
 # by, so re-deriving a directory from either after a cd resolves against the NEW working directory.
 HANGS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "${HANGS_DIR}/.." || exit 1
+# #3541: the directory classification, the report search and the keep-a-copy behaviour are shared with
+# `check-overture-cpu.sh` rather than written twice. Two copies would eventually disagree about what
+# UNMEASURED means, and the one that disagreed quietly would be the one reporting a clean bill (L263).
+# shellcheck source=./lib/diagnostic-reports.sh
+. "${HANGS_DIR}/lib/diagnostic-reports.sh"
 
 # Colon separated, so a fixture can point the whole search somewhere of its own.
 REPORT_DIRS="${OVERTURE_HANG_DIRS:-/Library/Logs/DiagnosticReports:${HOME}/Library/Logs/DiagnosticReports}"
@@ -58,59 +63,17 @@ while [ $# -gt 0 ]; do
 done
 
 # --- which directories could actually be read ------------------------------------------------------
-READABLE=""
-UNREADABLE=""
-MISSING=""
-OLD_IFS="${IFS}"
-IFS=":"
-for dir in ${REPORT_DIRS}; do
-  IFS="${OLD_IFS}"
-  [ -n "${dir}" ] || continue
-  if [ ! -d "${dir}" ]; then
-    MISSING="${MISSING}${dir}
-"
-  elif [ ! -r "${dir}" ] || ! ls "${dir}" >/dev/null 2>&1; then
-    UNREADABLE="${UNREADABLE}${dir}
-"
-  else
-    READABLE="${READABLE}${dir}
-"
-  fi
-  IFS=":"
-done
-IFS="${OLD_IFS}"
+overture_classify_report_dirs "${REPORT_DIRS}"
+READABLE="${OVERTURE_REPORTS_READABLE}"
+UNREADABLE="${OVERTURE_REPORTS_UNREADABLE}"
 
 if [ -z "${READABLE}" ]; then
-  echo "UNMEASURED: not one diagnostic reports directory could be read, so whether macOS has recorded"
-  echo "            a hang for Overture is unknown. That is not the same as there being none."
-  if [ -n "${UNREADABLE}" ]; then
-    echo "            present but unreadable (a permissions problem somebody can fix):"
-    printf '%s' "${UNREADABLE}" | sed 's/^/              /'
-  fi
-  if [ -n "${MISSING}" ]; then
-    echo "            not there at all:"
-    printf '%s' "${MISSING}" | sed 's/^/              /'
-  fi
+  overture_report_unmeasured "a hang for Overture"
   exit 2
 fi
 
 # --- the reports -----------------------------------------------------------------------------------
-REPORTS=""
-while IFS= read -r dir; do
-  [ -n "${dir}" ] || continue
-  for f in "${dir}"/Overture*.hang; do
-    [ -f "${f}" ] || continue
-    REPORTS="${REPORTS}${f}
-"
-  done
-done <<REPORT_DIR_LIST
-${READABLE}
-REPORT_DIR_LIST
-
-# Newest first, by the stamp macOS puts in the filename, which sorts lexically because it is written
-# largest unit first. Falling back on the name alone rather than on mtime: a copy operation rewrites an
-# mtime and the stamp is the report's own account of when the hang happened.
-REPORTS="$(printf '%s' "${REPORTS}" | grep -v '^[[:space:]]*$' | sort -r || true)"
+REPORTS="$(overture_find_reports '.hang')"
 
 if [ -z "${REPORTS}" ]; then
   echo "No Overture hang report on record."
@@ -197,15 +160,7 @@ while IFS= read -r report; do
     fi
   fi
 
-  KEPT="${OUT_DIR}/$(basename "${report}")"
-  if [ -f "${KEPT}" ]; then
-    echo "    kept:         ${KEPT} (already there, left alone)"
-  elif cp "${report}" "${KEPT}" 2>/dev/null; then
-    echo "    kept:         ${KEPT}"
-  else
-    echo "    kept:         COULD NOT COPY to ${KEPT}. These reports rotate, so read it where it lies"
-    echo "                  before it goes: ${report}"
-  fi
+  echo "    kept:         $(overture_keep_report "${report}" "${OUT_DIR}")"
   echo
 done <<REPORT_LIST
 ${REPORTS}
