@@ -6,6 +6,14 @@ import SwiftData
 // required; the event, date, and venue can all be unknown at intake. The soft duplicate note warns
 // when he has already logged this event but never blocks: an under-specified inquiry must still save.
 struct InquiryIntakeSheet: View {
+    // #3859: this sheet has a `StallSurface` case of its own now, so a stall recorded while it is on
+    // screen is attributed to it. #3762's rule follows from that: the surface a stall is attributed to
+    // has to count its own rebuilds, or the record reads `passes: 0`, and `0` there says the surface did
+    // not rebuild rather than that nobody counted (L11).
+    //
+    // Read as an OPTIONAL, on the same footing as every other environment object here, so a missed
+    // injection is a pass nobody counted rather than a crash.
+    @Environment(FreezeWatch.self) private var freezeWatch: FreezeWatch?
     // #1504: nil logs a new inquiry, non-nil edits that one. The same sheet serves both so the fields
     // and their normalization cannot drift apart between logging and correcting.
     var editing: Inquiry?
@@ -42,6 +50,9 @@ struct InquiryIntakeSheet: View {
     }
 
     var body: some View {
+        // #3859: this surface counts its own rebuild. Bound to `_` rather than called as a statement
+        // because `body` is a ViewBuilder, which takes a declaration and not a bare void expression.
+        let _ = freezeWatch?.recordPass()
         VStack(alignment: .leading, spacing: OVSpacing.md) {
             header
             fields

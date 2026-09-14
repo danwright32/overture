@@ -5,6 +5,14 @@ import SwiftData
 // tier, over contacted prospects only, so Dan can see what converts before adjusting the
 // rules by hand (the safe near-term shape of the deferred auto-tune, #4).
 struct OutcomePatternsView: View {
+    // #3859: this sheet has a `StallSurface` case of its own now, so a stall recorded while it is on
+    // screen is attributed to it. #3762's rule follows from that: the surface a stall is attributed to
+    // has to count its own rebuilds, or the record reads `passes: 0`, and `0` there says the surface did
+    // not rebuild rather than that nobody counted (L11).
+    //
+    // Read as an OPTIONAL, on the same footing as every other environment object here, so a missed
+    // injection is a pass nobody counted rather than a crash.
+    @Environment(FreezeWatch.self) private var freezeWatch: FreezeWatch?
     // #3871: the whole store, HANDED DOWN rather than queried again here.
     //
     // It was `@Query private var prospects: [Prospect]`, a bare descriptor identical to the one RootView
@@ -29,6 +37,9 @@ struct OutcomePatternsView: View {
     }
 
     var body: some View {
+        // #3859: this surface counts its own rebuild. Bound to `_` rather than called as a statement
+        // because `body` is a ViewBuilder, which takes a declaration and not a bare void expression.
+        let _ = freezeWatch?.recordPass()
         // #3852: bound ONCE. `rows` is a computed property that tallies the whole prospect store, and it
         // was read twice in this body, once to ask whether it was empty and once to draw it, so opening
         // this sheet ran the tally twice for one question. A computed property reads as a free field

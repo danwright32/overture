@@ -5,6 +5,14 @@ import SwiftUI
 // His notes section is authoritative and protected (#251); the observed tendencies are learned from
 // his edits each Prep run. Opened as a sheet from the toolbar, like DismissedView.
 struct VoiceGuidanceView: View {
+    // #3859: this sheet has a `StallSurface` case of its own now, so a stall recorded while it is on
+    // screen is attributed to it. #3762's rule follows from that: the surface a stall is attributed to
+    // has to count its own rebuilds, or the record reads `passes: 0`, and `0` there says the surface did
+    // not rebuild rather than that nobody counted (L11).
+    //
+    // Read as an OPTIONAL, on the same footing as every other environment object here, so a missed
+    // injection is a pass nobody counted rather than a crash.
+    @Environment(FreezeWatch.self) private var freezeWatch: FreezeWatch?
     @Environment(\.dismiss) private var dismiss
     @State private var text: String = ""
     @State private var loaded = false
@@ -12,6 +20,9 @@ struct VoiceGuidanceView: View {
     private let url = VoiceGuidanceStore.defaultURL
 
     var body: some View {
+        // #3859: this surface counts its own rebuild. Bound to `_` rather than called as a statement
+        // because `body` is a ViewBuilder, which takes a declaration and not a bare void expression.
+        let _ = freezeWatch?.recordPass()
         VStack(alignment: .leading, spacing: 0) {
             HStack {
                 Text("Voice guidance").font(OVType.dateHeading).foregroundStyle(OVColor.ink)
