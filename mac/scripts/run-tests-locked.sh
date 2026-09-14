@@ -19,7 +19,30 @@ set -euo pipefail
 # frontmost gets picked up non-deterministically). After the suite finishes, this kills any
 # resident Debug test-host Overture.app process before exiting with xcodebuild's own code.
 
-LOCK_FILE="/tmp/overture-mac-tests.lock"
+LOCK_FILE="${OVERTURE_FILE_LOCK:-/tmp/overture-mac-tests.lock}"
+
+# #3571: DOWNBEAT'S lock, taken as well as this runner's own, so the two projects actually exclude
+# each other on this Mac.
+#
+# Downbeat's `scripts/run-tests.sh` said its lock "is shared with Overture deliberately" and it was
+# not: Downbeat takes `mkdir` on this directory and this runner took `flock` on a different path, so
+# the comment read as a safety guarantee while providing none (L407). Two Mac test runs share the
+# derived data caches, testmanagerd and the test hosts, so one starting mid build of the other
+# produces failures belonging to neither change.
+#
+# TWO MECHANISMS ON PURPOSE, not one merged path, and Ovation's runner already records why: `flock`
+# opens with O_CREAT and cannot open a directory that way, while `mkdir` on a path already holding a
+# regular file returns EEXIST, which Downbeat's loop reads as held and then waits out its timeout.
+# Converting this runner to `mkdir` outright was declined for the reason that matters most here:
+# flock is released by the kernel when its holder dies and a directory lock is NOT.
+#
+# THE ORDER IS THE SAFETY PROPERTY. Ovation takes the directory lock first and the file lock second,
+# and its comment notes deadlock was impossible only because no sibling took two locks. This change
+# makes a second one, so the ONLY thing keeping them safe is that both take them in the same order.
+# `run-tests-locked.test.sh` asserts it rather than leaving it to this comment (L27).
+DIR_LOCK="${OVERTURE_DIR_LOCK:-/tmp/xcodebuild-tests.lock}"
+DIR_LOCK_TIMEOUT="${OVERTURE_DIR_LOCK_TIMEOUT:-1800}"
+DIR_LOCK_HELD=""
 # #2195: how many tests the last green run on this Mac executed. See the completeness check in main().
 # Overridable so the shell fixtures point it at a throwaway path: they drive main() with a stubbed
 # xcodebuild reporting a handful of tests, and against Dan's real baseline every one of those would read
@@ -512,13 +535,69 @@ keep_diagnostic_file() {
   echo "${kept}"
 }
 
+# #3571: is the process that planted this directory lock still alive?
+#
+# A directory lock outlives its holder, which is the one way it is worse than flock, so a run killed
+# mid test would otherwise block the next run of a DIFFERENT app for the whole timeout. Downbeat
+# carries `claim-stale-lock.sh` for exactly this; this is the same judgement, made here so the two
+# cannot disagree about what stale means.
+#
+# NO OWNER FILE READS AS CLAIMABLE. A lock with nothing recorded in it cannot be attributed to anyone
+# alive, and treating it as held would make one unreadable file block every run on the machine
+# indefinitely, which is the unrecoverable direction (L93).
+dir_lock_owner_alive() {
+  local owner_file="$1/owner" owner pid
+  [[ -f "${owner_file}" ]] || return 1
+  owner="$(cat "${owner_file}" 2>/dev/null || true)"
+  pid="${owner##*:}"
+  [[ "${pid}" =~ ^[0-9]+$ ]] || return 1
+  kill -0 "${pid}" 2>/dev/null
+}
+
+# Take Downbeat's directory lock, claiming it from a dead holder rather than waiting one out.
+#
+# ELAPSED IS REAL TIME, never a count of iterations: a deadline in seconds compared against a loop
+# counter measures the poll interval instead, and silently rescales the moment that interval changes
+# (L226).
+take_dir_lock() {
+  local waited_from
+  waited_from="$(date +%s)"
+  while ! mkdir "${DIR_LOCK}" 2>/dev/null; do
+    if ! dir_lock_owner_alive "${DIR_LOCK}"; then
+      echo "run-tests-locked.sh: claiming ${DIR_LOCK} from a holder that is no longer running." >&2
+      rm -rf "${DIR_LOCK}" 2>/dev/null || true
+    fi
+    if [[ "$(( $(date +%s) - waited_from ))" -gt "${DIR_LOCK_TIMEOUT}" ]]; then
+      echo "run-tests-locked.sh: gave up waiting ${DIR_LOCK_TIMEOUT}s for ${DIR_LOCK} (Downbeat's lock)." >&2
+      echo "  One holder the whole time with nothing running is a run that died holding it." >&2
+      exit 3
+    fi
+    sleep 1
+  done
+  # The owner line is what lets the NEXT run tell a live holder from a dead one, so it is written
+  # immediately after the lock is taken rather than later.
+  echo "overture:$$" > "${DIR_LOCK}/owner" 2>/dev/null || true
+  DIR_LOCK_HELD=1
+}
+
+# Released on EVERY exit path, not only the tidy one. A directory lock left planted blocks the next
+# run of a different app, which is the failure this whole thing exists to prevent.
+release_dir_lock() {
+  if [[ -n "${DIR_LOCK_HELD}" ]]; then
+    rm -rf "${DIR_LOCK}" 2>/dev/null || true
+    DIR_LOCK_HELD=""
+  fi
+}
+
 main() {
   command -v flock >/dev/null || { echo "flock not found; install it with: brew install flock" >&2; exit 1; }
 
   # #2577: however this script leaves, its watcher goes with it. A watcher that outlived the run
   # would sit printing stall warnings about a temporary file nobody is writing to any more, which is
   # a worse alarm than none: it would be indistinguishable from a real one and always wrong.
-  trap 'stop_progress_watch "${PROGRESS_WATCH_PID}"' EXIT
+  # #3571: the directory lock goes with the run too, and on INT and TERM as well as a tidy exit,
+  # because a killed run that leaves it planted is precisely the stale lock this has to avoid.
+  trap 'stop_progress_watch "${PROGRESS_WATCH_PID}"; release_dir_lock' EXIT INT TERM
 
   cd "${MAC_DIR}"
 
@@ -561,6 +640,13 @@ main() {
   # #3392: set inside the loop below and read after it. Declared here so a retry cannot inherit the
   # previous attempt's reading, which is the same reason `last_output` is per attempt.
   local restarted="" TIME_LIMIT_KILL=""
+
+  # #3571: DOWNBEAT'S LOCK FIRST, then this runner's own inside the loop below, which is the fixed
+  # order Ovation uses and the one thing making deadlock impossible now that two runners take two
+  # locks. Taken HERE rather than at the top of main, so the pre-flight above does not make a sibling
+  # wait, and OUTSIDE the retry loop, so a retry does not try to take a lock this run already holds.
+  take_dir_lock
+
   while true; do
     test_exit_code=0
     started_at="${SECONDS}"

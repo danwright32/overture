@@ -385,8 +385,19 @@ run_wrapper_with_stub_xcodebuild() {
 
   # flock's real job is serialising xcodebuild across worktrees, which is irrelevant here; once it
   # holds the lock it execs the rest of its arguments, and so does this.
+  # #3571: the stub also WITNESSES whether Downbeat's directory lock was already held at the moment
+  # this runner took its own file lock. That is the ordering assertion, and it can only be made from
+  # here: the order is invisible from outside, and asserting it in a comment is asserting nothing
+  # (L27). Inert unless a fixture sets the witness path, so every existing caller is unchanged.
   cat > "${bin_dir}/flock" <<'STUB'
 #!/usr/bin/env bash
+if [ -n "${FLOCK_STUB_WITNESS:-}" ]; then
+  if [ -d "${OVERTURE_DIR_LOCK:-/nonexistent}" ]; then
+    echo "dir-lock-held" >> "${FLOCK_STUB_WITNESS}"
+  else
+    echo "dir-lock-MISSING" >> "${FLOCK_STUB_WITNESS}"
+  fi
+fi
 shift
 exec "$@"
 STUB
@@ -1598,6 +1609,68 @@ Failing tests:
 ORDINARY_RED="$(run_wrapper_with_stub_xcodebuild "${ORDINARY_RED_LOG}" 65 "" "" "" "" 8643)"
 assert_not_contains "an ordinary red is not retried" "Retrying once" "${ORDINARY_RED}"
 assert_not_contains "and is never described as truncated" "TRUNCATED" "${ORDINARY_RED}"
+
+
+# ---------------------------------------------------------------------------
+# #3571: this runner must take DOWNBEAT's lock too, so the two projects actually exclude each other.
+#
+# Downbeat's `scripts/run-tests.sh:11` says its lock "is shared with Overture deliberately". It was not:
+# Downbeat takes `mkdir` on /tmp/xcodebuild-tests.lock and this runner took `flock` on a different path,
+# so the comment read as a safety guarantee while providing none (L407). Two Mac test runs on one Mac
+# share the derived data caches, testmanagerd and the test hosts, and a run starting while a sibling is
+# mid build produces failures belonging to neither change, which is the failure that teaches people to
+# distrust a red suite.
+#
+# THE ORDER IS THE SAFETY PROPERTY, not a detail. Ovation already takes both locks, directory first and
+# file second, and its own comment records that deadlock is impossible only because no sibling takes two
+# locks. This change breaks that premise: there are now two multi-lock takers, and the one thing keeping
+# them safe is that both take them in the SAME order. So the order is asserted here rather than trusted.
+DIR_LOCK_FIXTURE_DIR="$(fixture_scratch_dir)"
+THROWAWAY_DIR_LOCK="${DIR_LOCK_FIXTURE_DIR}/xcodebuild-tests.lock"
+WITNESS="${DIR_LOCK_FIXTURE_DIR}/witness"
+
+GREEN_RUN_LOG="Test Suite 'All tests' started
+Test run with 4 tests in 1 suite passed after 1.0 seconds.
+** TEST SUCCEEDED **"
+
+: > "${WITNESS}"
+DIR_LOCK_RUN="$(OVERTURE_DIR_LOCK="${THROWAWAY_DIR_LOCK}" FLOCK_STUB_WITNESS="${WITNESS}" \
+  run_wrapper_with_stub_xcodebuild "${GREEN_RUN_LOG}" 0)"
+
+# THE SEAM ITSELF (criterion 3). Without an override the lock path is hardcoded, so no fixture can
+# exercise this without taking the REAL lock and racing whatever else is running on this Mac (L2).
+assert_contains "the run reaches the test phase with the throwaway lock path" \
+  "Test run with 4 tests" "${DIR_LOCK_RUN}"
+
+# THE ORDER: Downbeat's directory lock is already held when this runner takes its own file lock.
+assert_contains "Downbeat's directory lock is taken BEFORE this runner's own file lock" \
+  "dir-lock-held" "$(cat "${WITNESS}")"
+assert_not_contains "and never the other way round" \
+  "dir-lock-MISSING" "$(cat "${WITNESS}")"
+
+# RELEASED ON THE WAY OUT. A directory lock is not released by the kernel when its holder dies, which
+# is the whole reason Downbeat carries a stale-claim script and a 1800s timeout. One left planted here
+# blocks the next run of a DIFFERENT app for half an hour.
+assert_equals "the directory lock is released when the run ends" "no" \
+  "$([ -d "${THROWAWAY_DIR_LOCK}" ] && echo yes || echo no)"
+
+# A STALE LOCK IS CLAIMED, NOT WAITED OUT. The crash-safety criterion, demonstrated rather than
+# asserted: flock is released by the kernel when its holder dies and mkdir is not, so adopting the
+# directory lock without this would make a killed Overture run block the next one for the timeout.
+STALE_DIR_LOCK="${DIR_LOCK_FIXTURE_DIR}/stale.lock"
+mkdir -p "${STALE_DIR_LOCK}"
+# A PID that cannot be running: claimed from the dead, which is the case that matters.
+echo "overture:999999" > "${STALE_DIR_LOCK}/owner"
+: > "${WITNESS}"
+STALE_RUN="$(OVERTURE_DIR_LOCK="${STALE_DIR_LOCK}" OVERTURE_DIR_LOCK_TIMEOUT=5 \
+  FLOCK_STUB_WITNESS="${WITNESS}" \
+  run_wrapper_with_stub_xcodebuild "${GREEN_RUN_LOG}" 0)"
+assert_contains "a lock held by a dead process is claimed rather than waited out" \
+  "Test run with 4 tests" "${STALE_RUN}"
+
+# `fixture_scratch_dir` does not sweep itself, and `check-temp-dir-leaks.sh` reads the runner's
+# directory for exactly this, so what this block made it takes away again.
+rm -rf "${DIR_LOCK_FIXTURE_DIR}"
 
 if [[ "${FAILURES}" -eq 0 ]]; then
   echo "All run-tests-locked.sh stale-host fixtures passed."
