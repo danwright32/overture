@@ -54,7 +54,7 @@ enum TitleNormalization {
         let spaced = String(s.map { ch in
             (ch.isLetter || ch.isNumber || ch.isWhitespace) ? ch : " "
         })
-        return spaced.replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+        return spaced.collapsingWhitespaceRuns()
             .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }

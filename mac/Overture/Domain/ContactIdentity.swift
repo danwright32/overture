@@ -36,8 +36,8 @@ enum ContactIdentity {
         guard let name else { return nil }
         var s = name.folding(options: .diacriticInsensitive, locale: Locale(identifier: "en_US_POSIX"))
         s = s.lowercased()
-        s = s.replacingOccurrences(of: #"[^a-z0-9\s]"#, with: " ", options: .regularExpression)
-        s = s.replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+        s = CompiledPattern.nonAlphanumericLowercase.replacingMatches(in: s, with: " ")
+        s = s.collapsingWhitespaceRuns()
         s = s.trimmingCharacters(in: .whitespaces)
         // A single character is not a name anybody can be identified by, and two people initialled the
         // same way would merge into one row.

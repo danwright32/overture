@@ -49,4 +49,58 @@ final class CompiledPattern: @unchecked Sendable {
         let range = NSRange(text.startIndex..., in: text)
         return regex.stringByReplacingMatches(in: text, range: range, withTemplate: template)
     }
+
+    // #3886: one capture group of the first match, or nil.
+    //
+    // WHY IT LIVES HERE. Without it, a call site that needs a PIECE of a match rather than a yes or no
+    // and a replace-all has to build its own `NSRegularExpression`, which is how
+    // `GroupNameMatch.stripProgramSubtitle` came to compile a fresh one on every name it normalized, on
+    // the scout's per-comparison path, and why `DraftCheck` keeps some of its patterns outside the shared
+    // type. Extending the one definition is the alternative to a second hand-rolled copy of the applying
+    // code (L370).
+    //
+    // THREE WAYS THERE IS NO CAPTURE, and all three answer nil rather than "". Nothing matched at all; the
+    // index names a group this pattern does not have; or the group is optional and did not participate,
+    // which `NSRegularExpression` reports as an NSNotFound range. An empty string would be a real capture
+    // to every caller, so a caller substituting one would replace a name with nothing (L215).
+    //
+    // Index 0 is the whole match, which is what `NSRegularExpression` means by it.
+    func firstCaptureGroup(_ index: Int, in text: String) -> String? {
+        let range = NSRange(text.startIndex..., in: text)
+        guard let match = regex.firstMatch(in: text, range: range),
+              index < match.numberOfRanges,
+              let captured = Range(match.range(at: index), in: text)
+        else { return nil }
+        return String(text[captured])
+    }
+}
+
+// #3886: the patterns several files had each spelled out for themselves, and the two readings of them
+// that were written over and over.
+//
+// Sharing the PATTERN alone would not be consolidation: what matters is that the applying code is shared
+// too, and it is, because every call here goes through `replacingMatches` above (L370). Written as String
+// methods rather than as bare statics because almost every call site is mid-chain
+// (`.lowercased().collapsingWhitespaceRuns().trimmingCharacters(...)`), and a form that breaks the chain
+// is a form the next person writes `options: .regularExpression` instead of.
+extension CompiledPattern {
+    static let whitespaceRun = CompiledPattern(#"\s+"#)
+    static let htmlTag = CompiledPattern(#"<[^>]+>"#)
+    // Only meaningful on already-lowercased text, which is how both call sites use it: a capital letter
+    // is outside the class and would be replaced by a space.
+    static let nonAlphanumericLowercase = CompiledPattern(#"[^a-z0-9\s]"#)
+}
+
+extension String {
+    // Every run of whitespace becomes a single space. The caller still does its own trimming, because
+    // the two call sites that trim disagree about whether newlines count and that is each one's decision.
+    func collapsingWhitespaceRuns() -> String {
+        CompiledPattern.whitespaceRun.replacingMatches(in: self, with: " ")
+    }
+
+    // Every HTML tag becomes a space, which is what the scrape and email paths mean by stripping markup:
+    // a space rather than nothing, so two words either side of a tag do not fuse into one.
+    func strippingHTMLTags() -> String {
+        CompiledPattern.htmlTag.replacingMatches(in: self, with: " ")
+    }
 }
