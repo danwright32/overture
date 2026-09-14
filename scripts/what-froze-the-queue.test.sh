@@ -168,6 +168,23 @@ assert_not_contains "and does not claim the whole file predates the change" \
   "${out}" "Every record here predates"
 assert_contains "and a sheet that used to read as the queue now names itself" "${out}" "patterns"
 
+# 13. #3813: a stall that counted no render pass but DID count RootView draws is a rebuilding window, not
+#     a main thread doing something that draws nothing, and the two call for different next steps. A
+#     record with no root count at all says "?" rather than 0, because absent and none are different
+#     answers (L98).
+mkdir -p "${WORK}/root"
+printf '{"session":"s","sequence":1,"at":"2026-09-14T17:47:37Z","seconds":9.1,"surface":"queue","load":"baseline","loadAverage":3.7,"passes":0,"passSeconds":0.0,"rootDraws":4}\n' \
+  > "${WORK}/root/log.ndjson"
+out="$("${READER}" --log "${WORK}/root/log.ndjson" 2>&1)"
+assert_contains "a silent stall that drew the window says so" "${out}" "drew the window anyway"
+assert_contains "and counts them" "${out}" "Of the 1 carrying a RootView draw count, 1"
+
+mkdir -p "${WORK}/noroot"
+record 9.1 0 0.0 > "${WORK}/noroot/log.ndjson"
+out="$("${READER}" --log "${WORK}/noroot/log.ndjson" 2>&1)"
+assert_contains "a silent stall from before #3813 says it cannot tell" "${out}" "cannot tell a rebuilding window"
+assert_not_contains "and does not claim the window drew" "${out}" "drew the window anyway"
+
 if [ "${FAILURES}" -eq 0 ]; then
   echo "what-froze-the-queue.test.sh: all passed"
 else

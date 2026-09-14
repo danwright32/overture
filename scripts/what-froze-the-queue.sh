@@ -140,13 +140,17 @@ elif _old_vocabulary:
     print("  Every record here predates #3859, so every `queue` is the queue OR any of seven sheets over")
     print("  it. Nothing in this file can say which.")
 print()
-print("  when                  seconds  passes  in passes  surface        load")
+print("  when                  seconds  passes  root  in passes  surface        load")
 for r in counted[:25]:
     when = str(r.get("at", ""))[:19].replace("T", " ")
     cost = r.get("passSeconds")
     shown = "{:>9.2f}".format(cost) if isinstance(cost, (int, float)) else "        ?"
-    print("  {:<20}  {:>7.2f}  {:>6}  {}  {:<13}  {}".format(
-        when, r.get("seconds", 0), r["passes"], shown,
+    # #3813: a record with no root count prints "?" rather than 0, because absent and none are different
+    # answers and a 0 there would read as "the window did not rebuild" (L98, L11).
+    root = r.get("rootDraws")
+    root_shown = "{:>4}".format(root) if isinstance(root, int) else "   ?"
+    print("  {:<20}  {:>7.2f}  {:>6}  {}  {}  {:<13}  {}".format(
+        when, r.get("seconds", 0), r["passes"], root_shown, shown,
         str(r.get("surface", "?")), str(r.get("load", "?"))))
 if len(counted) > 25:
     print(f"  ... and {len(counted) - 25} more, shown longest first.")
@@ -212,6 +216,20 @@ if silent:
     print("  counter, and the fetch before the body (#3750), the other surfaces (#3762) and every job")
     print("  on the main thread that is not a render pass all fail to bump it. Narrowing these needs")
     print("  one of those three instrumented, not a conclusion drawn from their shared silence.")
+    # #3813: one of those three is instrumented now. A stall that counted no render pass but DID count
+    # RootView draws is a window that was rebuilding while the surface inside it stood still, which is a
+    # different thing from a main thread busy with something that draws nothing. Reported only where the
+    # field is present: on every record written before #3813 it is absent, and absent is not zero (L98).
+    _root_counted = [r for r in silent if isinstance(r.get("rootDraws"), int)]
+    _root_drew = [r for r in _root_counted if r["rootDraws"] > 0]
+    if not _root_counted:
+        print("  None of them carries a RootView draw count, so they all predate #3813 and this tool")
+        print("  cannot tell a rebuilding window from a busy main thread for any of them.")
+    else:
+        print("  Of the {} carrying a RootView draw count, {} drew the window anyway: for those the "
+              "main".format(len(_root_counted), len(_root_drew)))
+        print("  thread was rebuilding RootView while the surface inside it stood still, which is a")
+        print("  different explanation from a main thread doing something that draws nothing at all.")
     for r in silent[:10]:
         when = str(r.get("at", ""))[:19].replace("T", " ")
         print(f"    {when}  {r.get('seconds', 0):.2f}s on {r.get('surface', '?')}")
