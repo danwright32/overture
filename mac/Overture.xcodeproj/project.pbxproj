@@ -180,6 +180,7 @@
 		15D53FD0ACFF3225006BE187 /* TicketTailorCalendar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 30020AB881BE973CC440C5D3 /* TicketTailorCalendar.swift */; };
 		15DEFC444325953CC8B6A5D7 /* DeadRunWriteOffRepair.swift in Sources */ = {isa = PBXBuildFile; fileRef = 62D4B1A8FC541F6BD57AE7C0 /* DeadRunWriteOffRepair.swift */; };
 		15E4DB115F5EE55D8D01CE2D /* LocalHistory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E8CE9327EAB13D8526847F9 /* LocalHistory.swift */; };
+		15E6F02EAA446A65DE8A9331 /* TheMatchLoopLeavesTheMainActorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 121399223656FF662F05B903 /* TheMatchLoopLeavesTheMainActorTests.swift */; };
 		15F41546EAB5492E353845C3 /* CancelledShootCopy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0207340E13F33B98C231042A /* CancelledShootCopy.swift */; };
 		16103F74982CA797FC4C29BB /* AnsweredReplyBackfill.swift in Sources */ = {isa = PBXBuildFile; fileRef = 81EAD75792E3E3BD8EAD6B2E /* AnsweredReplyBackfill.swift */; };
 		1622F4C853E61EB11D1DA49F /* AgentLogLocation.swift in Sources */ = {isa = PBXBuildFile; fileRef = D30AB1C746CDE024F6E7BCC1 /* AgentLogLocation.swift */; };
@@ -1144,12 +1145,14 @@
 		84F2B198166270B48CFCCBCF /* ProspectRowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D9834539BA47D783475B28C /* ProspectRowView.swift */; };
 		84F7E3CCE36ACBC3F0BB59A7 /* ManualDraftTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 52C647D1FA9632C5067B9B2F /* ManualDraftTests.swift */; };
 		85278C746B159D744E7CA73C /* ReplyGap.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9C8250080030BD14FDDEBBB /* ReplyGap.swift */; };
+		8545FC9EE3C2C87C4E1D99E6 /* ScoutClassify.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5016365F2BAD55F7C90CBA95 /* ScoutClassify.swift */; };
 		854F6B08FE4452948F427F99 /* DuplicateContactGuard.swift in Sources */ = {isa = PBXBuildFile; fileRef = A14670939A1D0902000A4FE2 /* DuplicateContactGuard.swift */; };
 		8556B9A36E5F94BF1F0ADBFB /* CardDivergence.swift in Sources */ = {isa = PBXBuildFile; fileRef = 62F8C36EB6001AE1CD49E6C6 /* CardDivergence.swift */; };
 		85B768EE7A7468FAED6C8E04 /* ModelContextSaveOrWarnSendNotConfirmedTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C249F67A9849E639DD3CB973 /* ModelContextSaveOrWarnSendNotConfirmedTests.swift */; };
 		85CBF1B3F89C45939014C081 /* CancelledReadDisposition.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5BBAEB2C76FDDA8C8553846D /* CancelledReadDisposition.swift */; };
 		85D56AF13AA7928857CE18A3 /* CopySurfacesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 23B732F2828EE6317000AABF /* CopySurfacesTests.swift */; };
 		85DEE7E70DB31785FF078578 /* UpdateAttemptTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B9722930780C51F6E593D38 /* UpdateAttemptTests.swift */; };
+		85E427CA2BFD5784B39515B2 /* ScoutClassify.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5016365F2BAD55F7C90CBA95 /* ScoutClassify.swift */; };
 		860C74029D52015238C458AD /* ScreenSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6128A0EB732BFB7E55143CAC /* ScreenSession.swift */; };
 		864476758898505BC99F7249 /* DismissAlwaysRecordsAnUndoTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A27E98AFB489C2C8CF48F121 /* DismissAlwaysRecordsAnUndoTests.swift */; };
 		86608992B602DAE4BAA199A5 /* ClientHorizon.swift in Sources */ = {isa = PBXBuildFile; fileRef = AED787476CB20A704F60718B /* ClientHorizon.swift */; };
@@ -2322,6 +2325,7 @@
 		117FEBD15E1FD6B79F667667 /* ContactDisplayTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContactDisplayTests.swift; sourceTree = "<group>"; };
 		11DC7FC9E1DF3032B02DC52C /* ManualPrepSaveReasonTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManualPrepSaveReasonTests.swift; sourceTree = "<group>"; };
 		120248A2D19A6D5398477906 /* TicketTailorExtractorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TicketTailorExtractorTests.swift; sourceTree = "<group>"; };
+		121399223656FF662F05B903 /* TheMatchLoopLeavesTheMainActorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TheMatchLoopLeavesTheMainActorTests.swift; sourceTree = "<group>"; };
 		121D62CB2FB6FF1DB15CF78A /* ProducerGateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProducerGateTests.swift; sourceTree = "<group>"; };
 		12279EDB11041AFF0141C12A /* PartialSweepIngestWiringTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PartialSweepIngestWiringTests.swift; sourceTree = "<group>"; };
 		124B319867628CB8A16842F8 /* SourceSearchTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourceSearchTests.swift; sourceTree = "<group>"; };
@@ -2704,6 +2708,7 @@
 		4F86268FB58646D3B203BDBA /* DraftEventDateCasesTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DraftEventDateCasesTests.swift; sourceTree = "<group>"; };
 		4F972C338BB5252619D20C13 /* CardSendGroupsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardSendGroupsTests.swift; sourceTree = "<group>"; };
 		4FD23D3AE7DCC9C84BAF2D0E /* GmailReplyCheckerSaveGuardTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GmailReplyCheckerSaveGuardTests.swift; sourceTree = "<group>"; };
+		5016365F2BAD55F7C90CBA95 /* ScoutClassify.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScoutClassify.swift; sourceTree = "<group>"; };
 		5019955D9286FDA760D67B4F /* ScoutResultAudit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScoutResultAudit.swift; sourceTree = "<group>"; };
 		50350E8E010D01DD330869F0 /* GoogleOAuthTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoogleOAuthTests.swift; sourceTree = "<group>"; };
 		5036447729F9729FC3CB7FCD /* BusinessDay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BusinessDay.swift; sourceTree = "<group>"; };
@@ -5036,6 +5041,7 @@
 				87673B91FD2858EF5A66A0D1 /* TheDivergenceLogIsCompactedTests.swift */,
 				5413D4478D3B1F70EC7D5358 /* TheFreezeLogIsBoundedWhileTheAppRunsTests.swift */,
 				3D5D1C4AC4B0559A6EC8D312 /* TheFreezeLogKeepsItsOldestRecordsTests.swift */,
+				121399223656FF662F05B903 /* TheMatchLoopLeavesTheMainActorTests.swift */,
 				1CE7CADF0428B1F66C603052 /* TheMissedCheckSentenceIsTrueOfBothCausesTests.swift */,
 				580226451EC4DF68FED31CFF /* TheOracleIsCountedApartTests.swift */,
 				91D0CA6C40659F5E63AA075E /* TheWatchdogCanSeeTheBarTests.swift */,
@@ -5461,6 +5467,7 @@
 				203E7EFE8858ADA4E9B22FBD /* Salutation.swift */,
 				8BB9F65D06CF95AF6C0261CD /* SameDateVenueMerge.swift */,
 				8553CF2C141CD1A6C9B5E610 /* SameNightTitleVariantMerge.swift */,
+				5016365F2BAD55F7C90CBA95 /* ScoutClassify.swift */,
 				B7FA7AECE7C97B9D82DCA92E /* ScoutControlState.swift */,
 				08BA0F4504495B3318601218 /* ScoutExtractCurrentSource.swift */,
 				35F6A280CEB97ABFA5673233 /* ScoutExtractProgress.swift */,
@@ -6171,6 +6178,7 @@
 				8341B1DFE8F45CBC43A70A1E /* Salutation.swift in Sources */,
 				0B56C1320FF2A74B8E128144 /* SameDateVenueMerge.swift in Sources */,
 				43B3C67499E86BA540F2E18E /* SameNightTitleVariantMerge.swift in Sources */,
+				85E427CA2BFD5784B39515B2 /* ScoutClassify.swift in Sources */,
 				51913FB979F7D32574E0C958 /* ScoutControlState.swift in Sources */,
 				1307B6A3046AB97CE70510A1 /* ScoutExtractCurrentSource.swift in Sources */,
 				DC64EE8E6986813FED70FB73 /* ScoutExtractIngest.swift in Sources */,
@@ -7593,6 +7601,7 @@
 				05C1A70C96EFCF611114E779 /* ScoutAnchorOnInsertTests.swift in Sources */,
 				0C185DCF9E60490F4E759025 /* ScoutCancelTests.swift in Sources */,
 				E248FD3C7D247FAE2FDDDA16 /* ScoutCancelWiringGuardTests.swift in Sources */,
+				8545FC9EE3C2C87C4E1D99E6 /* ScoutClassify.swift in Sources */,
 				1AB48A3A9C7C8D377AEBF255 /* ScoutControlState.swift in Sources */,
 				CDF02FC839A95F542BA6C41C /* ScoutControlStateTests.swift in Sources */,
 				96C53A56386B9871B6C48EB4 /* ScoutExtractConfirmSuppressionTests.swift in Sources */,
@@ -7868,6 +7877,7 @@
 				81A5D2E4BBD512D20D11FD0D /* TheDivergenceLogIsCompactedTests.swift in Sources */,
 				025A7F0495B66B2ED30BD39F /* TheFreezeLogIsBoundedWhileTheAppRunsTests.swift in Sources */,
 				CD58E47DD6204CC2BB5FF787 /* TheFreezeLogKeepsItsOldestRecordsTests.swift in Sources */,
+				15E6F02EAA446A65DE8A9331 /* TheMatchLoopLeavesTheMainActorTests.swift in Sources */,
 				A1C02463F2F9E167348A7119 /* TheMissedCheckSentenceIsTrueOfBothCausesTests.swift in Sources */,
 				AB4E72AB61A16E9890E3B1F4 /* TheOracleIsCountedApartTests.swift in Sources */,
 				7A653C549B2CB77776D8B6BA /* TheWatchdogCanSeeTheBarTests.swift in Sources */,
