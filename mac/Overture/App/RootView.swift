@@ -2012,19 +2012,27 @@ struct RootView: View {
                                                        writesThatFailed: freezeWatch.writesThatFailed) else {
             return false
         }
-        // #3808: never the SAME sentence twice running. This is not a nicety and it is the one thing the
-        // move to an hourly tick could have got badly wrong.
+        // #3808: the two sentences that carry NO record identity are said once, and nothing else is
+        // suppressed. This is the one thing the move to an hourly tick could have got badly wrong, and
+        // the first version of it did.
         //
-        // Two of the three things this reader can say are not about records and so have no identity to be
-        // remembered by: "the watchdog did not run" and "N writes failed". Their own comments say the
-        // first is "said once per session", and that was true only because the single caller ran once per
-        // session. It was a property of the CALL SITE and not of the rule, which is exactly the shape that
-        // breaks the first time somebody adds a second caller (L281), and an hourly repeat of a sentence
-        // Dan can do nothing about is what teaches him to stop reading the slot (L36, L523).
+        // Two of the three things this reader can say are not about records: "the watchdog did not run"
+        // and "N writes failed". Their own comments say the first is "said once per session", and that
+        // was true only because the single caller ran once per session. It was a property of the CALL
+        // SITE and not of the rule, which is the shape that breaks the first time a second caller is
+        // added (L281), and an hourly repeat of a sentence Dan can do nothing about is what teaches him
+        // to stop reading the slot (L36, L523).
         //
-        // The third thing it says, a count of freezes, is keyed on record identity already, so a genuinely
-        // new freeze produces a different sentence and is never suppressed by this.
-        guard message != lastFreezeNoticeSaid else { return false }
+        // THE THIRD SENTENCE IS NEVER SUPPRESSED, and the measurement is why. Written first as "never the
+        // same sentence twice running", which reads as obviously safe: a count notice is keyed on record
+        // identity, so surely a new freeze reads differently. It does not. The sentence renders the
+        // duration to one decimal place plus the surface and the load, and measured over Dan's live log
+        // on 2026-09-14, 1,075 of 1,115 records (96%) share that rendering with at least one other: 146
+        // of them are "0.4 seconds, queue, baseline" alone. A blanket rule would have silently swallowed
+        // most real freeze notices while reading as a tidy-up (L104, L1).
+        let carriesNoRecordIdentity = message == FreezeNoticeCopy.watchdogDidNotRun
+            || freezeWatch.writesThatFailed > 0
+        if carriesNoRecordIdentity, message == lastFreezeNoticeSaid { return false }
         let landed = status.set(message, priority: .warning)
         if landed { lastFreezeNoticeSaid = message }
         return landed

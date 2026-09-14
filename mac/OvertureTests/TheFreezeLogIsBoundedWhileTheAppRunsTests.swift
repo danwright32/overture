@@ -138,16 +138,34 @@ final class TheFreezeLogIsBoundedWhileTheAppRunsTests {
     // only because the single caller ran once per session: a property of the CALL SITE, not of the rule,
     // which is the shape that breaks the first time a second caller is added (L281). Hourly repetition of
     // a sentence Dan can do nothing about is how a slot stops being read (L36).
-    @Test("the same freeze sentence is never said twice running")
-    func anUnchangedNoticeIsNotRepeated() {
+    @Test("only the sentences carrying no record identity are said once")
+    func anUnchangedIdentitylessNoticeIsNotRepeated() {
         guard let body = SourceGuardHelper.bodyOfFunction(named: "reportAnyFreezes", in: rootView) else {
             Issue.record("reportAnyFreezes body not found in RootView"); return
         }
         let remembers = SourceGuardHelper.containsCode(
-            "guard message != lastFreezeNoticeSaid else { return false }", in: body)
+            "if carriesNoRecordIdentity, message == lastFreezeNoticeSaid { return false }", in: body)
         #expect(remembers, Comment(rawValue:
             "the freeze reporter says whatever it is handed, every tick. Two of its three sentences carry "
             + "no record identity, so on an hourly tick they repeat for ever (#3808, L281)"))
+
+        // AND THE COUNT SENTENCE IS NEVER SUPPRESSED, which is the half that is easy to get backwards.
+        // Written first as a blanket "never the same sentence twice running", which reads as obviously
+        // safe. Measured over Dan's live log on 2026-09-14, 1,075 of 1,115 records (96%) render a sentence
+        // identical to another record's, because it is a duration to one decimal place plus the surface
+        // and the load: 146 are "0.4 seconds, queue, baseline" alone. The blanket rule would have swallowed
+        // most real freeze notices while reading as a tidy-up (L104).
+        let suppressesEverything = SourceGuardHelper.containsCode(
+            "guard message != lastFreezeNoticeSaid else { return false }", in: body)
+        #expect(!suppressesEverything, Comment(rawValue:
+            "every repeated sentence is suppressed, not only the two that carry no record identity. "
+            + "96% of the records in the live log render a sentence some other record also renders, so "
+            + "this silently drops most real freeze notices (#3808)"))
+        let namesTheIdentitylessOnes = body.contains("FreezeNoticeCopy.watchdogDidNotRun")
+            && body.contains("freezeWatch.writesThatFailed > 0")
+        #expect(namesTheIdentitylessOnes, Comment(rawValue:
+            "the suppression does not say WHICH sentences carry no record identity, so it cannot be "
+            + "limited to them"))
         // Remembered only when the notice actually LANDED. Remembering a refused write would silence the
         // sentence for the rest of the session having never shown it (L98).
         let remembersOnlyWhatLanded = SourceGuardHelper.containsCode(
