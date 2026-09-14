@@ -1061,12 +1061,12 @@ enum ScoutService {
         into context: ModelContext
     ) async -> Outcome {
         let corpus = venueBrandCorpus(in: context)
-        let classified = await ScoutClassify.offTheCallersActor(
+        let classifiedPass = await ScoutClassify.offTheCallersActor(
             events: events, clients: clients, history: history,
             venueBrands: corpus.brands, sourceIds: sourceIds)
         return applySweep(events: events, clients: clients, history: history, blocked: blocked,
                           feed: feed, today: today, sourceIds: sourceIds,
-                          preClassified: PreClassified(result: classified,
+                          preClassified: PreClassified(result: classifiedPass,
                                                        degradedReads: corpus.degradedReads),
                           into: context)
     }
@@ -1167,21 +1167,26 @@ enum ScoutService {
         // else in this function, so on the pre-classified path the caller has already read it and doing
         // it again here would add a whole table fetch, measured at 158.8 ms over 1,238 rows, to the very
         // main thread block this change exists to shorten.
-        let classified: ScoutClassify.Result
+        // `classifiedPass`, not the obvious `classified`. The test-only-reachable scan matches on the
+        // bare IDENTIFIER, and `RunNightDrop` declares one called `classified` that only its tests name,
+        // so a local of that name here made that declaration read as reached by app code and turned its
+        // baseline entry stale. Seen: `everyBaselineEntryIsStillAFinding` went red on a file this change
+        // does not touch.
+        let classifiedPass: ScoutClassify.Result
         if let preClassified {
-            classified = preClassified.result
+            classifiedPass = preClassified.result
             // The caller's read, carried through, so a corpus it could not read still reaches Dan. Without
             // this the pre-classified path would report a clean run over a degraded corpus (#3071, L98).
             degradedReads.append(contentsOf: preClassified.degradedReads)
         } else {
             let corpus = venueBrandCorpus(in: context)
             degradedReads.append(contentsOf: corpus.degradedReads)
-            classified = ScoutClassify.run(events: events, clients: clients, history: history,
-                                           venueBrands: corpus.brands, sourceIds: sourceIds)
+            classifiedPass = ScoutClassify.run(events: events, clients: clients, history: history,
+                                               venueBrands: corpus.brands, sourceIds: sourceIds)
         }
-        let prospects = classified.prospects
-        skipped += classified.skipped
-        suppressedShows.append(contentsOf: classified.suppressedOrgs)
+        let prospects = classifiedPass.prospects
+        skipped += classifiedPass.skipped
+        suppressedShows.append(contentsOf: classifiedPass.suppressedOrgs)
 
         // Phase 2: collapse multi-night runs so only the representative night is upserted. Each row
         // carries its INDEX into `prospects` as its identity (#797), which is how a grouped run finds
