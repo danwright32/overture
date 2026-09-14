@@ -252,6 +252,9 @@ the subject named below.
   the number of render passes it spanned. A long stall spanning no pass is something else entirely.
 - **Asking whether the app itself froze**: `MainThreadWatchdog` records it, and `RootView` says at
   launch what the last session found. The watchdog WRITES and the main thread only stamps.
+- **Looking at Overture while it is frozen**: `scripts/sample-overture.sh`, which resolves the pid from
+  the full executable path and refuses when two copies match. It has THREE outcomes and the middle one
+  is the point: a sample naming none of the app's own frames is a reading to look at, not a pass.
 - **Asking what freezes macOS has already recorded**: `scripts/check-overture-hangs.sh`. Opt in. It
   reads the Overture PROCESS BLOCK of each `.hang` report, never the whole file, and has FOUR states
   across three exit codes: only UNMEASURED means nothing could be read.
