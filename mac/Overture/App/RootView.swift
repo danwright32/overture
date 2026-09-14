@@ -585,6 +585,17 @@ struct RootView: View {
         // Archive's own body works correctly. This still reads as "persistent" per the design
         // (always visible above the Queue, not tucked into a menu), just not toolbar-hosted.
         VStack(spacing: 0) {
+            // #3813: RootView counts its OWN body evaluations, beside the surface's render passes and
+            // never into them. Two views draw under `.queue`, this one and the `QueueView` inside it, and
+            // only the second bumps `passes`: SwiftUI re-evaluates `QueueView` only when a value handed to
+            // it changes, so an evaluation here that changes none of them rebuilds the window and bumps
+            // nothing. A stall spanning only those reads `passes: 0`, which is the reading that refutes
+            // the burst explanation and sends the next diagnosis elsewhere (L11).
+            //
+            // NOT inside the `#if DEBUG` below. `traceRootRender` is a diagnostic for somebody watching a
+            // Debug build, and the population this needs to measure is Dan's real sessions on the
+            // installed Release app (L535).
+            let _ = freezeWatch.recordRootDraw()
             #if DEBUG
             let _ = traceRootRender()   // #1930, see rootRenderInputs
             #endif

@@ -164,6 +164,19 @@ struct StallRecord: Codable, Equatable, Sendable {
     // and those are the "before" half of milestone 80's own reading. They decode with this absent.
     let passes: Int?
 
+    // #3813: how many times ROOTVIEW evaluated its own body while this stall lasted, or nothing where no
+    // root draw has ever been counted in this process.
+    //
+    // BESIDE `passes` and never added to it. Under `.queue` two views draw and only `QueueView` bumps
+    // `passes`, so a stall spanning only `RootView` evaluations reads `passes: 0`, and `0` there is the
+    // reading that sends the next diagnosis away from the queue. Folding the two together would redefine
+    // the unit `passes` counts and make every new record incomparable with the 1,041 already written,
+    // which are milestone 80's own "before" half (L683).
+    //
+    // THREE VALUES, the same as `passes`: `nil` is UNMEASURED, `0` means no root draw was counted during
+    // this stall, `N` is the count.
+    let rootDraws: Int?
+
     // #3815: how long this stall's render passes took, in seconds, or nothing where no pass has ever
     // been timed in this process.
     //
@@ -191,8 +204,8 @@ struct StallRecord: Codable, Equatable, Sendable {
     var identity: String { "\(session)#\(sequence)" }
 
     init(session: String, sequence: Int, at: Date, seconds: Double, surface: StallSurface,
-         load: MachineLoad, loadAverage: Double?, passes: Int?, passSeconds: Double? = nil,
-         windows: WindowPresence = .unknown) {
+         load: MachineLoad, loadAverage: Double?, passes: Int?, rootDraws: Int? = nil,
+         passSeconds: Double? = nil, windows: WindowPresence = .unknown) {
         self.session = session
         self.sequence = sequence
         self.at = at
@@ -206,6 +219,7 @@ struct StallRecord: Codable, Equatable, Sendable {
         // pass (L41, L168).
         self.surfaceVocabulary = StallSurface.vocabularySize
         self.passes = passes
+        self.rootDraws = rootDraws
         self.passSeconds = passSeconds
         self.windows = windows
     }
@@ -236,6 +250,7 @@ struct StallRecord: Codable, Equatable, Sendable {
         loadAverage = try c.decodeIfPresent(Double.self, forKey: .loadAverage)
         surfaceVocabulary = try c.decodeIfPresent(Int.self, forKey: .surfaceVocabulary)
         passes = try c.decodeIfPresent(Int.self, forKey: .passes)
+        rootDraws = try c.decodeIfPresent(Int.self, forKey: .rootDraws)
         passSeconds = try c.decodeIfPresent(Double.self, forKey: .passSeconds)
         // Decoded as a STRING and mapped, never as the enum directly. `decodeIfPresent` on an enum THROWS on
         // a value it does not know, which fails the WHOLE record rather than one field, so a later build

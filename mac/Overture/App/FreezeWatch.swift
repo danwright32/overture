@@ -75,6 +75,14 @@ final class FreezeWatch {
     // `EveryRenderPassIsCountedTests` holds, derived from the source rather than from a rule in prose.
     func recordPass() { watchdog?.passes.bump() }
 
+    // #3813: called by the MAIN thread every time RootView evaluates its own body. The only writer.
+    //
+    // A SEPARATE call from `recordPass()`, not an extra bump into it. `RootView` is not a surface a stall
+    // is attributed to: it is what is UNDERNEATH every surface, and it draws whether or not the view
+    // inside it does. Counting it into `passes` would redefine that field for every record already
+    // written, so the two are recorded side by side and a reading says which it is quoting (L683).
+    func recordRootDraw() { watchdog?.rootDraws.bump() }
+
     // #3815: called by the MAIN thread when a render pass RETURNS, with how long it took. The only writer.
     //
     // A separate call from `recordPass()` because the two happen at different moments and that difference

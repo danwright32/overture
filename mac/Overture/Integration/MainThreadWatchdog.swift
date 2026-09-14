@@ -95,6 +95,27 @@ final class MainThreadWatchdog: @unchecked Sendable {
 
     let passes = PassCountBox()
 
+    // #3813: how often ROOTVIEW evaluated its own body, counted separately from the surface's passes.
+    //
+    // A SECOND BOX rather than another writer into the first, and that choice is the whole issue. Under
+    // `.queue` two views draw, `RootView` and the `QueueView` inside it, and only the second bumps
+    // `passes`. SwiftUI re-evaluates `QueueView` only when a value `RootView` hands it changes, so a
+    // `RootView` evaluation that changes none of them rebuilds the window and bumps nothing, and a stall
+    // spanning only those reads `passes: 0`.
+    //
+    // Folding it into `passes` was the other option and is refused: it would redefine the unit that field
+    // counts, and milestone #80's before-and-after reading is taken across records already written
+    // (measured 2026-09-11: 1,041 records, every one `surface: queue`, 398 of the 536 live ones carrying
+    // a count taken from `QueueView` alone). Every new record would become incomparable with every old
+    // one, silently (L683). Recorded separately, both numbers stay readable and the reading can say which
+    // it is quoting.
+    //
+    // WHAT IS STILL UNMEASURED, stated rather than implied: how often `RootView` evaluates WITHOUT
+    // `QueueView` following. #3813 asked for that population to be measured first, and it cannot be
+    // measured without a counter that survives past a DEBUG trace into a real session. This box is that
+    // counter. Read the field on a real log before drawing any conclusion from it.
+    let rootDraws = PassCountBox()
+
     // #3815: how long those passes took, as a running total of seconds.
     //
     // A SECOND box rather than a field on the first, because the two are written at different moments: the
@@ -210,12 +231,14 @@ final class MainThreadWatchdog: @unchecked Sendable {
         // afterwards would also work and would be less exact: it could include a pass that happened
         // after the freeze had already ended.
         let passesAtPost = passes.current
+        let rootAtPost = rootDraws.current
         let costAtPost = passCost.current
         let sequence = nextSequence()
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
             let ran = self.now()
             let passesAtRun = self.passes.current
+            let rootAtRun = self.rootDraws.current
             let costAtRun = self.passCost.current
             let delay = ran.timeIntervalSince(posted) - self.interval
             // Back on the watchdog's queue to judge and write, because everything after this point must
@@ -228,6 +251,7 @@ final class MainThreadWatchdog: @unchecked Sendable {
                 self.keptLock.withLock { self.pingOutstanding = false }
                 self.recordIfStalled(delay, sequence: sequence, at: ran,
                                      passes: StallLog.passesSpanned(from: passesAtPost, to: passesAtRun),
+                                     rootDraws: StallLog.passesSpanned(from: rootAtPost, to: rootAtRun),
                                      passSeconds: StallLog.passSecondsSpanned(from: costAtPost,
                                                                              to: costAtRun))
             }
@@ -235,7 +259,7 @@ final class MainThreadWatchdog: @unchecked Sendable {
     }
 
     private func recordIfStalled(_ delay: TimeInterval, sequence: Int, at: Date, passes: Int?,
-                                 passSeconds: Double?) {
+                                 rootDraws: Int?, passSeconds: Double?) {
         // A ping that ran EARLY or on time is not a stall. Clamped rather than recorded as a negative,
         // which would be a measurement of the timer's own jitter dressed as a freeze.
         guard delay > 0 else { return }
@@ -243,6 +267,7 @@ final class MainThreadWatchdog: @unchecked Sendable {
         let stall = StallRecord(session: session, sequence: sequence, at: at, seconds: delay,
                                 surface: surface.current, load: reading.0, loadAverage: reading.1,
                                 passes: passes,
+                                rootDraws: rootDraws,
                                 passSeconds: passSeconds,
                                 // #3788: read from the box the main thread stamped, never asked of AppKit
                                 // here. This runs on the watchdog's own queue during a freeze, and a value
