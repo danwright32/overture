@@ -44,11 +44,14 @@ struct FeltWaitCostTests {
     private static let corpusSize = 1224
 
     private func container() throws -> ModelContainer {
-        try ModelContainer(for: Schema([Prospect.self, Recipient.self, Inquiry.self,
-                                        OrgReachabilityAnswer.self, WatchedSource.self,
-                                        RefusedContactAddress.self, PromotedProducer.self,
-                                        DemotedHouse.self]),
-                           configurations: [ModelConfiguration(isStoredInMemoryOnly: true)])
+        let made = try TestModelContainer.inMemory([Prospect.self, Recipient.self, Inquiry.self, OrgReachabilityAnswer.self, WatchedSource.self, RefusedContactAddress.self, PromotedProducer.self, DemotedHouse.self])
+        // #3874 PROBE, not a fix yet. `.modelContainer(c)` hands SwiftUI this container's mainContext,
+        // whose autosave is ON by default and schedules a run loop timer. The crash is that timer firing
+        // into a `_SwiftData_SwiftUI` observer between tests, and nothing in this repository sets
+        // `autosaveEnabled` anywhere. Every test here saves explicitly, so autosave buys the tests
+        // nothing and this changes no assertion.
+        made.mainContext.autosaveEnabled = false
+        return made
     }
 
     @discardableResult

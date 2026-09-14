@@ -37,11 +37,7 @@ struct ViewportSizeTests {
     private static let tallestSize = NSSize(width: 960, height: 900)
 
     private func container() throws -> ModelContainer {
-        try ModelContainer(for: Schema([Prospect.self, Recipient.self, Inquiry.self,
-                                        OrgReachabilityAnswer.self, WatchedSource.self,
-                                        RefusedContactAddress.self, PromotedProducer.self,
-                                        DemotedHouse.self]),
-                           configurations: [ModelConfiguration(isStoredInMemoryOnly: true)])
+        try TestModelContainer.inMemory([Prospect.self, Recipient.self, Inquiry.self, OrgReachabilityAnswer.self, WatchedSource.self, RefusedContactAddress.self, PromotedProducer.self, DemotedHouse.self])
     }
 
     // Far more rows than any window can show, so the count below is the viewport's and not the corpus's.

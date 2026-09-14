@@ -19,9 +19,7 @@ struct SendConfirmSheetStyledPreviewTests {
         plainText: "Best,\nDan Wright\nDan Wright Photography")
 
     private func confirmation(signature: OutboundSignature) throws -> SendConfirmation {
-        let ctx = ModelContext(try ModelContainer(
-            for: Schema([Prospect.self, Recipient.self]),
-            configurations: [ModelConfiguration(isStoredInMemoryOnly: true)]))
+        let ctx = ModelContext(try TestModelContainer.inMemory([Prospect.self, Recipient.self]))
         let key = Prospect.makeNaturalKey(groupName: "G", performanceDate: "2026-09-01", venue: "V")
         let p = Prospect(naturalKey: key, groupName: "G", discipline: "choral", venue: "V",
                          performanceDate: "2026-09-01", sourceListingURL: nil,

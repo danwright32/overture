@@ -24,11 +24,7 @@ import SwiftData
 struct ArchiveScrollDoesNotRebuildTests {
 
     private func container() throws -> ModelContainer {
-        try ModelContainer(for: Schema([Prospect.self, Recipient.self, Inquiry.self,
-                                        OrgReachabilityAnswer.self, WatchedSource.self,
-                                        RefusedContactAddress.self, PromotedProducer.self,
-                                        DemotedHouse.self]),
-                           configurations: [ModelConfiguration(isStoredInMemoryOnly: true)])
+        try TestModelContainer.inMemory([Prospect.self, Recipient.self, Inquiry.self, OrgReachabilityAnswer.self, WatchedSource.self, RefusedContactAddress.self, PromotedProducer.self, DemotedHouse.self])
     }
 
     // Enough rows that the list scrolls at all: a scroll shorter than the content moves nothing, and a

@@ -20,8 +20,7 @@ import ViewInspector
 @Suite("A live performer match is never invisible on the row (#1466)")
 struct PerformerMatchVisibilityTests {
     private func container() throws -> ModelContainer {
-        try ModelContainer(for: Schema([Prospect.self]),
-                           configurations: [ModelConfiguration(isStoredInMemoryOnly: true)])
+        try TestModelContainer.inMemory([Prospect.self])
     }
 
     private let vega = DownbeatClient(id: "client-larkin", displayName: "Larkin Sable", shortName: nil,
