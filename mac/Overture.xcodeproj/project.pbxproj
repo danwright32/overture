@@ -998,6 +998,7 @@
 		7470D56525E2EAC14A1C0128 /* OutgoingPitch.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8CE6BA3981BE2F033FEC3FC2 /* OutgoingPitch.swift */; };
 		74A4D5058AEED7F6D68D46B1 /* EmptyAnswerSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6D920786356E911592FA8E6 /* EmptyAnswerSection.swift */; };
 		74DDA85AB2C7978DB7552BCF /* ProspectMutations.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5352A249A3868BCF6566AE15 /* ProspectMutations.swift */; };
+		74F693CB58DD9A1CE3AC7862 /* DismissReadIsOwnedByTheButtonGuardTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5B99B24FAEE14FBB2E4FAF3 /* DismissReadIsOwnedByTheButtonGuardTests.swift */; };
 		75480457F877A58DF0D4D911 /* PrepImporterProbeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4EC69E4C8D6972F6A0D7803B /* PrepImporterProbeTests.swift */; };
 		754AFD394AE81E2E17C25D2F /* ScoutExtractResults.swift in Sources */ = {isa = PBXBuildFile; fileRef = 12FFD569036709A600D5AFD8 /* ScoutExtractResults.swift */; };
 		7561CB5CB6564605B999CB96 /* DriftedRunMerge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7ED908A59190AE4DDBFCD08C /* DriftedRunMerge.swift */; };
@@ -3777,6 +3778,7 @@
 		F4A846E5CEA3F79C9140936E /* DeadRunSweepTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeadRunSweepTests.swift; sourceTree = "<group>"; };
 		F4C1966045B1235EA61D26D1 /* RowSourceListingLinkTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RowSourceListingLinkTests.swift; sourceTree = "<group>"; };
 		F56875ADF0A8D3D852212940 /* SourceSchedule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourceSchedule.swift; sourceTree = "<group>"; };
+		F5B99B24FAEE14FBB2E4FAF3 /* DismissReadIsOwnedByTheButtonGuardTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DismissReadIsOwnedByTheButtonGuardTests.swift; sourceTree = "<group>"; };
 		F5D819A5E8AE4C839EB5078D /* RunBoundaryViolations.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunBoundaryViolations.swift; sourceTree = "<group>"; };
 		F5E4635FB01C46FF46503626 /* JointSendMigrationDryRunTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JointSendMigrationDryRunTests.swift; sourceTree = "<group>"; };
 		F61E801393EE83ECA3816ED8 /* EveryOverrideHasAReaderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EveryOverrideHasAReaderTests.swift; sourceTree = "<group>"; };
@@ -4219,6 +4221,7 @@
 				820162B4D03F0B7DB08414F2 /* DismissDayOffMutationTests.swift */,
 				761349B4D30DAB2CEC72D36D /* DismissDayOffWiringGuardTests.swift */,
 				073482FF171FDD03F329446D /* DismissedProspectsTests.swift */,
+				F5B99B24FAEE14FBB2E4FAF3 /* DismissReadIsOwnedByTheButtonGuardTests.swift */,
 				2F6556AF12C03406F0E47CD6 /* DismissReasonMigrationTests.swift */,
 				85DC307C6A1089DBB326D663 /* DockPresenceTests.swift */,
 				7442C3140BCA0474F9930704 /* DormantFetchBudgetTests.swift */,
@@ -6644,6 +6647,7 @@
 				864476758898505BC99F7249 /* DismissAlwaysRecordsAnUndoTests.swift in Sources */,
 				9A09E95969CB7334ACCBDC4E /* DismissDayOffMutationTests.swift in Sources */,
 				D515CB7F812C30FA9155893F /* DismissDayOffWiringGuardTests.swift in Sources */,
+				74F693CB58DD9A1CE3AC7862 /* DismissReadIsOwnedByTheButtonGuardTests.swift in Sources */,
 				40BBA591F9D28A62382A9D3C /* DismissReasonMigration.swift in Sources */,
 				D969EFC95C0B2FA5AE82DCDA /* DismissReasonMigrationTests.swift in Sources */,
 				FBD7B2A920A88F89F5162269 /* DismissedProspects.swift in Sources */,
