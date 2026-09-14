@@ -255,6 +255,9 @@ the subject named below.
 - **Looking at Overture while it is frozen**: `scripts/sample-overture.sh`, which resolves the pid from
   the full executable path and refuses when two copies match. It has THREE outcomes and the middle one
   is the point: a sample naming none of the app's own frames is a reading to look at, not a pass.
+- **Asking what freezes macOS has already recorded**: `scripts/check-overture-hangs.sh`. Opt in. It
+  reads the Overture PROCESS BLOCK of each `.hang` report, never the whole file, and has FOUR states
+  across three exit codes: only UNMEASURED means nothing could be read.
 - **Asking what a rotating log lost**: `scripts/what-the-log-lost.sh`, the `.1` file's reader. It reads
   the live file AND the `.1`, prints every rotation the app recorded, and tells content that is GONE
   apart from a rotation that was REFUSED. Defaults to the store backup log.
