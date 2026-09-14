@@ -692,7 +692,10 @@ enum ScoutService {
         // #888 part B: applySweep, because this IS a single-source sweep and it must still reconcile its
         // own report. `apply` alone no longer reconciles, and using it here would make Carnegie silently
         // stop marking anything gone: nothing would fail, shows would just quietly linger forever.
-        var outcome = applySweep(
+        // #3884: the OFF THE ACTOR entry point, not `applySweep` itself. `runNative` is already async, so
+        // this costs the call nothing, and it is the one production path the 27 second freezes were
+        // measured on.
+        var outcome = await applySweepOffTheActor(
             events: usable, clients: clients, history: history, blocked: blocked,
             feed: FeedCheck(sourceId: sourceId,
                             baseline: health.baseline,
@@ -1011,10 +1014,13 @@ enum ScoutService {
         feed: FeedCheck,
         today: String = QueueModel.easternToday(),
         sourceIds: [String] = [],
+        // #3884: passed straight through to `apply`. See `applySweepOffTheActor` below.
+        preClassified: PreClassified? = nil,
         into context: ModelContext
     ) -> Outcome {
         var outcome = apply(events: events, clients: clients, history: history, blocked: blocked,
-                            feed: feed, today: today, sourceIds: sourceIds, into: context)
+                            feed: feed, today: today, sourceIds: sourceIds,
+                            preClassified: preClassified, into: context)
         if let report = outcome.report {
             // #3071: a reconcile handed an invented empty marks nothing gone and says nothing about it,
             // so a run that could not read its own shows looks exactly like one where none had dropped
@@ -1027,11 +1033,78 @@ enum ScoutService {
         return outcome
     }
 
+    // #3884: the scout's own entry point, and the whole of what that issue asked for.
+    //
+    // `applySweep` is `@MainActor` and synchronous, so one source's whole match pass was one
+    // uninterrupted block of main thread work with the window unable to draw. Measured over the 127
+    // second scout window of 2026-09-13 22:25:05 EDT: 97.4 seconds of recorded main thread stall inside
+    // it, 77% of the window, of which only 12.5% was inside any counted render pass. The longest single
+    // stall was 27.2 seconds.
+    //
+    // THE SPLIT, in the order it has to happen. The corpus read needs the `ModelContext` and stays here.
+    // The per event classify and match loop is pure over values and is awaited OFF this actor. The
+    // upserts need the context again and run here on the way back. That is exactly "only the upsert
+    // touches the ModelContext there", which is what #3884 asked for.
+    //
+    // WHAT THIS DOES NOT REMOVE, said plainly: the upsert half still runs on the main actor and still
+    // blocks for as long as it takes, and this does not make the scout faster. It makes the window able
+    // to draw during the half that does not need the store.
+    @discardableResult
+    static func applySweepOffTheActor(
+        events: [ExtractedEvent],
+        clients: [DownbeatClient],
+        history: [HistoryRecord],
+        blocked: BlockedCalendar,
+        feed: FeedCheck,
+        today: String = QueueModel.easternToday(),
+        sourceIds: [String] = [],
+        into context: ModelContext
+    ) async -> Outcome {
+        let corpus = venueBrandCorpus(in: context)
+        let classifiedPass = await ScoutClassify.offTheCallersActor(
+            events: events, clients: clients, history: history,
+            venueBrands: corpus.brands, sourceIds: sourceIds)
+        return applySweep(events: events, clients: clients, history: history, blocked: blocked,
+                          feed: feed, today: today, sourceIds: sourceIds,
+                          preClassified: PreClassified(result: classifiedPass,
+                                                       degradedReads: corpus.degradedReads),
+                          into: context)
+    }
+
     // Application of already-extracted events with injected data, so the full
     // classify -> match -> assemble -> upsert chain is testable without network/WebKit.
     //
     // #888 part B: this UPSERTS and hands back what the source swept (`Outcome.report`). It does NOT
     // reconcile: see applySweep above for why that is now the caller's decision.
+    // #3884: a classify pass run elsewhere, with the store reads it had to make to run it.
+    //
+    // The two travel TOGETHER rather than as two parameters, because they are one fact: this pass, and
+    // whether the corpus behind it was readable. Handed in separately, a caller could supply the result
+    // and forget the reads, and the run would report a clean corpus it never read (L544).
+    struct PreClassified: Equatable, Sendable {
+        var result: ScoutClassify.Result
+        var degradedReads: [StoreRead]
+    }
+
+    // #1702/#1719: which presenter names read as their building's own brand, judged over the store as it
+    // stands, plus Dan's own corrections. ONE implementation, because `apply` reads it when it classifies
+    // for itself and `applySweepOffTheActor` reads it before handing a pass in, and two readings of the
+    // same corpus is how the two would come to judge different brands (L263).
+    //
+    // #3071: a corpus built from an invented empty is a THINNER brand list, so a hall's own brand can
+    // raise a fuzzy match it should not. The run still proceeds, because the answer is degraded rather
+    // than wrong, but the failed read travels with it.
+    static func venueBrandCorpus(in context: ModelContext)
+        -> (brands: ProducerGate.VenueBrands, degradedReads: [StoreRead]) {
+        var degraded: [StoreRead] = []
+        let brandShows = readOrRecord(.venueBrandCorpus, into: &degraded,
+                                      { try context.fetch(FetchDescriptor<Prospect>()) }) ?? []
+        let brands = ProducerGate.VenueBrands(
+            shows: brandShows.map { ProducerGate.Show(presenter: $0.presenter, venue: $0.venue) },
+            overrides: ProducerOverrideEditing.overrides(in: context))
+        return (brands, degraded)
+    }
+
     @discardableResult
     static func apply(
         events: [ExtractedEvent],
@@ -1048,6 +1121,9 @@ enum ScoutService {
         // satisfy the reconcile's "every source that owns this show was asked", so it never accrues a
         // miss. That is exactly today's behavior for a non-Carnegie URL.
         sourceIds: [String] = [],
+        // #3884: a classify pass the caller already ran OFF the main actor, or nil to run it here. See
+        // Phase 1 below for why nil is an instruction and not an absent input.
+        preClassified: PreClassified? = nil,
         into context: ModelContext
     ) -> Outcome {
         // #1648: the instant this run scores against, derived from the day it was already given rather
@@ -1074,42 +1150,43 @@ enum ScoutService {
         // can raise a fuzzy match it should not. The run still proceeds (the answer is degraded, not
         // wrong, and throwing here would discard the classify work already done), but it says so.
         var degradedReads: [StoreRead] = []
-        let brandShows = readOrRecord(.venueBrandCorpus, into: &degradedReads,
-                                      { try context.fetch(FetchDescriptor<Prospect>()) }) ?? []
-        let venueBrands = ProducerGate.VenueBrands(
-            shows: brandShows.map { ProducerGate.Show(presenter: $0.presenter, venue: $0.venue) },
-            overrides: ProducerOverrideEditing.overrides(in: context))
         // Natural keys actually present in this run's feed, so the post-upsert reconcile can
         // tell which stored prospects dropped out (#133).
         var seenKeys = Set<String>()
 
         // Phase 1: classify each event and collect prospect decisions (no upserts yet).
-        var prospects: [AssembledProspect] = []
-        for e in events {
-            let c = EventClassifier.classify(e)
-            // #384: the venue is what aims a "don't want to shoot this" pass at ONE show rather than
-            // at the whole org.
-            let verdict = HistoryMatch.matchRelationship(name: e.title, presenter: e.presenter,
-                                                         venue: e.venue,
-                                                         clients: clients, history: history,
-                                                         venueBrands: venueBrands)
-            switch ProspectAssembler.decide(event: e, classification: c, verdict: verdict) {
-            case .skip(let reason):
-                skipped += 1
-                // Only a REFUSAL is reported. The other skip (unreachable) means something entirely
-                // different; a report where the lines do not all mean "somebody asked you to stop" is a
-                // report that has to be read carefully, which means it will not be read at all.
-                //
-                // #901: a blocked date is no longer a skip of any kind. It is imported and flagged, so it
-                // cannot reach this report by any route.
-                if reason == .suppressed {
-                    suppressedShows.append(Prospect.decodeHTMLEntities(e.title))
-                }
-            case .prospect(var p):
-                p.sourceIds = sourceIds        // #771: stamped here; `decide` stays pure and clockless
-                prospects.append(p)
-            }
+        //
+        // #3884 MOVED THE LOOP ITSELF into `ScoutClassify`, which is pure and can run off the main actor.
+        // The store reads that FEED it (the whole table fetch behind `venueBrands`, and the producer
+        // overrides beside it) stay above this line, on the main actor, because a `ModelContext` cannot
+        // leave it. `preClassified` is how the scout hands in a pass it has already run off the actor;
+        // nil means "classify it here", which is what every other caller does and what this function has
+        // always done. Nil is a real instruction rather than a missing value, and there is no input it
+        // stands in for (L168).
+        // The corpus read is LAZY, and that is not a tidy-up. `venueBrands` feeds this loop and nothing
+        // else in this function, so on the pre-classified path the caller has already read it and doing
+        // it again here would add a whole table fetch, measured at 158.8 ms over 1,238 rows, to the very
+        // main thread block this change exists to shorten.
+        // `classifiedPass`, not the obvious `classified`. The test-only-reachable scan matches on the
+        // bare IDENTIFIER, and `RunNightDrop` declares one called `classified` that only its tests name,
+        // so a local of that name here made that declaration read as reached by app code and turned its
+        // baseline entry stale. Seen: `everyBaselineEntryIsStillAFinding` went red on a file this change
+        // does not touch.
+        let classifiedPass: ScoutClassify.Result
+        if let preClassified {
+            classifiedPass = preClassified.result
+            // The caller's read, carried through, so a corpus it could not read still reaches Dan. Without
+            // this the pre-classified path would report a clean run over a degraded corpus (#3071, L98).
+            degradedReads.append(contentsOf: preClassified.degradedReads)
+        } else {
+            let corpus = venueBrandCorpus(in: context)
+            degradedReads.append(contentsOf: corpus.degradedReads)
+            classifiedPass = ScoutClassify.run(events: events, clients: clients, history: history,
+                                               venueBrands: corpus.brands, sourceIds: sourceIds)
         }
+        let prospects = classifiedPass.prospects
+        skipped += classifiedPass.skipped
+        suppressedShows.append(contentsOf: classifiedPass.suppressedOrgs)
 
         // Phase 2: collapse multi-night runs so only the representative night is upserted. Each row
         // carries its INDEX into `prospects` as its identity (#797), which is how a grouped run finds
