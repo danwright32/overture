@@ -15,6 +15,14 @@ import SwiftData
 // EVERY RULE IS OUTSIDE THE VIEW (#863): what the list holds is `StruckAddressListing`, putting one back
 // is `StruckAddressMutations`, and the words are `StruckAddressCopy`. The view draws.
 struct StruckAddressesView: View {
+    // #3859: this sheet has a `StallSurface` case of its own now, so a stall recorded while it is on
+    // screen is attributed to it. #3762's rule follows from that: the surface a stall is attributed to
+    // has to count its own rebuilds, or the record reads `passes: 0`, and `0` there says the surface did
+    // not rebuild rather than that nobody counted (L11).
+    //
+    // Read as an OPTIONAL, on the same footing as every other environment object here, so a missed
+    // injection is a pass nobody counted rather than a crash.
+    @Environment(FreezeWatch.self) private var freezeWatch: FreezeWatch?
     @Environment(\.modelContext) private var context
     @Environment(ActionFeedback.self) private var feedback
     // Bound, so putting one back redraws this sheet the instant the row is gone.
@@ -36,6 +44,9 @@ struct StruckAddressesView: View {
     }
 
     var body: some View {
+        // #3859: this surface counts its own rebuild. Bound to `_` rather than called as a statement
+        // because `body` is a ViewBuilder, which takes a declaration and not a bare void expression.
+        let _ = freezeWatch?.recordPass()
         // #3852: bound ONCE. `entries` is a computed property that maps the whole prospect store, and it
         // was read twice here, once to ask whether it was empty and once to draw it, so one question
         // walked the store twice. A computed property reads as a free field access at the call site and

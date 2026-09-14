@@ -12,6 +12,14 @@ import SwiftData
 // different claim and a false one. The sentence lives in DaysOffAttention, next to the rule that decides
 // whether to show it, rather than in this view where nothing could test it (#863).
 struct DaysOffView: View {
+    // #3859: this sheet has a `StallSurface` case of its own now, so a stall recorded while it is on
+    // screen is attributed to it. #3762's rule follows from that: the surface a stall is attributed to
+    // has to count its own rebuilds, or the record reads `passes: 0`, and `0` there says the surface did
+    // not rebuild rather than that nobody counted (L11).
+    //
+    // Read as an OPTIONAL, on the same footing as every other environment object here, so a missed
+    // injection is a pass nobody counted rather than a crash.
+    @Environment(FreezeWatch.self) private var freezeWatch: FreezeWatch?
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var context
     @Environment(ActionFeedback.self) private var feedback
@@ -45,6 +53,9 @@ struct DaysOffView: View {
     @State private var confirmUnsaved = false
 
     var body: some View {
+        // #3859: this surface counts its own rebuild. Bound to `_` rather than called as a statement
+        // because `body` is a ViewBuilder, which takes a declaration and not a bare void expression.
+        let _ = freezeWatch?.recordPass()
         VStack(alignment: .leading, spacing: 0) {
             header
             Divider().overlay(OVColor.line)
