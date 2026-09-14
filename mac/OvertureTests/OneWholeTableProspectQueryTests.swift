@@ -128,9 +128,52 @@ struct OneWholeTableProspectQueryTests {
                      "SourcesView(prospects: allProspects,",
                      "StruckAddressesView(prospects: allProspects)",
                      "OrganisationsView(prospects: allProspects,"] {
-            #expect(rootView.contains(call), Comment(rawValue:
+            // Bound to a Bool first, never comparing the file's TEXT: a failing expectation renders its
+            // operands, and a whole source file between the reader and the sentence explaining the
+            // failure is how a red run stops being readable (L445). This test file already says so about
+            // the loop above, and the first version of this loop did it anyway.
+            let handsItsRows = rootView.contains(call)
+            #expect(handsItsRows, Comment(rawValue:
                 "RootView no longer hands its own rows to \(call): the sheet is deriving from something "
                 + "other than the app's one live whole-table read"))
+        }
+
+        // #3871: and none of the ten declares a DEFAULT for the rows it receives.
+        //
+        // This was a comment on every one of them and enforced by nothing (L407). Measured, before it was
+        // written: changing `let prospects: [Prospect]` to `var prospects: [Prospect] = []` in
+        // FollowUpsView compiled and the whole suite stayed green. An empty default is not a small
+        // untidiness here: a caller that forgets the argument renders an empty sheet, and an empty sheet
+        // is exactly what an empty store looks like, so the failure is silent and total (L168, L67).
+        for name in ["QueueView.swift", "ArchiveView.swift",
+                     "OutcomePatternsView.swift", "WrittenOffBacklogSection.swift",
+                     "EmptyAnswerSection.swift", "ExperimentReportView.swift",
+                     "FollowUpsView.swift", "OrganisationsView.swift",
+                     "SourcesView.swift", "StruckAddressesView.swift"] {
+            let file = try #require(app.first { $0.name == name })
+            let declarations = file.text.components(separatedBy: .newlines)
+                .map { $0.trimmingCharacters(in: .whitespaces) }
+                .filter { !$0.hasPrefix("//") }
+                .filter { $0.contains("prospects: [Prospect]") || $0.contains("allProspects: [Prospect]") }
+                // A line carrying a brace is a COMPUTED property, never storage: QueueView derives
+                // `prospects` from `allProspects` that way, and counting it would make this file read as
+                // holding two declarations and check neither.
+                .filter { !$0.contains("{") }
+            // The positive control: a file where the declaration cannot be found at all would pass every
+            // claim below while checking nothing (L98).
+            #expect(declarations.count == 1, Comment(rawValue:
+                "\(name) holds \(declarations.count) declarations of its handed-down rows, not one, so "
+                + "this cannot say whether any of them carries a default"))
+            for declaration in declarations {
+                let carriesADefault = declaration.contains("=")
+                #expect(!carriesADefault, Comment(rawValue:
+                    "\(name) gives its handed-down rows a default. A caller that forgets them then "
+                    + "renders an empty screen that looks exactly like an empty store"))
+                let isALet = declaration.hasPrefix("let ")
+                #expect(isALet, Comment(rawValue:
+                    "\(name) declares its handed-down rows as something other than a `let`, so they can "
+                    + "be given a default or reassigned after the view is built"))
+            }
         }
 
         // The three inside OutcomePatternsView take theirs from the sheet, which takes its own from
@@ -139,7 +182,8 @@ struct OneWholeTableProspectQueryTests {
         for call in ["EmptyAnswerSection(prospects: prospects)",
                      "WrittenOffBacklogSection(prospects: prospects)",
                      "ExperimentReportView(prospects: prospects)"] {
-            #expect(patterns.contains(call), Comment(rawValue:
+            let passesItsRows = patterns.contains(call)
+            #expect(passesItsRows, Comment(rawValue:
                 "OutcomePatternsView no longer passes its rows to \(call)"))
         }
     }
