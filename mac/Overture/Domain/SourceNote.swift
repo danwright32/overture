@@ -46,7 +46,7 @@ enum SourceNote {
 
     private static func clean(_ s: String) -> String? {
         let trimmed = s
-            .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+            .collapsingWhitespaceRuns()
             .trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? nil : trimmed
     }

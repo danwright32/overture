@@ -450,8 +450,8 @@ enum ReplyDetection {
     }
 
     private static func stripHTML(_ html: String) -> String {
-        html.replacingOccurrences(of: "<[^>]+>", with: " ", options: .regularExpression)
-            .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+        html.strippingHTMLTags()
+            .collapsingWhitespaceRuns()
             .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }

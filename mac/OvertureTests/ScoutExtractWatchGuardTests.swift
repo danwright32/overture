@@ -17,7 +17,10 @@ struct ScoutExtractWatchGuardTests {
         // Only when something was actually queued: a run with nothing to read must not sit waiting on a
         // run that was never launched.
         #expect(rootView.contains("$0.state == .queuedForReading"))
-        #expect(rootView.contains("await watchScoutExtractRun()"))
+        // #3887: the CALL, not one rendering of it. This asserted `watchScoutExtractRun()` exactly, so
+        // adding the argument that says whose read it is turned it red while what it guards, that a scout
+        // with queued pages waits for them, was untouched (L103).
+        #expect(rootView.contains("await watchScoutExtractRun("))
     }
 
     @Test func whatTheRunReadIsActuallyIngested() {

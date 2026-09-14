@@ -1268,7 +1268,7 @@ final class Prospect {
 
     private static func normalizedForEditCompare(_ s: String?) -> String {
         (s ?? "")
-            .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+            .collapsingWhitespaceRuns()
             .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
@@ -1657,7 +1657,7 @@ final class Prospect {
                                    with: " ", options: .regularExpression)
         s = s.precomposedStringWithCanonicalMapping // NFC
         s = s.lowercased()
-        s = s.replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+        s = s.collapsingWhitespaceRuns()
         return s.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 

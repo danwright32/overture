@@ -35,7 +35,10 @@ struct ScoutReattachGuardTests {
     @Test func theReattachFollowsTheReadToCompletion() {
         // And it still ingests and reports what the run produced, via the same watch + finish path a
         // manual run uses, so a reattached run is not a dead end.
-        #expect(rootView.contains("await watchScoutExtractRun()"))
+        // #3887: the CALL, not one rendering of it (L103). Which read the reattach follows is asserted
+        // where that is the subject, in ScoutReadBelongsToThisRunGuardTests; here the claim is only that
+        // it follows one at all.
+        #expect(rootView.contains("await watchScoutExtractRun("))
         #expect(rootView.contains("finishScout("))
     }
 

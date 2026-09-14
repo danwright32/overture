@@ -8,6 +8,35 @@ import Foundation
 // logic's only locked spec, not a cross-language drift guard.
 
 enum GroupNameMatch {
+    // #3886: every pattern this matcher uses, compiled ONCE and held here.
+    //
+    // `replacingOccurrences(of:options:.regularExpression)` and `range(of:options:)` take the pattern as a
+    // STRING, so each one is parsed and compiled on every single call, and `stripProgramSubtitle` went
+    // further and built a fresh `NSRegularExpression` by hand each time. That is invisible at the call
+    // site and reads exactly like a constant.
+    //
+    // It matters here more than almost anywhere else in the app, because normalize() is the innermost
+    // thing in the scout's history check: one comparison normalizes both names, and one event is compared
+    // against every client and every history record. Measured on the installed Release build on
+    // 2026-09-13, all 15 samples inside `HistoryMatch.matchRelationship` ended in `normalize`, 5 of them
+    // in `NSRegularExpression` construction; a 1 ms sample of a render pass minutes later put 346 of
+    // 19,748 main thread samples in `NSRegularExpression.init`, reached through `ClientHorizon` and
+    // `EngagementLink`, both of which come here.
+    //
+    // ONE DEFINITION PER PATTERN, which is the other half of it: a pattern written at two call sites is
+    // two places the same rule can drift apart (L370). Only the patterns unique to name matching live
+    // here; the whitespace collapse and the non-alphanumeric strip are shared with every other fold in
+    // the app and are defined once, on CompiledPattern.
+    private enum Patterns {
+        static let presentedByPrefix = CompiledPattern(#"(?i)^\s*presented by\s+"#)
+        // The separators are written as ICU escapes rather than as the characters themselves, so this
+        // file holds no literal en or em dash for the style gate to catch. `\u2013` and `\u2014` are
+        // four-hex-digit ICU escapes, read by the regex engine rather than by Swift: inside a RAW string
+        // Swift passes the backslash through untouched, which is what makes this work and what would
+        // make the brace form (`\u{2013}`, a Swift escape) arrive at ICU as literal text.
+        static let presenterBeforeSubtitle = CompiledPattern(#"^(.*?)(?:\s[-\u2013\u2014]\s|:\s).+$"#)
+        static let presentedByLine = CompiledPattern(#"^(?i)presented by\s+"#)
+    }
     // Accents fold to their plain letters before anything else (#774). The strip below removes
     // everything outside a-z, so without this "Sinfónica" shreds into the junk tokens "sinf" and
     // "nica" and can never match itself, and an org with an accent in its name silently reads as a
@@ -30,11 +59,11 @@ enum GroupNameMatch {
     // shared, because those are all canonicalization and none of them can lose an identity.
     private static func normalize(_ name: String, strippingSubtitle: Bool) -> String {
         var s = orgLine(foldAccents(name))
-        s = s.replacingOccurrences(of: #"(?i)^\s*presented by\s+"#, with: "", options: .regularExpression)
+        s = Patterns.presentedByPrefix.replacingMatches(in: s, with: "")
         if strippingSubtitle { s = stripProgramSubtitle(s) }
         s = s.lowercased()
-        s = s.replacingOccurrences(of: #"[^a-z0-9\s]"#, with: " ", options: .regularExpression)
-        s = s.replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+        s = CompiledPattern.nonAlphanumericLowercase.replacingMatches(in: s, with: " ")
+        s = s.collapsingWhitespaceRuns()
         return s.trimmingCharacters(in: .whitespaces)
     }
 
@@ -43,12 +72,8 @@ enum GroupNameMatch {
     // so a generic one-word prefix (e.g. "Jazz - ...") isn't collapsed. Booking-sheet names
     // are "Presenter - Program"; the venue lists just the presenter, so this lets them match (#105).
     private static func stripProgramSubtitle(_ s: String) -> String {
-        let pattern = #"^(.*?)(?:\s[-–—]\s|:\s).+$"#
-        guard let re = try? NSRegularExpression(pattern: pattern),
-              let m = re.firstMatch(in: s, range: NSRange(s.startIndex..., in: s)),
-              m.numberOfRanges >= 2,
-              let g1 = Range(m.range(at: 1), in: s) else { return s }
-        let presenter = s[g1].trimmingCharacters(in: .whitespaces)
+        guard let captured = Patterns.presenterBeforeSubtitle.firstCaptureGroup(1, in: s) else { return s }
+        let presenter = captured.trimmingCharacters(in: .whitespaces)
         return presenter.split(whereSeparator: { $0.isWhitespace }).count >= 2 ? presenter : s
     }
 
@@ -58,9 +83,7 @@ enum GroupNameMatch {
     private static func orgLine(_ name: String) -> String {
         let lines = name.split(separator: "\n", omittingEmptySubsequences: false)
             .map { String($0).trimmingCharacters(in: .whitespaces) }
-        if let presenter = lines.first(where: {
-            $0.range(of: #"^(?i)presented by\s+"#, options: .regularExpression) != nil
-        }) {
+        if let presenter = lines.first(where: { Patterns.presentedByLine.matches($0) }) {
             return presenter
         }
         return lines.first ?? ""

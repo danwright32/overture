@@ -22,8 +22,31 @@ enum DetachedRunOutcome {
     // No `running` input: every real caller only asks this after its own isRunning() check has
     // already confirmed the run stopped (#472), so a `.running` outcome was dead code, never
     // reachable from anything but a test exercising the parameter directly.
-    static func phase(runStartedAt: Date?, resultsModifiedAt: Date?) -> DetachedRunPhase {
+    // #3887: `callerStartedAt` is WHOSE RUN IS IT, and it is the input this rule was missing.
+    //
+    // Everything else here compares the results file against the run MARKER, which answers "did the run
+    // that most recently started produce anything". It never asked whether that run belongs to the
+    // caller. A caller that follows a run which is not there returns at once and lands on the marker and
+    // results file of whatever ran last, however long ago.
+    //
+    // Measured 2026-09-13. Dan started a scout and answered the read budget with "Read none", so no read
+    // ran; the marker and `overture-scout-extract-results.json` both still carried the read of
+    // 2026-09-07. The scout followed the read anyway (sources were still queued), got `.producedResults`
+    // from a six day old file, and re-imported all of it, freezing the app for 34.2 s. Two 10 s samples
+    // inside that freeze put 8,485 of 8,498 main thread samples under the ingest.
+    //
+    // Passing nil is the unchanged rule and is the right answer for a caller REATTACHING to a run from a
+    // previous session, which by construction started before the caller did. Every other caller says when
+    // its own work began, so a marker older than that reads as `.idle`: nothing of this caller's was
+    // started, which is exactly what `.idle` already means.
+    //
+    // At-or-after rather than strictly after, because the scout reads the marker its own read just wrote
+    // and the two can land on the same instant; strict would throw away real reads.
+    static func phase(runStartedAt: Date?,
+                      resultsModifiedAt: Date?,
+                      callerStartedAt: Date? = nil) -> DetachedRunPhase {
         guard let started = runStartedAt else { return .idle }
+        if let callerStartedAt, started < callerStartedAt { return .idle }
         if let modified = resultsModifiedAt, modified >= started { return .producedResults }
         return .finishedEmpty
     }

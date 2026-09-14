@@ -2021,7 +2021,10 @@ struct RootView: View {
         RunDurationHistoryStore.record(sources: readingSourceCount, seconds: elapsed)
     }
 
-    private func watchScoutExtractRun() async -> ScoutReadResult {
+    // #3887: `callerStartedAt` is the moment the work that is following this read began, so a read that
+    // started before it cannot be mistaken for this one's. nil means "any read", which is what
+    // reattaching to a run from a previous session needs and what every other caller must not pass.
+    private func watchScoutExtractRun(callerStartedAt: Date?) async -> ScoutReadResult {
         while ScoutExtractService.isRunning(now: Date()) {
             try? await Task.sleep(nanoseconds: 3 * 1_000_000_000)
         }
@@ -2034,7 +2037,8 @@ struct RootView: View {
         }
         let started = ScoutExtractService.lastRunStartedAt
         let resultsMod = FileTimestamp.modifiedAt(ScoutExtractResultsDecoder.defaultURL)   // #2105
-        switch DetachedRunOutcome.phase(runStartedAt: started, resultsModifiedAt: resultsMod ?? nil) {
+        switch DetachedRunOutcome.phase(runStartedAt: started, resultsModifiedAt: resultsMod ?? nil,
+                                        callerStartedAt: callerStartedAt) {
         case .producedResults:
             // #1054: a read Dan cancelled is not imported here. The decision (ask, and with what count) is
             // the pure CancelledReadDisposition, so the rule stays testable rather than living in the view.
@@ -2395,7 +2399,10 @@ struct RootView: View {
         scoutGeneration += 1
         let gen = scoutGeneration   // this run's token; a Retry bumps it so an abandoned Task no-ops
         isScanning = true
-        scoutStartedAt = Date()
+        // #3887: kept in a local as well as in the published property, because the property is cleared
+        // the moment the native sweep ends and the read is followed after that.
+        let runBeganAt = Date()
+        scoutStartedAt = runBeganAt
         scoutSummary = nil
         scoutNativeSnapshot = nil
         scoutCancelRequested = false   // #1037: a fresh run starts un-cancelled
@@ -2475,7 +2482,11 @@ struct RootView: View {
                     readingStartedAt = ScoutExtractService.lastRunStartedAt ?? Date()
                     readingSourceCount = outcome.sources.filter { $0.state == .queuedForReading }.count
                     scoutNativeSnapshot = nil
-                    let read = await watchScoutExtractRun()
+                    // #3887: THIS scout's own start. Sources can be left queued with no read run at all
+                    // (Dan answering the read budget with "Read none" does exactly that), and without
+                    // this boundary the watcher returns at once and imports whatever the last read left,
+                    // however old.
+                    let read = await watchScoutExtractRun(callerStartedAt: runBeganAt)
                     guard gen == scoutGeneration else { return }
                     // #1427: the read's elapsed, captured before readingStartedAt is cleared, so a normal
                     // completion can record its pace.
@@ -2577,7 +2588,9 @@ struct RootView: View {
         // run's own live progress file still carries the total it set out to read.
         readingSourceCount = ScoutExtractProgressDecoder.loadCurrent()?.total ?? 0
         scoutSheetShown = true
-        let read = await watchScoutExtractRun()
+        // #3887: nil, deliberately. The run this is reattaching to started in a session that has ended,
+        // so it necessarily predates this call; a boundary here would refuse every reattach there is.
+        let read = await watchScoutExtractRun(callerStartedAt: nil)
         guard gen == scoutGeneration else { return }
         let readingElapsed = readingStartedAt.map { Date().timeIntervalSince($0) }
         readingStartedAt = nil

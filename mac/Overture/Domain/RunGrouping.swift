@@ -70,7 +70,7 @@ enum RunGrouping {
     private static func canon(_ s: String?) -> String {
         VenueNormalization.normalizeForKey(s ?? "")
             .lowercased()
-            .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+            .collapsingWhitespaceRuns()
             .trimmingCharacters(in: .whitespaces)
     }
 
