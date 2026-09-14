@@ -27,6 +27,46 @@ struct DetachedRunOutcomeTests {
         let stale = started.addingTimeInterval(-120)
         #expect(DetachedRunOutcome.phase(runStartedAt: started, resultsModifiedAt: stale) == .finishedEmpty)
     }
+
+    // #3887: whose run is it. Everything above compares the results file against the run MARKER, and
+    // says nothing about whether that marker belongs to the caller asking. On 2026-09-13 a scout was
+    // answered with "Read none", started no read at all, and the marker plus results file left by the
+    // read of 2026-09-07 answered `.producedResults`: six day old events were re-imported and the app
+    // froze for 34.2 s.
+    @Test func idleWhenTheRunMarkerPredatesTheCallerAskingAboutIt() {
+        let freshResults = started.addingTimeInterval(120)
+        // The same inputs that read as produced results above, now asked by a caller that began AFTER
+        // that run started. Nothing here belongs to it.
+        #expect(DetachedRunOutcome.phase(runStartedAt: started, resultsModifiedAt: freshResults,
+                                         callerStartedAt: started.addingTimeInterval(600)) == .idle)
+    }
+
+    @Test func readsTheRunWhenItStartedAfterTheCaller() {
+        let callerBegan = started.addingTimeInterval(-10)
+        let freshResults = started.addingTimeInterval(120)
+        #expect(DetachedRunOutcome.phase(runStartedAt: started, resultsModifiedAt: freshResults,
+                                         callerStartedAt: callerBegan) == .producedResults)
+        #expect(DetachedRunOutcome.phase(runStartedAt: started, resultsModifiedAt: nil,
+                                         callerStartedAt: callerBegan) == .finishedEmpty)
+    }
+
+    // A run that started at the very moment the caller did is the caller's own: the scout reads the
+    // marker it just caused to be written, and a strict comparison would throw away every real read.
+    @Test func aRunStartedAtTheSameInstantIsTheCallersOwn() {
+        #expect(DetachedRunOutcome.phase(runStartedAt: started,
+                                         resultsModifiedAt: started.addingTimeInterval(60),
+                                         callerStartedAt: started) == .producedResults)
+    }
+
+    // A caller that does not say when it began is asking the old question, and gets the old answer.
+    // `reattachScoutExtractRun` is that caller by design: at launch the run it means to pick up started
+    // in a session that has ended, so a boundary of "now" would refuse every one of them.
+    @Test func noCallerStartIsTheUnchangedRule() {
+        let freshResults = started.addingTimeInterval(120)
+        #expect(DetachedRunOutcome.phase(runStartedAt: started, resultsModifiedAt: freshResults) == .producedResults)
+        #expect(DetachedRunOutcome.phase(runStartedAt: started, resultsModifiedAt: freshResults,
+                                         callerStartedAt: nil) == .producedResults)
+    }
 }
 
 @Suite("Run log tail")
