@@ -15,6 +15,17 @@ import SwiftData
 // The organisations most likely to be judged WRONG lead (#1729), because the rest of the list is
 // Overture working correctly and a person reads the top of a list.
 struct OrganisationsView: View {
+    // #3871: the whole store, HANDED DOWN rather than queried again here.
+    //
+    // It was `@Query private var prospects: [Prospect]`, a bare descriptor identical to the one RootView
+    // already holds. Measured 2026-09-12 by #3764 on the live store, two identical bare descriptors held
+    // by two live views share NOTHING: the second costs 99.6% of the first, 158.8 ms against 159.5 ms
+    // over 1,238 rows, against an end to end store change of 350.7 ms. So this sheet used to add a whole
+    // table read to every store change for as long as it was open.
+    //
+    // NO DEFAULT, for the reason ArchiveView's carries: an empty default renders an empty sheet that
+    // looks exactly like an empty store (L168, L67).
+    let prospects: [Prospect]
     // #1794: where an entry leads. Handed in rather than decided here, because the destination is the
     // QUEUE, which this sheet cannot reach: RootView owns the deep-link channel the queue watches, and
     // routing through it is what keeps this one navigation path rather than a second filter (Dan's note,
@@ -26,7 +37,6 @@ struct OrganisationsView: View {
     @Environment(FreezeWatch.self) private var freezeWatch: FreezeWatch?
     // Bound, so a correction made on a row while this is open redraws it rather than showing a stale
     // verdict: the gate reads these two sets, so the listing must be rebuilt when either changes.
-    @Query private var prospects: [Prospect]
     @Query private var promoted: [PromotedProducer]
     @Query private var demoted: [DemotedHouse]
 

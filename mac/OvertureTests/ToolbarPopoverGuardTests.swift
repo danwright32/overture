@@ -133,7 +133,7 @@ struct ToolbarPopoverGuardTests {
                         Button("Follow-ups") { showFollowUps = true }
                     }
                 }
-                .sheet(isPresented: $showFollowUps) { FollowUpsView() }
+                .sheet(isPresented: $showFollowUps) { FollowUpsView(prospects: []) }
         }
         """
         #expect(Self.toolbarAnchoredPopovers(in: good).isEmpty)

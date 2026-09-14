@@ -171,7 +171,9 @@ struct SourcesViewWiringTests {
         #expect(rootView.contains("showSources = true"))          // a button sets it
         // #970 gave the sheet a `readOne:` argument, so this matches the presentation rather than an
         // exact empty-argument call.
-        #expect(rootView.contains("$showSources) { SourcesView("))   // and a sheet presents it
+        // #3871 gave it a `prospects:` argument too, and the presentation now wraps onto its own line,
+        // so this reads the CODE rather than one rendering of it (L103).
+        #expect(SourceGuardHelper.containsCode("$showSources) { SourcesView(", in: rootView))
     }
 
     // A @Query, not a snapshot passed in: the sheet must reflect what the scout wrote on this run, not

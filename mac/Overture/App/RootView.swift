@@ -1284,10 +1284,10 @@ struct RootView: View {
                             initialHighlightRecipientId: archiveJumpRecipientId,
                             initialQuery: archiveOpeningQuery, onConnectGmail: connectGmail)
             }
-            .sheet(isPresented: $showPatterns) { OutcomePatternsView() }
+            .sheet(isPresented: $showPatterns) { OutcomePatternsView(prospects: allProspects) }
             .sheet(isPresented: $showInquiryIntake) { InquiryIntakeSheet() }
             .sheet(isPresented: $showFollowUps) {
-                FollowUpsView(onOpenInArchive: { key, recipientId in
+                FollowUpsView(prospects: allProspects, onOpenInArchive: { key, recipientId in
                     showFollowUps = false
                     openArchive(key: key, recipientId: recipientId)
                 }, onConnectGmail: connectGmail)
@@ -1310,18 +1310,20 @@ struct RootView: View {
             // #2760: which slot the one sheet is showing is RunTakeover's decision, and dismissing it
             // closes only that run's takeover.
             .sheet(isPresented: runTakeoverBinding) { prepProgressModal }
-            .sheet(isPresented: $showSources) { SourcesView(readOne: { runScout(only: [$0.sourceId]) }) }
+            .sheet(isPresented: $showSources) {
+                SourcesView(prospects: allProspects, readOne: { runScout(only: [$0.sourceId]) })
+            }
             .sheet(isPresented: $showDaysOff) { DaysOffView() }
             .sheet(isPresented: $showOmniFocusSettings) { OmniFocusSettingsView() }
             .sheet(isPresented: $showExcludedTowns) { ExcludedTownsView() }
-            .sheet(isPresented: $showStruckAddresses) { StruckAddressesView() }
+            .sheet(isPresented: $showStruckAddresses) { StruckAddressesView(prospects: allProspects) }
             // #1794: tapping an entry closes the sheet and filters the queue to that organisation's
             // shows. Through the SAME channel the away-alert leads path uses (`deepLinkedKeys`), never a
             // second filter mechanism, which is what Dan's note asked for. The request carries its own
             // identity (#1927), so tapping one organisation, coming back and tapping it again works: a
             // channel carrying the destination would read the second tap as no change at all.
             .sheet(isPresented: $showOrganisations) {
-                OrganisationsView(onShowShows: { entry in
+                OrganisationsView(prospects: allProspects, onShowShows: { entry in
                     let keys = OrganisationListing.naturalKeys(forOrganisation: entry.key,
                                                                in: nonDismissedProspects)
                     // An entry covering nothing would close the sheet onto an empty focused list, which

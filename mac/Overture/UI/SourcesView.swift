@@ -9,6 +9,17 @@ import SwiftData
 // broken source reading as an org that asked him to stop. SourceGrade is what decides which section a
 // row lands in, and it is a tested domain rule, so this view has no logic of its own to get wrong.
 struct SourcesView: View {
+    // #3871: the whole store, HANDED DOWN rather than queried again here.
+    //
+    // It was `@Query private var prospects: [Prospect]`, a bare descriptor identical to the one RootView
+    // already holds. Measured 2026-09-12 by #3764 on the live store, two identical bare descriptors held
+    // by two live views share NOTHING: the second costs 99.6% of the first, 158.8 ms against 159.5 ms
+    // over 1,238 rows, against an end to end store change of 350.7 ms. So this sheet used to add a whole
+    // table read to every store change for as long as it was open.
+    //
+    // NO DEFAULT, for the reason ArchiveView's carries: an empty default renders an empty sheet that
+    // looks exactly like an empty store (L168, L67).
+    let prospects: [Prospect]
     // #970: read ONE source now. Handed in rather than reached for, because starting a detached run is
     // RootView's job (it owns the live-run state and the one-at-a-time guard), and a view that launched
     // its own run would be a second place that could start one.
@@ -27,7 +38,6 @@ struct SourcesView: View {
     @Query(sort: \WatchedSource.orgName) private var sources: [WatchedSource]
     // #794: read to compute each source's lifetime yield (found/kept/sent/booked). The tally and its
     // sentence both live in SourceYield, a tested pure function, so this view has no counting of its own.
-    @Query private var prospects: [Prospect]
 
     // #802: the sheet is where the watchlist is MANAGED, because it was previously the only place it
     // could be seen and nowhere it could be changed: a calendar could only join by pasting a lead, and

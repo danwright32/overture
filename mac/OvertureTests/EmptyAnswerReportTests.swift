@@ -135,7 +135,7 @@ struct EmptyAnswerReportTests {
     @Test func theanalyticsSheetRendersTheSection() {
         let source = SourceGuardHelper.source("Overture/UI/OutcomePatternsView.swift")
         #expect(!source.isEmpty)
-        #expect(SourceGuardHelper.containsCode("EmptyAnswerSection()", in: source),
+        #expect(SourceGuardHelper.containsCode("EmptyAnswerSection(prospects:", in: source),
                 "the empty answer counts are built and no screen shows them (#2989)")
     }
 

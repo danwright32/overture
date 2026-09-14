@@ -91,10 +91,15 @@ struct FollowUpsListRendersTests {
         return nil
     }
 
+    // #3871: the sheet receives its rows, so this harness plays RootView's part through the one shared
+    // stand-in rather than spelling the query out again here. A harness that spells it differently from
+    // the app is a harness measuring something else.
     private func sheet(_ container: ModelContainer) -> some View {
-        FollowUpsView(gmailConnectedOverride: true, replyRunAliveOverride: false)
-            .modelContainer(container)
-            .environment(ActionFeedback())
+        RowsFromStore { (rows: [Prospect]) in
+            FollowUpsView(prospects: rows, gmailConnectedOverride: true, replyRunAliveOverride: false)
+        }
+        .modelContainer(container)
+        .environment(ActionFeedback())
     }
 
     // The state this suite exists for: there IS work due, so the sheet lays out a scrolling list.
