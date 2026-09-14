@@ -161,11 +161,17 @@ final class TheFreezeLogIsBoundedWhileTheAppRunsTests {
             "every repeated sentence is suppressed, not only the two that carry no record identity. "
             + "96% of the records in the live log render a sentence some other record also renders, so "
             + "this silently drops most real freeze notices (#3808)"))
-        let namesTheIdentitylessOnes = body.contains("FreezeNoticeCopy.watchdogDidNotRun")
-            && body.contains("freezeWatch.writesThatFailed > 0")
+        // `containsCode`, which STRIPS COMMENTS, not a bare `contains`. Written first with `contains`, and
+        // the mutation that proves this assertion (replacing the condition with `true`, which is the
+        // defect above reintroduced) left `// was: message == FreezeNoticeCopy.watchdogDidNotRun` behind
+        // and the test passed on that comment. A code matcher that reads prose fires on its own
+        // documentation, and here it did the opposite and stayed quiet on its own defect (L103, L135).
+        let namesTheIdentitylessOnes =
+            SourceGuardHelper.containsCode("message == FreezeNoticeCopy.watchdogDidNotRun", in: body)
+            && SourceGuardHelper.containsCode("freezeWatch.writesThatFailed > 0", in: body)
         #expect(namesTheIdentitylessOnes, Comment(rawValue:
             "the suppression does not say WHICH sentences carry no record identity, so it cannot be "
-            + "limited to them"))
+            + "limited to them, and every repeated freeze sentence is swallowed"))
         // Remembered only when the notice actually LANDED. Remembering a refused write would silence the
         // sentence for the rest of the session having never shown it (L98).
         let remembersOnlyWhatLanded = SourceGuardHelper.containsCode(
