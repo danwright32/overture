@@ -146,6 +146,28 @@ out="$("${READER}" --log "${WORK}/untimed/log.ndjson" 2>&1)"; status=$?
 assert_contains "an untimed stall is named as untimed" "${out}" "carry no pass duration"
 assert_not_contains "and is not read as a pass that took no time" "${out}" "do not account"
 
+# 12. #3859: the two surface vocabularies are the same file, and a distribution that adds them together
+#     is two populations in one number. The stamp is `surfaceVocabulary`, absent on every record written
+#     before it shipped, so the reading has to say which half it is looking at (L216).
+mkdir -p "${WORK}/vocab"
+record 16.73 1 0.2 > "${WORK}/vocab/log.ndjson"
+out="$("${READER}" --log "${WORK}/vocab/log.ndjson" 2>&1)"
+assert_contains "a log of only pre-#3859 records says every queue is the mixed population" \
+  "${out}" "Every record here predates #3859"
+assert_contains "and counts them" "${out}" "1 record(s) written before #3859, 0 after"
+
+# The mixed case, which is what Dan's own log will be for weeks after this ships.
+mkdir -p "${WORK}/mixed"
+record 16.73 1 0.2 > "${WORK}/mixed/log.ndjson"
+printf '{"session":"s","sequence":2,"at":"2026-09-14T17:47:37Z","seconds":9.1,"surface":"patterns","load":"baseline","loadAverage":3.7,"surfaceVocabulary":14,"passes":1,"passSeconds":0.2}\n' \
+  >> "${WORK}/mixed/log.ndjson"
+out="$("${READER}" --log "${WORK}/mixed/log.ndjson" 2>&1)"
+assert_contains "a mixed log counts both halves" "${out}" "1 record(s) written before #3859, 1 after"
+assert_contains "and refuses to have them added together" "${out}" "Do not add the two counts together"
+assert_not_contains "and does not claim the whole file predates the change" \
+  "${out}" "Every record here predates"
+assert_contains "and a sheet that used to read as the queue now names itself" "${out}" "patterns"
+
 if [ "${FAILURES}" -eq 0 ]; then
   echo "what-froze-the-queue.test.sh: all passed"
 else

@@ -169,6 +169,16 @@ enum FreezeNoticeCopy {
         case .sourcesSheet: return "The sources sheet was on screen."
         case .organisations: return "The organisations list was on screen."
         case .settings: return "Settings was on screen."
+        // #3859: the seven sheets that used to be recorded as the queue. Each names the sheet in the
+        // words its own heading uses, so the sentence names something Dan can point at rather than a
+        // case name (L399).
+        case .patterns: return "The what converts report was on screen."
+        case .struckAddresses: return "The list of addresses you removed was on screen."
+        case .daysOff: return "The days off sheet was on screen."
+        case .excludedTowns: return "The skipped towns sheet was on screen."
+        case .voiceGuidance: return "The voice guidance sheet was on screen."
+        case .inquiryIntake: return "The inquiry form was on screen."
+        case .prepSelection: return "The picker for which kept shows to prep was on screen."
         case .notRecorded: return "Nothing recorded which screen was open."
         }
     }

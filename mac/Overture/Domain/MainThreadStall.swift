@@ -35,10 +35,46 @@ enum StallSurface: String, Codable, CaseIterable, Sendable {
     case sourcesSheet
     case organisations
     case settings
+    // #3859: the seven sheets that used to have no case, so a stall while any of them was on screen was
+    // recorded as `queue`.
+    //
+    // WHY THEY ARE SEVEN CASES AND NOT ONE `otherSheet`. The point of the field is that a reading of the
+    // distribution can say which surface the time went to, and a shared case reproduces the same mixed
+    // population one level down: the next person reading it would have to ask which sheet `otherSheet`
+    // meant and have nothing to answer with (L11, L216). `patterns` in particular is not a cheap panel:
+    // until #3871 it held four live whole-table prospect queries at once counting the queue's.
+    //
+    // THE PREVIOUS BEHAVIOUR WAS DELIBERATE and is being overturned with a reason, not by oversight.
+    // `presentedSurface`'s header argued that an unknown sheet leaves the answer as whatever is
+    // underneath it, "a true statement about a real surface rather than a wrong one". That was defensible
+    // while the field was read one record at a time. It stopped being defensible when milestone #80 began
+    // reading the DISTRIBUTION: a `queue` count that is the queue OR any of seven sheets over it is two
+    // populations in one number and no reading taken from it can say which (L542, L216).
+    case patterns
+    case struckAddresses
+    case daysOff
+    case excludedTowns
+    case voiceGuidance
+    case inquiryIntake
+    case prepSelection
     // #3435: the fourth state, and it has its own wording wherever it is reported. The surface is stamped
     // by the MAIN thread and read by the watchdog, so a stall recorded before anything ever stamped it,
     // or by a build where the stamping was removed, has no surface rather than a wrong one (L11, L98).
     case notRecorded
+
+    // #3859: how many surfaces the build that wrote a record could name.
+    //
+    // This is what keeps the 1,562 `queue` records already on Dan's Mac READABLE rather than silently
+    // re-defined. Adding the seven cases changes what `queue` counts, so a record written before this
+    // shipped and one written after are not the same measurement, and nothing on the record said which
+    // (L683). A reader can now tell them apart: `nil` is a record from a build that could name six
+    // surfaces plus `notRecorded`, so its `queue` is the mixed population; a number is the size of the
+    // vocabulary that record's writer had.
+    //
+    // DERIVED from `allCases` rather than written down, so it cannot fall behind the enum it describes
+    // (L41). It is a COUNT rather than a version number for the same reason: a version is a second thing
+    // to remember to bump, and the count answers the only question a reader has.
+    static var vocabularySize: Int { allCases.count }
 }
 
 // #3442: what else this Mac was doing when the stall happened.
@@ -99,6 +135,10 @@ struct StallRecord: Codable, Equatable, Sendable {
     // "elevated" cannot be re-examined against a different line, which is the shape #3464 had to go back
     // and fix for the freeze tool's own threshold (L316, L107).
     let loadAverage: Double?
+    // #3859: how many surfaces the build that wrote this record could name, or nothing where it was
+    // written before that was recorded. See `StallSurface.vocabularySize` for why a reading of the
+    // distribution needs it.
+    let surfaceVocabulary: Int?
     // #3760: how many render passes the main thread ran while this stall lasted.
     //
     // THREE VALUES, and `nil` is never folded into `0`. `nil` is UNMEASURED: no pass has ever been
@@ -160,6 +200,11 @@ struct StallRecord: Codable, Equatable, Sendable {
         self.surface = surface
         self.load = load
         self.loadAverage = loadAverage
+        // #3859: DERIVED here, never a parameter. A caller that had to pass it could pass a stale number,
+        // and the one value that would read as "correct but wrong" is a count from a build with a
+        // different vocabulary. There is nothing for a call site to get wrong because there is nothing to
+        // pass (L41, L168).
+        self.surfaceVocabulary = StallSurface.vocabularySize
         self.passes = passes
         self.passSeconds = passSeconds
         self.windows = windows
@@ -174,9 +219,22 @@ struct StallRecord: Codable, Equatable, Sendable {
         sequence = try c.decode(Int.self, forKey: .sequence)
         at = try c.decode(Date.self, forKey: .at)
         seconds = try c.decode(Double.self, forKey: .seconds)
-        surface = try c.decode(StallSurface.self, forKey: .surface)
-        load = try c.decode(MachineLoad.self, forKey: .load)
+        // #3859: THE SAME RULE the windows field below records, applied to the two enum fields that were
+        // still decoded directly. Decoding an enum rejects a spelling it does not know by throwing, which
+        // fails the WHOLE record rather than one field, and #3859 is the change that makes that bite: it
+        // adds seven surfaces, so every record this build writes about one of them is unreadable to any
+        // build that predates it, and the next case added does the same to this one. A rule already fixed
+        // for one field and left on its siblings is the defect, not the instance (L30, L255).
+        //
+        // An unrecognised surface folds into `.notRecorded`, whose documented meaning is exactly this
+        // reader having no surface rather than a wrong one. An unrecognised load folds into `.unmeasured`,
+        // whose meaning is the reading could not be taken. Neither invents an answer (L11).
+        let surfaceSpelling = try c.decodeIfPresent(String.self, forKey: .surface)
+        surface = surfaceSpelling.flatMap(StallSurface.init(rawValue:)) ?? .notRecorded
+        let loadSpelling = try c.decodeIfPresent(String.self, forKey: .load)
+        load = loadSpelling.flatMap(MachineLoad.init(rawValue:)) ?? .unmeasured
         loadAverage = try c.decodeIfPresent(Double.self, forKey: .loadAverage)
+        surfaceVocabulary = try c.decodeIfPresent(Int.self, forKey: .surfaceVocabulary)
         passes = try c.decodeIfPresent(Int.self, forKey: .passes)
         passSeconds = try c.decodeIfPresent(Double.self, forKey: .passSeconds)
         // Decoded as a STRING and mapped, never as the enum directly. `decodeIfPresent` on an enum THROWS on

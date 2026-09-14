@@ -120,6 +120,25 @@ print(f"  read from: {', '.join(sources)}")
 print("  the count covers one thing: it counts QueueView body evaluations. The @Query fetch that")
 print("  feeds them (#3750), the surfaces that bump nothing (#3762) and every main thread job that")
 print("  is not a render pass are all outside it, and all of them read as zero.")
+
+# #3859: what a `queue` record MEANS depends on the build that wrote it, and the two are in the same file.
+#
+# Before #3859 seven of the twelve sheets had no StallSurface case and fell through to `queue`, so a
+# `queue` record from such a build is the queue OR any of those seven. Records written after it are the
+# queue alone. Said on every reading rather than only when both are present, because the mixed half is
+# the larger one today and a distribution quoted without this line is two populations in one number
+# (L216, L11). The stamp is the record's own `surfaceVocabulary`, absent on every older record.
+_old_vocabulary = [r for r in rows if r.get("surfaceVocabulary") is None]
+_new_vocabulary = [r for r in rows if r.get("surfaceVocabulary") is not None]
+print()
+print("  surface vocabulary: {} record(s) written before #3859, {} after.".format(
+    len(_old_vocabulary), len(_new_vocabulary)))
+if _old_vocabulary and _new_vocabulary:
+    print("  A `queue` in the first group is the queue OR any of seven sheets that had no case of their")
+    print("  own. A `queue` in the second is the queue. Do not add the two counts together.")
+elif _old_vocabulary:
+    print("  Every record here predates #3859, so every `queue` is the queue OR any of seven sheets over")
+    print("  it. Nothing in this file can say which.")
 print()
 print("  when                  seconds  passes  in passes  surface        load")
 for r in counted[:25]:

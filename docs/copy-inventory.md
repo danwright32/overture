@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1558 sentences**.
+Every sentence Overture can say to Dan: **1565 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -14,7 +14,7 @@ What is not, and why:
   sentences under tokens nobody reads.
 - **Nothing, if it is written as two literals joined with `+`.** Those ARE joined here, into the
   one sentence the running app says (#3155). What is still only part of what Dan reads is a
-  sentence carrying a VALUE: 562 of the 1558 below hold a
+  sentence carrying a VALUE: 562 of the 1565 below hold a
   `\(...)` where a number or a name goes, so what is printed is the template. They are counted
   here rather than listed again, because the hole is visible in the line itself; what was missing
   was any statement of how much of this document is templates.
@@ -2247,6 +2247,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/DaysOffView.swift`
 "The days Overture won't pitch you for: your booked shoots, and the days you block."
     `Domain/DaysOffAttention.swift`
+"The days off sheet was on screen."
+    `Domain/FreezeReport.swift`
 "The details are in run-boundary-violation.log, in the same folder as the store."
     `Domain/RunBoundaryViolations.swift`
 "The email bounced"
@@ -2257,12 +2259,16 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/SendConfirmSheet.swift`
 "The file is there but Overture could not make sense of it, so nothing in the queue is known to be a free night and the scout cannot keep clear of your bookings. Re-export it from Downbeat, then re-read it here."
     `Domain/AppNotice.swift`
+"The inquiry form was on screen."
+    `Domain/FreezeReport.swift`
 "The installer could not reach GitHub to check whether this build's code had been merged."
     `Domain/BuildFreshnessPanel.swift`
 "The last day is before the first day."
     `Domain/DayOff.swift`
 "The last follow-up sync failed. Tap Retry sync to try again."
     `Integration/OmniFocusUserNotifier.swift`
+"The list of addresses you removed was on screen."
+    `Domain/FreezeReport.swift`
 "The lookups already under way are finishing, so this takes a moment. Their answers will still be saved."
     `Domain/Reachability.swift`
 "The only listing for this one is a social page, which sits behind a login, so there's no way in from there. You can still keep it and add a contact by hand. This is a heads up so you don't dismiss a reachable show in its place."
@@ -2281,6 +2287,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/SourceFixConfirmActions.swift`
 "The pages that changed couldn't be handed off to be read (\(error)). They'll be tried again on the next scout."
     `Integration/ScoutService.swift`
+"The picker for which kept shows to prep was on screen."
+    `Domain/FreezeReport.swift`
 "The pitch to \(first.email) for \(first.show) bounced, so nobody ever read it."
     `Domain/AppNotice.swift`
 "The queue was on screen."
@@ -2331,6 +2339,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/ActionFeedback.swift`
 "The show's status, read from its contacts. Mark a contact below to change it."
     `UI/DraftReviewView.swift`
+"The skipped towns sheet was on screen."
+    `Domain/FreezeReport.swift`
 "The sources sheet was on screen."
     `Domain/FreezeReport.swift`
 "The subject line ends in punctuation: a subject is a label, not a sentence"
@@ -2339,6 +2349,10 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/UpdateAttempt.swift`
 "The update stopped without saying why. Ask Claude to look."
     `Domain/UpdateAttempt.swift`
+"The voice guidance sheet was on screen."
+    `Domain/FreezeReport.swift`
+"The what converts report was on screen."
+    `Domain/FreezeReport.swift`
 "Their calendar, not one show: a single show's page never changes again, so watching it would watch nothing."
     `UI/SourcesView.swift`
 "Their email (optional)"

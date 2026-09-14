@@ -333,10 +333,29 @@ struct RootView: View {
     // #3435 Phase 2e: which surface is on screen, as a closed enum case and never a name.
     //
     // Ordered so the TOPMOST thing wins, which is what "the surface on screen" means to somebody who has
-    // just watched the app stop answering. A sheet this does not know about leaves the answer as whatever
-    // is underneath it, which is a true statement about a real surface rather than a wrong one.
+    // just watched the app stop answering.
+    //
+    // #3859: EVERY sheet flag this view declares is named here, and that is a reversal of what this
+    // header used to say. It argued that a sheet with no case leaves the answer as whatever is underneath
+    // it, "a true statement about a real surface rather than a wrong one", which was defensible while the
+    // field was read one record at a time. Seven of the twelve flags fell through to `.queue` under that
+    // rule, and milestone #80 reads the DISTRIBUTION of this field: a `queue` count that is the queue OR
+    // any of seven sheets over it is two populations in one number (L216). The consequence is recorded on
+    // `StallSurface` itself now rather than only here, because a rule stated in one file's header is a
+    // rule nobody reading the enum can see.
+    //
+    // `EveryPresentedSheetHasASurfaceTests` derives the flag list from this file's own source and fails
+    // when one is declared and not named here, so the completeness is checked rather than remembered
+    // (L96).
     private var presentedSurface: StallSurface {
         if showOmniFocusSettings { return .settings }
+        if showPrepSelection { return .prepSelection }
+        if showInquiryIntake { return .inquiryIntake }
+        if showVoiceGuidance { return .voiceGuidance }
+        if showExcludedTowns { return .excludedTowns }
+        if showDaysOff { return .daysOff }
+        if showStruckAddresses { return .struckAddresses }
+        if showPatterns { return .patterns }
         if showSources { return .sourcesSheet }
         if showOrganisations { return .organisations }
         if showFollowUps { return .followUps }
