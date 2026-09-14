@@ -62,8 +62,8 @@ enum TicketLink {
             let href = ns.substring(with: m.range(at: 1))
             guard let url = URL(string: href, relativeTo: base)?.absoluteURL else { return nil }
             let inner = ns.substring(with: m.range(at: 2))
-                .replacingOccurrences(of: "<[^>]+>", with: " ", options: .regularExpression)
-                .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+                .strippingHTMLTags()
+                .collapsingWhitespaceRuns()
                 .trimmingCharacters(in: .whitespacesAndNewlines)
             return Anchor(text: inner, url: url)
         }

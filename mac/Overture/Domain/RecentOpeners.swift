@@ -105,7 +105,7 @@ enum RecentOpenersBuilder {
     }
 
     private static func normalize(_ s: String) -> String {
-        s.replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+        s.collapsingWhitespaceRuns()
             .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }

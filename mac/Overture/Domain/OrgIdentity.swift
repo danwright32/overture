@@ -87,7 +87,7 @@ enum OrgIdentity {
 
     private static func clean(_ s: String) -> String {
         s.replacingOccurrences(of: "&amp;", with: "&")
-            .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+            .collapsingWhitespaceRuns()
             .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
