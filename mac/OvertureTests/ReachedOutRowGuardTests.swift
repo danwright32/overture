@@ -50,10 +50,16 @@ struct ReachedOutRowGuardTests {
     // derivation, which is the defect #1774, #1922 and #1923 each fought.
     @Test func theReplyPanelIsASheetAndOwnsItsOwnText() throws {
         let queueView = SourceGuardHelper.source("Overture/UI/QueueView.swift")
+        let sheets = SourceGuardHelper.source("Overture/UI/QueueSheets.swift")
         let panel = SourceGuardHelper.source("Overture/UI/ReplySheet.swift")
-        #expect(queueView.contains(".sheet(item: $answeringReply)"))
+        // #3658 Phase 8: presented by `QueueSheetHost` rather than by `QueueView`, which is one level
+        // FURTHER from the derivation than this test was written to require, so the claim is unchanged
+        // and better satisfied. The point stands: it is a sheet, and the text is not the queue's state.
+        #expect(sheets.contains(".sheet(item: $sheets.answeringReply)"))
         #expect(!queueView.contains("@State private var replyPanelBody"),
                 "the reply text must live in the panel, never on QueueView (#2128).")
+        #expect(!sheets.contains("@State private var replyPanelBody"),
+                "the reply text must live in the panel, never on the sheet host either (#2128).")
         #expect(panel.contains("@State private var body_"),
                 "ReplySheet must own the text it is composing (#2128, #2145).")
     }

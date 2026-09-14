@@ -362,10 +362,29 @@ enum ActionAck {
     // more, so both are gone rather than left as copy for a state the app cannot be in (L29, L132).
 
 
-    // #2031: these contacts do not read the same letter, so one email cannot carry both without the app
-    // choosing whose words everybody gets. It says what to do about it, since either option is his.
-    static let jointSendMixedLetters =
-        "These contacts have different drafts, so one shared email would send one of them to everyone. Send them separately, or make the drafts match"
+    // #1778: the row's own show is not in the queue any more, so the control Dan just pressed had
+    // nothing to act on. Said rather than swallowed: fifty row actions used to return silently here,
+    // and a press that changes nothing and explains nothing reads exactly like a broken control (L11).
+    //
+    // It names the show where the caller knows it, because a message about "that show" on a screen of
+    // shows is a message he cannot act on (L80).
+    //
+    // It offers NO remedy, deliberately. The obvious one ("reopen the queue and try again") is an
+    // instruction nobody has verified changes the state he is stuck in, and a remedy that does not is
+    // worse than none: he follows it, nothing happens, and the message has cost him twice (L111). What
+    // it does say is the part that IS known and that stops him pressing again: the row is stale.
+    //
+    // NOT named for the queue, deliberately. `QueueShowableSurfacesAreOnePredicateTests` reads a
+    // declaration's NAME to find a surface deciding queue membership for itself, and any name pairing
+    // "queue" with "shown" is one: `showNoLongerInTheQueue` lowercases to contain both and was flagged
+    // as a fourth surface. The guard was right to ask, and the answer is a name that does not claim to
+    // answer queue visibility, rather than an exemption (L96).
+    static func couldNotFindShow(org: String?) -> String {
+        guard let org, !org.isEmpty else {
+            return "That show is no longer in the queue, so nothing was changed. The row you pressed is out of date"
+        }
+        return "\(org) is no longer in the queue, so nothing was changed. The row you pressed is out of date"
+    }
 
     // #2544: each of these refusals exists in TWO renderings, and what separates them is a clause that is
     // only true once there has been a press. The reason is what Save draft is refusing, shown beside the
@@ -378,7 +397,10 @@ enum ActionAck {
     // fragment plus an interpolation is not a sentence anybody can read cold. So they are two literals,
     // and `ManualPrepSaveReasonTests` holds them together by asserting each acknowledgement is exactly its
     // reason plus this clause, for every refusal there is.
-    static let manualPrepNeedsRecipientReason = "Add an address to send to"
+    // #2896: what to DO, and deliberately not what the field accepts. The note under the field already
+    // names both kinds, and this sentence sits beside the disabled Save button at the same moment, so
+    // repeating them here would be two lines where the second tells him nothing the first did not (#843).
+    static let manualPrepNeedsRecipientReason = "Add someone to write to"
     static let manualPrepNeedsBodyReason = "Write the email before saving it"
     static let manualPrepNeedsSubjectReason = "Add a subject line"
 
@@ -392,18 +414,21 @@ enum ActionAck {
     // he is still typing into. The two share the JUDGMENT, which is the half that must not drift.
     static let manualPrepGreetingHint = "Emails are held at send unless the body opens with a greeting"
 
-    static let manualPrepNeedsRecipient = "Add an address to send to. Nothing was saved"
+    static let manualPrepNeedsRecipient = "Add someone to write to. Nothing was saved"
     static let manualPrepNeedsBody = "Write the email before saving it. Nothing was saved"
     static let manualPrepNeedsSubject = "Add a subject line. Nothing was saved"
 
     // #2023: names the piece that cannot be read rather than refusing the whole field, because the field
     // may hold several people and only one of them is wrong.
-    static func manualPrepBadAddressReason(_ piece: String) -> String {
-        "\(piece) is not an email address"
+    // #2896: names BOTH kinds, because the field takes a route now. The old sentence ("is not an email
+    // address") sent Dan looking for the one thing the shows this sheet is reached from do not have,
+    // which is the same correction #2629 made to Add contact's own refusal.
+    static func manualPrepBadRouteReason(_ piece: String) -> String {
+        "\(piece) is not an email address or a link"
     }
 
-    static func manualPrepBadAddress(_ piece: String) -> String {
-        "\(piece) is not an email address. Nothing was saved"
+    static func manualPrepBadRoute(_ piece: String) -> String {
+        "\(piece) is not an email address or a link. Nothing was saved"
     }
 
     // A gap between two separators has no address in it to name, so it says what it is instead of reading
@@ -428,6 +453,12 @@ enum ActionAck {
     // have when a link would have been taken.
     static func contactBadRoute(_ piece: String) -> String {
         "\(piece) is not an email address or a link. No contact was added"
+    }
+
+    // #2408: says what CHANGED rather than that a row was deleted, because what Dan did was put an
+    // address back into play and what he wants to know is that the next run can use it.
+    static func struckAddressPutBack(_ handle: String) -> String {
+        "\(handle) is back. The next run can research and write to it again"
     }
 
     static func manualPrepSaved(org: String) -> String {

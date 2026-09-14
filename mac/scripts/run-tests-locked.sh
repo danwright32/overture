@@ -19,7 +19,36 @@ set -euo pipefail
 # frontmost gets picked up non-deterministically). After the suite finishes, this kills any
 # resident Debug test-host Overture.app process before exiting with xcodebuild's own code.
 
-LOCK_FILE="/tmp/overture-mac-tests.lock"
+LOCK_FILE="${OVERTURE_FILE_LOCK:-/tmp/overture-mac-tests.lock}"
+
+# #3571: DOWNBEAT'S lock, taken as well as this runner's own, so the two projects actually exclude
+# each other on this Mac.
+#
+# Downbeat's `scripts/run-tests.sh` said its lock "is shared with Overture deliberately" and it was
+# not: Downbeat takes `mkdir` on this directory and this runner took `flock` on a different path, so
+# the comment read as a safety guarantee while providing none (L407). Two Mac test runs share the
+# derived data caches, testmanagerd and the test hosts, so one starting mid build of the other
+# produces failures belonging to neither change.
+#
+# TWO MECHANISMS ON PURPOSE, not one merged path, and Ovation's runner already records why: `flock`
+# opens with O_CREAT and cannot open a directory that way, while `mkdir` on a path already holding a
+# regular file returns EEXIST, which Downbeat's loop reads as held and then waits out its timeout.
+# Converting this runner to `mkdir` outright was declined for the reason that matters most here:
+# flock is released by the kernel when its holder dies and a directory lock is NOT.
+#
+# THE ORDER IS THE SAFETY PROPERTY. Ovation takes the directory lock first and the file lock second,
+# and its comment notes deadlock was impossible only because no sibling took two locks. This change
+# makes a second one, so the ONLY thing keeping them safe is that both take them in the same order.
+# `run-tests-locked.test.sh` asserts it rather than leaving it to this comment (L27).
+DIR_LOCK="${OVERTURE_DIR_LOCK:-/tmp/xcodebuild-tests.lock}"
+DIR_LOCK_TIMEOUT="${OVERTURE_DIR_LOCK_TIMEOUT:-1800}"
+# The poll interval, injectable from the day it is written, so a test of the WAITING path records the
+# schedule instead of living through it (L524).
+DIR_LOCK_POLL="${OVERTURE_DIR_LOCK_POLL:-1}"
+# A TEST ONLY SEAM, mirroring Downbeat's. The interleaving below is microseconds wide and mostly does
+# not open, so racing real processes to produce it proves nothing (L134). A test drives it instead.
+DIR_LOCK_PAUSE_FILE="${OVERTURE_DIR_LOCK_PAUSE_FILE:-}"
+DIR_LOCK_HELD=""
 # #2195: how many tests the last green run on this Mac executed. See the completeness check in main().
 # Overridable so the shell fixtures point it at a throwaway path: they drive main() with a stubbed
 # xcodebuild reporting a handful of tests, and against Dan's real baseline every one of those would read
@@ -512,13 +541,124 @@ keep_diagnostic_file() {
   echo "${kept}"
 }
 
+# #3571: is the process that planted this directory lock still alive?
+#
+# A directory lock outlives its holder, which is the one way it is worse than flock, so a run killed
+# mid test would otherwise block the next run of a DIFFERENT app for the whole timeout. Downbeat
+# carries `claim-stale-lock.sh` for exactly this; this is the same judgement, made here so the two
+# cannot disagree about what stale means.
+#
+# Whether this lock's owner is DEMONSTRABLY dead. Ported from Downbeat's `scripts/claim-stale-lock.sh`
+# along with the reasoning, because the two have to agree about what stale means and the second copy
+# is the one that quietly drifts (L263). If either changes, both change.
+#
+# ANYTHING UNREADABLE COUNTS AS ALIVE. No file, an empty file, half a line: every one of those is
+# produced by a run that has just won `mkdir` and has not written its owner yet. Reading them as death
+# would clear the lock of a run that is about to build. An earlier version of this function did
+# exactly that, behind a grace period, which is a weaker approximation of the same idea.
+dir_lock_owner_is_dead() {
+  local dir="$1" owner pid
+  [[ -f "${dir}/owner" ]] || return 1
+  owner="$(cat "${dir}/owner" 2>/dev/null)" || return 1
+  [[ -n "${owner}" ]] || return 1
+  pid="${owner##*:}"
+  [[ "${pid}" =~ ^[0-9]+$ ]] || return 1
+  kill -0 "${pid}" 2>/dev/null && return 1
+  return 0
+}
+
+# Reached the seam: announce it, then wait to be released. Bounded, because a wait with no deadline is
+# a hang rather than a failure, and a hang here would hold a machine wide lock (L110).
+dir_lock_pause_at() {
+  local marker="${1:-}" waited=0
+  [[ -n "${marker}" ]] || return 0
+  : > "${marker}.reached"
+  while [[ -e "${marker}" ]] && [[ "${waited}" -lt 5000 ]]; do
+    sleep 0.05
+    waited=$((waited + 50))
+  done
+}
+
+# Claim the lock if, and only if, its owner is demonstrably dead. Ported from Downbeat's script.
+#
+# WHY NOT `rm -rf` AND RETRY, which is what this did first. A stale lock cannot be acquired by anybody
+# while it sits there, so the only way it becomes live is for a waiter to clear it. With A and B both
+# waiting on one stale lock, A clears it, wins `mkdir`, writes its owner and starts building, and B,
+# still acting on what it read before any of that, carries off A's LIVE lock. Downbeat measured that
+# happening about twice in eight runs (downbeat#218). The judgement therefore belongs on the lock
+# actually being taken, immediately before taking it, and again afterwards while possession is
+# exclusive (L70: the two sides of a check must not come from one stale reading).
+#
+# `mv` of a directory onto a name that does not exist is a single atomic rename, so of any number of
+# simultaneous callers exactly one succeeds.
+claim_dir_lock_if_dead() {
+  local stale
+  [[ -d "${DIR_LOCK}" ]] || return 1
+  dir_lock_owner_is_dead "${DIR_LOCK}" || return 1
+  dir_lock_pause_at "${DIR_LOCK_PAUSE_FILE}"
+  # Named with this shell's pid so two callers never aim at one destination, which would make the
+  # rename succeed for both.
+  stale="${DIR_LOCK}.stale.$$"
+  mv "${DIR_LOCK}" "${stale}" 2>/dev/null || return 1
+  if dir_lock_owner_is_dead "${stale}"; then
+    rm -rf "${stale}"
+    return 0
+  fi
+  # It went live underneath us, so it was never ours to take. The destination has to be FREE first:
+  # `mv` of a directory onto a path that now holds one does not fail, it moves the source INSIDE it
+  # and reports success, which would bury a live lock and report an ordinary miss.
+  if [[ -e "${DIR_LOCK}" ]] || ! mv "${stale}" "${DIR_LOCK}" 2>/dev/null; then
+    echo "run-tests-locked.sh: took a live lock at ${DIR_LOCK} and could not put it back." >&2
+    echo "  It is at ${stale}. A run believes it still holds the lock and something else now holds" >&2
+    echo "  that path, so two test runs may both proceed. Sort this out before trusting either." >&2
+  fi
+  return 1
+}
+
+# Take Downbeat's directory lock, claiming it from a dead holder rather than waiting one out.
+#
+# ELAPSED IS REAL TIME, never a count of iterations: a deadline in seconds compared against a loop
+# counter measures the poll interval instead, and silently rescales the moment that interval changes
+# (L226).
+take_dir_lock() {
+  local waited_from
+  waited_from="$(date +%s)"
+  while ! mkdir "${DIR_LOCK}" 2>/dev/null; do
+    if claim_dir_lock_if_dead; then
+      echo "run-tests-locked.sh: claimed ${DIR_LOCK} from a holder that is no longer running." >&2
+      continue
+    fi
+    if [[ "$(( $(date +%s) - waited_from ))" -gt "${DIR_LOCK_TIMEOUT}" ]]; then
+      echo "run-tests-locked.sh: gave up waiting ${DIR_LOCK_TIMEOUT}s for ${DIR_LOCK} (Downbeat's lock)." >&2
+      echo "  One holder the whole time with nothing running is a run that died holding it." >&2
+      exit 3
+    fi
+    sleep "${DIR_LOCK_POLL}"
+  done
+  # The owner line is what lets the NEXT run tell a live holder from a dead one, so it is written
+  # immediately after the lock is taken rather than later.
+  echo "overture:$$" > "${DIR_LOCK}/owner" 2>/dev/null || true
+  DIR_LOCK_HELD=1
+}
+
+# Released on EVERY exit path, not only the tidy one. A directory lock left planted blocks the next
+# run of a different app, which is the failure this whole thing exists to prevent.
+release_dir_lock() {
+  if [[ -n "${DIR_LOCK_HELD}" ]]; then
+    rm -rf "${DIR_LOCK}" 2>/dev/null || true
+    DIR_LOCK_HELD=""
+  fi
+}
+
 main() {
   command -v flock >/dev/null || { echo "flock not found; install it with: brew install flock" >&2; exit 1; }
 
   # #2577: however this script leaves, its watcher goes with it. A watcher that outlived the run
   # would sit printing stall warnings about a temporary file nobody is writing to any more, which is
   # a worse alarm than none: it would be indistinguishable from a real one and always wrong.
-  trap 'stop_progress_watch "${PROGRESS_WATCH_PID}"' EXIT
+  # #3571: the directory lock goes with the run too, and on INT and TERM as well as a tidy exit,
+  # because a killed run that leaves it planted is precisely the stale lock this has to avoid.
+  trap 'stop_progress_watch "${PROGRESS_WATCH_PID}"; release_dir_lock' EXIT INT TERM
 
   cd "${MAC_DIR}"
 
@@ -561,6 +701,13 @@ main() {
   # #3392: set inside the loop below and read after it. Declared here so a retry cannot inherit the
   # previous attempt's reading, which is the same reason `last_output` is per attempt.
   local restarted="" TIME_LIMIT_KILL=""
+
+  # #3571: DOWNBEAT'S LOCK FIRST, then this runner's own inside the loop below, which is the fixed
+  # order Ovation uses and the one thing making deadlock impossible now that two runners take two
+  # locks. Taken HERE rather than at the top of main, so the pre-flight above does not make a sibling
+  # wait, and OUTSIDE the retry loop, so a retry does not try to take a lock this run already holds.
+  take_dir_lock
+
   while true; do
     test_exit_code=0
     started_at="${SECONDS}"
@@ -812,6 +959,18 @@ main() {
     printf '%s\n' "${QUEUE_COST_NEXT}" > "${QUEUE_COST_RECORD}" 2>/dev/null || true
   fi
 
+  # #3508: the same, for the LIVE STORE reading. It is the richer and more trustworthy of the two figures,
+  # since it reads Dan's actual data rather than a corpus matching its shape, it is the reference the
+  # fixture figure is judged against, and until now nothing anywhere said when it last ran. Its own record
+  # rather than a second key in the one above, so a run that measured only one cannot erase the other.
+  LIVE_COST_RECORD="${OVERTURE_LIVE_STORE_COST_RECORD:-${MAC_DIR}/../.overture-live-store-cost-measured}"
+  LIVE_COST_SEEN="$(cat "${LIVE_COST_RECORD}" 2>/dev/null || true)"
+  echo "run-tests-locked.sh: $(live_store_cost_report "${QUEUE_COST_TODAY}" "${LIVE_COST_SEEN}" "${last_output}")" >&2
+  LIVE_COST_NEXT="$(live_store_cost_seen_update "${last_output}" "${QUEUE_COST_TODAY}" "${LIVE_COST_SEEN}")"
+  if [[ -n "${LIVE_COST_NEXT}" && "${LIVE_COST_NEXT}" != "${LIVE_COST_SEEN}" ]]; then
+    printf '%s\n' "${LIVE_COST_NEXT}" > "${LIVE_COST_RECORD}" 2>/dev/null || true
+  fi
+
   # #3166: and this run's cost, appended to a local series, so a climb has something to be seen against.
   #
   # Advisory only and never blocking, in the way `check-branch-backlog.sh` already rides along: the point
@@ -870,6 +1029,32 @@ main() {
   HOSTED_STAMP_NEXT="$(hosted_stamp_update "${HOSTED_VERIFIED}" "${HOSTED_STAMP_TODAY}" "${HOSTED_STAMP_SEEN}")"
   if [[ -n "${HOSTED_STAMP_NEXT}" && "${HOSTED_STAMP_NEXT}" != "${HOSTED_STAMP_SEEN}" ]]; then
     printf '%s' "${HOSTED_STAMP_NEXT}" > "${HOSTED_STAMP_RECORD}" 2>/dev/null || true
+  fi
+
+  # #3842: tests that could not be DRIVEN, because this Mac's screen was locked while they ran.
+  #
+  # A locked session means the WindowServer never lays out the borderless window the scroll tests host, so
+  # a real wheel turn has nothing to move. Those tests now say UNMEASURED and return rather than failing,
+  # because a red there is indistinguishable from a real regression in the scroll mechanism and it blocked
+  # every merge in this repository while naming four scroll tests rather than the lock.
+  #
+  # SAID HERE, LOUDLY, and that is the whole point: a skip nobody is told about is the silent skip this
+  # replaced a red with, and it would let a run report "Screen tests: verified by this run" while the one
+  # mechanism no other test covers went unchecked (L98, L11). The count and the names both, so a reader can
+  # see WHICH went unmeasured rather than only that something did.
+  SCREEN_LOCKED_SKIPS="$(grep -o 'screen-locked-unmeasured: [A-Za-z.]*' <<< "${last_output}" \
+                         | sed 's/screen-locked-unmeasured: //' | sort -u || true)"
+  if [[ -n "${SCREEN_LOCKED_SKIPS}" ]]; then
+    SCREEN_LOCKED_COUNT="$(wc -l <<< "${SCREEN_LOCKED_SKIPS}" | tr -d ' ')"
+    echo >&2
+    echo "run-tests-locked.sh: ${SCREEN_LOCKED_COUNT} test(s) were NOT MEASURED because this Mac's" >&2
+    echo "screen was LOCKED. They drive a real window, and a locked session never lays one out, so they" >&2
+    echo "could not be run rather than having passed. Unlock the screen and run again to cover them." >&2
+    echo "Waking the display is NOT enough: a woken display on a locked session still shows the lock" >&2
+    echo "screen (#3842)." >&2
+    while IFS= read -r skipped; do
+      [[ -n "${skipped}" ]] && echo "  ${skipped}" >&2
+    done <<< "${SCREEN_LOCKED_SKIPS}"
   fi
 
   # #2322: no test started at all, and the evidence says the machine rather than the change. Said
@@ -977,6 +1162,15 @@ main() {
   # them. The bundle path is the one the run printed itself, the same one the executed count is read
   # from, and it is passed even when empty so a run that named no bundle says that rather than showing
   # names with nothing under them.
+  # #3875: BEFORE the failing list, because if the host died the list below is about a different
+  # question and reading it first is what sends somebody to debug an innocent test.
+  local died_report
+  died_report="$(crash_restart_report "${last_output}")"
+  if [[ -n "${died_report}" ]]; then
+    echo >&2
+    awk 'NR==1 {print "run-tests-locked.sh: " $0; next} {print}' <<< "${died_report}" >&2
+  fi
+
   local failing_reprint
   failing_reprint="$(failing_tests_report "${last_output}" "$(test_run_result_bundle "${last_output}")")"
   if [[ -n "${failing_reprint}" ]]; then
@@ -991,6 +1185,42 @@ main() {
     exit 1
   fi
   exit "${test_exit_code}"
+}
+
+# #3875: say when the test HOST DIED during this run, instead of leaving the next test to be blamed.
+#
+# xcodebuild restarts the host after a crash and carries the totals forward, so the run can end with a
+# verdict that says nothing about the death. What it DOES leave is a line naming the restart, and the
+# test that had just started beside it, which is how an innocent test gets accused.
+#
+# Measured 2026-09-13: the hosted target run with `-test-iterations 10` killed the host 8 times and every
+# one was reported against `FeltWaitCostTests.measureWhatAPressCosts`, which in that configuration is a
+# guard on an unset variable, a print and a return. It had not executed a line of its own body. The same
+# boundary reproduced here on a later run. A test that returns instantly is the first quiet moment after
+# the preceding heavy test tears down, so the SAME innocent test is named every time, which reads exactly
+# like a reproducible fault in it. Two sessions investigated it before the crash reports were read.
+#
+# So this names BOTH: the last test to COMPLETE, which is a fact, and the one that was merely current,
+# which is an attribution and is labelled as one (L11: a message may claim only what its check measured).
+#
+# Silent on a clean run, deliberately. A report that speaks on every push is one people stop reading, and
+# this one would otherwise be noise on every ~9,600 test run (L36).
+crash_restart_report() {
+  local output="$1" restarts
+  restarts="$(grep -c 'Restarting after unexpected exit, crash, or test timeout' <<< "${output}" || true)"
+  [[ "${restarts}" -gt 0 ]] || return 0
+  echo "THE TEST HOST DIED ${restarts} time(s) during this run and xcodebuild restarted it."
+  awk '
+    /Test [A-Za-z0-9_]+\(\) (passed|failed)/ { completed = $0 }
+    /Test [A-Za-z0-9_]+\(\) started/         { started   = $0 }
+    /Restarting after unexpected exit/ {
+      if (completed != "") print "  last test to COMPLETE before it died: " completed
+      if (started   != "") print "  the test merely CURRENT when it died:  " started
+    }
+  ' <<< "${output}"
+  echo "  The second is an attribution and not a finding: a crash between tests is recorded against"
+  echo "  whichever test was current, and that test may not have run a line of its own body."
+  echo "  The evidence is the crash report, not this run: ~/Library/Logs/DiagnosticReports/"
 }
 
 # Allow this file to be sourced (e.g. by a test fixture) without running main, so

@@ -254,10 +254,10 @@ struct StoreSchemaGuardTests {
             // #1410: the snapshot lands in a MARKED folder. It is a copy of a file that was not
             // Overture's, and under a plain dated name it read as the most recent good backup.
             let backedUpStore = backupsDirectory
-                .appendingPathComponent("20231114-171320.foreign/\(StoreLocation.storeFilename)")
+                .appendingPathComponent("\(DatedFolderRotation.stamp(now)).foreign/\(StoreLocation.storeFilename)")
             #expect(FileManager.default.fileExists(atPath: backedUpStore.path))
             #expect(!FileManager.default.fileExists(
-                atPath: backupsDirectory.appendingPathComponent("20231114-171320").path))
+                atPath: backupsDirectory.appendingPathComponent(DatedFolderRotation.stamp(now)).path))
             await RealStoreTestLock.shared.release()
         } catch {
             await RealStoreTestLock.shared.release()
@@ -280,7 +280,7 @@ struct StoreSchemaGuardTests {
             let backupsDirectory = StoreBackup.backupsDirectory(dataDirectory: dir)
             try FileManager.default.createDirectory(at: backupsDirectory.appendingPathComponent("20200101-090000"),
                                                      withIntermediateDirectories: true)
-            let now = Date(timeIntervalSince1970: 1_700_000_000)   // sorts after 20200101-090000
+            let now = Date(timeIntervalSince1970: 1_700_000_000)   // sorts after 20200101-090000 in any zone
 
             _ = StoreSchemaGuard.refusalReason(storeURL: storeURL, dataDirectory: dir, now: now)
 

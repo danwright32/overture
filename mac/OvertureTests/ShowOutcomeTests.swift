@@ -4,7 +4,7 @@ import Foundation
 // #2394, phase 1 of docs/plans/2026-08-09-one-outcome-vocabulary.md.
 //
 // Overture had seven separate lists a disposition could be picked from, holding about 28 options for
-// roughly a dozen facts. This is the ONE vocabulary that replaces them: twelve values Dan can pick,
+// roughly a dozen facts. This is the ONE vocabulary that replaces them: fifteen values Dan can pick,
 // plus two Overture writes for itself and never offers.
 //
 // The three defects the old spread caused are what most of these tests exist to make impossible, so
@@ -16,8 +16,9 @@ struct ShowOutcomeTests {
 
     // MARK: the shape of the vocabulary
 
-    @Test func danCanChooseExactlyFourteenValues() {
-        #expect(ShowOutcome.danCanChoose.count == 14)
+    // #3674 made it fifteen, adding `emailBounced` to the pitched half.
+    @Test func danCanChooseExactlyFifteenValues() {
+        #expect(ShowOutcome.danCanChoose.count == 15)
     }
 
     // The order is a property of the vocabulary rather than something each view re-decides, so it is
@@ -30,9 +31,11 @@ struct ShowOutcomeTests {
     }
 
     // #2863 put `theySaidPriceTooHigh` with the other answers somebody gave, after the flat no, and kept
-    // Dan's own refusal last.
-    @Test func sixEndingsForAShowThatWasPitched() {
-        #expect(ShowOutcome.pitched == [.booked, .neverHeardBack, .theySaidNotNow,
+    // Dan's own refusal last. #3674 put `emailBounced` directly under `neverHeardBack`: they are the two
+    // endings that record no answer, and the choice between them is the whole point of the newer one, so
+    // adjacency is what makes Dan notice he has one (L609).
+    @Test func sevenEndingsForAShowThatWasPitched() {
+        #expect(ShowOutcome.pitched == [.booked, .neverHeardBack, .emailBounced, .theySaidNotNow,
                                         .theySaidNo, .theySaidPriceTooHigh, .turnedThemDown])
     }
 

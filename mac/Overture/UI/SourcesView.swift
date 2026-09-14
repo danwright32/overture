@@ -17,6 +17,13 @@ struct SourcesView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var context
     @Environment(ActionFeedback.self) private var feedback
+    // #3645 and #3762 both reached for this, from opposite directions, and it is one property.
+    //
+    // The app's own freeze instrument, so this sheet's render passes are COUNTED like the queue's.
+    // Read as an OPTIONAL on the same footing as every other environment object here: a preview or a
+    // test renders this view with no watch injected, and a sheet that could not be drawn at all without
+    // one would be worse than an uncounted pass.
+    @Environment(FreezeWatch.self) private var freezeWatch: FreezeWatch?
     @Query(sort: \WatchedSource.orgName) private var sources: [WatchedSource]
     // #794: read to compute each source's lifetime yield (found/kept/sent/booked). The tally and its
     // sentence both live in SourceYield, a tested pure function, so this view has no counting of its own.
@@ -62,12 +69,41 @@ struct SourcesView: View {
     // scroll multiplied (row count x every prospect) across many redraws on the main thread and froze the
     // app. Each row now reads its tally from this map in O(1); the map recomputes only when a prospect a
     // tally actually counts changes (SourceYield.signature).
-    @State private var tallies: [String: SourceYield.Tally] = [:]
+    // #3656: NOT cached any more, and not `@State`. The map is built once per body evaluation in `body`
+    // and threaded down to each row, which keeps the O(1)-per-row property #1429 bought while removing
+    // the change-key that decided whether to rebuild it. That key was a HASH of the store, and a
+    // collision meant the sheet drew a number the store disagreed with, which Dan has ruled out. What it
+    // costs is measured rather than guessed: `SourcesSheetCostTests`, 2026-09-08, the key was 3.95 ms per
+    // redraw against a 6.21 ms recompute, so dropping the gate costs about 2.26 ms per redraw.
+    //
+    // It must stay a value threaded from `body`. A computed property here would run the whole-store scan
+    // once per source ROW, which is 6.21 ms x 73 rows, and that is #1429 exactly.
     // #1429: the returning-client verdict per source, CACHED for the same reason. The old code called
     // ClientHorizon.isClient inline once per row on every redraw, each a token-set fuzzy match against the
     // whole Downbeat client list. It recomputes alongside the coverage result (same inputs: a source's
     // name, its tag, and the client list), so a row reads its flag in O(1).
     @State private var clientFlags: [String: Bool] = [:]
+    // #3645: which watched sources are a client's, as the VALUE the stage rule takes, cached beside the
+    // flags above because it is the same verdict asked a second way.
+    //
+    // THIS IS WHAT #3645 IS ABOUT. `roomContext` below built `ClientWindow(sources:clients:)` fresh every
+    // time it was read, and it was read as an ARGUMENT to the room derivation, so SwiftUI evaluated it on
+    // every body pass. Constructing one runs `ClientHorizon.clientSourceIds`, an O(clients x sources)
+    // token-set fuzzy match over the whole watchlist and the whole roster, and #1429 measured that same
+    // match on this sheet's render path freezing it. The flags beside it were cached for exactly that
+    // reason and the window was not, so the sheet went on paying for a verdict it had already decided.
+    //
+    // DERIVED FROM THE FLAGS rather than matched a second time: a source is in the window exactly when its
+    // flag is true, and `WatchedSource.sourceId` is unique at the store layer.
+    // `ClientHorizonTests.clientWindowFromFlagsMatchesTheOneBuiltFromSources` pins the two equal, so the
+    // cheap derivation can never answer differently from the authority (L70).
+    //
+    // OPTIONAL, and that is load bearing: nil means "not decided yet", never "no source is a client's",
+    // which is a real and very different answer (`ClientWindow.none` says so in its own docstring). The
+    // FIRST body evaluation happens before `.onChange(initial: true)` has run, and a sheet that opened
+    // with an empty window would draw a room list short by exactly Dan's clients' far-out shows and then
+    // silently correct itself. `roomContext` builds the real one that once.
+    @State private var clientWindow: ClientWindow?
 
     // #1175: which single-venue-feed source's location Dan is editing (its sourceId), and the draft text.
     @State private var editingLocationFor: String?
@@ -87,10 +123,10 @@ struct SourcesView: View {
     // identity rather than its name, so two spellings of one room cannot both open an editor.
     @State private var editingRoomKey: String?
     @State private var roomDraft = ""
-    // CACHED, for the reason the coverage list and the tallies above are: building it walks every stored
-    // show, and this sheet re-evaluates its body on every keystroke and scroll tick. Recomputed by the
-    // .onChange below only when a show that the list actually counts changes.
-    @State private var unplacedRooms: [UnplacedRooms.Room] = []
+    // #3656: built where it is rendered, for the same reason the tallies above are no longer cached. Its
+    // change-key was 2.46 ms per redraw to avoid a 2.64 ms recompute, so the gate was saving about 7% and
+    // carrying a collision risk for it. `unplacedRoomsSection` is evaluated once per body evaluation, so
+    // building the list there is once per redraw and never once per row.
     // #2288: Dan's town refusals, read here for the reason RootView reads them. The room list is a
     // promise about shows the Queue will put in front of him, so it has to apply the same geography gate
     // the Queue's own lists apply, and that gate is one of the inputs the shared rule takes.
@@ -100,18 +136,53 @@ struct SourcesView: View {
         GeoRefusals(userExcludedTowns: Set(excludedTownRows.map(\.town)),
                     allowedSeedTowns: Set(allowedSeedTownRows.map(\.town)))
     }
-    // #2365: one context for both calls below, so the signature that decides whether to recompute and
-    // the recompute itself are asked against the same day, instant and gate. #2288 records why they must
-    // agree: a signature computed against a different clock caches a list nobody asked for.
+    // #2365: one context for the whole pass, so every decision in one redraw is made against the same
+    // day, instant and gate. #2288 records why they must agree: a context built against a different clock
+    // answers a question nobody asked.
+    //
+    // #3645: the CLIENT WINDOW inside it is cached and the rest is not, which is a split rather than an
+    // oversight. The window is the O(clients x sources) fuzzy match, so it is decided when its inputs
+    // change. `now` and `today` are re-derived on every read deliberately: a frozen instant is how a sheet
+    // left open across midnight goes on judging lead time by yesterday, and caching the whole context
+    // would have bought about a microsecond of `Set` building at that price (L74, L175).
     private var roomContext: StageContext {
-        StageContext(geo: geo, clients: ClientWindow(sources: sources, clients: clients))
+        StageContext(geo: geo, clients: clientWindow ?? ClientWindow(sources: sources, clients: clients))
     }
     // #2216: the sources the live extract run has been asked for and not yet come back with, read once
     // per sheet build rather than per row (a per-row file read would put two file reads on every one of
     // 62 rows on every redraw). Empty whenever no run is in flight.
     @State private var sourcesBeingReadNow: Set<String> = []
 
+    // #3645: everything this redraw derives, worked out ONCE, in a pure function a test can run.
+    //
+    // Here rather than inside `SourcesRenderPass` for the same reason `QueueView` keeps its own bump
+    // there: the pass is a pure static derivation and this is a side effect on the app's own instrument.
+    // Counting the pass is what makes a freeze on this sheet attributable at all; until now `passes` was
+    // 0 on every record because nothing on this surface ever bumped it, and 0 is also what "the surface
+    // never rebuilt" reads as (L11). `EveryRenderPassIsCountedTests` is what keeps this call here.
+    private func makeRenderData() -> SourcesRenderPass.RenderData {
+        freezeWatch?.recordPass()
+        // #3815: the same pairing as `QueueView.makeRenderData`, and for the same reason: a count with no
+        // duration beside it cannot say whether the passes account for a freeze.
+        let passStarted = DispatchTime.now().uptimeNanoseconds
+        defer {
+            freezeWatch?.recordPassCost(
+                seconds: Double(DispatchTime.now().uptimeNanoseconds - passStarted) / 1_000_000_000)
+        }
+        return SourcesRenderPass.make(SourcesRenderPass.Inputs(
+            prospects: SourcesRenderPass.Corpus(prospects),
+            sources: sources,
+            searchQuery: searchQuery,
+            context: roomContext))
+    }
+
     var body: some View {
+        // The pass is counted INSIDE `makeRenderData()`, on its first line, exactly where `QueueView`
+        // counts its own. #3762 added a second bump here in the body while #3645 was lifting the
+        // derivation, and keeping both would count every rebuild of this sheet TWICE: `passes` would
+        // read 2 for one evaluation, and the field's whole job is to say how many times the surface
+        // really rebuilt during a stall (#3760). One bump, at the top of the derivation.
+        let data = makeRenderData()
         VStack(alignment: .leading, spacing: 0) {
             header
             Divider().overlay(OVColor.line)
@@ -128,9 +199,8 @@ struct SourcesView: View {
 
                 // #1432: matching is SourceSearch's decision, not this view's. An empty query returns every
                 // source unchanged, so an unsearched sheet renders exactly what it always did.
-                let visible = SourceSearch.filter(sources, query: searchQuery)
-
-                if visible.isEmpty {
+                // #3645: decided by the render pass, along with every other list on this screen.
+                if data.visible.isEmpty {
                     // Only reachable while searching, since an empty watchlist took the branch above. It has
                     // to SAY so: a blank sheet where the sources were reads as the sources having gone.
                     noMatches
@@ -166,13 +236,15 @@ struct SourcesView: View {
                             // question Dan did not ask above the one he did. Its cached value is untouched by the
                             // search (the filter never reaches the recompute's inputs below), so clearing the
                             // field brings it straight back without recomputing anything.
-                            if !SourceSearch.isSearching(searchQuery) {
+                            if !data.isSearching {
                                 coverageSection
                                 // #1752: the rooms no table can place, each with what is waiting on it and
                                 // somewhere to answer. Hidden while searching for the same reason the
                                 // coverage list is: it is a fact about the whole queue, not a search result.
                                 // Absent when there is nothing to ask, exactly like every other section.
-                                unplacedRoomsSection
+                                // #3645: and the pass does not DERIVE the list while searching either, so
+                                // a keystroke no longer pays for a panel that is not on screen.
+                                unplacedRoomsSection(data.rooms)
                             }
                             // Sectioning, ordering and the omit-empty rule all come from the tested domain
                             // function, so this view has no judgement of its own to get wrong. #1432: it is handed
@@ -187,11 +259,18 @@ struct SourcesView: View {
                             // initial put it. The split lifts those rows OUT of `visible`, so nothing is
                             // listed twice, and it uses the same predicate the badge counts, so the two
                             // can never disagree. Empty means absent, exactly like every other section.
-                            let attention = SourceAttention.split(visible)
-                            if !attention.needsALook.isEmpty {
-                                attentionSection(attention.needsALook)
+                            // #3656: ONE pass over the store for the whole list, threaded into every row
+                            // below. This is where #1429's O(1)-per-row property now comes from: it used
+                            // to come from a cached map a hash decided to refresh, and the hash could
+                            // collide, which meant a number the store disagreed with.
+                            // #3645: and the split, the sections and that one pass are all decided in
+                            // `SourcesRenderPass`, where a test can count what they cost.
+                            if !data.needsALook.isEmpty {
+                                attentionSection(data.needsALook, tallies: data.tallies)
                             }
-                            ForEach(SourceGrade.sections(attention.rest), id: \.grade) { section($0.grade, $0.sources) }
+                            ForEach(data.sections, id: \.grade) {
+                                section($0.grade, $0.sources, tallies: data.tallies)
+                            }
                         }
                         .padding(OVSpacing.lg)
                     }
@@ -216,21 +295,6 @@ struct SourcesView: View {
             // not re-sort every time a row's menu is built (#1429).
             clientRoster?.reload()
         }
-        // #1429: recompute the cached tallies ONLY when a prospect a tally counts actually changes. The
-        // signature is O(prospects) to evaluate each redraw (cheap next to the old O(rows x prospects) per
-        // redraw), and the single-pass recompute behind it runs only when it differs, so a scroll no longer
-        // drags the whole store through the main thread.
-        .onChange(of: SourceYield.signature(prospects), initial: true) {
-            tallies = SourceYield.tallies(in: prospects)
-        }
-        // #1752: the same gate for the unplaced-room list. Answering a room fills its shows' locations,
-        // which moves the signature, so the list drops that room without anything having to tell it to.
-        // #2288: and the same inputs go to both calls, because the signature is built from the list's own
-        // rule, so a signature computed against a different clock or gate would cache a list nobody asked
-        // for.
-        .onChange(of: UnplacedRooms.signature(prospects, context: roomContext), initial: true) {
-            unplacedRooms = UnplacedRooms.from(prospects, context: roomContext)
-        }
         // Recompute the cached coverage result AND the per-source returning-client flags ONLY when their
         // real inputs change. The signature is cheap to evaluate every redraw; the O(clients x sources)
         // matches behind it run only when the signature differs, so a keystroke or scroll no longer drags
@@ -241,7 +305,12 @@ struct SourcesView: View {
                   initial: true) {
             coverageResult = ClientCoverage.result(sources: sources, clients: clients,
                                                    dismissedIds: Set(dismissedCoverage.map(\.clientId)))
-            clientFlags = ClientHorizon.clientFlags(sources: sources, clients: clients)
+            // #3645: the flags and the window are ONE verdict, so they are decided by ONE fuzzy match and
+            // the window is folded out of the map. Asking `ClientHorizon.clientSourceIds` here as well
+            // would run the whole O(clients x sources) match a second time for an answer already in hand.
+            let flags = ClientHorizon.clientFlags(sources: sources, clients: clients)
+            clientFlags = flags
+            clientWindow = ClientWindow(clientFlags: flags)
         }
     }
 
@@ -300,8 +369,10 @@ struct SourcesView: View {
     // The list itself is computed by a tested domain function, so this view has no judgement of its own
     // to get wrong.
     @ViewBuilder
-    private var unplacedRoomsSection: some View {
-        let rooms = unplacedRooms
+    private func unplacedRoomsSection(_ rooms: [UnplacedRooms.Room]) -> some View {
+        // #3656: built rather than read from a cache a hash decided to refresh. #3645: and built in
+        // `SourcesRenderPass`, handed here as a value, so the store walk behind it is counted and cannot
+        // move back inside a `@ViewBuilder` where no test can see it.
         if !rooms.isEmpty {
             VStack(alignment: .leading, spacing: OVSpacing.xs) {
                 HStack(spacing: OVSpacing.xxs) {
@@ -558,7 +629,8 @@ struct SourcesView: View {
     // is not learning a second layout. Rust, like Failing: these are the rows the toolbar sent him for,
     // and every one of them has either broken outright or lost the ability to tell him a show was
     // cancelled. Its wording lives on SourceAttention, never here (#863/#885).
-    private func attentionSection(_ rows: [WatchedSource]) -> some View {
+    private func attentionSection(_ rows: [WatchedSource],
+                                  tallies: [String: SourceYield.Tally]) -> some View {
         VStack(alignment: .leading, spacing: OVSpacing.xs) {
             HStack(spacing: OVSpacing.xxs) {
                 Image(systemName: SourceAttention.sectionSystemImage).font(.system(size: 11))
@@ -569,7 +641,7 @@ struct SourcesView: View {
 
             VStack(spacing: 0) {
                 ForEach(rows) { source in
-                    row(source)
+                    row(source, tallies: tallies)
                     if source.persistentModelID != rows.last?.persistentModelID {
                         Divider().overlay(OVColor.line)
                     }
@@ -581,7 +653,8 @@ struct SourcesView: View {
         }
     }
 
-    private func section(_ grade: SourceGrade, _ rows: [WatchedSource]) -> some View {
+    private func section(_ grade: SourceGrade, _ rows: [WatchedSource],
+                         tallies: [String: SourceYield.Tally]) -> some View {
         VStack(alignment: .leading, spacing: OVSpacing.xs) {
             HStack(spacing: OVSpacing.xxs) {
                 Image(systemName: grade.systemImage).font(.system(size: 11))
@@ -598,7 +671,7 @@ struct SourcesView: View {
 
             VStack(spacing: 0) {
                 ForEach(rows) { source in
-                    row(source)
+                    row(source, tallies: tallies)
                     if source.persistentModelID != rows.last?.persistentModelID {
                         Divider().overlay(OVColor.line)
                     }
@@ -819,12 +892,16 @@ struct SourcesView: View {
         return parsed
     }
 
-    private func row(_ source: WatchedSource) -> some View {
+    private func row(_ source: WatchedSource, tallies: [String: SourceYield.Tally]) -> some View {
         // #794/#978/#1185: the lifetime tally, reused for the yield line below and for whether a single-venue
         // feed has actually surfaced shows yet (which decides its address nudge). The counting lives in
-        // SourceYield, a tested pure function; #1429 moved it out of the per-row path into the cached
-        // `tallies` map (computed once for the whole store), so this reads its own in O(1). A source absent
-        // from the map surfaced nothing and reads as the zero tally, which is what the scan returned too.
+        // SourceYield, a tested pure function; #1429 moved it out of the per-row path into a map computed
+        // once for the whole store, so this reads its own in O(1). A source absent from the map surfaced
+        // nothing and reads as the zero tally, which is what the scan returned too.
+        //
+        // #3656: the map arrives as an ARGUMENT rather than from a cached property. That is what makes
+        // the once-per-redraw property checkable: `SourcesSheetHasNoStaleCacheTests` asserts this function
+        // never calls the scan itself, which a stored property could not express.
         let tally = tallies[source.sourceId] ?? .zero
         return VStack(alignment: .leading, spacing: 3) {
             HStack(alignment: .firstTextBaseline, spacing: OVSpacing.xs) {

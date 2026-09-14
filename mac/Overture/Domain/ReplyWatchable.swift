@@ -146,8 +146,20 @@ extension Recipient: ReplyWatchableRecipient {
     // Overture's own reply lands on the attached thread, `sendReplyDraft` stores the id Gmail assigned it,
     // and from then on there IS a message of Overture's to thread off. A rule keyed on the channel alone
     // would go on refusing long after its reason had gone (L68).
+    // #3712: and never keyed on the CHANNEL alone any more. That clause was exactly right while an
+    // attached conversation could only ever sit on a form pitch, and phase 3 of milestone 82 made an
+    // emailed pitch attachable: on #3706's row the channel is `.email` and `gmailMessageId` names a real
+    // message Overture sent, so all three clauses were false about a thread Overture has never sent a
+    // word on, and the three readers of this predicate acted on that answer.
+    //
+    // The displaced arm asks the same question the original does, in the terms that row makes available:
+    // is the outgoing message this row holds a message on the conversation it now stores? While it is
+    // still the one the link displaced, it is not. It heals the same way too, because `sendReplyDraft`
+    // stores the id Gmail assigns Overture's own answer on the linked thread.
     var replyWatchConversationIsAttached: Bool {
-        outreachChannel == .contactForm && hasWatchableConversation && gmailMessageId == nil
+        guard hasWatchableConversation else { return false }
+        if attachDisplacedThreadId != nil { return gmailMessageId == attachDisplacedMessageId }
+        return outreachChannel == .contactForm && gmailMessageId == nil
     }
 }
 
@@ -174,6 +186,12 @@ enum ReplyThreading {
     static func inReplyTo(for r: any ReplyWatchableRecipient) -> String? {
         let theirs = r.inboundReplyMessageId?.trimmingCharacters(in: .whitespacesAndNewlines)
         if let theirs, !theirs.isEmpty { return theirs }
+        // #3712: the fallback is to OUR last outgoing message, which is only a parent while it is on the
+        // same conversation. On a row whose link REPLACED the thread the pitch went out on it is not: it
+        // names a message in another conversation entirely, so hanging an answer off it would point at a
+        // message the recipient's client cannot find. Nothing is better than the wrong thing here, and
+        // `AttachedConversation.refusalToContinue` is what stops the send going out unparented.
+        guard !r.replyWatchConversationIsAttached else { return nil }
         return r.gmailMessageId
     }
 
@@ -185,8 +203,10 @@ enum ReplyThreading {
     // Degrades to exactly today's chain when their id is unknown, since `MailThreading.references` drops
     // every empty part.
     static func references(for r: any ReplyWatchableRecipient) -> String? {
-        let ours = MailThreading.references(parentReferences: r.gmailReferences,
-                                            parentMessageID: r.gmailMessageId)
+        // #3712: our side of the chain, unless our side is a different conversation. See `inReplyTo`.
+        let ours = r.replyWatchConversationIsAttached ? nil
+            : MailThreading.references(parentReferences: r.gmailReferences,
+                                       parentMessageID: r.gmailMessageId)
         return MailThreading.references(parentReferences: ours,
                                         parentMessageID: r.inboundReplyMessageId)
     }

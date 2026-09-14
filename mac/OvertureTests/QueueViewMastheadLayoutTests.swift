@@ -40,10 +40,10 @@ struct QueueViewMastheadLayoutTests {
     }
 
     @Test func aMastheadRendersWithHeight() {
-        let view = QueueView(deepLinkedKey: .constant(nil), deepLinkedKeys: .constant(nil))
+        let view = QueueView(deepLinkedKey: .constant(nil), deepLinkedKeys: .constant(nil), allProspects: [])
         let items = [longshotItem(id: "a"), longshotItem(id: "b")]
 
-        #expect(renderedHeight(view.masthead(visible: items, items: items, fanOutLine: nil, notices: [],
+        #expect(renderedHeight(view.masthead(visible: items, items: items, fanOutLine: nil, notices: [], pendingBookings: QueueModel.pendingBookingCount(items),
                                      agentInputs: calmInputs)) > 0)
     }
 
@@ -52,16 +52,16 @@ struct QueueViewMastheadLayoutTests {
     // be somewhere he actually looks. Asserted by height, because a masthead that swallowed the line would
     // otherwise pass every test that only checked the sentence itself.
     @Test func aFanOutWarningMakesTheMastheadTaller() {
-        let view = QueueView(deepLinkedKey: .constant(nil), deepLinkedKeys: .constant(nil))
+        let view = QueueView(deepLinkedKey: .constant(nil), deepLinkedKeys: .constant(nil), allProspects: [])
         let items = [longshotItem(id: "a"), longshotItem(id: "b")]
 
-        let quiet = renderedHeight(view.masthead(visible: items, items: items, fanOutLine: nil, notices: [],
+        let quiet = renderedHeight(view.masthead(visible: items, items: items, fanOutLine: nil, notices: [], pendingBookings: QueueModel.pendingBookingCount(items),
                                                  agentInputs: calmInputs))
         let warned = renderedHeight(view.masthead(
             visible: items, items: items,
             fanOutLine: "Carnegie Hall Citywide: Ivalas Quartet is flagged as a possible match on 19 "
                 + "shows, which usually means the match is wrong.",
-            notices: [], agentInputs: calmInputs))
+            notices: [], pendingBookings: QueueModel.pendingBookingCount(items), agentInputs: calmInputs))
 
         #expect(quiet > 0)
         #expect(warned > quiet)
@@ -71,14 +71,14 @@ struct QueueViewMastheadLayoutTests {
     // must no longer make the masthead taller: with the breakdown line gone, the height is the same whether
     // or not a high-fit item is present. If someone re-introduced the breakdown line, this would fail.
     @Test func aHighFitItemNoLongerAddsABreakdownLine() {
-        let view = QueueView(deepLinkedKey: .constant(nil), deepLinkedKeys: .constant(nil))
+        let view = QueueView(deepLinkedKey: .constant(nil), deepLinkedKeys: .constant(nil), allProspects: [])
         let withoutHighFit = [longshotItem(id: "a"), longshotItem(id: "b")]
         let withHighFit = [highFitItem(id: "a"), longshotItem(id: "b")]
 
         let baseline = renderedHeight(view.masthead(visible: withoutHighFit, items: withoutHighFit,
-                                                    fanOutLine: nil, notices: [], agentInputs: calmInputs))
+                                                    fanOutLine: nil, notices: [], pendingBookings: QueueModel.pendingBookingCount(withoutHighFit), agentInputs: calmInputs))
         let withHigh = renderedHeight(view.masthead(visible: withHighFit, items: withHighFit,
-                                                    fanOutLine: nil, notices: [], agentInputs: calmInputs))
+                                                    fanOutLine: nil, notices: [], pendingBookings: QueueModel.pendingBookingCount(withHighFit), agentInputs: calmInputs))
 
         #expect(baseline > 0)
         #expect(withHigh == baseline)

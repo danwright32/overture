@@ -63,7 +63,7 @@ struct LostOnPriceOutcomeTests {
     // something each view re-decides. It goes beside the other answers somebody gave, after the flat no
     // and before Dan's own refusal.
     @Test func itSitsWithTheOtherAnswersSomebodyGave() {
-        #expect(ShowOutcome.pitched == [.booked, .neverHeardBack, .theySaidNotNow,
+        #expect(ShowOutcome.pitched == [.booked, .neverHeardBack, .emailBounced, .theySaidNotNow,
                                         .theySaidNo, .theySaidPriceTooHigh, .turnedThemDown])
     }
 

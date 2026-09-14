@@ -282,6 +282,19 @@ echo "==> mac/scripts/prune-stale-registrations.sh"
 echo "==> scripts/check-branch-backlog.sh"
 "${REPO_ROOT}/scripts/check-branch-backlog.sh" || true
 
+# #3640: says when a file Claude Code loads automatically into every session is running out of room.
+# AGENTS.md crossed the 150,000 character ceiling on 2026-09-06 and nothing here could have said so;
+# what reported it was a warning Dan happened to have on screen. Past the ceiling the rules do not
+# fail, they stop ARRIVING, and a rule that never arrived is indistinguishable from one that was
+# followed (L429).
+#
+# Here rather than behind a command somebody types, for the same reason as the two lines above: the
+# failure mode IS that nobody measures. Every contributor adds a paragraph and none of them can see
+# the total, so the growth is nobody's decision. Never blocking: a large instructions file is not a
+# defect in the change being pushed, and a gate would be overridden every time and then ignored.
+echo "==> scripts/check-always-loaded-size.sh"
+"${REPO_ROOT}/scripts/check-always-loaded-size.sh" || true
+
 # #2585: deletes the Xcode build folders belonging to worktrees that no longer exist, and says how much
 # room is left. Xcode keys DerivedData by workspace PATH, so every throwaway verify worktree and every
 # parallel agent mints a fresh ~1.6 GB folder outside the checkout that nothing reclaimed. On 2026-08-12

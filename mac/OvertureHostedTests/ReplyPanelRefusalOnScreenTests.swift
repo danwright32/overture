@@ -16,8 +16,7 @@ import ViewInspector
 @Suite("The reply panel says why it will not send (#2152)")
 struct ReplyPanelRefusalOnScreenTests {
     private func container() throws -> ModelContainer {
-        try ModelContainer(for: Schema([Prospect.self, Recipient.self]),
-                           configurations: [ModelConfiguration(isStoredInMemoryOnly: true)])
+        try TestModelContainer.inMemory([Prospect.self, Recipient.self])
     }
 
     // Dan's real row, measured on the live store (#2151): he pitched nbecker@ and Nicole answered from

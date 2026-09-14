@@ -44,7 +44,9 @@ enum InquiryMutations {
             case .theySaidNo: return .lostHard
             // Soft: a silence, a "not now", and a budget answer all leave the door open, and Dan's own
             // refusal closes it from his side rather than theirs. Matches `lostDoorOpen` on the show side.
-            case .neverHeardBack, .theySaidNotNow, .theySaidPriceTooHigh, .turnedThemDown: return .lostSoft
+            case .neverHeardBack, .theySaidNotNow, .theySaidPriceTooHigh, .turnedThemDown,
+                 .emailBounced:
+                return .lostSoft
             // An ending that says the inquiry BOOKED is not a loss whatever it arrived wrapped in, so it
             // answers what it says. `InquiryEnding.danCanChoose` filters it out of the menu, and the row
             // has its own Booked control, so this is unreachable today rather than a second way in.

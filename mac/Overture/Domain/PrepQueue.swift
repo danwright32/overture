@@ -150,6 +150,30 @@ struct PrepQueueItem: Codable, Equatable, Sendable {
     // ABSENT on the overwhelming majority of items and deliberately not an empty array, so the run is not
     // asked to reason about a list that is almost always nothing.
     var refusedEmails: [String]? = nil
+    // v14 (#2990): the addresses this show ALREADY HOLDS, so a contact re-run does not pay to
+    // rediscover and re-report people it was handed a moment ago.
+    //
+    // It only arises where Dan explicitly asks for a contact re-run: `PrepQueueBuilder.probedWithContact`
+    // sends a show that already has a contact down the `draft_only` path, so the run that starts from
+    // nothing is the one he asked for MORE from.
+    //
+    // MEASURED before it was built, across every archived run on this Mac (2026-09-06): 34 show-answers
+    // where an earlier run had already returned routes for that show, 18 routes rediscovered against 31
+    // genuinely new ones, and 5 of the 34 returning nothing the show did not already hold. Real and
+    // modest, which is why this is a field and not a change to what the run researches.
+    //
+    // CONTEXT, NOT TARGETS, and that is the whole design. He asked for this re-run because he wants
+    // somebody he does not have, so a list the run read as "these are done" would make the re-run
+    // pointless. The runbook is told so in those words.
+    //
+    // ADDRESSES only, the rule `refusedEmails` above follows, because the field is documented to the run
+    // as a list of email addresses and a form handle in it is a value the run reads as one.
+    //
+    // DISJOINT from `refusedEmails` by construction: a struck address is one Dan refused, so naming it
+    // here would put it back in front of the run as context on the very run meant to leave it alone.
+    //
+    // ABSENT, never an empty array, for the same reason as `refusedEmails`.
+    var alreadyFoundEmails: [String]? = nil
     // v13 (#2983): the producing organisation the APP already holds for this show, by name, straight from
     // the stored `presenter`.
     //
@@ -194,6 +218,17 @@ struct ShowListing: Codable, Equatable, Sendable {
     // description that fell past the cut is never reported as a page that published none (L11: a message
     // may claim only what its check actually measured). Absent means the whole page is here.
     var truncated: Bool? = nil
+    // #2698: HOW MUCH was lost at that cut, in characters of readable text. Written only where
+    // `truncated` is set, and absent everywhere else, which is deliberate: zero is a real measurement
+    // meaning the cut dropped nothing, and a page nobody cut was never measured at all, so writing zero
+    // there would make the emptiest possible non-answer read as a finding (L98, L11).
+    //
+    // `truncated: true` on its own says the page continued and nothing more, so from inside the run a
+    // producing credit that fell past the cut is indistinguishable from a page that never named one, and
+    // the run then reports "no producer credited" with complete confidence. That is the #2554 failure.
+    // This does not tell the run WHAT it lost, and deliberately does not claim to: what it converts is an
+    // unqualified negative into one that carries its own scope.
+    var droppedCharacters: Int? = nil
 
     static let read = "read"
     static let unreadable = "unreadable"
@@ -232,7 +267,7 @@ enum PrepRunIntent: Equatable, Sendable {
 }
 
 enum PrepQueueBuilder {
-    static let version = 13
+    static let version = 14
 
     // #1666: the wire vocabulary of a queue item's `reprepMode` (#367), named rather than written out at
     // each use, so the string that crosses to the run and the string a surface reads back are one spelling.

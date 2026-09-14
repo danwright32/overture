@@ -79,3 +79,6 @@ DerivedData/
 
 # #2597: the last measured queue rebuild cost, per machine, written by run-tests-locked.sh
 .overture-queue-cost-measured
+
+# #3508: the last measured LIVE STORE pass cost, per machine, for the same reason as the line above.
+.overture-live-store-cost-measured

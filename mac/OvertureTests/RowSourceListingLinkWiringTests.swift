@@ -83,13 +83,34 @@ struct RowSourceListingLinkWiringTests {
     // The label is only as good as the table it is handed, and an EMPTY table makes every row read
     // "Source listing", which is the same silent wrongness #1825 fixed pointing the other way. Both
     // surfaces have to hold a live watchlist query and resolve their rows through it.
+    // #3814: the surface is now the VIEW PLUS ITS RENDER PASS, where it has one, and the two halves are
+    // checked separately because they are two different claims.
+    //
+    // The live query has to stay in the VIEW: a `@Query` is what makes the watchlist live, and a pass is a
+    // pure function that cannot hold one. Where the table is BUILT is the other question, and Follow-ups
+    // now builds it inside `FollowUpsRenderPass` rather than inside a `@ViewBuilder`, which is the point
+    // of that change: a derivation in the body is somewhere no counter and no test can reach.
+    //
+    // So this follows the derivation instead of pinning it to a file (L103). What it must not become is a
+    // check that either file mentions the call, which would pass on a view that kept the query and a pass
+    // that never used it.
+    private static let surfaces = [
+        (view: "Overture/UI/QueueView.swift", buildsTheTableIn: "Overture/UI/QueueView.swift"),
+        (view: "Overture/UI/FollowUpsView.swift", buildsTheTableIn: "Overture/UI/FollowUpsRenderPass.swift"),
+    ]
+
     @Test func bothSurfacesResolveTheirLinksAgainstTheLiveWatchlist() {
-        for path in ["Overture/UI/QueueView.swift", "Overture/UI/FollowUpsView.swift"] {
-            let source = SourceGuardHelper.source(path)
-            #expect(source.contains("@Query private var watchedSources: [WatchedSource]"),
-                    "\(path) has no live watchlist to resolve a link's label against")
-            #expect(source.contains("QueueModel.sourceCalendarIndex(watchedSources)"),
-                    "\(path) never builds the calendar table, so every link would read as an event page")
+        for surface in Self.surfaces {
+            let view = SourceGuardHelper.source(surface.view)
+            #expect(!view.isEmpty, "\(surface.view) could not be read, so nothing below was measured")
+            #expect(view.contains("@Query private var watchedSources: [WatchedSource]"),
+                    "\(surface.view) has no live watchlist to resolve a link's label against")
+
+            let builder = SourceGuardHelper.source(surface.buildsTheTableIn)
+            #expect(!builder.isEmpty,
+                    "\(surface.buildsTheTableIn) could not be read, so nothing below was measured")
+            #expect(builder.contains("QueueModel.sourceCalendarIndex("),
+                    "\(surface.buildsTheTableIn) never builds the calendar table, so every link would read as an event page")
         }
     }
 }

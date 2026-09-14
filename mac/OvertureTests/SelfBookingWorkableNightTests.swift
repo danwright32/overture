@@ -15,7 +15,12 @@ struct SelfBookingWorkableNightTests {
                       name: String = "Show", date: String? = "2026-08-06") -> SelfBookingConflict.Show {
         // #3323: one night, spelled as the night-plural type. `date` is nil-able because a show with no
         // night at all is one of the cases below, and it becomes an empty night list.
-        SelfBookingConflict.Show(key: key, nights: date.map { [$0] } ?? [], isCommitment: commitment,
+        // #3676: these suites test the COLLISION, which reads only `isCommitment`, so which tier a
+        // committed show carries is immaterial here. `.emailed` is used throughout, being the
+        // archetype the check was written for; the tier's own behaviour lives in
+        // SelfBookingHeaderTierTests.
+        SelfBookingConflict.Show(key: key, nights: date.map { [$0] } ?? [],
+                                 commitment: commitment ? .emailed : nil,
                                  engagementKey: nil, name: name,
                                  timesByNight: date.map { [$0: times] } ?? [:])
     }
@@ -23,8 +28,8 @@ struct SelfBookingWorkableNightTests {
     @Test func curtainsFurtherApartThanTheGapAreNotAClash() {
         let target = show("b", at: ["20:00"], commitment: false)
         let other = show("a", at: ["14:00"], name: "Orchestra A")
-        #expect(SelfBookingConflict.conflicts(for: target, among: [other, target]).isEmpty)
-        #expect(SelfBookingConflict.workable(for: target, among: [other, target]).map(\.other.name)
+        #expect(BothSelfBookingReadings.conflicts(for: target, among: [other, target]).isEmpty)
+        #expect(BothSelfBookingReadings.workable(for: target, among: [other, target]).map(\.other.name)
                 == ["Orchestra A"])
     }
 
@@ -32,28 +37,28 @@ struct SelfBookingWorkableNightTests {
     @Test func exactlyTheGapIsWorkable() {
         let target = show("b", at: ["19:00"], commitment: false)
         let other = show("a", at: ["14:00"])
-        #expect(SelfBookingConflict.conflicts(for: target, among: [other, target]).isEmpty)
+        #expect(BothSelfBookingReadings.conflicts(for: target, among: [other, target]).isEmpty)
     }
 
     @Test func oneMinuteInsideTheGapStaysAClash() {
         let target = show("b", at: ["18:59"], commitment: false)
         let other = show("a", at: ["14:00"], name: "Orchestra A")
-        #expect(SelfBookingConflict.conflicts(for: target, among: [other, target]).map(\.other.name)
+        #expect(BothSelfBookingReadings.conflicts(for: target, among: [other, target]).map(\.other.name)
                 == ["Orchestra A"])
-        #expect(SelfBookingConflict.workable(for: target, among: [other, target]).isEmpty)
+        #expect(BothSelfBookingReadings.workable(for: target, among: [other, target]).isEmpty)
     }
 
     // The MAJORITY state: most sources publish only a day. An unknown time can never clear the night.
     @Test func aShowNobodyPublishedATimeForStaysAClash() {
         let target = show("b", at: [], commitment: false)
         let other = show("a", at: ["14:00"], name: "Orchestra A")
-        #expect(SelfBookingConflict.conflicts(for: target, among: [other, target]).map(\.other.name)
+        #expect(BothSelfBookingReadings.conflicts(for: target, among: [other, target]).map(\.other.name)
                 == ["Orchestra A"])
 
         // ...and the other way round: the target's own time alone proves nothing about the other show.
         let timed = show("b", at: ["20:00"], commitment: false)
         let untimed = show("a", at: [], name: "Orchestra A")
-        #expect(SelfBookingConflict.conflicts(for: timed, among: [untimed, timed]).map(\.other.name)
+        #expect(BothSelfBookingReadings.conflicts(for: timed, among: [untimed, timed]).map(\.other.name)
                 == ["Orchestra A"])
     }
 
@@ -62,7 +67,7 @@ struct SelfBookingWorkableNightTests {
     @Test func anUnreadableTimeStaysAClash() {
         let target = show("b", at: ["20:00"], commitment: false)
         let other = show("a", at: ["2pm"], name: "Orchestra A")
-        #expect(SelfBookingConflict.conflicts(for: target, among: [other, target]).map(\.other.name)
+        #expect(BothSelfBookingReadings.conflicts(for: target, among: [other, target]).map(\.other.name)
                 == ["Orchestra A"])
     }
 
@@ -71,15 +76,15 @@ struct SelfBookingWorkableNightTests {
     @Test func aDoubleBillCollidingOnEitherPerformanceStaysAClash() {
         let target = show("b", at: ["20:00"], commitment: false)
         let other = show("a", at: ["11:00", "19:00"], name: "Orchestra A")
-        #expect(SelfBookingConflict.conflicts(for: target, among: [other, target]).map(\.other.name)
+        #expect(BothSelfBookingReadings.conflicts(for: target, among: [other, target]).map(\.other.name)
                 == ["Orchestra A"])
     }
 
     @Test func aDoubleBillThatClearsTheGapTwiceIsWorkable() {
         let target = show("b", at: ["20:00"], commitment: false)
         let other = show("a", at: ["09:00", "11:00"], name: "Orchestra A")
-        #expect(SelfBookingConflict.conflicts(for: target, among: [other, target]).isEmpty)
-        #expect(SelfBookingConflict.workable(for: target, among: [other, target]).map(\.other.name)
+        #expect(BothSelfBookingReadings.conflicts(for: target, among: [other, target]).isEmpty)
+        #expect(BothSelfBookingReadings.workable(for: target, among: [other, target]).map(\.other.name)
                 == ["Orchestra A"])
     }
 
@@ -90,8 +95,8 @@ struct SelfBookingWorkableNightTests {
         let tight = show("a", at: ["18:00"], name: "Choir B")
         let far = show("b", at: ["13:00"], name: "Orchestra A")
         let all = [tight, far, target]
-        #expect(SelfBookingConflict.conflicts(for: target, among: all).map(\.other.name) == ["Choir B"])
-        #expect(SelfBookingConflict.workable(for: target, among: all).map(\.other.name) == ["Orchestra A"])
+        #expect(BothSelfBookingReadings.conflicts(for: target, among: all).map(\.other.name) == ["Choir B"])
+        #expect(BothSelfBookingReadings.workable(for: target, among: all).map(\.other.name) == ["Orchestra A"])
     }
 
     // The time never widens the net: a non-commitment, a different date and the same linked production
@@ -99,10 +104,10 @@ struct SelfBookingWorkableNightTests {
     @Test func theTimeOnlyEverNarrowsTheExistingRule() {
         let target = show("b", at: ["20:00"], commitment: false)
         let notCommitted = show("a", at: ["14:00"], commitment: false)
-        #expect(SelfBookingConflict.workable(for: target, among: [notCommitted, target]).isEmpty)
+        #expect(BothSelfBookingReadings.workable(for: target, among: [notCommitted, target]).isEmpty)
 
         let otherNight = show("a", at: ["14:00"], date: "2026-08-07")
-        #expect(SelfBookingConflict.workable(for: target, among: [otherNight, target]).isEmpty)
+        #expect(BothSelfBookingReadings.workable(for: target, among: [otherNight, target]).isEmpty)
     }
 
     // The gap Dan chose, stated once so the tests and the rule cannot drift.
@@ -115,7 +120,7 @@ struct SelfBookingWorkableNightTests {
 struct SelfBookingWorkableCopyTests {
     private func show(_ key: String, at times: [String], name: String = "Show")
         -> SelfBookingConflict.Show {
-        SelfBookingConflict.Show(key: key, nights: ["2026-08-06"], isCommitment: true,
+        SelfBookingConflict.Show(key: key, nights: ["2026-08-06"], commitment: .emailed,
                                  engagementKey: nil, name: name,
                                  timesByNight: ["2026-08-06": times])
     }

@@ -26,7 +26,14 @@ struct LinkReplyPicker: View {
     private enum Phase: Equatable {
         case reading
         case failed(String)
-        case ready([ProposedConversation.Candidate])
+        // #3708: no pitch date, so no window. Its own state and never an empty list: a contact Overture
+        // cannot read for and a mailbox holding no answer are different things, and only the second is
+        // something this screen is entitled to tell him (L98).
+        case noPitchDate
+        // `stoppedShort` rides the ready case rather than replacing it, for the reason `saveFailed` rides
+        // `.searched`: a truncated read really did read, and the candidates it found are true and worth
+        // picking from. What is in doubt is only whether the answer could be OLDER than what it saw.
+        case ready([ProposedConversation.Candidate], stoppedShort: GmailReplySearch.StopReason?)
     }
 
     @State private var phase: Phase = .reading
@@ -50,11 +57,39 @@ struct LinkReplyPicker: View {
                     .fixedSize(horizontal: false, vertical: true)
                 Button(ProposedConversationCopy.tryAgain) { Task { await load() } }
                     .font(OVType.meta)
-            case .ready(let candidates) where candidates.isEmpty:
-                Text(ProposedConversationCopy.pickNothingFound)
+            case .noPitchDate:
+                Text(ProposedConversationCopy.pickNoPitchDate)
                     .font(OVType.meta).foregroundStyle(OVColor.inkSoft)
                     .fixedSize(horizontal: false, vertical: true)
-            case .ready(let candidates):
+            case .ready(let candidates, let stoppedShort) where candidates.isEmpty:
+                // A truncated read that found nothing must NOT say it read the inbox and found nothing:
+                // it read the newest stretch of the window, which is a different claim (L98).
+                Text(stoppedShort == nil
+                     ? ProposedConversationCopy.pickNothingFound
+                     : ProposedConversationCopy.pickStoppedShort(examined: GmailReplySearch.maxMessagesOnDemand))
+                    .font(OVType.meta).foregroundStyle(OVColor.inkSoft)
+                    .fixedSize(horizontal: false, vertical: true)
+            case .ready(let candidates, let stoppedShort):
+                // Above the list, not under it: it changes how the list should be read, and a caveat
+                // below a scrolling region is one he may never reach.
+                if stoppedShort != nil {
+                    Text(ProposedConversationCopy.pickStoppedShort(examined: GmailReplySearch.maxMessagesOnDemand))
+                        .font(OVType.meta).foregroundStyle(OVColor.inkSoft)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                // #3711: what linking DOES, once, above the list. What Dan approves has to be exactly
+                // what happens including who it reaches (L64), and on a pitch that already has an address
+                // that is a MOVE: off the address he pitched and off the conversation Overture sent on.
+                // Said here rather than on each row because it is a fact about the contact, the same on
+                // every row, and each row already names the person it would move to.
+                //
+                // Only where there is a list. On the empty branch it would describe an act nothing on
+                // screen can perform.
+                Text(ProposedConversationCopy.pickWhatLinkingDoes(
+                        replacing: recipient.email,
+                        alsoMovesTheConversation: recipient.hasWatchableConversation))
+                    .font(.system(size: 10)).foregroundStyle(OVColor.inkSoft)
+                    .fixedSize(horizontal: false, vertical: true)
                 // #2159/L76: macOS hides scrollbars until a gesture starts, so a plain capped ScrollView
                 // is pixel-identical at rest to one showing everything it has, and Dan would answer only
                 // what he could see. This list can genuinely run long: a month of inbound mail can hold
@@ -86,11 +121,6 @@ struct LinkReplyPicker: View {
             Text(ProposedConversationCopy.detail(subject: candidate.subject,
                                                  sentAt: candidate.sentAt, now: Date()))
                 .font(OVType.meta).foregroundStyle(OVColor.inkSoft)
-            // What linking DOES, on every row, because each row would save a DIFFERENT address and what
-            // Dan approves has to be exactly what happens including who it reaches (L64).
-            Text(ProposedConversationCopy.confirmDetail(address: candidate.fromAddress))
-                .font(.system(size: 10)).foregroundStyle(OVColor.inkSoft)
-                .fixedSize(horizontal: false, vertical: true)
             if linking == candidate.messageId {
                 HStack(spacing: OVSpacing.sm) {
                     ProgressView().controlSize(.small)
@@ -105,32 +135,48 @@ struct LinkReplyPicker: View {
         .padding(.vertical, 4)
     }
 
+    // #3708: reads on demand, for THIS contact, back to its own pitch.
+    //
+    // It used to call the tick's own `search(in:)`, which meant this screen
+    // could only ever offer what the automatic scope was already looking at. That scope refuses anything
+    // holding a conversation, so on an emailed pitch it answered `nothingInScope` and the picker
+    // correctly reported that no mailbox had been read: the control was reachable and could never find
+    // anything. Widening the scope was the wrong fix, since it is the read the reconcile tick makes
+    // every thirty minutes (#3708 states the cost).
     private func load() async {
         phase = .reading
-        let outcome = await GmailReplySearch().search(in: context)
-        switch outcome {
+        // No pitch date, no window. Said as its own state rather than searched with a guessed one,
+        // because a window Overture invented would offer mail from before the pitch as the answer to it.
+        guard let since = recipient.manualSearchAnchor else {
+            phase = .noPitchDate
+            return
+        }
+        switch await GmailReplySearch().searchOnDemand(since: since) {
         case .notConnected:
             phase = .failed(ProposedConversationCopy.notConnected)
         case .failed(let reason):
             phase = .failed(reason)
-        case .nothingInScope:
-            // Not a failure, and not the same as "read the mailbox and found nothing": this pitch is out
-            // of the search's scope, so no mailbox was read for it at all (L98).
-            phase = .ready([])
-        case .searched(let candidates, _, _):
+        case .read(let candidates, let stoppedShort):
             phase = .ready(ProposedConversation.pickable(candidates, for: recipient, on: prospect,
-                                                         selfEmail: SendIdentity.danWright.email))
+                                                         selfEmail: SendIdentity.danWright.email),
+                           stoppedShort: stoppedShort)
         }
     }
 
     private func link(_ candidate: ProposedConversation.Candidate) async {
         linking = candidate.messageId
-        // Routed through the SAME propose-then-confirm pair the automatic path uses, rather than calling
-        // the attach directly, so a hand link and a confirmed proposal cannot end up writing different
-        // things (L16 applied to a write rather than a count).
-        ProposedConversation.clear(on: recipient)
-        ProposedConversation.propose(candidate, on: recipient, now: Date())
-        let outcome = await ConfirmProposedConversation().confirm(on: recipient, of: prospect, in: context)
+        // Routed through the SAME confirm the automatic path uses, rather than calling the attach
+        // directly, so a hand link and a confirmed proposal cannot end up writing different things (L16
+        // applied to a write rather than a count).
+        //
+        // #3712: the candidate is HANDED to it. This used to store the pick through
+        // `ProposedConversation.propose` and let `confirm` read it back, and `propose` is guarded by
+        // `isAskable`, which asks whether this is a form pitch with no conversation. On the emailed pitch
+        // this picker exists for, the write matched nothing, `confirm` found no proposal, and every pick
+        // was refused. A write that matches nothing reports success and the next step acts on a state
+        // nobody created (L100).
+        let outcome = await ConfirmProposedConversation().confirm(on: recipient, of: prospect,
+                                                                  in: context, picked: candidate)
         linking = nil
         switch outcome {
         case .notConnected:

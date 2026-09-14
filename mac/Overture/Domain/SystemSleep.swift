@@ -15,7 +15,7 @@ import Foundation
 // That window contained two nights, one of them with the lid shut for ten hours (`pmset -g log`,
 // Clamshell Sleep 23:23:23 to 09:34:57). Every clock the platform offers ran through it. So there is no
 // awake clock to read on this hardware, and the whole family is measured here rather than argued about:
-// see `SystemSleepMeasurementTests` and `fixtures/watch-gap-clock-measurement.json`.
+// see `SystemSleepTests` and `fixtures/watch-gap-clock-measurement.json`.
 //
 // What IS observable is the sleep itself. `NSWorkspace` posts a notification as the Mac goes to sleep
 // and another as it wakes, and the span between them is directly measurable by a running app. This is

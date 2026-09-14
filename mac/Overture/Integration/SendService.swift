@@ -5,9 +5,7 @@ import SwiftData
 enum SendService {
     // A performance's recipients in deterministic send order (SwiftData to-many is unordered).
     nonisolated private static func sendOrdered(_ recipients: [Recipient]) -> [Recipient] {
-        recipients.sorted {
-            $0.sendOrderRank != $1.sendOrderRank ? $0.sendOrderRank < $1.sendOrderRank : $0.id < $1.id
-        }
+        Recipient.inSendOrder(recipients)
     }
 
     // The next recipient a manual or throttled send would target for this performance: the first
@@ -208,15 +206,21 @@ enum SendService {
         let spent = group.map(\.followUpCount).max() ?? recipient.followUpCount
         guard FollowUp.isAwaitingNudge(recipient, in: prospect, now: now), spent < config.maxFollowUps,
               let email = recipient.email, !email.isEmpty else { return false }
-        // #2717: this path needs no attached-conversation refusal of its own, and that is a measured
-        // verdict rather than an omission. `isAwaitingNudge` above reads `Recipient.isAwaitingFollowUp`,
-        // which requires `outreachChannel == .email`, while an attached conversation only ever exists on a
-        // `.contactForm` row: the two are mutually exclusive by construction, so a refusal added here
-        // could never fire. One was written and then removed for exactly that reason, because a guard that
-        // cannot be seen to fail is indistinguishable from no guard while reading as protection (L1, L29).
-        // The rule it would have enforced is asserted where it is actually decided, by
-        // `anAttachedConversationNeverBecomesNudgeable` (#2716) and by the follow-up test in
-        // `AttachedConversationReadersTests`.
+        // #2717: this path needs no attached-conversation refusal of its own, and that is still true, but
+        // NOT for the reason recorded here until #3712. That reason was that `isAwaitingFollowUp` requires
+        // `outreachChannel == .email` while an attached conversation only ever exists on a `.contactForm`
+        // row, so "the two are mutually exclusive by construction". Milestone 82's phase 3 made an emailed
+        // pitch attachable and that construction stopped holding: #3706's row is `.email`, holds a
+        // conversation Overture never sent on, and reached this function with nothing in the way. A
+        // recorded reason for the ABSENCE of a guard is read by everyone afterwards as a decision somebody
+        // made, so it is corrected here rather than left standing (L346, L407).
+        //
+        // What keeps the guard unnecessary now is that `isAwaitingFollowUp` itself asks
+        // `replyWatchConversationIsAttached`, which #3712 widened to mean what it says: the stored thread
+        // is not one Overture sent on, whatever the channel. So the refusal lives in the predicate every
+        // nudge surface already reads, rather than in this one send path (L16). Asserted by
+        // `anAttachedConversationNeverBecomesNudgeable` (#2716), by the follow-up test in
+        // `AttachedConversationReadersTests`, and by `itIsNoLongerNudgeable` (#3712).
         let addresses = group.compactMap(\.email).filter { !$0.isEmpty }
         // Reply on THIS contact's conversation (#74, per-recipient #418 D): same threadId, In-Reply-To
         // the contact's last Message-ID, and a "Re:" subject, so a reply to the nudge lands on the
@@ -389,16 +393,13 @@ enum SendService {
         }
     }
 
-    // #2031: why these contacts cannot share one email, in the words Dan reads, or nil when they can.
+    // #2031's joint-send refusal stood here, and #3549 deleted it rather than leaving it as decoration.
+    // Its one reason was that the members would not receive the same words, which could only happen while
+    // a performer carried a second copy of the pitch. A show has one letter now, so every member of a
+    // group reads the same text by construction and the refusal could never fire again (L29, L281).
     //
-    // Only one reason exists, and it is the one the app must never decide on his behalf: the members would
-    // not receive the same words. A directly-addressed performer carries their own second-person letter
-    // (#641/#789), so putting them on one message with somebody reading a different letter means one of
-    // the two gets text written for the other, greeted by the other's name.
-    nonisolated static func jointSendRefusal(_ recipients: [Recipient], of prospect: Prospect) -> String? {
-        guard Set(recipients.map { $0.effectiveBody ?? "" }).count > 1 else { return nil }
-        return ActionAck.jointSendMixedLetters
-    }
+    // Worth knowing if it is ever wanted back: its message was never rendered anywhere. Nothing read the
+    // returned string, so the refusal was silent and Dan met it as a Send that did nothing (L109).
 
     // #2031: ONE email to several contacts of a performance, and every one of them recorded as having
     // received THAT email.
@@ -415,9 +416,11 @@ enum SendService {
         // draft naming contacts it was about to email.
         guard prospect.status == .approved else { return false }
         let group = sendOrdered(recipients.filter(\.isSendablePending))
-        guard !group.isEmpty, jointSendRefusal(group, of: prospect) == nil,
+        guard !group.isEmpty,
               let pitch = OutgoingPitch.text(forGroup: group, of: prospect),
-              let sharedBody = group.first?.effectiveBody,
+              // #3549: the show's one letter, read from the show rather than from whichever contact
+              // happened to sort first, which is the same text every member receives.
+              let sharedBody = prospect.draftBody,
               let mail = OutgoingMail(to: group.compactMap(\.email),
                                       subject: prospect.draftSubject ?? "", body: pitch)
         else { return false }

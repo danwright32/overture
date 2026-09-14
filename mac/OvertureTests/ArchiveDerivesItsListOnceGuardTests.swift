@@ -38,20 +38,37 @@ struct ArchiveDerivesItsListOnceGuardTests {
     // CALL sites, never the declaration. Counting every mention read the `func filteredItems()` line
     // as a second call and reported 2 for the correct code, which would have made the fix
     // unreachable: the guard demanded a number the right answer cannot produce.
-    private var derivationCallSites: Int {
+    private func callSites(of name: String) -> Int {
         SwiftSource.scannableLines(in: archiveView)
             .map(\.code)
-            .filter { $0.contains("filteredItems()") && !$0.contains("func filteredItems()") }
+            .filter { $0.contains("\(name)(") && !$0.contains("func \(name)(") }
             .count
     }
 
+    // #3655 Phase 5: BOTH derivations, not just the filter.
+    //
+    // The whole-store work moved: `makeScope()` is now the pass over every show in the store, and
+    // `filteredItems(_:)` is the filter and sort over the rows it produced. Guarding only the second
+    // would leave the expensive one free to be re-run per reader, which is exactly the defect #3492 was
+    // filed for, one function along (L30, L387: the likeliest place to repeat a defect class is the
+    // change that fixes it).
     @Test func theDerivationRunsExactlyOncePerRender() {
         #expect(!archiveView.isEmpty, "ArchiveView.swift could not be read, so this measured nothing")
-        let calls = derivationCallSites
+        let calls = callSites(of: "filteredItems")
         #expect(calls == 1,
-                Comment(rawValue: "ArchiveView calls filteredItems() \(calls) times. It is the whole "
-                        + "store derivation plus a filter and a sort, and it must run once per render "
-                        + "pass, bound in `body` and handed to the readers that need it."))
+                Comment(rawValue: "ArchiveView calls filteredItems() \(calls) times. It is a filter and "
+                        + "a sort over every row in the store, and it must run once per render pass, "
+                        + "bound in `body` and handed to the readers that need it."))
+    }
+
+    @Test func theWholeStorePassRunsExactlyOncePerRender() {
+        #expect(!archiveView.isEmpty, "ArchiveView.swift could not be read, so this measured nothing")
+        let calls = callSites(of: "makeScope")
+        #expect(calls == 1,
+                Comment(rawValue: "ArchiveView calls makeScope() \(calls) times. It is the pass over "
+                        + "every show in the store and it yields the card store the rows draw through, "
+                        + "so a second call is a second whole-store derivation AND a second card store "
+                        + "whose registry the first one's rows never reach (#3655)."))
     }
 
     @Test func bodyIsTheOneThatDerivesIt() {
@@ -62,7 +79,11 @@ struct ArchiveDerivesItsListOnceGuardTests {
         let bodyCode = SwiftSource.scannableLines(in: body).map(\.code).joined(separator: "\n")
         // Compared as a COUNT, never as `contains` over the whole body, so a failure prints the number
         // rather than the file. The first form of this suite printed all 279 lines four times over.
-        let bound = occurrences(of: "let filtered = filteredItems()", in: bodyCode)
+        let scope = occurrences(of: "let scope = makeScope()", in: bodyCode)
+        #expect(scope == 1,
+                Comment(rawValue: "ArchiveView.body binds the pass \(scope) times. The rows on screen and "
+                        + "the cards drawn into them must be two halves of ONE derivation (#3655)."))
+        let bound = occurrences(of: "let filtered = filteredItems(scope.rows)", in: bodyCode)
         #expect(bound == 1,
                 Comment(rawValue: "ArchiveView.body binds the derived list \(bound) times. It must derive "
                         + "once and bind it, so the readers below receive a value rather than each "
@@ -79,7 +100,7 @@ struct ArchiveDerivesItsListOnceGuardTests {
         }
         let bodyCode = SwiftSource.scannableLines(in: body).map(\.code).joined(separator: "\n")
         let header = occurrences(of: "header(filtered: filtered)", in: bodyCode)
-        let content = occurrences(of: "content(filtered: filtered)", in: bodyCode)
+        let content = occurrences(of: "content(filtered: filtered, cards: scope.cards)", in: bodyCode)
         #expect(header == 1,
                 Comment(rawValue: "the header is handed the bound list \(header) times; it must receive "
                         + "the value `body` derived, not run the derivation itself"))
@@ -90,8 +111,11 @@ struct ArchiveDerivesItsListOnceGuardTests {
 
     // Both readers take it as a parameter, so neither can quietly go back to reaching for a property.
     @Test func bothReadersTakeItAsAParameter() {
-        let header = occurrences(of: "private func header(filtered: [QueueItem])", in: code)
-        let content = occurrences(of: "private func content(filtered: [QueueItem])", in: code)
+        // #3655: `[QueueScopeRow]`, and the type is part of the needle deliberately. A reader taking
+        // `[QueueItem]` again would be handed a bound value correctly and would be handed CARDS, which is
+        // the whole-store card build this phase removed.
+        let header = occurrences(of: "private func header(filtered: [QueueScopeRow])", in: code)
+        let content = occurrences(of: "private func content(filtered: [QueueScopeRow],", in: code)
         #expect(header == 1, "the header must take the derived list as a parameter")
         #expect(content == 1, "the list must take the derived list as a parameter")
     }

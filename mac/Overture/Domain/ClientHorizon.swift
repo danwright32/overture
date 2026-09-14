@@ -19,7 +19,14 @@ enum ClientHorizon {
     // The org name confidently matches a Downbeat client, by the SAME names and matcher HistoryMatch uses
     // to recognize a client's SHOW, so a source and a show can never disagree about who is a client.
     static func matchesClientName(_ orgName: String, clients: [DownbeatClient]) -> Bool {
-        clients.contains { c in
+        // #3645: counted, because this is the expensive thing on the Sources sheet and a render pass of
+        // that sheet is supposed to run none of them. Counted WHERE THE WORK HAPPENS rather than at the
+        // call sites, so a new route to it is counted whether or not whoever adds it thinks about the
+        // cost, which is the whole property that makes this tally worth having (a counter the new code
+        // must opt into only ever measures the costs somebody already knew about). It reads one task
+        // local and returns when nobody is measuring, measured at 0.052% of a pass by `WorkTallyCostTests`.
+        QueueRenderPass.WorkTally.recordClientNameMatch()
+        return clients.contains { c in
             HistoryMatch.clientNames(c).contains { GroupNameMatch.isConfident(orgName, $0) }
         }
     }

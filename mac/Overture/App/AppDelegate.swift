@@ -72,7 +72,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         AgentLogLocation.prepareDirectory()
         // #295: bound the agent's stdout/stderr so an always-resident process can't grow them without
         // limit. Runs every launch (= every login for the resident agent); a no-op until a file is large.
-        AgentLogLocation.capLogs()
+        // #3789: through the entry point that REPORTS what a rotation destroyed, rather than the bare
+        // mechanism, whose answer this line used to drop on the floor.
+        AgentLogLocation.capLogsReportingWhatWasLost()
         guard let container = AppDelegate.sharedContainer else { return }
         // Runs the one-time, idempotent recipients/thread/salutation backfills here on the
         // window-independent launch path (not in a View's .task), so a windowless resident launch still
@@ -246,7 +248,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
 
     // The main Overture window only (#334 chose to exclude the onboarding window): a visible,
     // titled window that can become main, and isn't the onboarding window or the menu-bar item.
+    //
+    // #3788: "a window a person could be looking at" is now stated ONCE, in `WindowCensus`, because a
+    // second copy of it was written there and got the menu bar item wrong. This one keeps its own extra
+    // exclusion and nothing else: the onboarding window is genuinely something Dan is looking at, so the
+    // census counts it, and only THIS question (whether to show a Dock icon) wants it left out. Two
+    // callers, one definition, one of them narrowing it for a stated reason.
     private func isMainContentWindow(_ w: NSWindow) -> Bool {
-        w.isVisible && w !== onboardingWindow && w.canBecomeMain && w.styleMask.contains(.titled)
+        w !== onboardingWindow && WindowCensus.isContentWindow(WindowCensus.Window(w))
     }
 }

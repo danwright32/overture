@@ -117,7 +117,7 @@ enum OVColor {
     // #901: text on a filled rust badge. #1527 split it by theme. The original note here read "white reads
     // on both", which was a by-eye call and measured 3.45 to 1 against the dark-mode terracotta, under the
     // 4.5 to 1 that 11pt semibold needs. Light mode keeps white (5.89 to 1 on the darker brick); dark mode
-    // takes the warm ink (5.15 to 1). `ConflictPillColourTests` measures both, so this cannot silently
+    // takes the warm ink (5.15 to 1). `ConflictNoteColourTests` measures both, so this cannot silently
     // regress to a single value again.
     static let onRust = dynamic(
         light: NSColor(srgbRed: 1, green: 1, blue: 1, alpha: 0.96),

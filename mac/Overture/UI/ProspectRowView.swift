@@ -10,6 +10,8 @@ struct ProspectRowView: View {
     @State private var renameDraft = ""
     // #2007: the write-it-yourself editor.
     @State private var showingManualPrep = false
+    // #3341: the route Dan types on a triage card whose own advice told him to go and find one.
+    @State private var handAddedRoute = ""
 
     let item: QueueItem
     let today: String
@@ -52,9 +54,18 @@ struct ProspectRowView: View {
     // address rather than a recipient id because the two kinds are removed by different routes: one has a
     // Recipient row on this show, the other is printed from the organisation's own answer and has none.
     var onRemoveContactAddress: (_ address: QueueItem.DisplayedAddress) -> Void = { _ in }
+    // #2598: whether Dan has just struck this address, answered per address rather than for the card.
+    //
+    // Defaulted to false so every surface that draws this row without the queue's transient state (the
+    // Archive, the previews) is unaffected. A default that HID something would be the dangerous
+    // direction; this one can only ever show what the store says.
+    var isAddressStruck: (_ email: String) -> Bool = { _ in false }
     var onDismissContactReply: (_ recipientId: String) -> Void = { _ in }
     var onDismissContactBounce: (_ recipientId: String) -> Void = { _ in }
     var onDismissVenueMatch: (_ recipientId: String) -> Void = { _ in }
+    // #2937: Dan's answer to a profile the check guessed by name. Defaulted to a no-op like every
+    // callback beside it, so a preview or a test that does not offer it is unaffected.
+    var onConfirmGuessedProfile: (_ recipientId: String) -> Void = { _ in }
     var onDismissPressContactMatch: (_ recipientId: String) -> Void = { _ in }
     var onDismissDuplicateContactMatch: (_ recipientId: String) -> Void = { _ in }
     // #1866: Dan overruling the guard that held a confident find down to unverified.
@@ -186,6 +197,17 @@ struct ProspectRowView: View {
                 }
                 Spacer(minLength: OVSpacing.sm)
                 actions
+            }
+            // #3341: somewhere to put a contact on the card that ASKED for one. The field lives inside
+            // DraftReviewView, which only draws under `hasDraft` below, so following the card's own
+            // advice used to cost a Prep run on a show it had just called a long shot. Drawn only where
+            // the card actually asks (ReachabilityCopy.adviceAsksForAHandAddedContact) rather than on
+            // every row with no contact, because a control on a card that did not ask for one is the
+            // noise #1595 cut back, and a card telling him another check is worth more would be
+            // contradicted by a field inviting a search (L109).
+            if !item.hasDraft, item.reachabilityBadge() == .noEmailFound,
+               ReachabilityCopy.adviceAsksForAHandAddedContact(item.reachabilityEmptyReason) {
+                handAddedContactField
             }
             if item.hasDraft {
                 DraftReviewView(
@@ -633,6 +655,34 @@ struct ProspectRowView: View {
     // Before a probe it is the calm, advisory Layer 1 "Hard to reach" heuristic;
     // after a probe it is the firm "Email found" (forest) or "No email found" (rust). A decision aid, never
     // a gate. The decision lives in the model (item.reachabilityBadge), tested; this only renders it.
+    // #3341. Deliberately the SAME callback the draft review's own add uses (`onAddRecipient`, which
+    // goes through `ProspectMutations.addRecipientManually` and `ManualContactRoute.parse`), so the two
+    // paths cannot accept different things and a route Dan may type here is exactly a route he may type
+    // there (L263). An address, a contact form or a social profile all work, which is what #2629
+    // established and what the shows this appears on actually have.
+    private func addHandTypedRoute() {
+        guard ManualContactRoute.parse(handAddedRoute) != nil else { return }
+        onAddRecipient(handAddedRoute, nil)
+        handAddedRoute = ""
+    }
+
+    @ViewBuilder private var handAddedContactField: some View {
+        HStack(spacing: OVSpacing.xs) {
+            TextField("Email or link", text: $handAddedRoute)
+                .textFieldStyle(.roundedBorder)
+                .font(OVType.meta)
+                // Return adds the route, rather than falling through to whatever default button the
+                // enclosing view happens to have, which is the defect #2308 shipped once already.
+                .onSubmit { addHandTypedRoute() }
+            Button(ReachabilityCopy.addContactAction) { addHandTypedRoute() }
+            .buttonStyle(.bordered)
+            // The same rule the add itself is gated on, so the control can never look willing to take
+            // something the action then refuses (L109, #2629).
+            .disabled(ManualContactRoute.parse(handAddedRoute) == nil)
+        }
+        .padding(.top, OVSpacing.xs)
+    }
+
     @ViewBuilder private var reachabilityFlag: some View {
         switch item.reachabilityBadge() {
         case .none:
@@ -742,7 +792,11 @@ struct ProspectRowView: View {
             // column three times was a second thing competing for its WIDTH; a second line costs height
             // instead, which this row has, and it keeps the address on a line of its own to wrap into.
             VStack(alignment: .trailing, spacing: 3) {
-                ForEach(item.displayedContactAddresses) { address in
+                // #2598: struck addresses are gone from this list on the PRESS, rather than when the
+                // rebuild lands 860 ms later. Filtered here rather than in the derivation deliberately:
+                // the derivation is what takes the 860 ms, so anything that waits for it cannot be the
+                // answer to waiting for it.
+                ForEach(item.displayedContactAddresses.filter { !isAddressStruck($0.email) }) { address in
                     VStack(alignment: .trailing, spacing: 0) {
                         // Who the address belongs to, when the check named them. Quieter than the address:
                         // the address is the thing Dan acts on, this is the fact that tells him what it is
@@ -822,6 +876,17 @@ struct ProspectRowView: View {
                     .font(OVType.meta)
                     .foregroundStyle(OVColor.forestText)
                     .multilineTextAlignment(.trailing)
+                    // #2937: his answer, offered only on a handle that is still a guess. A control on
+                    // every route would read as a decision he has to make about all of them, and it
+                    // disappears once he has answered, because a doubt that stays on screen after it is
+                    // settled teaches him to ignore the line (L269).
+                    if route.offersConfirmation, let id = route.recipientId {
+                        Button(ReachabilityCopy.confirmProfileControl) { onConfirmGuessedProfile(id) }
+                            .buttonStyle(.plain)
+                            .font(OVType.meta)
+                            .foregroundStyle(OVColor.forestText)
+                            .help(ReachabilityCopy.confirmProfileHelp)
+                    }
                 }
             }
         }

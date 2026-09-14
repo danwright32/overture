@@ -15,19 +15,26 @@ struct QueueDepartingFoldTests {
             matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil, status: .approved)
     }
 
+    // #3654: the visible half of the fold is ROWS and the departing half is CARDS, which is what the two
+    // actually are on screen: the list holds rows, and a show that has just left has no card the store
+    // could build, only the snapshot taken when Dan pressed.
+    private func row(_ key: String) -> QueueScopeRow {
+        QueueScopeRow(item(key))
+    }
+
     @Test func aDepartingRowIsShownEvenThoughItLeftVisible() {
-        let out = QueueModel.withDeparting([item("a")], departing: ["b": item("b")])
+        let out = QueueModel.withDeparting([row("a")], departing: ["b": item("b")])
         #expect(Set(out.map(\.id)) == ["a", "b"])
     }
 
     @Test func aDepartingRowStillInVisibleIsNotDuplicated() {
         let a = item("a")
-        let out = QueueModel.withDeparting([a], departing: ["a": a])
+        let out = QueueModel.withDeparting([row("a")], departing: ["a": a])
         #expect(out.map(\.id) == ["a"])   // shown once, from the departing snapshot
     }
 
     @Test func noDepartingRowsLeavesVisibleUntouched() {
-        let out = QueueModel.withDeparting([item("a"), item("b")], departing: [:])
+        let out = QueueModel.withDeparting([row("a"), row("b")], departing: [:])
         #expect(out.map(\.id) == ["a", "b"])
     }
 }

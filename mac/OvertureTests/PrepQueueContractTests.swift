@@ -81,9 +81,9 @@ struct PrepQueueContractTests {
         #expect(roundTripped == expected)
     }
 
-    @Test func theBuilderNowStampsVersion13() {
+    @Test func theBuilderNowStampsVersion14() {
         let q = PrepQueueBuilder.build(from: [], generatedAt: "2026-06-25T00:00:00.000Z", houses: [])
-        #expect(q.version == 13)
+        #expect(q.version == 14)
     }
 
     // v13 (#2983): an item may name the producing organisation the APP already holds, which until this
@@ -105,11 +105,42 @@ struct PrepQueueContractTests {
         #expect(v12.items.allSatisfy { $0.presenterOnRecord == nil })
     }
 
-    @Test(arguments: 1...13)
+    @Test(arguments: 1...14)
     func noFixtualderrClaimsTheActIsAllThereIsWhileNamingAProducer(version: Int) throws {
         let decoded = try JSONDecoder().decode(PrepQueue.self, from: try fixture("v\(version).json"))
         for item in decoded.items where item.onlyTheActIsNamed == true {
             #expect(item.presenterOnRecord == nil)
+        }
+    }
+
+    // v14 (#2990): an item may name the addresses the show ALREADY HOLDS, so a contact re-run does not
+    // pay to rediscover people it was handed a moment ago. Additive, so every earlier fixture still
+    // decodes with the field absent.
+    //
+    // The two lists must stay DISJOINT inside one item, asserted across EVERY fixture rather than only
+    // this one, so a later fixture cannot introduce the contradiction the field exists to avoid: a struck
+    // address named here would put an address Dan refused back in front of the run as context, on the
+    // very run meant to leave it alone (L16).
+    @Test func theV14FixtureNamesTheAddressesTheShowAlreadyHolds() throws {
+        let decoded = try JSONDecoder().decode(PrepQueue.self, from: try fixture("v14.json"))
+        #expect(decoded.version == 14)
+        #expect(decoded.items[1].alreadyFoundEmails == ["harbourwinds@harbourwinds.example"])
+        #expect(decoded.items[0].alreadyFoundEmails == nil)
+        // The earlier fixture, unchanged, still decodes and says nothing about what the show holds.
+        let v13 = try JSONDecoder().decode(PrepQueue.self, from: try fixture("v13.json"))
+        #expect(v13.items.allSatisfy { $0.alreadyFoundEmails == nil })
+    }
+
+    @Test(arguments: 1...14)
+    func noFixtureNamesAnAddressItAlsoRefuses(version: Int) throws {
+        let decoded = try JSONDecoder().decode(PrepQueue.self, from: try fixture("v\(version).json"))
+        for item in decoded.items {
+            let struck = Set(item.refusedEmails ?? [])
+            for held in item.alreadyFoundEmails ?? [] {
+                #expect(!struck.contains(held),
+                        Comment(rawValue: "v\(version).json names \(held) as already found and also "
+                                + "refuses it, which puts an address Dan struck back in front of the run"))
+            }
         }
     }
 

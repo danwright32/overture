@@ -26,7 +26,14 @@ struct QueueDateGroups<Header: View, Content: View>: View {
     let groups: [QueueModel.DateGroup]
     let sendState: SendProgressState
     @ViewBuilder let header: () -> Header
-    @ViewBuilder let content: (QueueModel.DateGroup, [String: DepartureReason]) -> Content
+    // #3654: the departing SNAPSHOTS travel down beside their reasons.
+    //
+    // The list holds rows and a row's card is built on demand from the store, but a row that is LEAVING
+    // has no card the store would build: the send has already changed what the show is, and the leaving
+    // delight is drawing the card as it was when he pressed. That snapshot lives here, so it is handed
+    // down rather than read again further in, which is the same rule the reasons already travel by.
+    @ViewBuilder let content: (QueueModel.DateGroup, [String: DepartureReason],
+                               [String: QueueItem]) -> Content
 
     var body: some View {
         // Read once, here. Every splice decision below is made from this one value, and the keys travel
@@ -38,7 +45,7 @@ struct QueueDateGroups<Header: View, Content: View>: View {
         LazyVStack(alignment: .leading, spacing: OVSpacing.xl) {
             header()
             ForEach(QueueModel.groups(groups, withDeparting: departing)) { group in
-                content(group, departureReasons)
+                content(group, departureReasons, departing)
             }
         }
         .scrollTargetLayout()
@@ -91,11 +98,17 @@ struct QueueSendAwareRow<Content: View>: View {
     let sendState: SendProgressState
     @ViewBuilder let content: (_ highlightedKey: String?,
                                _ sendingSince: Date?,
-                               _ replySince: @escaping (String) -> Date?) -> Content
+                               _ replySince: @escaping (String) -> Date?,
+                               _ isAddressStruck: @escaping (String) -> Bool) -> Content
 
     var body: some View {
         content(sendState.highlighted,
                 sendState.sendingSince(key),
-                { recipientId in sendState.replySendingSince(recipientId) })
+                { recipientId in sendState.replySendingSince(recipientId) },
+                // #2598: a CLOSURE for the same reason the reply lookup above is one. It is read inside
+                // the address's own row, so striking one address redraws that address rather than the
+                // card, and reading it here rather than at the call site keeps the dependency below
+                // QueueView's derivation (#1922, #1916).
+                { email in sendState.isStruck(SendProgressState.strikeKey(show: key, email: email)) })
     }
 }

@@ -118,6 +118,18 @@ struct RootView: View {
     private var clientWindow: ClientWindow {
         clientRoster?.window(for: watchedSources) ?? .none
     }
+    // #3435 Phase 2e: the app watches its own main thread and writes what it finds. Held here because
+    // this is the view that outlives every sheet, so the watch spans a session rather than a screen.
+    @State private var freezeWatch = FreezeWatch()
+    // And STOOD DOWN when this window goes away. Overture is a menu bar app that sits with no window most
+    // of the day, and an idle surface must pay nothing (Dan's standing rule, and L353). The first version
+    // of the watchdog claimed to stand down and nothing called anything.
+    @Environment(\.scenePhase) private var scenePhase
+    // #3793: what this launch's housekeeping on that log did, so the masthead can say it. Optional, and
+    // nil means the housekeeping has not run yet rather than that it found nothing: a launch that has not
+    // reached the call must not be able to report a clean bill of health it never measured (L98).
+    @State private var freezeHousekeeping: FreezeLog.Housekeeping?
+
     @State private var showArchive = false
     @State private var archiveJumpKey: String?
     // #685: which contact on the jumped-to show to highlight (nil when the jump only identifies
@@ -144,6 +156,9 @@ struct RootView: View {
     @State private var showSources = false
     @State private var showDaysOff = false      // #901
     @State private var showExcludedTowns = false   // #1118: review and un-exclude skipped towns
+    // #2408: the addresses Dan struck before a run, and the one place he can put one back. An
+    // organisation-scoped strike is invisible everywhere else once he leaves the card.
+    @State private var showStruckAddresses = false
     @State private var showOrganisations = false   // #1731: what Overture reads as a building
     @State private var showOmniFocusSettings = false   // #931 rehome, #2397 trimmed to the sync window
     // #803: when the DETACHED reading half began, so it has a visible working / still-alive / stalled
@@ -229,13 +244,31 @@ struct RootView: View {
     // `body` would register no dependency on it and leave the line frozen.
     @State private var failingResponses: [ResponseDecodeFailures.Health] = []
 
-    // Reads an in-memory dictionary under a lock, no filesystem and no derivation, and assigns only on a
-    // real change so an app with nothing wrong redraws nothing (#1774: an idle surface must pay nothing).
+    // #3647: the bounced pitches, held here for the same reason as the two registers above. It was passed as
+    // an ARGUMENT to the notices view, so it was derived in `body` on every evaluation, while reading as
+    // though it belonged to the view it was handed to.
+    @State private var bouncedPitches: [AppNotices.BouncedPitch] = []
+
+    // Reads two in-memory dictionaries under a lock, and ONE derivation over the prospect table, and assigns
+    // only on a real change so an app with nothing wrong redraws nothing (#1774: an idle surface must pay
+    // nothing).
+    //
+    // THE DERIVATION IS NEW AND THIS COMMENT USED TO SAY THERE WAS NONE (#3647). It is here rather than in
+    // `body` because `body` runs far more often than the store changes: a single scout run drives 60 to 130
+    // evaluations from `@State` alone, and the scan measured 1.9 ms warm on the live store of 1,238 rows, so
+    // the argument form cost 0.11 to 0.24 seconds per scout run against 1.9 ms a minute here. That trade is
+    // what justifies breaking this function's "no derivation" property, and the cost of the minute tick is
+    // stated rather than left for somebody to rediscover: 1.9 ms every 60 s, for an app that stays resident.
+    //
+    // A bounce therefore surfaces up to a minute late, which is the same latency the two registers above
+    // already accept for the same reason.
     private func refreshUnreadableFiles() {
         let current = HandoffReadFailures.shared.current()
         if current != unreadableFiles { unreadableFiles = current }
         let responses = ResponseDecodeFailures.shared.failing()
         if responses != failingResponses { failingResponses = responses }
+        let bounces = BounceDetection.unresolvedBounces(in: allProspects)
+        if bounces != bouncedPitches { bouncedPitches = bounces }
     }
 
     // The ONE place the file is read for this line, so the launch load and the notice's own re-read
@@ -297,15 +330,53 @@ struct RootView: View {
         .help(DaysOffAttention.help(reason))
     }
 
-    private var nonDismissedProspects: [Prospect] { allProspects.filter { $0.status != .dismissed } }
-
-    private var reachedOutKeys: Set<String> {
-        Set(ReachedOutQueue.active(from: nonDismissedProspects, now: Date()).map(\.prospect.naturalKey))
+    // #3435 Phase 2e: which surface is on screen, as a closed enum case and never a name.
+    //
+    // Ordered so the TOPMOST thing wins, which is what "the surface on screen" means to somebody who has
+    // just watched the app stop answering. A sheet this does not know about leaves the answer as whatever
+    // is underneath it, which is a true statement about a real surface rather than a wrong one.
+    private var presentedSurface: StallSurface {
+        if showOmniFocusSettings { return .settings }
+        if showSources { return .sourcesSheet }
+        if showOrganisations { return .organisations }
+        if showFollowUps { return .followUps }
+        if showArchive { return .archive }
+        return .queue
     }
 
-    // Every show Overture has ever tracked. Not what the search bar above the Queue offers (see
-    // searchableItems); it is what Archive holds, counted so an empty search can say the show is there.
+    private var nonDismissedProspects: [Prospect] { allProspects.filter { $0.status != .dismissed } }
+
+    // #3493: TAKES the rows rather than reading `nonDismissedProspects` itself.
+    //
+    // It used to be a computed property that read that one, and both of its callers read that one too, so
+    // a single evaluation filtered the whole store TWICE. A computed property is re-run by every reader
+    // and a call site reads as a free field access, which says nothing about what it costs (L383). As a
+    // function taking the list, the caller binds one walk and hands it to both.
+    private func reachedOutKeys(in rows: [Prospect]) -> Set<String> {
+        Set(ReachedOutQueue.active(from: rows, now: Date()).map(\.prospect.naturalKey))
+    }
+
+    // Every show Overture has ever tracked, as CARDS. Not what the search bar above the Queue offers
+    // (see searchableRows); it is what the Prep selection sheet reads.
+    //
+    // #3655 Phase 5: this is no longer what SEARCH runs on, and the split is the phase. A card carries
+    // the send grouping, the recipient snapshots and a draft lint pass over every pending contact's body,
+    // and building one per show in the store was being paid the moment Dan typed a character. What is
+    // left here needs a card and cannot take a row: `QueueModel.calendarClashesForPrep` reads
+    // `hasUnclearedConflict` and `conflictNote`, and the note is card-derived. It is also not on a
+    // keystroke path at all: it is read inside a `.sheet` content closure, so it evaluates when the sheet
+    // opens and never during a render of the queue behind it.
     private var allItems: [QueueItem] { allProspects.map(QueueItem.init) }
+
+    // #3655 Phase 5: the same shows as ROWS, which is what both halves of the search bar run on.
+    //
+    // A row is about twenty fields and one contacts walk; a card is 130 fields and a lint pass. Nothing
+    // the search does (matching a name, an address, a venue; sorting by date; carrying an id to a deep
+    // link) needs anything a row does not carry, which `ShowSearchFacts` is what enforces rather than
+    // states.
+    private var allRows: [QueueScopeRow] {
+        allProspects.map { QueueScopeRow($0, facts: RecipientFacts.of($0)) }
+    }
 
     // #1580: what the persistent bar above the Queue can find, which is exactly the shows a stage will
     // render. Dan asked for the split: "search should only allow me to search for shows in the queue.
@@ -314,10 +385,13 @@ struct RootView: View {
     //
     // Scoped by StageNavigation.stagedKeys, the same predicate the stage lists render from, so a pick
     // can only ever land on a row he can see.
-    private var searchableItems: [QueueItem] {
-        let scope = StageNavigation.stagedKeys(in: nonDismissedProspects, reachedOutKeys: reachedOutKeys,
+    // #3655 Phase 5: ROWS, not cards. The scoping rule below is unchanged; what it filters is cheaper.
+    private var searchableRows: [QueueScopeRow] {
+        // #3493: ONE walk of the store, shared by the scope and the reached-out set it is judged with.
+        let kept = nonDismissedProspects
+        let scope = StageNavigation.stagedKeys(in: kept, reachedOutKeys: reachedOutKeys(in: kept),
                                                context: StageContext(geo: geo, clients: clientWindow))
-        return allItems.filter { scope.contains($0.id) }
+        return allRows.filter { scope.contains($0.id) }
     }
 
     // Whether a deep-linked show (an OmniFocus follow-up tap, #628, or a search pick) should jump into
@@ -332,8 +406,10 @@ struct RootView: View {
     // #1580: one copy, not two. A search pick is now always in scope and so always takes the Queue
     // branch, but the Archive branch stays for the follow-up taps, which can name a closed show.
     private func routeDeepLink(toKey key: String) {
-        if StageNavigation.opensInQueue(key: key, in: nonDismissedProspects,
-                                        reachedOutKeys: reachedOutKeys,
+        // #3493: bound once, for the same reason searchableRows binds it.
+        let kept = nonDismissedProspects
+        if StageNavigation.opensInQueue(key: key, in: kept,
+                                        reachedOutKeys: reachedOutKeys(in: kept),
                                         context: StageContext(geo: geo, clients: clientWindow)) {
             deepLinkedKey = LeadDeepLink(key: key)
         } else {
@@ -353,8 +429,13 @@ struct RootView: View {
     }
 
     // #2546: why "Prep kept" is refusing, from the same call that decides whether it is. The rule moved
-    // to PrepStartGate so it is reachable from a test at all (#863); this reads it twice, for the
-    // sentence in the menu and for the item's disabled state, and both are the same answer (L109).
+    // to PrepStartGate so it is reachable from a test at all (#863), and the sentence in the menu and the
+    // item's disabled state are the same answer (L109).
+    //
+    // #3837: READ ONCE at its call site, into a local, rather than four times. This comment used to say
+    // "this reads it twice", which was two behind the code: the four reads were `.disabled`,
+    // `.accessibilityHint`, `.help` and `ControlRefusalLine`, and the body below reaches the filesystem
+    // every time. `ThePrepToolbarLabelReadsItsMarkersOnceTests` is what keeps it at one.
     private var prepRefusal: String? {
         // #3015: the PREP slot's own question. It used to ask the whole-app one, which refuses for ANY
         // live run, so a check going meant the menu item was disabled and Cmd+P refused. That is one of
@@ -453,6 +534,7 @@ struct RootView: View {
             "archiveOpeningQuery": "\(archiveOpeningQuery.count)",
             "sheets": [showArchive, showPatterns, showFollowUps, showVoiceGuidance, showInquiryIntake,
                        showSources, showDaysOff, showExcludedTowns, showOrganisations,
+                       showStruckAddresses,
                        showOmniFocusSettings].map { $0 ? "1" : "0" }.joined(),
             "status": "\(status.text?.count ?? -1)/\(status.priority)",
             "scoutTask": "\(scoutTask != nil)",
@@ -489,8 +571,8 @@ struct RootView: View {
             #endif
             // #1926: the bar owns the query, and both scopes are handed over as work to do rather than
             // work already done. Neither closure runs unless Dan is actually searching.
-            QueueSearchBar(items: { searchableItems },
-                           archiveItems: { allItems },
+            QueueSearchBar(items: { searchableRows },
+                           archiveItems: { allRows },
                            onSelect: { result in routeDeepLink(toKey: result.id) },
                            onSearchArchive: { query in openArchive(query: query) })
             .padding(.horizontal, OVSpacing.lg).padding(.vertical, OVSpacing.sm)
@@ -527,7 +609,14 @@ struct RootView: View {
     }
 
     private var queueSurface: some View {
-        QueueView(deepLinkedKey: $deepLinkedKey, deepLinkedKeys: $deepLinkedKeys, onConnectGmail: connectGmail,
+        QueueView(deepLinkedKey: $deepLinkedKey, deepLinkedKeys: $deepLinkedKeys,
+                  // #3846: THIS view's whole-table read, handed down. QueueView held a bare @Query
+                  // over Prospect identical to the one above, and two identical bare descriptors in
+                  // two live views share nothing: the second cost 99.6% of the first, measured
+                  // 2026-09-12 over 1,238 rows. Both views are always on screen, so the app read the
+                  // whole prospect table twice on every store change.
+                  allProspects: allProspects,
+                  onConnectGmail: connectGmail,
                   // #2204: out of the toolbar's status slot, which macOS hides in the overflow chevron at
                   // Dan's ordinary window width, and onto the masthead he reads.
                   // #2478: and the Downbeat export that has lost every shoot it was carrying, which is
@@ -551,11 +640,16 @@ struct RootView: View {
                                               // follow-ups and the reached-out queue, which is precisely
                                               // why nothing else on this screen would ever mention it
                                               // again.
-                                              bouncedPitches: BounceDetection.unresolvedBounces(in: allProspects),
+                                              bouncedPitches: bouncedPitches,
                                               // #3298: and an export Overture cannot read at all, which
                                               // is upstream of every other line here: while it stands,
                                               // nothing in the queue is known to be a free night.
                                               downbeatAvailability: downbeatHealth,
+                                              // #3793: and what this launch's bookkeeping on the freeze
+                                              // log deleted or could not do. Silent unless something was
+                                              // lost or refused, and drawn after the status line, which
+                                              // is where the freezes themselves are reported.
+                                              freezeHousekeeping: freezeHousekeeping,
                                               status: status),
                   // #2250: the remedy a notice names, run from here where the sync lives.
                   onNoticeAction: { action in
@@ -645,6 +739,11 @@ struct RootView: View {
                         Button("Log an inquiry...") { showInquiryIntake = true }
                         Toggle("Auto-scout daily", isOn: $autoScoutEnabled)
                         Divider()
+                        // #3837: read ONCE. `prepRefusal` reads a run marker off disk, and it was read
+                        // four times here, by `.disabled`, `.accessibilityHint`, `.help` and the refusal
+                        // line, so one question cost four `stat` calls. A computed property reads as free
+                        // at the call site, which is #3646's own sentence about the shape.
+                        let refusal = prepRefusal
                         // #953: opens the per-run picker rather than prepping every kept show at once, so
                         // Dan can hold a long lead-time show out of this run. The sheet defaults the
                         // selection by performance date and hands back exactly the rows he chose.
@@ -654,14 +753,14 @@ struct RootView: View {
                             Label("Prep kept", systemImage: "envelope.badge")
                         }
                         .keyboardShortcut("p", modifiers: .command)
-                        .disabled(prepRefusal != nil)
-                        .accessibilityHint(prepRefusal ?? "")
-                        .help(prepRefusal ?? "")
+                        .disabled(refusal != nil)
+                        .accessibilityHint(refusal ?? "")
+                        .help(refusal ?? "")
                         // #2546: the reason as its own row directly under the item it explains, rather
                         // than only as a tooltip. A menu item has no room beside it for a sentence, but
                         // the greyed item is only ever visible while this menu is open, which is exactly
                         // when this row is on screen too, so the reason is there at rest (L49).
-                        ControlRefusalLine(reason: prepRefusal)
+                        ControlRefusalLine(reason: refusal)
                         // #367: re-prep everything already drafted/approved in one go; each choice
                         // just flags the eligible prospects and they ride along in the next
                         // "Prep kept" run above, no separate run/launch of its own.
@@ -815,11 +914,39 @@ struct RootView: View {
                     }
                     .help("Towns you've told Overture to skip. Take one back off the list here.")
 
-                    // #1731: who Overture thinks puts each show on. It belongs in this group for the same
-                    // reason the other three do: all four say what Overture is working from, one the
-                    // calendars it reads, one the days it keeps clear, one the places it stays out of, and
-                    // this one the organisations it decided about. No attention state: these verdicts are
-                    // his to review when he chooses, never something that needs him.
+                    // #2408: the addresses he removed before a run. It belongs in this group with the
+                    // other three for the same reason they belong together: all of them say what Overture
+                    // is working from, one the calendars it reads, one the days it keeps clear, one the
+                    // places it stays out of, and this one the addresses it leaves alone. No attention
+                    // state of its own: a strike is his decision working, never something that needs him.
+                    Button {
+                        showStruckAddresses = true
+                    } label: {
+                        ToolbarHoverLabel(title: StruckAddressCopy.heading, systemImage: "envelope.badge.shield.half.filled")
+                    }
+                    .help(StruckAddressCopy.explanation)
+
+                }
+                // #1731: who Overture thinks puts each show on.
+                //
+                // #2408 MOVED IT HERE, out of the group above, and that is a deliberate displacement
+                // rather than a tidy-up. `ToolbarConsolidationGuardTests` refuses a new button without
+                // one, because the row already overflows into the macOS ">>" menu, so an added button
+                // pushes something else towards being hidden and WHICH one must be somebody's decision
+                // rather than an accident of window width.
+                //
+                // Dan's call, 2026-09-07, asked which of the two should be the one that falls into the
+                // overflow: Presenters is read-only EVIDENCE he looks at occasionally (the sheet mutates
+                // nothing at all, by his own 2026-07-29 decision), and the addresses he removed is a list
+                // with an action on it. So it joins "What converts" and "Voice guidance" below, which are
+                // the settings-ish views #901 already put here for this exact reason.
+                // #901 (Dan's walk, 2026-07-14): What converts and Voice guidance sit AFTER the
+                // Sources/Days off group, not before it. With every toolbar label now always shown the row
+                // overflows into the macOS ">>" menu, and in that order the brand-new Days off button was
+                // the first thing hidden. The daily-driver buttons (Archive, Follow-ups) and the two things
+                // Overture is working from (Sources, Days off) come first; these two settings-ish views can
+                // fall into the overflow instead.
+                ToolbarItem(placement: .secondaryAction) {
                     Button {
                         showOrganisations = true
                     } label: {
@@ -827,12 +954,6 @@ struct RootView: View {
                     }
                     .help("Who Overture thinks puts each show on, and who it reads as the building.")
                 }
-                // #901 (Dan's walk, 2026-07-14): What converts and Voice guidance sit AFTER the
-                // Sources/Days off group, not before it. With every toolbar label now always shown the row
-                // overflows into the macOS ">>" menu, and in that order the brand-new Days off button was
-                // the first thing hidden. The daily-driver buttons (Archive, Follow-ups) and the two things
-                // Overture is working from (Sources, Days off) come first; these two settings-ish views can
-                // fall into the overflow instead.
                 ToolbarItem(placement: .secondaryAction) {
                     Button {
                         showPatterns = true
@@ -967,6 +1088,32 @@ struct RootView: View {
                 // be on disk at once, so a file nobody surfaces is the account of one run destroying
                 // another's paid work with no reason for Dan ever to open it (L46, L142).
                 reportAnyBoundaryViolation()
+                // #3435 Phase 2e: start watching the main thread, and say what the LAST session found.
+                // Started here rather than at app launch so it begins when there is a window to freeze,
+                // and reported here because this is the one place that already tells Dan what happened
+                // while he was not looking.
+                freezeWatch.start(support: StoreLocation.handoffDirectory)
+                // #3435: bounded HERE rather than on the freeze path, which stays a pure append. An
+                // append is safe to do while the main thread is wedged and a read, modify, write is not
+                // (L105). The file only grows when the app really freezes, so it is cheap wherever it runs.
+                // That sentence used to read "so once per launch is plenty", and #3796 is what it cost.
+                // #3763: ONE call, so the archive's own month-long retention cannot be forgotten beside the
+                // compaction that fills it. What the FREEZES were is reported by `reportAnyFreezes` below.
+                //
+                // #3796 moved the call into `runFreezeLogHousekeeping()` so the HOURLY tick can make it
+                // too, because once per launch turned out to mean once per LOGIN: Overture is a login
+                // agent that stays resident, and measured 2026-09-11 the live log held 700 records
+                // against a cap of 500 while the process holding it was 23 hours old.
+                //
+                // #3793 needs what that call RETURNS, because six written and tested sentences about
+                // deleted or unarchivable records could otherwise never be said. The two compose rather
+                // than compete, and the report is kept inside the shared method rather than here, so the
+                // hourly run reaches the masthead on exactly the same terms as the launch one. Keeping it
+                // only at this call site would have left the hourly path discarding it, which is the
+                // defect #3793 exists to end, reintroduced one line away from its own fix (L46, L3).
+                runFreezeLogHousekeeping()
+                reportAnyFreezes()
+                reportAnyCardDivergences()
                 // #1035: the same reattach, for the scout's detached read. A scout-extract run outlives
                 // the app, so one can still be going at launch (a relaunch over a live run, or the window
                 // scene torn down and rebuilt mid-read). Reopen the takeover and follow it to completion
@@ -1034,11 +1181,11 @@ struct RootView: View {
             }
             .task {
                 guard AppEnvironment.shouldStartBackgroundServices else { return }
-                // Keep the daily scout schedule honored while the app stays open (#33).
-                while !Task.isCancelled {
-                    try? await Task.sleep(nanoseconds: 60 * 60 * 1_000_000_000)  // hourly
-                    autoScoutIfDue()
-                }
+                // The hourly tick, for the work that is due on the clock rather than on something Dan
+                // did. #3796 lifted the loop itself into `HourlyMaintenance`: the cadence and the sleep
+                // are the ones this held inline, and being a value they can now be driven by a test
+                // instead of waited out for an hour.
+                await HourlyMaintenance.run { hourlyMaintenance() }
             }
     }
 
@@ -1111,8 +1258,12 @@ struct RootView: View {
                 }
             }
             .sheet(isPresented: $showArchive) {
-                ArchiveView(initialHighlightKey: archiveJumpKey, initialHighlightRecipientId: archiveJumpRecipientId,
-                           initialQuery: archiveOpeningQuery, onConnectGmail: connectGmail)
+                // #3846: the sheet's rows come from here rather than from a second whole-table query
+                // of its own, which added 165.0 ms to every store change for as long as it was open.
+                ArchiveView(prospects: allProspects,
+                            initialHighlightKey: archiveJumpKey,
+                            initialHighlightRecipientId: archiveJumpRecipientId,
+                            initialQuery: archiveOpeningQuery, onConnectGmail: connectGmail)
             }
             .sheet(isPresented: $showPatterns) { OutcomePatternsView() }
             .sheet(isPresented: $showInquiryIntake) { InquiryIntakeSheet() }
@@ -1128,8 +1279,10 @@ struct RootView: View {
             .sheet(isPresented: $showPrepSelection) {
                 // #2365: no sources and no client list any more. The sheet applies no date rule, so it
                 // needs neither, and this call no longer reads the export off disk to present a sheet.
+                // #3493: `allItems`, not a second `allProspects.map(QueueItem.init)` written inline. Two
+                // definitions of one question can each be changed without the other (L263, L370).
                 PrepSelectionSheet(prospects: toPrep,
-                                   allItems: allProspects.map(QueueItem.init)) { includedKeys in startPrep(includedKeys: includedKeys) }
+                                   allItems: allItems) { includedKeys in startPrep(includedKeys: includedKeys) }
             }
             // #1130: the Prep run's takeover, mirroring the scout's (#1034). A detached Prep run takes
             // minutes, so it gets the same prominent working/still-alive/stalled screen instead of only a
@@ -1142,6 +1295,7 @@ struct RootView: View {
             .sheet(isPresented: $showDaysOff) { DaysOffView() }
             .sheet(isPresented: $showOmniFocusSettings) { OmniFocusSettingsView() }
             .sheet(isPresented: $showExcludedTowns) { ExcludedTownsView() }
+            .sheet(isPresented: $showStruckAddresses) { StruckAddressesView() }
             // #1794: tapping an entry closes the sheet and filters the queue to that organisation's
             // shows. Through the SAME channel the away-alert leads path uses (`deepLinkedKeys`), never a
             // second filter mechanism, which is what Dan's note asked for. The request carries its own
@@ -1172,10 +1326,41 @@ struct RootView: View {
     private func withOutermostWrappers<Content: View>(_ content: Content) -> some View {
         content
             .onAppear { modals.closesSheetsWith { closeEveryPresentedSheet() } }
+            // #3435 Phase 2e: the MAIN THREAD commits which surface is on screen, and the watchdog only
+            // ever reads it. Asking the main actor for it at write time would make the field unavailable
+            // at exactly the moment a record is being written, so the guard would fall silent on
+            // precisely the input it exists to judge (L345).
+            //
+            // Derived from the sheet flags rather than stamped by each surface for itself: one writer
+            // cannot drift from another, and a sheet added later that nobody remembers to stamp reports
+            // the surface underneath it rather than a stale one.
+            .onChange(of: presentedSurface, initial: true) { _, surface in
+                freezeWatch.stamp(surface)
+            }
+            // #3788: whether any window is on screen, from the window COUNT rather than from `scenePhase`.
+            // The phase below stands the watch down on `.background`, and its comment claims that means the
+            // window is gone; measured 2026-09-11 that is false here, because Overture is resident in the
+            // menu bar so the scene outlives the window. One observation, registered once, so there is no
+            // per-site stamp for anybody to forget (L621).
+            .task { await WindowCensus.observeUntilCancelled { freezeWatch.stampWindows($0) } }
+            // #3435: the watch follows the window. `.inactive` keeps it running deliberately, because a
+            // window that has merely lost focus is still on screen and still drawing, and a freeze there
+            // is one Dan can see. Only `.background`, which for this scene means the window is gone,
+            // stands it down.
+            .onChange(of: scenePhase) { _, phase in
+                switch phase {
+                case .background: freezeWatch.stop()
+                default: freezeWatch.start(support: StoreLocation.handoffDirectory)
+                }
+            }
             .actionFeedbackBanner()
             // Injected outermost so the sheets above inherit it too (#285).
             .environment(feedback)
             .environment(dayOffOffer)
+            // #3760: so the surface that runs the render pass can tell the watchdog it ran one. Injected
+            // rather than reached for, on the same footing as the two above, and read as an OPTIONAL by
+            // the surfaces so a missed injection is a pass nobody counted rather than a crash.
+            .environment(freezeWatch)
             // #1414: the Edit menu's Undo raises a token on the App; the reversal happens HERE, where
             // the context, the live rows and the feedback banner all exist.
             .onChange(of: undoRequest.token) { _, _ in performQueueUndo() }
@@ -1767,6 +1952,35 @@ struct RootView: View {
         status.set(message, priority: .warning)
     }
 
+    // #3435 Phase 2e: THE READER, which is what makes the detector more than a field nobody looks at.
+    //
+    // `.warning` for the same reason the boundary violation notice is: an `.info` write can be silently
+    // overwritten by a later routine receipt, and this is the record of the app having stopped answering.
+    //
+    // Said ONCE per freeze, through `FreezeReport`, which remembers in defaults what it has already said.
+    // A message that reappears on every launch is what teaches somebody to skim the whole panel (#884).
+    // #3654 step 4c: what the queue's own check of its cards found, said once per record.
+    //
+    // Said at LAUNCH rather than on the render that found it, deliberately. The check runs inside a render
+    // pass, and a notice raised from there would arrive while Dan is scrolling, about a card the app has
+    // already corrected before drawing it (CORRECTION C1). Nothing is waiting on him: what he can do with
+    // it is report it, and a launch is when he can.
+    private func reportAnyCardDivergences() {
+        guard let message = CardDivergenceReport.newlyReported(in: StoreLocation.handoffDirectory) else {
+            return
+        }
+        status.set(message, priority: .warning)
+    }
+
+    private func reportAnyFreezes() {
+        guard let message = FreezeReport.newlyReported(in: StoreLocation.handoffDirectory,
+                                                       watchdogRan: freezeWatch.isWatching,
+                                                       writesThatFailed: freezeWatch.writesThatFailed) else {
+            return
+        }
+        status.set(message, priority: .warning)
+    }
+
     // #802: the scout's reading half. The extract run is detached, so without this the pages it read
     // would sit in a results file nobody opens until the next launch, and Dan's scout would look like it
     // had found nothing. Mirrors the Prep watcher deliberately: wait for the live run, then ingest at once,
@@ -1944,6 +2158,7 @@ struct RootView: View {
         showSources = false
         showDaysOff = false
         showExcludedTowns = false
+        showStruckAddresses = false
         showOrganisations = false
         showOmniFocusSettings = false
     }
@@ -2056,6 +2271,91 @@ struct RootView: View {
     private func startReplyClassifyIfNeeded() {
         guard !ReplyClassifyService.isRunning(now: Date()) else { return }
         _ = try? ReplyClassifyService.startClassify(from: context, now: Date())
+    }
+
+    // Everything that comes due on the CLOCK rather than on something Dan did, once an hour while the
+    // window is open. It is a list rather than a single call because #3796 made it one: the scout
+    // schedule was the only thing here, and a resident app needs its bookkeeping on the same tick.
+    //
+    // The bookkeeping goes FIRST. Both halves are synchronous and neither throws, so the order changes
+    // nothing today, but a scout that is due is the expensive, conditional half of this tick and it must
+    // never be what stands between the log and its cap (L73).
+    private func hourlyMaintenance() {
+        runFreezeLogHousekeeping()
+        autoScoutIfDue()
+    }
+
+    // #3435/#3763: bound the freeze log and prune the archive it fills. ONE method, called from the
+    // launch task and from the hourly tick above, so the two cannot drift into doing different things
+    // (L613). It is the only place in this view that names the domain call.
+    //
+    // Idempotent, which is what makes it safe to run on a schedule at all: a second call over files a
+    // first has already compacted and pruned reports `.nothingToArchive` and `.nothingToRemove` and
+    // writes neither file, so a launch immediately after a scheduled run costs two reads.
+    //
+    // Never on the freeze path, which stays a pure append: an append is safe to do while the main thread
+    // is wedged and a read, modify, write is not (L105).
+    //
+    // The report is DISCARDED here, deliberately and with its reader named: #3793 is the issue that puts
+    // it on a surface. Written as an explicit discard rather than an ignored return, because a returned
+    // value nobody reads is how six other logs in this app came to lose content in silence (#3789), and a
+    // deliberately inactive half needs the issue that activates it filed in the same change rather than
+    // left to be rediscovered (L65).
+    // The ONE place the freeze log's bookkeeping runs, called from the launch task and from the hourly
+    // tick. It KEEPS what the run reports (#3793) rather than discarding it: the value is what
+    // `AppNotices` turns into a sentence on the masthead, and a report nobody reads looks alive to every
+    // is-this-used check while the thing it was added for silently never happens (L46).
+    //
+    // The VALUE is stored, never a sentence composed here, because what it means on screen is
+    // `AppNotices`' decision and belongs beside every other fault it draws.
+    private func runFreezeLogHousekeeping() {
+        // #3828: OFF the main actor. Measured at 12.75 ms in the hour it compacts and 4.71 ms in every
+        // other hour, which is 76% and 28% of one 60Hz frame, paid for the whole life of a resident
+        // process on the thread this milestone exists to shorten.
+        //
+        // Through `FreezeLogHousekeeper` rather than a bare detached task, because the main actor was
+        // providing the serialisation for free and moving off it takes that away: the launch call and
+        // the hourly tick can overlap, and two concurrent compactions of one file would archive the same
+        // dropped records twice. The actor makes that impossible rather than unlikely.
+        //
+        // An UNSTRUCTURED task deliberately, unlike the watchers above, which are `async let` so the
+        // window's teardown cancels them. This is a short file job that must finish: cancelling it
+        // half way through a compaction is the one outcome worse than paying for it, since the archive
+        // write and the live rewrite are two steps with nothing around them (L5).
+        let url = FreezeLog.url(in: StoreLocation.handoffDirectory)
+        // #3811: the card divergence log's own bookkeeping, from the SAME method and therefore the same
+        // two moments, through the same actor. Its `compact` had no caller anywhere in the app while
+        // `docs/contracts.md` said the file was compacted at launch, so the rule that keeps one example of
+        // each distinct field set had never run once. Called here rather than given a call site of its own
+        // because two bookkeeping calls somebody has to remember to keep together is how this one came to
+        // be forgotten (L621, L613).
+        let divergenceURL = CardDivergenceLog.url(in: StoreLocation.handoffDirectory)
+        Task {
+            let done = await FreezeLogHousekeeper.shared.run(at: url, now: Date())
+            apply(housekeeping: done)
+            // Its report is DISCARDED, deliberately and with the reason: there is no surface for it yet.
+            // #3793 is the issue that put the freeze log's report on the masthead, and this one joins it
+            // there rather than inventing a second notice here. An explicit discard rather than an ignored
+            // return, because a value nobody reads is how six other logs in this app came to lose content
+            // in silence (#3789, L46, L65).
+            _ = await FreezeLogHousekeeper.shared.runCardDivergence(at: divergenceURL)
+        }
+    }
+
+    private func apply(housekeeping done: FreezeLog.Housekeeping) {
+
+        // A QUIET run never replaces a report that had something to say.
+        //
+        // The obvious assignment is wrong here and it took writing it to see why. Housekeeping runs at
+        // launch and then hourly, and the overwhelmingly common outcome is `nothingToArchive` plus
+        // `nothingToRemove`, which draws no notice at all. So a launch that DID permanently delete
+        // records would put its sentence on the masthead and the very next hourly tick would replace it
+        // with a quiet one, taking the only account of that deletion off the screen before Dan had any
+        // particular reason to have read it. That is #3830's defect, which this session filed an hour
+        // before writing this line, reintroduced by the fix for a different issue (L387).
+        //
+        // The rule itself is `FreezeLog.kept`, where a test can reach it.
+        freezeHousekeeping = FreezeLog.kept(freezeHousekeeping, after: done)
     }
 
     private func autoScoutIfDue() {
@@ -2326,12 +2626,24 @@ struct RootView: View {
     // #1822: lifted out of the toolbar's `label:` builder, which the added arguments pushed past the Swift
     // type-checker's limit for one expression. Nothing about the label changed in the move.
     private var prepToolbarLabel: some View {
-        // #2760: the run really in flight, whichever slot holds it. `runInFlight` asks both, so the label
-        // names a check whether it is in the check slot or (during the upgrade window) still in the prep
-        // slot. The exclusion means at most one of them is live, so there is one label to draw.
-        let kind = PrepQueueService.runInFlight(now: Date()) ?? .prep
+        // #2760: the run really in flight, whichever slot holds it, so the label names a check whether it
+        // is in the check slot or (during the upgrade window) still in the prep slot. The exclusion means
+        // at most one of them is live, so there is one label to draw.
+        //
+        // #3837: ONE reading of the markers, and one instant, which is what `slotStatus` exists for. This
+        // was `runInFlight(now: Date())` (which reads both markers) followed one line later by
+        // `isRunning(slot: .check, now: Date())` (which reads the check marker a third time), and this is
+        // a computed `View` property, so all of it ran on every RootView body evaluation. #3646 removed
+        // exactly this shape from `QueueView` and introduced `slotStatus` for it; this call site was left
+        // on the older pair.
+        //
+        // The two `Date()` calls were the worse half. They asked the two questions about two different
+        // instants, so a marker that stopped beating between them made the label NAME a run in one slot
+        // and TIME it from another, which is a wrong label rather than a slow one.
+        let status = PrepQueueService.slotStatus(now: Date())
+        let kind = status.inFlight ?? .prep
         let isProbe = kind == .reachabilityCheck
-        let slot: RunSlot = PrepQueueService.isRunning(slot: .check, now: Date()) ? .check : .prep
+        let slot: RunSlot = status.checkSlotRunning ? .check : .prep
         return LiveRunLabel(
             base: RunProgressCopy.title(isProbe ? .probing : .prepping),
             since: PrepQueueService.lastRunStartedAt(slot: slot),

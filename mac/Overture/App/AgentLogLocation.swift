@@ -123,11 +123,38 @@ enum AgentLogLocation {
         [standardOutURL, standardErrorURL, problemsURL, gmailConnectDebugURL]
     }
 
-    @discardableResult
     static func capLogs(maxBytes: Int = defaultMaxLogBytes,
                         files: [URL] = AgentLogLocation.cappedFiles,
-                        fileManager: FileManager = .default) -> [URL] {
-        LogRotation.cap(files: files, maxBytes: maxBytes, fileManager: fileManager)
+                        fileManager: FileManager = .default) -> LogRotation.Report {
+        // `return` spelled out rather than left implicit, so the line SAYS the report is being handed
+        // on. `noCallSiteThrowsTheRotationReportAway` reads the call site as text and cannot tell a
+        // single-expression body from a bare statement, and a bare statement here is the defect.
+        return LogRotation.cap(files: files, maxBytes: maxBytes, fileManager: fileManager)
+    }
+
+    // #3789: the launch entry point, which caps AND says what it cost. `capLogs` above is the pure
+    // mechanism and this is the one AppDelegate calls, so a launch cannot cap and forget to report,
+    // which is what every one of these five call sites did before.
+    //
+    // ONE previous generation is right for these four files and nothing here changes that. They are
+    // the agent's stdout, stderr, problem ledger and Gmail connect trace: diagnostics that roll by
+    // design, 5 MB each, read when something has just gone wrong rather than as a history. Truncating
+    // in place rather than renaming is load-bearing for two of them, because launchd holds them open
+    // (see LogRotation), so an archive of the #3763 shape is not even available here.
+    //
+    // What it reports, and only this: a rotation that DESTROYED a generation, or one that was refused.
+    // A first roll moves every byte into the `.1` beside it and loses nothing, and a problem raised on
+    // every roll of a log that is meant to roll is precisely the false positive #1689 exists to stop:
+    // ANY new byte in this ledger raises the menu bar nudge, so a routine line here would teach Dan to
+    // stop believing it, which is what the old stderr-size rule did (L36, L11).
+    static func capLogsReportingWhatWasLost(maxBytes: Int = defaultMaxLogBytes,
+                                            files: [URL] = AgentLogLocation.cappedFiles,
+                                            fileManager: FileManager = .default,
+                                            report: (String) -> Void = { AgentLog.problem($0) }) {
+        let rotation = capLogs(maxBytes: maxBytes, files: files, fileManager: fileManager)
+        for note in rotation.lossNotes {
+            report(note)
+        }
     }
 
     // Create the log directory owner-only (0700) if missing, and tighten it if an earlier run left it

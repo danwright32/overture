@@ -1,6 +1,14 @@
 import Testing
 import Foundation
 
+// #3654: the list holds ROWS, so the groups going in are rows and the departing snapshot stays a CARD.
+// That asymmetry is what the splice is about now: a show that has just left has no card the store could
+// build, only the one taken when Dan pressed.
+private func row(_ id: String, date: String?) -> QueueScopeRow {
+    QueueScopeRow(id: id, groupName: id, discipline: "music", venue: "Weill Recital Hall",
+                  performanceDate: date, fitScore: 5)
+}
+
 private func item(_ id: String, date: String?) -> QueueItem {
     QueueItem(
         id: id, groupName: id, discipline: "music", venue: "Weill Recital Hall",
@@ -24,12 +32,12 @@ private func item(_ id: String, date: String?) -> QueueItem {
 @Suite("A just-sent card is spliced back into the groups already built (#1922)")
 struct DepartingRowsSpliceTests {
     @Test func nothingDepartingLeavesTheGroupsExactlyAsTheyWere() {
-        let groups = QueueModel.groupByDate([item("a", date: "2026-07-01"), item("b", date: "2026-07-02")])
+        let groups = QueueModel.groupByDate([row("a", date: "2026-07-01"), row("b", date: "2026-07-02")])
         #expect(QueueModel.groups(groups, withDeparting: [:]) == groups)
     }
 
     @Test func aDepartingShowRejoinsItsOwnNight() {
-        let groups = QueueModel.groupByDate([item("a", date: "2026-07-01")])
+        let groups = QueueModel.groupByDate([row("a", date: "2026-07-01")])
         let sent = item("b", date: "2026-07-01")
 
         let spliced = QueueModel.groups(groups, withDeparting: ["b": sent])
@@ -40,7 +48,7 @@ struct DepartingRowsSpliceTests {
 
     // The load-bearing case. Nothing is left on that night, so there is no group to splice into.
     @Test func sendingTheOnlyShowOnANightKeepsThatNightOnScreen() {
-        let groups = QueueModel.groupByDate([item("a", date: "2026-07-02")])
+        let groups = QueueModel.groupByDate([row("a", date: "2026-07-02")])
         let sent = item("b", date: "2026-07-01")
 
         let spliced = QueueModel.groups(groups, withDeparting: ["b": sent])
@@ -56,7 +64,7 @@ struct DepartingRowsSpliceTests {
     // The store can still be offering the row for a frame while the send settles. Showing it twice would
     // draw the card next to its own farewell.
     @Test func aShowThatIsBothStillListedAndDepartingAppearsOnce() {
-        let groups = QueueModel.groupByDate([item("a", date: "2026-07-01")])
+        let groups = QueueModel.groupByDate([row("a", date: "2026-07-01")])
 
         let spliced = QueueModel.groups(groups, withDeparting: ["a": item("a", date: "2026-07-01")])
 
@@ -64,7 +72,7 @@ struct DepartingRowsSpliceTests {
     }
 
     @Test func anUndatedDepartingShowLandsInTheUndatedGroup() {
-        let groups = QueueModel.groupByDate([item("a", date: "2026-07-01")])
+        let groups = QueueModel.groupByDate([row("a", date: "2026-07-01")])
 
         let spliced = QueueModel.groups(groups, withDeparting: ["b": item("b", date: nil)])
 

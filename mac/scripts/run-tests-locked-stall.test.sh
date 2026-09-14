@@ -119,6 +119,9 @@ STUB
     OVERTURE_TEST_LOCK_NOTICE_SECONDS="${lock_notice}" \
     OVERTURE_HOSTED_SUITE_RECORD="${bin_dir}/hosted-seen" \
     OVERTURE_SUITE_RUN_SERIES="${bin_dir}/suite-run-series" \
+    OVERTURE_DIR_LOCK="${bin_dir}/dir.lock" \
+    OVERTURE_DIR_LOCK_TIMEOUT=5 \
+    OVERTURE_DIR_LOCK_POLL=1 \
     "${SCRIPT_DIR}/run-tests-locked.sh" 2>&1)"
   rm -rf "${bin_dir}"
   printf '%s\n' "${output}"

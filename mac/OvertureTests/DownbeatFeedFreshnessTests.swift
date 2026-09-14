@@ -117,7 +117,12 @@ struct FeedFreshnessWiringGuardTests {
                 "the sheet must gate the stalled notice on the fact the feed is stalled")
         #expect(sheet.contains("DaysOffAttention.feedStalledExplanation"),
                 "the sheet must show the reassuring stalled-feed sentence")
-        #expect(sheet.contains("DaysOffAttention.needsALook(calendar, feedStalled: true)"),
+        // #3852: `cal`, not `calendar`. The rule is unchanged and is the same one: the snooze is offered
+        // for the stalled case too. What moved is that the sheet now reads its calendar ONCE into a local
+        // and hands it down, because it was reading the computed property three more times after binding
+        // it, and each read decodes the whole Downbeat export from disk. The comment above that binding
+        // claimed it was worked out once while three lines below still read it directly.
+        #expect(sheet.contains("DaysOffAttention.needsALook(cal, feedStalled: true)"),
                 "the sheet must offer the snooze for the stalled case too")
     }
 }
