@@ -56,6 +56,95 @@ struct NoWholeStoreWalkInAnArgumentTests {
         return names
     }
 
+
+    // Does this line hand a store-wide collection to something as part of a CALL over it?
+    //
+    // An argument is `label: value`; the shape being refused is a value that CALLS something with a
+    // store-wide collection in it. A bare `label: allProspects` is not this: passing the collection itself
+    // costs nothing at the call site, and the subview is then where the cost is attributed.
+    //
+    // THREE WRONG VERSIONS, and each one is here because it refused correct code, which is the direction
+    // that matters: a guard that goes red for the wrong reason teaches the next person to edit it until it
+    // is quiet (L103). The first asked whether the value held a paren at all, and refused
+    // `allItems: allItems) { ... startPrep(...) }`, where the paren belonged to a trailing closure. The
+    // second asked whether a paren came BEFORE the collection, which reads the LINE'S LAYOUT rather than
+    // the code: `ArchiveView(prospects: allProspects,` on its own line passed, and the identical
+    // `.sheet(isPresented: $showPatterns) { OutcomePatternsView(prospects: allProspects) }` was refused
+    // for having its opening paren on the same line (measured on #3871, which is the change that makes
+    // handing rows to a sheet the RULE rather than the exception).
+    //
+    // What it asks now is the question the rule is actually about: is the collection the WHOLE value of
+    // its own argument? `prospects: allProspects` is, whatever else is on the line. `corpus:
+    // allProspects.filter { ... }` is not, and neither is `rows: expensive(allProspects)`.
+    static func passesAWholeStoreCall(_ code: String, storeWide: [String]) -> Bool {
+        for name in storeWide {
+            var searchFrom = code.startIndex
+            while let found = code.range(of: name, range: searchFrom..<code.endIndex) {
+                searchFrom = found.upperBound
+                // A longer identifier that merely CONTAINS the name is a different value.
+                let beforeChar = found.lowerBound == code.startIndex
+                    ? Character(" ") : code[code.index(before: found.lowerBound)]
+                let endsTheLine = found.upperBound == code.endIndex
+                let afterChar = endsTheLine ? Character(" ") : code[found.upperBound]
+                if beforeChar.isLetter || beforeChar.isNumber || beforeChar == "_" { continue }
+                if afterChar.isLetter || afterChar.isNumber || afterChar == "_" { continue }
+
+                // It has to sit in an argument at all: something labelled, before it, on this line.
+                let before = code[..<found.lowerBound]
+                guard let colon = before.lastIndex(of: ":") else { continue }
+                // Between the label's colon and the collection there may be nothing but space, or the
+                // collection is part of a larger expression and this is the shape being refused.
+                let between = before[before.index(after: colon)...]
+                // The value ENDS there: the argument list continues, the call closes, or the line does.
+                // A trailing space is deliberately NOT enough, or `foo: allProspects ?? []` would read as
+                // a bare pass while the expression beside it is exactly what this refuses.
+                let isTheWholeValue = between.allSatisfy(\.isWhitespace)
+                    && (endsTheLine || afterChar == "," || afterChar == ")")
+                if isTheWholeValue { continue }
+
+                // The label has to look like an argument rather than a type annotation or a dictionary key.
+                let labelStart = before[..<colon].lastIndex(where: { $0 == "(" || $0 == "," })
+                    .map { before.index(after: $0) } ?? before.startIndex
+                let label = before[labelStart..<colon].trimmingCharacters(in: .whitespaces)
+                if label.hasPrefix("\"") || label.contains(" ") || label.isEmpty { continue }
+                return true
+            }
+        }
+        return false
+    }
+
+
+    // The predicate itself, against source this test writes. A guard's matcher is the half that can be
+    // wrong in the silent direction, and this one has now been wrong in the LOUD direction twice, which
+    // is what these preserve cases are for (L104).
+    @Test("the matcher catches a call over the store in an argument")
+    func catchesTheShapeItExistsFor() {
+        let names = ["allProspects"]
+        #expect(Self.passesAWholeStoreCall("QueueView(items: buildItems(allProspects))", storeWide: names))
+        #expect(Self.passesAWholeStoreCall("Foo(rows: allProspects.filter { $0.isKept })", storeWide: names))
+        #expect(Self.passesAWholeStoreCall("Foo(count: allProspects.count)", storeWide: names))
+        #expect(Self.passesAWholeStoreCall("Foo(rows: allProspects ?? [])", storeWide: names))
+    }
+
+    @Test("the matcher permits handing the collection itself to a subview")
+    func preservesWhatItMustNotRefuse() {
+        let names = ["allProspects"]
+        // The shape #3846 and #3871 make the rule: RootView holds the one query and hands the rows down.
+        #expect(!Self.passesAWholeStoreCall("ArchiveView(prospects: allProspects,", storeWide: names))
+        // The SAME code with the sheet modifier on the same line, which the previous rule refused purely
+        // for its layout.
+        #expect(!Self.passesAWholeStoreCall(
+            ".sheet(isPresented: $showPatterns) { OutcomePatternsView(prospects: allProspects) }",
+            storeWide: names))
+        #expect(!Self.passesAWholeStoreCall("FollowUpsView(prospects: allProspects, onOpenInArchive: {", storeWide: names))
+        // The trailing-closure case that the FIRST version of this guard refused.
+        #expect(!Self.passesAWholeStoreCall("PrepSelectionSheet(prospects: toPrep, allItems: allItems) { keys in", storeWide: names))
+        // A declaration, not an argument.
+        #expect(!Self.passesAWholeStoreCall("let allProspects: [Prospect]", storeWide: names))
+        // A longer identifier that merely contains the name.
+        #expect(!Self.passesAWholeStoreCall("Foo(rows: allProspectsCached.count)", storeWide: ["allProspects"]))
+    }
+
     @Test("no argument in RootView's body passes a call over the whole store")
     func rootViewPassesNoWholeStoreCall() throws {
         let source = try String(contentsOf: RepoRoot.mac
@@ -70,25 +159,9 @@ struct NoWholeStoreWalkInAnArgumentTests {
 
         var offenders: [String] = []
         for (line, code) in SwiftSource.scannableLines(in: source, skipping: .all) {
-            // An argument is `label: value`; the shape being refused is a value that CALLS something with a
-            // store-wide collection in it. A bare `label: allProspects` is not this: passing the collection
-            // itself costs nothing at the call site, and the subview is then where the cost is attributed.
-            guard let colon = code.firstIndex(of: ":") else { continue }
-            let value = String(code[code.index(after: colon)...])
-            // The collection must be INSIDE a call, which means an opening parenthesis BEFORE it. Written
-            // first as "the value contains a paren and contains the collection", which refused
-            // `allItems: allItems) { ... startPrep(...) }`: that passes the collection itself, which this
-            // guard deliberately permits, and the paren belonged to a trailing closure further along the
-            // line. An over-matching filter reads as working while refusing correct code, so it is tested
-            // against what it must PRESERVE and not only against what it must catch (L104).
-            guard let collection = storeWide.compactMap({ value.range(of: $0) }).min(by: {
-                $0.lowerBound < $1.lowerBound
-            }) else { continue }
-            guard let paren = value.firstIndex(of: "("), paren < collection.lowerBound else { continue }
-            // The label has to look like an argument rather than a type annotation or a dictionary key.
-            let label = code[..<colon].trimmingCharacters(in: .whitespaces)
-            guard !label.hasPrefix("\""), !label.contains(" ") else { continue }
-            offenders.append("  RootView.swift:\(line)  \(code.trimmingCharacters(in: .whitespaces))")
+            if Self.passesAWholeStoreCall(code, storeWide: storeWide) {
+                offenders.append("  RootView.swift:\(line)  \(code.trimmingCharacters(in: .whitespaces))")
+            }
         }
 
         let why = """
