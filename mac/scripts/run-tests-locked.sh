@@ -1015,6 +1015,15 @@ main() {
   # them. The bundle path is the one the run printed itself, the same one the executed count is read
   # from, and it is passed even when empty so a run that named no bundle says that rather than showing
   # names with nothing under them.
+  # #3875: BEFORE the failing list, because if the host died the list below is about a different
+  # question and reading it first is what sends somebody to debug an innocent test.
+  local died_report
+  died_report="$(crash_restart_report "${last_output}")"
+  if [[ -n "${died_report}" ]]; then
+    echo >&2
+    awk 'NR==1 {print "run-tests-locked.sh: " $0; next} {print}' <<< "${died_report}" >&2
+  fi
+
   local failing_reprint
   failing_reprint="$(failing_tests_report "${last_output}" "$(test_run_result_bundle "${last_output}")")"
   if [[ -n "${failing_reprint}" ]]; then
@@ -1029,6 +1038,42 @@ main() {
     exit 1
   fi
   exit "${test_exit_code}"
+}
+
+# #3875: say when the test HOST DIED during this run, instead of leaving the next test to be blamed.
+#
+# xcodebuild restarts the host after a crash and carries the totals forward, so the run can end with a
+# verdict that says nothing about the death. What it DOES leave is a line naming the restart, and the
+# test that had just started beside it, which is how an innocent test gets accused.
+#
+# Measured 2026-09-13: the hosted target run with `-test-iterations 10` killed the host 8 times and every
+# one was reported against `FeltWaitCostTests.measureWhatAPressCosts`, which in that configuration is a
+# guard on an unset variable, a print and a return. It had not executed a line of its own body. The same
+# boundary reproduced here on a later run. A test that returns instantly is the first quiet moment after
+# the preceding heavy test tears down, so the SAME innocent test is named every time, which reads exactly
+# like a reproducible fault in it. Two sessions investigated it before the crash reports were read.
+#
+# So this names BOTH: the last test to COMPLETE, which is a fact, and the one that was merely current,
+# which is an attribution and is labelled as one (L11: a message may claim only what its check measured).
+#
+# Silent on a clean run, deliberately. A report that speaks on every push is one people stop reading, and
+# this one would otherwise be noise on every ~9,600 test run (L36).
+crash_restart_report() {
+  local output="$1" restarts
+  restarts="$(grep -c 'Restarting after unexpected exit, crash, or test timeout' <<< "${output}" || true)"
+  [[ "${restarts}" -gt 0 ]] || return 0
+  echo "THE TEST HOST DIED ${restarts} time(s) during this run and xcodebuild restarted it."
+  awk '
+    /Test [A-Za-z0-9_]+\(\) (passed|failed)/ { completed = $0 }
+    /Test [A-Za-z0-9_]+\(\) started/         { started   = $0 }
+    /Restarting after unexpected exit/ {
+      if (completed != "") print "  last test to COMPLETE before it died: " completed
+      if (started   != "") print "  the test merely CURRENT when it died:  " started
+    }
+  ' <<< "${output}"
+  echo "  The second is an attribution and not a finding: a crash between tests is recorded against"
+  echo "  whichever test was current, and that test may not have run a line of its own body."
+  echo "  The evidence is the crash report, not this run: ~/Library/Logs/DiagnosticReports/"
 }
 
 # Allow this file to be sourced (e.g. by a test fixture) without running main, so
