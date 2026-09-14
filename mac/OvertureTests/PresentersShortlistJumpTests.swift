@@ -116,7 +116,7 @@ struct PresentersShortlistJumpTests {
                 "the row must actually invoke it, or the shortlist still leads nowhere")
 
         let root = SourceGuardHelper.source("Overture/App/RootView.swift")
-        #expect(root.contains("OrganisationsView(onShowShows:"),
+        #expect(root.contains("OrganisationsView(prospects: allProspects, onShowShows:"),
                 "and RootView must hand one in, or the sheet is drawn with no route at all")
         #expect(root.contains("deepLinkedKeys = LeadsDeepLink(keys: keys, heading: entry.name)"),
                 "through the existing leads channel, never a second filter path (Dan's note)")

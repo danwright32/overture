@@ -125,7 +125,7 @@ struct StruckAddressListingTests {
     @Test func thesheetIsReachableFromTheApp() {
         let root = SourceGuardHelper.source("Overture/App/RootView.swift")
         #expect(!root.isEmpty)
-        #expect(SourceGuardHelper.containsCode("StruckAddressesView()", in: root), Comment(rawValue:
+        #expect(SourceGuardHelper.containsCode("StruckAddressesView(prospects:", in: root), Comment(rawValue:
             "the sheet is built and nothing presents it, so the list Dan needs cannot be opened"))
         #expect(SourceGuardHelper.containsCode("showStruckAddresses = true", in: root), Comment(rawValue:
             "nothing raises the sheet, so the state it is bound to can never become true"))

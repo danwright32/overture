@@ -8,7 +8,17 @@ import SwiftData
 struct ExperimentReportView: View {
     @Environment(\.modelContext) private var context
     @Query(sort: [SortDescriptor(\Experiment.startedAt, order: .reverse)]) private var experiments: [Experiment]
-    @Query private var prospects: [Prospect]
+    // #3871: the whole store, HANDED DOWN rather than queried again here.
+    //
+    // It was `@Query private var prospects: [Prospect]`, a bare descriptor identical to the one RootView
+    // already holds. Measured 2026-09-12 by #3764 on the live store, two identical bare descriptors held
+    // by two live views share NOTHING: the second costs 99.6% of the first, 158.8 ms against 159.5 ms
+    // over 1,238 rows, against an end to end store change of 350.7 ms. So this sheet used to add a whole
+    // table read to every store change for as long as it was open.
+    //
+    // NO DEFAULT, for the reason ArchiveView's carries: an empty default renders an empty sheet that
+    // looks exactly like an empty store (L168, L67).
+    let prospects: [Prospect]
 
     @State private var selectedId: String?
     @State private var newVariantA: OpenerArchetype = .reasonFirst

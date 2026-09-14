@@ -384,9 +384,11 @@ struct ExternalRebuildProbeTests {
             ScopeProbe(prospects: rows) { TextField("q", text: .constant("")) }
         }
         // THE SIBLING, added after code review on #3878 found the PR's own sweep too narrow to see it.
-        // `FollowUpsView` has the identical shape: `@Environment(\\.dismiss)` at view level (`:10`), a
-        // whole-table `@Query prospects` (`:15`), `makeRenderData()` called from `body` (`:128`), and one
-        // `dismiss()` call site (`:138`). It also carries #3861's measured, unattributed freezes.
+        // `FollowUpsView` has the identical shape: `@Environment(\\.dismiss)` at view level (`:10`),
+        // `makeRenderData()` called from `body`, and one `dismiss()` call site. It also carries #3861's
+        // measured, unattributed freezes. Its whole-table `@Query prospects` was the fourth shared
+        // property until #3871 took it away; it receives the harness's rows now, exactly as the probes
+        // beside it do, which is the same store-to-screen path and not a narrower one.
         //
         // IT READS UNMEASURED, and that is the instrument refusing rather than failing. `WorkTally` counts
         // QUEUE rows; `FollowUpsRenderPass` increments none of its counters, so this harness cannot see a
@@ -394,7 +396,7 @@ struct ExternalRebuildProbeTests {
         // instead of the false all clear a bare zero would have been (L98). Measuring it needs a counter
         // on that pass, which is app instrumentation and belongs with the sibling fix, not here. The arm
         // is kept deliberately: an absent arm and an unmeasurable one read alike, and this one says which.
-        let followUps = focusReading { _ in FollowUpsView() }
+        let followUps = focusReading { rows in FollowUpsView(prospects: rows) }
         // THE SECOND SUSPECT, after the banner came back quiet. Comparing the two screens' property
         // wrappers, `ArchiveView` reads `@Environment(\\.dismiss)` and `QueueView` does not, which is
         // the kind of value a presentation context can revise when focus moves.

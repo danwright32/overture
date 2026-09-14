@@ -56,19 +56,11 @@ struct OneWholeTableProspectQueryTests {
         // `QueueView` and to `ArchiveView` rather than re-read by each of them.
         "RootView.swift": "the owner: the app's one always-live whole-table read",
 
-        // The eight sheets. Each is presented OVER RootView, so each one that is open costs a second
-        // whole table read per store change on top of the owner's. #3871 is the issue that converts them,
-        // ranked by whether Dan actually sits on the sheet: `OutcomePatternsView` is the worst, because it
-        // CONTAINS `WrittenOffBacklogSection` and `EmptyAnswerSection`, which hold their own, and can
-        // present `ExperimentReportView`, which holds a fourth.
-        "OutcomePatternsView.swift": "sheet over the owner, owed to #3871",
-        "WrittenOffBacklogSection.swift": "section inside OutcomePatternsView, owed to #3871",
-        "EmptyAnswerSection.swift": "section inside OutcomePatternsView, owed to #3871",
-        "ExperimentReportView.swift": "sheet from inside OutcomePatternsView, owed to #3871",
-        "FollowUpsView.swift": "sheet over the owner, owed to #3871",
-        "OrganisationsView.swift": "sheet over the owner, owed to #3871",
-        "SourcesView.swift": "sheet over the owner, owed to #3871",
-        "StruckAddressesView.swift": "sheet over the owner, owed to #3871",
+        // #3871 converted the eight sheets that used to be here: `OutcomePatternsView` with the two
+        // sections inside it and the report it presents, `FollowUpsView`, `OrganisationsView`,
+        // `SourcesView` and `StruckAddressesView`. Each now receives the rows from RootView, so the
+        // list is down to its owner and this is the shape the rule always meant. An entry may only ever
+        // leave, and they all have.
     ]
 
     @Test func everyWholeTableProspectQueryIsOneThisRuleAccountsFor() throws {
@@ -96,11 +88,18 @@ struct OneWholeTableProspectQueryTests {
             + "change, so the list stays the count of what is left rather than of what was once true"))
     }
 
-    // The two the measurement priced, named individually, because the list above would go on passing if
-    // one of them quietly took its own query back and an entry was added for it.
+    // Every converted surface, named individually, because the list above would go on passing if one of
+    // them quietly took its own query back and an entry was added for it.
+    //
+    // #3871 added the eight sheets to the two #3846 converted. They are named here rather than counted,
+    // so a surface that regains a query is reported by NAME and with what it costs.
     @Test func theQueueAndTheArchiveTakeTheirRowsFromTheOwner() throws {
         let app = AppSourceWalk.appFiles()
-        for name in ["QueueView.swift", "ArchiveView.swift"] {
+        for name in ["QueueView.swift", "ArchiveView.swift",
+                     "OutcomePatternsView.swift", "WrittenOffBacklogSection.swift",
+                     "EmptyAnswerSection.swift", "ExperimentReportView.swift",
+                     "FollowUpsView.swift", "OrganisationsView.swift",
+                     "SourcesView.swift", "StruckAddressesView.swift"] {
             let file = try #require(app.first { $0.name == name },
                                     Comment(rawValue: "\(name) was not in the app walk at all"))
             // Bound to a Bool first, and the file's TEXT is never an operand: a failing expectation
@@ -120,5 +119,28 @@ struct OneWholeTableProspectQueryTests {
         let handsTheArchiveItsRows = rootView.contains("ArchiveView(prospects: allProspects,")
         #expect(handsTheArchiveItsRows,
                 "RootView no longer hands the Archive its rows, so the sheet is reading the table itself")
+
+        // #3871: and each of the five sheets RootView presents directly. Asserted on the call site rather
+        // than only on the absence of a query in the sheet, because a sheet whose parameter nobody fills
+        // does not compile, but a sheet handed something OTHER than the owner's rows would (L3).
+        for call in ["OutcomePatternsView(prospects: allProspects)",
+                     "FollowUpsView(prospects: allProspects,",
+                     "SourcesView(prospects: allProspects,",
+                     "StruckAddressesView(prospects: allProspects)",
+                     "OrganisationsView(prospects: allProspects,"] {
+            #expect(rootView.contains(call), Comment(rawValue:
+                "RootView no longer hands its own rows to \(call): the sheet is deriving from something "
+                + "other than the app's one live whole-table read"))
+        }
+
+        // The three inside OutcomePatternsView take theirs from the sheet, which takes its own from
+        // RootView, so the whole group is one read rather than four.
+        let patterns = try #require(app.first { $0.name == "OutcomePatternsView.swift" }).text
+        for call in ["EmptyAnswerSection(prospects: prospects)",
+                     "WrittenOffBacklogSection(prospects: prospects)",
+                     "ExperimentReportView(prospects: prospects)"] {
+            #expect(patterns.contains(call), Comment(rawValue:
+                "OutcomePatternsView no longer passes its rows to \(call)"))
+        }
     }
 }

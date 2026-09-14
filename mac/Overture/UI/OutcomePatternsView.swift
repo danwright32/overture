@@ -5,7 +5,17 @@ import SwiftData
 // tier, over contacted prospects only, so Dan can see what converts before adjusting the
 // rules by hand (the safe near-term shape of the deferred auto-tune, #4).
 struct OutcomePatternsView: View {
-    @Query private var prospects: [Prospect]
+    // #3871: the whole store, HANDED DOWN rather than queried again here.
+    //
+    // It was `@Query private var prospects: [Prospect]`, a bare descriptor identical to the one RootView
+    // already holds. Measured 2026-09-12 by #3764 on the live store, two identical bare descriptors held
+    // by two live views share NOTHING: the second costs 99.6% of the first, 158.8 ms against 159.5 ms
+    // over 1,238 rows, against an end to end store change of 350.7 ms. So this sheet used to add a whole
+    // table read to every store change for as long as it was open.
+    //
+    // NO DEFAULT, for the reason ArchiveView's carries: an empty default renders an empty sheet that
+    // looks exactly like an empty store (L168, L67).
+    let prospects: [Prospect]
     @State private var dimension: OutcomePatterns.Dimension = .production
     @State private var auditTarget: AuditTarget?
     // #5 Phase 4: the opener A/B report opens from here, its analytics sibling, since the toolbar is full.
@@ -74,11 +84,11 @@ struct OutcomePatternsView: View {
                     GenreCorrectionsSection()
                     // #2989: what the empty contact answers are claiming, and the one contradiction
                     // visible without opening a card.
-                    EmptyAnswerSection()
+                    EmptyAnswerSection(prospects: prospects)
                     // Milestone 61 Phase 0.3: the shows a check wrote off that turned out to hold a
                     // route. The reader for the contradiction marker, which is the only record that
                     // survives the repair which removed the contradiction itself.
-                    WrittenOffBacklogSection()
+                    WrittenOffBacklogSection(prospects: prospects)
                 }
                 .padding(OVSpacing.lg)
             }
@@ -88,7 +98,7 @@ struct OutcomePatternsView: View {
         .popover(item: $auditTarget, arrowEdge: .trailing) { target in
             autoBookedList(for: target.value)
         }
-        .sheet(isPresented: $showExperiments) { ExperimentReportView() }
+        .sheet(isPresented: $showExperiments) { ExperimentReportView(prospects: prospects) }
     }
 
     private func patternRow(name: String, tally: OutcomeTally) -> some View {
