@@ -303,3 +303,25 @@ the measurement it came from lives here. Read the entry before the rule decides 
   through `scripts/check-overture-hangs.test.sh`, which builds reports in the real shape rather than
   reading this machine's.
 
+
+## Asking what CPU burns macOS has already recorded
+
+- **Asking what CPU burns macOS has already recorded: `scripts/check-overture-cpu.sh` (#3541).** macOS
+  writes an `Overture_*.cpu_resource.diag` when the app burns processor time past a threshold, into the
+  same directories as the `.hang` reports #3425 reads, and nothing here read them. Measured 2026-09-04,
+  three on this Mac against two hang reports.
+  It catches a case the hang reports structurally cannot. A hang report is written when the app stops
+  answering the window server; a freeze that never quite stops answering while still burning a core
+  leaves no hang report and one of these. The first run of this script on Dan's Mac reproduced #3884 and
+  #3886's whole evidence chain in one screen, from `RootView.runScout` down to
+  `NSRegularExpression.__allocating_init`.
+  A SIBLING rather than a mode of the hang reader, because it is a different file format with different
+  fields. What the two share is in `scripts/lib/diagnostic-reports.sh` and written once: which
+  directories could be read, how a report is found and kept, and the three-outcome vocabulary (L263).
+  **Read the stack as a SAMPLE, not a profile.** It is a microstackshot: a real report here holds 22
+  steps over 96 seconds with 145 samples lost, so the counts beside each frame say where the busiest
+  thread USUALLY was and say nothing about what share of the time anything cost (L355). The script
+  prints the steps line, the samples lost and the sampled duration beside every stack for that reason,
+  and says so in its own output rather than leaving it to whoever reads it.
+  Three outcomes, the same as the hang reader's: `1` reports are on record, `0` the directories it could
+  read hold none and it names them, `2` UNMEASURED because not one could be read.

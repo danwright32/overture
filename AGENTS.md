@@ -258,6 +258,9 @@ the subject named below.
 - **Asking what freezes macOS has already recorded**: `scripts/check-overture-hangs.sh`. Opt in. It
   reads the Overture PROCESS BLOCK of each `.hang` report, never the whole file, and has FOUR states
   across three exit codes: only UNMEASURED means nothing could be read.
+- **Asking what CPU burns macOS has already recorded**: `scripts/check-overture-cpu.sh`. Opt in, the
+  sibling of the hang reader and the one that catches a freeze which never stopped answering the window
+  server. Its stack is a SAMPLE, so read the steps and samples-lost lines beside it.
 - **Asking what a rotating log lost**: `scripts/what-the-log-lost.sh`, the `.1` file's reader. It reads
   the live file AND the `.1`, prints every rotation the app recorded, and tells content that is GONE
   apart from a rotation that was REFUSED. Defaults to the store backup log.
