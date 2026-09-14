@@ -243,13 +243,21 @@ enum ReplyCandidateMatch {
     static func judge(_ candidates: [GmailReplySearch.InboundMessage], for r: Recipient, on p: Prospect,
                       selfEmail: String) -> Verdict {
         let t = tokens(for: r, on: p)
-        let ranked = candidates
+        // FOUR STEPS WITH NAMED, TYPED RESULTS rather than one chain, and the behaviour is identical.
+        // Swift 6.4 (Xcode 27) refuses to type-check the chained form: "the compiler is unable to
+        // type-check this expression in reasonable time". A `filter.map.filter.sorted` over a closure that
+        // returns a struct gives the expression checker one problem with every intermediate element type
+        // unknown, and the older compiler happened to get through it. Naming each step pins those types.
+        // Do not put it back into one chain (L103's sibling: the shape here is load bearing, not a style).
+        let allowed: [GmailReplySearch.InboundMessage] = candidates
             .filter { refusal(for: $0, venue: p.venue, selfEmail: selfEmail) == nil }
-            .map { score($0, tokens: t) }
-            .filter { $0.score >= floor }
-            // Sorted by score, then by message id, so a run is reproducible and two equal scores do not
-            // change places between ticks.
-            .sorted { $0.score != $1.score ? $0.score > $1.score : $0.message.messageId < $1.message.messageId }
+        let scored: [Scored] = allowed.map { score($0, tokens: t) }
+        let aboveFloor: [Scored] = scored.filter { $0.score >= floor }
+        // Sorted by score, then by message id, so a run is reproducible and two equal scores do not
+        // change places between ticks.
+        let ranked: [Scored] = aboveFloor.sorted {
+            $0.score != $1.score ? $0.score > $1.score : $0.message.messageId < $1.message.messageId
+        }
 
         guard let top = ranked.first else { return .nothingLooksLikeThem }
         guard let runnerUp = ranked.dropFirst().first else { return .proposed(top) }
