@@ -93,10 +93,125 @@ final class TheFreezeLogIsBoundedWhileTheAppRunsTests {
                 "the scout schedule lost its hourly tick")
     }
 
+    // #3808: and it SAYS what was recorded, on the same tick. Overture is a login agent that stays
+    // resident, so before this a freeze recorded at 10am was not told until the next login: the same
+    // stale premise #3796 found one line above, for the same reason. Dan's call, 2026-09-14 (this
+    // session, in chat): ride the hourly tick.
+    @Test("the hourly tick also says what was recorded")
+    func theHourlyTickReportsWhatWasRecorded() {
+        guard let body = SourceGuardHelper.bodyOfFunction(named: "hourlyMaintenance", in: rootView) else {
+            Issue.record("hourlyMaintenance body not found in RootView"); return
+        }
+        #expect(body.contains("reportWhatWasRecorded()"), Comment(rawValue:
+            "the hourly tick bounds the freeze log and never says what is in it, so a freeze recorded "
+            + "mid-session waits for the next login to be told (#3808)"))
+        // AFTER the housekeeping, which rewrites the very file the report reads.
+        guard let housekeeping = body.range(of: "runFreezeLogHousekeeping()"),
+              let reporting = body.range(of: "reportWhatWasRecorded()") else {
+            Issue.record("one of the two calls is missing from the hourly tick"); return
+        }
+        let inOrder = housekeeping.lowerBound < reporting.lowerBound
+        #expect(inOrder, "the tick reports on the log before it has bounded it")
+    }
+
+    // ONE method with two callers, for the reason the housekeeping is one: two lists of the same pair
+    // would drift, and the half that drifted quietly would be the one that stopped being said (L613).
+    @Test("both callers report through one method, not a list each")
+    func bothCallersShareOneReporter() {
+        let calls = SourceGuardHelper.normalizedCode(rootView)
+            .components(separatedBy: "reportWhatWasRecorded()").count - 1
+        // Its declaration plus the launch task plus the hourly tick.
+        #expect(calls == 3, Comment(rawValue:
+            "reportWhatWasRecorded() appears \(calls) times, not the three expected (its declaration and "
+            + "its two callers), so a caller has grown its own list of what to report"))
+
+        guard let body = SourceGuardHelper.bodyOfFunction(named: "reportWhatWasRecorded", in: rootView) else {
+            Issue.record("reportWhatWasRecorded body not found in RootView"); return
+        }
+        #expect(body.contains("reportAnyFreezes()"))
+        #expect(body.contains("reportAnyCardDivergences()"))
+    }
+
+    // THE OTHER PART THAT IS EASY TO GET WRONG. Two of the three sentences the freeze reader can say are
+    // not about records and so have no identity to be remembered by: "the watchdog did not run" and
+    // "N writes failed". The first's own comment says it is "said once per session", and that was true
+    // only because the single caller ran once per session: a property of the CALL SITE, not of the rule,
+    // which is the shape that breaks the first time a second caller is added (L281). Hourly repetition of
+    // a sentence Dan can do nothing about is how a slot stops being read (L36).
+    @Test("only the sentences carrying no record identity are said once")
+    func anUnchangedIdentitylessNoticeIsNotRepeated() {
+        guard let body = SourceGuardHelper.bodyOfFunction(named: "reportAnyFreezes", in: rootView) else {
+            Issue.record("reportAnyFreezes body not found in RootView"); return
+        }
+        let remembers = SourceGuardHelper.containsCode(
+            "if carriesNoRecordIdentity, message == lastFreezeNoticeSaid { return false }", in: body)
+        #expect(remembers, Comment(rawValue:
+            "the freeze reporter says whatever it is handed, every tick. Two of its three sentences carry "
+            + "no record identity, so on an hourly tick they repeat for ever (#3808, L281)"))
+
+        // AND THE COUNT SENTENCE IS NEVER SUPPRESSED, which is the half that is easy to get backwards.
+        // Written first as a blanket "never the same sentence twice running", which reads as obviously
+        // safe. Measured over Dan's live log on 2026-09-14, 1,075 of 1,115 records (96%) render a sentence
+        // identical to another record's, because it is a duration to one decimal place plus the surface
+        // and the load: 146 are "0.4 seconds, queue, baseline" alone. The blanket rule would have swallowed
+        // most real freeze notices while reading as a tidy-up (L104).
+        let suppressesEverything = SourceGuardHelper.containsCode(
+            "guard message != lastFreezeNoticeSaid else { return false }", in: body)
+        #expect(!suppressesEverything, Comment(rawValue:
+            "every repeated sentence is suppressed, not only the two that carry no record identity. "
+            + "96% of the records in the live log render a sentence some other record also renders, so "
+            + "this silently drops most real freeze notices (#3808)"))
+        // `containsCode`, which STRIPS COMMENTS, not a bare `contains`. Written first with `contains`, and
+        // the mutation that proves this assertion (replacing the condition with `true`, which is the
+        // defect above reintroduced) left `// was: message == FreezeNoticeCopy.watchdogDidNotRun` behind
+        // and the test passed on that comment. A code matcher that reads prose fires on its own
+        // documentation, and here it did the opposite and stayed quiet on its own defect (L103, L135).
+        let namesTheIdentitylessOnes =
+            SourceGuardHelper.containsCode("message == FreezeNoticeCopy.watchdogDidNotRun", in: body)
+            && SourceGuardHelper.containsCode("freezeWatch.writesThatFailed > 0", in: body)
+        #expect(namesTheIdentitylessOnes, Comment(rawValue:
+            "the suppression does not say WHICH sentences carry no record identity, so it cannot be "
+            + "limited to them, and every repeated freeze sentence is swallowed"))
+        // Remembered only when the notice actually LANDED. Remembering a refused write would silence the
+        // sentence for the rest of the session having never shown it (L98).
+        let remembersOnlyWhatLanded = SourceGuardHelper.containsCode(
+            "if landed { lastFreezeNoticeSaid = message }", in: body)
+        #expect(remembersOnlyWhatLanded, Comment(rawValue:
+            "the last-said sentence is recorded whether or not the write landed, so a refused write "
+            + "silences that sentence for the session having never put it on screen"))
+    }
+
+    // THE PART THAT IS EASY TO GET WRONG, and the reason these two are paired rather than simply both
+    // called. Both write the status slot at `.warning`, and `StatusLine.set` applies an equal priority
+    // write over a showing message, so calling both unconditionally means the second REPLACES the first.
+    // That is a silent loss and not a cosmetic one: both readers mark every record they CONSIDERED as
+    // said, so the replaced notice is never offered again (L98, L152).
+    @Test("a tick that has a freeze to report does not also consume the divergence notice")
+    func theSecondNoticeIsNotConsumedByTheFirst() {
+        guard let body = SourceGuardHelper.bodyOfFunction(named: "reportWhatWasRecorded", in: rootView) else {
+            Issue.record("reportWhatWasRecorded body not found in RootView"); return
+        }
+        let guardsTheSecond = SourceGuardHelper.containsCode("if reportAnyFreezes() { return }", in: body)
+        #expect(guardsTheSecond, Comment(rawValue:
+            "both notices are raised unconditionally, so on a tick carrying both the second overwrites "
+            + "the first, and the first's records are already marked as said. Ask whether the freeze "
+            + "notice landed and leave the divergence for the next tick (#3808)"))
+
+        // And that is only answerable because each reporter says whether its notice went up. A reporter
+        // returning nothing cannot be asked, and the pairing above would be guesswork.
+        #expect(SourceGuardHelper.containsCode("private func reportAnyFreezes() -> Bool", in: rootView))
+        #expect(SourceGuardHelper.containsCode("private func reportAnyCardDivergences() -> Bool", in: rootView))
+    }
+
     // The launch call stays, and it stays BEFORE the report that reads the file it has just rewritten.
     @Test("the launch task still does the housekeeping, before it reports what the log holds")
     func theLaunchCallSurvivesAndKeepsItsOrder() {
-        guard let launchRegion = SourceGuardHelper.between("freezeWatch.start(", and: "reportAnyFreezes()",
+        // #3808: the launch task calls `reportWhatWasRecorded()` now, which is the pair of reporters in
+        // one method. Named exactly rather than left as `reportAnyFreezes()`: that string still occurs
+        // further down the file, so this region would have stretched past the launch task entirely and
+        // gone on passing while measuring something else (L135).
+        guard let launchRegion = SourceGuardHelper.between("freezeWatch.start(",
+                                                           and: "reportWhatWasRecorded()",
                                                            in: rootView) else {
             Issue.record("the launch task's freeze block was not found in RootView"); return
         }
