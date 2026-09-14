@@ -32,11 +32,7 @@ import SwiftData
 @Suite("Drawing the queue costs the same marker reads however many shows it holds (#3646)")
 struct MarkerReadsDoNotScaleWithTheQueueTests {
     private func container() throws -> ModelContainer {
-        try ModelContainer(for: Schema([Prospect.self, Recipient.self, Inquiry.self,
-                                        OrgReachabilityAnswer.self, WatchedSource.self,
-                                        RefusedContactAddress.self, PromotedProducer.self,
-                                        DemotedHouse.self]),
-                           configurations: [ModelConfiguration(isStoredInMemoryOnly: true)])
+        try TestModelContainer.inMemory([Prospect.self, Recipient.self, Inquiry.self, OrgReachabilityAnswer.self, WatchedSource.self, RefusedContactAddress.self, PromotedProducer.self, DemotedHouse.self])
     }
 
     // `perDate` shows on each of `dates` days, so both dimensions of the defect move together: the card

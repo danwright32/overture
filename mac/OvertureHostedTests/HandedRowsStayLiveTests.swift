@@ -26,11 +26,7 @@ import SwiftData
 struct HandedRowsStayLiveTests {
 
     private func container() throws -> ModelContainer {
-        try ModelContainer(for: Schema([Prospect.self, Recipient.self, Inquiry.self,
-                                        OrgReachabilityAnswer.self, WatchedSource.self,
-                                        RefusedContactAddress.self, PromotedProducer.self,
-                                        DemotedHouse.self]),
-                           configurations: [ModelConfiguration(isStoredInMemoryOnly: true)])
+        try TestModelContainer.inMemory([Prospect.self, Recipient.self, Inquiry.self, OrgReachabilityAnswer.self, WatchedSource.self, RefusedContactAddress.self, PromotedProducer.self, DemotedHouse.self])
     }
 
     private func insert(_ ctx: ModelContext, key: String, date: String) {

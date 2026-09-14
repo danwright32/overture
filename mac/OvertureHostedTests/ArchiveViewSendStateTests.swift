@@ -37,8 +37,7 @@ struct ArchiveViewSendStateTests {
     }
 
     private func context() throws -> ModelContext {
-        let container = try ModelContainer(for: Schema([Prospect.self]),
-                                           configurations: [ModelConfiguration(isStoredInMemoryOnly: true)])
+        let container = try TestModelContainer.inMemory([Prospect.self])
         return ModelContext(container)
     }
 

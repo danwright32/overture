@@ -118,8 +118,7 @@ struct DraftModelTraceDisplayTests {
     // --- The reply stamp, end to end -----------------------------------------------------------
 
     private func context() throws -> ModelContext {
-        ModelContext(try ModelContainer(for: Schema([Prospect.self, Recipient.self]),
-                                        configurations: [ModelConfiguration(isStoredInMemoryOnly: true)]))
+        ModelContext(try TestModelContainer.inMemory([Prospect.self, Recipient.self]))
     }
 
     private func prospectWithReplier(_ ctx: ModelContext) -> (Prospect, Recipient) {

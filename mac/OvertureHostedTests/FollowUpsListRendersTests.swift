@@ -26,9 +26,7 @@ struct FollowUpsListRendersTests {
     private let now = Date(timeIntervalSince1970: 1_780_000_000)   // 2026-06-27
 
     private func container() throws -> ModelContainer {
-        try ModelContainer(for: Schema([Prospect.self, Recipient.self, Inquiry.self,
-                                        WatchedSource.self]),
-                           configurations: [ModelConfiguration(isStoredInMemoryOnly: true)])
+        try TestModelContainer.inMemory([Prospect.self, Recipient.self, Inquiry.self, WatchedSource.self])
     }
 
     // A show that has been and gone, pitched and sent, which is what `PostEventPrompt` asks about. The
