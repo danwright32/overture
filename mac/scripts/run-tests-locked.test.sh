@@ -489,10 +489,21 @@ STUB
   # real suite as "SLOWER than twice the median of the last 18 full runs (19s)". Found by reading the
   # file after a run, exactly as the same defect was found for the live-store corpus record.
   SUITE_SERIES_AFTER_RUN="${bin_dir}/suite-run-series"
+  # #3571: THE SIBLING LOCKS ARE THROWAWAY BY DEFAULT, for the same reason the series file above is
+  # (L2). The runner now takes Downbeat's machine-wide directory lock as well as its own, and flock is
+  # stubbed here while `mkdir` is not, so without this every stubbed run competes for the REAL lock
+  # with whatever else is on this Mac. Two lanes of `run-shell-fixtures.sh` then block each other for
+  # the full 1800s timeout, which is a HANG rather than a failure and took a merge run down.
+  #
+  # A caller that is testing the lock itself sets `OVERTURE_DIR_LOCK` and wins, because this defaults
+  # rather than overrides.
   output="$(PATH="${bin_dir}:${PATH}" OVERTURE_TEST_BASELINE_FILE="${baseline_file}" \
     OVERTURE_TEST_DIAGNOSTICS_DIR="${diagnostics_dir}" \
     OVERTURE_HOSTED_SUITE_RECORD="${HOSTED_RECORD_AFTER_PARALLEL}" \
     OVERTURE_SUITE_RUN_SERIES="${SUITE_SERIES_AFTER_RUN}" \
+    OVERTURE_DIR_LOCK="${OVERTURE_DIR_LOCK:-${bin_dir}/dir.lock}" \
+    OVERTURE_DIR_LOCK_TIMEOUT="${OVERTURE_DIR_LOCK_TIMEOUT:-5}" \
+    OVERTURE_DIR_LOCK_POLL="${OVERTURE_DIR_LOCK_POLL:-1}" \
     "${SCRIPT_DIR}/run-tests-locked.sh" 2>&1)"
   code=$?
   log_calls="$(grep -c . "${bin_dir}/log-calls" 2>/dev/null || echo 0)"
