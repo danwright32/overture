@@ -20,12 +20,23 @@ enum ScoutExtractIngest {
     // Each source is independent: a run that died at source nine keeps sources one through eight, and
     // a source it never reached keeps its pending hash and its unread flag so the next run picks it up
     // again rather than skipping it forever.
+    // #3905: ASYNC, so the per event classify and match loop can leave the main actor.
+    //
+    // #3884 did this for the scout's own sweep and named this path as the one it did not convert. It is
+    // the worse of the two: on 2026-09-13 an ingest froze the app for 34.2 s, with two 10 s samples
+    // putting 8,485 of 8,498 main thread samples under this function and `ScoutService.apply`. #3887
+    // stopped it re-importing a STALE results file; it never stopped a legitimate import blocking the
+    // window for as long as it takes.
+    //
+    // ONE implementation, made async, rather than a second `ingestOffTheActor` beside it. The loop below
+    // is long and carries the source resolution, the health state and the reconcile; a second copy of it
+    // is how the two would come to disagree about what an ingest does (L263).
     @discardableResult
     static func ingest(_ results: ScoutExtractResults,
                        clients: [DownbeatClient], history: [HistoryRecord], blocked: BlockedCalendar,
                        today: String = QueueModel.easternToday(),
                        now: Date = Date(),
-                       into context: ModelContext) -> ScoutService.Outcome {
+                       into context: ModelContext) async -> ScoutService.Outcome {
         var outcome = ScoutService.Outcome(found: 0, inserted: 0, updated: 0, skipped: 0)
 
         for result in results.results {
@@ -124,6 +135,14 @@ enum ScoutExtractIngest {
             // upcoming-only guard apply to a watched source exactly as they do to everything else. A
             // watchlist that could smuggle a refused org back in by a side door would be worse than no
             // watchlist at all.
+            // #3905: the corpus is read HERE, on the main actor, because it needs the `ModelContext`;
+            // the loop over this source's events is awaited off it; the upserts below run here again.
+            // The same three steps `ScoutService.applySweepOffTheActor` takes, and the same shared
+            // pieces, so the two paths cannot drift about what a classify pass is.
+            let corpus = ScoutService.venueBrandCorpus(in: context)
+            let classifiedPass = await ScoutClassify.offTheCallersActor(
+                events: events, clients: clients, history: history,
+                venueBrands: corpus.brands, sourceIds: [source.sourceId])
             let applied = ScoutService.apply(
                 events: events, clients: clients, history: history, blocked: blocked,
                 // #887: the events this run THREW AWAY are handed over with the ones it kept. They were
@@ -147,7 +166,10 @@ enum ScoutExtractIngest {
                                              // struck for a row that is on the page right now.
                                              structuralGapURLs: rejection.structuralGapURLs,
                                              structuralGapDates: rejection.structuralGapDates),
-                today: today, sourceIds: [source.sourceId], into: context)
+                today: today, sourceIds: [source.sourceId],
+                preClassified: ScoutService.PreClassified(result: classifiedPass,
+                                                          degradedReads: corpus.degradedReads),
+                into: context)
             outcome.merge(applied)
 
             if applied.saveFailed {

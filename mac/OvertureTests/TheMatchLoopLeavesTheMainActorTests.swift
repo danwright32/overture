@@ -114,6 +114,46 @@ struct TheMatchLoopLeavesTheMainActorTests {
             + "corpus reads as a clean run"))
     }
 
+    // #3905: the OTHER path into the same loop, which #3884 named and did not convert. It is the one
+    // that froze the app for 34.2 s on 2026-09-13, with two 10 s samples putting 8,485 of 8,498 main
+    // thread samples under it. Asserted from the source for the same reason as the sweep above:
+    // `ScoutExtractIngest` needs a `ModelContext`, so no test in this target can drive it.
+    @Test func theExtractIngestAlsoClassifiesOffTheActor() {
+        let source = SourceGuardHelper.source("Overture/Integration/ScoutExtractIngest.swift")
+        #expect(!source.isEmpty, "ScoutExtractIngest.swift could not be read, so this measured nothing")
+
+        let classifiesOffTheActor =
+            SourceGuardHelper.containsCode("await ScoutClassify.offTheCallersActor(", in: source)
+        #expect(classifiesOffTheActor, Comment(rawValue:
+            "the extract ingest classifies inline on the main actor again, so importing a read holds "
+            + "the window for as long as it takes (#3905, and #3887 measured it at 34.2 s)"))
+
+        // Through the SAME shared pieces as the sweep, so the two paths cannot drift about what a
+        // classify pass is or what a failed corpus read means (L263).
+        let readsTheSharedCorpus =
+            SourceGuardHelper.containsCode("ScoutService.venueBrandCorpus(in: context)", in: source)
+        #expect(readsTheSharedCorpus, "the ingest reads the brand corpus some other way than the shared helper")
+        let carriesTheDegradedRead =
+            SourceGuardHelper.containsCode("degradedReads: corpus.degradedReads", in: source)
+        #expect(carriesTheDegradedRead, Comment(rawValue:
+            "the ingest drops the store reads that failed while classifying, so a degraded corpus reads "
+            + "as a clean import"))
+    }
+
+    // Both paths, named together, because the defect this pair exists for is converting ONE of them and
+    // believing the class is covered: that is exactly what happened between #3884 and #3905 (L30).
+    @Test func neitherPathIntoTheLoopClassifiesOnTheMainActor() {
+        for file in ["Overture/Integration/ScoutService.swift",
+                     "Overture/Integration/ScoutExtractIngest.swift"] {
+            let source = SourceGuardHelper.source(file)
+            #expect(!source.isEmpty, Comment(rawValue: "\(file) could not be read"))
+            let awaitsTheClassify =
+                SourceGuardHelper.containsCode("await ScoutClassify.offTheCallersActor(", in: source)
+            #expect(awaitsTheClassify, Comment(rawValue:
+                "\(file) reaches the match loop without awaiting it off the actor"))
+        }
+    }
+
     // A plain `Task` INHERITS the caller's actor, so the one thing that would make all of this decorative
     // is the detach going missing. Asserted by name.
     @Test func theDetachIsNotAPlainTask() {

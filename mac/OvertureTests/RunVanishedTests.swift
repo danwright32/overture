@@ -49,11 +49,11 @@ struct RunVanishedTests {
     // The whole point of the verdict: the page has NOT been read, so it must be read next time. Stamping
     // the hash here would be the single worst thing the watchlist can do: the source would report as
     // healthy and unchanged forever, having never once been read.
-    @Test func aSourceTheRunNeverReachedIsTriedAgainRatherThanSkippedForever() throws {
+    @Test func aSourceTheRunNeverReachedIsTriedAgainRatherThanSkippedForever() async throws {
         let ctx = try context()
         let source = queuedSource(ctx)
 
-        ScoutExtractIngest.ingest(results("kaufman", verdict: .notRead),
+        await ScoutExtractIngest.ingest(results("kaufman", verdict: .notRead),
                                   clients: [], history: [], blocked: .empty, now: now, into: ctx)
 
         #expect(source.lastContentHash == "old-hash", "the hash of a page nobody read must never be stamped")
@@ -64,11 +64,11 @@ struct RunVanishedTests {
 
     // It must be LOUD. A run that lost a source and said nothing is the bug; a run that lost a source and
     // named it is the fix.
-    @Test func theLostSourceIsNamedToDan() throws {
+    @Test func theLostSourceIsNamedToDan() async throws {
         let ctx = try context()
         queuedSource(ctx)
 
-        let outcome = ScoutExtractIngest.ingest(results("kaufman", verdict: .notRead),
+        let outcome = await ScoutExtractIngest.ingest(results("kaufman", verdict: .notRead),
                                                 clients: [], history: [], blocked: .empty, now: now, into: ctx)
 
         let warning = try #require(outcome.warning)
@@ -88,11 +88,11 @@ struct RunVanishedTests {
     }
 
     // A source the run DID read still lands normally. The guard speaks only for what came back missing.
-    @Test func aSourceTheRunDidReadIsUnaffected() throws {
+    @Test func aSourceTheRunDidReadIsUnaffected() async throws {
         let ctx = try context()
         let source = queuedSource(ctx)
 
-        ScoutExtractIngest.ingest(results("kaufman", verdict: .allPast),
+        await ScoutExtractIngest.ingest(results("kaufman", verdict: .allPast),
                                   clients: [], history: [], blocked: .empty, now: now, into: ctx)
 
         #expect(source.lastContentHash == "new-hash", "a page we genuinely read is stamped")

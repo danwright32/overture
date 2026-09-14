@@ -181,21 +181,21 @@ struct SourceReadabilityPersistenceTests {
                           sourceUrl: "https://kaufman.example/\(title)")
     }
 
-    private func ingest(_ events: [ScoutExtractEvent], into ctx: ModelContext) {
+    private func ingest(_ events: [ScoutExtractEvent], into ctx: ModelContext) async {
         let r = ScoutExtractResults(
             version: 1, generatedAt: "2026-07-13T00:00:00Z",
             results: [ScoutExtractResult(sourceId: "kaufman", verdict: .upcomingListings,
                                          events: events, note: nil)])
-        ScoutExtractIngest.ingest(r, clients: [], history: [], blocked: .empty,
+        await ScoutExtractIngest.ingest(r, clients: [], history: [], blocked: .empty,
                                   today: ScoutTestClock.beforeAllFixtures,
                                   now: Date(timeIntervalSince1970: 1_800_000_000), into: ctx)
     }
 
-    @Test func anIngestRecordsWhatItCouldNotRead() throws {
+    @Test func anIngestRecordsWhatItCouldNotRead() async throws {
         let ctx = try context()
         let s = source(ctx)
 
-        ingest([event("Read", venue: "Merkin Hall"),
+        await ingest([event("Read", venue: "Merkin Hall"),
                 event("Unread", venue: nil)], into: ctx)
 
         #expect(s.lastReadableCount == 1)
@@ -213,11 +213,11 @@ struct SourceReadabilityPersistenceTests {
     // real presenter) is no longer a title drop, it is RESCUED and named from that field, so this uses a
     // row with nothing at all to name it (the helper sets presenter = title, so an empty title also
     // leaves the presenter empty; a nil venue leaves nothing to fall back to).
-    @Test func anIngestRecordsATitlelessDropSeparately() throws {
+    @Test func anIngestRecordsATitlelessDropSeparately() async throws {
         let ctx = try context()
         let s = source(ctx)
 
-        ingest([event("Read", venue: "Merkin Hall"),
+        await ingest([event("Read", venue: "Merkin Hall"),
                 event("", venue: nil)], into: ctx)   // no title, no presenter, no venue: nothing to name it
 
         #expect(s.lastReadableCount == 1)
@@ -235,13 +235,13 @@ struct SourceReadabilityPersistenceTests {
     //
     // So: a real source that usually lists 30 shows reads its page, gets 16, and Dan is told, in the row he
     // will actually look at, that it cannot mark anything gone until that smaller calendar holds.
-    @Test func aRunThatCameBackHalfSizeSaysSoOnTheSourceItself() throws {
+    @Test func aRunThatCameBackHalfSizeSaysSoOnTheSourceItself() async throws {
         let ctx = try context()
         let s = source(ctx)
         s.baselineFeedCount = 30
         s.successfulCheckCount = WatchedSource.warmupRuns
 
-        ingest((1...16).map { event("Show \($0)", venue: "Merkin Hall") }, into: ctx)
+        await ingest((1...16).map { event("Show \($0)", venue: "Merkin Hall") }, into: ctx)
 
         #expect(s.lastReadableCount == 16)
         #expect(s.baselineFeedCount == 30)          // NOT re-baselined to 16: the shrink is not believed yet
@@ -250,7 +250,7 @@ struct SourceReadabilityPersistenceTests {
 
     // ...and it stops saying it the moment the smaller calendar is believed, or the line becomes permanent
     // furniture on a source that is working perfectly well at its new size.
-    @Test func aShrunkenSourceStopsComplainingOnceItsNewSizeIsBelieved() throws {
+    @Test func aShrunkenSourceStopsComplainingOnceItsNewSizeIsBelieved() async throws {
         let ctx = try context()
         let s = source(ctx)
         s.baselineFeedCount = 30
@@ -259,7 +259,7 @@ struct SourceReadabilityPersistenceTests {
         for read in 0..<FeedReconcile.selfHealThreshold {
             s.pendingContentHash = "hash-\(read)"   // its page changed again, and again it lists 16
             s.hasUnreadChanges = true
-            ingest((1...16).map { event("Show \($0)", venue: "Merkin Hall") }, into: ctx)
+            await ingest((1...16).map { event("Show \($0)", venue: "Merkin Hall") }, into: ctx)
         }
 
         #expect(s.baselineFeedCount == 16)          // the shrink held, so 16 is simply what this source is
@@ -268,15 +268,15 @@ struct SourceReadabilityPersistenceTests {
 
     // A source that recovers must STOP saying it is broken, or the warning becomes permanent furniture and
     // Dan learns to skim past the one line he must never skim past.
-    @Test func aSourceThatRecoversStopsComplaining() throws {
+    @Test func aSourceThatRecoversStopsComplaining() async throws {
         let ctx = try context()
         let s = source(ctx)
 
-        ingest([event("Read", venue: "Merkin Hall"), event("Unread", venue: nil)], into: ctx)
+        await ingest([event("Read", venue: "Merkin Hall"), event("Unread", venue: nil)], into: ctx)
         #expect(s.readabilityNote != nil)
 
         s.pendingContentHash = "newer-hash"      // its page changed again and this run read all of it
-        ingest([event("Read", venue: "Merkin Hall"), event("Unread", venue: "Merkin Hall")], into: ctx)
+        await ingest([event("Read", venue: "Merkin Hall"), event("Unread", venue: "Merkin Hall")], into: ctx)
 
         #expect(s.lastUnreadableCount == 0)
         #expect(s.readabilityNote == nil)
@@ -319,7 +319,7 @@ struct SourceReadabilityPersistenceTests {
     // ...and the wiring, which is a second claim (#887 cut its own wire and left 1,829 tests green). The view
     // reads `source.readabilityNoteIsInformationalOnly`, not the pure function, so this drives a REAL source
     // through a real read at Jalopy's exact live shape and asks the property the sheet asks.
-    @Test func aRealSourceAtJalopysShapeReportsItsToleratedDropAsPlain() throws {
+    @Test func aRealSourceAtJalopysShapeReportsItsToleratedDropAsPlain() async throws {
         let ctx = try context()
         let s = source(ctx)
         s.baselineFeedCount = 28
@@ -327,7 +327,7 @@ struct SourceReadabilityPersistenceTests {
 
         var events = (1...27).map { event("Show \($0)", venue: "Jalopy Theatre") }
         events.append(event("The 2026 Brooklyn Folk Festival", venue: nil))
-        ingest(events, into: ctx)
+        await ingest(events, into: ctx)
 
         #expect(s.lastReadableCount == 27)
         #expect(s.lastUnreadableCount == 1)

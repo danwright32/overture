@@ -181,7 +181,7 @@ struct WatchlistEditURLTests {
     // page, a comparable-sized feed of different shows. The old prospect must NOT be pushed toward gone:
     // the corrected URL has to re-earn warmup first. Without the reset in editURL this test fails, and
     // the show Dan kept quietly leaves his queue.
-    @Test func aCorrectedUrlCannotCancelTheOldPagesProspects() throws {
+    @Test func aCorrectedUrlCannotCancelTheOldPagesProspects() async throws {
         let ctx = try context()
         let s = WatchedSource(sourceId: "kaufman", orgName: "Kaufman",
                               listingsURL: "https://old.example/events", kind: .html)
@@ -211,7 +211,7 @@ struct WatchlistEditURLTests {
                 ScoutExtractEvent(title: "New B", presenter: "New B", venue: "Kaufman",
                                   performanceDate: "2099-10-02", sourceUrl: "https://new.example/b")],
                 note: nil)])
-        _ = ScoutExtractIngest.ingest(results, clients: [], history: [], blocked: .empty,
+        _ = await ScoutExtractIngest.ingest(results, clients: [], history: [], blocked: .empty,
                                       today: ScoutTestClock.beforeAllFixtures,
                                       now: Date(timeIntervalSince1970: 1_800_000_000), into: ctx)
 
