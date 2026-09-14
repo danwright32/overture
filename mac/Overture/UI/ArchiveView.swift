@@ -32,7 +32,6 @@ struct ArchiveView: View {
     // is absent, which would turn a missed injection into a crash of the whole app (and does crash any
     // test that builds this view directly). Nil simply means this surface records nothing.
     @Environment(QueueUndoStack.self) private var undoStack: QueueUndoStack?
-    @Environment(\.dismiss) private var dismiss
     @Environment(ActionFeedback.self) private var feedback
     @Environment(DayOffOfferRequest.self) private var dayOffOffer   // #924
     // #3762: the app's own freeze instrument, read as an OPTIONAL on the same footing as every other
@@ -212,12 +211,16 @@ struct ArchiveView: View {
         highlightedRecipientId = recipientId
     }
 
+    // #3876: `DoneButton` owns the dismiss read so this view does not, which is what stops every focus
+    // change re-deriving the whole store through `makeScope()` below. The reasoning, the measurement and
+    // the one surface this approach cannot reach are all on the component (`DoneButton.swift`) rather
+    // than repeated at each of its six call sites.
     private func header(filtered: [QueueScopeRow]) -> some View {
         HStack {
             Text("Archive").font(OVType.dateHeading).foregroundStyle(OVColor.ink)
             Text("\(filtered.count)").font(.system(size: 12)).foregroundStyle(OVColor.inkFaint)
             Spacer()
-            Button("Done") { dismiss() }
+            DoneButton()
         }
         .padding(OVSpacing.lg)
     }

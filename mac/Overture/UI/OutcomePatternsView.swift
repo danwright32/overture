@@ -5,7 +5,6 @@ import SwiftData
 // tier, over contacted prospects only, so Dan can see what converts before adjusting the
 // rules by hand (the safe near-term shape of the deferred auto-tune, #4).
 struct OutcomePatternsView: View {
-    @Environment(\.dismiss) private var dismiss
     @Query private var prospects: [Prospect]
     @State private var dimension: OutcomePatterns.Dimension = .production
     @State private var auditTarget: AuditTarget?
@@ -32,7 +31,7 @@ struct OutcomePatternsView: View {
                 Text("What converts").font(OVType.dateHeading).foregroundStyle(OVColor.ink)
                 Spacer()
                 Button("Opener A/B") { showExperiments = true }
-                Button("Done") { dismiss() }
+                DoneButton()
             }
             .padding(OVSpacing.lg)
 

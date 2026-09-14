@@ -7,7 +7,6 @@ import SwiftData
 // replies, and a conversation reminder steps forward when Dan acts on it or resolves when booked/lost.
 struct FollowUpsView: View {
     @Environment(\.modelContext) private var context
-    @Environment(\.dismiss) private var dismiss
     @Environment(ActionFeedback.self) private var feedback   // #285
     // #3762: the app's own freeze instrument, read as an OPTIONAL on the same footing as every other
     // environment object here, so a missed injection is a pass nobody counted rather than a crash.
@@ -135,7 +134,7 @@ struct FollowUpsView: View {
                 Text("\(listed.counts.total)")
                     .font(.system(size: 12)).foregroundStyle(OVColor.inkFaint)
                 Spacer()
-                Button("Done") { dismiss() }
+                DoneButton()
             }
             .padding(OVSpacing.lg)
             Divider()

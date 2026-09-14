@@ -6,7 +6,6 @@ import SwiftData
 // create/end rules live in ExperimentEditing (tested); this view only renders and wires the two buttons.
 // It never declares a winner (that is #4): the bar only gates the "too few to tell" line.
 struct ExperimentReportView: View {
-    @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var context
     @Query(sort: [SortDescriptor(\Experiment.startedAt, order: .reverse)]) private var experiments: [Experiment]
     @Query private var prospects: [Prospect]
@@ -26,7 +25,7 @@ struct ExperimentReportView: View {
             HStack {
                 Text("Opener A/B").font(OVType.dateHeading).foregroundStyle(OVColor.ink)
                 Spacer()
-                Button("Done") { dismiss() }
+                DoneButton()
             }
             .padding(OVSpacing.lg)
             Divider()

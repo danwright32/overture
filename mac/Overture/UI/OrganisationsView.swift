@@ -21,7 +21,6 @@ struct OrganisationsView: View {
     // 2026-08-11). Defaulted to nothing so the sheet still builds in a preview or a test with no queue
     // behind it; the row below is drawn as a control only when there is somewhere to go.
     var onShowShows: ((OrganisationListing.Entry) -> Void)?
-    @Environment(\.dismiss) private var dismiss
     // #3762: the app's own freeze instrument, read as an OPTIONAL on the same footing as every other
     // environment object here, so a missed injection is a pass nobody counted rather than a crash.
     @Environment(FreezeWatch.self) private var freezeWatch: FreezeWatch?
@@ -81,7 +80,7 @@ struct OrganisationsView: View {
                     .font(.system(size: 12)).foregroundStyle(OVColor.inkSoft)
             }
             Spacer()
-            Button("Done") { dismiss() }.keyboardShortcut(.defaultAction)
+            DoneButton(isDefaultAction: true)
         }
         .padding(OVSpacing.lg)
     }
