@@ -1668,6 +1668,68 @@ STALE_RUN="$(OVERTURE_DIR_LOCK="${STALE_DIR_LOCK}" OVERTURE_DIR_LOCK_TIMEOUT=5 \
 assert_contains "a lock held by a dead process is claimed rather than waited out" \
   "Test run with 4 tests" "${STALE_RUN}"
 
+# A LOCK THAT IS STILL BEING SET UP IS NOT STALE. Downbeat's runner takes the directory with `mkdir`
+# and writes its owner file immediately afterwards, so there is a window where the lock is held by a
+# live run and carries no owner. Claiming on "no owner file" alone would steal it inside that window,
+# which is worse than waiting: two Mac test runs would then be doing exactly what this lock exists to
+# prevent, and the theft would be invisible to both. So an ownerless lock is only claimed once it has
+# stayed ownerless for the grace period.
+OWNERLESS_LOCK="${DIR_LOCK_FIXTURE_DIR}/ownerless.lock"
+mkdir -p "${OWNERLESS_LOCK}"
+: > "${WITNESS}"
+OWNERLESS_RUN="$(OVERTURE_DIR_LOCK="${OWNERLESS_LOCK}" OVERTURE_DIR_LOCK_TIMEOUT=3 \
+  OVERTURE_DIR_LOCK_POLL=1 OVERTURE_DIR_LOCK_GRACE=60 FLOCK_STUB_WITNESS="${WITNESS}" \
+  run_wrapper_with_stub_xcodebuild "${GREEN_RUN_LOG}" 0)"
+assert_contains "a freshly made ownerless lock is WAITED for, not stolen" \
+  "gave up waiting" "${OWNERLESS_RUN}"
+assert_not_contains "and the run never claimed it" \
+  "claiming" "${OWNERLESS_RUN}"
+rm -rf "${OWNERLESS_LOCK}"
+
+# THE POLL INTERVAL IS INJECTABLE, so a test of the WAITING path does not wait for real (L524). The
+# arm above proves the seam works by waiting out a 3 second timeout rather than the 1800 second one.
+
+# A LOCK THAT GOES LIVE UNDERNEATH THE CLAIM IS PUT BACK, NOT DESTROYED. This is the interleaving the
+# atomic claim exists for, and the one an `rm -rf` and retry gets wrong: the lock reads dead, another
+# run takes it in the moment before the rename, and a naive claimer carries off a LIVE lock. Downbeat
+# measured that about twice in eight runs (downbeat#218).
+#
+# Driven through the runner's own pause seam rather than by racing real processes, because the window
+# is microseconds wide and mostly does not open, so a race would prove nothing (L134).
+LIVE_UNDER_LOCK="${DIR_LOCK_FIXTURE_DIR}/wentlive.lock"
+PAUSE="${DIR_LOCK_FIXTURE_DIR}/pause"
+mkdir -p "${LIVE_UNDER_LOCK}"
+echo "overture:999999" > "${LIVE_UNDER_LOCK}/owner"
+: > "${PAUSE}"
+( OVERTURE_DIR_LOCK="${LIVE_UNDER_LOCK}" OVERTURE_DIR_LOCK_TIMEOUT=3 OVERTURE_DIR_LOCK_POLL=1 \
+  OVERTURE_DIR_LOCK_PAUSE_FILE="${PAUSE}" \
+  run_wrapper_with_stub_xcodebuild "${GREEN_RUN_LOG}" 0 >/dev/null 2>&1 ) &
+WENT_LIVE_RUN_PID=$!
+# Wait for the runner to reach the seam, bounded: a wait with no deadline is a hang, not a failure.
+reached_waited=0
+while [[ ! -e "${PAUSE}.reached" ]] && [[ "${reached_waited}" -lt 200 ]]; do
+  sleep 0.05
+  reached_waited=$((reached_waited + 1))
+done
+assert_equals "the runner reaches the claim seam, so this arm measured the interleaving" "yes" \
+  "$([ -e "${PAUSE}.reached" ] && echo yes || echo no)"
+# It judged the lock dead and is about to rename it. Make it LIVE underneath, then release.
+echo "overture:$$" > "${LIVE_UNDER_LOCK}/owner"
+rm -f "${PAUSE}"
+wait "${WENT_LIVE_RUN_PID}" 2>/dev/null || true
+
+assert_equals "the live lock is still there, put back rather than destroyed" "yes" \
+  "$([ -d "${LIVE_UNDER_LOCK}" ] && echo yes || echo no)"
+assert_contains "and it still belongs to the run that took it" \
+  "overture:$$" "$(cat "${LIVE_UNDER_LOCK}/owner" 2>/dev/null || echo MISSING)"
+# Captured, then tested, rather than piped into `grep -q`: under pipefail a short circuiting consumer
+# kills the producer, so an early match and no match are indistinguishable (L183), which is the exact
+# shape `run-shell-fixtures.test.sh` refuses across the tree.
+STRANDED="$(ls -d "${LIVE_UNDER_LOCK}".stale.* 2>/dev/null || true)"
+assert_equals "and nothing was left stranded at a .stale path" "no" \
+  "$([ -n "${STRANDED}" ] && echo yes || echo no)"
+rm -rf "${LIVE_UNDER_LOCK}"
+
 # `fixture_scratch_dir` does not sweep itself, and `check-temp-dir-leaks.sh` reads the runner's
 # directory for exactly this, so what this block made it takes away again.
 rm -rf "${DIR_LOCK_FIXTURE_DIR}"

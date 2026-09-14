@@ -42,6 +42,12 @@ LOCK_FILE="${OVERTURE_FILE_LOCK:-/tmp/overture-mac-tests.lock}"
 # `run-tests-locked.test.sh` asserts it rather than leaving it to this comment (L27).
 DIR_LOCK="${OVERTURE_DIR_LOCK:-/tmp/xcodebuild-tests.lock}"
 DIR_LOCK_TIMEOUT="${OVERTURE_DIR_LOCK_TIMEOUT:-1800}"
+# The poll interval, injectable from the day it is written, so a test of the WAITING path records the
+# schedule instead of living through it (L524).
+DIR_LOCK_POLL="${OVERTURE_DIR_LOCK_POLL:-1}"
+# A TEST ONLY SEAM, mirroring Downbeat's. The interleaving below is microseconds wide and mostly does
+# not open, so racing real processes to produce it proves nothing (L134). A test drives it instead.
+DIR_LOCK_PAUSE_FILE="${OVERTURE_DIR_LOCK_PAUSE_FILE:-}"
 DIR_LOCK_HELD=""
 # #2195: how many tests the last green run on this Mac executed. See the completeness check in main().
 # Overridable so the shell fixtures point it at a throwaway path: they drive main() with a stubbed
@@ -542,16 +548,71 @@ keep_diagnostic_file() {
 # carries `claim-stale-lock.sh` for exactly this; this is the same judgement, made here so the two
 # cannot disagree about what stale means.
 #
-# NO OWNER FILE READS AS CLAIMABLE. A lock with nothing recorded in it cannot be attributed to anyone
-# alive, and treating it as held would make one unreadable file block every run on the machine
-# indefinitely, which is the unrecoverable direction (L93).
-dir_lock_owner_alive() {
-  local owner_file="$1/owner" owner pid
-  [[ -f "${owner_file}" ]] || return 1
-  owner="$(cat "${owner_file}" 2>/dev/null || true)"
+# Whether this lock's owner is DEMONSTRABLY dead. Ported from Downbeat's `scripts/claim-stale-lock.sh`
+# along with the reasoning, because the two have to agree about what stale means and the second copy
+# is the one that quietly drifts (L263). If either changes, both change.
+#
+# ANYTHING UNREADABLE COUNTS AS ALIVE. No file, an empty file, half a line: every one of those is
+# produced by a run that has just won `mkdir` and has not written its owner yet. Reading them as death
+# would clear the lock of a run that is about to build. An earlier version of this function did
+# exactly that, behind a grace period, which is a weaker approximation of the same idea.
+dir_lock_owner_is_dead() {
+  local dir="$1" owner pid
+  [[ -f "${dir}/owner" ]] || return 1
+  owner="$(cat "${dir}/owner" 2>/dev/null)" || return 1
+  [[ -n "${owner}" ]] || return 1
   pid="${owner##*:}"
   [[ "${pid}" =~ ^[0-9]+$ ]] || return 1
-  kill -0 "${pid}" 2>/dev/null
+  kill -0 "${pid}" 2>/dev/null && return 1
+  return 0
+}
+
+# Reached the seam: announce it, then wait to be released. Bounded, because a wait with no deadline is
+# a hang rather than a failure, and a hang here would hold a machine wide lock (L110).
+dir_lock_pause_at() {
+  local marker="${1:-}" waited=0
+  [[ -n "${marker}" ]] || return 0
+  : > "${marker}.reached"
+  while [[ -e "${marker}" ]] && [[ "${waited}" -lt 5000 ]]; do
+    sleep 0.05
+    waited=$((waited + 50))
+  done
+}
+
+# Claim the lock if, and only if, its owner is demonstrably dead. Ported from Downbeat's script.
+#
+# WHY NOT `rm -rf` AND RETRY, which is what this did first. A stale lock cannot be acquired by anybody
+# while it sits there, so the only way it becomes live is for a waiter to clear it. With A and B both
+# waiting on one stale lock, A clears it, wins `mkdir`, writes its owner and starts building, and B,
+# still acting on what it read before any of that, carries off A's LIVE lock. Downbeat measured that
+# happening about twice in eight runs (downbeat#218). The judgement therefore belongs on the lock
+# actually being taken, immediately before taking it, and again afterwards while possession is
+# exclusive (L70: the two sides of a check must not come from one stale reading).
+#
+# `mv` of a directory onto a name that does not exist is a single atomic rename, so of any number of
+# simultaneous callers exactly one succeeds.
+claim_dir_lock_if_dead() {
+  local stale
+  [[ -d "${DIR_LOCK}" ]] || return 1
+  dir_lock_owner_is_dead "${DIR_LOCK}" || return 1
+  dir_lock_pause_at "${DIR_LOCK_PAUSE_FILE}"
+  # Named with this shell's pid so two callers never aim at one destination, which would make the
+  # rename succeed for both.
+  stale="${DIR_LOCK}.stale.$$"
+  mv "${DIR_LOCK}" "${stale}" 2>/dev/null || return 1
+  if dir_lock_owner_is_dead "${stale}"; then
+    rm -rf "${stale}"
+    return 0
+  fi
+  # It went live underneath us, so it was never ours to take. The destination has to be FREE first:
+  # `mv` of a directory onto a path that now holds one does not fail, it moves the source INSIDE it
+  # and reports success, which would bury a live lock and report an ordinary miss.
+  if [[ -e "${DIR_LOCK}" ]] || ! mv "${stale}" "${DIR_LOCK}" 2>/dev/null; then
+    echo "run-tests-locked.sh: took a live lock at ${DIR_LOCK} and could not put it back." >&2
+    echo "  It is at ${stale}. A run believes it still holds the lock and something else now holds" >&2
+    echo "  that path, so two test runs may both proceed. Sort this out before trusting either." >&2
+  fi
+  return 1
 }
 
 # Take Downbeat's directory lock, claiming it from a dead holder rather than waiting one out.
@@ -563,16 +624,16 @@ take_dir_lock() {
   local waited_from
   waited_from="$(date +%s)"
   while ! mkdir "${DIR_LOCK}" 2>/dev/null; do
-    if ! dir_lock_owner_alive "${DIR_LOCK}"; then
-      echo "run-tests-locked.sh: claiming ${DIR_LOCK} from a holder that is no longer running." >&2
-      rm -rf "${DIR_LOCK}" 2>/dev/null || true
+    if claim_dir_lock_if_dead; then
+      echo "run-tests-locked.sh: claimed ${DIR_LOCK} from a holder that is no longer running." >&2
+      continue
     fi
     if [[ "$(( $(date +%s) - waited_from ))" -gt "${DIR_LOCK_TIMEOUT}" ]]; then
       echo "run-tests-locked.sh: gave up waiting ${DIR_LOCK_TIMEOUT}s for ${DIR_LOCK} (Downbeat's lock)." >&2
       echo "  One holder the whole time with nothing running is a run that died holding it." >&2
       exit 3
     fi
-    sleep 1
+    sleep "${DIR_LOCK_POLL}"
   done
   # The owner line is what lets the NEXT run tell a live holder from a dead one, so it is written
   # immediately after the lock is taken rather than later.
