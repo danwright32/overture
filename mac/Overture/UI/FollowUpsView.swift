@@ -11,7 +11,17 @@ struct FollowUpsView: View {
     // #3762: the app's own freeze instrument, read as an OPTIONAL on the same footing as every other
     // environment object here, so a missed injection is a pass nobody counted rather than a crash.
     @Environment(FreezeWatch.self) private var freezeWatch: FreezeWatch?
-    @Query private var prospects: [Prospect]
+    // #3871: the whole store, HANDED DOWN rather than queried again here.
+    //
+    // It was `@Query private var prospects: [Prospect]`, a bare descriptor identical to the one RootView
+    // already holds. Measured 2026-09-12 by #3764 on the live store, two identical bare descriptors held
+    // by two live views share NOTHING: the second costs 99.6% of the first, 158.8 ms against 159.5 ms
+    // over 1,238 rows, against an end to end store change of 350.7 ms. So this sheet used to add a whole
+    // table read to every store change for as long as it was open.
+    //
+    // NO DEFAULT, for the reason ArchiveView's carries: an empty default renders an empty sheet that
+    // looks exactly like an empty store (L168, L67).
+    let prospects: [Prospect]
     // #2816: the watchlist, so a row's link back to the show can say whether it reaches the show's own
     // page or only the source's calendar (#1680). A @Query on the same precedent QueueView follows: a
     // source whose calendar address changes re-decides the label with no other prompting, and an empty
@@ -628,5 +638,8 @@ private func previewProspect(_ group: String, event: String?) -> Prospect {
     d.setRecipients([dContact])
     ctx.insert(d)
 
-    return FollowUpsView().modelContainer(container).environment(ActionFeedback())
+    // #3871: the rows are fetched here and handed in, because the sheet no longer holds a query of its
+    // own. A preview owns its container, so the one fetch is this preview's to make.
+    let rows = (try? ctx.fetch(FetchDescriptor<Prospect>())) ?? []
+    return FollowUpsView(prospects: rows).modelContainer(container).environment(ActionFeedback())
 }
