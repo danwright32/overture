@@ -348,15 +348,24 @@ struct ReplyInvariantsLiveStoreTests {
             // examined zero rows and a rule that examined every row must not look alike (L98). The set
             // aside count is printed for the same reason: an exclusion nobody can see the size of is one
             // that can grow to cover the whole corpus without anybody noticing (L182).
-            print("LIVE STORE AUTO-REPLY CHECK: \(answered.count) conversations carry a recorded answer, "
-                  + "\(fromOneAttachWrite.count) of them recorded in one write with a conversation attach "
-                  + "and therefore not measurable here, \(unmeasurable.count) more unmeasurable for want "
-                  + "of an anchor or because the answer predates their message, "
-                  + "\(settled.count) already read and settled in "
-                  + "fixtures/answered-fast-by-hand.txt, "
-                  + "\(suspicious.count) of the rest sent within "
-                  + "\(Int(AutomaticAnswerSignature.window))s of the message they answer. A zero "
-                  + "population means this measured nothing.")
+            // ONE multiline literal rather than a chain of `+`, and the wording is unchanged. Swift 6.4
+            // (Xcode 27) refuses to type-check the concatenated form: "the compiler is unable to
+            // type-check this expression in reasonable time". Nine string literals joined by `+`, seven of
+            // them carrying interpolations of different types, is a large overload problem for the
+            // expression checker, and the older compiler happened to get through it. A single literal with
+            // the same interpolations is not an overload problem at all.
+            let population = """
+                LIVE STORE AUTO-REPLY CHECK: \(answered.count) conversations carry a recorded answer, \
+                \(fromOneAttachWrite.count) of them recorded in one write with a conversation attach \
+                and therefore not measurable here, \(unmeasurable.count) more unmeasurable for want \
+                of an anchor or because the answer predates their message, \
+                \(settled.count) already read and settled in \
+                fixtures/answered-fast-by-hand.txt, \
+                \(suspicious.count) of the rest sent within \
+                \(Int(AutomaticAnswerSignature.window))s of the message they answer. A zero \
+                population means this measured nothing.
+                """
+            print(population)
             #expect(suspicious.isEmpty, """
                 \(suspicious.count) conversation(s) had their answer recorded within \
                 \(Int(AutomaticAnswerSignature.window)) seconds of the message it answers, which is the shape of an \
