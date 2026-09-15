@@ -593,10 +593,17 @@ source "${SCRIPT_DIR}/verify-and-merge-branch.sh"
 take_verify_slot "\$1" || exit 1
 echo "\${VERIFY_SLOT_SCRATCH}" > "\$2"
 echo ready
-while :; do sleep 1; done
+# Blocks with NO fork: opening a fifo for reading waits until a writer appears, and nothing ever
+# opens this one for writing. A loop around sleep here forks a sleep that the kill -9 below does not
+# reach, so the fixture left a process running and the runner own leak check refused the run,
+# measured 2026-09-15.
+mkfifo "\$3"
+read -r _ < "\$3"
 TAKER
 TAKER_SCRATCH_FILE="${FIX_ROOT}/taker-scratch"
-bash "${FIX_ROOT}/take-and-die.sh" "${KILL_LOCK}" "${TAKER_SCRATCH_FILE}" > "${FIX_ROOT}/taker.out" 2>&1 &
+TAKER_BLOCK_FIFO="${FIX_ROOT}/taker-block"
+bash "${FIX_ROOT}/take-and-die.sh" "${KILL_LOCK}" "${TAKER_SCRATCH_FILE}" "${TAKER_BLOCK_FIFO}" \
+  > "${FIX_ROOT}/taker.out" 2>&1 &
 TAKER_PID=$!
 TAKER_WAITED=0
 while [[ ! -s "${FIX_ROOT}/taker.out" && "${TAKER_WAITED}" -lt 100 ]]; do
