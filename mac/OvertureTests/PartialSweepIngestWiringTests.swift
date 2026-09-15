@@ -71,24 +71,24 @@ struct PartialSweepIngestWiringTests {
                           sourceUrl: "https://kaufman.example/\(title)")
     }
 
-    private func ingest(_ events: [ScoutExtractEvent], into ctx: ModelContext) {
+    private func ingest(_ events: [ScoutExtractEvent], into ctx: ModelContext) async {
         let r = ScoutExtractResults(
             version: 1, generatedAt: "2026-07-13T00:00:00Z",
             results: [ScoutExtractResult(sourceId: "kaufman", verdict: .upcomingListings,
                                          events: events, note: nil)])
-        ScoutExtractIngest.ingest(r, clients: [], history: [], blocked: .empty,
+        await ScoutExtractIngest.ingest(r, clients: [], history: [], blocked: .empty,
                                   today: ScoutTestClock.beforeAllFixtures, now: now, into: ctx)
     }
 
     // THE BUG. The run read the listings page fine and reported a healthy verdict, but one of its events
     // came back with no venue, which means its detail page was never read. This run does not know what
     // else it failed to reach, so it does not get to conclude that last time's show was cancelled.
-    @Test func aRunThatDroppedAnEventDoesNotMarkLastTimesShowAsMissing() throws {
+    @Test func aRunThatDroppedAnEventDoesNotMarkLastTimesShowAsMissing() async throws {
         let ctx = try context()
         establishedSource(ctx)
         let stranded = showItListedLastTime(ctx)
 
-        ingest([event("Kept", venue: "Merkin Hall"),
+        await ingest([event("Kept", venue: "Merkin Hall"),
                 event("DetailPageNeverRead", venue: nil)],     // <- dropped by ExtractedEventGuard
                into: ctx)
 
@@ -100,12 +100,12 @@ struct PartialSweepIngestWiringTests {
     // allowed to speak, and it does.
     //
     // If this one ever stops incrementing, the test above has stopped testing anything.
-    @Test func aCleanRunDoesMarkLastTimesShowAsMissing() throws {
+    @Test func aCleanRunDoesMarkLastTimesShowAsMissing() async throws {
         let ctx = try context()
         establishedSource(ctx)
         let stranded = showItListedLastTime(ctx)
 
-        ingest([event("Kept", venue: "Merkin Hall")], into: ctx)
+        await ingest([event("Kept", venue: "Merkin Hall")], into: ctx)
 
         #expect(stranded.missedScoutCount == 1)
     }

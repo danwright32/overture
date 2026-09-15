@@ -2112,7 +2112,7 @@ struct RootView: View {
                 cancelled: scoutCancelRequested,
                 readCount: scoutCancelRequested ? pendingCancelledReadCount() : 0) {
             case .ingest:
-                return .ingested(ingestScoutExtract())
+                return .ingested(await ingestScoutExtract())
             case .promptKeepOrDiscard(let count):
                 return .cancelledWithPartial(readCount: count)
             case .discardSilently:
@@ -2138,7 +2138,10 @@ struct RootView: View {
     }
 
     @discardableResult
-    private func ingestScoutExtract() -> ScoutService.Outcome? {
+    // #3905: ASYNC, because the ingest it calls now awaits the classify pass off the main actor. That
+    // is the whole reason the async travels up through this view: the work is the same, it just no
+    // longer holds the window while it happens.
+    private func ingestScoutExtract() async -> ScoutService.Outcome? {
         // #2879: THE SCOUT SIBLING of #2873, the same line for the third time. A results file the
         // decoder refused returned nil here, which every caller reads as "the run produced nothing", so
         // a whole extract run's shows could be dropped in silence. The answer to the caller is unchanged;
@@ -2147,7 +2150,7 @@ struct RootView: View {
                                              decode: ScoutExtractResultsDecoder.decode).value else { return nil }
         let loaded = DownbeatBridge.loadWithHealth(now: Date())
         let existing = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
-        let outcome = ScoutExtractIngest.ingest(
+        let outcome = await ScoutExtractIngest.ingest(
             results, clients: loaded.clients,
             history: LocalHistory.forMatching(existing: existing),
             blocked: ScoutService.blockedCalendar(export: (loaded.bookings, loaded.blockedDates,
@@ -2796,10 +2799,16 @@ struct RootView: View {
 
     // #1054: Dan kept the cancelled read's shows. Import the partial file the normal way (dedup and
     // classify still apply); they join the queue like any other find.
+    // #3905: the import is awaited in a Task, because this is a BUTTON handler and cannot be async
+    // itself. The two lines after it run when the import finishes, not before, so the prompt is only
+    // dismissed once the shows are actually in: doing it the other way round would clear the question
+    // and leave the work running behind a screen that says it is done (L415, L12).
     private func keepCancelledRead() {
-        ingestScoutExtract()
-        cancelledScoutRead = nil
-        modals.settled()
+        Task {
+            await ingestScoutExtract()
+            cancelledScoutRead = nil
+            modals.settled()
+        }
     }
 
     // #1054: Dan discarded them. Delete the partial file so the reattach path cannot re-import it on a

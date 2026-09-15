@@ -31,11 +31,11 @@ struct SourceNoteIngestTests {
     }
 
     // The one the issue is about. A source the run never reached explains WHY, and Dan can read it.
-    @Test func aFailedSourcesOwnExplanationLandsOnTheRow() {
+    @Test func aFailedSourcesOwnExplanationLandsOnTheRow() async {
         let ctx = context()
         let source = watched(ctx)
 
-        _ = ScoutExtractIngest.ingest(results(.notRead, note:
+        _ = await ScoutExtractIngest.ingest(results(.notRead, note:
             "The run exited with status 1 and produced no results for this source. "
             + "Last lines of the run log: + claude -p | Error: connection reset"),
             clients: [], history: [], blocked: .empty, now: Date(), into: ctx)
@@ -46,11 +46,11 @@ struct SourceNoteIngestTests {
 
     // A HEALTHY source can have something to say too, and it is worth saying: "only three of these had
     // text captions" is exactly the kind of thing Dan should see and currently cannot.
-    @Test func aHealthySourceCanStillExplainItself() {
+    @Test func aHealthySourceCanStillExplainItself() async {
         let ctx = context()
         let source = watched(ctx)
 
-        _ = ScoutExtractIngest.ingest(
+        _ = await ScoutExtractIngest.ingest(
             results(.upcomingListings, note: "Two shows list no venue, so they were left out."),
             clients: [], history: [], blocked: .empty, now: Date(), into: ctx)
 
@@ -60,15 +60,15 @@ struct SourceNoteIngestTests {
     // THE FAILURE-PATH CASE THAT MATTERS MOST. A source that RECOVERS must stop explaining a failure it
     // no longer has. A stale note is worse than no note: it would tell Dan a healthy source is broken,
     // and he would stop believing the notes entirely.
-    @Test func aSourceThatRecoversStopsExplainingItsOldFailure() {
+    @Test func aSourceThatRecoversStopsExplainingItsOldFailure() async {
         let ctx = context()
         let source = watched(ctx)
 
-        _ = ScoutExtractIngest.ingest(results(.notRead, note: "The run never reached this page."), clients: [], history: [], blocked: .empty,
+        _ = await ScoutExtractIngest.ingest(results(.notRead, note: "The run never reached this page."), clients: [], history: [], blocked: .empty,
                                       now: Date(), into: ctx)
         #expect(source.runNote != nil)
 
-        _ = ScoutExtractIngest.ingest(results(.upcomingListings, note: nil),
+        _ = await ScoutExtractIngest.ingest(results(.upcomingListings, note: nil),
                                       clients: [], history: [], blocked: .empty, now: Date(), into: ctx)
         #expect(source.runNote == nil)
     }

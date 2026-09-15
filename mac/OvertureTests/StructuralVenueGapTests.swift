@@ -308,7 +308,7 @@ struct StructuralVenueGapTests {
     // The live Smoke Ring shape, through the REAL agent ingest: four rows, one of them the Oct 24 placeholder.
     // The source keeps its cancellation detection and leaves the badge, the placeholder's own show is never
     // struck, and a show that genuinely dropped off the page still is.
-    @Test func theLiveSmokeRingPageStopsTrippingTheAlarmAndStillCancels() throws {
+    @Test func theLiveSmokeRingPageStopsTrippingTheAlarmAndStillCancels() async throws {
         let ctx = try context()
         let source = WatchedSource(sourceId: "smoke-ring-quartet", orgName: "Smoke Ring Quartet",
                                    listingsURL: "https://www.smokeringquartet.com/gigs", kind: .html)
@@ -324,7 +324,7 @@ struct StructuralVenueGapTests {
         for _ in 1...FeedReconcile.goneThreshold {
             source.pendingContentHash = "hash-\(UUID().uuidString)"
             source.hasUnreadChanges = true
-            ScoutExtractIngest.ingest(smokeRingResults(), clients: [], history: [], blocked: .empty,
+            await ScoutExtractIngest.ingest(smokeRingResults(), clients: [], history: [], blocked: .empty,
                                       today: ScoutTestClock.beforeAllFixtures, now: now, into: ctx)
         }
 

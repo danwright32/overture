@@ -44,18 +44,18 @@ struct ScoutExtractIngestTests {
                           performanceDate: date, sourceUrl: "https://org.example/\(title)")
     }
 
-    private func ingest(_ r: ScoutExtractResults, into ctx: ModelContext) -> ScoutService.Outcome {
-        ScoutExtractIngest.ingest(r, clients: [], history: [], blocked: .empty,
+    private func ingest(_ r: ScoutExtractResults, into ctx: ModelContext) async -> ScoutService.Outcome {
+        await ScoutExtractIngest.ingest(r, clients: [], history: [], blocked: .empty,
                                   today: ScoutTestClock.beforeAllFixtures, now: now, into: ctx)
     }
 
     // MARK: - The happy path
 
-    @Test func aReadPageBecomesProspectsStampedWithItsSource() throws {
+    @Test func aReadPageBecomesProspectsStampedWithItsSource() async throws {
         let ctx = try context()
         queuedSource(ctx)
 
-        let outcome = ingest(results("org", verdict: .upcomingListings,
+        let outcome = await ingest(results("org", verdict: .upcomingListings,
                                      events: [event("Brooklyn Youth Chorus")]), into: ctx)
 
         #expect(outcome.inserted == 1)
@@ -64,22 +64,22 @@ struct ScoutExtractIngestTests {
     }
 
     // THE rule of this slice. The hash is promoted ONLY after the ingest actually saved.
-    @Test func theContentHashIsStampedOnlyAfterASuccessfulIngest() throws {
+    @Test func theContentHashIsStampedOnlyAfterASuccessfulIngest() async throws {
         let ctx = try context()
         let s = queuedSource(ctx, pending: "new-hash", lastIngested: "old-hash")
 
-        ingest(results("org", verdict: .upcomingListings, events: [event("A Show")]), into: ctx)
+        await ingest(results("org", verdict: .upcomingListings, events: [event("A Show")]), into: ctx)
 
         #expect(s.lastContentHash == "new-hash")   // we read this page and landed it
         #expect(s.pendingContentHash == nil)       // nothing left in flight
         #expect(s.hasUnreadChanges == false)       // and nothing is waiting to be read
     }
 
-    @Test func aSuccessfulIngestCountsTowardTheWarmupAndTheHealthRecord() throws {
+    @Test func aSuccessfulIngestCountsTowardTheWarmupAndTheHealthRecord() async throws {
         let ctx = try context()
         let s = queuedSource(ctx)
 
-        ingest(results("org", verdict: .upcomingListings, events: [event("A Show")]), into: ctx)
+        await ingest(results("org", verdict: .upcomingListings, events: [event("A Show")]), into: ctx)
 
         #expect(s.successfulCheckCount == 1)
         #expect(s.lastSucceededAt == now)
@@ -93,11 +93,11 @@ struct ScoutExtractIngestTests {
     // A page whose calendar is drawn by JavaScript, or that carries no dated listings at all, is BROKEN.
     // Its hash must NOT be stamped, or we would never look at it again: it would report as healthy and
     // unchanged forever, having never once been read.
-    @Test func anUnreadablePageIsNamedAsAFailureAndItsHashIsNotStamped() throws {
+    @Test func anUnreadablePageIsNamedAsAFailureAndItsHashIsNotStamped() async throws {
         let ctx = try context()
         let s = queuedSource(ctx, pending: "new-hash", lastIngested: "old-hash")
 
-        let outcome = ingest(results("org", verdict: .unreadable), into: ctx)
+        let outcome = await ingest(results("org", verdict: .unreadable), into: ctx)
 
         #expect(s.health == .failing)
         #expect(s.lastFailure == .verdict(.unreadable))
@@ -110,11 +110,11 @@ struct ScoutExtractIngestTests {
         #expect(s.isActive)
     }
 
-    @Test func aPageWithNoDatedContentIsAlsoAFailure() throws {
+    @Test func aPageWithNoDatedContentIsAlsoAFailure() async throws {
         let ctx = try context()
         let s = queuedSource(ctx)
 
-        ingest(results("org", verdict: .noDatedContent), into: ctx)
+        await ingest(results("org", verdict: .noDatedContent), into: ctx)
 
         #expect(s.health == .failing)
         #expect(s.lastFailure == .verdict(.noDatedContent))
@@ -123,11 +123,11 @@ struct ScoutExtractIngestTests {
     // #1055: a couldn't-be-checked result carries the very page URL it was about, so the end-of-scout
     // popup can show (and open) it without sending Dan to the Sources sheet to find out which page was
     // flagged. This is the failed source's own listingsURL, threaded onto its SourceResult.
-    @Test func aFailedSourceCarriesItsListingsURLForThePopup() throws {
+    @Test func aFailedSourceCarriesItsListingsURLForThePopup() async throws {
         let ctx = try context()
         queuedSource(ctx, id: "protestra")   // listingsURL: https://protestra.example/events
 
-        let outcome = ingest(results("protestra", verdict: .noDatedContent), into: ctx)
+        let outcome = await ingest(results("protestra", verdict: .noDatedContent), into: ctx)
 
         let failed = outcome.failedSources.first { $0.sourceId == "protestra" }
         #expect(failed?.listingsURL == "https://protestra.example/events")
@@ -138,11 +138,11 @@ struct ScoutExtractIngestTests {
     // A partial read's real events are safe to ingest (FeedReconcile can never let this verdict argue a
     // show is gone, since absenceIsEvidence gates on upcomingListings), but the hash must never latch:
     // the rest of the page is still out there and the next scout has to go back for it.
-    @Test func aPartiallyReadPageIngestsItsEventsButNeverLatchesTheHash() throws {
+    @Test func aPartiallyReadPageIngestsItsEventsButNeverLatchesTheHash() async throws {
         let ctx = try context()
         let s = queuedSource(ctx, pending: "new-hash", lastIngested: "old-hash")
 
-        let outcome = ingest(results("org", verdict: .incompleteExtraction,
+        let outcome = await ingest(results("org", verdict: .incompleteExtraction,
                                      events: [event("A Show")]), into: ctx)
 
         #expect(outcome.inserted == 1)                  // the real event it DID find lands
@@ -156,13 +156,13 @@ struct ScoutExtractIngestTests {
 
     // A partial count must not corrupt the baseline/warmup math: a page that is genuinely this size
     // would otherwise look like a shrinking calendar after enough incomplete reads.
-    @Test func aPartiallyReadPageDoesNotAdvanceTheBaselineOrWarmup() throws {
+    @Test func aPartiallyReadPageDoesNotAdvanceTheBaselineOrWarmup() async throws {
         let ctx = try context()
         let s = queuedSource(ctx)
         s.baselineFeedCount = 40
         s.successfulCheckCount = 3
 
-        ingest(results("org", verdict: .incompleteExtraction, events: [event("A Show")]), into: ctx)
+        await ingest(results("org", verdict: .incompleteExtraction, events: [event("A Show")]), into: ctx)
 
         #expect(s.baselineFeedCount == 40)
         #expect(s.successfulCheckCount == 3)
@@ -170,11 +170,11 @@ struct ScoutExtractIngestTests {
 
     // The run's own explanation still lands on the source, exactly as it does for every other verdict,
     // so Dan can read what made this page hard even though nothing failed.
-    @Test func aPartiallyReadPageKeepsTheRunsNote() throws {
+    @Test func aPartiallyReadPageKeepsTheRunsNote() async throws {
         let ctx = try context()
         let s = queuedSource(ctx)
 
-        ScoutExtractIngest.ingest(
+        await ScoutExtractIngest.ingest(
             ScoutExtractResults(version: 1, generatedAt: "2026-07-16T00:00:00Z",
                                 results: [ScoutExtractResult(sourceId: "org", verdict: .incompleteExtraction,
                                                              events: [event("A Show")],
@@ -189,11 +189,11 @@ struct ScoutExtractIngestTests {
     // A quiet off-season is the NORMAL state (5 of the 7 spike sites, in July). It is not a failure, the
     // source is healthy, and its hash IS stamped: we read that page, and what it said was "nothing until
     // autumn". Re-reading it every day until the season starts would be paying to be told that again.
-    @Test func aQuietOffSeasonIsHealthyAndItsHashIsStamped() throws {
+    @Test func aQuietOffSeasonIsHealthyAndItsHashIsStamped() async throws {
         let ctx = try context()
         let s = queuedSource(ctx, pending: "new-hash", lastIngested: "old-hash")
 
-        let outcome = ingest(results("org", verdict: .allPast), into: ctx)
+        let outcome = await ingest(results("org", verdict: .allPast), into: ctx)
 
         #expect(s.health == .ok)
         #expect(s.lastFailure == nil)
@@ -204,11 +204,11 @@ struct ScoutExtractIngestTests {
 
     // An empty upcomingListings verdict is the same fact, arrived at differently, and is equally not a
     // failure.
-    @Test func anEmptyButHealthyListingIsNotAFailure() throws {
+    @Test func anEmptyButHealthyListingIsNotAFailure() async throws {
         let ctx = try context()
         let s = queuedSource(ctx)
 
-        ingest(results("org", verdict: .upcomingListings, events: []), into: ctx)
+        await ingest(results("org", verdict: .upcomingListings, events: []), into: ctx)
 
         #expect(s.health == .ok)
         #expect(s.lastContentHash == "new-hash")
@@ -219,11 +219,11 @@ struct ScoutExtractIngestTests {
     // A source id the app never queued resolves to nothing at all. The results file is written by a
     // Claude run: if it ever rebuilt an id instead of echoing it, the work must vanish loudly rather
     // than land on some other org's row.
-    @Test func aSourceIdWeNeverQueuedIsIgnoredRatherThanGuessedAt() throws {
+    @Test func aSourceIdWeNeverQueuedIsIgnoredRatherThanGuessedAt() async throws {
         let ctx = try context()
         let s = queuedSource(ctx, id: "org")
 
-        let outcome = ingest(results("some-other-id", verdict: .upcomingListings,
+        let outcome = await ingest(results("some-other-id", verdict: .upcomingListings,
                                      events: [event("Not Ours")]), into: ctx)
 
         #expect(try ctx.fetch(FetchDescriptor<Prospect>()).isEmpty)
@@ -239,13 +239,13 @@ struct ScoutExtractIngestTests {
 
     // A source that was queued but that the run never got to (it died at source nine) keeps its pending
     // hash and its unread flag, so the next run picks it up again rather than skipping it forever.
-    @Test func aSourceTheRunNeverReachedIsLeftPendingForNextTime() throws {
+    @Test func aSourceTheRunNeverReachedIsLeftPendingForNextTime() async throws {
         let ctx = try context()
         let a = queuedSource(ctx, id: "a")
         let b = queuedSource(ctx, id: "b")
 
         // The run died after source a: only a is in the results.
-        ingest(results("a", verdict: .upcomingListings, events: [event("A Show")]), into: ctx)
+        await ingest(results("a", verdict: .upcomingListings, events: [event("A Show")]), into: ctx)
 
         #expect(a.lastContentHash == "new-hash")   // a landed
         #expect(b.lastContentHash == "old-hash")   // b did not, and is not pretended to have
@@ -259,11 +259,11 @@ struct ScoutExtractIngestTests {
     // #769 do-not-contact suppression, the blocked-date skip and the #798 upcoming-only guard apply to a
     // watched source exactly as they do to everything else. A watchlist that could smuggle a refused org
     // back in would be worse than no watchlist.
-    @Test func aPastDatedShowFromAWatchedSourceIsNeverImported() throws {
+    @Test func aPastDatedShowFromAWatchedSourceIsNeverImported() async throws {
         let ctx = try context()
         queuedSource(ctx)
 
-        let outcome = ingest(results("org", verdict: .upcomingListings,
+        let outcome = await ingest(results("org", verdict: .upcomingListings,
                                      events: [event("Already Happened", date: "2020-01-01")]), into: ctx)
 
         #expect(outcome.inserted == 0)
@@ -275,11 +275,11 @@ struct ScoutExtractIngestTests {
     // The run said every listing was in the past, then returned an upcoming show anyway. Today those
     // events were INGESTED off a verdict that claims there was nothing upcoming to ingest. A run that
     // disagrees with itself does not get to add shows.
-    @Test func allPastWithEventsIsAContradictionAndDoesNotIngest() throws {
+    @Test func allPastWithEventsIsAContradictionAndDoesNotIngest() async throws {
         let ctx = try context()
         let s = queuedSource(ctx)
 
-        let outcome = ingest(results("org", verdict: .allPast, events: [event("A Show")]), into: ctx)
+        let outcome = await ingest(results("org", verdict: .allPast, events: [event("A Show")]), into: ctx)
 
         #expect(s.health == .failing)
         guard case .inconsistentResult = s.lastFailure else {
@@ -292,11 +292,11 @@ struct ScoutExtractIngestTests {
     // A verdict that already fails on its own (no dated content) is RELABELLED as a contradiction when it
     // still returns events, so the reason Dan reads names the real problem (the run disagreed with
     // itself) rather than the generic "wrong page".
-    @Test func noDatedContentWithEventsIsNamedAsAContradiction() throws {
+    @Test func noDatedContentWithEventsIsNamedAsAContradiction() async throws {
         let ctx = try context()
         let s = queuedSource(ctx)
 
-        ingest(results("org", verdict: .noDatedContent, events: [event("A Show")]), into: ctx)
+        await ingest(results("org", verdict: .noDatedContent, events: [event("A Show")]), into: ctx)
 
         guard case .inconsistentResult = s.lastFailure else {
             Issue.record("expected inconsistentResult, got \(String(describing: s.lastFailure))"); return
@@ -305,11 +305,11 @@ struct ScoutExtractIngestTests {
     }
 
     // A consistent healthy read is untouched: the audit must never fail a source that agreed with itself.
-    @Test func aConsistentReadStillLandsNormally() throws {
+    @Test func aConsistentReadStillLandsNormally() async throws {
         let ctx = try context()
         let s = queuedSource(ctx)
 
-        ingest(results("org", verdict: .upcomingListings, events: [event("A Show")]), into: ctx)
+        await ingest(results("org", verdict: .upcomingListings, events: [event("A Show")]), into: ctx)
 
         #expect(s.health == .ok)
         #expect(s.lastFailure == nil)

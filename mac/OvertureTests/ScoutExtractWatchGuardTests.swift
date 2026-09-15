@@ -12,7 +12,7 @@ import Testing
 struct ScoutExtractWatchGuardTests {
     private var rootView: String { SourceGuardHelper.source("Overture/App/RootView.swift") }
 
-    @Test func aScoutThatQueuedPagesWaitsForThemToBeRead() {
+    @Test func aScoutThatQueuedPagesWaitsForThemToBeRead() async {
         #expect(!rootView.isEmpty)
         // Only when something was actually queued: a run with nothing to read must not sit waiting on a
         // run that was never launched.
@@ -23,8 +23,8 @@ struct ScoutExtractWatchGuardTests {
         #expect(rootView.contains("await watchScoutExtractRun("))
     }
 
-    @Test func whatTheRunReadIsActuallyIngested() {
-        #expect(rootView.contains("ScoutExtractIngest.ingest("))
+    @Test func whatTheRunReadIsActuallyIngested() async {
+        #expect(rootView.contains("await ScoutExtractIngest.ingest("))
     }
 
     // A run that finishes without producing anything is the one shape of failure that would otherwise be

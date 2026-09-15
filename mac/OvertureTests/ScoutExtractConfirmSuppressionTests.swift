@@ -25,14 +25,14 @@ struct ScoutExtractConfirmSuppressionTests {
                                                          events: events, note: nil)])
     }
 
-    private func ingest(_ r: ScoutExtractResults, into ctx: ModelContext) -> ScoutService.Outcome {
-        ScoutExtractIngest.ingest(r, clients: [], history: [], blocked: .empty,
+    private func ingest(_ r: ScoutExtractResults, into ctx: ModelContext) async -> ScoutService.Outcome {
+        await ScoutExtractIngest.ingest(r, clients: [], history: [], blocked: .empty,
                                   today: ScoutTestClock.beforeAllFixtures, now: now, into: ctx)
     }
 
     // The realistic full path (red-team #4): confirm at H_empty, then the page grows real shows (a
     // successful read moves the ingested hash forward), then it goes quiet again at exactly H_empty.
-    @Test func aReadThatReturnsToTheConfirmedEmptyBytesIsSuppressed() throws {
+    @Test func aReadThatReturnsToTheConfirmedEmptyBytesIsSuppressed() async throws {
         let ctx = try context()
         let s = WatchedSource(sourceId: "org", orgName: "Org",
                               listingsURL: "https://org.example/events", kind: .html)
@@ -44,7 +44,7 @@ struct ScoutExtractConfirmSuppressionTests {
         // The page grows a real show: a successful read promotes lastContentHash to H_shows.
         s.pendingContentHash = "H_shows"
         s.hasUnreadChanges = true
-        _ = ingest(results(.upcomingListings, events: [
+        _ = await ingest(results(.upcomingListings, events: [
             ScoutExtractEvent(title: "A Concert", presenter: "A Concert", venue: "Merkin Hall",
                               performanceDate: "2099-09-19", sourceUrl: "https://org.example/a")]), into: ctx)
         #expect(s.lastContentHash == "H_shows")
@@ -53,7 +53,7 @@ struct ScoutExtractConfirmSuppressionTests {
         // The page returns to the exact confirmed-empty bytes.
         s.pendingContentHash = "H_empty"
         s.hasUnreadChanges = true
-        let outcome = ingest(results(.noDatedContent), into: ctx)
+        let outcome = await ingest(results(.noDatedContent), into: ctx)
 
         #expect(outcome.failedSources.isEmpty)       // NOT nagged
         #expect(s.health == .ok)                     // not marked failing
@@ -64,7 +64,7 @@ struct ScoutExtractConfirmSuppressionTests {
 
     // The other direction, through the same real path: a confirmed page whose bytes have CHANGED is a
     // failure again. The confirmation was for specific bytes, not forever.
-    @Test func aChangedPageNagsAgainDespiteAPriorConfirmation() throws {
+    @Test func aChangedPageNagsAgainDespiteAPriorConfirmation() async throws {
         let ctx = try context()
         let s = WatchedSource(sourceId: "org", orgName: "Org",
                               listingsURL: "https://org.example/events", kind: .html)
@@ -75,7 +75,7 @@ struct ScoutExtractConfirmSuppressionTests {
         ctx.insert(s)
         try ctx.save()
 
-        let outcome = ingest(results(.noDatedContent), into: ctx)
+        let outcome = await ingest(results(.noDatedContent), into: ctx)
 
         #expect(outcome.failedSources.count == 1)     // nags again
         #expect(s.health == .failing)
