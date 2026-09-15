@@ -138,10 +138,27 @@ struct QueueRenderPassLiveStoreCostTests {
         var prospects: [Prospect] = []
         var answers: [OrgReachabilityAnswer] = []
         var sources: [WatchedSource] = []
+        // #3849: THE THREE TABLES THIS INSTRUMENT DID NOT READ, and the reason they are here.
+        //
+        // `QueueView` holds six `@Query` properties on the render path and this arm read three of them.
+        // The other three feed arguments the app evaluates AT THE CALL SITE of the pass
+        // (`ContactRefusal.ledger(from:)`, `ProducerOverrides(promotedRows:demotedRows:)`), which is
+        // exactly the shape #3829 found on the Sources sheet: a modifier argument is evaluated on every
+        // pass just like the keys beside it, and an instrument that never names it prices a pass that
+        // nobody runs. Found by the guard in `ACostInstrumentEnumeratesItsSubjectsTests`, enumerated from
+        // the source rather than remembered (L96, L400).
+        //
+        // So both halves are paid here now: the read, and the value built from it.
+        var refusedRows: [RefusedContactAddress] = []
+        var promoted: [PromotedProducer] = []
+        var demoted: [DemotedHouse] = []
         let fetchSeconds = seconds {
             prospects = (try? ctx.fetch(FetchDescriptor<Prospect>())) ?? []
             answers = (try? ctx.fetch(FetchDescriptor<OrgReachabilityAnswer>())) ?? []
             sources = (try? ctx.fetch(FetchDescriptor<WatchedSource>())) ?? []
+            refusedRows = (try? ctx.fetch(FetchDescriptor<RefusedContactAddress>())) ?? []
+            promoted = (try? ctx.fetch(FetchDescriptor<PromotedProducer>())) ?? []
+            demoted = (try? ctx.fetch(FetchDescriptor<DemotedHouse>())) ?? []
         }
 
         // #3750: WHERE INSIDE THE FETCH the time goes, which nothing has ever asked.
@@ -168,6 +185,14 @@ struct QueueRenderPassLiveStoreCostTests {
         }
         let sourcesFetch = timedInAFreshContext { c in
             _ = (try? c.fetch(FetchDescriptor<WatchedSource>())) ?? []
+        }
+        // #3849: the three above, read the same way. Reported together rather than one line each: each is
+        // a small table beside the prospect one, and three lines of near-zero in a block whose point is
+        // where the time goes would bury the line that matters (L629).
+        let otherTablesFetch = timedInAFreshContext { c in
+            _ = (try? c.fetch(FetchDescriptor<RefusedContactAddress>())) ?? []
+            _ = (try? c.fetch(FetchDescriptor<PromotedProducer>())) ?? []
+            _ = (try? c.fetch(FetchDescriptor<DemotedHouse>())) ?? []
         }
         // And the RELATIONSHIP, which the fetch above does not pay and the pass does: every card and every
         // stage decision reaches a show's `recipients`, and SwiftData faults that on first touch. Timed
@@ -214,14 +239,48 @@ struct QueueRenderPassLiveStoreCostTests {
         }
 
         // 3. The whole pass, so the remainder is everything else QueueRenderPass.make does.
-        func makePass(cardKeys: Set<String>?) -> QueueView.RenderData {
+        // #3849: the two values the app builds at the call site of every pass, built here the same way
+        // and TIMED, rather than left at their `.none` defaults. Left at the defaults, this instrument
+        // was pricing a pass with no refusals and no producer overrides in it, which is not the pass
+        // that runs on Dan's Mac: the producer gate reads the overrides, so the default also changed
+        // which presenters the pass admits.
+        _ = ContactRefusal.ledger(from: refusedRows)
+        let refusalLedgerTerm = medianSeconds { _ = ContactRefusal.ledger(from: refusedRows) }
+        _ = ProducerOverrides(promotedRows: promoted, demotedRows: demoted)
+        let overridesTerm = medianSeconds { _ = ProducerOverrides(promotedRows: promoted, demotedRows: demoted) }
+        let refusals = ContactRefusal.ledger(from: refusedRows)
+        let overrides = ProducerOverrides(promotedRows: promoted, demotedRows: demoted)
+
+        func makePass(cardKeys: Set<String>?,
+                      refusals: ContactRefusal.Ledger = refusals,
+                      overrides: ProducerOverrides = overrides) -> QueueView.RenderData {
             QueueRenderPass.make(QueueRenderPass.Inputs(
                 allProspects: QueueRenderPass.Corpus(prospects),
                 inquiries: [], orgAnswers: answers, sources: sources,
+                refusals: refusals, overrides: overrides,
                 context: .at(QueueModel.easternToday(), now: Date()),
                 focusedStage: .scout, focusedKeys: nil,
                 requestedCardKeys: cardKeys))
         }
+
+        // #3849: WHAT CHANGED BY MEASURING THE REAL PASS, as a difference inside ONE run.
+        //
+        // Every reading this instrument printed before #3849 was taken with `refusals` and `overrides`
+        // at their empty defaults, and the producer gate READS the overrides, so the empty arm does not
+        // merely skip a small cost: it can admit a different set of presenters and therefore build a
+        // different number of cards. A figure from before and a figure from after are two populations,
+        // and comparing them across days would be reading the machine as much as the change (L84, L395).
+        //
+        // So both arms run here, medians of five, minutes apart from nothing else. The difference is the
+        // only honest statement about what the correction cost; the absolute numbers move with whatever
+        // else the Mac is doing.
+        _ = makePass(cardKeys: nil, refusals: .none, overrides: .none)
+        let asItWasMeasured = medianSeconds { _ = makePass(cardKeys: nil, refusals: .none, overrides: .none) }
+        // Both counts taken once, here, rather than inside the report string: a pass costs hundreds of
+        // milliseconds and a call in a print statement is a whole derivation that reads as a field access
+        // (L383).
+        let emptyArmRows = makePass(cardKeys: nil, refusals: .none, overrides: .none).rows.count
+        let realArmRows = makePass(cardKeys: nil).rows.count
         let work = QueueRenderPass.WorkTally.measure { _ = makePass(cardKeys: nil) }
         let pass = medianSeconds { _ = makePass(cardKeys: nil) }
         let passSeconds = pass.median
@@ -490,6 +549,14 @@ struct QueueRenderPassLiveStoreCostTests {
             the prospect table        \(ms(prospectFetch.median)) ms   \(spread(prospectFetch))
             the org answer table      \(ms(answersFetch.median)) ms   \(spread(answersFetch))
             the watched source table  \(ms(sourcesFetch.median)) ms   \(spread(sourcesFetch))
+            the refusal, promoted and demoted tables together, which #3849 found this arm was not
+            reading at all while the app's own pass reads all three (\(refusedRows.count), \(promoted.count)
+            and \(demoted.count) rows):
+                                      \(ms(otherTablesFetch.median)) ms   \(spread(otherTablesFetch))
+            and the two values the app builds from them at the call site of every pass, which were
+            left at their empty defaults here until #3849:
+              the refusal ledger      \(ms(refusalLedgerTerm.median)) ms   \(spread(refusalLedgerTerm))
+              the producer overrides  \(ms(overridesTerm.median)) ms   \(spread(overridesTerm))
             the same read narrowed to the \(rowFields.count) fields a ROW is built from, which is
             what a partial @Query would cost (#3750):
                                       \(ms(partialFetch.median)) ms   \(spread(partialFetch))
@@ -502,6 +569,11 @@ struct QueueRenderPassLiveStoreCostTests {
             a whole-store card build  \(ms(itemsSeconds)) ms
             the pass minus that       \(restLabel)
             the pass                  \(ms(passSeconds)) ms   \(spread(pass))
+          #3849: THE SAME PASS with refusals and overrides at the empty defaults, which is what every
+          reading from this instrument before #3849 was. Both arms are in THIS run, so the difference
+          is attributable; neither absolute number is comparable with a figure from another day.
+            the pass as it was measured \(ms(asItWasMeasured.median)) ms   \(spread(asItWasMeasured))
+            ROWS in scope on that arm   \(emptyArmRows) against \(realArmRows) with the app's own arguments
           END TO END, the fetch plus the pass:
             total                     \(ms(fetchSeconds + passSeconds)) ms
 
