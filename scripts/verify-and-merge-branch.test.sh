@@ -591,10 +591,12 @@ KILL_LOCK="${FIX_ROOT}/killed-run.lock"
 cat > "${FIX_ROOT}/take-and-die.sh" <<TAKER
 source "${SCRIPT_DIR}/verify-and-merge-branch.sh"
 take_verify_slot "\$1" || exit 1
+echo "\${VERIFY_SLOT_SCRATCH}" > "\$2"
 echo ready
 while :; do sleep 1; done
 TAKER
-bash "${FIX_ROOT}/take-and-die.sh" "${KILL_LOCK}" > "${FIX_ROOT}/taker.out" 2>&1 &
+TAKER_SCRATCH_FILE="${FIX_ROOT}/taker-scratch"
+bash "${FIX_ROOT}/take-and-die.sh" "${KILL_LOCK}" "${TAKER_SCRATCH_FILE}" > "${FIX_ROOT}/taker.out" 2>&1 &
 TAKER_PID=$!
 TAKER_WAITED=0
 while [[ ! -s "${FIX_ROOT}/taker.out" && "${TAKER_WAITED}" -lt 100 ]]; do
@@ -623,9 +625,18 @@ fi
 # `kill -9` reaches no cleanup. That is true of the product too, and it is the right trade rather than
 # a gap: what a crashed verification leaves behind is three small files in the temp folder, while what
 # it must NOT leave behind is the slot, which the assertion above is about. The fixture runner counts
-# leftovers in its own temp folder, so without this line the run is refused for a directory the test
-# created on purpose.
-rm -rf "${TMPDIR:-/tmp}"/verify-slot.* 2>/dev/null || true
+# leftovers in its own temp folder, so without this the run is refused for a directory the test made
+# on purpose.
+#
+# By the path the taker RECORDED, never by a glob over the temp folder. A `rm -rf "${TMPDIR}"/prefix.*`
+# reads as safe because the prefix is distinctive, and it is safe only for as long as the per-fixture
+# TMPDIR scoping holds; the day that slipped, this line would delete a concurrent run's scratch instead
+# of its own. Deleting exactly what this test created cannot do that at all.
+TAKER_SCRATCH="$(cat "${TAKER_SCRATCH_FILE}" 2>/dev/null || true)"
+case "${TAKER_SCRATCH}" in
+  */verify-slot.*) rm -rf "${TAKER_SCRATCH}" ;;
+  *) fail "the taker did not record its scratch, so the leftover cannot be removed by name" ;;
+esac
 
 if flock -n "${OVERTURE_VERIFY_WORKTREE_LOCK}" true 2>/dev/null; then
   pass "the slot lock is released when the verification ends"
