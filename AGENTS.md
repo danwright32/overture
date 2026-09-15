@@ -250,6 +250,10 @@ the subject named below.
 
 - **Asking what a freeze actually was**: `scripts/what-froze-the-queue.sh` prints each stall beside
   the number of render passes it spanned. A long stall spanning no pass is something else entirely.
+- **Recording the main thread DURING a freeze**: `scripts/watch-freezes.sh` takes rolling stack samples
+  of the live app and keeps only the ones overlapping a stall its freeze log recorded. `kept 0` is a
+  reading, not silence. The line beside a kept sample names the DEEPEST frame over half the main thread,
+  never the outermost, and says UNREADABLE rather than a zero share.
 - **Asking whether the app itself froze**: `MainThreadWatchdog` records it, and `RootView` says at
   launch what the last session found. The watchdog WRITES and the main thread only stamps.
 - **Looking at Overture while it is frozen**: `scripts/sample-overture.sh`, which resolves the pid from

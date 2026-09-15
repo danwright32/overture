@@ -48,6 +48,43 @@ the measurement it came from lives here. Read the entry before the rule decides 
   its own logs rather than reading the live one.
 
 
+## Recording the main thread DURING a freeze
+
+- **Recording the main thread during a freeze: `scripts/watch-freezes.sh` (#3888).** Takes rolling stack
+  samples of the live Overture and KEEPS only the ones that line up with a stall the app's own freeze log
+  recorded. It is the other half of `what-froze-the-queue.sh`: that one reads the record of a stall, this
+  one records what the main thread was doing while the stall was happening.
+  It exists because a freeze is over before anybody can start a `sample` by hand, measured at about a
+  minute on 2026-08-30 (#3419), and because the alternative left on 2026-09-13 was a macOS microstackshot
+  of 22 samples, which DETECTS rather than measures (L355). A throwaway version of this caught the next
+  freezes inside minutes and is what settled #3884, at up to 100% of main thread samples in
+  `ScoutService.apply`. It was deleted with the session that wrote it, which is why it is here.
+  How to run it: `scripts/watch-freezes.sh --minutes 60`, and then use the app. It reads the process
+  table, the freeze log and stack samples; it never touches the screen, the keyboard or the mouse, so it
+  is not one of the tools that drives Dan's machine and it needs no `--yes`. Kept samples land in
+  `~/.overture-mac-test-diagnostics/freeze-watch/`, beside `sample-overture.sh`'s, for that script's own
+  recorded reason: this evidence is read days later and the shared temp folder is cleared at boot. The
+  throwaway chunks are 2 to 3.5 MB each and go to the repo's scratch instead, where a leak check can see
+  them, and are deleted within seconds of being judged.
+  Read its answer correctly. Exit `2` is REFUSED: it could not name exactly one running Overture, by the
+  full executable path through `scripts/lib/overture-pid.sh`, so nothing was watched. Exit `3` is the app
+  going away mid-watch, naming the pid it lost, with whatever it kept before that kept. Exit `0` is a
+  watch that ran to its end, and **`kept 0` is a reading, not silence**: it watched, chunks were taken,
+  and no stall reached the keep threshold. It says that in words because a watch that found nothing and a
+  watch that never happened are different facts (L98, L11).
+  The one line beside each kept sample is a SAMPLE's reading and is written to say so. It always prints
+  the main thread's total sample count next to any share, because a share without its denominator is not
+  a measurement (L355), and it names the DEEPEST frame carrying at least half of them rather than the
+  outermost, which is near 100% by construction and says nothing. A sample with no main thread block at
+  all reads `UNREADABLE` rather than a zero share: an idle app and a sample whose symbols never resolved
+  produce the same empty list.
+  `--since` decides which records count as new, and the default is the instant the watch starts, so a log
+  holding months of history does not print months of history. Pass an earlier instant to have the records
+  already in the log judged too.
+  Its judging half rides along on every push through `scripts/watch-freezes.test.sh`, which drives a stub
+  sampler and built logs, so every one of the outcomes above is produced rather than waited for.
+
+
 ## Asking what a contact check actually searched for
 
 - **Asking what a contact check actually searched for: `scripts/what-the-check-searched.sh <show>` (#2996).**
