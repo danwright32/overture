@@ -2958,9 +2958,17 @@ enum QueueModel {
         // #2816: the table lives on QueueModel now, because the reached-out and follow-up rows resolve
         // their own links against it too, and two builds of one table are two things to drift.
         let calendarBySourceId = sourceCalendarIndex(sources)
+        // #3278: over the UNFILTERED corpus, never the caller's rows, for the same reason `venueBrands`
+        // above is: the live twin that contradicts a flagged row may itself be dismissed or out of the
+        // queue's window, and a contradiction the caller's scope happens to exclude is still a
+        // contradiction. Judging it against a filtered set would let the warning come back for exactly
+        // the rows Dan has already dealt with.
+        let contradictedCancellations = ContradictedCancellation.contradictedKeys(among: corpus ?? prospects)
         let pre = CardPreamble(linked: linked, inherited: inherited, venueBrands: venueBrands,
                                rowCounts: rowCounts, calendarBySourceId: calendarBySourceId,
-                               overrides: overrides, clients: clients, now: now, day: day)
+                               overrides: overrides, clients: clients,
+                               contradictedCancellations: contradictedCancellations,
+                               now: now, day: day)
 
         var rows: [QueueScopeRow] = []
         var contactsByKey: [String: [Recipient]] = [:]
@@ -3026,6 +3034,12 @@ enum QueueModel {
         let calendarBySourceId: [String: String]
         let overrides: ProducerOverrides
         let clients: ClientWindow
+        // #3278: the flagged rows the store itself contradicts, computed once over the corpus.
+        //
+        // HERE rather than in the card, because this is a whole-corpus answer and the card is per row:
+        // asking it per card would walk the store once per card drawn. On the preamble it is built with
+        // the other whole-corpus tables and read by each card as a set membership test.
+        let contradictedCancellations: Set<String>
         let now: Date
         let day: String
 
@@ -3146,6 +3160,21 @@ enum QueueModel {
         // classification the row is not actually using.
         item.treatedAsVenue = pre.venueBrands.contains(p.presenter)
         item.presenterWasTheRoom = p.presenterWasTheRoom == true   // #1788
+        // #3278: the warning is WITHHELD where the store holds a live row for plainly the same show.
+        //
+        // The STORED field is untouched and stays true: the row really has missed its sweeps, and the
+        // other half of #3278, which stops the duplicate being minted at all, is a separate change with
+        // its own measuring to do. What this decides is only whether Dan is TOLD a live show may be
+        // cancelled, which is the half that was wrong on his queue.
+        //
+        // Both readers come through this one field, the struck-through title and the warning row in
+        // `ProspectRowView`, so withholding it here covers both rather than leaving one of them still
+        // saying it (L605). And it is withheld HERE rather than in `QueueItem.init` because the question
+        // is about the whole corpus and the initialiser is handed one prospect: the set is built once per
+        // pass, in `preamble`, exactly like `venueBrands` and the client list beside it (L91).
+        if pre.contradictedCancellations.contains(p.naturalKey) {
+            item.disappearedFromFeed = false
+        }
         // #1731: only meaningful where the verdict IS the building; nil otherwise.
         item.readAsTheBuildingReason = pre.venueBrands.contains(p.presenter)
             ? OrganisationListing.buildingReason(
@@ -3632,6 +3661,9 @@ extension QueueItem {
             nightStartTimes: p.nightStartTimes,               // #1699
             partOfRelatedRun: p.partOfRelatedRun,
             heldBackFrom: p.heldBackAt == nil ? nil : p.heldBackBySlot,
+            // #3278 withholds this where the store contradicts itself, and does it in `card`, above,
+            // beside every other field that needs the whole corpus to answer. This initialiser is handed
+            // ONE prospect and has no corpus to ask.
             disappearedFromFeed: p.disappearedFromFeed,
             contacts: contacts,
             reprepDraftRequested: p.reprepDraftRequested,
