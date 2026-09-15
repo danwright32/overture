@@ -45,6 +45,12 @@ import SwiftData
 // Recorded rather than chased: this is an opt-in diagnostic and the alternative is leaving a clone behind,
 // which is the leak #3065 exists to prevent.
 struct QueueRenderPassLiveStoreCostTests {
+
+    // #3660: what one row of the prospect table may cost to fetch and materialise, in milliseconds.
+    //
+    // Declared here rather than inline so a change to it is a visible edit to a named calibration rather
+    // than a number moved inside an assertion.
+    private static let fetchCeilingMsPerRow = 0.50
     // `nonisolated` because Swift Testing evaluates `.enabled(if:)` in a Sendable closure outside the
     // suite's actor, and this suite is @MainActor for QueueRenderPass.make's sake. Neither property
     // touches main-actor state.
@@ -652,6 +658,51 @@ struct QueueRenderPassLiveStoreCostTests {
         //
         // The tolerance is DERIVED from the widest spread the two arms actually reported, so it tracks
         // how noisy the machine is rather than being a number somebody picked.
+        // #3660: the fetch TRACKED, not merely measured.
+        //
+        // At about 175 ms it is the largest single term in a store change, and nothing held it to
+        // anything: this suite asserted that the readings were REAL and that the arms were ORDERED, and
+        // neither notices the fetch doubling.
+        //
+        // THE FETCH rather than the end-to-end store change, which is what #3660's own restatement of
+        // 2026-09-11 asks for, and the difference is deliberate. The other two terms of a store change
+        // already have guards: `QueueRenderPassCostTests` pins how many whole-store sweeps a pass makes
+        // and how much per-card work it does, both as COUNTS, which is what lets them sit on the
+        // mandatory gate. The fetch is the one term with nothing on it at all, and it is the largest.
+        // A ratchet over the sum would also be answered by all three moving against each other, so a
+        // fetch that doubled while the card build halved would read as no change (L367).
+        //
+        // PER ROW, never a total, and that is the whole design. A total on a growing store goes up for
+        // the most ordinary reason there is, so a ratchet on one would fire on Dan adding shows (L323). A
+        // RATE is flat while the fetch stays linear, so what it catches is a change in KIND: a fault
+        // storm, a descriptor that stopped being linear, a second read folded into this one. It is also
+        // immune to how busy this Mac is in a way no absolute millisecond figure can be (L224), because
+        // both terms move together.
+        //
+        // THE CEILING is far above the reading rather than just over it, so anything approaching it is a
+        // change in kind and not noise (L172). Measured 2026-09-14 on the live store: 173.0 ms over
+        // 1,252 rows, which is 0.1382 ms a row, so the ceiling sits about 3.6 times above it.
+        //
+        // Re-take it with
+        //   TEST_RUNNER_MEASURE_QUEUE_LIVE_STORE=1 mac/scripts/run-tests-locked.sh \
+        //     -only-testing:OvertureTests/QueueRenderPassLiveStoreCostTests
+        // and read the printed `per row` figure rather than trusting any number in this comment, which
+        // is a dated measurement and cannot re-take itself (L316).
+        let fetchPerRowMs = (prospectFetch.median / Double(prospects.count)) * 1000
+        print("""
+        queue-live-store-fetch-ratchet (#3660)
+          the prospect fetch        \(ms(prospectFetch.median)) ms over \(prospects.count) rows
+          per row                   \(String(format: "%.4f", fetchPerRowMs)) ms
+          ceiling                   \(String(format: "%.4f", Self.fetchCeilingMsPerRow)) ms a row
+        """)
+        #expect(fetchPerRowMs < Self.fetchCeilingMsPerRow,
+                Comment(rawValue: "the prospect fetch costs "
+                        + "\(String(format: "%.4f", fetchPerRowMs)) ms a row against a ceiling of "
+                        + "\(String(format: "%.4f", Self.fetchCeilingMsPerRow)). A rate that moves has "
+                        + "changed in KIND rather than grown: a relationship faulted per row, a "
+                        + "descriptor that stopped being linear, or a second read folded into this one. "
+                        + "The store getting bigger cannot do this (#3660)."))
+
         let fetchNoise = max(prospectFetch.high - prospectFetch.low,
                              faultRecipients.high - faultRecipients.low)
         #expect(faultRecipients.median >= prospectFetch.median - fetchNoise,
