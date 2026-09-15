@@ -380,7 +380,7 @@ struct QueueItemSnapshotTests {
         func s(body: String? = nil, requestedAt: Date? = nil, answeredAt: Date? = nil) -> RecipientSnapshot {
             RecipientSnapshot(id: "x", name: "N", email: "e@e.example", role: nil, provenance: .act,
                               sendState: .sent, replied: true, lastReplyText: nil, resolution: nil,
-                              bounced: false, outcomeSource: nil, replyDraftSubject: nil,
+                              bounced: false, outcomeSource: nil,
                               replyDraftBody: body, replyDraftRequestedAt: requestedAt,
                               awaitedReplyDraftRequestedAt: ReplyDraftRequest.awaited(
                                   requestedAt: requestedAt, draftBody: body, answeredAt: answeredAt),

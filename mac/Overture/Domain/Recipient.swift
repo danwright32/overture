@@ -313,6 +313,16 @@ final class Recipient {
     // likely outcomes are an opaque 400 or a message Gmail groups server side while every
     // standards-based client files it separately. Its reader is `SendService.replySubject`.
     var attachedThreadSubject: String?
+    // #3891: the Subject THIS contact's email went out under, written by the send the moment it lands.
+    //
+    // The show's `sentSubject` is frozen by its first send only, while every later contact is sent under
+    // whatever the subject box holds at that moment, so a subject edited between two contacts leaves the
+    // second conversation carrying a subject the show never recorded. Answering or nudging that contact
+    // from the show's copy would split its conversation. Nil on a contact sent before this shipped, on a
+    // form or DM route (no email subject), and on one never sent; `Prospect.conversationSubject(for:)`
+    // falls back to the show's copy for all three. Written by `SendService.deliver` and
+    // `SendService.sendJointly`; read only through `Prospect.conversationSubject(for:)`.
+    var pitchSubject: String?
     // #2715: what the attach found here before detection overwrote it, so the compensating detach
     // (#2719) can put it back. `reopenOnReply` clears a `.stoodDown` resolution and nulls the three
     // draft-baseline fields, and nothing else in the app remembers any of them, so without capturing
@@ -518,6 +528,14 @@ final class Recipient {
     // beside the manual controls; it never auto-sets a RecipientResolution (#420 C4). `replyDraft*` is
     // the drafted response Dan reviews; `replyDraftRequestedAt` stamps the request so the conversation
     // view can show progress and a timeout can surface a dead run as needs-attention (#420 C6).
+    //
+    // `replyDraftSubject` is RETAINED STORAGE, read and written by nothing (#3891). It held the subject
+    // the drafter wrote, which the send preferred over the conversation's own, so an answer to Jenny
+    // Powers on 2026-09-14 left under a subject her conversation had never carried and was filed as a new
+    // one. The answer now always continues the conversation's subject and the drafter no longer writes
+    // one. Left on the model rather than deleted, for the reason given on `overrideBody` above: dropping a
+    // stored property would be this app's first subtractive migration, which gets its own change with a
+    // rehearsal against a store clone first.
     var replyDraftSubject: String?
     var replyDraftBody: String?
     var replyDraftRequestedAt: Date?
@@ -545,8 +563,8 @@ final class Recipient {
     // The reply-draft voice-learning pair (#463), mirroring Prospect.originalDraft*/sentBody for the cold
     // draft. originalReplyDraftBody is the AI's reply before Dan's first substantive edit; sentReplyBody
     // is the exact text he committed (sent via Overture or copied out to Gmail), frozen at commit so a
-    // later re-draft can't rewrite the lesson. Reply subjects are auto ("Re: …"), never Dan-edited, so
-    // only the body is captured.
+    // later re-draft can't rewrite the lesson. Reply subjects continue the conversation's own ("Re: …",
+    // #3891), are never Dan-edited and never AI-written, so only the body is captured.
     var originalReplyDraftBody: String?
     var sentReplyBody: String?
     var replySentAt: Date?
@@ -1256,7 +1274,6 @@ final class Recipient {
     // recordRepliedInGmail, which stopped being true the moment the in-app send started calling it.
     func recordAnswerSent(now: Date) {
         freezeSentReply(now: now)   // capture the committed copy before consuming the draft (#463)
-        replyDraftSubject = nil
         replyDraftBody = nil
         lastFollowUpAt = now
         // The fact that had no home: Dan answered. Stamped LAST and unconditionally, unlike the freeze
@@ -1301,7 +1318,6 @@ final class Recipient {
         // The reply is gone, so its derived AI hint + draft must go too (#449); otherwise the
         // contact reads "Awaiting reply" yet still shows an intent suggestion and a leftover draft.
         intentHint = nil
-        replyDraftSubject = nil
         replyDraftBody = nil
         replyDraftRequestedAt = nil
         replyDraftEditedByDan = false

@@ -788,15 +788,15 @@ struct SendServiceTests {
         let p = twoRecipients(ctx, body: "Hello,\n\nshared body", ingested: Date(timeIntervalSince1970: 1))
         let r = p.recipients.first { $0.email == "emma@act.example" }!
         r.gmailThreadId = "rt"; r.gmailMessageId = "<rm>"; r.sendState = .sent; r.replied = true
-        r.replyDraftSubject = "Re: Photographing you"; r.replyDraftBody = "Glad to help — July works."
+        r.replyDraftBody = "Glad to help, July works."
         let sender = CapturingSender()
 
         #expect(await SendService.sendReplyDraft(r, of: p, now: Date(timeIntervalSince1970: 10), sender: sender) == true)
         #expect(sender.last?.to == ["emma@act.example"])
         #expect(sender.last?.threadId == "rt")               // the CONTACT's thread, not the lead rollup
         #expect(sender.last?.inReplyTo == "<rm>")
-        #expect(sender.last?.subject == "Re: Photographing you")
-        #expect(sender.last?.body == "Glad to help — July works.")
+        #expect(sender.last?.subject == "Re: S")                // the conversation's subject (#3891)
+        #expect(sender.last?.body == "Glad to help, July works.")
         #expect(r.replyDraftBody == nil)                     // draft consumed (can't double-send)
         #expect(r.lastFollowUpAt == Date(timeIntervalSince1970: 10))   // clock re-anchored
     }
@@ -831,7 +831,7 @@ struct SendServiceTests {
         let p = twoRecipients(ctx, body: "Hello,\n\nshared body", ingested: Date(timeIntervalSince1970: 1))
         let r = p.recipients.first { $0.email == "emma@act.example" }!
         r.gmailThreadId = "rt"; r.gmailMessageId = "<rm>"; r.sendState = .sent; r.replied = true
-        r.replyDraftSubject = "Re: Photographing you"; r.replyDraftBody = "Glad to help, July works."
+        r.replyDraftBody = "Glad to help, July works."
         let sender = GatedSender()
 
         let firstTask = Task { await SendService.sendReplyDraft(r, of: p, now: Date(timeIntervalSince1970: 10), sender: sender) }
@@ -897,10 +897,100 @@ struct SendServiceTests {
 
     @Test func recordAnswerSentConsumesTheDraftWithoutSending() {
         let r = Recipient(id: "a@act.example", email: "a@act.example", provenance: .act)
-        r.replyDraftSubject = "Re"; r.replyDraftBody = "a draft"
+        r.replyDraftBody = "a draft"
         r.recordAnswerSent(now: Date(timeIntervalSince1970: 7))
         #expect(r.replyDraftBody == nil)
-        #expect(r.replyDraftSubject == nil)
         #expect(r.lastFollowUpAt == Date(timeIntervalSince1970: 7))
+    }
+
+    // MARK: - #3891 an answer keeps the subject its conversation carries
+
+    // Dan answered Jenny Powers from the Send button on 2026-09-14 and the answer left under the drafter's
+    // own subject, "Photos for your October 3 show at 54 Below", on a conversation that had only ever
+    // carried the pitch's. Spark filed it as a brand new conversation, and Gmail groups the recipient's
+    // mail by the same rule. Whatever the drafter wrote, the answer is "Re:" plus the subject the pitch
+    // actually went out under, and the sheet Dan approves shows that same subject (L64).
+    private let noSignature = OutboundSignature(html: "", plainText: "")
+
+    @Test func anAnswerCarriesTheSubjectThePitchWentOutUnderNotTheDraftersOwn() async throws {
+        let ctx = ModelContext(try container())
+        let (p, r) = sentContact(ctx, group: "A", threadId: "th-j", msgId: "<theirs@x.org>")
+        p.sentSubject = "Photographing A at 54 Below."
+        r.replied = true
+        r.replyDraftSubject = "Photos for your October 3 show at 54 Below"
+        r.replyDraftBody = "Happy to, here is my rate."
+
+        let sheet = try #require(SendConfirmation(replyFor: r, of: p, body: "Happy to, here is my rate.",
+                                                  signature: noSignature))
+        #expect(sheet.subject == "Re: Photographing A at 54 Below.")
+
+        let sender = CapturingSender()
+        #expect(await SendService.sendReplyDraft(r, of: p, now: Date(timeIntervalSince1970: 10), sender: sender) == true)
+        #expect(sender.last?.subject == "Re: Photographing A at 54 Below.")
+    }
+
+    // The draft subject is what Dan last TYPED, which is not what the conversation carries once he edits a
+    // pitch after it went out. Every message that continues the conversation reads the frozen sent copy:
+    // the answer, the follow up nudge, and both of their confirmation sheets.
+    @Test func aPitchSubjectEditedAfterSendingRenamesNoMessageOnTheConversation() async throws {
+        let ctx = ModelContext(try container())
+        let (p, r) = sentContact(ctx, group: "A", threadId: "th-e", msgId: "<orig@x.org>")
+        p.sentSubject = "Photographs for A"
+        p.draftSubject = "A subject Dan retyped later"
+
+        #expect(SendService.replySubject(for: r, of: p) == "Re: Photographs for A")
+        let nudgeSheet = try #require(SendConfirmation(followUpFor: r, of: p, signature: noSignature))
+        #expect(nudgeSheet.subject == "Re: Photographs for A")
+
+        let sender = CapturingSender()
+        #expect(await SendService.sendFollowUp(r, of: p, now: Self.beforeTheShow, sender: sender) == true)
+        #expect(sender.last?.subject == "Re: Photographs for A")
+    }
+
+    // A pitch that went out before its sent copy was frozen has no `sentSubject`, and its draft subject is
+    // then the best record of what it was sent under, so the fallback stays.
+    @Test func aPitchWithNoFrozenSentSubjectFallsBackToItsDraftSubject() throws {
+        let ctx = ModelContext(try container())
+        let (p, r) = sentContact(ctx, group: "A")
+        #expect(p.sentSubject == nil)
+        r.replyDraftSubject = "Something the drafter made up"
+        #expect(SendService.replySubject(for: r, of: p) == "Re: Photographs for A")
+    }
+
+    // The show's `sentSubject` is frozen by the FIRST send only, while each contact's email goes out under
+    // whatever the subject box holds when THAT contact is sent. Edit the subject between two contacts and
+    // the second conversation carries the new subject, so answering it from the show's frozen copy would
+    // split it exactly as #3891 did. Each contact's own conversation is answered and nudged under the
+    // subject its own email carried.
+    @Test func eachContactIsAnsweredUnderTheSubjectItsOwnEmailCarried() async throws {
+        let ctx = ModelContext(try container())
+        let p = twoRecipients(ctx, body: "Hello,\n\nshared body", ingested: Date(timeIntervalSince1970: 1))
+        p.draftSubject = "First subject"
+        #expect(await SendService.sendOne(p, now: Date(timeIntervalSince1970: 10), sender: FakeSender()) == true)
+        let first = try #require(p.recipients.first { $0.sendState == .sent })
+        let second = try #require(p.recipients.first { $0.sendState == .pending })
+
+        p.draftSubject = "Second subject"
+        #expect(await SendService.sendOne(p, now: Date(timeIntervalSince1970: 20), sender: FakeSender()) == true)
+        #expect(second.sendState == .sent)
+
+        #expect(SendService.replySubject(for: first, of: p) == "Re: First subject")
+        #expect(SendService.replySubject(for: second, of: p) == "Re: Second subject")
+        let nudgeSheet = try #require(SendConfirmation(followUpFor: second, of: p, signature: noSignature))
+        #expect(nudgeSheet.subject == "Re: Second subject")
+    }
+
+    // A joint email is one message, so every contact on it records that one subject.
+    @Test func everyContactOnAJointEmailRecordsItsSubject() async throws {
+        let ctx = ModelContext(try container())
+        let p = twoRecipients(ctx, body: "Hello,\n\nshared body", ingested: Date(timeIntervalSince1970: 1))
+        p.draftSubject = "Together"
+        #expect(await SendService.sendJointly(p, to: p.recipients, now: Date(timeIntervalSince1970: 10),
+                                              sender: FakeSender()) == true)
+        p.draftSubject = "Retyped afterwards"
+        p.sentSubject = nil   // isolate the per-contact record from the show's frozen copy
+        for r in p.recipients {
+            #expect(SendService.replySubject(for: r, of: p) == "Re: Together")
+        }
     }
 }

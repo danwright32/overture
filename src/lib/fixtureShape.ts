@@ -456,7 +456,9 @@ export function assertReplyClassifyQueueShape(data: unknown, file: string, expec
   });
 }
 
-// overture-reply-classify-results.json (versions 1-3, additive: recipientId at v2+, draftSubject/draftBody at v3+)
+// overture-reply-classify-results.json (versions 1-3, additive: recipientId at v2+, draftSubject/draftBody at v3+).
+// #3891: draftSubject is retired and nothing writes it any more; still accepted as optional so a results
+// file from an older run passes, matching the app, which decodes such a file and drops the subject.
 export function assertReplyClassifyResultsShape(data: unknown, file: string, expectedVersion: number): void {
   const root = requireObject(data, file, "(root)");
   const version = requireVersion(root.version, file, [1, 2, 3]);

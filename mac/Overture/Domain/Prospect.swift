@@ -594,6 +594,21 @@ final class Prospect {
     var sentSubject: String? = nil
     var sentBody: String? = nil
 
+    // #3891: the subject every message CONTINUING one contact's conversation starts from, and the only
+    // place that says so. Read by the answer and the follow up nudge, and by both of their confirmation
+    // sheets, so no message Dan approves on a conversation can carry a subject it never had.
+    //
+    // In order: a linked conversation's own subject (#2715), since Overture never sent on it; the
+    // subject this contact's own email went out under; the show's frozen sent copy, for a contact sent
+    // before that was recorded per contact; and last the draft subject, for a pitch sent before even the
+    // show's copy was frozen. The draft subject is only what Dan last typed, which is why it comes last:
+    // a subject edited after sending would otherwise rename the conversation being answered.
+    func conversationSubject(for recipient: Recipient) -> String? {
+        let recorded = [recipient.attachedThreadSubject, recipient.pitchSubject, sentSubject]
+        if let subject = recorded.compactMap({ $0 }).first(where: { !$0.isEmpty }) { return subject }
+        return draftSubject
+    }
+
     // Dan-owned: he marked this send as a poor example ("don't learn from this") so the voice-learning
     // export (#241) skips it, keeping the signal clean (#244). Defaulted so existing records migrate
     // cleanly (lightweight additive, like #132).

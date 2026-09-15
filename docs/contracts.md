@@ -809,6 +809,14 @@ guidance (`overture-voice-guidance.md`) and applies only distilled tendencies, n
 per-recipient outcome). Additive: the tolerant gate (1 through 3) still accepts v1/v2; `queue-v3.json`
 / `results-v3.json` are the spec.
 
+`draftSubject` is RETIRED (#3891), without a version bump, because removing an optional field breaks no
+reader. The runner no longer asks for it and the app no longer declares it, so a results file from an
+older run that still carries one decodes, lands its `draftBody`, and drops the subject. An answer always
+goes out under the subject its conversation already carries (`SendService.replySubject`): the drafted
+subject used to be sent in its place, and an answer to a contact on 2026-09-14 was filed as a new
+conversation because of it. The TypeScript shape check still accepts the key as optional, for the same
+older files.
+
 ### `overture-voice-feedback.json`
 
 How Dan revises drafts, so the Prep drafter learns his voice over time (#241 / #119). The app writes

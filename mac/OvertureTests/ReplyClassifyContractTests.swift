@@ -102,7 +102,7 @@ struct ReplyClassifyContractTests {
     }
 
     // v3 (#420): the queue now populates recipientId on every item (one item per replied recipient),
-    // and the results carry an AI-drafted reply (draftSubject/draftBody) per recipient alongside the
+    // and the results carry an AI-drafted reply (draftBody; draftSubject retired #3891) per recipient alongside the
     // non-binding intent hint. Two items can share a naturalKey with different recipientIds.
     @Test func theV3QueueHasOneItemPerRecipientWithIds() throws {
         let queue = try JSONDecoder().decode(ReplyClassifyQueue.self, from: try fixture("queue-v3.json"))
@@ -129,7 +129,6 @@ struct ReplyClassifyContractTests {
         #expect(results.version == 3)
         let pres = results.results.first { $0.recipientId == "pres@presentingorg.example" }
         #expect(pres?.intent == "wants_to_book")
-        #expect(pres?.draftSubject == "Re: Photographing Aurora Strings at Carnegie Hall")
         #expect(pres?.draftBody?.isEmpty == false)
         let act = results.results.first { $0.recipientId == "act@aurorastrings.example" }
         #expect(act?.intent == "declined")
@@ -155,7 +154,7 @@ struct ReplyClassifyContractTests {
     @Test func olderResultsStillDecodeUnderTheV3Gate() throws {
         let v1 = try ReplyClassifyResultsDecoder.decode(try fixture("results-v1.json"))
         #expect(v1.version == 1)
-        #expect(v1.results[0].draftSubject == nil)
+        #expect(v1.results[0].draftBody == nil)
         let v2 = try ReplyClassifyResultsDecoder.decode(try fixture("results-v2.json"))
         #expect(v2.version == 2)
         #expect(v2.results[0].draftBody == nil)

@@ -3,9 +3,9 @@ import SwiftData
 
 // Ingests the classify + drafter workflow's results (#112, v3 #420 C3/C4, per-recipient suggestion
 // #653). Joins each result by (naturalKey, recipientId) -> Prospect -> the specific Recipient, writing
-// that contact's NON-BINDING intent hint, the AI-drafted reply (replyDraftSubject/replyDraftBody, C0
-// fields), and its OWN conversation-state suggestion -- based on its own reply, never averaged or
-// compromised with a sibling recipient's. A result with no recipientId (legacy v1/v2) carries no
+// that contact's NON-BINDING intent hint, the AI-drafted reply body (replyDraftBody, C0 field; the
+// drafter's subject is retired, #3891), and its OWN conversation-state suggestion -- based on its own
+// reply, never averaged or compromised with a sibling recipient's. A result with no recipientId (legacy v1/v2) carries no
 // per-contact target, so it gets no hint, draft, or suggestion at all. NOTHING here sets a binding
 // RecipientResolution (decision f); the binding marks are Dan's manual B2 controls. Never overwrites a
 // state Dan set on that recipient by hand (#60).
@@ -54,7 +54,6 @@ enum ReplyClassifyImporter {
                        rec.replyDraftBody?.isEmpty == false {
                         outcome.skippedEdited += 1
                     } else {
-                        if let s = r.draftSubject { rec.replyDraftSubject = s }
                         // A fresh AI draft is not Dan's edit, so clear any stale "edited" marker:
                         // otherwise this AI body would be wrongly protected on the next run.
                         //
