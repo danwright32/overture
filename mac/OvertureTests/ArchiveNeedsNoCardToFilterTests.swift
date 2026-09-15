@@ -150,7 +150,23 @@ struct ArchiveWiringGuardTests {
         #expect(!buildsEveryCard,
                 Comment(rawValue: "ArchiveView is building a card for every show in the store again, "
                         + "which is the #3437 profile's 65% of the main thread while typing (#3655)"))
-        let narrows = archive.contains("cardKeys: cardKeys.takeKeys()")
+        // #3879 RE-SPELLED, not weakened. This asserted the single literal `cardKeys: cardKeys.takeKeys()`
+        // and went red when the drain was lifted to its own line so the memo could hand the SAME keys to
+        // both the key and the build. The decision it defends is unchanged and is still honoured; what
+        // broke was one rendering of it (L103). So it now asserts the two facts the rule is made of:
+        // the registry is DRAINED, and what the pass is handed for `cardKeys:` is a value rather than
+        // the `nil` that means every row in scope.
+        //
+        // Checked against the reversal rule before changing it (L252, L430): #3654's narrowing is not
+        // reversed, it is the thing #3879 memoises, and `aDrawnRowGoesThroughTheStore` below still pins
+        // the other half of the contract.
+        let drains = archive.contains("cardKeys.takeKeys()")
+        #expect(drains, "Archive no longer drains the card key registry, so the next pass predicts nothing")
+        let handsEveryRow = archive.contains("cardKeys: nil")
+        #expect(!handsEveryRow,
+                Comment(rawValue: "Archive asks for a card for every row in scope again, which is the "
+                        + "whole-store card build #3655 removed"))
+        let narrows = archive.contains("cardKeys: keys") || archive.contains("cardKeys: cardKeys.takeKeys()")
         #expect(narrows, "Archive no longer narrows its card build to what the last frame drew")
         let records = archive.contains("cardKeyRegistry: cardKeys")
         #expect(records,
