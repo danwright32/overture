@@ -113,7 +113,8 @@ struct TheAppChecksItsOwnCardsTests {
         let pre = QueueModel.CardPreamble(linked: [:], inherited: [:],
                                           venueBrands: ProducerGate.VenueBrands(shows: [], overrides: .none),
                                           rowCounts: [:], calendarBySourceId: [:], overrides: .none,
-                                          clients: .none, now: Date(), day: "2099-03-01")
+                                          clients: .none, contradictedCancellations: [],
+                                          now: Date(), day: "2099-03-01")
         let show = try #require(shows.first { $0.naturalKey == "k8" })
         var stale = QueueModel.card(show, contacts: nil, preamble: pre)
         stale.presenterLine = "a card left over from an earlier pass"

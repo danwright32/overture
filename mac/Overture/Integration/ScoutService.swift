@@ -1548,7 +1548,11 @@ enum ScoutService {
     // Do these two runs cover any of the same days? Dates are ISO `yyyy-MM-dd`, so string ordering IS date
     // ordering. A run with no end date is a single night. A run with no start cannot be compared at all and
     // is deliberately treated as no overlap: an unknown date must never authorize a re-key.
-    private static func runsOverlap(storedStart: String?, storedEnd: String?,
+    // #3278: internal and NONISOLATED, so the contradiction rule reads the SAME overlap test the re-key
+    // guard uses instead of keeping a second copy of it (L263). Nonisolated is what it always should have
+    // been: it reads four strings and returns a Bool, and it inherited ScoutService's main actor isolation
+    // only by sitting inside it.
+    nonisolated static func runsOverlap(storedStart: String?, storedEnd: String?,
                                     incomingStart: String?, incomingEnd: String?) -> Bool {
         guard let storedStart, let incomingStart else { return false }
         let storedClose = storedEnd ?? storedStart
