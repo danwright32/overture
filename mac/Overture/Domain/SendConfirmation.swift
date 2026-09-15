@@ -153,7 +153,7 @@ struct SendConfirmation: Equatable {
     @MainActor
     // #2145: the show's own reply, now only a LOOKUP of the two things the shared initializer above takes.
     // Kept as its own entry point because the lookup is genuinely Prospect-shaped (the subject is derived
-    // from the show's draft subject and its merged-concert name), while the composition it feeds is not.
+    // from the show's conversation subject and its merged-concert name), while the composition it feeds is not.
     init?(replyFor recipient: Recipient, of prospect: Prospect, body: String,
           signature: OutboundSignature = GmailSignatureStore.currentSignature()) {
         self.init(replyTo: SendGroup.replyAudience(of: recipient),
@@ -167,7 +167,7 @@ struct SendConfirmation: Equatable {
     init?(followUpFor recipient: Recipient, of prospect: Prospect,
           signature: OutboundSignature = GmailSignatureStore.currentSignature()) {
         guard let email = recipient.email, !email.isEmpty else { return nil }
-        let content = FollowUp.nudgeContent(originalSubject: prospect.draftSubject, groupName: prospect.groupName,
+        let content = FollowUp.nudgeContent(originalSubject: prospect.conversationSubject(for: recipient), groupName: prospect.groupName,
                                             isMerged: prospect.isMergedConcert,
                                             contactName: recipient.name, venue: prospect.venue,
                                             followUpCount: recipient.followUpCount)

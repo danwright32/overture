@@ -109,6 +109,7 @@ enum SendService {
             recipient.sendClaimedAt = nil
             recipient.gmailThreadId = receipt.threadId
             recipient.gmailMessageId = receipt.messageID
+            recipient.pitchSubject = mail.subject   // #3891: what THIS conversation is called
             recipient.replyTrackingDegraded = receipt.threadIdDegraded
             recipient.threadingDegraded = receipt.messageIDDegraded   // #2647
             recipient.sendError = nil
@@ -229,7 +230,8 @@ enum SendService {
         // what Dan confirmed is exactly what sends.
         // #2030: built BEFORE the claim below, so a message that cannot be built never leaves the claim
         // held on a nudge that was never sent.
-        let content = FollowUp.nudgeContent(originalSubject: prospect.draftSubject, groupName: prospect.groupName,
+        // #3891: the conversation's subject, never the draft Dan may have retyped since it went out.
+        let content = FollowUp.nudgeContent(originalSubject: prospect.conversationSubject(for: recipient), groupName: prospect.groupName,
                                             isMerged: prospect.isMergedConcert,
                                             contactName: recipient.name, venue: prospect.venue,
                                             followUpCount: recipient.followUpCount)
@@ -302,9 +304,14 @@ enum SendService {
     // #2144: what a reply is CALLED, in one place. The confirmation sheet Dan approves and the message
     // that leaves both ask this, so the subject line he reads cannot differ from the one on the email. Two
     // expressions of the same rule would drift the first time either changed.
+    //
+    // #3891: the drafter's own subject is not consulted, and it is no longer written. An answer that left
+    // under "Photos for your October 3 show" on a conversation carrying the pitch's subject was filed as a
+    // new conversation by Spark, and Gmail groups the recipient's mail by the same rule, so the answer
+    // always continues the subject the conversation already has.
     static func replySubject(for recipient: Recipient, of prospect: Prospect) -> String {
-        if let drafted = recipient.replyDraftSubject { return drafted }
-        // #2715: on an ATTACHED conversation the thread's own Subject wins over the show's draft.
+        // #2715: on an ATTACHED conversation the thread's own Subject wins over the show's draft. That
+        // rule now lives in `Prospect.conversationSubject(for:)` with the rest of the order (#3891).
         //
         // Gmail requires the Subject to match the thread's when a message is sent with its threadId
         // (`GmailSender` passes one), and `prospect.draftSubject` on a hand-sent pitch is the subject of
@@ -313,9 +320,7 @@ enum SendService {
         // it separately, which is the exact split documented at `GmailSender.swift:57`. The confirmation
         // sheet reads this same value, so Dan would also be approving a subject the recipient will never
         // see (L64).
-        let original = recipient.attachedThreadSubject.flatMap { $0.isEmpty ? nil : $0 }
-            ?? prospect.draftSubject
-        return FollowUp.replySubject(originalSubject: original,
+        return FollowUp.replySubject(originalSubject: prospect.conversationSubject(for: recipient),
                                      groupName: FollowUp.safeDisplayName(prospect.groupName,
                                                                           isMerged: prospect.isMergedConcert))
     }
@@ -452,6 +457,7 @@ enum SendService {
                 r.sendClaimedAt = nil
                 r.gmailThreadId = receipt.threadId
                 r.gmailMessageId = receipt.messageID
+                r.pitchSubject = mail.subject   // #3891: one email, so one subject for every member
                 r.replyTrackingDegraded = receipt.threadIdDegraded
                 r.threadingDegraded = receipt.messageIDDegraded   // #2647
                 r.sendGroupId = groupId

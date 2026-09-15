@@ -56,7 +56,7 @@ struct ReplyClassifyImporterTests {
 
         let res = ReplyClassifyResults(version: 3, generatedAt: "x", results: [
             ReplyClassifyResult(naturalKey: "show", intent: "interested", recipientId: "act@a.example",
-                                draftSubject: "Re: A", draftBody: "A new AI draft."),
+                                draftBody: "A new AI draft."),
         ])
         let out = ReplyClassifyImporter.ingest(res, into: ctx)
 
@@ -82,7 +82,7 @@ struct ReplyClassifyImporterTests {
 
         let res = ReplyClassifyResults(version: 3, generatedAt: "x", results: [
             ReplyClassifyResult(naturalKey: "show", intent: "interested", recipientId: "act@a.example",
-                                draftSubject: "Re: A", draftBody: "A fresh draft for the new reply."),
+                                draftBody: "A fresh draft for the new reply."),
         ])
         let out = ReplyClassifyImporter.ingest(res, into: ctx)
 
@@ -90,6 +90,29 @@ struct ReplyClassifyImporterTests {
         #expect(ra?.replyDraftBody == "A fresh draft for the new reply.")
         #expect(ra?.replyDraftEditedByDan == false)   // stale marker reset; the fresh draft isn't protected
         #expect(out.skippedEdited == 0)
+    }
+
+    // #3891: the drafter's subject is retired. A results file written by a run from before the change
+    // still carries one, and it must land the body while writing no subject anywhere, because the only
+    // subject an answer may carry is the one its conversation already has.
+    @Test func aDraftedSubjectInTheResultsFileIsNotStored() throws {
+        let ctx = ModelContext(try container())
+        let p = lead(ctx, key: "show")
+        let act = Recipient(id: "act@a.example", email: "act@a.example", provenance: .act)
+        act.sendState = .sent; act.replied = true
+        p.setRecipients([act])
+        try ctx.save()
+
+        let json = Data("""
+            {"version":3,"results":[{"naturalKey":"show","intent":"interested","recipientId":"act@a.example",
+             "draftSubject":"Photos for your October 3 show","draftBody":"Happy to help."}]}
+            """.utf8)
+        let res = try JSONDecoder().decode(ReplyClassifyResults.self, from: json)
+        _ = ReplyClassifyImporter.ingest(res, into: ctx)
+
+        let ra = try #require(p.recipients.first { $0.id == "act@a.example" })
+        #expect(ra.replyDraftBody == "Happy to help.")
+        #expect(ra.replyDraftSubject == nil)
     }
 
     // #617: a real save() failure (not just the source-scan guard in ImporterSaveGuardTests), via

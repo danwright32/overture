@@ -85,7 +85,10 @@ struct ReplyClassifyResult: Codable, Equatable, Sendable {
                                // v3 (#420 C4): consumed as a NON-BINDING intent hint (recipient.intentHint),
                                // never auto-sets a RecipientResolution.
     var recipientId: String?   // v2 (#392): echoed back so the intent attaches to the right recipient
-    var draftSubject: String?  // v3 (#420): the AI-drafted reply subject for this recipient (optional)
+    // #3891: v3's `draftSubject` is RETIRED and deliberately undeclared. An answer always continues the
+    // subject its conversation already carries (`SendService.replySubject`), so a subject the drafter
+    // invents has nowhere correct to go. A results file from a run before the change still carries the
+    // key; leaving it undeclared is what lets that file decode and land its body without the subject.
     var draftBody: String?     // v3 (#420): the AI-drafted reply body for this recipient (optional)
 }
 

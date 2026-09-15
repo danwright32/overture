@@ -53,7 +53,6 @@ struct ReplyMirrorsItsAudienceTests {
     private func replier(_ p: Prospect, audience: [String]?) -> Recipient {
         let r = p.recipients.first { $0.email == "ann@org.example" }!
         r.gmailThreadId = "rt"; r.gmailMessageId = "<rm>"; r.replied = true
-        r.replyDraftSubject = "Re: Photographing you"
         r.replyDraftBody = "July works."
         r.replyAudience = audience
         return r

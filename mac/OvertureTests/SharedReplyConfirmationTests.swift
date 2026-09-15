@@ -83,7 +83,6 @@ struct SharedReplyConfirmationTests {
         let r = Recipient(id: "nbecker@evc.org", email: "nbecker@evc.org", provenance: .act)
         r.replied = true
         r.replyAudience = ["nicole@evc.org", "chelsea@evc.org"]
-        r.replyDraftSubject = "Re: Photographing the Pumpkin Singalong"
         p.addRecipient(r)
 
         let viaShow = try #require(SendConfirmation(replyFor: r, of: p, body: "Tuesday works.",

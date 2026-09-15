@@ -113,7 +113,7 @@ struct ReplyClassifyShortfallTests {
         let results = ReplyClassifyResults(version: 3, generatedAt: "2099-01-01T00:00:00Z",
             results: pairs.map {
                 ReplyClassifyResult(naturalKey: $0.0, intent: "interested", recipientId: $0.1,
-                                    draftSubject: "Re: your concert", draftBody: "Thanks for writing.")
+                                    draftBody: "Thanks for writing.")
             })
         let url = dir.appendingPathComponent("overture-reply-classify-results.json")
         try JSONEncoder().encode(results).write(to: url)

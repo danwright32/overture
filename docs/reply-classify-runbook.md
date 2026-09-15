@@ -77,7 +77,9 @@ The run now does two jobs per work-list item, per recipient:
 1. **Classify** the reply's intent (interested / wants_to_book / has_question / declined). This is a
    NON-BINDING hint on the app side; Dan still marks the binding outcome by hand.
 2. **Draft a reply** in Dan's voice that responds to what the contact actually wrote. Emit
-   `draftSubject` and `draftBody`.
+   `draftBody` only. Do NOT write a `draftSubject` (#3891): the answer goes out on the contact's existing
+   conversation under the subject that conversation already carries, which the app supplies. A subject
+   written here was sent in place of it, and the answer was filed as a brand new conversation.
 
 Rules:
 
@@ -127,7 +129,7 @@ Rules:
   already supplies. If `performanceDate` is absent (a genuinely undated show), simply don't name a date.
 - **Write incrementally as you go (#1081):** rewrite `overture-reply-classify-results.json` with the
   complete **version 3** `ReplyClassifyResults` JSON (each result =
-  `{naturalKey, recipientId, intent, draftSubject, draftBody}`) covering EVERY item you have finished so
+  `{naturalKey, recipientId, intent, draftBody}`) covering EVERY item you have finished so
   far, immediately after EACH item, not just at the very end, and nothing else. The launcher script
   derives the reply drafter's live "N of M" progress display by counting the entries in this file itself
   (`ReplyClassifyProgress` version `1`: `{ version, total, completed }`, seeded by the script with
@@ -149,8 +151,8 @@ and `results-as-written-v3.json` is that same shape as a real run actually write
 
 ## After classify: what the app does with the results (shipped)
 
-The drafted reply is not sent automatically. The app attaches `draftSubject` /
-`draftBody` to the replied recipient as a suggestion; Dan reads the actual reply in
+The drafted reply is not sent automatically. The app attaches `draftBody` to the
+replied recipient as a suggestion, and sends it under the conversation's own subject; Dan reads the actual reply in
 Gmail, reviews the AI draft in the app, edits it if needed, and sends it himself. The
 classified `intent` is the same kind of suggestion: it informs the state the app
 proposes, and Dan confirms or corrects it by hand. Neither the intent nor the draft

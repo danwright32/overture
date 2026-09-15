@@ -204,7 +204,7 @@ struct SearchCoversEveryContactFieldTests {
             "the text of a letter": [
                 "overrideBody", "lintOverriddenBody", "replyDraftSubject", "replyDraftBody",
                 "originalReplyDraftBody", "sentReplyBody", "attachPriorOriginalReplyDraftBody",
-                "greetingOverriddenBody", "openingOverride", "attachedThreadSubject",
+                "greetingOverriddenBody", "openingOverride", "attachedThreadSubject", "pitchSubject",
                 "replyProposedSubject", "lastReplyText", "sendError",
             ],
             // A way IN rather than a person. The card already labels a contact form by its site, and the

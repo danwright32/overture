@@ -551,11 +551,9 @@ struct ReplyPanelTests {
         let r = contact(p, "nbecker@everyvoicechoirs.org", group: nil)
         r.replied = true
         r.replyAudience = ["nbecker@everyvoicechoirs.org"]
-        r.replyDraftSubject = "Re: Photographing the Pumpkin Singalong"
 
         let c = try #require(SendConfirmation(replyFor: r, of: p, body: "Tuesday works."))
         #expect(c.subject == SendService.replySubject(for: r, of: p))
-        #expect(c.subject == "Re: Photographing the Pumpkin Singalong")
     }
 
     // And with no subject stored on the reply it falls back to the same derived one the sender derives,

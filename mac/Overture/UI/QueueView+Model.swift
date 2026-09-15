@@ -818,7 +818,6 @@ struct RecipientSnapshot: Identifiable, Equatable, Sendable {
     // (a venue guess, a press address, a suspected duplicate, the draft lint). "Every email it's going to
     // send to" has to be honest about the ones it will not, or the list quietly overstates itself.
     var isHeldFromSending: Bool = false
-    var replyDraftSubject: String? = nil
     var replyDraftBody: String? = nil
     var replyDraftRequestedAt: Date? = nil
     // #2869: the reply draft is on the clipboard and Dan has not said he sent it. On the snapshot
@@ -3692,7 +3691,7 @@ extension RecipientSnapshot {
                   bounced: r.bounced, outcomeSource: r.outcomeSource,
                   suppressionReason: r.suppressionReason,
                   isHeldFromSending: r.isBlockedAwaitingReview(lintBlockers: lintBlockers()),
-                  replyDraftSubject: r.replyDraftSubject, replyDraftBody: r.replyDraftBody,
+                  replyDraftBody: r.replyDraftBody,
                   replyDraftRequestedAt: r.replyDraftRequestedAt,
                   replyCopiedAt: r.replyCopiedAt,
                   // #2966: the shared rule's answer, so the card and the reply panel cannot disagree about
