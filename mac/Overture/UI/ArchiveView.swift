@@ -114,17 +114,41 @@ struct ArchiveView: View {
     // pays the whole derivation again, and a call site reads as a free field access whatever it costs
     // (L383). `ArchiveDerivesItsListOnceGuardTests` counts the call sites, which a property access cannot
     // be counted by.
+    // #3879: the memo, so an evaluation that changed none of the inputs below costs nothing.
+    //
+    // A `@State` reference, which is what makes it survive this struct being rebuilt on every RootView
+    // render while never invalidating anything itself: it is a plain class, so writing to it is not a
+    // change SwiftUI observes.
+    @State private var scopeMemo = ScopeMemo<QueueModel.Scope>()
+
     private func makeScope() -> QueueModel.Scope {
-        QueueModel.scope(from: prospects, answers: orgAnswers,
-                         overrides: ProducerOverrides(promotedRows: promotedProducers,
-                                                      demotedRows: demotedHouses),
-                         sources: watchedSources,
-                         refusals: ContactRefusal.ledger(from: refusedAddresses),
-                         // #3654's ordering contract: what the last frame drew is what this one prebuilds.
-                         // A row that was not predicted still draws, from a card built on the spot, and
-                         // the store counts that as an EXPECTED first-frame miss rather than a defect.
-                         cardKeys: cardKeys.takeKeys(),
-                         cardKeyRegistry: cardKeys)
+        // DRAINED ON EVERY EVALUATION, whatever the memo then decides, and that is not a detail.
+        // `takeKeys()` empties the registry, so a memo hit that skipped it would let the registry
+        // accumulate every frame's keys and silently grow the next real pass into one over a set nobody
+        // asked for. Drained here, handed into the key, and handed into the build.
+        let keys = cardKeys.takeKeys()
+        // Every input this derivation reads, named one per line. A seventh arriving here and not below
+        // is what `ScopeMemoInputsAreCompleteGuardTests` refuses (L40, L96).
+        var fingerprint = ScopeFingerprint()
+        fingerprint.add(prospects)
+        fingerprint.add(orgAnswers)
+        fingerprint.add(promotedProducers)
+        fingerprint.add(demotedHouses)
+        fingerprint.add(watchedSources)
+        fingerprint.add(refusedAddresses)
+        return scopeMemo.value(fingerprint: fingerprint.finalized(), cardKeys: keys, now: Date()) {
+            QueueModel.scope(from: prospects, answers: orgAnswers,
+                             overrides: ProducerOverrides(promotedRows: promotedProducers,
+                                                          demotedRows: demotedHouses),
+                             sources: watchedSources,
+                             refusals: ContactRefusal.ledger(from: refusedAddresses),
+                             // #3654's ordering contract: what the last frame drew is what this one
+                             // prebuilds. A row that was not predicted still draws, from a card built on
+                             // the spot, and the store counts that as an EXPECTED first-frame miss
+                             // rather than a defect.
+                             cardKeys: keys,
+                             cardKeyRegistry: cardKeys)
+        }
     }
 
     // #3655: the rows for an ACTION, which happens outside a render pass and so has no pass to read.

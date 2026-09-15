@@ -118,6 +118,120 @@ func scrollPosition(of pid: pid_t) -> Double? {
     firstScrollPosition(under: AXUIElementCreateApplication(pid))
 }
 
+// #3588: WHY the tree could not be read, as three separate facts.
+//
+// The one message this replaced listed all three causes and named none, so the reader had to go and
+// find out by hand which one it was. On 2026-09-14, the first time this tool was ever pointed at the
+// running app, that is exactly what happened: it reported "no window, or no permission, or no scroll
+// bar", and a probe written on the spot showed accessibility was granted, the read returned cleanly,
+// and the app had zero windows. Every fact needed to say so was already available here (L11).
+//
+// The ORDER is load bearing and is asserted in the self test. An untrusted process reads ZERO windows,
+// so asking about the window count first would report a permission problem as "no window open" and send
+// somebody to open a window that is already open: one guard answering for another (L70).
+enum TreeRefusal {
+    case notTrusted
+    case noWindow
+    case noScrollBar
+}
+
+func diagnoseTree(trusted: Bool, windows: Int) -> TreeRefusal {
+    if !trusted { return .notTrusted }
+    if windows == 0 { return .noWindow }
+    return .noScrollBar
+}
+
+func refusalMessage(_ refusal: TreeRefusal, pid: pid_t) -> String {
+    switch refusal {
+    case .notTrusted:
+        return """
+        UNMEASURED: this process has no accessibility permission, so it cannot read any app's window \
+        tree and nothing about pid \(pid) was measured.
+          Grant it in System Settings, Privacy and Security, Accessibility, to the terminal or tool \
+        running this. Nothing was posted.
+        """
+    case .noWindow:
+        return """
+        UNMEASURED: pid \(pid) has accessibility permission granted and NO WINDOW OPEN, so there is \
+        nothing to scroll.
+          Overture can run with its window closed. Open it, put a list on screen, and run this again. \
+        Nothing was posted.
+        """
+    case .noScrollBar:
+        return """
+        UNMEASURED: pid \(pid) has a window open and no VERTICAL SCROLL BAR anywhere in its tree.
+          This is the reading about the SURFACE rather than about the setup: either the list is short \
+        enough not to scroll, or it draws no scroll bar for the accessibility API to report. A scroll \
+        whose landing cannot be checked is the reading #3480 spent a day being misled by, so nothing \
+        was posted.
+        """
+    }
+}
+
+/// How many windows the app has, read through the same API the position read uses.
+func windowCount(of pid: pid_t) -> Int {
+    (attribute(AXUIElementCreateApplication(pid), kAXWindowsAttribute as String) as? [AXUIElement])?.count ?? 0
+}
+
+// #3588: whether the surface COULD have scrolled, so a position that did not move is one finding rather
+// than two folded together.
+//
+// `nil` is its own answer and is not folded into either: an extent that could not be read says nothing
+// about the surface, and reporting it as "there was nothing to scroll" would turn a failed measurement
+// into a reassuring one (L98).
+func couldHaveScrolled(visible: Double?, content: Double?) -> Bool? {
+    guard let visible, let content else { return nil }
+    return content > visible
+}
+
+/// The scroll area's own height, and the tallest thing inside it, read off the same tree.
+func scrollExtent(of pid: pid_t) -> (visible: Double?, content: Double?) {
+    guard let area = firstScrollArea(under: AXUIElementCreateApplication(pid)) else { return (nil, nil) }
+    func height(_ element: AXUIElement) -> Double? {
+        guard let value = attribute(element, kAXSizeAttribute as String) else { return nil }
+        var size = CGSize.zero
+        guard AXValueGetValue(value as! AXValue, .cgSize, &size) else { return nil }
+        return size.height
+    }
+    // The TALLEST child rather than the first: the content group sits among the headings and controls
+    // the surface also puts in the scroll area, and which index it lands on is a layout detail (L237).
+    let tallest = children(of: area).compactMap(height).max()
+    return (height(area), tallest)
+}
+
+/// What the extent says about a position that did not move, in one line.
+func extentLine(of pid: pid_t) -> String {
+    let extent = scrollExtent(of: pid)
+    switch couldHaveScrolled(visible: extent.visible, content: extent.content) {
+    case true:
+        return """
+          Its content is \(Int(extent.content ?? 0))pt inside a \(Int(extent.visible ?? 0))pt viewport, so \
+        it COULD have scrolled. A posted wheel event is not driving this surface.
+        """
+    case false:
+        return """
+          Its content is \(Int(extent.content ?? 0))pt inside a \(Int(extent.visible ?? 0))pt viewport, so \
+        there was nothing to scroll. Put a longer list on screen and measure again.
+        """
+    case nil:
+        return """
+          Whether it COULD have scrolled could not be read, so this says nothing about the surface \
+        either way.
+        """
+    }
+}
+
+func firstScrollArea(under element: AXUIElement, depth: Int = 0) -> AXUIElement? {
+    guard depth < 40 else { return nil }
+    if let role = attribute(element, kAXRoleAttribute as String) as? String, role == kAXScrollAreaRole {
+        return element
+    }
+    for child in children(of: element) {
+        if let found = firstScrollArea(under: child, depth: depth + 1) { return found }
+    }
+    return nil
+}
+
 // --- posting ---------------------------------------------------------------------------------------------
 
 func postWheel(to pid: pid_t, turns: Int, delta: Int32) -> Bool {
@@ -175,6 +289,37 @@ func selfTest() -> Int32 {
     check("--turns 0 is refused", refused(["--pid", "9", "--turns", "0"]) != nil)
     check("--delta 0 is refused", refused(["--pid", "9", "--delta", "0"]) != nil)
 
+    // #3588: the three reasons the tree can be unreadable are three different facts with three
+    // different remedies, and until now one message listed all three and named none (L11). Measured
+    // 2026-09-14 against Dan's running Release app: the tool said UNMEASURED naming all three, and a
+    // hand-written probe then showed accessibility WAS granted, the read SUCCEEDED, and the app had
+    // zero windows. The tool had every fact it needed to say that and said none of them.
+    check("no accessibility permission is its own answer",
+          diagnoseTree(trusted: false, windows: 0) == .notTrusted)
+    check("permission is checked BEFORE the window count, because an untrusted read reports zero windows",
+          diagnoseTree(trusted: false, windows: 3) == .notTrusted)
+    check("a trusted read of an app with no window is its own answer",
+          diagnoseTree(trusted: true, windows: 0) == .noWindow)
+    check("a window with no vertical scroll bar in it is the third, and the only one about the surface",
+          diagnoseTree(trusted: true, windows: 1) == .noScrollBar)
+    check("each answer names a different remedy",
+          Set([TreeRefusal.notTrusted, .noWindow, .noScrollBar].map { refusalMessage($0, pid: 1) }).count == 3)
+
+    // #3588: a surface that DID NOT MOVE is two different findings and the message used to be one.
+    // Measured 2026-09-14 on Dan's running Release app: the scroll area's viewport is 875pt and its
+    // content group is 2,600pt over 217 children, so the list could certainly have scrolled, and the
+    // bar still read 0.0000 after 12 down turns. Told apart by the same rule as every other pair here,
+    // because "the list was already at its end" and "the event did not drive the surface" call for
+    // opposite next steps (L11).
+    check("content taller than the viewport means the surface COULD have scrolled",
+          couldHaveScrolled(visible: 875, content: 2600) == true)
+    check("content that fits means there was nothing to scroll",
+          couldHaveScrolled(visible: 875, content: 400) == false)
+    check("content exactly the height of the viewport is nothing to scroll",
+          couldHaveScrolled(visible: 875, content: 875) == false)
+    check("an unreadable extent is neither, and says so rather than guessing",
+          couldHaveScrolled(visible: nil, content: nil) == nil)
+
     let defaults = parsed(["--pid", "42"])
     check("a bare --pid parses", defaults?.pid == 42)
     check("and defaults to 12 turns", defaults?.turns == 12)
@@ -221,12 +366,9 @@ guard NSRunningApplication(processIdentifier: pid) != nil else {
 
 let before = options.requireMovement ? scrollPosition(of: pid) : nil
 if options.requireMovement && before == nil {
-    print("""
-    UNMEASURED: could not read a vertical scroll bar anywhere in pid \(pid)'s window tree.
-      Either the app has no window open, or this terminal has not been granted accessibility \
-    permission, or the surface draws no scroll bar. Nothing was posted: a scroll whose landing cannot \
-    be checked is the reading #3480 spent a day being misled by.
-    """)
+    // #3588: read BOTH facts and say which of the three it is, rather than listing all three.
+    print(refusalMessage(diagnoseTree(trusted: AXIsProcessTrusted(), windows: windowCount(of: pid)),
+                         pid: pid))
     exit(2)
 }
 
@@ -259,6 +401,7 @@ print("""
 DID NOT MOVE: the scroll position is still \(before.map { String(format: "%.4f", $0) } ?? "unknown") \
 after \(options.turns) turns.
   The event was posted and the tree was readable, so this is a real finding about the surface rather \
-than a failure to measure. It is what a list already scrolled to its end looks like too.
+than a failure to measure.
+\(extentLine(of: pid))
 """)
 exit(1)
