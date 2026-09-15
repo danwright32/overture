@@ -111,6 +111,10 @@ resolve_pr() {
 # poll is the one thing this shape costs against a plain flock, where the kernel does it for free, and
 # it is bounded, tested, and stated rather than left to be discovered.
 VERIFY_SLOT_HOLDER_PID=""
+# The holder's own scratch, remembered so the release can remove it. A scratch directory that nothing
+# deletes is exactly the habit `scripts/lib/scratch.sh` exists to make visible, and the fixture runner
+# refuses a run that leaves one behind, which is how this was caught rather than shipped.
+VERIFY_SLOT_SCRATCH=""
 # TWO INTERVALS, because they answer two different questions and one number for both makes the second
 # decide the first. This is how fast a DEAD run frees the slot, paid as one builtin wake a second by a
 # process that is otherwise asleep.
@@ -153,6 +157,7 @@ take_verify_slot() {
   # and the holder's whole job is to watch THIS run.
   local run_pid=$$
   scratch="$(overture_scratch_dir verify-slot)" || return 1
+  VERIFY_SLOT_SCRATCH="${scratch}"
   ready="${scratch}/state"
   # A SEPARATE marker, never overwritten, because contention is a fact about this wait while `state`
   # moves on to "held" the moment the slot comes free. Reading contention out of a value that is about
@@ -395,6 +400,12 @@ release_verify_slot() {
     kill "${VERIFY_SLOT_HOLDER_PID}" 2>/dev/null || true
     wait "${VERIFY_SLOT_HOLDER_PID}" 2>/dev/null || true
     VERIFY_SLOT_HOLDER_PID=""
+  fi
+  # AFTER the holder has gone, never before: it has the fifo open, and removing the scratch from under
+  # a live holder would leave it reading a path that is no longer there.
+  if [[ -n "${VERIFY_SLOT_SCRATCH}" ]]; then
+    rm -rf "${VERIFY_SLOT_SCRATCH}"
+    VERIFY_SLOT_SCRATCH=""
   fi
 }
 
