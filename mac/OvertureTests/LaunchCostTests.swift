@@ -31,6 +31,11 @@ import Foundation
 //
 // IT REPORTS, it does not assert a threshold. A millisecond ceiling here would be measuring whatever
 // else the Mac is doing (L224), and the reason to have the numbers is to know which term to attack.
+// @MainActor because two of the launch steps it drives are: `ScoutExtractService.isRunning` and
+// `PrepQueueService.slotStatus` are main-actor isolated, which is itself part of what this measures.
+// Launch does that work ON the main thread, so a suite that drove them from anywhere else would be
+// timing something the app never does (L472).
+@MainActor
 @Suite("What launch costs on the main thread (#3785)")
 final class LaunchCostTests {
 
