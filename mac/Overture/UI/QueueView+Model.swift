@@ -2820,6 +2820,57 @@ enum QueueModel {
     // let a triage decision quietly change which organisations qualify (see OrgAnswerLedger). Both
     // default to empty so the many call sites that only want rows (Archive's own list, tests) are
     // unaffected and simply inherit nothing.
+    // #3742: the two whole-corpus producer tables, as ONE value that can be built once and reused.
+    //
+    // WHAT THEY COST. `ProducerGate.VenueBrands` folds every distinct presenter in the store against
+    // every venue spelling in it, to decide which presenter names are really the building's own brand.
+    // Measured on the live store 2026-09-11 it is 40.6 ms a pass (5 runs, 40.1 to 42.5), the largest
+    // single piece inside `scope`, and the `Corpus` it is built from is 27.2 ms beside it (#3743). It is
+    // not an un-optimised loop: #1963 indexed it and its own comment records that this init used to be
+    // the biggest single slice of the queue's derivation. It costs what it costs because there are
+    // roughly 400 distinct presenters and the store keeps growing.
+    //
+    // WHY THEY ARE ONE VALUE. They are a pure function of the SAME two inputs: the corpus's
+    // `(presenter, venue)` pairs and the `ProducerOverrides`. Held apart, a caller could hand in a
+    // corpus built from one store state and brands built from another, which is a wrong answer about
+    // which presenters the producer gate admits, which is a show Dan is not offered. Together they can
+    // only be built from one pair of inputs at one instant.
+    //
+    // WHY REUSING THEM IS SAFE, and it is the whole issue. Neither input changes on a scroll, a
+    // keystroke, a sheet opening or a stage change, which is most of what makes a pass run; nor on a
+    // strike, a dismissal, an approval or a status edit, which is most of what Dan does. They change
+    // when a show with a new presenter or a new venue arrives, or when Dan promotes or demotes one.
+    // The KEY is derived from those inputs and from nothing cheaper (L40): a count would be blind to a
+    // presenter swapped for another, and a timestamp would be blind to everything.
+    struct ProducerTables {
+        let corpus: ProducerGate.Corpus
+        let venueBrands: ProducerGate.VenueBrands
+
+        init(shows: [ProducerGate.Show], overrides: ProducerOverrides) {
+            corpus = ProducerGate.Corpus(shows)
+            venueBrands = ProducerGate.VenueBrands(corpus: corpus, overrides: overrides)
+        }
+
+        /// The key these tables are a function of: every `(presenter, venue)` pair, in order, plus the
+        /// overrides. Content rather than identity, because a presenter edited IN PLACE changes the
+        /// answer and leaves every object where it was.
+        static func key(shows: [ProducerGate.Show], overrides: ProducerOverrides) -> Int {
+            var hasher = Hasher()
+            hasher.combine(shows.count)
+            for show in shows {
+                hasher.combine(show.presenter)
+                hasher.combine(show.venue)
+            }
+            // The overrides as their two SORTED member lists rather than as a value, because
+            // `ProducerOverrides` is Equatable and not Hashable, and a Set's iteration order is not
+            // stable between instances: hashing it unsorted would make two equal overrides key
+            // differently and the memo would never hit.
+            hasher.combine(overrides.promoted.sorted())
+            hasher.combine(overrides.demoted.sorted())
+            return hasher.finalize()
+        }
+    }
+
     static func scope(from prospects: [Prospect],
                       answers: [OrgReachabilityAnswer] = [], corpus: [Prospect]? = nil,
                       // #3652: the rows the cross-venue engagement link is CLUSTERED over, which is not
@@ -2867,6 +2918,10 @@ enum QueueModel {
                       // Where the render path's requests are recorded for the NEXT pass. Nil everywhere
                       // but the app.
                       cardKeyRegistry: CardKeyRegistry? = nil,
+                      // #3742: the producer tables, already built. Nil means "build them here", which is
+                      // what every test call site and every caller with no memo does, so this is a no-op
+                      // until a surface hands them in.
+                      producerTables: ProducerTables? = nil,
                       today: String? = nil) -> Scope {
         let day = today ?? EasternDate.today(now)
         // #3652/#3644: over `rowsForLinking`, which defaults to the rows being built. Its three
@@ -2878,9 +2933,12 @@ enum QueueModel {
         // derivations that need it. `inheritedAnswers` built one and `ProducerGate.VenueBrands` built an
         // equivalent one from the same shows in the same pass; measured on the live store the index alone
         // is 27.2 ms, so it was being paid twice per render.
-        let producerCorpus = ProducerGate.Corpus((corpus ?? prospects).map {
-            ProducerGate.Show(presenter: $0.presenter, venue: $0.venue)
-        })
+        // #3742: built here only when the caller did not hand them in. The shows are mapped once either
+        // way, because the caller's key is derived from the same mapping.
+        let tables = producerTables ?? ProducerTables(
+            shows: (corpus ?? prospects).map { ProducerGate.Show(presenter: $0.presenter, venue: $0.venue) },
+            overrides: overrides)
+        let producerCorpus = tables.corpus
         let inherited = inheritedAnswers(answers, corpus: corpus ?? prospects,
                                          overrides: overrides, refusals: refusals,
                                          heldKeys: heldKeys, now: now,
@@ -2890,7 +2948,7 @@ enum QueueModel {
         // store against every venue spelling in it (roughly 400 by 114 on Dan's), which is a cost a card
         // must not pay on every render. The corpus is deliberately the unfiltered store rather than the
         // caller's rows, so a dismissal cannot quietly change which names draw.
-        let venueBrands = ProducerGate.VenueBrands(corpus: producerCorpus, overrides: overrides)
+        let venueBrands = tables.venueBrands
         // #1732: how many rows each organisation carries, over the SAME unfiltered corpus venueBrands
         // judges against, so a dismissal cannot quietly take an organisation under the bar and remove the
         // control from the rows still showing. Built once here for the same reason as venueBrands above.

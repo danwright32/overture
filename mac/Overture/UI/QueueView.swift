@@ -89,6 +89,14 @@ struct QueueView: View {
 
     // #1570: Dan's standing geography refusals as one value, handed to StageNavigation so the stage
     // lists, the pill counts and the masthead all apply them. They used to reach only the masthead.
+    // #3742: the producer tables, memoised on their own inputs rather than on the pass's.
+    //
+    // A SECOND memo beside whatever else this view holds, and deliberately not folded into one: the
+    // pass's key changes on every store change, and these two tables change only when a presenter, a
+    // venue or an override does. Folding them together would make this table rebuild on every strike
+    // and dismissal, which is exactly the 68 ms #3742 exists to stop paying.
+    @State private var producerTablesMemo = ScopeMemo<QueueModel.ProducerTables>()
+
     private var geo: GeoRefusals {
         GeoRefusals(userExcludedTowns: userExcludedTowns, allowedSeedTowns: allowedSeedTowns)
     }
@@ -392,13 +400,26 @@ struct QueueView: View {
         // Same two marker reads either way: `runInFlight` is this call now.
         let runStatus = PrepQueueService.slotStatus(now: now)
         let inFlight = runStatus.inFlight
+        // #3742: built once and reused until a presenter, a venue or an override moves. The key is
+        // derived from those inputs and from nothing cheaper (L40): the shows are mapped here, the key
+        // is taken from that mapping, and the tables are built from the same mapping on a miss, so the
+        // three can never describe different store states.
+        let shows = allProspects.map { ProducerGate.Show(presenter: $0.presenter, venue: $0.venue) }
+        let overrides = ProducerOverrides(promotedRows: promotedProducers, demotedRows: demotedHouses)
+        let tables = producerTablesMemo.value(
+            fingerprint: QueueModel.ProducerTables.key(shows: shows, overrides: overrides),
+            // NO clock window. These tables read no clock at all, so a staleness bound here would be
+            // one rebuild of a 68 ms table every two seconds of active use, bought for nothing.
+            cardKeys: [], now: now, staleAfter: .never) {
+            QueueModel.ProducerTables(shows: shows, overrides: overrides)
+        }
         return QueueRenderPass.make(QueueRenderPass.Inputs(
             allProspects: QueueRenderPass.Corpus(allProspects),
             inquiries: inquiries,
             orgAnswers: orgAnswers,
             sources: watchedSources,
             refusals: ContactRefusal.ledger(from: refusedAddresses),
-            overrides: ProducerOverrides(promotedRows: promotedProducers, demotedRows: demotedHouses),
+            overrides: overrides,
             context: StageContext(now: now, geo: geo, clients: clientWindow),
             focusedStage: focusedStage,
             focusedKeys: focusedKeys,
@@ -419,7 +440,8 @@ struct QueueView: View {
             // than read, so the set is what the last frame drew and not everything Dan has scrolled past
             // since the app opened.
             requestedCardKeys: cardKeys.takeKeys(),
-            cardKeyRegistry: cardKeys))
+            cardKeyRegistry: cardKeys,
+            producerTables: tables))
     }
 
     #if DEBUG

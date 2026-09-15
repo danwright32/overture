@@ -335,6 +335,12 @@ enum QueueRenderPass {
         // Where this pass's own render path will record what it draws, for the pass after it. Nil in
         // every test that measures one pass on its own, which have no next frame.
         var cardKeyRegistry: QueueModel.CardKeyRegistry? = nil
+        // #3742: the presenter-against-venue table and the corpus it is built from, when the caller
+        // already has them. 40.6 ms and 27.2 ms respectively on the live store, and neither input
+        // changes on a strike, a dismissal, an approval or a status edit, which is most of what Dan
+        // does. Nil means "build them in the pass", which is what every test call site does, so the
+        // cost tests keep measuring the whole derivation.
+        var producerTables: QueueModel.ProducerTables? = nil
     }
 
     @MainActor
@@ -358,7 +364,11 @@ enum QueueRenderPass {
                                      // sentence and the stage's decision come from one answer.
                                      clients: context.clients, now: context.now,
                                      cardKeys: i.requestedCardKeys,
-                                     cardKeyRegistry: i.cardKeyRegistry, today: context.today)
+                                     cardKeyRegistry: i.cardKeyRegistry,
+                                     // #3742: the producer tables, when the caller has them in hand.
+                                     // Nil everywhere but the app, which is the same rule every other
+                                     // prebuilt value on `Inputs` follows.
+                                     producerTables: i.producerTables, today: context.today)
         // #3653 Phase 3: one build, two halves. The cards are what the screen draws; the rows are what
         // every whole-scope sweep below reads, and they cost one contacts walk between them rather than
         // one each.
