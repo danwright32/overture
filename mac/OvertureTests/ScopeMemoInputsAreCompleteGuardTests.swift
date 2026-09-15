@@ -21,6 +21,16 @@ struct ScopeMemoInputsAreCompleteGuardTests {
     private static let appRoot = RepoRoot.mac.appendingPathComponent("Overture")
     private static let fileFloor = 100
 
+    /// Declarations whose memo keys through a named function rather than through `ScopeFingerprint`,
+    /// with the test that asserts THAT key is complete. Written as the reason plus its evidence, never
+    /// as a bare name: an exemption with nothing behind it is worse than no list (L233, L362).
+    static let keyedElsewhere: [String: String] = [
+        "QueueView.swift.makeRenderData":
+            "keys through QueueModel.ProducerTables.key, which hashes the presenter and venue CONTENT "
+            + "rather than identity because a name edited in place changes the answer; its completeness "
+            + "is driven in all three directions by ProducerTablesReuseTests (#3742)",
+    ]
+
     /// Every `@Model` class the app declares, read off the declarations.
     static func modelTypes() -> Set<String> {
         var names: Set<String> = []
@@ -81,9 +91,26 @@ struct ScopeMemoInputsAreCompleteGuardTests {
             for (name, declaration) in RedrawRegion.declarations(in: code)
             where declaration.body.contains("Memo.value(") {
                 derivations.append("\(file.name).\(name)")
-                for (collection, element) in collections
-                where declaration.body.contains(collection) && !declaration.body.contains(".add(\(collection))") {
-                    missing.append("\(file.name).\(name) reads \(collection): [\(element)] and never adds it to the key")
+                for (collection, element) in collections where declaration.body.contains(collection) {
+                    // TWO ways a collection can be in the key, and both are real. `.add(name)` is the
+                    // `ScopeFingerprint` builder, which hashes IDENTITY. The other is a named key
+                    // function over a value DERIVED from the collection, which is what #3742's producer
+                    // tables need: their key has to hash the presenter and venue CONTENT, because a
+                    // presenter edited in place changes the answer and leaves every pointer where it
+                    // was, and an identity hash cannot see that.
+                    //
+                    // So a declaration that passes a `fingerprint:` built by something other than
+                    // `ScopeFingerprint` is accepted here, and its completeness is asserted by the tests
+                    // named in `keyedElsewhere` instead. That is not a hole: those tests drive the
+                    // invalidation in every direction, which is strictly more than this text rule can
+                    // see. An entry with no such test would be an exemption with no reason behind it,
+                    // which is worse than no list (L233).
+                    let addsIt = declaration.body.contains(".add(\(collection))")
+                    let derivesTheKey = Self.keyedElsewhere["\(file.name).\(name)"] != nil
+                        && declaration.body.contains("fingerprint:")
+                    if !addsIt && !derivesTheKey {
+                        missing.append("\(file.name).\(name) reads \(collection): [\(element)] and never adds it to the key")
+                    }
                 }
             }
         }
@@ -93,6 +120,14 @@ struct ScopeMemoInputsAreCompleteGuardTests {
             nothing under mac/Overture runs a derivation through ScopeMemo, so this guard checked \
             nothing at all
             """)
+        // An exemption whose evidence has gone is an exemption with no reason behind it, so the named
+        // test file has to still be there (L233).
+        for (declaration, reason) in Self.keyedElsewhere {
+            #expect(!SourceGuardHelper.source("OvertureTests/ProducerTablesReuseTests.swift").isEmpty,
+                    Comment(rawValue: "\(declaration) is exempted because \(reason), and that test is "
+                            + "gone, so the exemption now covers nothing"))
+        }
+
         #expect(missing.isEmpty, Comment(rawValue: """
             \(missing.joined(separator: "; ")). A memo keyed on fewer inputs than its derivation reads \
             serves an answer that disagrees with the store the moment the missing one changes, and \

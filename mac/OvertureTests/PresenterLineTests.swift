@@ -222,7 +222,18 @@ struct PresenterLineWiringTests {
             Issue.record("QueueModel.scope(from:) is gone, so this guard is asking nothing")
             return
         }
-        #expect(body.contains("ProducerGate.VenueBrands("))
+        // #3742 RE-SPELLED, not weakened. This asserted the literal `ProducerGate.VenueBrands(` and went
+        // red when the table moved into `QueueModel.ProducerTables`, which builds it from the same corpus
+        // and hands it in so the two whole-corpus tables can be reused between passes. The rule this
+        // defends is that `scope` HAS a brand table built from the whole store, and that is still true;
+        // what broke was one rendering of it (L103). Checked against the reversal rule before changing
+        // it (L252, L430): #1598's whole-store corpus is not reversed, it is what `ProducerTables` is
+        // constructed from, and the assertion below still pins it.
+        let buildsTheTableItself = body.contains("ProducerGate.VenueBrands(")
+        let takesOneBuiltFromTheSameCorpus = body.contains("ProducerTables(") && body.contains("venueBrands")
+        #expect(buildsTheTableItself || takesOneBuiltFromTheSameCorpus,
+                Comment(rawValue: "QueueModel.scope neither builds a brand table nor takes one, so the "
+                        + "gate is inert and every house brand in the store would draw"))
         // #3654: the per-card decoration moved out of the builder into `QueueModel.card`, which is the one
         // place a card is made, reached both by the pass's prebuild and by a row that arrives on screen
         // after it. Asserted THERE, or this guard would be satisfied by the table being built and say

@@ -43,7 +43,31 @@ import Observation
 final class ScopeMemo<Value> {
 
     /// How long an answer may be served before the clock alone makes it stale. See part 4 above.
+    ///
+    /// The DEFAULT, for a derivation that reads the clock. A derivation that does not read it at all
+    /// passes `staleAfter: .never`, and #3742 is why that exists: the producer tables are a function of
+    /// the corpus's presenter and venue pairs and the overrides, with no clock anywhere in them, so a
+    /// two second window there is not a safeguard, it is one rebuild of a 68 ms table every two seconds
+    /// of active use, bought for nothing. A TTL that cannot protect anything is overhead wearing the
+    /// clothes of a guard.
     static var staleAfterSeconds: Double { 2 }
+
+    /// How long this memo's answer may be served before the clock alone makes it stale.
+    ///
+    /// Spelled as a TYPE rather than as an optional Double so the two cases are named at the call site:
+    /// `.seconds(2)` says a clock reaches this derivation and here is the bound, `.never` says it does
+    /// not. An optional would make the second case read as "nobody set one" (L544).
+    enum Staleness {
+        case seconds(Double)
+        case never
+
+        func hasExpired(builtAt: Date, now: Date) -> Bool {
+            switch self {
+            case .seconds(let window): return now.timeIntervalSince(builtAt) >= window
+            case .never: return false
+            }
+        }
+    }
 
     private struct Key: Equatable {
         let fingerprint: Int
@@ -72,13 +96,14 @@ final class ScopeMemo<Value> {
     func value(fingerprint: Int,
                cardKeys: Set<String>,
                now: Date,
+               staleAfter: Staleness = .seconds(ScopeMemo.staleAfterSeconds),
                build: () -> Value) -> Value {
         let wanted = Key(fingerprint: fingerprint, cardKeys: cardKeys)
         if !staleFlag.isSet,
            let key, key == wanted,
            let value,
            let builtAt,
-           now.timeIntervalSince(builtAt) < Self.staleAfterSeconds {
+           !staleAfter.hasExpired(builtAt: builtAt, now: now) {
             return value
         }
 

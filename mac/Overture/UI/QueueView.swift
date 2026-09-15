@@ -408,7 +408,9 @@ struct QueueView: View {
         let overrides = ProducerOverrides(promotedRows: promotedProducers, demotedRows: demotedHouses)
         let tables = producerTablesMemo.value(
             fingerprint: QueueModel.ProducerTables.key(shows: shows, overrides: overrides),
-            cardKeys: [], now: now) {
+            // NO clock window. These tables read no clock at all, so a staleness bound here would be
+            // one rebuild of a 68 ms table every two seconds of active use, bought for nothing.
+            cardKeys: [], now: now, staleAfter: .never) {
             QueueModel.ProducerTables(shows: shows, overrides: overrides)
         }
         return QueueRenderPass.make(QueueRenderPass.Inputs(
@@ -438,8 +440,8 @@ struct QueueView: View {
             // than read, so the set is what the last frame drew and not everything Dan has scrolled past
             // since the app opened.
             requestedCardKeys: cardKeys.takeKeys(),
-            producerTables: tables,
-            cardKeyRegistry: cardKeys))
+            cardKeyRegistry: cardKeys,
+            producerTables: tables))
     }
 
     #if DEBUG

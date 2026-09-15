@@ -133,6 +133,27 @@ struct ScopeMemoTests {
         #expect(memo.builds == 2)
     }
 
+    @Test func aDerivationThatReadsNoClockIsNeverStaleFromTheClockAlone() throws {
+        // #3742: the other half of the window, and it is asserted rather than assumed. A memo over a
+        // derivation with no clock in it must NOT rebuild on age, because there is nothing for a window
+        // to protect: it would be one rebuild of the whole table per window, bought for nothing.
+        let ctx = ModelContext(try container())
+        let rows = seed(ctx, rows: 12)
+        let memo = ScopeMemo<Int>()
+
+        func evaluate(at when: Date) -> Int {
+            memo.value(fingerprint: Self.fingerprint(rows), cardKeys: [], now: when,
+                       staleAfter: .never) { rows.count }
+        }
+
+        _ = evaluate(at: t0)
+        _ = evaluate(at: t0.addingTimeInterval(ScopeMemo<Int>.staleAfterSeconds * 1_000))
+        #expect(memo.builds == 1, """
+            a memo told its derivation reads no clock rebuilt on age anyway, so `.never` is not the \
+            choice it says it is
+            """)
+    }
+
     @Test func anAnswerOlderThanTheWindowRebuilds() throws {
         let ctx = ModelContext(try container())
         let rows = seed(ctx, rows: 12)

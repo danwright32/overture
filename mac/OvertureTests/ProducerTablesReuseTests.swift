@@ -14,6 +14,7 @@ import SwiftData
 // regression no cost test would see. So this suite is mostly about the key, and the three directions it
 // has to be right in are each produced here rather than reasoned about: a presenter, a venue, and an
 // override. A key that misses one is silently wrong only for that one (L40).
+@MainActor
 @Suite("The producer tables are reused only while their inputs hold (#3742)")
 struct ProducerTablesReuseTests {
 
