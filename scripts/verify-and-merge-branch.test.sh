@@ -486,8 +486,14 @@ release_verify_slot
 # Driven through setup_worktree and release_verify_slot rather than by re-implementing the locking
 # here, because the thing under test is what THIS script leaves behind (L472).
 setup_worktree "feature" >/dev/null 2>&1
-ORPHAN_MARKER="${FIX_ROOT}/orphan-alive"
-( sleep 30; rm -f "${ORPHAN_MARKER}" ) &
+# The stand-in orphan BLOCKS ON A BUILTIN rather than forking a sleep, so the kill below reaches all
+# of it. A `( sleep 30; ... ) &` here leaves the sleep running when its subshell is killed, and the
+# runner's leak check correctly refuses a fixture that leaves a process behind. Third time this shape
+# has bitten in this change, which is the argument for never writing it again rather than for fixing
+# it once: opening a fifo for reading waits for a writer that never comes, and costs no process.
+ORPHAN_FIFO="${FIX_ROOT}/orphan-block"
+mkfifo "${ORPHAN_FIFO}"
+( read -r _ < "${ORPHAN_FIFO}" ) &
 SLOT_ORPHAN=$!
 release_verify_slot
 if flock -n "${OVERTURE_VERIFY_WORKTREE_LOCK}" true 2>/dev/null; then
