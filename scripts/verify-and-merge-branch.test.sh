@@ -619,6 +619,13 @@ if flock -n "${KILL_LOCK}" true 2>/dev/null; then
 else
   fail "a killed verification left the slot locked: a crash must release it, which is what the kernel flock gave for free and what this holder has to keep (#3680, L409)"
 fi
+# The killed taker's scratch, removed HERE because it is the one path that cannot remove its own: a
+# `kill -9` reaches no cleanup. That is true of the product too, and it is the right trade rather than
+# a gap: what a crashed verification leaves behind is three small files in the temp folder, while what
+# it must NOT leave behind is the slot, which the assertion above is about. The fixture runner counts
+# leftovers in its own temp folder, so without this line the run is refused for a directory the test
+# created on purpose.
+rm -rf "${TMPDIR:-/tmp}"/verify-slot.* 2>/dev/null || true
 
 if flock -n "${OVERTURE_VERIFY_WORKTREE_LOCK}" true 2>/dev/null; then
   pass "the slot lock is released when the verification ends"
