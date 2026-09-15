@@ -541,6 +541,30 @@ if [[ -d "${DERIVED_ROOT}/Overture-slot" ]]; then
 else
   fail "the warm build cache must survive the verification"
 fi
+# #3680: and the holder is ASLEEP while it holds the slot, not spinning.
+#
+# Asserted because a mutation proved nothing else does: replacing the fifo wait with something that
+# returns immediately leaves every other assertion here green while the holder burns a core for the
+# whole verification. That is not hypothetical in this repo, it is #3682, where a spin went unnoticed
+# for five hours and thirty-seven minutes. Measured as CPU time actually consumed over a real second
+# rather than asserted about the source text, because the claim is about what the process does (L63).
+setup_worktree "feature" >/dev/null 2>&1
+IDLE_PID="${VERIFY_SLOT_HOLDER_PID}"
+cpu_hundredths() {
+  ps -o time= -p "$1" 2>/dev/null | tr -d ' ' | awk -F'[:.]' '{ print ($1 * 6000) + ($2 * 100) + $3 }'
+}
+CPU_BEFORE="$(cpu_hundredths "${IDLE_PID}")"
+sleep 2
+CPU_AFTER="$(cpu_hundredths "${IDLE_PID}")"
+if [[ -z "${CPU_BEFORE}" || -z "${CPU_AFTER}" ]]; then
+  fail "could not read the holder's CPU time, so whether it spins was not measured (L98)"
+elif [[ $(( CPU_AFTER - CPU_BEFORE )) -le 20 ]]; then
+  pass "the holder sleeps while it holds the slot instead of spinning"
+else
+  fail "the holder burned $(( CPU_AFTER - CPU_BEFORE )) hundredths of a second of CPU over two seconds of holding: it is spinning, which is #3682's defect in the process that now holds every merge behind it"
+fi
+release_verify_slot
+
 # #3680: and released when a verification DIES, which is the property the plain `exec 9>` had for
 # free and the one a swap to a lock directory or a pid file would silently lose (L409). The holder
 # watches the run that asked for the slot and ends when it goes, so a killed or crashed verification
