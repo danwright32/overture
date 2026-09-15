@@ -174,43 +174,58 @@ struct ContradictedCancellationTests {
     // beside the app says.
     @Test(.enabled(if: liveStoreExists, "no live store on this machine"))
     func noFutureShowIsFlaggedGoneWhileALiveTwinContradictsIt() async throws {
-        await RealStoreTestLock.shared.acquire()
-        defer { Task { await RealStoreTestLock.shared.release() } }
-
-        let dir = try sandboxes.make(named: "contradicted-cancellation")
-        guard let clone = try LiveStoreClone.makeClone(in: dir) else { return }
-        let ctx = ModelContext(try container(at: clone))
-        LaunchReplay.run(in: ctx, handoffDirectory: try sandboxes.make(named: "contradicted-handoff"))
-        try ctx.save()
-
-        let all = try ctx.fetch(FetchDescriptor<Prospect>())
-        let today = QueueModel.easternToday()
-        let onScreen = all.filter { ($0.runEndDate ?? $0.performanceDate ?? "") >= today }
-        let flagged = onScreen.filter(\.disappearedFromFeed)
-        let contradicted = flagged.filter { ContradictedCancellation.liveTwin(of: $0, among: all) != nil }
-
-        print("Contradicted cancellation corpus: \(flagged.count) future row(s) flagged gone, "
-              + "of \(onScreen.count) on screen; \(contradicted.count) contradicted by a live twin")
-
-        // ASSERTED THROUGH WHAT IS DRAWN, never through the stored field, and the difference is the
-        // whole point of the fix. `disappearedFromFeed` on the model stays true: the row really has
-        // missed thirteen sweeps, and #3278's first half, which stops the duplicate being minted at
-        // all, is not what this ships. What changes is that the CARD does not carry the warning while
-        // the store holds a live twin. A test asserting the stored field were empty would be red
-        // forever and would be asking for a fix nobody wrote (L63).
+        // Released INLINE on every path, never from a `defer { Task { ... } }`, which is a promise to
+        // release after this test has already returned and the next suite has already started building
+        // its container (#2190/#2195). `RealStoreLockPairingTests` caught exactly that shape here.
         //
-        // And it is asked of the PASS, over the real corpus, rather than of `contradictedKeys` again.
-        // Comparing the set against the rows `liveTwin` picks out would be one rule checked against
-        // itself and could not go red for any reason (L70); this crosses every step between the rule
-        // and the screen.
-        var data = QueueModel.scope(from: onScreen, corpus: all)
-        let stillWarned = contradicted.compactMap { show -> String? in
-            guard let row = data.rows.first(where: { $0.id == show.naturalKey }) else { return nil }
-            return data.cards.card(for: row).disappearedFromFeed ? show.groupName : nil
+        // THREE paths, not two: the throw, the ordinary end, and the early return when this machine has
+        // no live store to clone. The third is the one a do/catch alone does not cover.
+        await RealStoreTestLock.shared.acquire()
+        do {
+            let dir = try sandboxes.make(named: "contradicted-cancellation")
+            guard let clone = try LiveStoreClone.makeClone(in: dir) else {
+                await RealStoreTestLock.shared.release()
+                return
+            }
+            let ctx = ModelContext(try container(at: clone))
+            LaunchReplay.run(in: ctx, handoffDirectory: try sandboxes.make(named: "contradicted-handoff"))
+            try ctx.save()
+
+            let all = try ctx.fetch(FetchDescriptor<Prospect>())
+            let today = QueueModel.easternToday()
+            let onScreen = all.filter { ($0.runEndDate ?? $0.performanceDate ?? "") >= today }
+            let flagged = onScreen.filter(\.disappearedFromFeed)
+            let contradicted = flagged.filter {
+                ContradictedCancellation.liveTwin(of: $0, among: all) != nil
+            }
+
+            print("Contradicted cancellation corpus: \(flagged.count) future row(s) flagged gone, "
+                  + "of \(onScreen.count) on screen; \(contradicted.count) contradicted by a live twin")
+
+            // ASSERTED THROUGH WHAT IS DRAWN, never through the stored field, and the difference is the
+            // whole point of the fix. `disappearedFromFeed` on the model stays true: the row really has
+            // missed thirteen sweeps, and #3278's first half, which stops the duplicate being minted at
+            // all, is not what this ships. What changes is that the CARD does not carry the warning
+            // while the store holds a live twin. A test asserting the stored field were empty would be
+            // red forever and would be asking for a fix nobody wrote (L63).
+            //
+            // And it is asked of the PASS, over the real corpus, rather than of `contradictedKeys`
+            // again. Comparing the set against the rows `liveTwin` picks out would be one rule checked
+            // against itself and could not go red for any reason (L70); this crosses every step between
+            // the rule and the screen.
+            var data = QueueModel.scope(from: onScreen, corpus: all)
+            let stillWarned = contradicted.compactMap { show -> String? in
+                guard let row = data.rows.first(where: { $0.id == show.naturalKey }) else { return nil }
+                return data.cards.card(for: row).disappearedFromFeed ? show.groupName : nil
+            }
+            #expect(stillWarned.isEmpty,
+                    Comment(rawValue: "\(stillWarned.count) of \(flagged.count) cancellation "
+                            + "warning(s) would still be drawn while a live twin contradicts them "
+                            + "(#3278): \(stillWarned.prefix(4))"))
+            await RealStoreTestLock.shared.release()
+        } catch {
+            await RealStoreTestLock.shared.release()
+            throw error
         }
-        #expect(stillWarned.isEmpty,
-                Comment(rawValue: "\(stillWarned.count) of \(flagged.count) cancellation warning(s) "
-                        + "would still be drawn while a live twin contradicts them (#3278): "
-                        + "\(stillWarned.prefix(4))"))
     }
 }
