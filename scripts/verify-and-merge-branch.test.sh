@@ -452,11 +452,51 @@ release_verify_slot
 flock "${OVERTURE_VERIFY_WORKTREE_LOCK}" sleep 1 &
 LOCK_HOLDER=$!
 sleep 0.3
-WAIT_OUTPUT="$( { setup_worktree "feature" >/dev/null; } 2>&1 )"
+# Through a FILE rather than a `$( ... )`, and that is about what is being tested rather than about
+# style. Command substitution runs its body in a subshell, so the slot would be taken there and the
+# holder's pid would die with it, leaving nothing for `release_verify_slot` to end. Both production
+# callers (`verify_and_merge` and the batch script's main setup) call this in their own shell, so
+# capturing in a subshell would be measuring a shape the product never uses (L472).
+WAIT_LOG="${FIX_ROOT}/busy-slot-wait.log"
+setup_worktree "feature" >/dev/null 2>"${WAIT_LOG}"
 WAIT_STATUS=$?
+WAIT_OUTPUT="$(cat "${WAIT_LOG}")"
 wait "${LOCK_HOLDER}" 2>/dev/null
 assert_equals "a busy slot is waited for, and setup still succeeds" "0" "${WAIT_STATUS}"
 assert_contains "the wait announces itself rather than sitting silent" "${WAIT_OUTPUT}" "waiting"
+
+# #3680: and the wait NAMES who is holding it. "Waiting" alone is true of a verification that will
+# finish in two minutes and of an orphan that will never finish, and on 2026-09-07 it was the second:
+# a shell fixture orphaned five hours earlier held the slot, `ps` showed no xcodebuild anywhere, and
+# the machine looked idle while every merge blocked. A message that cannot tell those apart leaves
+# reading `lsof` by hand as the only diagnosis available (L11, L148).
+assert_contains "the wait names the process holding the slot" "${WAIT_OUTPUT}" "Holding it"
+assert_contains "and how long that process has been alive, so an orphan is recognisable" \
+  "${WAIT_OUTPUT}" "running for"
+release_verify_slot
+
+# #3680: THE CAUSE. `exec 9>lock` is inherited by every process started while the lock is held, and an
+# inherited descriptor holds the flock exactly as the opener's does. So any process that outlives the
+# run keeps the verify slot, whatever it was doing and whether or not it ever asked for a lock.
+#
+# Measured on this Mac before the fix: a child started under a plain `exec 9>` and left running kept
+# the slot after its parent exited, and `flock <file> -c` leaks it the same way, so neither shape is a
+# way out on bash 3.2, which has no close-on-exec redirection.
+#
+# Driven through setup_worktree and release_verify_slot rather than by re-implementing the locking
+# here, because the thing under test is what THIS script leaves behind (L472).
+setup_worktree "feature" >/dev/null 2>&1
+ORPHAN_MARKER="${FIX_ROOT}/orphan-alive"
+( sleep 30; rm -f "${ORPHAN_MARKER}" ) &
+SLOT_ORPHAN=$!
+release_verify_slot
+if flock -n "${OVERTURE_VERIFY_WORKTREE_LOCK}" true 2>/dev/null; then
+  pass "a process left running by a verification does not keep the slot locked"
+else
+  fail "the slot is still locked by a process that never asked for it: the lock descriptor was inherited, so every later merge blocks on an orphan (#3680)"
+fi
+kill "${SLOT_ORPHAN}" 2>/dev/null || true
+wait "${SLOT_ORPHAN}" 2>/dev/null || true
 
 # A completed verification leaves the slot checkout, its registration, and its build cache all in
 # place. The cache IS the speedup, and reclaim-orphan-derived-data.sh keeps any folder whose
@@ -501,6 +541,46 @@ if [[ -d "${DERIVED_ROOT}/Overture-slot" ]]; then
 else
   fail "the warm build cache must survive the verification"
 fi
+# #3680: and released when a verification DIES, which is the property the plain `exec 9>` had for
+# free and the one a swap to a lock directory or a pid file would silently lose (L409). The holder
+# watches the run that asked for the slot and ends when it goes, so a killed or crashed verification
+# frees the slot within one poll instead of wedging it until somebody reads `lsof`.
+#
+# Driven by KILLING a real taker rather than by calling the release path, because the release path is
+# exactly what a crash does not reach.
+KILL_LOCK="${FIX_ROOT}/killed-run.lock"
+cat > "${FIX_ROOT}/take-and-die.sh" <<TAKER
+source "${SCRIPT_DIR}/verify-and-merge-branch.sh"
+take_verify_slot "\$1" || exit 1
+echo ready
+while :; do sleep 1; done
+TAKER
+bash "${FIX_ROOT}/take-and-die.sh" "${KILL_LOCK}" > "${FIX_ROOT}/taker.out" 2>&1 &
+TAKER_PID=$!
+TAKER_WAITED=0
+while [[ ! -s "${FIX_ROOT}/taker.out" && "${TAKER_WAITED}" -lt 100 ]]; do
+  sleep 0.2
+  TAKER_WAITED=$(( TAKER_WAITED + 1 ))
+done
+# The POSITIVE half first: a kill that frees a slot nobody ever took proves nothing (L159).
+if flock -n "${KILL_LOCK}" true 2>/dev/null; then
+  fail "the taker never took the slot, so killing it would prove nothing"
+else
+  pass "a taker holds the slot before it is killed"
+fi
+kill -9 "${TAKER_PID}" 2>/dev/null || true
+wait "${TAKER_PID}" 2>/dev/null || true
+KILL_WAITED=0
+while ! flock -n "${KILL_LOCK}" true 2>/dev/null && [[ "${KILL_WAITED}" -lt 100 ]]; do
+  sleep 0.2
+  KILL_WAITED=$(( KILL_WAITED + 1 ))
+done
+if flock -n "${KILL_LOCK}" true 2>/dev/null; then
+  pass "a verification that is killed frees the slot rather than wedging it"
+else
+  fail "a killed verification left the slot locked: a crash must release it, which is what the kernel flock gave for free and what this holder has to keep (#3680, L409)"
+fi
+
 if flock -n "${OVERTURE_VERIFY_WORKTREE_LOCK}" true 2>/dev/null; then
   pass "the slot lock is released when the verification ends"
 else
