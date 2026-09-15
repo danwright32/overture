@@ -212,6 +212,10 @@ take_verify_slot() {
     if ! kill -0 "${VERIFY_SLOT_HOLDER_PID}" 2>/dev/null; then
       echo "Could not take the verify worktree slot (lock: ${slot_lock})." >&2
       VERIFY_SLOT_HOLDER_PID=""
+      # The scratch goes too. A caller handed a refusal has nothing to release, so this is the only
+      # place this directory can be cleaned up on the failing path.
+      rm -rf "${scratch}"
+      VERIFY_SLOT_SCRATCH=""
       return 1
     fi
     if [[ -e "${contended}" && -z "${announced}" ]]; then

@@ -541,6 +541,21 @@ if [[ -d "${DERIVED_ROOT}/Overture-slot" ]]; then
 else
   fail "the warm build cache must survive the verification"
 fi
+# #3680: a slot that CANNOT be taken is refused, not reported as taken. This is the fail-closed path,
+# and it had no test: a lock path the holder cannot open makes the holder exit, and what the caller is
+# told then decides whether a verification runs with no exclusion at all while believing it has some.
+# Through a file, not a `$( ... )`, for the reason `take_verify_slot` records: a command substitution
+# runs in a subshell, so the pid it sets and clears would be the subshell's and the assertion below
+# would be reading whatever the previous release happened to leave in this shell (L70).
+FAILED_TAKE_LOG="${FIX_ROOT}/failed-take.log"
+take_verify_slot "/overture-no-such-directory-3680/lock" >/dev/null 2>"${FAILED_TAKE_LOG}"
+FAILED_TAKE_STATUS=$?
+FAILED_TAKE="$(cat "${FAILED_TAKE_LOG}")"
+assert_equals "a slot that cannot be opened is refused" "1" "${FAILED_TAKE_STATUS}"
+assert_contains "and the refusal says so rather than passing silently" \
+  "${FAILED_TAKE}" "Could not take the verify worktree slot"
+assert_equals "and leaves no holder pid behind for the release to kill" "" "${VERIFY_SLOT_HOLDER_PID}"
+
 # #3680: and the holder is ASLEEP while it holds the slot, not spinning.
 #
 # Asserted because a mutation proved nothing else does: replacing the fifo wait with something that
