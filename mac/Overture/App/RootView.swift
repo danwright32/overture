@@ -58,7 +58,13 @@ struct RootView: View {
     // seen. Every raise goes through here, and raising closes what is presented first. See AppModals.
     @State private var modals = AppModals()
     @State private var scoutSheetShown = false        // the sheet is presented (vs hidden while it runs)
-    @State private var scoutNativeSnapshot: RunProgressView.Snapshot?   // latest native-phase heartbeat
+    // #3885: the scout's heartbeat, on an OBSERVED object rather than on this view's own `@State`.
+    //
+    // It was `@State private var scoutNativeSnapshot`, written several times a second while a run is on.
+    // Writing to `@State` invalidates this view WHETHER OR NOT the body reads the value, so every
+    // heartbeat re-evaluated `RootView` and therefore `queueSurface`, which is the `QueueView` under
+    // whatever sheet is open. See `ScoutProgressModel` for the sample that measured it.
+    @State private var scoutProgress = ScoutProgressModel()
     // Supersedes an abandoned run's completion after a stalled-state Retry, so the old Task cannot
     // clobber the fresh run's state when it finally returns (CLAUDE.md: assume it runs twice).
     @State private var scoutGeneration = 0
@@ -178,13 +184,30 @@ struct RootView: View {
     // #885: one definition of "due", shared with the sheet this badge opens (DueWork). Summed here in
     // the body before, and summed again in FollowUpsView's own body: the pill Dan clicks and the list he
     // lands on stated the same rule twice, with nothing asserting they agreed.
+    // #3885: memoised, because this is a whole-store sweep on every evaluation of this body.
+    //
+    // `DueWork.counts` walks every prospect, and the toolbar pill reads this on every RootView draw
+    // whatever provoked it. The marker file read beside it (`ReplyClassifyService.isRunning`) is paid
+    // on every one too. Neither is proportional to what changed.
+    //
+    // The key carries the corpus's identity AND the marker, because the count genuinely depends on both
+    // and a memo keyed on only the first would keep showing the old number while a classify run started
+    // or died (L40). The marker read is cheap and is paid to BUILD the key, which is the trade: the
+    // sweep is what this removes, not the read.
+    @State private var followUpsMemo = ScopeMemo<Int>()
+
     private var followUpsDue: Int {
         let now = Date()
         // #2878: the badge counts a stalled reply draft too, because the sheet it opens now lists one.
         // The liveness is read here rather than defaulted, so a classify run still beating is not
         // reported as a dead one (#471, L168).
-        return DueWork.counts(prospects: allProspects, now: now,
-                              replyRunAlive: ReplyClassifyService.isRunning(now: now)).total
+        let replyRunAlive = ReplyClassifyService.isRunning(now: now)
+        var fingerprint = ScopeFingerprint()
+        fingerprint.add(allProspects)
+        fingerprint.add(value: replyRunAlive)
+        return followUpsMemo.value(fingerprint: fingerprint.finalized(), cardKeys: [], now: now) {
+            DueWork.counts(prospects: allProspects, now: now, replyRunAlive: replyRunAlive).total
+        }
     }
 
     // #805: how many watched sources need Dan's eyes. Counted by SourceAttention and never summed here, for
@@ -533,7 +556,7 @@ struct RootView: View {
             "scoutCancelRequested": "\(scoutCancelRequested)",
             "scoutReadAsk": "\(scoutReadAsk != nil)",
             "cancelledScoutRead": "\(cancelledScoutRead ?? -1)",
-            "scoutSnapshot": snapshotFingerprint(scoutNativeSnapshot),
+            "scoutSnapshot": snapshotFingerprint(scoutProgress.nativeSnapshot),
             "listingRead": snapshotFingerprint(takeover.listingProgress(.prep)),
             "listingReadStarted": "\(takeover.listingStartedAt(.prep) != nil)",
             "checkListingRead": snapshotFingerprint(takeover.listingProgress(.check)),
@@ -2504,7 +2527,7 @@ struct RootView: View {
         let runBeganAt = Date()
         scoutStartedAt = runBeganAt
         scoutSummary = nil
-        scoutNativeSnapshot = nil
+        scoutProgress.nativeSnapshot = nil
         scoutCancelRequested = false   // #1037: a fresh run starts un-cancelled
         // #1034: a scout Dan STARTED takes over the screen with the progress modal; the scheduled
         // watch-only run keeps its quiet toolbar label and never pops it (his call, #1010).
@@ -2525,7 +2548,7 @@ struct RootView: View {
                         // working rather than stuck. A sweep through all 62 sources (#1518) passes the
                         // 3-minute ceiling every run, so without this every scout ended by warning that
                         // it looked stuck. Carried on the snapshot so it clears with it.
-                        scoutNativeSnapshot = .init(sourceName: name, completed: index, total: total,
+                        scoutProgress.nativeSnapshot = .init(sourceName: name, completed: index, total: total,
                                                     advancedAt: Date())
                     },
                     // #2203: the SAME phase, once its counted part is done. Keeps `advancedAt` moving
@@ -2534,9 +2557,9 @@ struct RootView: View {
                     // alive. Without it a slow tail was judged stuck by the wall clock alone.
                     onNativeStep: { step in
                         guard gen == scoutGeneration else { return }
-                        scoutNativeSnapshot = .init(sourceName: nil,
-                                                    completed: scoutNativeSnapshot?.completed ?? 0,
-                                                    total: scoutNativeSnapshot?.total ?? 0,
+                        scoutProgress.nativeSnapshot = .init(sourceName: nil,
+                                                    completed: scoutProgress.nativeSnapshot?.completed ?? 0,
+                                                    total: scoutProgress.nativeSnapshot?.total ?? 0,
                                                     advancedAt: Date(), step: step)
                     },
                     // #1037: the native sweep stops between sources when Dan cancels, and launches no read.
@@ -2581,7 +2604,7 @@ struct RootView: View {
                     // stalled state if the detached run dies.
                     readingStartedAt = ScoutExtractService.lastRunStartedAt ?? Date()
                     readingSourceCount = outcome.sources.filter { $0.state == .queuedForReading }.count
-                    scoutNativeSnapshot = nil
+                    scoutProgress.nativeSnapshot = nil
                     // #3887: THIS scout's own start. Sources can be left queued with no read run at all
                     // (Dan answering the read budget with "Read none" does exactly that), and without
                     // this boundary the watcher returns at once and imports whatever the last read left,
@@ -2636,7 +2659,7 @@ struct RootView: View {
             isScanning = false
             scoutStartedAt = nil
             scoutIsManual = false
-            scoutNativeSnapshot = nil
+            scoutProgress.nativeSnapshot = nil
         }
     }
 
@@ -2648,7 +2671,7 @@ struct RootView: View {
         scoutStartedAt = nil
         readingStartedAt = nil
         scoutIsManual = false
-        scoutNativeSnapshot = nil
+        scoutProgress.nativeSnapshot = nil
         // #1037: a run Dan stopped closes quietly. It gets no summary popup: he abandoned it, so the
         // partial warnings are not something he asked to see, and cancelScout already closed the sheet.
         if scoutCancelRequested {
@@ -2681,7 +2704,7 @@ struct RootView: View {
         scoutGeneration += 1
         let gen = scoutGeneration
         scoutIsManual = true
-        scoutNativeSnapshot = nil
+        scoutProgress.nativeSnapshot = nil
         scoutWarnings = nil
         readingStartedAt = ScoutExtractService.lastRunStartedAt ?? Date()
         // #1427: the native half ran in the session that started this run, so its queued count is gone; the
@@ -2792,7 +2815,7 @@ struct RootView: View {
         scoutStartedAt = nil
         readingStartedAt = nil
         scoutIsManual = false
-        scoutNativeSnapshot = nil
+        scoutProgress.nativeSnapshot = nil
         scoutCancelRequested = false
         askAboutCancelledRead(count: count)
     }
@@ -2850,7 +2873,7 @@ struct RootView: View {
                 phase: readingStartedAt != nil ? .reading : .scouting,
                 since: readingStartedAt ?? scoutStartedAt,
                 snapshot: { readingStartedAt != nil ? RunProgressView.Snapshot.liveReading()
-                                                    : (scoutNativeSnapshot ?? .init()) },
+                                                    : (scoutProgress.nativeSnapshot ?? .init()) },
                 heartbeat: readingStartedAt != nil ? { ScoutExtractService.heartbeat(now: Date()) } : nil,
                 // #1427: the reading phase predicts "~X remaining" from past completed runs; every other
                 // phase (and a thin history) shows nothing. Loaded each tick so a run recorded moments ago

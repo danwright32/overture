@@ -122,6 +122,13 @@ struct ScopeFingerprint {
         for item in items { hasher.combine(ObjectIdentifier(item)) }
     }
 
+    /// A value that is not a collection of model objects, for an input a derivation reads that the store
+    /// cannot see: a marker file's answer, a connection flag, a stage. Named `value:` rather than
+    /// overloading `add` so an array of `Hashable` elements cannot silently match the wrong one.
+    mutating func add(value: some Hashable) {
+        hasher.combine(value)
+    }
+
     func finalized() -> Int { hasher.finalize() }
 }
 
