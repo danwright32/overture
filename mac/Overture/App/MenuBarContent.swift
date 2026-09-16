@@ -12,6 +12,9 @@ struct MenuBarContent: View {
     // seen-size; opening the logs updates it, clearing the nudge reactively. The ledger holds only
     // lines the app itself called a problem, so any growth at all is worth a word.
     @AppStorage(AgentLogLocation.viewedProblemSizeKey) private var viewedProblemSize: Double = 0
+    // #3890: published beside the badge count by the same writers, so the line below and the number on
+    // the glyph are two readings of one derivation.
+    @AppStorage(DueBadge.repliesKey) private var repliesWaiting: Int = 0
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
@@ -21,6 +24,10 @@ struct MenuBarContent: View {
         // moment: it is exactly when Dan is asking what the resident app is doing. Reading the clocks
         // here rather than inside MenuBarStatus keeps the decision pure and testable.
         let watchReport = WatchHeartbeatStore.currentReport()
+        // First, above the app's own status: a person waiting on Dan outranks what the app is doing.
+        if let replies = MenuBarStatus.repliesWaitingLine(count: repliesWaiting) {
+            Text(replies)
+        }
         Text(MenuBarStatus.line(lastReconcileAt: last, now: Date(), omniFocusFailed: omniFocusFailedAt > 0,
                                 hasUnreadLogProblems: unreadLogProblems, watchReport: watchReport))
         Divider()

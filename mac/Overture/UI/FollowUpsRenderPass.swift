@@ -49,6 +49,9 @@ enum FollowUpsRenderPass {
         // The whole store, through the counted accessor. Nothing here can reach a prospect any other way,
         // so a sweep added later is counted whether or not whoever adds it thinks about the cost.
         var prospects: Corpus
+        // #3890: hire inquiries, for the replies waiting on an answer. A plain array rather than a
+        // `Corpus` for the reason `sources` gives: a different table, counted apart.
+        var inquiries: [Inquiry]
         // The watchlist, for the link label each row draws (#2816). Not a `Corpus`: it is a different
         // table, and a counter that folded the two would report a number nothing could act on.
         var sources: [WatchedSource]
@@ -78,7 +81,8 @@ enum FollowUpsRenderPass {
     static func make(_ i: Inputs) -> RenderData {
         // ONE store read for the whole pass, counted. `DueWork.rows` runs its four rules over the array
         // this returns; see the header for why those four are not four sweeps.
-        let rows = DueWork.rows(prospects: i.prospects.all, now: i.now, replyRunAlive: i.replyRunAlive)
+        let rows = DueWork.rows(prospects: i.prospects.all, inquiries: i.inquiries, now: i.now,
+                                replyRunAlive: i.replyRunAlive)
 
         // The sheet draws one sentence and no rows when nothing is due, so the index it would thread into
         // those rows must not be built. Not an optimisation: it is what the empty screen already renders,

@@ -29,6 +29,14 @@ enum MenuBarStatus {
         return "Last checked \(formatter.string(from: last))"
     }
 
+    // #3890: replies waiting on Dan's answer, named in the menu for as long as they wait. Dan's call,
+    // 2026-09-15: this and the corrected badge are the lasting signal outside the app, rather than a
+    // change to how alerts are posted. Nothing at all when none are waiting, so it is never a zero.
+    static func repliesWaitingLine(count: Int) -> String? {
+        guard count > 0 else { return nil }
+        return "\(Plural.count(count, "reply", "replies")) waiting on your answer"
+    }
+
     // #1688: the menu item names what the click will actually do.
     //
     // "Open agent logs" opening a Finder window is the defect Dan reported, and the honest fix has two

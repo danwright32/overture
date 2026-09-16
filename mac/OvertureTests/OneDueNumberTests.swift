@@ -33,7 +33,7 @@ struct OneDueNumberTests {
     private func day(_ offset: TimeInterval) -> String { EasternDate.today(now.addingTimeInterval(offset)) }
 
     private func makeContext() throws -> ModelContext {
-        ModelContext(try ModelContainer(for: Schema([Prospect.self, Recipient.self]),
+        ModelContext(try ModelContainer(for: Schema([Prospect.self, Recipient.self, Inquiry.self]),
                                         configurations: [ModelConfiguration(isStoredInMemoryOnly: true)]))
     }
 
@@ -123,12 +123,37 @@ struct OneDueNumberTests {
         return p
     }
 
+    // #3890: somebody wrote back and nobody has answered, on a show still ahead.
+    @discardableResult
+    private func replyToAnswer(_ context: ModelContext, key: String = "wrote") -> Prospect {
+        let p = show(key, "Every Voice Choirs", on: day(20 * 86_400))
+        p.sentAt = now.addingTimeInterval(-4 * 86_400)
+        context.insert(p)
+        let r = Recipient(id: "\(key)@example.com", email: "\(key)@example.com", name: "Nicole",
+                          provenance: .presenter)
+        r.sendState = .sent
+        r.sentAt = now.addingTimeInterval(-4 * 86_400)
+        r.gmailMessageId = "m-\(key)"
+        r.reopenOnReply(at: now.addingTimeInterval(-7_200))
+        p.setRecipients([r])
+        return p
+    }
+
+    // #3890: a hire inquiry whose inquirer wrote back and is waiting on an answer.
+    private func inquiryToAnswer(_ context: ModelContext) {
+        let i = Inquiry(source: .contactForm, inquirerName: "Marta Reyes",
+                        inquirerEmail: "marta@example.org", eventName: "Winter recital")
+        i.replied = true
+        i.repliedAt = now.addingTimeInterval(-5_400)
+        context.insert(i)
+    }
+
     private func allProspects(_ context: ModelContext) throws -> [Prospect] {
         try context.fetch(FetchDescriptor<Prospect>())
     }
 
-    private func rows(_ all: [Prospect]) -> DueWork.Rows {
-        DueWork.rows(prospects: all, now: now, replyRunAlive: false)
+    private func rows(_ all: [Prospect], inquiries: [Inquiry] = []) -> DueWork.Rows {
+        DueWork.rows(prospects: all, inquiries: inquiries, now: now, replyRunAlive: false)
     }
 
     private func followUpsPill(_ queue: [Prospect], all: [Prospect]) -> AgentStatus {
@@ -147,19 +172,21 @@ struct OneDueNumberTests {
         let context = try makeContext()
         silentFollowUp(context); afterTheShow(context)
         stalledReplyDraft(context); conversationToConfirm(context)
+        replyToAnswer(context); inquiryToAnswer(context)
         let all = try allProspects(context)
-        let listed = rows(all)
+        let listed = rows(all, inquiries: try context.fetch(FetchDescriptor<Inquiry>()))
 
-        // Each kind is really present, so the equality below is asserting about four numbers rather than
-        // about four zeroes.
+        // Each kind is really present, so the equality below is asserting about real numbers rather than
+        // about zeroes.
         #expect(listed.silent.count == 1)
         #expect(listed.afterTheShow.count == 1)
         #expect(listed.stalledReplyDrafts.count == 1)
         #expect(listed.conversationsToConfirm.count == 1)
+        #expect(listed.repliesToAnswer.count == 2)   // #3890: the show's reply and the inquiry's
 
         #expect(listed.counts.total == listed.rendered,
                 "the header states \(listed.counts.total) over \(listed.rendered) rendered rows")
-        #expect(listed.rendered == 4)
+        #expect(listed.rendered == 6)
     }
 
     // The pill Dan clicks states the number of the sheet he lands on. This is what #2968 broke: the pill
@@ -254,8 +281,14 @@ struct OneDueNumberTests {
         // and the test would pass just as well with the guard deleted (L159). Measured: it did.
         let silent = silentFollowUp(context, key: "silentdismissed")
         silent.markDismissed(reason: .notAFit, at: now)
+        // #3890: a reply waiting on an answer is the plainest case of somebody reaching in.
+        let wrote = replyToAnswer(context, key: "wrotedismissed")
+        wrote.markDismissed(reason: .notAFit, at: now)
         let all = try allProspects(context)
         let listed = rows(all)
+
+        #expect(listed.repliesToAnswer.count == 1,
+                "a person waiting on Dan's answer stopped counting because the show was cut")
 
         #expect(listed.conversationsToConfirm.count == 1,
                 "a possible reply stopped being asked about because the show was cut, which loses the person")
@@ -287,6 +320,19 @@ struct OneDueNumberTests {
     }
 
     // MARK: - Built is not wired (L3)
+
+    // #3890: the replies section exists and iterates the shared rows, and each row carries the answer
+    // itself rather than only saying somebody is waiting (#80, #126).
+    @Test func theSheetDrawsTheRepliesToAnswerSection() throws {
+        let source = SourceGuardHelper.source("Overture/UI/FollowUpsView.swift")
+        #expect(!source.isEmpty)
+        #expect(SourceGuardHelper.containsCode("ForEach(listed.repliesToAnswer, id: \\.id)", in: source),
+                "FollowUpsView counts replies to answer and draws no section iterating them (#3890)")
+        #expect(source.contains("ReplyToAnswerCopy.section"),
+                "the replies section has no heading of its own")
+        #expect(source.contains("ReplyPanelCopy.answer"),
+                "a reply row offers no way to answer, which is the whole of what it is waiting for")
+    }
 
     // The section exists in the sheet, iterating the shared rows, so the number above is a promise about
     // rows the app really draws rather than a list only this test has asked for.

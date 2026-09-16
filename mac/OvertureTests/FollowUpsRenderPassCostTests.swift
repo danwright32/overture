@@ -113,6 +113,7 @@ struct FollowUpsRenderPassCostTests {
         -> FollowUpsRenderPass.Inputs {
         FollowUpsRenderPass.Inputs(
             prospects: FollowUpsRenderPass.Corpus(seeded.prospects, tally: tally),
+            inquiries: [],
             sources: seeded.sources,
             now: Self.now,
             replyRunAlive: false)
@@ -178,7 +179,7 @@ struct FollowUpsRenderPassCostTests {
         let lifted = FollowUpsRenderPass.make(inputs(seeded)).rows
         // The derivation the body ran before the lift, spelled out here rather than called through the
         // pass, so this compares two things rather than one thing with itself (L70).
-        let inline = DueWork.rows(prospects: seeded.prospects, now: Self.now, replyRunAlive: false)
+        let inline = DueWork.rows(prospects: seeded.prospects, inquiries: [], now: Self.now, replyRunAlive: false)
 
         #expect(lifted.rendered == inline.rendered)
         #expect(lifted.counts == inline.counts)

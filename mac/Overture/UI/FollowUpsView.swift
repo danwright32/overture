@@ -22,6 +22,8 @@ struct FollowUpsView: View {
     // NO DEFAULT, for the reason ArchiveView's carries: an empty default renders an empty sheet that
     // looks exactly like an empty store (L168, L67).
     let prospects: [Prospect]
+    // #3890: the hire inquiries, handed down on the same rule, for the replies waiting on an answer.
+    let inquiries: [Inquiry]
     // #2816: the watchlist, so a row's link back to the show can say whether it reaches the show's own
     // page or only the source's calendar (#1680). A @Query on the same precedent QueueView follows: a
     // source whose calendar address changes re-decides the label with no other prompting, and an empty
@@ -50,6 +52,12 @@ struct FollowUpsView: View {
     // RootView because the row that raises it is this sheet's, and #2967 already established that this
     // surface presents its own Gmail work.
     @State private var manualLinkTarget: ManualLinkTarget?
+    // #3890: the reply Dan pressed Answer on, presented on the same ReplySheet the queue answers from.
+    @State private var answering: ReplyTarget?
+    struct ReplyTarget: Identifiable {
+        let conversation: ReplyToAnswer.DueConversation
+        var id: AnyHashable { conversation.id }
+    }
     @State private var showReconnect = false
     // #976: the section at the top of the scroll, bound so the list holds its place while its rows
     // rebuild. `prospects` is a @Query, so a reply-classify or Prep run re-emits it and rebuilds this
@@ -64,7 +72,7 @@ struct FollowUpsView: View {
     // The sentence outlived the code by a month and was then read as a live constraint by the plan for
     // this phase, which budgeted a test for behaviour that cannot happen (L346).
     private enum ScrollSection: Hashable {
-        case afterTheShow, silent, stalledReplyDrafts, conversationsToConfirm
+        case afterTheShow, silent, stalledReplyDrafts, conversationsToConfirm, repliesToAnswer
     }
 
     // #948: each pending send now carries the branded SendConfirmation the shared SendConfirmSheet
@@ -102,6 +110,7 @@ struct FollowUpsView: View {
         }
         return FollowUpsRenderPass.make(FollowUpsRenderPass.Inputs(
             prospects: FollowUpsRenderPass.Corpus(prospects),
+            inquiries: inquiries,
             sources: watchedSources,
             // ONE instant for the whole drawing. This body used to take two, `Date()` here and a second
             // `Date()` inside the scroll holder, so a row's sentence and the rule that put the row there
@@ -170,8 +179,19 @@ struct FollowUpsView: View {
                         // reading `Date()` for itself and dating its own sentence a moment apart. #3814:
                         // it is now the SAME instant the rules above were judged at, which it was not.
                         let now = data.now
-                        // #2878: first, because it is the only one of the three that says something
-                        // has gone WRONG. The other two are work arriving on schedule.
+                        // #3890: first of all, because a person is waiting on Dan here, which is the
+                        // most time sensitive thing the sheet holds (L609).
+                        if !listed.repliesToAnswer.isEmpty {
+                            section(ReplyToAnswerCopy.section) {
+                                ForEach(listed.repliesToAnswer, id: \.id) { conversation in
+                                    replyToAnswerRow(conversation, sourceCalendars: sourceCalendars, now: now)
+                                    Divider()
+                                }
+                            }
+                            .id(ScrollSection.repliesToAnswer)   // #976
+                        }
+                        // #2878: next, because it is the only one of the rest that says something
+                        // has gone WRONG. The others are work arriving on schedule.
                         if !listed.stalledReplyDrafts.isEmpty {
                             section(StalledReplyDraftCopy.section) {
                                 ForEach(listed.stalledReplyDrafts, id: \.recipient.id) { d in
@@ -234,6 +254,18 @@ struct FollowUpsView: View {
         // #3707: the same picker the Reached out row opens, on the row where #3706's false ending is
         // actually recorded: this is where PostEventPrompt asks how the show went, and a pitch that got a
         // real answer on another thread is the one about to be filed as neverHeardBack.
+        // #3890: Answer on a reply row opens the one reply screen, told what it is answering, exactly as
+        // the queue's own Answer does (#2145), so what sends from here is what sends from there.
+        .sheet(item: $answering) { target in
+            switch target.conversation {
+            case .show(let prospect, let recipient):
+                ReplySheet(composition: .answering(recipient, of: prospect, context: context, feedback: feedback),
+                           gmailConnected: gmailConnected)
+            case .inquiry(let inquiry):
+                ReplySheet(composition: .answering(inquiry, context: context, feedback: feedback),
+                           gmailConnected: gmailConnected)
+            }
+        }
         .sheet(item: $manualLinkTarget) { target in
             LinkReplyPicker(prospect: target.prospect, recipient: target.recipient) {
                 manualLinkTarget = nil
@@ -458,6 +490,48 @@ struct FollowUpsView: View {
     // "Draft it again" asks for the same draft on the same conversation, and "View in Archive" reaches
     // the full card where the reply text and the compose box are, so he can simply write it himself.
     // #710: threaded parameters and no defaults for the same reasons the two rows above have them (L168).
+    // #3890: somebody wrote back and is waiting on Dan's answer. Names the show or event, who wrote, and
+    // how long ago, and carries Answer itself, so the row is somewhere to act (#80, #126). `now` and
+    // `sourceCalendars` are threaded for the reasons the rows below give (L168).
+    func replyToAnswerRow(_ conversation: ReplyToAnswer.DueConversation,
+                          sourceCalendars: [String: String], now: Date) -> some View {
+        HStack(alignment: .top, spacing: OVSpacing.md) {
+            VStack(alignment: .leading, spacing: 3) {
+                switch conversation {
+                case .show(let p, let r):
+                    Text(p.groupName).font(OVType.groupName).foregroundStyle(OVColor.ink)
+                    RowSourceLink(listingURL: p.sourceListingURL, sourceIds: p.sourceIds,
+                                  calendars: sourceCalendars)
+                    Text(r.name ?? r.email ?? "no contact").font(OVType.body).foregroundStyle(OVColor.inkSoft)
+                case .inquiry(let i):
+                    // Led by the person, then the event, then where the inquiry came from: the same three
+                    // facts in the same order as the queue's own inquiry row (`InquiryRowView`), so a hire
+                    // inquiry is recognisable as one here rather than reading like a scouted show (L605).
+                    Text(i.inquirerName).font(OVType.groupName).foregroundStyle(OVColor.ink)
+                    Text(InquiryCopy.rowSubtitle(event: i.eventName, venue: i.venue))
+                        .font(OVType.body).foregroundStyle(OVColor.inkSoft)
+                    Text(i.source.label).font(OVType.tag).foregroundStyle(OVColor.inkFaint)
+                }
+                if let arrived = conversation.arrivedAt {
+                    Text(ReplyToAnswerCopy.line(arrivedAt: arrived, now: now))
+                        .font(.system(size: 10)).foregroundStyle(OVColor.inkSoft)
+                }
+            }
+            Spacer(minLength: OVSpacing.sm)
+            VStack(alignment: .trailing, spacing: 6) {
+                // forestText, never forest: the brand green is a FILL token (ForestTextColourTests, L149).
+                Button(ReplyPanelCopy.answer) { answering = ReplyTarget(conversation: conversation) }
+                    .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.forestText)
+                if case .show(let p, let r) = conversation {
+                    Button("View in Archive") { onOpenInArchive(p.naturalKey, r.id) }
+                        .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.inkSoft)
+                }
+            }
+        }
+        .padding(.vertical, OVSpacing.xs)
+        .padding(.horizontal, OVSpacing.xs)
+    }
+
     func stalledReplyDraftRow(_ d: StalledReplyDraft.DueRecipient,
                               sourceCalendars: [String: String], now: Date) -> some View {
         let p = d.prospect, r = d.recipient
@@ -641,5 +715,5 @@ private func previewProspect(_ group: String, event: String?) -> Prospect {
     // #3871: the rows are fetched here and handed in, because the sheet no longer holds a query of its
     // own. A preview owns its container, so the one fetch is this preview's to make.
     let rows = (try? ctx.fetch(FetchDescriptor<Prospect>())) ?? []
-    return FollowUpsView(prospects: rows).modelContainer(container).environment(ActionFeedback())
+    return FollowUpsView(prospects: rows, inquiries: []).modelContainer(container).environment(ActionFeedback())
 }

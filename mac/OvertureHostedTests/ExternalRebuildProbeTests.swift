@@ -396,7 +396,7 @@ struct ExternalRebuildProbeTests {
         // instead of the false all clear a bare zero would have been (L98). Measuring it needs a counter
         // on that pass, which is app instrumentation and belongs with the sibling fix, not here. The arm
         // is kept deliberately: an absent arm and an unmeasurable one read alike, and this one says which.
-        let followUps = focusReading { rows in FollowUpsView(prospects: rows) }
+        let followUps = focusReading { rows in FollowUpsView(prospects: rows, inquiries: []) }
         // THE SECOND SUSPECT, after the banner came back quiet. Comparing the two screens' property
         // wrappers, `ArchiveView` reads `@Environment(\\.dismiss)` and `QueueView` does not, which is
         // the kind of value a presentation context can revise when focus moves.

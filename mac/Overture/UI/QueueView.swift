@@ -499,8 +499,10 @@ struct QueueView: View {
             // Published from `data.agentInputs.followUpsDue`, which IS the pill's number, so the badge is
             // a reader of one derivation rather than a second sweep that happens to agree (L16). Keyed on
             // the value, so it writes when the number changes rather than on every redraw.
-            .task(id: data.agentInputs.followUpsDue) {
-                DueBadge.publish(data.agentInputs.followUpsDue)
+            // #3890: keyed on both numbers, so a reply answered while another thing comes due (the total
+            // unchanged) still republishes the reply count the menu names.
+            .task(id: [data.agentInputs.followUpsDue, data.agentInputs.repliesToAnswer]) {
+                DueBadge.publish(data.agentInputs.followUpsDue, replies: data.agentInputs.repliesToAnswer)
             }
             .sendConfirmAndReconnectAlerts(
                 pendingConfirm: $pendingConfirm,

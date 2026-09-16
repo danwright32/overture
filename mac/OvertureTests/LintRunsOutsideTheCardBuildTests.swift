@@ -153,7 +153,7 @@ struct LintRunsOutsideTheCardBuildTests {
         // than a bigger box to put the number in.
         let stageCounts = lintRuns { _ = StageNavigation.counts(in: placement) }
         let dueWork = lintRuns {
-            _ = DueWork.counts(prospects: rows, now: resolved.now, replyRunAlive: false)
+            _ = DueWork.counts(prospects: rows, inquiries: [], now: resolved.now, replyRunAlive: false)
         }
         let deadEnds = lintRuns { _ = DraftedDeadEnd.count(in: rows) }
         let stalledDrafts = lintRuns {

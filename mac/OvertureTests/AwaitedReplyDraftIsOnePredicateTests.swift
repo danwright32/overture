@@ -129,8 +129,8 @@ struct AwaitedReplyDraftIsOnePredicateTests {
         let all = try context.fetch(FetchDescriptor<Prospect>())
         let inputs = AgentInputs.from(prospects: all, allProspects: all, context: .at(today, now: now),
                                      gmailConnected: true, runInFlight: nil, replyRunAlive: false)
-        let counts = DueWork.counts(prospects: all, now: now, replyRunAlive: false)
-        let listed = DueWork.rows(prospects: all, now: now, replyRunAlive: false)
+        let counts = DueWork.counts(prospects: all, inquiries: [], now: now, replyRunAlive: false)
+        let listed = DueWork.rows(prospects: all, inquiries: [], now: now, replyRunAlive: false)
 
         #expect(inputs.stalledReplyDrafts == 0)          // the Follow-ups pill
         #expect(counts.stalledReplyDrafts == 0)          // the sheet's header, the toolbar badge
@@ -146,8 +146,8 @@ struct AwaitedReplyDraftIsOnePredicateTests {
         let all = try context.fetch(FetchDescriptor<Prospect>())
         let inputs = AgentInputs.from(prospects: all, allProspects: all, context: .at(today, now: now),
                                      gmailConnected: true, runInFlight: nil, replyRunAlive: false)
-        let counts = DueWork.counts(prospects: all, now: now, replyRunAlive: false)
-        let listed = DueWork.rows(prospects: all, now: now, replyRunAlive: false)
+        let counts = DueWork.counts(prospects: all, inquiries: [], now: now, replyRunAlive: false)
+        let listed = DueWork.rows(prospects: all, inquiries: [], now: now, replyRunAlive: false)
 
         #expect(inputs.stalledReplyDrafts == 1)
         #expect(counts.stalledReplyDrafts == 1)

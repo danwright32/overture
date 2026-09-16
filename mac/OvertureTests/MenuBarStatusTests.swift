@@ -14,6 +14,14 @@ struct MenuBarStatusTests {
         #expect(line == "OmniFocus sync needs attention")
     }
 
+    // #3890: the menu names replies waiting on Dan's answer for as long as they wait, and says nothing at
+    // all when none are, so the line is never a permanent zero.
+    @Test func theMenuNamesRepliesWaitingOnAnAnswer() {
+        #expect(MenuBarStatus.repliesWaitingLine(count: 0) == nil)
+        #expect(MenuBarStatus.repliesWaitingLine(count: 1) == "1 reply waiting on your answer")
+        #expect(MenuBarStatus.repliesWaitingLine(count: 3) == "3 replies waiting on your answer")
+    }
+
     @Test func noReconcileYetShowsTheWatchingState() {
         let line = MenuBarStatus.line(lastReconcileAt: nil, now: Date(timeIntervalSince1970: 2_000),
                                       omniFocusFailed: false, hasUnreadLogProblems: false)

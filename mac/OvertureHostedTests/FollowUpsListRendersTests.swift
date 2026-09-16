@@ -96,7 +96,7 @@ struct FollowUpsListRendersTests {
     // the app is a harness measuring something else.
     private func sheet(_ container: ModelContainer) -> some View {
         RowsFromStore { (rows: [Prospect]) in
-            FollowUpsView(prospects: rows, gmailConnectedOverride: true, replyRunAliveOverride: false)
+            FollowUpsView(prospects: rows, inquiries: [], gmailConnectedOverride: true, replyRunAliveOverride: false)
         }
         .modelContainer(container)
         .environment(ActionFeedback())
