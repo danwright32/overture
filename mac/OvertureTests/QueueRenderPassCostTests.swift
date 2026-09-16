@@ -343,14 +343,19 @@ struct QueueRenderPassWorkUnitCostTests {
     // 2026-06-22 to 2027-07-08, so the old window held far more of the corpus inside the scout horizon
     // than the real one does, and both lint terms were measured against that.
     //
-    // #3423 narrowing the ordinary lead time window from 90 days to nine weeks moved this by ZERO, and
-    // that is a measurement rather than an assumption: both constants here are exact `==` assertions, so
-    // the suite going green on the combined tree IS the reading. Recorded because the branch that made
-    // that change carried 35 and 19, measured before #3516 respread this corpus from 108 dates across
-    // four months to 224 at the live store's own clustering. At the old spread the window held enough of
-    // the corpus that narrowing it moved one row in and out of the lint; at the real spread it does not.
-    // The superseded numbers are not reconciled with these, they are discarded, because they answer a
-    // question about a fixture that no longer exists (L84, L220).
+    // #3423 narrowing the ordinary lead time window from 90 days to nine weeks moved this by ZERO on THIS
+    // corpus, and that is a measurement rather than an assumption: both constants here are exact `==`
+    // assertions, so the suite going green on the combined tree IS the reading.
+    //
+    // Recorded because the branch that made that change carried 35 and 19 instead. Those were measured
+    // before #3516 respread this corpus from 108 dates across four months to 224 at the live store's own
+    // clustering, so they answer a question about a fixture that no longer exists and are discarded
+    // rather than reconciled with these (L84, L220).
+    //
+    // WHY the two fixtures disagree about the window is NOT measured here, and is deliberately not
+    // guessed at: the corpus starts 2026-08-01 and spans 237 dates, so both windows cut it, and the lint
+    // runs per pending contact carrying a body rather than per row. Whether the zero is because those
+    // contacts all sit inside nine weeks, or for some other reason, would need its own reading (L107).
     private static let allowedDraftLintRuns = 82
 
     // MEASURED on this corpus by `theLintRunsAreAttributedBetweenCardBuildAndTheRestOfThePass`, not
