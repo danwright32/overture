@@ -203,14 +203,18 @@ struct UnplacedRoomsTests {
     }
 }
 
-// #1752 follow-up: the list is CACHED behind a signature, because building it walks every stored show
-// and the Sources sheet re-evaluates its body on every keystroke and scroll tick. That is the defect
-// #1356 and #1429 each fixed on this very sheet, and shipping the list inline reintroduced it.
+// #1752 asked whether the unplaced-room list was rebuilt on every redraw, and gated it behind a hash of
+// the store. #3656 removed that gate: measured 2026-09-08 it cost 2.46 ms per redraw to avoid a 2.64 ms
+// recompute, saving about 7%, and a hash collision meant the sheet could show a room list the store
+// disagreed with. The list is now built where it renders, once per body evaluation.
 //
-// A signature is only worth anything if it MOVES when the list would. These pin exactly that, because a
-// signature that never changes caches a stale list forever and one that always changes caches nothing.
+// The six tests that pinned the signature's behaviour are DELETED with it rather than adjusted: a test
+// asserting a decision that has been reversed is the guard defending the rejected behaviour, and its
+// whole content is the thing being removed (L252, L430).
+//
+// What is kept here is everything about the LIST itself, which is unchanged and still has to be right.
 @MainActor
-@Suite("The unplaced-room list is not rebuilt on every redraw (#1752)")
+@Suite("What the unplaced-room list holds (#1752, #3656)")
 struct UnplacedRoomsSignatureTests {
 
     private func container() throws -> ModelContainer {
@@ -235,46 +239,6 @@ struct UnplacedRoomsSignatureTests {
 
     private func all(_ ctx: ModelContext) throws -> [Prospect] {
         try ctx.fetch(FetchDescriptor<Prospect>())
-    }
-
-    // The whole point: an unrelated redraw must not move it, or the cache saves nothing.
-    @Test func readingTheSameStoreTwiceGivesTheSameSignature() throws {
-        let ctx = ModelContext(try container())
-        show(ctx, key: "k1", venue: "54 Below")
-
-        #expect(UnplacedRooms.signature(try all(ctx), context: .at("2026-08-07")) == UnplacedRooms.signature(try all(ctx), context: .at("2026-08-07")))
-    }
-
-    // The change that MUST move it: a room getting an answer fills its shows' locations, and a stale list
-    // would keep asking Dan a question he has already answered.
-    @Test func placingAShowMovesTheSignature() throws {
-        let ctx = ModelContext(try container())
-        let p = show(ctx, key: "k1", venue: "54 Below")
-        let before = UnplacedRooms.signature(try all(ctx), context: .at("2026-08-07"))
-
-        p.location = "New York, NY"
-        #expect(UnplacedRooms.signature(try all(ctx), context: .at("2026-08-07")) != before)
-    }
-
-    @Test func aNewUnplacedShowMovesTheSignature() throws {
-        let ctx = ModelContext(try container())
-        show(ctx, key: "k1", venue: "54 Below")
-        let before = UnplacedRooms.signature(try all(ctx), context: .at("2026-08-07"))
-
-        show(ctx, key: "k2", venue: "Cherry Lane Theatre")
-        #expect(UnplacedRooms.signature(try all(ctx), context: .at("2026-08-07")) != before)
-    }
-
-    // A show that already knows where it is cannot change this list, so it must not invalidate the cache
-    // either: every scout that places a show would otherwise rebuild it for nothing.
-    @Test func changingAPlacedShowsRoomLeavesTheSignatureAlone() throws {
-        let ctx = ModelContext(try container())
-        show(ctx, key: "k1", venue: "54 Below")
-        let placed = show(ctx, key: "k2", venue: "Merkin Hall", location: "New York, NY")
-        let before = UnplacedRooms.signature(try all(ctx), context: .at("2026-08-07"))
-
-        placed.venue = "Somewhere Else Entirely"
-        #expect(UnplacedRooms.signature(try all(ctx), context: .at("2026-08-07")) == before)
     }
 }
 
@@ -366,17 +330,6 @@ struct UnplacedRoomsStillAheadTests {
         show(ctx, key: "k1", venue: "54 Below", date: nil)
 
         #expect(try rooms(ctx).first?.showCount == 1)
-    }
-
-    // The signature has to move on the same rule, or the cached list goes stale the moment a show ages
-    // out and the panel keeps naming a room nothing is waiting on.
-    @Test func theSignatureMovesWhenTheLastShowInARoomPasses() throws {
-        let ctx = ModelContext(try container())
-        show(ctx, key: "k1", venue: "54 Below", date: "2026-09-01")
-        let onTheDay = UnplacedRooms.signature(try ctx.fetch(FetchDescriptor<Prospect>()), context: .at(today))
-        let afterwards = UnplacedRooms.signature(try ctx.fetch(FetchDescriptor<Prospect>()),
-                                                 context: .at("2026-09-02"))
-        #expect(onTheDay != afterwards)
     }
 }
 
@@ -474,19 +427,5 @@ struct UnplacedRoomsFollowTheQueueTests {
 
         #expect(waiting.count == 2, "the fixture must hold shows the queue shows, or this proves nothing")
         #expect(try rooms(ctx).map(\.showCount).reduce(0, +) == waiting.count)
-    }
-
-    // The cached list is only worth what its signature is worth. A show leaving the Queue for a reason
-    // that is not the calendar has to move it too, or the panel keeps naming a room nothing is waiting
-    // on until something unrelated happens to change.
-    @Test func cuttingTheLastShowInARoomMovesTheSignature() throws {
-        let ctx = ModelContext(try container())
-        let p = show(ctx, key: "k1")
-        let before = UnplacedRooms.signature(try ctx.fetch(FetchDescriptor<Prospect>()),
-                                             context: .at(today, now: now))
-
-        p.status = .dismissed
-        #expect(UnplacedRooms.signature(try ctx.fetch(FetchDescriptor<Prospect>()),
-                                        context: .at(today, now: now)) != before)
     }
 }

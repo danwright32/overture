@@ -192,6 +192,46 @@ struct DriftedRunMergeTests {
                 "the merge must not invent a date")
     }
 
+    // #3778: the CLASS, which the test above states as a property of one merge and this states as an
+    // invariant of the row. A natural key is `title|date|venue`, so a key that disagrees with the row's
+    // own `performanceDate` is a record no later reader can resolve: a key derived from a record's own
+    // fields is only as good as its agreement with them (L15).
+    //
+    // Written as the invariant rather than as "the key must not change" on purpose, because the defect
+    // has two spellings and the narrow assertion only catches one. #3775 adopted the deleted row's key
+    // and left the date; adopting the date and leaving the key would be the same broken row the other
+    // way up, and a guard blind to half of what it exists for reads exactly like one that works (L1).
+    //
+    // Scoped to THIS pass, and that is a real limit rather than caution. The key is not a function of
+    // the row's fields in general: `SameNightTitleVariantMerge` deliberately leaves the key tracking the
+    // title the FEED publishes while `groupName` tracks a rename Dan made, so key and field disagree
+    // there by design (#3582). What makes the same disagreement a defect here is the field it lands in.
+    // This pass's members share a title and differ in the NIGHT, because its whole subject is a run
+    // whose opening night moved, and which night a row stands for is not a naming preference: the
+    // survivor is usually the row Dan refused or wrote to, and about that night specifically.
+    @Test func theSurvivorsKeyAgreesWithItsOwnDate() throws {
+        let context = try ctx()
+        // The survivor must NOT be the row the feed still lists, or `carryTheFeedIdentity` returns nil by
+        // design and this passes without the adoption it exists to judge ever happening (L159). A row that
+        // reached the outside world takes the ladder's first rung, and only one row having history keeps
+        // `mustDefer` from firing, so the pair still merges.
+        let reachedOut = row(context, night: "2026-07-23", ingestedDaysAgo: 3, missed: 5)
+        reachedOut.sentAt = Date(timeIntervalSince1970: 1_750_000_000)
+        row(context, night: "2026-07-26", ingestedDaysAgo: 0, missed: 0)
+
+        DriftedRunMerge.run(in: context)
+
+        let survivor = try #require(try all(context).first)
+        let date = try #require(survivor.performanceDate)
+        let expected = Prospect.makeNaturalKey(groupName: survivor.groupName,
+                                               performanceDate: date, venue: survivor.venue)
+        #expect(survivor.naturalKey == expected, """
+            The survivor's key and its own date disagree: key \(survivor.naturalKey ?? "nil") \
+            against performanceDate \(date). Whichever of the two the merge means to keep, it has to \
+            keep both, or the row stands for a night its key does not name (#3778).
+            """)
+    }
+
     // Idempotent: a second launch changes nothing and deletes nothing.
     @Test func runningItTwiceChangesNothingTheSecondTime() throws {
         let context = try ctx()

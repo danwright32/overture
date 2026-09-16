@@ -49,13 +49,13 @@ struct GenrePrecedenceTests {
                           sourceUrl: "https://example.test/a-man-called-paris")
     }
 
-    private func ingest(_ perSource: [(String, [ScoutExtractEvent])], into ctx: ModelContext) {
+    private func ingest(_ perSource: [(String, [ScoutExtractEvent])], into ctx: ModelContext) async {
         let results = ScoutExtractResults(
             version: 1, generatedAt: "2026-07-13T00:00:00Z",
             results: perSource.map { id, events in
                 ScoutExtractResult(sourceId: id, verdict: .upcomingListings, events: events, note: nil)
             })
-        ScoutExtractIngest.ingest(results, clients: [], history: [], blocked: .empty,
+        await ScoutExtractIngest.ingest(results, clients: [], history: [], blocked: .empty,
                                   today: ScoutTestClock.beforeAllFixtures, now: now, into: ctx)
     }
 
@@ -73,12 +73,12 @@ struct GenrePrecedenceTests {
 
     // THE defect. The source that could read the genre ran FIRST, so the one that could not ran last and
     // erased it. A genre that was read must not lose to one that was not.
-    @Test func aSourceThatCannotReadTheGenreDoesNotEraseOneThatCould() throws {
+    @Test func aSourceThatCannotReadTheGenreDoesNotEraseOneThatCould() async throws {
         let ctx = try context()
         source(ctx, "frigid")
         source(ctx, "manual-lead")
 
-        ingest([("frigid", [event(namingPresenter: "Brooklyn Youth Chorus")]),
+        await ingest([("frigid", [event(namingPresenter: "Brooklyn Youth Chorus")]),
                 ("manual-lead", [event(namingPresenter: nil)])], into: ctx)
 
         #expect(try storedGenre(ctx) == "music")
@@ -86,12 +86,12 @@ struct GenrePrecedenceTests {
 
     // The same two facts in the other order must reach the same answer, which is what "no precedence
     // rule" cost: this order already passed, and the one above did not, for no reason but iteration.
-    @Test func theOppositeOrderReachesTheSameGenre() throws {
+    @Test func theOppositeOrderReachesTheSameGenre() async throws {
         let ctx = try context()
         source(ctx, "frigid")
         source(ctx, "manual-lead")
 
-        ingest([("manual-lead", [event(namingPresenter: nil)]),
+        await ingest([("manual-lead", [event(namingPresenter: nil)]),
                 ("frigid", [event(namingPresenter: "Brooklyn Youth Chorus")])], into: ctx)
 
         #expect(try storedGenre(ctx) == "music")
@@ -100,16 +100,16 @@ struct GenrePrecedenceTests {
     // The rule must not become "first read wins", which would be deterministic and WRONG: `apply` runs
     // for the same source on every scout, so a source that corrects its own listing has to be able to
     // move the genre it set. Only a DIFFERENT source is held off.
-    @Test func aSourceMayStillCorrectItsOwnEarlierReading() throws {
+    @Test func aSourceMayStillCorrectItsOwnEarlierReading() async throws {
         let ctx = try context()
         source(ctx, "frigid")
 
-        ingest([("frigid", [event(namingPresenter: "Brooklyn Youth Chorus")])], into: ctx)
+        await ingest([("frigid", [event(namingPresenter: "Brooklyn Youth Chorus")])], into: ctx)
         #expect(try storedGenre(ctx) == "music")
 
         // The same source, next run, no longer naming the organisation.
         source(ctx, "frigid").hasUnreadChanges = true
-        ingest([("frigid", [event(namingPresenter: nil)])], into: ctx)
+        await ingest([("frigid", [event(namingPresenter: nil)])], into: ctx)
 
         #expect(try storedGenre(ctx) == "other")
     }
@@ -119,12 +119,12 @@ struct GenrePrecedenceTests {
     // from a blend of two readings that neither source ever made. Profile and coverage are scoring axes,
     // so a mixture is not cosmetic: on the live store the difference between these two readings of one
     // show is 8 points, the full width of the queue.
-    @Test func theKeptClassificationKeepsItsOwnProfileAndCoverage() throws {
+    @Test func theKeptClassificationKeepsItsOwnProfileAndCoverage() async throws {
         let ctx = try context()
         source(ctx, "frigid")
         source(ctx, "manual-lead")
 
-        ingest([("frigid", [event(namingPresenter: "Brooklyn Youth Chorus")]),
+        await ingest([("frigid", [event(namingPresenter: "Brooklyn Youth Chorus")]),
                 ("manual-lead", [event(namingPresenter: nil)])], into: ctx)
 
         let row = try #require((try? ctx.fetch(FetchDescriptor<Prospect>()))?.first)
@@ -138,12 +138,12 @@ struct GenrePrecedenceTests {
     // genre while taking a second source's reason would print a sentence about a genre the row does not
     // hold. #1664 covered how that sentence reads to Dan and is closed: #1657 stopped the fit reason
     // printing the raw genre code on 2026-08-08.
-    @Test func theKeptClassificationKeepsItsOwnReason() throws {
+    @Test func theKeptClassificationKeepsItsOwnReason() async throws {
         let ctx = try context()
         source(ctx, "frigid")
         source(ctx, "manual-lead")
 
-        ingest([("frigid", [event(namingPresenter: "Brooklyn Youth Chorus")]),
+        await ingest([("frigid", [event(namingPresenter: "Brooklyn Youth Chorus")]),
                 ("manual-lead", [event(namingPresenter: nil)])], into: ctx)
 
         let row = try #require((try? ctx.fetch(FetchDescriptor<Prospect>()))?.first)
@@ -208,12 +208,12 @@ struct BlendedClassificationTests {
         #expect(byGenre.profile == .neutral)
     }
 
-    @Test func theCardKeepsWhatEachSourceKnew() throws {
+    @Test func theCardKeepsWhatEachSourceKnew() async throws {
         let ctx = try context()
         source(ctx, "venue-feed")
         source(ctx, "artist-page")
 
-        ingest([("venue-feed", [event(producerOnly)]),
+        await ingest([("venue-feed", [event(producerOnly)]),
                 ("artist-page", [event(genreOnly)])], into: ctx)
 
         let row = try #require((try? ctx.fetch(FetchDescriptor<Prospect>()))?.first)
@@ -223,12 +223,12 @@ struct BlendedClassificationTests {
     }
 
     // Order must not change the answer, which is what a merge buys over a precedence.
-    @Test func theOppositeOrderKeepsTheSameTwoFacts() throws {
+    @Test func theOppositeOrderKeepsTheSameTwoFacts() async throws {
         let ctx = try context()
         source(ctx, "venue-feed")
         source(ctx, "artist-page")
 
-        ingest([("artist-page", [event(genreOnly)]),
+        await ingest([("artist-page", [event(genreOnly)]),
                 ("venue-feed", [event(producerOnly)])], into: ctx)
 
         let row = try #require((try? ctx.fetch(FetchDescriptor<Prospect>()))?.first)
@@ -246,7 +246,7 @@ struct BlendedClassificationTests {
     // share, so the classifier forced `weak` on both readings and the dangerous combination could never
     // arise. Implementing the naive "prefer strong" merge left it green. The agency verdict has to come
     // from the PRESENTER, the only field the two sources differ on.
-    @Test func aFlatteringSecondSourceDoesNotStripAnAgencysPenalty() throws {
+    @Test func aFlatteringSecondSourceDoesNotStripAnAgencysPenalty() async throws {
         let ctx = try context()
         source(ctx, "agency-feed")
         source(ctx, "venue-feed")
@@ -264,7 +264,7 @@ struct BlendedClassificationTests {
         #expect(EventClassifier.classify(flatteringRead.asExtractedEvent).production == .selfProduced)
         #expect(EventClassifier.classify(flatteringRead.asExtractedEvent).profile == .strong)
 
-        ingest([("agency-feed", [agencyRead]), ("venue-feed", [flatteringRead])], into: ctx)
+        await ingest([("agency-feed", [agencyRead]), ("venue-feed", [flatteringRead])], into: ctx)
 
         let row = try #require((try? ctx.fetch(FetchDescriptor<Prospect>()))?
                                 .first { $0.performanceDate == "2099-11-02" })
@@ -274,13 +274,13 @@ struct BlendedClassificationTests {
                 "the agency penalty must survive a second source describing the show more flatteringly")
     }
 
-    private func ingest(_ perSource: [(String, [ScoutExtractEvent])], into ctx: ModelContext) {
+    private func ingest(_ perSource: [(String, [ScoutExtractEvent])], into ctx: ModelContext) async {
         let results = ScoutExtractResults(
             version: 1, generatedAt: "2026-07-13T00:00:00Z",
             results: perSource.map { id, events in
                 ScoutExtractResult(sourceId: id, verdict: .upcomingListings, events: events, note: nil)
             })
-        ScoutExtractIngest.ingest(results, clients: [], history: [], blocked: .empty,
+        await ScoutExtractIngest.ingest(results, clients: [], history: [], blocked: .empty,
                                   today: ScoutTestClock.beforeAllFixtures, now: now, into: ctx)
     }
 }

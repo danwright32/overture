@@ -48,9 +48,63 @@ enum StageNavigation {
     // empty). A named constant, not a literal buried in the view, so the choice has a testable seam.
     static let openingStage: StageFocus = .scout
 
+    // #3738: every show's stages, decided ONCE.
+    //
+    // WHAT THIS IS FOR. `QueueRenderPass.make` asked the same question three times in three shapes over
+    // one corpus in one pass: `queueKeys` walked every prospect evaluating `matches` until one focus hit,
+    // `counts` walked every prospect evaluating `matches` against all nine with no short circuit, and
+    // `focusedKeys` walked again for the focused stage. `matches` faults a prospect's `recipients`, and
+    // on 1,230 rows that came to about 23,000 evaluations per render: 152.1 ms of the pass's floor,
+    // measured by #3736.
+    //
+    // THE ARGUMENT WAS ALREADY IN THIS FILE, one step short. `counts` records that it goes through the
+    // same private `matches` predicate as `naturalKeys` so that a count and its destination are identical
+    // BY CONSTRUCTION, and `stagedKeys` records that it is written as a union rather than a second sweep
+    // so it cannot drift. Both are L16 applied to the PREDICATE. This is the same argument applied to the
+    // EVALUATION: one predicate, asked once per show, read by everything.
+    //
+    // IT IS NOT A SECOND PREDICATE, which matters because `QueueShowableSurfacesAreOnePredicateTests`
+    // audits every surface that answers "will the queue show this lead". Nothing here decides anything:
+    // `placements` calls `matches` and stores what it said. Every reader below is a projection of that
+    // record, so a surface reading one is reading `matches` at one remove rather than asking a second
+    // question.
+    //
+    // ORDER IS PRESERVED, in two senses that are both load bearing. The entries are in the prospects'
+    // own order, because `naturalKeys` returns keys in that order and its callers render them.  And each
+    // entry's focuses are in `countedFocuses` order, because `stage(containing:)` takes the FIRST match
+    // and which one that is decides where a deep link lands.
+    struct Placement {
+        fileprivate let entries: [(key: String, focuses: [StageFocus])]
+
+        /// How many shows were placed. Read by the tests that check this was built over the corpus they
+        /// think it was, so a placement over an empty list cannot answer every question with silence
+        /// (L98).
+        var count: Int { entries.count }
+    }
+
+    static func placements(in prospects: [Prospect], context: StageContext) -> Placement {
+        // #3738: counted here, at the one place a placement is built, so "once per pass" is a number a
+        // test can assert rather than a claim in a comment (L63, L27).
+        QueueRenderPass.WorkTally.recordStagePlacement()
+        return Placement(entries: prospects.map { p in
+            (p.naturalKey, countedFocuses.filter { matches($0, p, context: context) })
+        })
+    }
+
+    // `.followUps` and `.reachedOut` are absent from `countedFocuses` and `matches` returns false for
+    // both, so a placement answers EVERY focus and not merely the counted ones. Said out loud rather than
+    // left to be noticed, because the two cases coincide for a reason (neither resolves queue keys) and a
+    // reader checking only the code would have to prove it (L11).
+    static func naturalKeys(for focus: StageFocus, in placement: Placement) -> [String] {
+        placement.entries.compactMap { $0.focuses.contains(focus) ? $0.key : nil }
+    }
+
     static func naturalKeys(for focus: StageFocus, in prospects: [Prospect],
                             context: StageContext) -> [String] {
-        prospects.filter { matches(focus, $0, context: context) }.map(\.naturalKey)
+        // A FORWARDER and never a second implementation, on `QueueModel.items`' precedent beside it: two
+        // entry points onto one derivation is the shape that drifts, and the drift would be silent
+        // because both halves would go on returning perfectly good keys (L263).
+        naturalKeys(for: focus, in: placements(in: prospects, context: context))
     }
 
     // #1134: which stage a deep-linked lead belongs to, so a tapped OmniFocus follow-up or a search pick
@@ -58,11 +112,18 @@ enum StageNavigation {
     // reached-out lead focuses .reachedOut (its rows come from ReachedOutQueue, keyed separately); every
     // other lead is placed by the same `matches` predicate the pills count with. nil for a lead in no
     // stage at all (RootView routes those to Archive instead).
+    static func stage(containing key: String, in placement: Placement,
+                      reachedOutKeys: Set<String>) -> StageFocus? {
+        if reachedOutKeys.contains(key) { return .reachedOut }
+        // FIRST, and the entry's focuses are in `countedFocuses` order, so this is the same focus the
+        // direct form returned.
+        return placement.entries.first { $0.key == key }?.focuses.first
+    }
+
     static func stage(containing key: String, in prospects: [Prospect], reachedOutKeys: Set<String>,
                       context: StageContext) -> StageFocus? {
-        if reachedOutKeys.contains(key) { return .reachedOut }
-        guard let p = prospects.first(where: { $0.naturalKey == key }) else { return nil }
-        return countedFocuses.first { matches($0, p, context: context) }
+        stage(containing: key, in: placements(in: prospects, context: context),
+              reachedOutKeys: reachedOutKeys)
     }
 
     // #1140: which rows the focused list shows. A stage pill (`stage` non-nil) re-derives its membership
@@ -72,10 +133,14 @@ enum StageNavigation {
     // specific named set Dan asked to see, so its keys are returned verbatim (the flat list renders
     // whichever of them still exist). This lives here, not in the SwiftUI view, so it can be tested at all
     // (the #863 lesson: a rule computed inside a view has no seam a test can reach).
+    static func focusedKeys(stage: StageFocus?, leadKeys: [String], in placement: Placement) -> [String] {
+        guard let stage else { return leadKeys }
+        return naturalKeys(for: stage, in: placement)
+    }
+
     static func focusedKeys(stage: StageFocus?, leadKeys: [String], in prospects: [Prospect],
                             context: StageContext) -> [String] {
-        guard let stage else { return leadKeys }
-        return naturalKeys(for: stage, in: prospects, context: context)
+        focusedKeys(stage: stage, leadKeys: leadKeys, in: placements(in: prospects, context: context))
     }
 
     // #1567: whether the Queue will show Dan this lead at all, which is what a global search pick and an
@@ -105,15 +170,18 @@ enum StageNavigation {
     // Counted through the same `matches` predicate as the pill beneath it, so the masthead can no longer
     // read lower than the pills it sits above (452 against 589 on the live store). One pass over the
     // prospects, in the style of `counts` above, so a prospect's recipients fault at most once (#1121).
-    static func queueKeys(in prospects: [Prospect], reachedOutKeys: Set<String>,
-                          context: StageContext) -> Set<String> {
+    static func queueKeys(in placement: Placement, reachedOutKeys: Set<String>) -> Set<String> {
         var result = Set<String>()
-        for p in prospects where !reachedOutKeys.contains(p.naturalKey) {
-            if countedFocuses.contains(where: { matches($0, p, context: context) }) {
-                result.insert(p.naturalKey)
-            }
+        for entry in placement.entries
+        where !reachedOutKeys.contains(entry.key) && !entry.focuses.isEmpty {
+            result.insert(entry.key)
         }
         return result
+    }
+
+    static func queueKeys(in prospects: [Prospect], reachedOutKeys: Set<String>,
+                          context: StageContext) -> Set<String> {
+        queueKeys(in: placements(in: prospects, context: context), reachedOutKeys: reachedOutKeys)
     }
 
     // #1580: every show a stage will render, which is what the global search bar is allowed to find.
@@ -123,11 +191,17 @@ enum StageNavigation {
     //
     // Written as the union rather than as a second sweep so it cannot drift from `opensInQueue`, which
     // is the same question asked of one key. `SearchScopedToQueueTests` holds the two to each other.
+    static func stagedKeys(in placement: Placement, reachedOutKeys: Set<String>) -> Set<String> {
+        var result = queueKeys(in: placement, reachedOutKeys: reachedOutKeys)
+        for entry in placement.entries where reachedOutKeys.contains(entry.key) {
+            result.insert(entry.key)
+        }
+        return result
+    }
+
     static func stagedKeys(in prospects: [Prospect], reachedOutKeys: Set<String>,
                            context: StageContext) -> Set<String> {
-        var result = queueKeys(in: prospects, reachedOutKeys: reachedOutKeys, context: context)
-        for p in prospects where reachedOutKeys.contains(p.naturalKey) { result.insert(p.naturalKey) }
-        return result
+        stagedKeys(in: placements(in: prospects, context: context), reachedOutKeys: reachedOutKeys)
     }
 
     // Every focus that resolves queue keys. `.followUps` is excluded on purpose: it opens FollowUpsView
@@ -156,15 +230,17 @@ enum StageNavigation {
         return inquiry.sentAt == nil ? .review : .reachedOut
     }
 
-    static func counts(in prospects: [Prospect],
-                       context: StageContext) -> [StageFocus: Int] {
+    static func counts(in placement: Placement) -> [StageFocus: Int] {
         var result: [StageFocus: Int] = [:]
-        for p in prospects {
-            for focus in countedFocuses where matches(focus, p, context: context) {
-                result[focus, default: 0] += 1
-            }
+        for entry in placement.entries {
+            for focus in entry.focuses { result[focus, default: 0] += 1 }
         }
         return result
+    }
+
+    static func counts(in prospects: [Prospect],
+                       context: StageContext) -> [StageFocus: Int] {
+        counts(in: placements(in: prospects, context: context))
     }
 
     // #2359: the queue's far edge, applied to TRIAGE ALONE.

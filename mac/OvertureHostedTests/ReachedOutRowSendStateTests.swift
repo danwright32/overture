@@ -40,7 +40,7 @@ struct ReachedOutRowSendStateTests {
 
     private func row(since: Date?) -> some View {
         let (p, r) = pitched()
-        return QueueView(deepLinkedKey: .constant(nil), deepLinkedKeys: .constant(nil))
+        return QueueView(deepLinkedKey: .constant(nil), deepLinkedKeys: .constant(nil), allProspects: [])
             .reachedOutRow((prospect: p, recipient: r, next: Date()), now: Date(), since: since,
                            sourceCalendars: [:])
     }

@@ -8,6 +8,7 @@ import SwiftData
 // data without ever touching live data. Wrapped in #if DEBUG so it is compiled out of release
 // builds entirely and can never run against Dan's real install.
 #if DEBUG
+// survivor-inheritance-exempt: deletes Prospect, because a debug only teardown that empties the DEBUG store wholesale, so there is no survivor to carry anything onto (#3597)
 enum DebugSeed {
     // The handoff files the app INGESTS (per docs/contracts.md): scout results, the Downbeat export,
     // booking/warm history, drafted emails, and reply intents. Deliberately excludes the files the app

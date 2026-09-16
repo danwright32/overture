@@ -208,7 +208,7 @@ struct RunNightDropKeyCollisionTests {
         try ctx.save()
 
         let entry = QueueUndoEntry(recording: "Dismiss", on: run, priorStatus: priorStatus,
-                                   priorShowOutcomeRaw: nil, priorDismissedAt: nil,
+                                   priorShowOutcomeRaw: nil, priorShowOutcomeAt: nil, priorDismissedAt: nil,
                                    priorConflictClearedKey: nil, droppedNights: ["2026-10-02"])
         let outcome = QueueUndo.apply(entry, resolving: { _ in run }, in: ctx,
                                       export: (bookings: [], blockedDates: [], health: .ok))

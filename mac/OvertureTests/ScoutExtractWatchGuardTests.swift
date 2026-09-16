@@ -12,16 +12,19 @@ import Testing
 struct ScoutExtractWatchGuardTests {
     private var rootView: String { SourceGuardHelper.source("Overture/App/RootView.swift") }
 
-    @Test func aScoutThatQueuedPagesWaitsForThemToBeRead() {
+    @Test func aScoutThatQueuedPagesWaitsForThemToBeRead() async {
         #expect(!rootView.isEmpty)
         // Only when something was actually queued: a run with nothing to read must not sit waiting on a
         // run that was never launched.
         #expect(rootView.contains("$0.state == .queuedForReading"))
-        #expect(rootView.contains("await watchScoutExtractRun()"))
+        // #3887: the CALL, not one rendering of it. This asserted `watchScoutExtractRun()` exactly, so
+        // adding the argument that says whose read it is turned it red while what it guards, that a scout
+        // with queued pages waits for them, was untouched (L103).
+        #expect(rootView.contains("await watchScoutExtractRun("))
     }
 
-    @Test func whatTheRunReadIsActuallyIngested() {
-        #expect(rootView.contains("ScoutExtractIngest.ingest("))
+    @Test func whatTheRunReadIsActuallyIngested() async {
+        #expect(rootView.contains("await ScoutExtractIngest.ingest("))
     }
 
     // A run that finishes without producing anything is the one shape of failure that would otherwise be

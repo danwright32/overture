@@ -8,6 +8,14 @@ import SwiftData
 // again, and there is no stored "hold" flag. All of the sheet's wording lives in PrepSelectionCopy so it
 // stays testable (#885).
 struct PrepSelectionSheet: View {
+    // #3859: this sheet has a `StallSurface` case of its own now, so a stall recorded while it is on
+    // screen is attributed to it. #3762's rule follows from that: the surface a stall is attributed to
+    // has to count its own rebuilds, or the record reads `passes: 0`, and `0` there says the surface did
+    // not rebuild rather than that nobody counted (L11).
+    //
+    // Read as an OPTIONAL, on the same footing as every other environment object here, so a missed
+    // injection is a pass nobody counted rather than a crash.
+    @Environment(FreezeWatch.self) private var freezeWatch: FreezeWatch?
     @Environment(\.dismiss) private var dismiss
 
     // A value-type snapshot of each eligible prospect, so the sheet never holds a SwiftData model across
@@ -47,6 +55,9 @@ struct PrepSelectionSheet: View {
     }
 
     var body: some View {
+        // #3859: this surface counts its own rebuild. Bound to `_` rather than called as a statement
+        // because `body` is a ViewBuilder, which takes a declaration and not a bare void expression.
+        let _ = freezeWatch?.recordPass()
         VStack(alignment: .leading, spacing: OVSpacing.md) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(PrepSelectionCopy.title).font(OVType.dateHeading).foregroundStyle(OVColor.ink)

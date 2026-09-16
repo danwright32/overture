@@ -261,25 +261,4 @@ struct SourceYieldTests {
         #expect(SourceYield.tallies(in: prospects)["s"] == SourceYield.tally(sourceId: "s", in: prospects))
         #expect(SourceYield.tallies(in: prospects)["s"]?.found == 1)
     }
-
-    // #1429: the change-key the sheet uses to decide WHEN to recompute the cached tallies, evaluated every
-    // redraw so an unrelated scroll tick skips the recompute. It must move when something a tally counts
-    // moves (a show added, a status shifted) and stay put on a mere reorder, so it never causes a needless
-    // full-store recompute nor misses a real one.
-    @Test func signatureTracksTallyInputsAndIgnoresOrder() {
-        let base = [show("a", sources: ["s"], status: .new),
-                    show("b", sources: ["s"], status: .queued)]
-        let sig = SourceYield.signature(base)
-
-        // A reorder of the same prospects is not a change.
-        #expect(SourceYield.signature(base.reversed()) == sig)
-
-        // Adding a show is.
-        #expect(SourceYield.signature(base + [show("c", sources: ["s"], status: .new)]) != sig)
-
-        // Moving a show's status is, even with the count unchanged (kept/unreviewed shift).
-        let moved = [show("a", sources: ["s"], status: .queued),
-                     show("b", sources: ["s"], status: .queued)]
-        #expect(SourceYield.signature(moved) != sig)
-    }
 }

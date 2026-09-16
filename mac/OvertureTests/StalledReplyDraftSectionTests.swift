@@ -117,7 +117,7 @@ struct StalledReplyDraftSectionTests {
     @Test func theSheetsHeaderCountsTheStalledDraftThePillSentHimFor() throws {
         let context = try makeContext()
         showWithAStalledReplyDraft(context)
-        let counts = DueWork.counts(prospects: try prospects(context), now: now, replyRunAlive: false)
+        let counts = DueWork.counts(prospects: try prospects(context), inquiries: [], now: now, replyRunAlive: false)
 
         #expect(counts.stalledReplyDrafts == 1)
         #expect(counts.total == 1, "the sheet reads \"Due \(counts.total)\" under a pill that says 1 stalled")
@@ -128,7 +128,7 @@ struct StalledReplyDraftSectionTests {
     @Test func theSheetListsARowForTheStalledDraft() throws {
         let context = try makeContext()
         showWithAStalledReplyDraft(context)
-        let listed = DueWork.rows(prospects: try prospects(context), now: now, replyRunAlive: false)
+        let listed = DueWork.rows(prospects: try prospects(context), inquiries: [], now: now, replyRunAlive: false)
 
         #expect(listed.stalledReplyDrafts.count == 1)
         #expect(listed.stalledReplyDrafts.first?.prospect.groupName == "Aurora Strings")
@@ -141,7 +141,7 @@ struct StalledReplyDraftSectionTests {
     @Test func aStalledDraftIsInNoOtherSectionSoNothingElseCoveredForIt() throws {
         let context = try makeContext()
         showWithAStalledReplyDraft(context)
-        let listed = DueWork.rows(prospects: try prospects(context), now: now, replyRunAlive: false)
+        let listed = DueWork.rows(prospects: try prospects(context), inquiries: [], now: now, replyRunAlive: false)
 
         #expect(listed.silent.isEmpty)
         #expect(listed.afterTheShow.isEmpty)
@@ -156,7 +156,7 @@ struct StalledReplyDraftSectionTests {
         showWithAStalledReplyDraft(context)
         let all = try prospects(context)
         let pill = followUpsPill(all)
-        let listed = DueWork.rows(prospects: all, now: now, replyRunAlive: false)
+        let listed = DueWork.rows(prospects: all, inquiries: [], now: now, replyRunAlive: false)
 
         #expect(pill.count == listed.stalledReplyDrafts.count,
                 "the pill says \"\(pill.detail)\" (\(pill.count)) over \(listed.stalledReplyDrafts.count) rows")
@@ -179,7 +179,7 @@ struct StalledReplyDraftSectionTests {
 
         let all = try prospects(context)
         let pill = followUpsPill(all)
-        let listed = DueWork.rows(prospects: all, now: now, replyRunAlive: false)
+        let listed = DueWork.rows(prospects: all, inquiries: [], now: now, replyRunAlive: false)
 
         #expect(pill.detail == "2 reply drafts stalled")
         #expect(pill.count == 2)
@@ -196,11 +196,14 @@ struct StalledReplyDraftSectionTests {
         showWithAStalledReplyDraft(context)
         let all = try prospects(context)
         let pill = followUpsPill(all, replyRunAlive: true)
-        let listed = DueWork.rows(prospects: all, now: now, replyRunAlive: true)
+        let listed = DueWork.rows(prospects: all, inquiries: [], now: now, replyRunAlive: true)
 
-        #expect(pill.count == 0)
         #expect(listed.stalledReplyDrafts.isEmpty)
-        #expect(pill.count == listed.stalledReplyDrafts.count)
+        // #3890: nothing is stalled, and the person who wrote is still waiting on an answer, so the pill
+        // states that one thing rather than zero. The pill and the rows agree, which is what this asserts.
+        #expect(listed.repliesToAnswer.count == 1)
+        #expect(pill.count == listed.rendered)
+        #expect(pill.count == 1)
     }
 
     // MARK: - The class, not the instance
@@ -232,8 +235,16 @@ struct StalledReplyDraftSectionTests {
         #expect(SourceGuardHelper.containsCode(
             "ForEach(listed.stalledReplyDrafts, id: \\.recipient.id)", in: source),
                 "the stalled section no longer iterates the shared rows (#2878)")
-        #expect(source.contains("DueWork.rows("),
-                "FollowUpsView no longer takes its rows from DueWork, so it can derive them a second way")
+        // #3814: the derivation moved into `FollowUpsRenderPass`, so the claim is checked THERE. The rule
+        // is unchanged and is the same one: this sheet's rows come from `DueWork` and are never derived a
+        // second way. Following the code rather than pinning the file, because a guard that breaks on a
+        // legitimate move teaches the next person to edit it until it is quiet (L103).
+        let pass = SourceGuardHelper.source("Overture/UI/FollowUpsRenderPass.swift")
+        #expect(!pass.isEmpty, "FollowUpsRenderPass could not be read, so nothing below was measured")
+        #expect(pass.contains("DueWork.rows("),
+                "the Follow-ups pass no longer takes its rows from DueWork, so it can derive them a second way")
+        #expect(!source.contains("DueWork.rows("),
+                "FollowUpsView derives the rows itself as well as through the pass, which is two derivations")
         // The view holds no predicate of its own. Two definitions of "is this stalled" is the shape that
         // let the count and the list disagree, and the fix is worth nothing if the view reintroduces one.
         #expect(!source.contains("isReplyDraftStalled"),

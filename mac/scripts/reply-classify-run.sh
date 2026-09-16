@@ -176,7 +176,8 @@ discard_previous_results "$RESULTS"
 PROMPT="You are the Overture reply-classify + reply-drafter run (v3). Follow $RUNBOOK exactly. Read the
 work-list at $QUEUE. For EVERY item: (1) classify the reply's intent as exactly one of interested,
 wants_to_book, has_question, or declined; (2) DRAFT a short reply in Dan's voice that responds to what
-the contact actually wrote, emitting draftSubject and draftBody. NEVER ask the contact for the date,
+the contact actually wrote, emitting draftBody only and NO draftSubject (#3891: the app answers under the
+subject the conversation already carries, and a drafted subject split the conversation). NEVER ask the contact for the date,
 venue, or location (#438): each item carries venue and performanceDate (the show Overture already knows).
 REFERENCE them, never request them (e.g. 'your March 10 concert at Carnegie Hall', never 'let me know the
 date').
@@ -190,7 +191,7 @@ $VOICE and apply those tendencies only as secondary nudges, never over the skill
 paraphrase raw past email pairs (the #119/#249 leak guard). Copy each item's naturalKey AND recipientId
 verbatim so each result attaches to the right contact. Immediately after finishing EACH item, rewrite
 $RESULTS with the complete v3 ReplyClassifyResults JSON (version 3; each result = {naturalKey,
-recipientId, intent, draftSubject, draftBody}) covering EVERY item you have finished so far, not just
+recipientId, intent, draftBody}) covering EVERY item you have finished so far, not just
 this one, and nothing else to that file. Do this after every single item, not only at the end: the app
 derives its live 'N of M' progress from this file's own entry count, so the last time you do this simply
 IS the end, and you must never wait until the whole work-list is done to write anything. If $VOICE is

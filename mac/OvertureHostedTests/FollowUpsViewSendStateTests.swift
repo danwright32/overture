@@ -26,7 +26,7 @@ struct FollowUpsViewSendStateTests {
 
     @Test func aRowWithNoInFlightSendShowsTheNudgeButton() throws {
         let (p, r) = prospectAndRecipient()
-        let view = FollowUpsView()
+        let view = FollowUpsView(prospects: [], inquiries: [])
         let d = FollowUp.DueRecipient(prospect: p, recipient: r)
 
         _ = try view.row(d, since: nil, sourceCalendars: [:]).inspect().find(button: SendConfirmCopy.openReview)
@@ -34,7 +34,7 @@ struct FollowUpsViewSendStateTests {
 
     @Test func aRowWithAnInFlightSendShowsTheLiveLabelInsteadOfTheButton() throws {
         let (p, r) = prospectAndRecipient()
-        let view = FollowUpsView()
+        let view = FollowUpsView(prospects: [], inquiries: [])
         let d = FollowUp.DueRecipient(prospect: p, recipient: r)
         let since = Date(timeIntervalSince1970: 1000)
 

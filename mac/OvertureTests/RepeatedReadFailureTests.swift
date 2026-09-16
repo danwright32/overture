@@ -45,39 +45,39 @@ struct RepeatedReadFailureTests {
                                               sourceUrl: "https://org.example/a")
 
     @discardableResult
-    private func ingest(_ r: ScoutExtractResults, into ctx: ModelContext) -> ScoutService.Outcome {
-        ScoutExtractIngest.ingest(r, clients: [], history: [], blocked: .empty,
+    private func ingest(_ r: ScoutExtractResults, into ctx: ModelContext) async -> ScoutService.Outcome {
+        await ScoutExtractIngest.ingest(r, clients: [], history: [], blocked: .empty,
                                   today: ScoutTestClock.beforeAllFixtures, now: now, into: ctx)
     }
 
     // MARK: - The memory the row never had
 
     // The whole of the defect: run ten was indistinguishable from run one.
-    @Test func consecutiveRunsThatFailedToReadAreCounted() throws {
+    @Test func consecutiveRunsThatFailedToReadAreCounted() async throws {
         let ctx = try context()
         let s = source()
         ctx.insert(s)
         try ctx.save()
 
         for run in 1...10 {
-            ingest(results(.notRead), into: ctx)
+            await ingest(results(.notRead), into: ctx)
             #expect(s.failedReadStreak == run)
         }
     }
 
     // The other half, and the one that decides whether the warning can ever be trusted: a source that
     // reads again is not one run away from the warning, it is back at nothing.
-    @Test func aRunThatActuallyReadThePageClearsTheStreak() throws {
+    @Test func aRunThatActuallyReadThePageClearsTheStreak() async throws {
         let ctx = try context()
         let s = source()
         ctx.insert(s)
         try ctx.save()
 
-        for _ in 1...9 { ingest(results(.notRead), into: ctx) }
+        for _ in 1...9 { await ingest(results(.notRead), into: ctx) }
         #expect(s.failedReadStreak == 9)
         #expect(s.repeatedFailureNote(now: now) != nil)
 
-        ingest(results(.upcomingListings, events: [aRealShow]), into: ctx)
+        await ingest(results(.upcomingListings, events: [aRealShow]), into: ctx)
 
         #expect(s.failedReadStreak == 0)
         #expect(s.repeatedFailureNote(now: now) == nil)
@@ -85,7 +85,7 @@ struct RepeatedReadFailureTests {
         // And it stays back at nothing: one later failure must not re-arm a warning built on nine runs
         // that have been answered. (The row is still work while it carries that fresh failure, which is
         // the failing grade's job and predates this; what must not come back is the history.)
-        ingest(results(.notRead), into: ctx)
+        await ingest(results(.notRead), into: ctx)
         #expect(s.failedReadStreak == 1)
         #expect(s.repeatedFailureNote(now: now) == nil)
         #expect(!SourceAttention.hasFailedToReadRepeatedly(s))
@@ -93,25 +93,25 @@ struct RepeatedReadFailureTests {
 
     // A page read in part is a page that was read: real shows came back from it and were ingested, so it
     // is not a run that came away with nothing.
-    @Test func aPartlyReadPageClearsTheStreakToo() throws {
+    @Test func aPartlyReadPageClearsTheStreakToo() async throws {
         let ctx = try context()
         let s = source()
         s.pendingPageMonths = ["2026-08", "2026-09"]        // the app stitched two months in
         ctx.insert(s)
         try ctx.save()
 
-        for _ in 1...4 { ingest(results(.notRead), into: ctx) }
+        for _ in 1...4 { await ingest(results(.notRead), into: ctx) }
         #expect(s.failedReadStreak == 4)
 
         s.pendingPageMonths = ["2026-08", "2026-09"]
-        ingest(results(.upcomingListings, events: [aRealShow]), into: ctx)   // covers one of the two
+        await ingest(results(.upcomingListings, events: [aRealShow]), into: ctx)   // covers one of the two
 
         #expect(s.failedReadStreak == 0)
     }
 
     // #1027: Dan confirmed this page is the right one and merely quiet. The read worked; there is no
     // failure to count and no history left to complain about.
-    @Test func aConfirmedEmptyReadClearsTheStreak() throws {
+    @Test func aConfirmedEmptyReadClearsTheStreak() async throws {
         let ctx = try context()
         let s = source()
         s.confirmedEmptyHash = "H_empty"
@@ -121,7 +121,7 @@ struct RepeatedReadFailureTests {
 
         s.failedReadStreak = 6
 
-        ingest(results(.noDatedContent), into: ctx)
+        await ingest(results(.noDatedContent), into: ctx)
 
         #expect(s.failedReadStreak == 0)
     }

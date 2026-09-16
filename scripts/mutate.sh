@@ -305,6 +305,38 @@ if ! command -v "${RUNNER}" >/dev/null 2>&1; then
   exit 2
 fi
 
+# #3792: a target carrying UNCOMMITTED changes is refused, before the file is touched.
+#
+# This script breaks a file and restores it. When a run is killed, or the session ends mid-run, the broken
+# file stays behind, and the cleanup anybody reaches for is `git checkout -- <file>`, which reverts to the
+# last commit and therefore destroys any uncommitted work in that file as well. The leftover damage and the
+# work share one fate and only one of them is meant to go, so the recovery stops being general and becomes
+# "re-apply exactly the lines the mutation removed", from this script's output or from memory.
+#
+# In the tool rather than in a habit because the habit was measured and failed: three times in one session
+# on 2026-09-11, the second and third after the rule had been stated out loud and resolved upon (L27).
+#
+# A target in NO repository is allowed, and that is not an oversight: there is nothing for a revert to
+# destroy, and this script's own fixture mutates a file under the temp folder. So the question is asked of
+# the target's own directory and a negative answer means "not under version control here", never "dirty".
+TARGET_DIR="$(cd "$(dirname "${TARGET}")" 2>/dev/null && pwd)"
+if [ "${OVERTURE_MUTATE_ALLOW_DIRTY:-}" = "1" ]; then
+  echo "mutate.sh: OVERTURE_MUTATE_ALLOW_DIRTY=1 is set, so an uncommitted target is allowed for this run."
+  echo "  Announced rather than silent: the leftover from an interrupted run cannot be cleaned up with a"
+  echo "  revert while this file holds work that is not committed."
+elif [ -n "${TARGET_DIR}" ] && git -C "${TARGET_DIR}" rev-parse --is-inside-work-tree >/dev/null 2>&1      && [ -n "$(git -C "${TARGET_DIR}" status --porcelain -- "${TARGET}" 2>/dev/null)" ]; then
+  echo "UNCOMMITTED - nothing was mutated and nothing was run."
+  echo "  ${TARGET} has changes that are not committed."
+  echo
+  echo "  This script breaks that file and restores it afterwards. If the run is interrupted the broken"
+  echo "  copy stays, and the obvious cleanup (git checkout -- the file) would take your uncommitted work"
+  echo "  with it, because both live in the same file."
+  echo
+  echo "  Commit first, then mutate: a revert is then always the safe move. To mutate work you do not"
+  echo "  intend to keep, set OVERTURE_MUTATE_ALLOW_DIRTY=1, which says so in the output."
+  exit 2
+fi
+
 # How many characters the expression's LAST match consumed, asked of perl itself on a COPY (#2820).
 # Prints the length, or "unknown" when it could not be measured.
 #

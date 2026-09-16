@@ -24,8 +24,14 @@ enum DueWork {
         // the Follow-ups pill because this number is what the sheet's own header states: without it the
         // pill read "1 reply draft stalled" and the sheet behind it read "Due 0".
         var stalledReplyDrafts: Int = 0
+        // #3890: conversations where somebody wrote back and is waiting on Dan's answer, scouted shows
+        // and hire inquiries both. The count the Dock and menu bar exist to show, and the one #2397 took
+        // out of this total without anything replacing it.
+        var repliesToAnswer: Int = 0
 
-        var total: Int { followUps + afterTheShow + conversationsToConfirm + stalledReplyDrafts }
+        var total: Int {
+            followUps + afterTheShow + conversationsToConfirm + stalledReplyDrafts + repliesToAnswer
+        }
     }
 
     // #2878/#2828: the ROWS behind the number, so the two are one derivation rather than two that happen
@@ -42,11 +48,15 @@ enum DueWork {
         // be counted here and rendered only on the Reached out row, so the header could stand over
         // fewer rows than it promised, which is #863 in the one place that exists to prevent it.
         var conversationsToConfirm: [ProposedConversation.DueRecipient] = []
+        // #3890: drawn first, in their own section, because a person waiting on an answer is the most
+        // time sensitive thing on the sheet (L609).
+        var repliesToAnswer: [ReplyToAnswer.DueConversation] = []
 
         // What FollowUpsView actually DRAWS. Named apart from the count below on purpose: the whole
         // defect was a number and a list that were not the same thing.
         var rendered: Int {
             afterTheShow.count + silent.count + stalledReplyDrafts.count + conversationsToConfirm.count
+                + repliesToAnswer.count
         }
         var isEmpty: Bool { rendered == 0 }
 
@@ -55,14 +65,15 @@ enum DueWork {
         var counts: Counts {
             Counts(followUps: silent.count, afterTheShow: afterTheShow.count,
                    conversationsToConfirm: conversationsToConfirm.count,
-                   stalledReplyDrafts: stalledReplyDrafts.count)
+                   stalledReplyDrafts: stalledReplyDrafts.count,
+                   repliesToAnswer: repliesToAnswer.count)
         }
     }
 
     // `replyRunAlive` is required and carries no default (L168). A caller that forgot it would report a
     // classify run still beating as a dead one (#471), which is a wrong list and a wrong badge rather
     // than a compile error.
-    static func rows(prospects: [Prospect], now: Date, replyRunAlive: Bool,
+    static func rows(prospects: [Prospect], inquiries: [Inquiry], now: Date, replyRunAlive: Bool,
                      followUp: FollowUpConfig = .init()) -> Rows {
         // #2967 state 2: one form pitch on a show that has been and gone is owed BOTH questions at
         // once, and counting it twice put "Due 2" over one contact. The confirm question wins and the
@@ -72,22 +83,44 @@ enum DueWork {
         // rather than in the view, so the number and the rows cannot disagree about it (L16).
         let toConfirm = ProposedConversation.dueRecipients(from: prospects)
         let confirmKeys = Set(toConfirm.map(\.recipient.id))
+        // #3890: two more of the same shape, each settled here for the same reason.
+        //
+        // A reply whose requested draft DIED is already listed, as the stalled draft with its own remedy,
+        // so its conversation is not listed a second time as a reply to answer.
+        //
+        // And a passed show whose reply is unanswered is ONE thing, the answer: the post-event prompt for
+        // that conversation yields until Dan has answered, then comes back. Dan's call, 2026-09-15, on
+        // the same reasoning as the confirm rule above: how a show ended is often exactly what the reply
+        // is about, so it is asked once the conversation is dealt with rather than beside it.
+        let stalled = StalledReplyDraft.dueRecipients(from: prospects, now: now, runAlive: replyRunAlive)
+        let stalledConversations = Set(stalled.map { SendGroup.groupKey($0.recipient) })
+        let replies = ReplyToAnswer.dueConversations(prospects: prospects, inquiries: inquiries)
+            .filter { conversation in
+                guard case .show(_, let r) = conversation else { return true }
+                return !stalledConversations.contains(SendGroup.groupKey(r))
+            }
+        let waitingConversations = Set(replies.compactMap { conversation -> String? in
+            guard case .show(let p, let r) = conversation else { return nil }
+            return "\(p.naturalKey)|\(SendGroup.groupKey(r))"
+        })
         return Rows(afterTheShow: PostEventPrompt.dueRecipients(from: prospects, now: now)
-                .filter { !confirmKeys.contains($0.recipient.id) },
+                .filter { !confirmKeys.contains($0.recipient.id) }
+                .filter { !waitingConversations.contains("\($0.prospect.naturalKey)|\(SendGroup.groupKey($0.recipient))") },
              // Oldest pitch first, which is the order the sheet showed before this ordering moved here
              // from its body: one place decides what the list holds AND what order it is in.
              silent: FollowUp.dueRecipients(from: prospects, now: now, config: followUp)
                 .sorted { ($0.recipient.sentAt ?? .distantPast) < ($1.recipient.sentAt ?? .distantPast) },
-             stalledReplyDrafts: StalledReplyDraft.dueRecipients(from: prospects, now: now,
-                                                                 runAlive: replyRunAlive),
+             stalledReplyDrafts: stalled,
              // The SAME function the Reached out row is built from, never a second predicate that
              // happens to agree today (L16).
-             conversationsToConfirm: toConfirm)
+             conversationsToConfirm: toConfirm,
+             repliesToAnswer: replies)
     }
 
-    static func counts(prospects: [Prospect], now: Date, replyRunAlive: Bool,
+    static func counts(prospects: [Prospect], inquiries: [Inquiry], now: Date, replyRunAlive: Bool,
                        followUp: FollowUpConfig = .init()) -> Counts {
-        rows(prospects: prospects, now: now, replyRunAlive: replyRunAlive, followUp: followUp).counts
+        rows(prospects: prospects, inquiries: inquiries, now: now, replyRunAlive: replyRunAlive,
+             followUp: followUp).counts
     }
 }
 

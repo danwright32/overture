@@ -39,7 +39,22 @@ struct BackupLogHonestyTests {
             atPath: StoreBackup.backupsDirectory(dataDirectory: dataDirectory).path).sorted()
     }
 
-    private let when = Date(timeIntervalSince1970: 1_700_000_000)   // 20231114-171320
+    private let when = Date(timeIntervalSince1970: 1_700_000_000)
+
+    // DERIVED from the same helper the code uses, never written out as a literal.
+    //
+    // That instant renders as 20231114-171320 in Eastern and 20231114-221320 in UTC, and
+    // `DatedFolderRotation.stamp` takes the CALLER's zone deliberately: a store backup records when
+    // THIS Mac took the copy, so local is the right answer and the app is not what was wrong here.
+    // What was wrong is asserting one machine's rendering of the rule instead of the rule (L103, L504).
+    //
+    // Measured 2026-09-12 by the first hosted CI run: four tests in this file went red on a UTC runner,
+    // and the suite had never once run outside America/New_York.
+    //
+    // The FORMAT is still pinned, independently, by `theStampFormatIsStillTheDocumentedOne` in
+    // StoreBackupTests, so deriving here does not leave both sides of every assertion coming from one
+    // lookup (L70).
+    private var stamp: String { DatedFolderRotation.stamp(when) }
 
     // MARK: - A refusal snapshot is not a backup
 
@@ -52,7 +67,7 @@ struct BackupLogHonestyTests {
         _ = StoreBackup.makeBackup(dataDirectory: dir, now: when, reason: .foreignFile)
 
         let text = try log(dir)
-        #expect(text.contains("20231114-171320"))
+        #expect(text.contains(stamp))
         #expect(!text.contains("success"))
         #expect(text.contains(StoreBackup.foreignFileLogNote))
     }
@@ -65,7 +80,7 @@ struct BackupLogHonestyTests {
 
         _ = StoreBackup.makeBackup(dataDirectory: dir, now: when)
 
-        #expect(try log(dir).contains("20231114-171320 success"))
+        #expect(try log(dir).contains("\(stamp) success"))
     }
 
     // Visible in the folder listing too, not only in the log. Someone looking for a backup to restore
@@ -79,8 +94,8 @@ struct BackupLogHonestyTests {
 
         let destination = try #require(StoreBackup.makeBackup(dataDirectory: dir, now: when, reason: .foreignFile))
 
-        #expect(destination.lastPathComponent == "20231114-171320.foreign")
-        #expect(try entries(dir).contains("20231114-171320.foreign"))
+        #expect(destination.lastPathComponent == "\(stamp).foreign")
+        #expect(try entries(dir).contains("\(stamp).foreign"))
     }
 
     // MARK: - A refusal snapshot never ages out a real backup
@@ -128,7 +143,7 @@ struct BackupLogHonestyTests {
         #expect(!text.contains("success"))
         #expect(text.contains(StoreBackup.nothingCopiedLogNote))
         // And the empty folder is not left behind to be counted as one of the ten kept.
-        #expect(try !entries(dir).contains("20231114-171320"))
+        #expect(try !entries(dir).contains(stamp))
     }
 
     // MARK: - The 2026-07-23 incident, end to end
@@ -153,6 +168,6 @@ struct BackupLogHonestyTests {
         let text = try log(dir)
         #expect(!text.contains("success"))
         #expect(text.contains(StoreBackup.foreignFileLogNote))
-        #expect(try entries(dir).contains("20231114-171320.foreign"))
+        #expect(try entries(dir).contains("\(stamp).foreign"))
     }
 }

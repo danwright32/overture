@@ -136,7 +136,9 @@ struct GeoRefusalsRenderPassWiringTests {
         }
         // #2365: the resolve happens through the CONTEXT, so the pass carries one value through its
         // sweeps rather than unpacking the gate and passing the pieces separately.
-        #expect(body.contains("let context = i.context.resolvingPlaces(of: i.prospects.all)"))
+        // #3507: `inQueue` rather than `i.prospects`, since the queue's scope is now derived from the one
+        // whole-table corpus inside this function rather than arriving as a second @Query.
+        #expect(body.contains("let context = i.context.resolvingPlaces(of: inQueue.all)"))
     }
 
     // And carries it, so the surfaces built from the same pass answer from the same table rather than
@@ -147,6 +149,25 @@ struct GeoRefusalsRenderPassWiringTests {
             Issue.record("expected to find stageEmptyState")
             return
         }
-        #expect(empty.contains("geo: data.geo"))
+        // #3738 RE-AIMED THIS, and the claim it now makes is stronger than the one it made before.
+        //
+        // It asserted `geo: data.geo`, which is the empty-stage card handing the pass's RESOLVED
+        // geography to a fresh `StageContext` so that counting the other stages did not re-resolve every
+        // show's place. That was the right assertion while the card counted the other stages itself. It
+        // no longer counts them at all: the pass decides every show's stages once and the card reads
+        // `data.stageCounts`, so the question of which geography it would have used cannot arise.
+        //
+        // Re-aimed rather than deleted, because the reason survives the change: this card must not sweep
+        // the store. Asserting the counts come from the snapshot says that, and says it about a sweep
+        // that is now absent rather than about an argument to one that is present (L252, L430).
+        #expect(empty.contains("data.stageCounts"),
+                Comment(rawValue: "the empty-stage card counts the other stages itself again, which "
+                        + "re-decides every show's stages inside a SwiftUI body (#3738)"))
+        #expect(!empty.contains("StageNavigation.counts("),
+                Comment(rawValue: "the empty-stage card is deciding every show's stages again rather "
+                        + "than reading the pass's own table (#3738)"))
+        // And the pass really does carry them, so the needle above cannot be satisfied by a field that
+        // does not exist.
+        #expect(queueView.contains("let stageCounts: [StageFocus: Int]"))
     }
 }

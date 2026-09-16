@@ -54,15 +54,13 @@
             "email": "virgile@virgileroche.example",
             "method": "direct_email",
             "confidence": "high",
-            "sourceUrl": "https://virgileroche.example/schedule",
-            "overrideBody": "My name is Dan Wright and I'm a professional arts photographer here in NYC. I'm writing in regard to your May 18 concert with Nora Calder at Carnegie Hall. I shoot unobtrusive, no-flash documentary coverage, so the audience doesn't notice me and the performance isn't disturbed. I've been photographing at Carnegie Hall for close to ten years now, and you can see my portfolio at danwrightphotography.com. I'd be glad to talk about your photography plans for the performance, if you don't have someone on it already. I look forward to hearing from you!"
+            "sourceUrl": "https://virgileroche.example/schedule"
           },
           {
             "provenance": "performer",
             "name": "Nora Calder",
             "method": "form_or_dm",
-            "confidence": "low",
-            "overrideBody": "I'm Dan Wright, a documentary photographer here in New York City working in the performing arts. I'm writing about your May 18 concert with Virgile Roche at Carnegie Hall. I work without flash and stay out of the way, so nothing about the night changes because I'm in the room. My work at Carnegie Hall goes back close to ten years, and my portfolio is at danwrightphotography.com. I'd be glad to talk through your photography plans for this performance, if you don't have it covered already. I look forward to hearing from you."
+            "confidence": "low"
           }
         ],
         "draft": {

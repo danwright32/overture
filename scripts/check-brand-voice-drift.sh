@@ -62,6 +62,18 @@ BRAND_VOICE_ANCHORS=(
   # exactly the one-sided state this check exists to name.
   "no two sentences in a row"
   "short paragraphs"
+  # #3683: what "reword it every time" licenses. Both sources carried the rule that sentence one names
+  # Dan AND his trade, and neither said who the trade clause has to be ABOUT, so a draft satisfied both
+  # halves while moving Dan out of the subject slot ("I'm Dan Wright, and live performance is the whole of
+  # my photography work here in NYC"). The invariant is an anchor because it is the half a rewrite silently
+  # drops: naming both is what everyone checks.
+  "subject of the clause that states his trade"
+  # #3685: the closing hedge names what it is about rather than pointing at it. On a multi night run the
+  # drafter pluralises the pronoun to agree with the nights it has in mind, and those nights are never a
+  # noun phrase in the email, so "if you don't already have someone covering them" reaches for an
+  # antecedent nobody wrote. An anchor because it is the seam of two rules that are each right on their
+  # own side, so either source losing it puts the pronoun straight back within reach.
+  "names what it is about rather than pointing at it"
   # #1824: describe Dan, never categorize the recipient. The phrase that broke this rule ("working with
   # performing arts organizations in New York", sent to one singer-songwriter) was in neither source, which
   # is precisely why the rule now has to be in BOTH: a model with no instruction either way will assemble

@@ -106,11 +106,21 @@ final class Recipient {
     // than shown as a false citation. Distinct from contactFormURL, which stays the form_or_dm
     // contact's own submission link.
     var contactSourceURL: String?
-    // v4 (#640, #634 Phase B): only ever meaningful when provenance == .performer, a direct,
-    // second-person draft for THIS recipient, preferred over the shared Prospect.draftBody at send.
-    // PrepImporter clears this whenever a re-ingested contact's provenance is no longer .performer.
-    var overrideBody: String?
 
+    // RETAINED STORAGE, read and written by nothing (#3549). This held a directly addressed performer's
+    // own second copy of the pitch, which the send preferred over the show's body while the card edited
+    // the show's body, so an edit was reported as applied and reached nobody. `effectiveBody` no longer
+    // consults it, `PrepImporter` no longer writes it, and the runbook no longer asks for it.
+    //
+    // Left on the model deliberately rather than deleted, by the same convention as Prospect's own
+    // retained columns: every schema change this app has made was ADDITIVE and it carries no
+    // MigrationPlan or VersionedSchema (see AppSchema), so dropping a stored property would be its first
+    // subtractive migration against a live store whose only net is the launch backup. That gets its own
+    // change with a rehearsal against a store clone first, not a line in a behaviour fix.
+    //
+    // Measured 2026-09-05: 9 rows carried a value, 5 already sent. The one time migration that empties
+    // them is separate from this code change, so the column is left holding whatever it holds.
+    var overrideBody: String? = nil
     // #789: the EXACT text Dan explicitly confirmed is fine to send despite a blocking lint finding.
     // A copy of the text rather than a bare boolean, so a later edit to DIFFERENT text silently
     // invalidates the override with no migration bookkeeping (isLintOverridden below); the same
@@ -202,6 +212,32 @@ final class Recipient {
     // they saw when such a profile was refused outright (#2147, L75): the app still never CLAIMS a route
     // it cannot tie to anybody. The card shows the handle and says what could not be confirmed.
     var nameMatchOnly: Bool = false
+    // #2937: DAN'S ANSWER to that doubt, which is a different fact from the doubt itself and has to be
+    // stored separately for the reason the field above states: `nameMatchOnly` is re-derived on EVERY
+    // ingest rather than latched, so a later run that still cannot tie the account to the show would put
+    // the doubt back and take his answer with it. The four contact guards beside it already solve exactly
+    // this with a paired `...Dismissed`, and this is that shape.
+    //
+    // It is HIS, so nothing but him clears it: no run writes it, and the ingest leaves it alone.
+    //
+    // FALSE means he has not answered, which is every row written before this. It never means "he said
+    // no": there is nothing to say no to, because an unconfirmed guess is already excluded from every
+    // route list and refusing it again would change nothing.
+    var nameMatchOnlyDismissed: Bool = false
+
+    // #2937: whether the app may still treat this route as a guess. ONE predicate, because four readers
+    // ask it (the social route list, the stored verdict, the card's own line, and whether a DM can be
+    // recorded), and four spellings of one question is how they come to disagree about a single row
+    // (L16).
+    var isUnconfirmedNameMatch: Bool { nameMatchOnly && !nameMatchOnlyDismissed }
+    // #3078: the run's declaration that `role` is its OWN summary rather than a phrase the cited page
+    // carries. Stored, because the card reads it and the ingest is the only writer, and re-derived on
+    // every ingest rather than latched, exactly like `nameMatchOnly` above: a later run that quotes the
+    // page has stopped characterising, and latching would keep the note on a role that is now a quote.
+    //
+    // FALSE is the unremarkable default, matching absence: a run that says nothing is not characterising
+    // anything, and every recipient written before this reads that way (L98, L128).
+    var roleIsACharacterisation: Bool = false
 
     // #2622: WHO this contact is to the show (primary, secondary, tertiary), as the check judged it from
     // the page it read. Raw, like the confidence and method beside it, so a value this build does not know
@@ -277,6 +313,16 @@ final class Recipient {
     // likely outcomes are an opaque 400 or a message Gmail groups server side while every
     // standards-based client files it separately. Its reader is `SendService.replySubject`.
     var attachedThreadSubject: String?
+    // #3891: the Subject THIS contact's email went out under, written by the send the moment it lands.
+    //
+    // The show's `sentSubject` is frozen by its first send only, while every later contact is sent under
+    // whatever the subject box holds at that moment, so a subject edited between two contacts leaves the
+    // second conversation carrying a subject the show never recorded. Answering or nudging that contact
+    // from the show's copy would split its conversation. Nil on a contact sent before this shipped, on a
+    // form or DM route (no email subject), and on one never sent; `Prospect.conversationSubject(for:)`
+    // falls back to the show's copy for all three. Written by `SendService.deliver` and
+    // `SendService.sendJointly`; read only through `Prospect.conversationSubject(for:)`.
+    var pitchSubject: String?
     // #2715: what the attach found here before detection overwrote it, so the compensating detach
     // (#2719) can put it back. `reopenOnReply` clears a `.stoodDown` resolution and nulls the three
     // draft-baseline fields, and nothing else in the app remembers any of them, so without capturing
@@ -294,6 +340,42 @@ final class Recipient {
     // it put there. An address that was already on the contact was never the attach's to remove, and nil
     // afterwards is indistinguishable from nil before without recording the fact at the time.
     var attachWroteAddress: Bool = false
+    // #3709: the address the pitch actually went to, when a link MOVED the contact onto somebody else.
+    //
+    // Dan's call, 2026-09-08, asked directly, because overwriting a populated address is new behaviour
+    // and doing it naively would leave the row carrying the sent message and the sent date under the
+    // writer's name: the show would read as "pitched the performer, performer replied" when the truth is
+    // "pitched the producer, producer forwarded, performer replied". So the row talks to the writer and
+    // underneath it still records where the pitch went, which is what milestone 37's org ledger and #16's
+    // funnel need in order to learn which contacts get answers.
+    //
+    // It is the FLAG as well as the value, deliberately, rather than a `attachReplacedAddress` boolean
+    // beside it: non-nil means a live replacing attach displaced this address, because the detach clears
+    // it in the same write that puts the address back. Two fields answering one question is how they come
+    // to disagree (L83). It is mutually exclusive with `attachWroteAddress` by construction: one arm
+    // fills an empty address, the other replaces a populated one.
+    //
+    // Read by `DetachConversation` (#3710) and by `PrepImporter.apply`, which must not put the pitched
+    // address back over a link Dan made by hand.
+    var attachDisplacedEmail: String?
+    // #3709: the thread the PITCH went out on, when a link replaced it with the one they answered on.
+    //
+    // Without it a detach would null `gmailThreadId` and an emailed pitch would come back holding no
+    // conversation at all, so Overture would stop watching the thread it sent on and there would be
+    // nothing for a follow-up to thread onto. Read by `DetachConversation` (#3710).
+    var attachDisplacedThreadId: String?
+    // #3712: the outgoing message the DISPLACED thread's ancestry hangs off, recorded at the same moment
+    // and for the same reason as the thread above.
+    //
+    // It is not restored by the detach, because it is never moved: `gmailMessageId` stays exactly where
+    // it is, since it is what proves Overture emailed this contact (`hasProvenOutreach`) and clearing it
+    // would make the show read as never pitched. What it records is WHICH message the stored id was when
+    // the link was made, and that is the only way to answer the question three readers ask: is the
+    // message Overture holds on this row a message on the conversation the row now stores? While the two
+    // are equal it is not, and the moment Overture answers on the linked thread `sendReplyDraft` stores
+    // an id that is on it and the question answers itself (L68: a refusal keyed on the attach alone would
+    // outlive its reason). Read by `replyWatchConversationIsAttached`.
+    var attachDisplacedMessageId: String?
     // #2719: that a conversation has EVER been attached here, which the detach deliberately does not
     // clear.
     //
@@ -446,6 +528,14 @@ final class Recipient {
     // beside the manual controls; it never auto-sets a RecipientResolution (#420 C4). `replyDraft*` is
     // the drafted response Dan reviews; `replyDraftRequestedAt` stamps the request so the conversation
     // view can show progress and a timeout can surface a dead run as needs-attention (#420 C6).
+    //
+    // `replyDraftSubject` is RETAINED STORAGE, read and written by nothing (#3891). It held the subject
+    // the drafter wrote, which the send preferred over the conversation's own, so an answer to Jenny
+    // Powers on 2026-09-14 left under a subject her conversation had never carried and was filed as a new
+    // one. The answer now always continues the conversation's subject and the drafter no longer writes
+    // one. Left on the model rather than deleted, for the reason given on `overrideBody` above: dropping a
+    // stored property would be this app's first subtractive migration, which gets its own change with a
+    // rehearsal against a store clone first.
     var replyDraftSubject: String?
     var replyDraftBody: String?
     var replyDraftRequestedAt: Date?
@@ -473,8 +563,8 @@ final class Recipient {
     // The reply-draft voice-learning pair (#463), mirroring Prospect.originalDraft*/sentBody for the cold
     // draft. originalReplyDraftBody is the AI's reply before Dan's first substantive edit; sentReplyBody
     // is the exact text he committed (sent via Overture or copied out to Gmail), frozen at commit so a
-    // later re-draft can't rewrite the lesson. Reply subjects are auto ("Re: …"), never Dan-edited, so
-    // only the body is captured.
+    // later re-draft can't rewrite the lesson. Reply subjects continue the conversation's own ("Re: …",
+    // #3891), are never Dan-edited and never AI-written, so only the body is captured.
     var originalReplyDraftBody: String?
     var sentReplyBody: String?
     var replySentAt: Date?
@@ -500,9 +590,14 @@ final class Recipient {
     // The stable join + dedupe key: the canonicalized email when present, else the form URL (so a
     // form-only contact survives an email being added later), else nil when there is neither and so
     // nothing to make a recipient from.
+    // #2408: the prefix that marks a handle as a LINK rather than an address, named rather than written
+    // out at each use. Two spellings of one marker is how a reader comes to strip a prefix the writer
+    // does not add (L263).
+    static let formHandlePrefix = "form:"
+
     static func makeId(email: String?, formURL: String?) -> String? {
         if let email, !email.isEmpty { return ReplyDetection.email(from: email) }
-        if let formURL, !formURL.isEmpty { return "form:" + formURL }
+        if let formURL, !formURL.isEmpty { return formHandlePrefix + formURL }
         return nil
     }
 
@@ -573,8 +668,17 @@ final class Recipient {
     // typically weeks old. Reading the attach as "this is an email contact now" would make the nudge
     // instantly OVERDUE, count it in the Due pill, and send a real cold nudge onto a stranger's
     // conversation. Do not "fix" this to consult the address or the thread.
+    // #3712: and never onto a conversation Overture did not send on. This is the OPPOSITE direction to
+    // the paragraph above and does not weaken it: that one refuses to read an attach as "this is an email
+    // contact now", which would make a form pitch instantly nudgeable. This one refuses to go on treating
+    // an EMAIL contact as nudgeable once a link has moved it onto somebody else's thread and somebody
+    // else's address. The nudge is a cold chase, threaded onto the conversation Overture itself started,
+    // and after a replacing attach the row holds neither: it would arrive as a chase of a pitch the writer
+    // never received, on a conversation Overture never opened. It heals with the predicate, so a row
+    // Overture has since answered on is nudgeable again exactly as it was.
     var isAwaitingFollowUp: Bool {
         isSilent && resolution == nil && outcomeSource != .manual && outreachChannel == .email
+            && !replyWatchConversationIsAttached
     }
 
     // #677: this contact replied and nobody has dealt with it yet: replied, no resolution recorded,
@@ -614,6 +718,19 @@ final class Recipient {
     // that predicate short-circuits on, and they are here because `!hasUnhandledReply` on its own is
     // equally true of a contact that never replied, one that bounced, and one Dan stood down. A line may
     // claim only what its check actually measured (L11).
+    // #3573: their newest message arrived AFTER the draft was asked for, so the draft on file answers
+    // their previous one. One definition, read by the drafter's own eligibility rule
+    // (`ReplyClassifyService.recipientNeedsClassify`) and by what the conversation offers on screen
+    // (`ReplyConversationMode`), because those two disagreeing is how a stale draft comes to sit under a
+    // Send button (L16).
+    //
+    // Judged on `replyArrivedAt`, when they SENT it, rather than on when Overture noticed: a message that
+    // arrived before the request and was recorded after it is not a newer message.
+    var replyPostdatesDraftRequest: Bool {
+        guard let requested = replyDraftRequestedAt, let theirs = replyArrivedAt else { return false }
+        return theirs > requested
+    }
+
     var replyIsAnswered: Bool {
         replied && !bounced && resolution == nil && replyHandledAt != nil && !hasUnhandledReply
     }
@@ -718,12 +835,20 @@ final class Recipient {
             && !isBlockedByGreeting
     }
 
-    // #789 / #641: the text THIS recipient actually receives. A directly-addressed performer's own
-    // second-person draft (#634 Phase C) wins over the shared third-person body; for everyone else
-    // it IS the shared body. SendService.deliver reads this to compose the mail, and the lint below
-    // reads the same property to judge it, so what is CHECKED can never drift from what is SENT.
+    // #789 / #641 / #3549: the text THIS recipient actually receives, which is the show's one letter.
+    //
+    // It used to prefer a second copy stored on a directly-addressed performer (#634 Phase C), so one
+    // show could carry two letters. Only the send path read that copy; the card previewed, edited and
+    // badged the shared body, so an edit was reported as applied and reached nobody. Dan, 2026-09-05:
+    // "we should just always only have 1 version." The address form (second person to a performer,
+    // third person to a presenter) is now written into the one body, by whoever writes it, since Prep
+    // knows the show's contacts when it drafts.
+    //
+    // Kept as a named property rather than inlined at each call site: it is the ONE definition of the
+    // outgoing text, and every reader of outgoing content goes through it, so what is CHECKED cannot
+    // drift from what is SENT (#3551, L402).
     var effectiveBody: String? {
-        (provenance == .performer ? overrideBody : nil) ?? prospect?.draftBody
+        prospect?.draftBody
     }
 
     // #789: the blocking lint findings in that text. Derived live rather than stored at ingest on
@@ -776,9 +901,11 @@ final class Recipient {
     // inbox it is the correct opening, with the `Attn:` block above it naming the desk.
     var greetingMisaddressed: Bool {
         guard let prospect else { return false }
-        // A performer's own second-person letter (#634) goes to them alone, whatever else is on the
-        // show, so a name in it is right by construction.
-        if provenance == .performer, overrideBody?.isEmpty == false { return false }
+        // #3549 removed the performer carve-out that used to sit here. It stood on a performer having
+        // a letter of their OWN, which went to them alone, making a name in it right by construction.
+        // With one letter per show that premise is gone: a body naming the performer, on a show that
+        // also emails a presenter, is misaddressed for exactly the reason this guard exists. A single
+        // contact show is unaffected, since the audience is then one and the size test is false.
         return prospect.greetingAudienceSize > 1 && DraftGreeting.namesSomeone(effectiveBody)
     }
 
@@ -915,12 +1042,49 @@ final class Recipient {
     // the manual-send picker must impose a stable order or "the next recipient" (and which address each
     // click sends) would vary run to run. Act/performer contacts go first (mutually exclusive per
     // performance, so they tie), then a presenter, then a manual add (the #366/#368 contact ladder:
-    // target the act or performer; the presenter only after), ties broken by id.
+    // target the act or performer; the presenter only after).
     var sendOrderRank: Int {
         switch provenance {
         case .act, .performer: return 0
         case .presenter: return 1
         case .manual: return 2
+        }
+    }
+
+    // #3603: what breaks a tie in that ladder, and it is a STATED order rather than an emergent one.
+    //
+    // The rank above ties constantly: on a self-produced show every contact is a performer, so every
+    // one is rank 0 and the tie-break alone decides. That tie-break used to be `id`, which is
+    // `makeId`'s output: the canonical address when there is one, the literal "form:" plus the URL
+    // when there is not. So the order was really alphabetical over a string whose FIRST CHARACTER
+    // depends on whether the contact has an address at all, and "form:" precedes any address from g to
+    // z. Measured on the live store 2026-08-30 (the #3284 evidence): four performer contacts, three
+    // ids beginning "form:" and one address beginning "s", so all three contacts that cannot receive
+    // the email were listed above the one that can.
+    //
+    // So: the ladder first, then whether the email can actually reach this contact, then the id.
+    //
+    // The receivability key is "holds an address", NOT `isSendablePending`. That is deliberate and is
+    // the one choice here worth understanding. `isSendablePending` is the question the SEND asks, and
+    // it folds in the draft's lint findings, the greeting, a calendar conflict and the review guards,
+    // every one of which changes while Dan is editing. Sorting on it would reorder the card under his
+    // hands as he typed, and would run a lint pass per comparison (L62). An address held by a guard is
+    // still an address: that person is one dismissal away from receiving the email, where a form-only
+    // contact is not. `email?.isEmpty == false` is the same predicate `hasUnguardedAddress` and
+    // `offersSendModeChoice` already read, so a contact holding `""` is not treated as reachable.
+    var canReceiveTheEmail: Bool { email?.isEmpty == false }
+
+    // The ONE comparator, because it was written out at six call sites and six copies of an order are
+    // six things to drift (L263, L370). `SendOrderTests.nothingReimplementsTheComparator` is what keeps
+    // it here.
+    //
+    // `nonisolated` because the queue CARD asks this question as well as the send does, off the main
+    // actor in places, and the two must never disagree about who comes first (L16).
+    nonisolated static func inSendOrder(_ recipients: [Recipient]) -> [Recipient] {
+        recipients.sorted { a, b in
+            if a.sendOrderRank != b.sendOrderRank { return a.sendOrderRank < b.sendOrderRank }
+            if a.canReceiveTheEmail != b.canReceiveTheEmail { return a.canReceiveTheEmail }
+            return a.id < b.id
         }
     }
 
@@ -1123,7 +1287,6 @@ final class Recipient {
     // recordRepliedInGmail, which stopped being true the moment the in-app send started calling it.
     func recordAnswerSent(now: Date) {
         freezeSentReply(now: now)   // capture the committed copy before consuming the draft (#463)
-        replyDraftSubject = nil
         replyDraftBody = nil
         lastFollowUpAt = now
         // The fact that had no home: Dan answered. Stamped LAST and unconditionally, unlike the freeze
@@ -1168,7 +1331,6 @@ final class Recipient {
         // The reply is gone, so its derived AI hint + draft must go too (#449); otherwise the
         // contact reads "Awaiting reply" yet still shows an intent suggestion and a leftover draft.
         intentHint = nil
-        replyDraftSubject = nil
         replyDraftBody = nil
         replyDraftRequestedAt = nil
         replyDraftEditedByDan = false

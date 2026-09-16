@@ -186,10 +186,10 @@ struct PrepContact: Codable, Equatable, Sendable {
     var confidence: String?   // high | medium | low
     var formUrl: String?
     var provenance: String?   // v2 (#392): act | presenter (never the host venue); v3 (#587) adds performer
-    // v4 (#639, #634 Phase A): only meaningful when provenance == "performer", a direct, second-person
-    // draft body for THIS contact, used instead of the shared (third-person) PrepResult.draft.body when
-    // emailing a named performer directly rather than a third party describing them.
-    var overrideBody: String?
+    // v11 (#3549) RETIRED `overrideBody`, a second copy of the pitch carried by a performer contact.
+    // A show has one letter now, and the address form belongs in it. A payload still carrying the old
+    // key decodes fine and the value is ignored, which is the point of decoding by named key: an older
+    // Prep run is not an error.
     // v6 (#363): the page this contact was actually read from, so the app's confidence badge can
     // link Dan through to verify it himself. Only ever meaningful when confidence == "high" (the
     // runbook's STRICT verification bar); distinct from formUrl, which stays the form_or_dm
@@ -227,6 +227,25 @@ struct PrepContact: Codable, Equatable, Sendable {
     // the rule is dormant until runs emit it, which `PerformerCorroborationAdoption` measures rather than
     // leaving to be discovered (L128).
     var performanceCorroborated: Bool?
+    // v12 (#3078): is `role` a phrase the page named in `sourceUrl` actually carries, or your own
+    // summary of what it says?
+    //
+    // `role` is unbounded free text the app derives nothing from, and nothing asked whether the word the
+    // run chose is on the page it cited, so a paraphrase reached the card with the same authority as a
+    // quote. The measured case, 2026-08-17: `role: "Playwright"` for a performer whose cited page says
+    // "an actor and writer" and carries the word once, inside the NAME OF A THEATRE in an unrelated
+    // regional credit.
+    //
+    // DECLARED rather than measured, which is #3078's open question answered by #2269 closing: every
+    // `WebFetch` result a run receives is PROSE written by a small model against the page, so the run
+    // never holds the page and there is nothing at ingest to check a role against.
+    //
+    // TRUE is the unremarkable value and ABSENT is what every contact written before this carries and
+    // what a run with nothing to declare sends, so absence reads as "nobody has said" and changes
+    // nothing. Reading it as a characterisation would mark 270 of the 447 contacts in the archives at
+    // once (L98, L128). The rule is dormant until runs emit it, which `RunInstructionCompliance`
+    // measures rather than leaving to be discovered.
+    var roleQuoted: Bool?
 }
 
 struct PrepDraft: Codable, Equatable, Sendable {
@@ -256,7 +275,7 @@ enum PrepResultsDecoder {
     // for exactly the reason the paragraph above gives.
     // #2912 raised this to 10 with the contact `nameMatchOnly` field, IN THE SAME COMMIT as
     // `fixtures/prep-results/v10.json`, for exactly the reason the paragraph above gives.
-    static let supportedVersion = 11
+    static let supportedVersion = 12
     static let minimumVersion = 1
 
     static func decode(_ data: Data) throws -> PrepResults {

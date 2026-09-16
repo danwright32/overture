@@ -19,9 +19,7 @@ import ViewInspector
 @Suite("The send sheet offers the contact picker (#2017)")
 struct SendConfirmSheetPickerTests {
     private func show(contacts: Int) throws -> Prospect {
-        let ctx = ModelContext(try ModelContainer(
-            for: Schema([Prospect.self, Recipient.self]),
-            configurations: [ModelConfiguration(isStoredInMemoryOnly: true)]))
+        let ctx = ModelContext(try TestModelContainer.inMemory([Prospect.self, Recipient.self]))
         let key = Prospect.makeNaturalKey(groupName: "Lumen", performanceDate: "2026-09-01", venue: "V")
         let p = Prospect(naturalKey: key, groupName: "Lumen", discipline: "choral", venue: "V",
                          performanceDate: "2026-09-01", sourceListingURL: nil,

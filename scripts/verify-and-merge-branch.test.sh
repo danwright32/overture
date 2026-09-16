@@ -452,11 +452,57 @@ release_verify_slot
 flock "${OVERTURE_VERIFY_WORKTREE_LOCK}" sleep 1 &
 LOCK_HOLDER=$!
 sleep 0.3
-WAIT_OUTPUT="$( { setup_worktree "feature" >/dev/null; } 2>&1 )"
+# Through a FILE rather than a `$( ... )`, and that is about what is being tested rather than about
+# style. Command substitution runs its body in a subshell, so the slot would be taken there and the
+# holder's pid would die with it, leaving nothing for `release_verify_slot` to end. Both production
+# callers (`verify_and_merge` and the batch script's main setup) call this in their own shell, so
+# capturing in a subshell would be measuring a shape the product never uses (L472).
+WAIT_LOG="${FIX_ROOT}/busy-slot-wait.log"
+setup_worktree "feature" >/dev/null 2>"${WAIT_LOG}"
 WAIT_STATUS=$?
+WAIT_OUTPUT="$(cat "${WAIT_LOG}")"
 wait "${LOCK_HOLDER}" 2>/dev/null
 assert_equals "a busy slot is waited for, and setup still succeeds" "0" "${WAIT_STATUS}"
 assert_contains "the wait announces itself rather than sitting silent" "${WAIT_OUTPUT}" "waiting"
+
+# #3680: and the wait NAMES who is holding it. "Waiting" alone is true of a verification that will
+# finish in two minutes and of an orphan that will never finish, and on 2026-09-07 it was the second:
+# a shell fixture orphaned five hours earlier held the slot, `ps` showed no xcodebuild anywhere, and
+# the machine looked idle while every merge blocked. A message that cannot tell those apart leaves
+# reading `lsof` by hand as the only diagnosis available (L11, L148).
+assert_contains "the wait names the process holding the slot" "${WAIT_OUTPUT}" "Holding it"
+assert_contains "and how long that process has been alive, so an orphan is recognisable" \
+  "${WAIT_OUTPUT}" "running for"
+release_verify_slot
+
+# #3680: THE CAUSE. `exec 9>lock` is inherited by every process started while the lock is held, and an
+# inherited descriptor holds the flock exactly as the opener's does. So any process that outlives the
+# run keeps the verify slot, whatever it was doing and whether or not it ever asked for a lock.
+#
+# Measured on this Mac before the fix: a child started under a plain `exec 9>` and left running kept
+# the slot after its parent exited, and `flock <file> -c` leaks it the same way, so neither shape is a
+# way out on bash 3.2, which has no close-on-exec redirection.
+#
+# Driven through setup_worktree and release_verify_slot rather than by re-implementing the locking
+# here, because the thing under test is what THIS script leaves behind (L472).
+setup_worktree "feature" >/dev/null 2>&1
+# The stand-in orphan BLOCKS ON A BUILTIN rather than forking a sleep, so the kill below reaches all
+# of it. A `( sleep 30; ... ) &` here leaves the sleep running when its subshell is killed, and the
+# runner's leak check correctly refuses a fixture that leaves a process behind. Third time this shape
+# has bitten in this change, which is the argument for never writing it again rather than for fixing
+# it once: opening a fifo for reading waits for a writer that never comes, and costs no process.
+ORPHAN_FIFO="${FIX_ROOT}/orphan-block"
+mkfifo "${ORPHAN_FIFO}"
+( read -r _ < "${ORPHAN_FIFO}" ) &
+SLOT_ORPHAN=$!
+release_verify_slot
+if flock -n "${OVERTURE_VERIFY_WORKTREE_LOCK}" true 2>/dev/null; then
+  pass "a process left running by a verification does not keep the slot locked"
+else
+  fail "the slot is still locked by a process that never asked for it: the lock descriptor was inherited, so every later merge blocks on an orphan (#3680)"
+fi
+kill "${SLOT_ORPHAN}" 2>/dev/null || true
+wait "${SLOT_ORPHAN}" 2>/dev/null || true
 
 # A completed verification leaves the slot checkout, its registration, and its build cache all in
 # place. The cache IS the speedup, and reclaim-orphan-derived-data.sh keeps any folder whose
@@ -501,6 +547,110 @@ if [[ -d "${DERIVED_ROOT}/Overture-slot" ]]; then
 else
   fail "the warm build cache must survive the verification"
 fi
+# #3680: a slot that CANNOT be taken is refused, not reported as taken. This is the fail-closed path,
+# and it had no test: a lock path the holder cannot open makes the holder exit, and what the caller is
+# told then decides whether a verification runs with no exclusion at all while believing it has some.
+# Through a file, not a `$( ... )`, for the reason `take_verify_slot` records: a command substitution
+# runs in a subshell, so the pid it sets and clears would be the subshell's and the assertion below
+# would be reading whatever the previous release happened to leave in this shell (L70).
+FAILED_TAKE_LOG="${FIX_ROOT}/failed-take.log"
+take_verify_slot "/overture-no-such-directory-3680/lock" >/dev/null 2>"${FAILED_TAKE_LOG}"
+FAILED_TAKE_STATUS=$?
+FAILED_TAKE="$(cat "${FAILED_TAKE_LOG}")"
+assert_equals "a slot that cannot be opened is refused" "1" "${FAILED_TAKE_STATUS}"
+assert_contains "and the refusal says so rather than passing silently" \
+  "${FAILED_TAKE}" "Could not take the verify worktree slot"
+assert_equals "and leaves no holder pid behind for the release to kill" "" "${VERIFY_SLOT_HOLDER_PID}"
+
+# #3680: and the holder is ASLEEP while it holds the slot, not spinning.
+#
+# Asserted because a mutation proved nothing else does: replacing the fifo wait with something that
+# returns immediately leaves every other assertion here green while the holder burns a core for the
+# whole verification. That is not hypothetical in this repo, it is #3682, where a spin went unnoticed
+# for five hours and thirty-seven minutes. Measured as CPU time actually consumed over a real second
+# rather than asserted about the source text, because the claim is about what the process does (L63).
+setup_worktree "feature" >/dev/null 2>&1
+IDLE_PID="${VERIFY_SLOT_HOLDER_PID}"
+cpu_hundredths() {
+  ps -o time= -p "$1" 2>/dev/null | tr -d ' ' | awk -F'[:.]' '{ print ($1 * 6000) + ($2 * 100) + $3 }'
+}
+CPU_BEFORE="$(cpu_hundredths "${IDLE_PID}")"
+sleep 2
+CPU_AFTER="$(cpu_hundredths "${IDLE_PID}")"
+if [[ -z "${CPU_BEFORE}" || -z "${CPU_AFTER}" ]]; then
+  fail "could not read the holder's CPU time, so whether it spins was not measured (L98)"
+elif [[ $(( CPU_AFTER - CPU_BEFORE )) -le 20 ]]; then
+  pass "the holder sleeps while it holds the slot instead of spinning"
+else
+  fail "the holder burned $(( CPU_AFTER - CPU_BEFORE )) hundredths of a second of CPU over two seconds of holding: it is spinning, which is #3682's defect in the process that now holds every merge behind it"
+fi
+release_verify_slot
+
+# #3680: and released when a verification DIES, which is the property the plain `exec 9>` had for
+# free and the one a swap to a lock directory or a pid file would silently lose (L409). The holder
+# watches the run that asked for the slot and ends when it goes, so a killed or crashed verification
+# frees the slot within one poll instead of wedging it until somebody reads `lsof`.
+#
+# Driven by KILLING a real taker rather than by calling the release path, because the release path is
+# exactly what a crash does not reach.
+KILL_LOCK="${FIX_ROOT}/killed-run.lock"
+cat > "${FIX_ROOT}/take-and-die.sh" <<TAKER
+source "${SCRIPT_DIR}/verify-and-merge-branch.sh"
+take_verify_slot "\$1" || exit 1
+echo "\${VERIFY_SLOT_SCRATCH}" > "\$2"
+echo ready
+# Blocks with NO fork: opening a fifo for reading waits until a writer appears, and nothing ever
+# opens this one for writing. A loop around sleep here forks a sleep that the kill -9 below does not
+# reach, so the fixture left a process running and the runner own leak check refused the run,
+# measured 2026-09-15.
+mkfifo "\$3"
+read -r _ < "\$3"
+TAKER
+TAKER_SCRATCH_FILE="${FIX_ROOT}/taker-scratch"
+TAKER_BLOCK_FIFO="${FIX_ROOT}/taker-block"
+bash "${FIX_ROOT}/take-and-die.sh" "${KILL_LOCK}" "${TAKER_SCRATCH_FILE}" "${TAKER_BLOCK_FIFO}" \
+  > "${FIX_ROOT}/taker.out" 2>&1 &
+TAKER_PID=$!
+TAKER_WAITED=0
+while [[ ! -s "${FIX_ROOT}/taker.out" && "${TAKER_WAITED}" -lt 100 ]]; do
+  sleep 0.2
+  TAKER_WAITED=$(( TAKER_WAITED + 1 ))
+done
+# The POSITIVE half first: a kill that frees a slot nobody ever took proves nothing (L159).
+if flock -n "${KILL_LOCK}" true 2>/dev/null; then
+  fail "the taker never took the slot, so killing it would prove nothing"
+else
+  pass "a taker holds the slot before it is killed"
+fi
+kill -9 "${TAKER_PID}" 2>/dev/null || true
+wait "${TAKER_PID}" 2>/dev/null || true
+KILL_WAITED=0
+while ! flock -n "${KILL_LOCK}" true 2>/dev/null && [[ "${KILL_WAITED}" -lt 100 ]]; do
+  sleep 0.2
+  KILL_WAITED=$(( KILL_WAITED + 1 ))
+done
+if flock -n "${KILL_LOCK}" true 2>/dev/null; then
+  pass "a verification that is killed frees the slot rather than wedging it"
+else
+  fail "a killed verification left the slot locked: a crash must release it, which is what the kernel flock gave for free and what this holder has to keep (#3680, L409)"
+fi
+# The killed taker's scratch, removed HERE because it is the one path that cannot remove its own: a
+# `kill -9` reaches no cleanup. That is true of the product too, and it is the right trade rather than
+# a gap: what a crashed verification leaves behind is three small files in the temp folder, while what
+# it must NOT leave behind is the slot, which the assertion above is about. The fixture runner counts
+# leftovers in its own temp folder, so without this the run is refused for a directory the test made
+# on purpose.
+#
+# By the path the taker RECORDED, never by a glob over the temp folder. A `rm -rf "${TMPDIR}"/prefix.*`
+# reads as safe because the prefix is distinctive, and it is safe only for as long as the per-fixture
+# TMPDIR scoping holds; the day that slipped, this line would delete a concurrent run's scratch instead
+# of its own. Deleting exactly what this test created cannot do that at all.
+TAKER_SCRATCH="$(cat "${TAKER_SCRATCH_FILE}" 2>/dev/null || true)"
+case "${TAKER_SCRATCH}" in
+  */verify-slot.*) rm -rf "${TAKER_SCRATCH}" ;;
+  *) fail "the taker did not record its scratch, so the leftover cannot be removed by name" ;;
+esac
+
 if flock -n "${OVERTURE_VERIFY_WORKTREE_LOCK}" true 2>/dev/null; then
   pass "the slot lock is released when the verification ends"
 else

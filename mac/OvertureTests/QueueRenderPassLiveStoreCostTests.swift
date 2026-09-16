@@ -33,7 +33,24 @@ import SwiftData
 // rides along on every push, through the `Queue rebuild cost:` readout (#2597).
 @MainActor
 @Suite("Queue render pass cost against the live store (#1992)")
+// KNOWN AND MEASURED, so nobody has to re-diagnose it: with three tests each cloning the store, the run
+// prints `BUG IN CLIENT OF libsqlite3.dylib: ... vnode unlinked while in use` three times, once per
+// clone. A SwiftData container holds its sqlite connection until it is deallocated and nothing here can
+// make that happen on demand, so the sandbox is removed while the connection is still open.
+//
+// Measured 2026-09-05 rather than assumed: with two tests it printed nothing; with three it printed nine
+// times, which one container per test and a fresh CONTEXT per reading brought down to three; making the
+// suite a `final class`, so Swift Testing releases an instance per test, did not change it. The integrity
+// it complains about is a THROWAWAY CLONE's, never Dan's store, which is read only and never opened here.
+// Recorded rather than chased: this is an opt-in diagnostic and the alternative is leaving a clone behind,
+// which is the leak #3065 exists to prevent.
 struct QueueRenderPassLiveStoreCostTests {
+
+    // #3660: what one row of the prospect table may cost to fetch and materialise, in milliseconds.
+    //
+    // Declared here rather than inline so a change to it is a visible edit to a named calibration rather
+    // than a number moved inside an assertion.
+    private static let fetchCeilingMsPerRow = 0.50
     // `nonisolated` because Swift Testing evaluates `.enabled(if:)` in a Sendable closure outside the
     // suite's actor, and this suite is @MainActor for QueueRenderPass.make's sake. Neither property
     // touches main-actor state.
@@ -44,6 +61,16 @@ struct QueueRenderPassLiveStoreCostTests {
     nonisolated private static var liveStoreExists: Bool {
         FileManager.default.fileExists(atPath: liveStoreURL.path)
     }
+
+    // #3660 Phase 10: how many rows a frame draws.
+    //
+    // #3751: MEASURED now rather than assumed. It was 12, chosen as "above what a laptop window shows and
+    // below what a tall one does", which was a guess nothing had checked, and everything this milestone
+    // claims about the shipping pass is measured through it. `ViewportSizeTests` lays Archive out at the
+    // tallest window its own frame allows and counts the rows realized, and asserts this number covers
+    // that one. It lives on `QueueViewportAssumption` so the guard and the instrument read ONE value
+    // rather than two that have to be kept in step (L70).
+    private static var viewportRows: Int { QueueViewportAssumption.rows }
 
     private let sandboxes = TemporarySandboxes()
 
@@ -73,6 +100,28 @@ struct QueueRenderPassLiveStoreCostTests {
         return Date().timeIntervalSince(start)
     }
 
+    // #3660 Phase 10: how many samples every reading below is the MEDIAN of.
+    //
+    // A single reading is not a yardstick (L656). Measured 2026-09-09 while adding the narrowed arm: the
+    // pass with no card and the same pass with twelve came out 442 ms and 435 ms, in that order, which
+    // cannot be true (the second contains the first) and is simply what a difference smaller than the
+    // run-to-run noise looks like on a shared Mac (L224). Both those numbers were real; neither was a
+    // yardstick. The median of several is.
+    private static let samples = 5
+
+    /// The MEDIAN of `samples` runs, not the mean and not one reading. The median because these
+    /// distributions have a long right tail (another process waking is a slow sample, and nothing makes a
+    /// sample artificially fast), so a mean tracks whatever else this Mac happened to do.
+    ///
+    /// It also returns the spread, because a median quoted without one is a number nobody can tell a
+    /// stable reading from a noisy one by (L172, L395).
+    private func medianSeconds(_ work: () -> Void) -> (median: Double, low: Double, high: Double) {
+        var runs: [Double] = []
+        for _ in 0..<Self.samples { runs.append(seconds(work)) }
+        runs.sort()
+        return (runs[runs.count / 2], runs.first ?? 0, runs.last ?? 0)
+    }
+
     @Test(.enabled(if: liveStoreExists, "no live store on this machine"))
     func measureOnePassAgainstTheLiveStore() throws {
         guard ProcessInfo.processInfo.environment["MEASURE_QUEUE_LIVE_STORE"] != nil else {
@@ -83,7 +132,11 @@ struct QueueRenderPassLiveStoreCostTests {
         }
 
         let clone = try cloneLiveStore()
-        let ctx = ModelContext(try openContainer(at: clone))
+        // #3750: the CONTAINER is held, so the fetch decomposition below can open a fresh CONTEXT per arm
+        // against the same file. A fresh container per arm would time opening the store rather than
+        // reading it.
+        let container = try openContainer(at: clone)
+        let ctx = ModelContext(container)
 
         // 1. What a @Query costs: the table read plus materialising every object. The in-memory fixture
         //    never pays this, and QueueView holds two such queries over the prospect table, so this is the
@@ -91,10 +144,96 @@ struct QueueRenderPassLiveStoreCostTests {
         var prospects: [Prospect] = []
         var answers: [OrgReachabilityAnswer] = []
         var sources: [WatchedSource] = []
+        // #3849: THE THREE TABLES THIS INSTRUMENT DID NOT READ, and the reason they are here.
+        //
+        // `QueueView` holds six `@Query` properties on the render path and this arm read three of them.
+        // The other three feed arguments the app evaluates AT THE CALL SITE of the pass
+        // (`ContactRefusal.ledger(from:)`, `ProducerOverrides(promotedRows:demotedRows:)`), which is
+        // exactly the shape #3829 found on the Sources sheet: a modifier argument is evaluated on every
+        // pass just like the keys beside it, and an instrument that never names it prices a pass that
+        // nobody runs. Found by the guard in `ACostInstrumentEnumeratesItsSubjectsTests`, enumerated from
+        // the source rather than remembered (L96, L400).
+        //
+        // So both halves are paid here now: the read, and the value built from it.
+        var refusedRows: [RefusedContactAddress] = []
+        var promoted: [PromotedProducer] = []
+        var demoted: [DemotedHouse] = []
         let fetchSeconds = seconds {
             prospects = (try? ctx.fetch(FetchDescriptor<Prospect>())) ?? []
             answers = (try? ctx.fetch(FetchDescriptor<OrgReachabilityAnswer>())) ?? []
             sources = (try? ctx.fetch(FetchDescriptor<WatchedSource>())) ?? []
+            refusedRows = (try? ctx.fetch(FetchDescriptor<RefusedContactAddress>())) ?? []
+            promoted = (try? ctx.fetch(FetchDescriptor<PromotedProducer>())) ?? []
+            demoted = (try? ctx.fetch(FetchDescriptor<DemotedHouse>())) ?? []
+        }
+
+        // #3750: WHERE INSIDE THE FETCH the time goes, which nothing has ever asked.
+        //
+        // The fetch is now the largest single thing between this app and the milestone's bar: 168 ms
+        // against a pass of 175. Everything above decomposes the pass; this decomposes the half nobody
+        // has looked at, on the same rule (L507).
+        //
+        // EACH ARM GETS A FRESH CONTEXT, which is the whole reason this is measurable at all. A fetch of
+        // a table already read is served from the context's row cache, so timing the three in one context
+        // measures the ORDER they were written in rather than what each costs. The container is shared,
+        // so what is being told apart is the context's work rather than the file's.
+        func timedInAFreshContext(_ work: (ModelContext) -> Void) -> (median: Double, low: Double, high: Double) {
+            medianSeconds {
+                let fresh = ModelContext(container)
+                work(fresh)
+            }
+        }
+        let prospectFetch = timedInAFreshContext { c in
+            _ = (try? c.fetch(FetchDescriptor<Prospect>())) ?? []
+        }
+        let answersFetch = timedInAFreshContext { c in
+            _ = (try? c.fetch(FetchDescriptor<OrgReachabilityAnswer>())) ?? []
+        }
+        let sourcesFetch = timedInAFreshContext { c in
+            _ = (try? c.fetch(FetchDescriptor<WatchedSource>())) ?? []
+        }
+        // #3849: the three above, read the same way. Reported together rather than one line each: each is
+        // a small table beside the prospect one, and three lines of near-zero in a block whose point is
+        // where the time goes would bury the line that matters (L629).
+        let otherTablesFetch = timedInAFreshContext { c in
+            _ = (try? c.fetch(FetchDescriptor<RefusedContactAddress>())) ?? []
+            _ = (try? c.fetch(FetchDescriptor<PromotedProducer>())) ?? []
+            _ = (try? c.fetch(FetchDescriptor<DemotedHouse>())) ?? []
+        }
+        // And the RELATIONSHIP, which the fetch above does not pay and the pass does: every card and every
+        // stage decision reaches a show's `recipients`, and SwiftData faults that on first touch. Timed
+        // apart from the fetch because they are two different costs that a single `fetch and materialise`
+        // line has always folded into one (L118).
+        let faultRecipients = timedInAFreshContext { c in
+            let rows = (try? c.fetch(FetchDescriptor<Prospect>())) ?? []
+            for row in rows { _ = row.recipients.count }
+        }
+
+        // #3750: WHAT A PARTIAL FETCH WOULD BUY, before anybody changes a `@Query`.
+        //
+        // The fetch materialises every stored property of every `Prospect`, and the type has about 130 of
+        // them while a `QueueScopeRow` is built from roughly two dozen. `FetchDescriptor.propertiesToFetch`
+        // exists for exactly that. What nobody knows is whether the cost IS the field materialising:
+        // 133 microseconds a row could as easily be object allocation and SwiftData's own bookkeeping, in
+        // which case a partial fetch buys nothing and costs a fault on every reader that wants more.
+        //
+        // Measured before building, which is the same move that has corrected three premises today (L107).
+        // The list below is the ROW's own fields, read off `QueueScopeRow.init(_:facts:)`, plus the few
+        // `StageNavigation.matches` needs. It is not exhaustive and does not need to be: what is being
+        // measured is whether narrowing the fetch changes the number at all.
+        let rowFields: [PartialKeyPath<Prospect>] = [
+            \Prospect.naturalKey, \Prospect.groupName, \Prospect.discipline, \Prospect.venue,
+            \Prospect.presenter, \Prospect.location, \Prospect.performanceDate, \Prospect.runNights,
+            \Prospect.performanceStartTimes, \Prospect.nightStartTimes, \Prospect.startTimesVary,
+            \Prospect.fitScore, \Prospect.tier, \Prospect.statusRaw, \Prospect.sentAt,
+            \Prospect.outcomeRaw, \Prospect.showOutcomeRaw, \Prospect.bookingSuggested,
+            \Prospect.draftBody, \Prospect.reachabilityProbedAt, \Prospect.reachabilityUnansweredAt,
+            \Prospect.reachabilityRecheckRequestedAt, \Prospect.runEndDate,
+        ]
+        let partialFetch = timedInAFreshContext { c in
+            var descriptor = FetchDescriptor<Prospect>()
+            descriptor.propertiesToFetch = rowFields
+            _ = (try? c.fetch(descriptor)) ?? []
         }
 
         // A warm pass first, so the split below is not dominated by first-touch faulting.
@@ -106,28 +245,296 @@ struct QueueRenderPassLiveStoreCostTests {
         }
 
         // 3. The whole pass, so the remainder is everything else QueueRenderPass.make does.
-        let work = QueueRenderPass.WorkTally.measure {
-            _ = QueueRenderPass.make(QueueRenderPass.Inputs(
-                prospects: QueueRenderPass.Corpus(prospects),
+        // #3849: the two values the app builds at the call site of every pass, built here the same way
+        // and TIMED, rather than left at their `.none` defaults. Left at the defaults, this instrument
+        // was pricing a pass with no refusals and no producer overrides in it, which is not the pass
+        // that runs on Dan's Mac: the producer gate reads the overrides, so the default also changed
+        // which presenters the pass admits.
+        _ = ContactRefusal.ledger(from: refusedRows)
+        let refusalLedgerTerm = medianSeconds { _ = ContactRefusal.ledger(from: refusedRows) }
+        _ = ProducerOverrides(promotedRows: promoted, demotedRows: demoted)
+        let overridesTerm = medianSeconds { _ = ProducerOverrides(promotedRows: promoted, demotedRows: demoted) }
+        let refusals = ContactRefusal.ledger(from: refusedRows)
+        let overrides = ProducerOverrides(promotedRows: promoted, demotedRows: demoted)
+
+        func makePass(cardKeys: Set<String>?,
+                      refusals: ContactRefusal.Ledger = refusals,
+                      overrides: ProducerOverrides = overrides) -> QueueView.RenderData {
+            QueueRenderPass.make(QueueRenderPass.Inputs(
                 allProspects: QueueRenderPass.Corpus(prospects),
                 inquiries: [], orgAnswers: answers, sources: sources,
+                refusals: refusals, overrides: overrides,
                 context: .at(QueueModel.easternToday(), now: Date()),
-                focusedStage: .scout, focusedKeys: nil))
+                focusedStage: .scout, focusedKeys: nil,
+                requestedCardKeys: cardKeys))
         }
-        let passSeconds = seconds {
-            _ = QueueRenderPass.make(QueueRenderPass.Inputs(
-                prospects: QueueRenderPass.Corpus(prospects),
-                allProspects: QueueRenderPass.Corpus(prospects),
-                inquiries: [], orgAnswers: answers, sources: sources,
-                context: .at(QueueModel.easternToday(), now: Date()),
-                focusedStage: .scout, focusedKeys: nil))
+
+        // #3849: WHAT CHANGED BY MEASURING THE REAL PASS, as a difference inside ONE run.
+        //
+        // Every reading this instrument printed before #3849 was taken with `refusals` and `overrides`
+        // at their empty defaults, and the producer gate READS the overrides, so the empty arm does not
+        // merely skip a small cost: it can admit a different set of presenters and therefore build a
+        // different number of cards. A figure from before and a figure from after are two populations,
+        // and comparing them across days would be reading the machine as much as the change (L84, L395).
+        //
+        // So both arms run here, medians of five, minutes apart from nothing else. The difference is the
+        // only honest statement about what the correction cost; the absolute numbers move with whatever
+        // else the Mac is doing.
+        _ = makePass(cardKeys: nil, refusals: .none, overrides: .none)
+        let asItWasMeasured = medianSeconds { _ = makePass(cardKeys: nil, refusals: .none, overrides: .none) }
+        // Both counts taken once, here, rather than inside the report string: a pass costs hundreds of
+        // milliseconds and a call in a print statement is a whole derivation that reads as a field access
+        // (L383).
+        let emptyArmRows = makePass(cardKeys: nil, refusals: .none, overrides: .none).rows.count
+        let realArmRows = makePass(cardKeys: nil).rows.count
+        let work = QueueRenderPass.WorkTally.measure { _ = makePass(cardKeys: nil) }
+        let pass = medianSeconds { _ = makePass(cardKeys: nil) }
+        let passSeconds = pass.median
+
+        // 4. #3660 Phase 10: THE PASS THE APP ACTUALLY RUNS, which is the one nothing here measured.
+        //
+        // THIS IS THE CORRECTION, and it is worth reading before the numbers. Every timing in this file
+        // called `QueueModel.items(from:)` and left `requestedCardKeys` at nil, which means a card for
+        // EVERY show in scope. Since #3654 the app asks for the keys the last frame drew, so the arm this
+        // instrument was timing has not been the shipping arm since that merged, while the readout on
+        // every push went on saying `Queue rebuild cost` (L400, L63: a check's NAME is not a statement of
+        // its coverage, and an instrument aimed at the wrong arm keeps reporting a number nobody can act
+        // on).
+        //
+        // The viewport is a STATED size rather than a guess at Dan's window, and the per-card marginal
+        // cost is printed beside it so the reading generalises to a taller one instead of being true only
+        // of this number (L172, L316).
+        // 5. #3660 Phase 10: the PREAMBLE alone, with no card built at all.
+        //
+        // The fourth arm, and the one that changes what to do next. `QueueModel.scope` derives the
+        // whole-corpus tables (the engagement clustering, the presenter-against-venue walk, the
+        // organisation row counts, the inherited answer ledger) BEFORE it builds a single card, and every
+        // one of them is over the whole store whatever the card set says. Narrowing the cards provably
+        // cannot touch them, which is what makes them the term to read: without this arm the difference
+        // between the two arms above reads as "the pass got cheaper" with no way to see how much of it
+        // never could (L507, a remainder nobody records is where the unexplained cost accumulates).
+        _ = QueueModel.scope(from: prospects, answers: answers, corpus: prospects, sources: sources,
+                             cardKeys: [])
+        let preamble = medianSeconds {
+            _ = QueueModel.scope(from: prospects, answers: answers, corpus: prospects, sources: sources,
+                                 cardKeys: [])
         }
+        let preambleSeconds = preamble.median
+
+        let focused = makePass(cardKeys: nil).focusedRows
+        let viewport = Set(focused.prefix(Self.viewportRows).map(\.id))
+        _ = makePass(cardKeys: viewport)                    // warm, as above
+        let narrowedWork = QueueRenderPass.WorkTally.measure { _ = makePass(cardKeys: viewport) }
+        let narrowed = medianSeconds { _ = makePass(cardKeys: viewport) }
+        let narrowedSeconds = narrowed.median
+
+        // 6. THE FLOOR: the same pass with NO card at all.
+        //
+        // The number that decides what is worth building next, and the one no arm above can give. Every
+        // arm that builds cards mixes two costs, so "the pass got cheaper" says nothing about how much of
+        // it COULD get cheaper. This is the part narrowing provably cannot reach: the whole-corpus tables,
+        // a row for every show, the stage navigation, the reached-out sweep, the geography and the date
+        // grouping. Measured over the pass's OWN corpus rather than over a differently scoped one, so it
+        // is a component of the readings above rather than a number beside them (L118).
+        _ = makePass(cardKeys: [])
+        let floor = medianSeconds { _ = makePass(cardKeys: []) }
+        let floorSeconds = floor.median
+
+        // 7. #3660 Phase 10: WHERE INSIDE THE FLOOR the time goes.
+        //
+        // The floor is 99% of the shipping pass, so "the pass is expensive" is now a statement about
+        // these terms and nothing else. Without this split the only available next step is to chunk the
+        // whole thing, which is a large and risky change aimed at a cost nobody has located: a remainder
+        // that is never decomposed is exactly where the unexplained time accumulates (L507).
+        //
+        // Each term is timed AS THE PASS CALLS IT, over the pass's own corpus, so these are components of
+        // the floor above rather than numbers beside it (L118). They will not sum to it exactly: the pass
+        // also allocates the RenderData and runs the terms not listed here, and any one reading carries
+        // the noise its own spread reports.
+        let everyProspect = prospects
+        let inQueue = QueueRenderPass.Corpus(prospects).narrowed(QueueModel.queueScope)
+        let baseContext = StageContext.at(QueueModel.easternToday(), now: Date())
+        _ = baseContext.resolvingPlaces(of: inQueue.all)
+        let geoTerm = medianSeconds { _ = baseContext.resolvingPlaces(of: inQueue.all) }
+        let resolved = baseContext.resolvingPlaces(of: inQueue.all)
+
+        let scopeTerm = medianSeconds {
+            _ = QueueModel.scope(from: inQueue.all, answers: answers, corpus: everyProspect,
+                                 sources: sources, clients: resolved.clients, now: resolved.now,
+                                 cardKeys: [], today: resolved.today)
+        }
+        let reachedOutTerm = medianSeconds {
+            _ = ReachedOutQueue.activeWithDates(from: inQueue.all, now: resolved.now)
+        }
+        let reachedOutKeys = Set(ReachedOutQueue.activeWithDates(from: inQueue.all,
+                                                                now: resolved.now)
+            .map(\.prospect.naturalKey))
+        // #3738: the pass decides every show's stages ONCE and reads that table four ways, so the
+        // decomposition is the table plus its projections rather than four independent sweeps. Timed the
+        // other way the four lines each rebuilt the table and their sum exceeded the floor they are
+        // components of, which is the arithmetic saying the split was wrong rather than the floor (L118).
+        let placeTerm = medianSeconds { _ = StageNavigation.placements(in: inQueue.all, context: resolved) }
+        // #3742: the SCOUT arm of the stage rule, which is 32.3 ms of the placement's 59.1 ms, measured by
+        // reducing `countedFocuses` to one focus at a time. It walks no recipients; what it does is ask
+        // whether each show is inside the lead-time window, and that runs `EasternDate.daysUntil`, which
+        // is TWO `DateFormatter` parses per show. One of the two is `today`, the same string every time.
+        //
+        // Timed here so the claim is a number rather than a reading of the code (L107).
+        let leadTimeTerm = medianSeconds {
+            for p in inQueue.all {
+                _ = QueueModel.isWithinOrdinaryLeadTime(performanceDate: p.performanceDate,
+                                                        today: resolved.today)
+            }
+        }
+        // And one parse on its own, over the same count, so the term above can be read as parses rather
+        // than as an unexplained cost.
+        let dayParseTerm = medianSeconds {
+            for p in inQueue.all { _ = EasternDate.date(from: p.performanceDate ?? "2027-01-01") }
+        }
+        let placement = StageNavigation.placements(in: inQueue.all, context: resolved)
+        let stageTerm = medianSeconds {
+            _ = StageNavigation.queueKeys(in: placement, reachedOutKeys: reachedOutKeys)
+        }
+        let fanOutTerm = medianSeconds { _ = QueueRenderPass.fanOutWarning(inQueue.all) }
+
+        // INSIDE `QueueModel.scope`, which is the largest term left once #3737 and #3738 landed.
+        //
+        // Same rule as the floor above: a remainder nobody decomposes is where the unexplained cost sits
+        // (L507). These are the pieces reachable from a test; `inheritedAnswers` and the card build are
+        // not, and what they cost shows up as this block's own remainder rather than being guessed at.
+        let engagementTerm = medianSeconds {
+            _ = EngagementLink.group(inQueue.all.map(EngagementLink.Row.init))
+        }
+        // #3743: the index is SHARED now, so the two terms that need it are timed with one in hand and
+        // the index is timed once on its own. Measured the other way each rebuilt it and the block stopped
+        // mirroring the pass, which is the same correction #3738 made to the stage terms (L118).
+        let producerIndex = ProducerGate.Corpus(everyProspect.map {
+            ProducerGate.Show(presenter: $0.presenter, venue: $0.venue)
+        })
+        let brandsTerm = medianSeconds {
+            _ = ProducerGate.VenueBrands(corpus: producerIndex, overrides: .none)
+        }
+        let rowCountsTerm = medianSeconds {
+            _ = QueueModel.organisationRowCounts(everyProspect.map(\.presenter))
+        }
+        // The row loop: one contacts walk and one `QueueScopeRow` per show, which is what `scope` does
+        // for every show whatever the card set says.
+        let rowsTerm = medianSeconds {
+            for p in inQueue.all { _ = QueueScopeRow(p, facts: RecipientFacts.of(p)) }
+        }
+        // And the contacts walk ALONE, so the row's own cost can be told from the cost of reaching its
+        // contacts. They are one line in the loop and two very different things to fix.
+        let contactsTerm = medianSeconds {
+            for p in inQueue.all { _ = RecipientFacts.of(p) }
+        }
+        // #3743: the term #3741 could not reach, which was almost all of that block's 41.3 ms remainder.
+        //
+        // It is SKIPPED ENTIRELY when the stored ledger is empty (`guard !answers.isEmpty`), so a reading
+        // of zero here would mean the clone held no organisation answers rather than the work being free.
+        // The count is printed beside it for exactly that reason (L98).
+        // #3743: the index BOTH of the two big terms need, over the same corpus, in the same pass. They
+        // used to build one each; `QueueModel.scope` builds it once and hands it to both now. Timed on
+        // its own so the shared part is a line rather than something folded into whichever term happens
+        // to be measured first (L370, L118).
+        let producerCorpusTerm = medianSeconds {
+            _ = ProducerGate.Corpus(everyProspect.map {
+                ProducerGate.Show(presenter: $0.presenter, venue: $0.venue)
+            })
+        }
+        // #3742: WHAT A CACHE KEY WOULD COST, before anybody builds the cache.
+        //
+        // The proposal is to reuse the producer index across passes, since its inputs (the corpus's
+        // presenter and venue pairs, plus the overrides) change on a scout run and not on a scroll. Any
+        // such cache needs a key derived from those inputs, because a key on anything cheaper can be
+        // wrong, and a wrong `VenueBrands` changes which presenters the producer gate admits, which
+        // changes which shows Dan is offered. No cost test would see that.
+        //
+        // But a content key is ITSELF a walk of every row, so the saving is the index minus the key, not
+        // the index. That is the number nobody had, and it is what decides whether the cache is worth its
+        // invalidation risk. Measured here rather than reasoned about (L107).
+        //
+        // Hashing is the CHEAPEST honest key: it reads both fields of every row exactly as the index
+        // does, and does strictly less with them.
+        let indexKeyTerm = medianSeconds {
+            var hasher = Hasher()
+            for p in everyProspect {
+                hasher.combine(p.presenter)
+                hasher.combine(p.venue)
+            }
+            _ = hasher.finalize()
+        }
+
+        let inheritedTerm = medianSeconds {
+            _ = QueueModel.inheritedAnswers(answers, corpus: everyProspect, overrides: .none,
+                                            refusals: .none, heldKeys: [], now: resolved.now,
+                                            producerCorpus: producerIndex)
+        }
+        let scopeNamed = engagementTerm.median + brandsTerm.median + rowCountsTerm.median
+            + rowsTerm.median + inheritedTerm.median + producerCorpusTerm.median
+
+        // The terms the first decomposition left out, chased because they were the REMAINDER: the five
+        // above came to 154 ms of a 421.7 ms floor, and a remainder that large is where the answer is
+        // (L507). Timed in the same way, over the same corpus.
+        let rowsForTerms = QueueModel.scope(from: inQueue.all, answers: answers, corpus: everyProspect,
+                                            sources: sources, clients: resolved.clients,
+                                            now: resolved.now, cardKeys: [], today: resolved.today).rows
+        let agentTerm = medianSeconds {
+            _ = AgentInputs.from(prospects: inQueue.all, allProspects: everyProspect, inquiries: [],
+                                 context: resolved, gmailConnected: false,
+                                 runInFlight: nil, replyRunAlive: false, placement: placement)
+        }
+        let focusedTerm = medianSeconds {
+            _ = Set(StageNavigation.focusedKeys(stage: .scout, leadKeys: [], in: placement))
+        }
+        let selfBookingTerm = medianSeconds { _ = QueueModel.selfBookingIndex(rowsForTerms) }
+        let pendingTerm = medianSeconds { _ = QueueModel.pendingBookingCount(rowsForTerms) }
+        let groupTerm = medianSeconds { _ = QueueModel.groupByDate(rowsForTerms) }
+
+        let named = geoTerm.median + scopeTerm.median + reachedOutTerm.median + stageTerm.median
+            + placeTerm.median
+            + fanOutTerm.median + agentTerm.median + focusedTerm.median + selfBookingTerm.median
+            + pendingTerm.median + groupTerm.median
+        let unaccounted = max(0, floorSeconds - named)
 
         let recipients = (try? ctx.fetch(FetchDescriptor<Recipient>()))?.count ?? 0
         let ms = { (s: Double) in String(format: "%.1f", s * 1000) }
-        let rest = max(0, passSeconds - itemsSeconds)
+        // #3660: this difference stopped being meaningful once the pass got cheaper than the standalone
+        // build it subtracts, and it printed `0.0 ms`, which reads as a real measurement of nothing (L98).
+        //
+        // It was always two corpora (`itemsSeconds` builds over the whole store, the pass over its own
+        // non-dismissed scope), and while the pass was the dearer of the two the difference was at least
+        // a positive number with a caveat. Now that #3737 and #3738 have taken the pass below it, the
+        // subtraction is negative and clamping it to zero states a measurement nobody took. So it says
+        // which it is instead. The line is kept rather than deleted because every earlier reading of this
+        // instrument was quoted from it (L277).
+        let rest = passSeconds - itemsSeconds
+        let restLabel = rest > 0
+            ? "\(ms(rest)) ms"
+            : "not meaningful: the pass is now CHEAPER than a whole-store card build, and the two "
+              + "measure different corpora. Read THE FLOOR below."
+        // The marginal card, derived from the two arms rather than assumed: the difference in time over
+        // the difference in cards built. Stated so a taller window can be priced without re-measuring,
+        // and so a reader can tell a pass that got cheaper from one that merely built fewer cards.
+        let spread = { (r: (median: Double, low: Double, high: Double)) in
+            "(\(Self.samples) runs, \(ms(r.low)) to \(ms(r.high)))"
+        }
+        let floorShare = narrowedSeconds > 0
+            ? String(format: "%.0f%%", floorSeconds / narrowedSeconds * 100)
+            : "not measurable"
+        let extraCards = work.queueItems - narrowedWork.queueItems
+        let perCard = extraCards > 0
+            ? String(format: "%.3f", (passSeconds - narrowedSeconds) * 1000 / Double(extraCards))
+            : "not measurable, both arms built the same number of cards"
 
         // Counts and durations only. Nothing here can name a show, a venue, a person or a URL.
+        //
+        // #3660 Phase 10: `the pass minus that` is a DIFFERENCE and not a component, and the label says
+        // so now. `itemsSeconds` times a standalone `QueueModel.items` over the whole store, while the
+        // pass derives its own scope over the non-dismissed subset, so subtracting one from the other
+        // mixes two corpora. It was labelled `everything else` and read as the pass's non-card half,
+        // which the floor arm below shows it is not: the pass with no card at all is 99% of the narrowed
+        // pass, not 23% of it. Kept rather than deleted, because it is the number every earlier reading
+        // of this instrument was quoted from and removing it would leave those unexplainable (L277).
         //
         // GROUPED so the arithmetic cannot be misread. The first version listed the fetch beside the
         // pass's own two halves above a line reading `whole pass`, and those three do not add up to it:
@@ -142,19 +549,650 @@ struct QueueRenderPassLiveStoreCostTests {
 
           BEFORE the pass, paid once per store change, twice where two queries read the table:
             fetch and materialise     \(ms(fetchSeconds)) ms
-          THE PASS itself, which these two divide between them:
-            build the cards           \(ms(itemsSeconds)) ms
-            everything else           \(ms(rest)) ms
-            the pass                  \(ms(passSeconds)) ms
+          #3750: inside it, each in a FRESH context so a warm row cache cannot answer for the next.
+          These are three separate reads, so they do not sum to the line above, which reads all three
+          into ONE context and pays the shared setup once.
+            the prospect table        \(ms(prospectFetch.median)) ms   \(spread(prospectFetch))
+            the org answer table      \(ms(answersFetch.median)) ms   \(spread(answersFetch))
+            the watched source table  \(ms(sourcesFetch.median)) ms   \(spread(sourcesFetch))
+            the refusal, promoted and demoted tables together, which #3849 found this arm was not
+            reading at all while the app's own pass reads all three (\(refusedRows.count), \(promoted.count)
+            and \(demoted.count) rows):
+                                      \(ms(otherTablesFetch.median)) ms   \(spread(otherTablesFetch))
+            and the two values the app builds from them at the call site of every pass, which were
+            left at their empty defaults here until #3849:
+              the refusal ledger      \(ms(refusalLedgerTerm.median)) ms   \(spread(refusalLedgerTerm))
+              the producer overrides  \(ms(overridesTerm.median)) ms   \(spread(overridesTerm))
+            the same read narrowed to the \(rowFields.count) fields a ROW is built from, which is
+            what a partial @Query would cost (#3750):
+                                      \(ms(partialFetch.median)) ms   \(spread(partialFetch))
+            the same read PLUS faulting every show's recipients, which the pass does and the fetch
+            above does not. Read the DIFFERENCE against the spreads either side of it: measured
+            twice a day apart it was 13 ms and then under 4 ms, so what this says is that
+            faulting the relationships is small, not how small (#3750):
+                                      \(ms(faultRecipients.median)) ms   \(spread(faultRecipients))
+          THE PASS itself, EVERY card built, which is what this instrument measured before #3660:
+            a whole-store card build  \(ms(itemsSeconds)) ms
+            the pass minus that       \(restLabel)
+            the pass                  \(ms(passSeconds)) ms   \(spread(pass))
+          #3849: THE SAME PASS with refusals and overrides at the empty defaults, which is what every
+          reading from this instrument before #3849 was. Both arms are in THIS run, so the difference
+          is attributable; neither absolute number is comparable with a figure from another day.
+            the pass as it was measured \(ms(asItWasMeasured.median)) ms   \(spread(asItWasMeasured))
+            ROWS in scope on that arm   \(emptyArmRows) against \(realArmRows) with the app's own arguments
           END TO END, the fetch plus the pass:
             total                     \(ms(fetchSeconds + passSeconds)) ms
 
           work units in the pass: \(work.queueItems) cards, \(work.sendGroupBuilds) send groups, \(work.draftLintRuns) draft lint runs
+
+          NARROWED to what a frame draws (#3654), which is the arm the app actually runs:
+            viewport                  \(viewport.count) rows of \(focused.count) in the focused stage
+            the pass                  \(ms(narrowedSeconds)) ms   \(spread(narrowed))
+            END TO END with the fetch \(ms(fetchSeconds + narrowedSeconds)) ms
+            work units                \(narrowedWork.queueItems) cards, \(narrowedWork.sendGroupBuilds) send groups, \(narrowedWork.draftLintRuns) draft lint runs
+            marginal cost per card    \(perCard) ms
+
+          THE FLOOR, the same pass with NO card built, which narrowing cannot reach:
+            the pass                  \(ms(floorSeconds)) ms   \(spread(floor))
+            share of the narrowed arm \(floorShare)
+            of which the whole-corpus tables plus a row per show, over EVERY row in the store,
+            which is a wider corpus than the pass's own and so reads dearer than the
+            `QueueModel.scope` line below it. Two corpora, not two answers (L118):
+                                      \(ms(preambleSeconds)) ms   \(spread(preamble))
+
+          INSIDE THE FLOOR, each term timed as the pass calls it, over the pass's own corpus.
+          These do not sum to the floor: the pass runs more than these and each carries its own noise.
+            resolve every show's place \(ms(geoTerm.median)) ms   \(spread(geoTerm))
+            QueueModel.scope, no cards \(ms(scopeTerm.median)) ms   \(spread(scopeTerm))
+            reached-out sweep          \(ms(reachedOutTerm.median)) ms   \(spread(reachedOutTerm))
+            place every show's stages \(ms(placeTerm.median)) ms   \(spread(placeTerm))
+              of which the lead-time window, over every row:
+                                       \(ms(leadTimeTerm.median)) ms   \(spread(leadTimeTerm))
+              and one day-string parse each, for comparison:
+                                       \(ms(dayParseTerm.median)) ms   \(spread(dayParseTerm))
+            masthead membership        \(ms(stageTerm.median)) ms   \(spread(stageTerm))
+            possible-match fan-out     \(ms(fanOutTerm.median)) ms   \(spread(fanOutTerm))
+            pill counts, from the table \(ms(agentTerm.median)) ms   \(spread(agentTerm))
+            focused rows, from the table \(ms(focusedTerm.median)) ms   \(spread(focusedTerm))
+            self-booking night index   \(ms(selfBookingTerm.median)) ms   \(spread(selfBookingTerm))
+            pending booking count      \(ms(pendingTerm.median)) ms   \(spread(pendingTerm))
+            group by date              \(ms(groupTerm.median)) ms   \(spread(groupTerm))
+            ---
+            named terms                \(ms(named)) ms
+            NOT ACCOUNTED FOR          \(ms(unaccounted)) ms
+
+          INSIDE `QueueModel.scope`, the largest term left. The pieces a test can reach; what
+          `inheritedAnswers` and the rest cost is this block's own remainder rather than a guess.
+            engagement clustering      \(ms(engagementTerm.median)) ms   \(spread(engagementTerm))
+            the producer index, ONCE, shared by the two terms under it (#3743):
+                                       \(ms(producerCorpusTerm.median)) ms   \(spread(producerCorpusTerm))
+              and what a CACHE KEY over the same rows would cost, which is what a cross-pass
+              cache would have to pay before it could skip the build (#3742):
+                                       \(ms(indexKeyTerm.median)) ms   \(spread(indexKeyTerm))
+              so reusing the index across passes is worth at most the difference:
+                                       \(ms(max(0, producerCorpusTerm.median - indexKeyTerm.median))) ms
+            presenter against venue    \(ms(brandsTerm.median)) ms   \(spread(brandsTerm))
+            organisation row counts    \(ms(rowCountsTerm.median)) ms   \(spread(rowCountsTerm))
+            inheriting an org answer   \(ms(inheritedTerm.median)) ms   \(spread(inheritedTerm))
+              over \(answers.count) stored answers, which is what it is skipped entirely without
+            a row per show             \(ms(rowsTerm.median)) ms   \(spread(rowsTerm))
+              of which the contacts walk
+                                       \(ms(contactsTerm.median)) ms   \(spread(contactsTerm))
+            ---
+            named                      \(ms(scopeNamed)) ms
+            NOT ACCOUNTED FOR          \(ms(max(0, scopeTerm.median - scopeNamed))) ms
         """)
 
         // The only assertions, and both are about the measurement being REAL rather than about the
         // numbers, which move with whatever else this Mac is running (L224).
         #expect(!prospects.isEmpty, "the clone held no prospects, so this timed an empty store")
         #expect(passSeconds > 0, "a whole pass took no measurable time, so it never ran")
+        #expect(narrowedSeconds > 0, "the narrowed pass took no measurable time, so it never ran")
+        // #3750: the relationship arm contains the fetch arm, so it cannot be MEANINGFULLY cheaper.
+        //
+        // WITHIN THIS RUN'S OWN NOISE, which the first version of this assertion did not allow and which
+        // is the same correction #3735 already made to the three pass arms below. It demanded strict
+        // ordering and fired on a correct run: 173.4 ms against 176.8 ms, three milliseconds apart on
+        // readings of a hundred and seventy, which is not an ordering at all (L224). That was this defect
+        // class being repeated in the very change that had fixed it one file over (L387).
+        //
+        // The tolerance is DERIVED from the widest spread the two arms actually reported, so it tracks
+        // how noisy the machine is rather than being a number somebody picked.
+        // #3660: the fetch TRACKED, not merely measured.
+        //
+        // At about 175 ms it is the largest single term in a store change, and nothing held it to
+        // anything: this suite asserted that the readings were REAL and that the arms were ORDERED, and
+        // neither notices the fetch doubling.
+        //
+        // THE FETCH rather than the end-to-end store change, which is what #3660's own restatement of
+        // 2026-09-11 asks for, and the difference is deliberate. The other two terms of a store change
+        // already have guards: `QueueRenderPassCostTests` pins how many whole-store sweeps a pass makes
+        // and how much per-card work it does, both as COUNTS, which is what lets them sit on the
+        // mandatory gate. The fetch is the one term with nothing on it at all, and it is the largest.
+        // A ratchet over the sum would also be answered by all three moving against each other, so a
+        // fetch that doubled while the card build halved would read as no change (L367).
+        //
+        // PER ROW, never a total, and that is the whole design. A total on a growing store goes up for
+        // the most ordinary reason there is, so a ratchet on one would fire on Dan adding shows (L323). A
+        // RATE is flat while the fetch stays linear, so what it catches is a change in KIND: a fault
+        // storm, a descriptor that stopped being linear, a second read folded into this one. It is also
+        // immune to how busy this Mac is in a way no absolute millisecond figure can be (L224), because
+        // both terms move together.
+        //
+        // THE CEILING is far above the reading rather than just over it, so anything approaching it is a
+        // change in kind and not noise (L172). Measured 2026-09-14 on the live store: 173.0 ms over
+        // 1,252 rows, which is 0.1382 ms a row, so the ceiling sits about 3.6 times above it.
+        //
+        // Re-take it with
+        //   TEST_RUNNER_MEASURE_QUEUE_LIVE_STORE=1 mac/scripts/run-tests-locked.sh \
+        //     -only-testing:OvertureTests/QueueRenderPassLiveStoreCostTests
+        // and read the printed `per row` figure rather than trusting any number in this comment, which
+        // is a dated measurement and cannot re-take itself (L316).
+        let fetchPerRowMs = (prospectFetch.median / Double(prospects.count)) * 1000
+        print("""
+        queue-live-store-fetch-ratchet (#3660)
+          the prospect fetch        \(ms(prospectFetch.median)) ms over \(prospects.count) rows
+          per row                   \(String(format: "%.4f", fetchPerRowMs)) ms
+          ceiling                   \(String(format: "%.4f", Self.fetchCeilingMsPerRow)) ms a row
+        """)
+        #expect(fetchPerRowMs < Self.fetchCeilingMsPerRow,
+                Comment(rawValue: "the prospect fetch costs "
+                        + "\(String(format: "%.4f", fetchPerRowMs)) ms a row against a ceiling of "
+                        + "\(String(format: "%.4f", Self.fetchCeilingMsPerRow)). A rate that moves has "
+                        + "changed in KIND rather than grown: a relationship faulted per row, a "
+                        + "descriptor that stopped being linear, or a second read folded into this one. "
+                        + "The store getting bigger cannot do this (#3660)."))
+
+        let fetchNoise = max(prospectFetch.high - prospectFetch.low,
+                             faultRecipients.high - faultRecipients.low)
+        #expect(faultRecipients.median >= prospectFetch.median - fetchNoise,
+                Comment(rawValue: "faulting every show's recipients (\(ms(faultRecipients.median)) ms) came "
+                        + "out cheaper than the fetch alone (\(ms(prospectFetch.median)) ms) by more than "
+                        + "this run's own noise (\(ms(fetchNoise)) ms), which cannot be true: the second "
+                        + "contains the first"))
+        // The two arms really are different arms. Without this, a narrowing that silently stopped
+        // narrowing would print two numbers that agree and read as a pass that got no cheaper, which is
+        // indistinguishable from an instrument measuring the same thing twice (L70, L98).
+        #expect(narrowedWork.queueItems < work.queueItems,
+                Comment(rawValue: "the narrowed arm built \(narrowedWork.queueItems) cards and the full "
+                        + "arm \(work.queueItems). If those are equal the narrowing is not in force and "
+                        + "both lines above describe one arm."))
+        #expect(preambleSeconds > 0, "the preamble took no measurable time, so it never ran")
+        #expect(floorSeconds > 0, "the floor took no measurable time, so it never ran")
+        // The arms are ORDERED, which is the one thing about them that cannot be a matter of what else
+        // the machine is running: more cards cannot be cheaper. A reading that breaks this is the
+        // instrument misfiring rather than a finding about the code (L224).
+        // ORDERED, within the noise this run actually measured rather than exactly. More cards cannot be
+        // cheaper, but two arms differing by less than the spread of their own samples are not ordered by
+        // anything, and demanding they be would make this fire on the ordinary case (L224, L172). The
+        // tolerance is DERIVED from the widest spread in this run, so it tracks how noisy the machine is
+        // rather than being a number somebody picked.
+        let noise = max(pass.high - pass.low, max(narrowed.high - narrowed.low, floor.high - floor.low))
+        #expect(preambleSeconds <= floorSeconds + noise,
+                Comment(rawValue: "scope alone (\(ms(preambleSeconds)) ms) came out dearer than the whole "
+                        + "pass with no cards (\(ms(floorSeconds)) ms) by more than this run's own noise "
+                        + "(\(ms(noise)) ms), which cannot be true: the second contains the first"))
+        #expect(floorSeconds <= narrowedSeconds + noise,
+                Comment(rawValue: "the no-card pass (\(ms(floorSeconds)) ms) came out dearer than the same "
+                        + "pass with \(viewport.count) cards (\(ms(narrowedSeconds)) ms) by more than this "
+                        + "run's own noise (\(ms(noise)) ms)"))
+        #expect(narrowedWork.queueItems <= viewport.count,
+                Comment(rawValue: "the narrowed arm built \(narrowedWork.queueItems) cards for a viewport "
+                        + "of \(viewport.count), so it built cards nothing asked for"))
     }
+
+    // #3507: does the SECOND prospect query cost anything, or does SwiftData share the row cache?
+    //
+    // `QueueView` holds two `@Query` properties over `Prospect` (`QueueView.swift:26` and `:38`),
+    // differing only in scope: one drops dismissed shows and sorts, the other is the whole-store corpus
+    // the producer gate and inherited answers are judged against. The reading above times a fetch of the
+    // table ONCE and calls it `fetch and materialise`, so the claim that a store notification pays that
+    // term TWICE is arithmetic performed on one measurement rather than a measurement (L107).
+    //
+    // #3507's own direction says so and says what to do about it: "whether SwiftData actually
+    // materialises twice or shares the row cache between two descriptors over one entity is an
+    // assumption here, not a measurement", and "the first step is to time the two fetches separately and
+    // confirm the second is not nearly free. If it is nearly free, this issue closes with that recorded."
+    //
+    // THREE fetches, not two, because two cannot tell the answers apart. A cheap second fetch could mean
+    // either that this particular descriptor is cheap or that ANY repeat is cheap once the objects are
+    // resident, and those imply different fixes. So: the corpus descriptor, then the queue's own filtered
+    // and sorted one, then the corpus descriptor AGAIN.
+    //
+    // Each fetch is timed in TWO PARTS, the query and then a property touch over every row it returned,
+    // because folding them into one number cannot answer the question. A `fetch` hands back objects whose
+    // values may not have been read yet, so timing the call alone measures the query and not the
+    // materialisation; timing them together cannot say which of the two a repeat actually re-pays, and
+    // those imply different fixes. One query plus an in-memory filter removes the QUERY half and nothing
+    // of the touch half, so the split is the whole decision.
+    @Test(.enabled(if: liveStoreExists, "no live store on this machine"))
+    func measureTheSecondProspectFetchOverTheSameTable() throws {
+        guard ProcessInfo.processInfo.environment["MEASURE_QUEUE_LIVE_STORE"] != nil else {
+            print("queue-live-store-second-fetch: not measured. Set TEST_RUNNER_MEASURE_QUEUE_LIVE_STORE=1 to run it.")
+            return
+        }
+
+        let clone = try cloneLiveStore()
+        let ctx = ModelContext(try openContainer(at: clone))
+
+        // The app's own two descriptors, spelled the way `QueueView` spells them, so this measures the
+        // queries that actually run rather than a pair written beside them (L107).
+        let corpus = FetchDescriptor<Prospect>()
+        let queueScope = FetchDescriptor<Prospect>(
+            predicate: #Predicate<Prospect> { $0.statusRaw != "dismissed" },
+            sortBy: [SortDescriptor(\Prospect.performanceDate, order: .forward),
+                     SortDescriptor(\Prospect.fitScore, order: .reverse)])
+
+        struct Reading { var rows = 0; var query = 0.0; var touch = 0.0
+                         var total: Double { query + touch } }
+
+        func fetchThenTouch(_ descriptor: FetchDescriptor<Prospect>) -> Reading {
+            var r = Reading()
+            var rows: [Prospect] = []
+            r.query = seconds { rows = (try? ctx.fetch(descriptor)) ?? [] }
+            var touched = 0
+            r.touch = seconds {
+                for row in rows where row.statusRaw.isEmpty == false { touched += 1 }
+            }
+            r.rows = touched
+            return r
+        }
+
+        // #3507 asks whether the other views holding a prospect query share this cost. `RootView`'s
+        // second one is the same SHAPE (a filtered descriptor beside an unfiltered one) and is measured
+        // here rather than reasoned about from the two above, because it returns a far smaller set and
+        // whether that matters is the whole question (L107).
+        let keptToPrep = FetchDescriptor<Prospect>(predicate: PrepQueueBuilder.needsPrepPredicate)
+
+        let first = fetchThenTouch(corpus)
+        let second = fetchThenTouch(queueScope)
+        let third = fetchThenTouch(corpus)
+        let fourth = fetchThenTouch(keptToPrep)
+
+        let ms = { (s: Double) in String(format: "%.1f", s * 1000) }
+        let perRow = { (r: Reading) -> String in
+            guard r.rows > 0 else { return "n/a" }
+            return String(format: "%.3f", r.total / Double(r.rows) * 1000)
+        }
+
+        print("""
+        queue-live-store-second-fetch: two @Query descriptors over one table (#3507)
+                                     rows      query      touch      total   per row
+          1. whole corpus, cold      \(first.rows)   \(ms(first.query)) ms   \(ms(first.touch)) ms   \(ms(first.total)) ms   \(perRow(first)) ms
+          2. queue scope, filtered   \(second.rows)   \(ms(second.query)) ms   \(ms(second.touch)) ms   \(ms(second.total)) ms   \(perRow(second)) ms
+          3. whole corpus, repeated  \(third.rows)   \(ms(third.query)) ms   \(ms(third.touch)) ms   \(ms(third.total)) ms   \(perRow(third)) ms
+          4. RootView kept-to-prep    \(fourth.rows)   \(ms(fourth.query)) ms   \(ms(fourth.touch)) ms   \(ms(fourth.total)) ms   \(perRow(fourth)) ms
+
+          Reading 3 against 1 is the answer to #3507. A repeat of the IDENTICAL descriptor, over objects
+          the context already holds, is what one query plus an in-memory filter would remove. If it is
+          near the cold figure the second query is paid in full; if it is near zero the row cache is
+          shared and the change buys nothing.
+
+          Read 2 against 3 as well, so a cheap second reading cannot be credited to the wrong cause: a
+          filtered descriptor returning fewer rows is cheaper for that reason alone, and per-row is the
+          column that separates the two.
+
+          Row 4 is the sibling question. `RootView` holds the same two-query shape, so if the cost is
+          per row returned rather than per query, its second one is cheap for a reason `QueueView`'s was
+          not, and the two do not want the same fix.
+        """)
+
+        // The assertions are about the measurement being REAL, never about the numbers, which move with
+        // whatever else this Mac is running (L224). A run where a fetch returned no rows would report a
+        // reassuring near-zero for the emptiest possible reason (L98).
+        #expect(first.rows > 0, "the corpus fetch touched no rows, so nothing was materialised")
+        #expect(second.rows > 0, "the queue-scope fetch touched no rows, so its timing means nothing")
+        #expect(third.rows == first.rows, "the repeated corpus fetch saw a different table than the first")
+        #expect(second.rows < first.rows, "the queue scope returned the whole table, so its predicate did nothing")
+        #expect(first.query > 0, "the first query took no measurable time, so it never ran")
+        #expect(fourth.rows >= 0, "the kept-to-prep descriptor could not be run at all")
+    }
+
+    // #3764: what an OPEN ARCHIVE adds to every store change.
+    //
+    // `QueueView` holds `@Query private var allProspects: [Prospect]` and `ArchiveView` holds
+    // `@Query private var prospects: [Prospect]`. Both are BARE, so they are the IDENTICAL descriptor over
+    // the whole table. Archive is presented as a `.sheet` over the queue (`RootView.swift:1201`), so while
+    // it is open both views exist and both queries are live, and SwiftData satisfies each descriptor
+    // independently.
+    //
+    // The prospect table read is the largest single term in a store change, so the plausible reading is
+    // that opening the Archive doubles it for as long as the sheet is up. Nobody had measured whether it
+    // does, and no existing instrument could: every cost test here drives ONE derivation at a time.
+    //
+    // WHY MEASURE RATHER THAN FIX. The obvious fix, one query shared between the two, is not obviously
+    // right: #1598 records why the queue's query deliberately reads the WHOLE store including dismissed
+    // rows, and Archive's scope is different. Pricing first is what the rest of this milestone has done
+    // and it has changed the answer three times (#3742 went 40.6 ms to 10.4 ms, #3750's question 1 closed
+    // on a measurement that reversed its premise).
+    //
+    // MEASURED 2026-09-12 on the live store of 1,238 rows, and the answer is that it doubles:
+    //
+    //   the queue's prospect read alone            159.5 ms   1238 rows
+    //   what the second prospect query adds        158.8 ms
+    //   the sheet's five other tables                6.2 ms
+    //   so an open Archive adds, per store change   165.0 ms
+    //
+    // 158.8 against 159.5 is 99.6%, so SwiftData shares nothing between two identical descriptors held by
+    // two live views, exactly as #3507 found for two held by one. Against an end-to-end store change of
+    // 350.7 ms with the sheet closed, an open Archive makes it about 516 ms, and the figure is a FLOOR
+    // rather than the whole cost: this prices the fetches and not the Archive's own derivation.
+    //
+    // THE ARCHIVE'S OTHER FIVE QUERIES ARE MEASURED TOO, and that is the half reading 3 above could never
+    // answer. The sheet holds six `@Query` properties, enumerated from its source rather than from memory
+    // (`grep -n "@Query" mac/Overture/UI/ArchiveView.swift`), and every one of them is re-satisfied on a
+    // store change. A reading that priced only the prospect table would understate what the sheet costs
+    // while looking like the whole answer (L146).
+    @Test(.enabled(if: liveStoreExists, "no live store on this machine"))
+    func measureWhatAnOpenArchiveAddsToAStoreChange() throws {
+        guard ProcessInfo.processInfo.environment["MEASURE_QUEUE_LIVE_STORE"] != nil else {
+            print("queue-live-store-archive-open: not measured. Set TEST_RUNNER_MEASURE_QUEUE_LIVE_STORE=1 to run it.")
+            return
+        }
+
+        let clone = try cloneLiveStore()
+        let ctx = ModelContext(try openContainer(at: clone))
+
+        // Spelled as the two views spell them, so this measures the descriptors that actually run rather
+        // than a pair written beside them (L107).
+        let queueQuery = FetchDescriptor<Prospect>()
+        let archiveQuery = FetchDescriptor<Prospect>()
+
+        struct Reading { var rows = 0; var seconds = 0.0 }
+
+        func read(_ descriptor: FetchDescriptor<Prospect>) -> Reading {
+            var r = Reading()
+            var rows: [Prospect] = []
+            r.seconds = seconds {
+                rows = (try? ctx.fetch(descriptor)) ?? []
+                // TOUCHED, never merely fetched. A fetch that returns unfaulted objects costs a fraction
+                // of one whose fields are read, and the app reads them, so an untouched reading would
+                // price a query the app never makes (L102).
+                for row in rows where row.statusRaw.isEmpty == false { r.rows += 1 }
+            }
+            return r
+        }
+
+        // ARM A: ONE whole-table read, which since #3846 is what the app holds while the Archive is open.
+        let queueAlone = read(queueQuery)
+        // ARM B: what it cost BEFORE #3846, when the sheet held a second live query of its own. Kept as a
+        // measurement rather than deleted with the defect, because it is the evidence the rule rests on:
+        // a second live whole-table query is a whole second table read, and the eight sheets still holding
+        // one (#3871) each pay this the moment they are opened.
+        let withArchive = read(queueQuery).seconds + read(archiveQuery).seconds
+
+        // And the sheet's five other tables, which are live for as long as it is.
+        func count<T: PersistentModel>(_ type: T.Type) -> (rows: Int, seconds: Double) {
+            var n = 0
+            let taken = seconds { n = ((try? ctx.fetch(FetchDescriptor<T>())) ?? []).count }
+            return (n, taken)
+        }
+        let orgAnswers = count(OrgReachabilityAnswer.self)
+        let refused = count(RefusedContactAddress.self)
+        let promoted = count(PromotedProducer.self)
+        let demoted = count(DemotedHouse.self)
+        let sources = count(WatchedSource.self)
+        let others = orgAnswers.seconds + refused.seconds + promoted.seconds + demoted.seconds + sources.seconds
+
+        func ms(_ v: Double) -> String { String(format: "%7.1f", v * 1000) }
+
+        print("""
+        queue-live-store-archive-open: what an open Archive adds to one store change (#3764)
+          one whole-table prospect read            \(ms(queueAlone.seconds)) ms   \(queueAlone.rows) rows
+          two of them, as the app held before #3846 \(ms(withArchive)) ms
+          what a SECOND live query adds            \(ms(withArchive - queueAlone.seconds)) ms
+          the sheet's five other tables            \(ms(others)) ms
+            OrgReachabilityAnswer                  \(ms(orgAnswers.seconds)) ms   \(orgAnswers.rows) rows
+            RefusedContactAddress                  \(ms(refused.seconds)) ms   \(refused.rows) rows
+            PromotedProducer                       \(ms(promoted.seconds)) ms   \(promoted.rows) rows
+            DemotedHouse                           \(ms(demoted.seconds)) ms   \(demoted.rows) rows
+            WatchedSource                          \(ms(sources.seconds)) ms   \(sources.rows) rows
+          so an open Archive added, before #3846    \(ms(withArchive - queueAlone.seconds + others)) ms
+          and adds now                              \(ms(others)) ms
+
+          Read the second line against the first. Both descriptors are BARE and therefore identical, so
+          if SwiftData shared the read this would be near the first figure and a second live query is
+          nearly free; if it satisfies each independently it is near twice it and every extra live
+          whole-table query doubles the largest term in a store change for as long as it is held.
+
+          #3846 took the Archive's own query away, and the queue's: RootView holds the one read and hands
+          the rows to both. What an open Archive costs now is the five small tables alone.
+
+          The five other tables are small by row count and are reported anyway, because "small" is the
+          claim this milestone has had to withdraw three times.
+        """)
+
+        // About the measurement being REAL, never about the numbers, which move with whatever else this
+        // Mac is running (L224).
+        #expect(queueAlone.rows > 0, "the queue's read touched no rows, so nothing was materialised")
+        #expect(queueAlone.seconds > 0, "the queue's read took no measurable time, so it never ran")
+        #expect(withArchive > queueAlone.seconds,
+                Comment(rawValue: "two reads of the table cost no more than one, which cannot be true "
+                        + "and means this measured one of them twice or neither of them at all"))
+    }
+
+    // #3501: does loading each card's contacts in one go help, now that a fixture with real contacts
+    // exists to measure it against?
+    //
+    // `QueueItem.init` reads `p.recipients` about fifteen times while building one card, `recipients` is
+    // a to-many SwiftData `@Relationship`, and neither of the queue's descriptors prefetches it, so a
+    // pass can FAULT the relationship rather than read it from memory.
+    //
+    // WHY THIS IS BEING ASKED A SECOND TIME. It was proposed on #1930 and explicitly WITHDRAWN, for a
+    // good reason recorded there: the corpus it would have been measured against inserted 724 prospects
+    // and not one `Recipient`, so every array was empty, faulting contributed nothing to the 275 ms
+    // figure, and nothing justified the change. #2048 rebuilt that fixture at the live spread, so the
+    // measurement that could not be taken can be taken. A withdrawn proposal whose reasoning was about
+    // the INSTRUMENT rather than about the code gets re-proposed every few months by whoever next reads
+    // a profile; answering it with a number closes it in whichever direction the number points.
+    //
+    // A NULL RESULT IS A REAL RESULT and is written down as one (L248), because the work that would
+    // exercise this again is exactly the work a recorded negative prevents.
+    //
+    // THREE readings, not two, and the third is what makes the other two readable. A prefetched pass run
+    // second is helped by the operating system's own page cache whatever SwiftData does, so a plain pass
+    // is run AGAIN afterwards: if the second plain reading is as fast as the prefetched one, the saving
+    // belonged to the cache and not to the prefetch (L70). Each opens its OWN container, so no reading
+    // is served objects a previous one already materialised.
+    @Test(.enabled(if: liveStoreExists, "no live store on this machine"))
+    func measureWhetherPrefetchingTheContactsHelps() throws {
+        guard ProcessInfo.processInfo.environment["MEASURE_QUEUE_LIVE_STORE"] != nil else {
+            print("queue-live-store-prefetch: not measured. Set TEST_RUNNER_MEASURE_QUEUE_LIVE_STORE=1 to run it.")
+            return
+        }
+
+        // ONE container, and a fresh CONTEXT per reading. Opening a second container on the same clone
+        // leaves both connections alive when the sandbox is removed, and the run then prints
+        // `BUG IN CLIENT OF libsqlite3.dylib: vnode unlinked while in use` nine times over. That is a
+        // real complaint rather than noise (L219): a SwiftData container holds its sqlite connection
+        // until it is deallocated, and nothing here can make that happen on demand. Measured both ways
+        // on 2026-09-05: three containers print it whether they share a clone or each get their own,
+        // one container prints nothing.
+        //
+        // A fresh context is enough for what this asks. The prefetch is a property of the FETCH, so it
+        // is taken afresh on every reading whatever is resident, and the three build figures below are
+        // within half a millisecond of each other, which is what says residency is not the variable.
+        let clone = try cloneLiveStore()
+        let container = try openContainer(at: clone)
+
+        // One reading: a fresh context, a fetch with the given descriptor, and building every card from
+        // what came back. The FETCH is timed separately from the build, because a prefetch moves work
+        // INTO the fetch and out of the build, so a single total cannot say whether anything was saved
+        // or merely moved.
+        func reading(prefetching: Bool) throws -> (fetch: Double, build: Double, rows: Int, contacts: Int) {
+            let ctx = ModelContext(container)
+            var descriptor = FetchDescriptor<Prospect>()
+            if prefetching { descriptor.relationshipKeyPathsForPrefetching = [\Prospect.recipients] }
+            var rows: [Prospect] = []
+            let fetch = seconds { rows = (try? ctx.fetch(descriptor)) ?? [] }
+            let build = seconds {
+                _ = QueueModel.items(from: rows, answers: [], corpus: rows, sources: [])
+            }
+            // Counted through the same context, so no fourth container is opened just to ask.
+            let contacts = (try? ctx.fetchCount(FetchDescriptor<Recipient>())) ?? 0
+            return (fetch, build, rows.count, contacts)
+        }
+
+        let plain = try reading(prefetching: false)
+        let prefetched = try reading(prefetching: true)
+        let plainAgain = try reading(prefetching: false)
+
+        let ms = { (s: Double) in String(format: "%.1f", s * 1000) }
+
+        print("""
+        queue-live-store-prefetch: does loading the contacts in one go help? (#3501)
+          rows \(plain.rows), contacts \(plain.contacts)
+                                        fetch      build      total
+          1. plain                      \(ms(plain.fetch)) ms   \(ms(plain.build)) ms   \(ms(plain.fetch + plain.build)) ms
+          2. prefetching recipients     \(ms(prefetched.fetch)) ms   \(ms(prefetched.build)) ms   \(ms(prefetched.fetch + prefetched.build)) ms
+          3. plain again                \(ms(plainAgain.fetch)) ms   \(ms(plainAgain.build)) ms   \(ms(plainAgain.fetch + plainAgain.build)) ms
+
+          Read 2 against 3, never against 1. Reading 3 is the control: it is a plain fetch run after the
+          same file has been read twice, so anything the operating system's page cache explains shows up
+          there too. A prefetch is only worth building if 2 beats 3 on the TOTAL.
+        """)
+
+        // The assertions are about the measurement being real, never about the numbers, which move with
+        // whatever else this Mac is running (L224).
+        #expect(plain.rows > 0, "the plain fetch returned no rows, so nothing was built")
+        #expect(prefetched.rows == plain.rows, "the two fetches saw different tables")
+        #expect(plain.contacts > 0, Comment(rawValue:
+                "the store holds no contacts at all, so every recipients array was empty and this "
+                + "measured the same nothing #1930 withdrew the proposal over"))
+        #expect(plain.build > 0, "building every card took no measurable time, so it never ran")
+    }
+
+    // #3654: WHERE the per-card time actually goes, before anybody designs around a guess.
+    //
+    // What is known: the card-build term is roughly 420 to 480 ms over 1,224 rows, and #2598 established
+    // that the cost is the per-card construction rather than the corpus scan. What was ASSUMED, by me in
+    // #3671 and corrected in #3673, is that walking each show's contacts is where that sits. Measured, it
+    // is not: collapsing twelve contact reaches per card to one moved nothing, because SwiftData faults a
+    // to-many relationship once and caches it.
+    //
+    // So this asks the question the live store can answer without any refactor at all. 962 of its shows
+    // carry NO contact and 262 carry at least one (measured 2026-09-07). A contactless card runs no draft
+    // lint, builds no `RecipientSnapshot`, and every contact-derived fact short-circuits on an empty
+    // array. If per-card cost is contact-derived, the two groups must differ sharply. If they cost the
+    // same, what a card costs is the construction itself, and a design aimed at contact work is aimed at
+    // nothing (L107: a number quoted to justify a design must be produced by the code's own predicate).
+    //
+    // WHAT THIS CANNOT SAY, stated so nobody over-reads it. It compares two POPULATIONS of Dan's real
+    // shows, not one population two ways, so the groups differ in more than their contacts: a show with
+    // contacts has been prepped, so it more often carries a draft body, an outcome and a send state. That
+    // makes it the WEAKER direction for the contact hypothesis and the stronger one for its refutation: if
+    // the group that does MORE work costs the same per card, contact work is not the term.
+    @Test func measureWhetherContactsAreWhatACardCosts() throws {
+        guard ProcessInfo.processInfo.environment["MEASURE_QUEUE_LIVE_STORE"] != nil else {
+            print("queue-live-store-cards: not measured. Set TEST_RUNNER_MEASURE_QUEUE_LIVE_STORE=1 to run it.")
+            return
+        }
+
+        let clone = try cloneLiveStore()
+        let container = try openContainer(at: clone)
+        let ctx = ModelContext(container)
+        let rows = (try? ctx.fetch(FetchDescriptor<Prospect>())) ?? []
+
+        // Split AFTER the fetch and after one warming pass, so neither group pays for the other's
+        // materialisation and residency is not the variable (the prefetch reading beside this one
+        // establishes that a warm and a cold build differ by under half a millisecond).
+        for r in rows { _ = r.recipients.isEmpty }
+
+        let withContacts = rows.filter { !$0.recipients.isEmpty }
+        let without = rows.filter { $0.recipients.isEmpty }
+
+        // Guarded rather than assumed: a split that put everything on one side would report a per-card
+        // figure for a population of nothing, and a division by zero reads as a finding (L98).
+        guard withContacts.count > 50, without.count > 50 else {
+            print("""
+            queue-live-store-cards: UNMEASURED. The store split \(withContacts.count) with contacts
+              against \(without.count) without, which is too lopsided to compare per-card costs.
+            """)
+            return
+        }
+
+        func build(_ rows: [Prospect]) -> Double { seconds { for r in rows { _ = QueueItem(r) } } }
+        // Each group built twice, alternating, so a drift in machine load lands on both rather than on
+        // whichever ran second (L224: a duration compared against a fixed number measures the machine).
+        let a1 = build(withContacts), b1 = build(without)
+        let a2 = build(withContacts), b2 = build(without)
+
+        let withPer = ((a1 + a2) / 2) / Double(withContacts.count) * 1000
+        let withoutPer = ((b1 + b2) / 2) / Double(without.count) * 1000
+        let ratio = withoutPer > 0 ? withPer / withoutPer : 0
+
+        print("""
+        queue-live-store-cards: is building a card about its contacts? (#3654)
+          shows with a contact      \(withContacts.count)
+          shows with none           \(without.count)
+                                     per card
+          with contacts             \(String(format: "%.4f", withPer)) ms
+          without                   \(String(format: "%.4f", withoutPer)) ms
+          ratio                     \(String(format: "%.2f", ratio))x
+
+          Read the RATIO. Near 1 means a card costs the same whether or not it has contacts, so what a
+          card costs is its construction and a tier-one design aimed at contact work is aimed at
+          something already free (#3673 measured that directly). Far above 1 means contact-derived work
+          is the term after all and tier one should carry exactly the fields that avoid it.
+
+          It compares two POPULATIONS of real shows rather than one population two ways, so the groups
+          differ in more than contacts: a show with contacts has been prepped, so it more often carries a
+          draft body and an outcome. That is the weaker direction for the contact hypothesis and the
+          stronger one for refuting it.
+        """)
+
+        #expect(withPer > 0 && withoutPer > 0,
+                "a group built in no measurable time, so nothing here was timed (L98)")
+    }
+
+
+    // #3647: what the bounce scan in RootView's ARGUMENT LIST costs, which neither existing instrument can
+    // see. `QueueRenderPass.Corpus` counts sweeps over rows the pass was handed and this happens outside the
+    // pass; `WorkTally` counts `QueueItem` construction and this builds none. So the shape sits in the one
+    // position both are structurally blind to, which is why it is measured here before anything is built:
+    // three premises in this milestone have already reversed under measurement.
+    //
+    // Reported against the SAME pass cost the rest of this file measures, because 4 ms matters or does not
+    // depending entirely on what it is 4 ms of, and against the per-evaluation frequency, because the issue's
+    // claim is about how OFTEN this runs rather than what one run costs.
+    @Test func measureTheBounceScanInTheArgumentList() throws {
+        guard ProcessInfo.processInfo.environment["MEASURE_QUEUE_LIVE_STORE"] != nil else {
+            print("queue-live-store-bounces: not measured. Set TEST_RUNNER_MEASURE_QUEUE_LIVE_STORE=1 to run it.")
+            return
+        }
+
+        let clone = try cloneLiveStore()
+        let container = try openContainer(at: clone)
+        let ctx = ModelContext(container)
+        let rows = (try? ctx.fetch(FetchDescriptor<Prospect>())) ?? []
+        guard rows.count > 100 else {
+            print("queue-live-store-bounces: UNMEASURED. The clone holds \(rows.count) rows, which is not the store.")
+            return
+        }
+
+        // WARMED FIRST, deliberately. RootView's body runs many times over one store state, so every
+        // evaluation after the first meets an already-faulted relationship. Measuring the cold case would
+        // report the fetch's cost a second time and credit it to this scan (L102).
+        for r in rows { _ = r.recipients.isEmpty }
+
+        let warm = medianSeconds { _ = BounceDetection.unresolvedBounces(in: rows) }
+        let found = BounceDetection.unresolvedBounces(in: rows).count
+
+        print("""
+        queue-live-store-bounces: the scan RootView runs as an argument (#3647)
+          rows                      \(rows.count)
+          bounces it finds          \(found)
+          per evaluation, warm      \(String(format: "%.1f", warm.median * 1000)) ms \
+        (5 runs, \(String(format: "%.1f", warm.low * 1000)) to \(String(format: "%.1f", warm.high * 1000)))
+          RootView evaluations in one scout run, from #3647's own reading: 60 to 130, so the run pays
+          \(String(format: "%.2f", warm.median * 60)) to \(String(format: "%.2f", warm.median * 130)) seconds of this.
+        """)
+
+        // Not a threshold. A cost test that refuses above a number becomes a dated constant nobody re-reads,
+        // and this file deliberately reports instead (L316). What IS asserted is that the measurement happened
+        // over a real population, so a clone that came back empty cannot print a reassuring 0.0 ms.
+        #expect(found >= 0)
+        #expect(warm.median > 0, "the scan measured as taking no time at all, which means it ran over nothing")
+    }
+
 }

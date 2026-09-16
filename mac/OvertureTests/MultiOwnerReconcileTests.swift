@@ -73,25 +73,25 @@ struct MultiOwnerReconcileTests {
     }
 
     // ONE results file carrying several sources, which is what the batched extract run really produces.
-    private func ingest(_ perSource: [(String, [ScoutExtractEvent])], into ctx: ModelContext) {
+    private func ingest(_ perSource: [(String, [ScoutExtractEvent])], into ctx: ModelContext) async {
         let results = ScoutExtractResults(
             version: 1, generatedAt: "2026-07-13T00:00:00Z",
             results: perSource.map { id, events in
                 ScoutExtractResult(sourceId: id, verdict: .upcomingListings, events: events, note: nil)
             })
-        ScoutExtractIngest.ingest(results, clients: [], history: [], blocked: .empty,
+        await ScoutExtractIngest.ingest(results, clients: [], history: [], blocked: .empty,
                                   today: ScoutTestClock.beforeAllFixtures, now: now, into: ctx)
     }
 
     // THE case that could never fire. Both owners swept their calendars in this run, both are entirely
     // believable, and neither of them lists the show any more. It is gone, and it may finally be said.
-    @Test func bothOwnersSweptAndNeitherHasIt() throws {
+    @Test func bothOwnersSweptAndNeitherHasIt() async throws {
         let ctx = try context()
         establishedSource(ctx, "kaufman")
         establishedSource(ctx, "merkin")
         let show = coListedShow(ctx, owners: ["kaufman", "merkin"])
 
-        ingest([("kaufman", [event("Something Else", from: "kaufman")]),
+        await ingest([("kaufman", [event("Something Else", from: "kaufman")]),
                 ("merkin", [event("Another Thing", from: "merkin")])], into: ctx)
 
         #expect(show.missedScoutCount == 1)
@@ -100,26 +100,26 @@ struct MultiOwnerReconcileTests {
     // The conservative half, and the reason the test above is not simply "cancellation got easier".
     // Kaufman swept and does not have it, but merkin was NOT in this run at all. Merkin might still be
     // listing it. Nothing may be concluded.
-    @Test func anOwnerThatWasNeverAskedBlocksTheWholeConclusion() throws {
+    @Test func anOwnerThatWasNeverAskedBlocksTheWholeConclusion() async throws {
         let ctx = try context()
         establishedSource(ctx, "kaufman")
         establishedSource(ctx, "merkin")
         let show = coListedShow(ctx, owners: ["kaufman", "merkin"])
 
-        ingest([("kaufman", [event("Something Else", from: "kaufman")])], into: ctx)   // merkin absent
+        await ingest([("kaufman", [event("Something Else", from: "kaufman")])], into: ctx)   // merkin absent
 
         #expect(show.missedScoutCount == 0)
     }
 
     // An owner that ran but is too DEGRADED to be trusted about what is missing (#150) is not evidence
     // either. It reported, so it can still prove a show alive; it cannot help take one away.
-    @Test func aDegradedOwnerCannotHelpTakeAShowAway() throws {
+    @Test func aDegradedOwnerCannotHelpTakeAShowAway() async throws {
         let ctx = try context()
         establishedSource(ctx, "kaufman")
         establishedSource(ctx, "merkin", baseline: 20)      // merkin usually lists 20; it returns 1
         let show = coListedShow(ctx, owners: ["kaufman", "merkin"])
 
-        ingest([("kaufman", [event("Something Else", from: "kaufman")]),
+        await ingest([("kaufman", [event("Something Else", from: "kaufman")]),
                 ("merkin", [event("Only One", from: "merkin")])], into: ctx)   // 1 of 20: degraded
 
         #expect(show.missedScoutCount == 0)
@@ -127,14 +127,14 @@ struct MultiOwnerReconcileTests {
 
     // Presence beats absence, from ANY source, even one too degraded to be trusted about what is missing.
     // If merkin still lists the show, kaufman dropping it proves nothing.
-    @Test func oneOwnerStillListingItProvesItAliveDespiteTheOther() throws {
+    @Test func oneOwnerStillListingItProvesItAliveDespiteTheOther() async throws {
         let ctx = try context()
         establishedSource(ctx, "kaufman")
         establishedSource(ctx, "merkin")
         let show = coListedShow(ctx, owners: ["kaufman", "merkin"])
         show.missedScoutCount = 1
 
-        ingest([("kaufman", [event("Something Else", from: "kaufman")]),
+        await ingest([("kaufman", [event("Something Else", from: "kaufman")]),
                 ("merkin", [ScoutExtractEvent(title: "Aurora Strings", presenter: "Aurora Strings",
                                               venue: "Merkin Hall", performanceDate: "2099-09-19",
                                               sourceUrl: "https://kaufman.example/aurora")])],
@@ -145,12 +145,12 @@ struct MultiOwnerReconcileTests {
 
     // A single-owner show must behave exactly as it did before the batching, or this change has quietly
     // altered the common case while claiming to fix the rare one.
-    @Test func aSingleOwnerShowIsUnaffectedByTheBatching() throws {
+    @Test func aSingleOwnerShowIsUnaffectedByTheBatching() async throws {
         let ctx = try context()
         establishedSource(ctx, "kaufman")
         let show = coListedShow(ctx, owners: ["kaufman"])
 
-        ingest([("kaufman", [event("Something Else", from: "kaufman")])], into: ctx)
+        await ingest([("kaufman", [event("Something Else", from: "kaufman")])], into: ctx)
 
         #expect(show.missedScoutCount == 1)
     }

@@ -21,10 +21,13 @@ struct AgentsDocSuiteCountsTests {
     // #1993: found through the shared search, which halts loudly if the repo is not there. A doc
     // this could not find would make every assertion below vacuously true, which is #1967's exact
     // failure and the reason the search exists at all.
-    private var agentsDoc: String {
-        get throws {
-            try String(contentsOf: RepoRoot.url.appendingPathComponent("AGENTS.md"), encoding: .utf8)
-        }
+    //
+    // #3640: every always-loaded file, not just AGENTS.md. The paragraph this suite was written for,
+    // the one stating the suite's own size, is among the bodies that moved into docs/agents/, so a
+    // version of this guard still reading one path would have gone on passing while covering the one
+    // place a hand-written count is now most likely to be written back (L129, L30).
+    private var agentsDocs: [AgentInstructionDocs.Doc] {
+        get throws { try AgentInstructionDocs.all() }
     }
 
     // The measurement from 2026-08-02 is the one number allowed to stay, because it is a record of
@@ -32,21 +35,37 @@ struct AgentsDocSuiteCountsTests {
     // of the shape "N tests" or "N,NNN tests" is a live claim that will drift.
     private let datedMeasurement = "4802"
 
+    // The corpus is a separate claim from what is in it, and it is the one #3640 puts at risk: a run
+    // that read AGENTS.md alone satisfies every assertion below while saying nothing about the moved
+    // bodies. Asserted here so the widening cannot silently come undone (L3).
+    @Test func theGuardReadsTheMovedBodiesAndNotOnlyTheIndex() throws {
+        let docs = try agentsDocs
+        #expect(docs.first?.name == "AGENTS.md")
+        let topics = docs.dropFirst()
+        #expect(!topics.isEmpty, "no topic files, so this suite is guarding only the index")
+        for topic in topics {
+            #expect(topic.name.hasPrefix("\(AgentInstructionDocs.topicsDirectory)/"))
+            #expect(!topic.text.isEmpty, "\(topic.name) is empty, so scanning it asserts nothing")
+        }
+    }
+
     @Test func noLineClaimsATestCountAsCurrentFact() throws {
-        let doc = try agentsDoc
         let pattern = try NSRegularExpression(pattern: #"[\d,]{3,}\s+tests"#)
-        let range = NSRange(doc.startIndex..., in: doc)
 
         var offenders: [String] = []
-        pattern.enumerateMatches(in: doc, range: range) { match, _, _ in
-            guard let match, let r = Range(match.range, in: doc) else { return }
-            let text = String(doc[r])
-            guard !text.replacingOccurrences(of: ",", with: "").hasPrefix(datedMeasurement) else { return }
-            offenders.append(text)
+        for doc in try agentsDocs {
+            let text = doc.text
+            let range = NSRange(text.startIndex..., in: text)
+            pattern.enumerateMatches(in: text, range: range) { match, _, _ in
+                guard let match, let r = Range(match.range, in: text) else { return }
+                let found = String(text[r])
+                guard !found.replacingOccurrences(of: ",", with: "").hasPrefix(datedMeasurement) else { return }
+                offenders.append("\(doc.name): \(found)")
+            }
         }
 
         #expect(offenders.isEmpty, """
-            AGENTS.md states a test count as a current fact: \(offenders).
+            The agent instructions state a test count as a current fact: \(offenders).
             Measured numbers are generated or omitted, never hand-written (L32). The suite reports \
             its own size on every run of mac/scripts/run-tests-locked.sh ("Suite shape: ..."), so \
             point at that instead of writing the figure down here.
@@ -57,8 +76,9 @@ struct AgentsDocSuiteCountsTests {
     // number has nowhere to go and will simply write one back in. A rule that removes something
     // without naming its replacement gets undone (L80).
     @Test func theDocPointsAtTheRunsOwnReadout() throws {
-        let doc = try agentsDoc
-        #expect(doc.contains("Suite shape:"))
+        let docs = try agentsDocs
+        #expect(docs.contains { $0.text.contains("Suite shape:") },
+                "nothing in the agent instructions points at the readout that replaced the number")
     }
 
     // #2532: the same rule for how LONG a run takes, which the count rule did not cover and which had
@@ -70,35 +90,36 @@ struct AgentsDocSuiteCountsTests {
     // warning it exists to support. The `Suite shape:` line already reports the wall clock of the run
     // in front of you, which cannot drift because the run produces it.
     @Test func noLineClaimsHowLongASuiteRunTakes() throws {
-        let doc = try agentsDoc
         // Both spellings, because the one that was wrong was written in words rather than digits and a
         // guard that only caught "90 seconds" would have passed on it the whole time.
         let patterns = [#"\b[\d,]+\s*(second|minute|hour)s?\b"#,
                         #"\b(a|one|two|three|four|five|half)\b[\w\s]{0,14}\b(minute|hour)s?\b"#]
         var offenders: [String] = []
-        for line in doc.components(separatedBy: "\n") {
-            // Only lines making a claim about a RUN. A duration elsewhere (a timeout, a cooldown, a
-            // retention window) is a fact about the product, not a measurement of this machine.
-            let lower = line.lowercased()
-            guard lower.contains("suite") || lower.contains("run") || lower.contains("test") else { continue }
-            // And only a line that CLAIMS a duration. A sentence that merely mentions minutes in passing
-            // ("CI would otherwise only surface minutes later") is prose, not a measurement, and a guard
-            // that fires on it is one somebody will delete rather than obey.
-            guard ["takes", "take ", "took", "lasts", "runs in", "completes in"].contains(where: {
-                lower.contains($0)
-            }) else { continue }
-            for pattern in patterns {
-                guard let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive)
-                else { continue }
-                let range = NSRange(line.startIndex..., in: line)
-                if let match = regex.firstMatch(in: line, range: range), let r = Range(match.range, in: line) {
-                    offenders.append("\(line.trimmingCharacters(in: .whitespaces)) [matched: \(line[r])]")
-                    break
+        for doc in try agentsDocs {
+            for line in doc.text.components(separatedBy: "\n") {
+                // Only lines making a claim about a RUN. A duration elsewhere (a timeout, a cooldown, a
+                // retention window) is a fact about the product, not a measurement of this machine.
+                let lower = line.lowercased()
+                guard lower.contains("suite") || lower.contains("run") || lower.contains("test") else { continue }
+                // And only a line that CLAIMS a duration. A sentence that merely mentions minutes in passing
+                // ("CI would otherwise only surface minutes later") is prose, not a measurement, and a guard
+                // that fires on it is one somebody will delete rather than obey.
+                guard ["takes", "take ", "took", "lasts", "runs in", "completes in"].contains(where: {
+                    lower.contains($0)
+                }) else { continue }
+                for pattern in patterns {
+                    guard let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive)
+                    else { continue }
+                    let range = NSRange(line.startIndex..., in: line)
+                    if let match = regex.firstMatch(in: line, range: range), let r = Range(match.range, in: line) {
+                        offenders.append("\(doc.name): \(line.trimmingCharacters(in: .whitespaces)) [matched: \(line[r])]")
+                        break
+                    }
                 }
             }
         }
         #expect(offenders.isEmpty, """
-            AGENTS.md states how long a run takes: \(offenders).
+            The agent instructions state how long a run takes: \(offenders).
             Measured numbers are generated or omitted, never hand-written (L32). Every run of \
             mac/scripts/run-tests-locked.sh ends with a "Suite shape:" line carrying its own wall \
             clock, so point at that instead of writing a figure down here.

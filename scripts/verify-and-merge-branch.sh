@@ -26,6 +26,7 @@ source "${SCRIPT_DIR}/check-pr-ci.sh"
 # verify-and-merge-batch.sh, so the two merge paths cannot disagree about what a mergeable PR looks
 # like, exactly as they already share the completeness guard and the merge itself.
 # shellcheck source=./lib/generated-conflict.sh
+source "${SCRIPT_DIR}/lib/scratch.sh"
 source "${SCRIPT_DIR}/lib/generated-conflict.sh"
 # delete_merged_local_branch, shared with merge-when-green.sh and tidy-checkout.sh (#2234).
 source "${SCRIPT_DIR}/lib/checkout-tidy.sh"
@@ -87,6 +88,152 @@ resolve_pr() {
 # under a second to come back; the build cache lives outside the checkout and is untouched). A slot
 # that cannot be scrubbed, or that belongs to some other repo, is rebuilt from nothing rather than
 # trusted, since the whole point of the scrub is that the suite judges only the branch.
+# The verify slot, taken by a process whose ONLY job is to hold it (#3680).
+#
+# THE DEFECT THIS SHAPE EXISTS FOR. The slot used to be `exec 9>"${slot_lock}"` in this shell. A
+# descriptor opened that way is INHERITED by every process started while it is held, and an inherited
+# descriptor holds the flock exactly as the opener's does. So anything that outlived a run held the
+# verify slot indefinitely, whatever it was doing and whether or not it had ever heard of a lock.
+# Measured 2026-09-07: a `check-pure-suite-imports.test.sh` subshell orphaned five hours earlier,
+# reparented to launchd, blocked a merge for fourteen minutes; `lsof` named it as a holder while `ps`
+# showed no xcodebuild anywhere, so the machine looked idle. `git` and `git-remote-https` were seen
+# carrying the same descriptor in the same minute, as ordinary children of this script.
+#
+# WHY A HOLDER PROCESS AND NOT CLOSE-ON-EXEC. macOS ships bash 3.2, which has no `{fd}` redirection
+# and no way to mark a descriptor close-on-exec. Measured on this Mac rather than assumed: a child
+# left running under a plain `exec 9>` keeps the lock after its parent exits, and `flock <file> -c`
+# leaks it identically, so neither is a way out. What does work is keeping the descriptor somewhere
+# that starts nothing.
+#
+# AND IT STILL RELEASES ON DEATH, which is the property a naive swap to a lock directory or a pid file
+# would lose (L409). The holder watches the run that asked for the slot and ends when it goes, so a
+# crashed or killed verification frees the slot within one poll rather than wedging it forever. That
+# poll is the one thing this shape costs against a plain flock, where the kernel does it for free, and
+# it is bounded, tested, and stated rather than left to be discovered.
+VERIFY_SLOT_HOLDER_PID=""
+# The holder's own scratch, remembered so the release can remove it. A scratch directory that nothing
+# deletes is exactly the habit `scripts/lib/scratch.sh` exists to make visible, and the fixture runner
+# refuses a run that leaves one behind, which is how this was caught rather than shipped.
+VERIFY_SLOT_SCRATCH=""
+# TWO INTERVALS, because they answer two different questions and one number for both makes the second
+# decide the first. This is how fast a DEAD run frees the slot, paid as one builtin wake a second by a
+# process that is otherwise asleep.
+VERIFY_SLOT_POLL_SECONDS="${OVERTURE_VERIFY_SLOT_POLL_SECONDS:-1}"
+# And this is how promptly a person waiting is TOLD, which wants to be short: at one second the
+# announcement lost its race with a hold that was itself about a second long, so a genuinely contended
+# wait passed in silence and the guard for it read as a feature working (seen in this file's fixture).
+VERIFY_SLOT_WAIT_POLL_SECONDS="${OVERTURE_VERIFY_SLOT_WAIT_POLL_SECONDS:-0.2}"
+
+# Who is holding the lock, as a line per process, or nothing when it cannot tell.
+#
+# Reported rather than merely waited on, because "waiting" is true of a verification that finishes in
+# two minutes and of an orphan that never finishes, and those need opposite responses from whoever is
+# reading (L11). The elapsed time is what separates them: a holder running for hours is not a suite.
+#
+# Our OWN holder is excluded by pid, and that exclusion is the difference between a useful report and
+# a confusing one: it has the file open from the moment it starts, so without this it names itself as
+# a competitor in every message.
+verify_slot_holders() {
+  local slot_lock="$1" mine="${2:-}" pids pid
+  command -v lsof >/dev/null 2>&1 || return 0
+  pids="$(lsof -t -- "${slot_lock}" 2>/dev/null | sort -u)" || return 0
+  [[ -n "${pids}" ]] || return 0
+  for pid in ${pids}; do
+    [[ "${pid}" == "$$" ]] && continue
+    [[ -n "${mine}" && "${pid}" == "${mine}" ]] && continue
+    ps -o pid=,etime=,comm= -p "${pid}" 2>/dev/null \
+      | sed 's/^ *\([0-9]*\) *\([^ ]*\) *\(.*\)$/  pid \1, running for \2, \3/'
+  done
+}
+
+# NOT CALLABLE FROM A COMMAND SUBSTITUTION, and it is worth knowing why rather than discovering it.
+# `$( ... )` runs its body in a subshell, so the holder's pid would be set there and die with it,
+# leaving `release_verify_slot` nothing to end and the slot held until the run exits. Both callers
+# (`verify_and_merge` here, and the batch script's main setup) call this in their own shell.
+take_verify_slot() {
+  local slot_lock="$1"
+  local scratch ready heartbeat contended state
+  # Captured HERE, in the script, and passed in. `$$` inside the holder would be a different shell's,
+  # and the holder's whole job is to watch THIS run.
+  local run_pid=$$
+  scratch="$(overture_scratch_dir verify-slot)" || return 1
+  VERIFY_SLOT_SCRATCH="${scratch}"
+  ready="${scratch}/state"
+  # A SEPARATE marker, never overwritten, because contention is a fact about this wait while `state`
+  # moves on to "held" the moment the slot comes free. Reading contention out of a value that is about
+  # to be replaced is how the announcement came to depend on a poll winning a race.
+  contended="${scratch}/contended"
+  heartbeat="${scratch}/heartbeat"
+  mkfifo "${heartbeat}" 2>/dev/null || return 1
+
+  # THE HOLDER IS A FRESH bash, AND IT FORKS NOTHING. Both halves are load bearing and both were
+  # measured here rather than reasoned about.
+  #
+  # A FRESH bash, reached through an exec, because a forked subshell inherits every descriptor its
+  # parent holds, bash's own internal duplicate of a `$( ... )` capture pipe included. Those are
+  # close-on-exec, which does nothing for a fork, so a subshell holder that never execs keeps that
+  # pipe open for its whole life and any command substitution around a verification never returns
+  # (L235). Seen: as a subshell, this file's own fixture hung at the busy-slot case with
+  # `take_verify_slot` having already returned 0.
+  #
+  # AND IT FORKS NOTHING, which is the defect this whole shape exists for. Every command below is a
+  # bash builtin: `exec`, `echo`, `kill -0` and `read`. A `sleep` here reintroduced the inheritance one
+  # level down, because `sleep` inherits fd 9 from the holder and went on holding the lock after the
+  # holder was killed. `read -t` on a fifo opened READ-WRITE is the wait that costs no process: O_RDWR
+  # on a fifo never blocks on open, and nothing ever writes to it, so each read simply times out.
+  #
+  # `flock` is the one external command, and it is short lived by construction: given a descriptor it
+  # takes the lock and exits, leaving the lock held by the descriptor rather than by itself.
+  bash -c '
+    slot_lock="$1"; ready="$2"; heartbeat="$3"; run_pid="$4"; poll="$5"; contended="$6"
+    exec 9>"${slot_lock}" || exit 1
+    if ! flock -n 9; then
+      echo yes > "${contended}"
+      flock 9 || exit 1
+    fi
+    echo held > "${ready}"
+    exec 8<>"${heartbeat}" || exit 1
+    while kill -0 "${run_pid}" 2>/dev/null; do
+      read -t "${poll}" -r _ <&8 || true
+    done
+  ' verify-slot-holder \
+    "${slot_lock}" "${ready}" "${heartbeat}" "${run_pid}" "${VERIFY_SLOT_POLL_SECONDS}" \
+    "${contended}" >/dev/null 2>&1 &
+  VERIFY_SLOT_HOLDER_PID=$!
+
+  # Waited for OUT LOUD, and the holders named, because a silent wait is indistinguishable from a hang
+  # for as long as the other suite takes (L110). Announced only once the holder has REPORTED
+  # contention, never merely because it has not answered yet: announcing on the first unanswered poll
+  # would put the message in front of every run, including the ordinary case where the slot was free.
+  local announced=""
+  while :; do
+    state="$(cat "${ready}" 2>/dev/null || true)"
+    [[ "${state}" == "held" ]] && break
+    if ! kill -0 "${VERIFY_SLOT_HOLDER_PID}" 2>/dev/null; then
+      echo "Could not take the verify worktree slot (lock: ${slot_lock})." >&2
+      VERIFY_SLOT_HOLDER_PID=""
+      # The scratch goes too. A caller handed a refusal has nothing to release, so this is the only
+      # place this directory can be cleaned up on the failing path.
+      rm -rf "${scratch}"
+      VERIFY_SLOT_SCRATCH=""
+      return 1
+    fi
+    if [[ -e "${contended}" && -z "${announced}" ]]; then
+      announced="yes"
+      {
+        echo "Another verification holds the verify worktree; waiting for it to finish (lock: ${slot_lock})..."
+        echo "Holding it:"
+        verify_slot_holders "${slot_lock}" "${VERIFY_SLOT_HOLDER_PID}"
+        echo "If one of those has been running for hours it is an orphan rather than a suite: nothing"
+        echo "here waits on it deliberately, and killing it frees the slot (#3680)."
+      } >&2
+    fi
+    sleep "${VERIFY_SLOT_WAIT_POLL_SECONDS}"
+  done
+  [[ -n "${announced}" ]] && echo "Got the verify worktree." >&2
+  return 0
+}
+
 setup_worktree() {
   local branch="$1"
   WORKTREE_DIR="${OVERTURE_VERIFY_WORKTREE:-${HOME}/.overture-verify-worktree}"
@@ -101,15 +248,9 @@ setup_worktree() {
     return 1
   fi
 
-  # Two verifications must not share the slot: the second would scrub the first mid-suite. The lock
-  # is a kernel flock, so a crashed holder releases it by dying, and the wait announces itself
-  # because a silent wait is indistinguishable from a hang for as long as the other suite takes
-  # (L110). Held on fd 9 until release_verify_slot closes it.
-  exec 9>"${slot_lock}"
-  if ! flock -n 9; then
-    echo "Another verification holds the verify worktree; waiting for it to finish (lock: ${slot_lock})..." >&2
-    flock 9
-    echo "Got the verify worktree." >&2
+  # Two verifications must not share the slot: the second would scrub the first mid-suite.
+  if ! take_verify_slot "${slot_lock}"; then
+    return 1
   fi
 
   git -C "${REPO_ROOT}" fetch origin "${branch}"
@@ -257,7 +398,19 @@ run_full_suite() {
 # mints one build folder, kept warm on purpose, and reclaim-orphan-derived-data.sh keeps any folder
 # whose workspace still exists.
 release_verify_slot() {
-  exec 9>&- 2>/dev/null || true
+  # Nothing to close here: this shell never held the descriptor. Ending the holder IS the release,
+  # and the flock goes with it because the holder is the only process that ever had the file open.
+  if [[ -n "${VERIFY_SLOT_HOLDER_PID}" ]]; then
+    kill "${VERIFY_SLOT_HOLDER_PID}" 2>/dev/null || true
+    wait "${VERIFY_SLOT_HOLDER_PID}" 2>/dev/null || true
+    VERIFY_SLOT_HOLDER_PID=""
+  fi
+  # AFTER the holder has gone, never before: it has the fifo open, and removing the scratch from under
+  # a live holder would leave it reading a path that is no longer there.
+  if [[ -n "${VERIFY_SLOT_SCRATCH}" ]]; then
+    rm -rf "${VERIFY_SLOT_SCRATCH}"
+    VERIFY_SLOT_SCRATCH=""
+  fi
 }
 
 # The orchestration: resolve the PR, bail on a merge conflict or an unresolvable identifier,

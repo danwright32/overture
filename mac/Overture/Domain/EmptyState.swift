@@ -35,6 +35,7 @@ enum EmptyState {
     static let followUpsSheet = [
         "Nothing to act on. Shows you've pitched appear here for a gentle follow-up, again once the date has passed so you can close them out, and whenever a conversation turns up that might be their reply; they drop off the moment you act on one.",
         StalledReplyDraftCopy.nothingStalled,
+        ReplyToAnswerCopy.nothingWaiting,
     ].joined(separator: " ")
 
     static func archive(hasAnyItems: Bool) -> Message {

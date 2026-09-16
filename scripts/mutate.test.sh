@@ -647,6 +647,51 @@ OUT="$(OVERTURE_MUTATE_RUNNER="${RED_RUNNER}" "${MUTATE}" "${SUBJECT}" 's/Copy\.
 assert_contains "a caught mutation is still caught" "${OUT}" "CAUGHT"
 assert_not_contains "and carries no recurrence note" "${OUT}" "still in Subject.swift"
 
+# #3792: a target with UNCOMMITTED changes is refused before the file is touched.
+#
+# The tool breaks a file and restores it. When the run is killed or the session ends first, the broken file
+# stays, and the cleanup anybody reaches for is `git checkout -- <file>`, which reverts to the last commit
+# and so destroys any uncommitted work in it too. The leftover and the work share one fate and only one of
+# them is meant to go. Hit three times in one session on 2026-09-11, the later two after the rule had been
+# stated out loud, which is why it belongs in the tool rather than in a habit (L27).
+#
+# A REAL temporary repository, because the check asks git and a stubbed answer would only prove the stub.
+REPO="${WORK}/repo"
+mkdir -p "${REPO}"
+git -C "${REPO}" init --quiet
+REPO_SUBJECT="${REPO}/Subject.swift"
+printf 'struct Subject {
+    static let answer = "yes"
+}
+' > "${REPO_SUBJECT}"
+git -C "${REPO}" add Subject.swift
+git -C "${REPO}" -c user.name=fixture -c user.email=fixture@example.com commit --quiet -m "subject"
+
+# Clean: the ordinary case, and it must still work. Asserted FIRST, because a guard that refuses everything
+# would pass the refusal case below while breaking every real use (L159).
+OUT="$(OVERTURE_MUTATE_RUNNER="${RED_RUNNER}" "${MUTATE}" "${REPO_SUBJECT}" 's/"yes"/"no"/' 2>&1)"
+assert_contains "a committed target is mutated as usual" "${OUT}" "CAUGHT"
+assert_not_contains "and is not refused for being in a repository" "${OUT}" "UNCOMMITTED"
+
+# Dirty: refused, and the file is left exactly as it was.
+printf 'struct Subject {
+    static let answer = "maybe"
+}
+' > "${REPO_SUBJECT}"
+BEFORE="$(cat "${REPO_SUBJECT}")"
+OUT="$(OVERTURE_MUTATE_RUNNER="${RED_RUNNER}" "${MUTATE}" "${REPO_SUBJECT}" 's/"maybe"/"no"/' 2>&1)"
+STATUS=$?
+assert_contains "an uncommitted target is refused" "${OUT}" "UNCOMMITTED"
+assert_contains "and the refusal names the file" "${OUT}" "Subject.swift"
+assert_not_contains "and reports no verdict at all" "${OUT}" "CAUGHT"
+assert_not_contains "nor a surviving guard" "${OUT}" "SURVIVED"
+assert_equals "and the file is untouched" "${BEFORE}" "$(cat "${REPO_SUBJECT}")"
+
+# The deliberate case has a way through, and it ANNOUNCES itself rather than passing silently.
+OUT="$(OVERTURE_MUTATE_ALLOW_DIRTY=1 OVERTURE_MUTATE_RUNNER="${RED_RUNNER}" "${MUTATE}" "${REPO_SUBJECT}" 's/"maybe"/"no"/' 2>&1)"
+assert_contains "the override lets it through" "${OUT}" "CAUGHT"
+assert_contains "and says it was used" "${OUT}" "OVERTURE_MUTATE_ALLOW_DIRTY"
+
 if [[ "${FAILURES:-0}" -ne 0 ]]; then
   echo "${FAILURES} failure(s)"
   exit 1

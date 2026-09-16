@@ -209,10 +209,24 @@ struct AppNoticeTests {
     // shape here: #1912 was exactly it, a field computed by #2741 that nothing ever read.
     //
     // At the source, because the site is a SwiftUI view body, which cannot be tested at all.
+    // TWO PARTS rather than one spelling, since #3647. This asserted the single literal
+    // `bouncedPitches: BounceDetection.unresolvedBounces(`, which bundled two different facts into one
+    // string: that the masthead RECEIVES the rows, and that the rows are really DERIVED. #3647 moved the
+    // derivation out of the argument list (where it ran in `body` on every evaluation, invisible to both
+    // cost instruments) into the same refresh the two notices beside it use, which kept both facts and
+    // broke only the spelling.
+    //
+    // Asserting the rule instead is STRICTER than what this checked before, not looser: it still catches
+    // #1912's defect, a bounce field nothing ever read, and it additionally catches a `bouncedPitches`
+    // that is passed to the masthead but never computed, which the single literal could not tell apart
+    // from the healthy case (L103).
     @Test func themastheadHandsTheNoticeTheRowsItJudges() {
         let root = SourceGuardHelper.source("Overture/App/RootView.swift")
-        #expect(root.contains("bouncedPitches: BounceDetection.unresolvedBounces("),
-                "the masthead must pass the bounced rows, or the line can never be drawn")
+        #expect(root.contains("bouncedPitches: bouncedPitches")
+                || root.contains("bouncedPitches: BounceDetection.unresolvedBounces("),
+                "the masthead must be handed the bounced rows, or the line can never be drawn")
+        #expect(root.contains("BounceDetection.unresolvedBounces("),
+                "nothing in RootView derives the bounced rows, so whatever the masthead is handed is empty for ever")
     }
 }
 

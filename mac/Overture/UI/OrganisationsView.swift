@@ -15,16 +15,28 @@ import SwiftData
 // The organisations most likely to be judged WRONG lead (#1729), because the rest of the list is
 // Overture working correctly and a person reads the top of a list.
 struct OrganisationsView: View {
+    // #3871: the whole store, HANDED DOWN rather than queried again here.
+    //
+    // It was `@Query private var prospects: [Prospect]`, a bare descriptor identical to the one RootView
+    // already holds. Measured 2026-09-12 by #3764 on the live store, two identical bare descriptors held
+    // by two live views share NOTHING: the second costs 99.6% of the first, 158.8 ms against 159.5 ms
+    // over 1,238 rows, against an end to end store change of 350.7 ms. So this sheet used to add a whole
+    // table read to every store change for as long as it was open.
+    //
+    // NO DEFAULT, for the reason ArchiveView's carries: an empty default renders an empty sheet that
+    // looks exactly like an empty store (L168, L67).
+    let prospects: [Prospect]
     // #1794: where an entry leads. Handed in rather than decided here, because the destination is the
     // QUEUE, which this sheet cannot reach: RootView owns the deep-link channel the queue watches, and
     // routing through it is what keeps this one navigation path rather than a second filter (Dan's note,
     // 2026-08-11). Defaulted to nothing so the sheet still builds in a preview or a test with no queue
     // behind it; the row below is drawn as a control only when there is somewhere to go.
     var onShowShows: ((OrganisationListing.Entry) -> Void)?
-    @Environment(\.dismiss) private var dismiss
+    // #3762: the app's own freeze instrument, read as an OPTIONAL on the same footing as every other
+    // environment object here, so a missed injection is a pass nobody counted rather than a crash.
+    @Environment(FreezeWatch.self) private var freezeWatch: FreezeWatch?
     // Bound, so a correction made on a row while this is open redraws it rather than showing a stale
     // verdict: the gate reads these two sets, so the listing must be rebuilt when either changes.
-    @Query private var prospects: [Prospect]
     @Query private var promoted: [PromotedProducer]
     @Query private var demoted: [DemotedHouse]
 
@@ -48,6 +60,12 @@ struct OrganisationsView: View {
     }
 
     var body: some View {
+        // #3762: this surface counts its own rebuild. Without it a stall recorded while this sheet is on
+        // top reads `passes: 0`, and `0` is not a blank there: it says the surface did not rebuild, which
+        // is the reading that refutes "a burst of store changes did this" (L11). Bound to `_` rather than
+        // called as a statement because `body` is a ViewBuilder, which takes a declaration and not a bare
+        // void expression.
+        let _ = freezeWatch?.recordPass()
         VStack(alignment: .leading, spacing: 0) {
             header
             Divider().overlay(OVColor.line)
@@ -72,7 +90,7 @@ struct OrganisationsView: View {
                     .font(.system(size: 12)).foregroundStyle(OVColor.inkSoft)
             }
             Spacer()
-            Button("Done") { dismiss() }.keyboardShortcut(.defaultAction)
+            DoneButton(isDefaultAction: true)
         }
         .padding(OVSpacing.lg)
     }
@@ -100,19 +118,26 @@ struct OrganisationsView: View {
     // MARK: - #1768: one name spelled two ways
 
     private var sameNameTwice: some View {
-        VStack(alignment: .leading, spacing: OVSpacing.xs) {
-            sectionHeading("Possibly one name twice", systemImage: "doc.on.doc", count: nearMisses.count)
+        // #3852: bound ONCE, and this is the most expensive instance the scan found. `nearMisses` walks
+        // the whole prospect store TWICE (every presenter, then every venue) and then runs
+        // `NearMissNames.pairs`, which compares every distinct folded name against every other and runs
+        // an edit-distance check on each surviving pair. It was read three times in this one section,
+        // once for the heading's count, once to ask whether it was empty and once to draw it, so opening
+        // this sheet paid all of that three times over for one answer (L383).
+        let pairs = nearMisses
+        return VStack(alignment: .leading, spacing: OVSpacing.xs) {
+            sectionHeading("Possibly one name twice", systemImage: "doc.on.doc", count: pairs.count)
             // Says the COST, which the heading does not, and admits the list is a guess. Overture cannot
             // merge these itself: the same closeness that catches a typo also catches two names that are
             // genuinely different, and merging those would put one company's contact on another's shows.
             Text("Each pair counts as two organisations, so nothing found for one is ever reused for the other. Some are real typos and some are simply different names.")
                 .font(.system(size: 11)).foregroundStyle(OVColor.inkSoft)
                 .fixedSize(horizontal: false, vertical: true)
-            if nearMisses.isEmpty {
+            if pairs.isEmpty {
                 Text("No names look duplicated right now.")
                     .font(.system(size: 12)).foregroundStyle(OVColor.inkSoft)
             } else {
-                ForEach(nearMisses) { pair in
+                ForEach(pairs) { pair in
                     VStack(alignment: .leading, spacing: 1) {
                         Text(pair.a).font(.system(size: 12, weight: .medium)).foregroundStyle(OVColor.ink)
                         Text(pair.b).font(.system(size: 12, weight: .medium)).foregroundStyle(OVColor.ink)

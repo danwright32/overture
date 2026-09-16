@@ -49,11 +49,13 @@ cd "${MEASURE_DIR}/.." || exit 1
 
 # shellcheck source=./lib/scratch.sh
 . "${MEASURE_DIR}/lib/scratch.sh"
+# shellcheck source=./lib/overture-pid.sh
+. "${MEASURE_DIR}/lib/overture-pid.sh"
 
 # The full executable path, never the app name or the bundle id. Two builds of Overture can run at once
 # and both are called "Overture"; resolving by name once sent a Cmd+W to Dan's live app instead of the
 # Debug one it was aimed at.
-APP_EXEC="/Applications/Overture.app/Contents/MacOS/Overture"
+APP_EXEC="$(overture_app_exec)"
 
 PS_CMD="${OVERTURE_MEASURE_PS:-}"
 PGREP_CMD="${OVERTURE_MEASURE_PGREP:-}"
@@ -131,26 +133,13 @@ if [ -z "${BASELINE_NAMES}" ]; then
 fi
 
 # --- which Overture -------------------------------------------------------------------------------
-if [ -n "${PGREP_CMD}" ]; then
-  APP_PIDS="$("${PGREP_CMD}" 2>/dev/null || true)"
-else
-  APP_PIDS="$(pgrep -f "${APP_EXEC}" 2>/dev/null || true)"
-fi
-APP_PIDS="$(printf '%s\n' "${APP_PIDS}" | grep -E '^[0-9]+$' || true)"
-APP_COUNT="$(printf '%s\n' "${APP_PIDS}" | grep -cE '^[0-9]+$' || true)"
-
-if [ "${APP_COUNT}" -eq 0 ]; then
-  echo "UNMEASURED: Overture is not running, so there is nothing to sample."
-  echo "            Launch it and take the measurement again."
+# The rule lives in scripts/lib/overture-pid.sh, shared with scripts/sample-overture.sh so the two
+# cannot come to disagree about which Overture they mean (L263, #3424).
+APP_PID="$(overture_resolve_pid "${PGREP_CMD}")"
+if [ $? -ne 0 ]; then
+  echo "UNMEASURED: ${APP_PID}"
   exit 2
 fi
-if [ "${APP_COUNT}" -gt 1 ]; then
-  echo "UNMEASURED: two copies of Overture are running, pids $(printf '%s' "${APP_PIDS}" | tr '\n' ' ')."
-  echo "            Which one this would have measured is not something the pid alone can settle, so it"
-  echo "            measures neither. Quit the build you are not measuring and run this again."
-  exit 2
-fi
-APP_PID="${APP_PIDS}"
 
 # --- what else was busy ----------------------------------------------------------------------------
 #

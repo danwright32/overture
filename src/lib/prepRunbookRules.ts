@@ -187,8 +187,43 @@ export const RUNBOOK_RULES: RunbookRule[] = [
   // built out of Dan's own identity line and applied to a reader who does not fit it.
   { name: "use-the-listing-handed-over",
     pattern: /Before\s+you\s+draft,\s+read\s+what\s+the\s+show\s+IS/i },
+  // #2258: where a listing separates who is in charge from a cast list, the leads ARE the target and
+  // the cast is a fallback. Dan's call, 2026-08-07, on a run that pursued 17 people as one flat pool and
+  // surfaced two cast members.
+  { name: "the-billed-hierarchy-decides-the-target",
+    pattern: /Read\s+the\s+BILLED\s+HIERARCHY\s+off\s+the\s+page\s+first/i },
+  // #3347: and the RANK comes from how this show bills them, not from what their own site says they do
+  // in general. The app drops an unsupported `primary` at ingest; this is the instruction that stops it
+  // being produced.
+  // #2625: every tier answers a question about a PERSON, so an address with nobody behind it gets none.
+  // The app drops one at ingest; this is the instruction that stops it being produced.
+  // #3078: a role a run SUMMARISED and a role the page SAID reached the card as the same words. The app
+  // marks a summary; this is the instruction that makes it possible to know which it is.
+  { name: "say-whose-words-the-role-is",
+    pattern: /Say\s+whose\s+words\s+the\s+role\s+is\s+\(`roleQuoted`/i },
+  // #2630: a show whose only route is a form or a DM gets a pitch written for that, not a 150 word email
+  // under a subject line nothing will ever show. The run knows which route it is writing for, because it
+  // found the routes itself one step earlier.
+  { name: "a-direct-message-is-not-an-email",
+    pattern: /A\s+direct\s+message\s+is\s+not\s+an\s+email/i },
+  { name: "a-contact-with-no-name-gets-no-tier",
+    pattern: /A\s+contact\s+with\s+no\s+`name`\s+gets\s+no\s+tier\s+at\s+all/i },
+  { name: "rank-from-how-this-show-bills-them",
+    pattern: /Rank\s+from\s+how\s+THIS\s+SHOW\s+bills\s+them,\s+never\s+from\s+what\s+their\s+own\s+site\s+says/i },
   { name: "no-description-is-a-complete-answer",
     pattern: /"No description published"\s+is a correct and complete answer/i },
+  // #2698: a page that was CUT cannot support a finished negative. `truncated` used to say only that the
+  // page continued, so a credit falling past the cut read to the run exactly like a page that named
+  // nobody. The count is now on the item; this is the instruction that makes the run spend it, and it is
+  // guarded because a rule living only in a prompt is a hope (L27).
+  // #2681: the stored producing credit keeps whatever the page put in front of the name, and the app
+  // deliberately does not cut it off (measured: one role prefix and four two-person credits in thirteen,
+  // so every mechanical rule destroyed more than it repaired). The run is what makes the search good, so
+  // the instruction is guarded rather than left to be remembered (L27).
+  { name: "the-credit-may-carry-a-role-search-the-name",
+    pattern: /The\s+value\s+may\s+carry\s+a\s+role\s+in\s+front\s+of\s+the\s+name,\s+and\s+the\s+name\s+is\s+what\s+you\s+search/i },
+  { name: "a-cut-page-cannot-support-a-finished-negative",
+    pattern: /A\s+cut\s+page\s+cannot\s+support\s+a\s+finished\s+negative/i },
   { name: "never-categorize-the-recipient",
     pattern: /Describe Dan, never categorize the recipient/i },
   // #1856: where a listing names no producer, the run pursues the people it DOES name. Without this the
@@ -313,6 +348,25 @@ export const RUNBOOK_RULES: RunbookRule[] = [
     pattern: /no two sentences in a row may use the same connector construction/i },
   { name: "body-runs-in-short-paragraphs",
     pattern: /Write the body in short paragraphs/i },
+  // #3683: "reword it every time" is a licence over the WORDING, never over the grammar. Both this
+  // runbook and the brand voice skill required sentence one to carry Dan's name AND his trade, and
+  // neither said who the trade clause has to be ABOUT, so a real draft satisfied both halves while
+  // moving him out of the subject slot ("I'm Dan Wright, and live performance is the whole of my
+  // photography work here in NYC"). Guarded because naming both halves is what everyone checks, so the
+  // invariant is the part a rewrite drops silently.
+  { name: "dan-is-the-subject-of-the-trade-clause",
+    pattern: /SUBJECT of the clause that states his trade/i },
+  // #3685: the closing hedge names what it is about rather than pointing at it. On a multi night run
+  // there is no plural noun anywhere in the email for a plural pronoun to reach for, because the run is
+  // referenced as a singular "run" and its nights are never a noun phrase at all.
+  // #3677: a subject is a label, not a sentence. Guarded because the FORMULA one line above used to
+  // carry the stop inside its own quotes, so the example taught the inverse of the rule and was then
+  // defended with the rule's authority (L562). A guard on the rule is what stops the stop coming back
+  // into the example.
+  { name: "a-subject-never-ends-in-punctuation",
+    pattern: /A subject NEVER ends in punctuation/i },
+  { name: "the-hedge-names-what-it-is-about",
+    pattern: /hedge NAMES what it is about rather than pointing at it/i },
   // #2874: the answer to "what do you charge", the highest-intent reply Overture ever drafts. The whole
   // answer used to be one parenthetical here ("$250 an hour plus tax, one-hour minimum, gallery within
   // two weeks"), which is the CEILING on what a drafted reply can say, and on 2026-08-17 a real reply to

@@ -45,6 +45,10 @@ struct AgentInputs: Sendable {
     // the total, because it decides the pill's TONE while the total decides its NUMBER, and those are
     // now two different questions. Both are read off one `DueWork.Counts`, so they cannot disagree.
     var conversationsToConfirm: Int = 0
+    // #3890: how many of `followUpsDue` are replies waiting on Dan's answer, read off the same
+    // `DueWork.Counts`. Not shown on the pill; the queue publishes it beside the total so the menu bar can
+    // name waiting replies with the window closed.
+    var repliesToAnswer: Int = 0
     // #2674: how many of the rows at `drafted` have nobody to send to. Its own input rather than a fold
     // into `toReview`, because Dan's call was that the stage KEEPS them: the number stays honest about
     // how many rows are there, and this says how many of them the stage's action cannot touch.
@@ -89,19 +93,29 @@ extension AgentInputs {
     // invisible on the third. A default would let a caller forget the distinction silently, which is how
     // the two sets came to disagree in the first place; a required argument makes every call site say
     // which it means.
+    // #3738: `placement` is every show's stages, already decided by the caller.
+    //
+    // DEFAULTED TO nil, which means decide them here, and that is a correctness-preserving default rather
+    // than one standing for absent data (L168): the answer is identical either way and only the cost
+    // differs. What stops the one call site that matters quietly losing it is not the signature but a
+    // COUNT: `StagePlacedOncePerPassTests` pins a render pass at exactly one placement, so a caller that
+    // stopped passing one is red rather than slow (L27).
     static func from(prospects: [Prospect], allProspects: [Prospect], inquiries: [Inquiry] = [],
                      context: StageContext,
-                     gmailConnected: Bool, runInFlight: RunKind?, replyRunAlive: Bool) -> AgentInputs {
+                     gmailConnected: Bool, runInFlight: RunKind?, replyRunAlive: Bool,
+                     placement: StageNavigation.Placement? = nil) -> AgentInputs {
         // Counted THROUGH StageNavigation, never alongside it, so a pill's number and the rows its tap
         // lands on come from one predicate and cannot answer the same question differently.
         // #1121: one traversal for every focus (StageNavigation.counts), not one traversal per focus, so
         // the send-related counts fault each prospect's `recipients` at most once instead of once each.
-        let focusCounts = StageNavigation.counts(in: prospects, context: context)
+        let focusCounts = StageNavigation.counts(
+            in: placement ?? StageNavigation.placements(in: prospects, context: context))
         // #1837: ONE derivation, read twice. The pill states `total` and its attention tone is now decided
         // by `conversationsToConfirm`, and those must be two readings of the same Counts rather than two
         // calls that could drift or disagree about the same store (L16). Hoisted rather than called twice
         // for that reason, not for speed.
-        let dueWork = DueWork.counts(prospects: allProspects, now: context.now, replyRunAlive: replyRunAlive)
+        let dueWork = DueWork.counts(prospects: allProspects, inquiries: inquiries, now: context.now,
+                                     replyRunAlive: replyRunAlive)
         func count(_ focus: StageFocus) -> Int { focusCounts[focus] ?? 0 }
         // #1436: inquiries share two of these stages, so a logged inquiry is counted where it renders.
         func inquiryCount(_ focus: StageFocus) -> Int {
@@ -124,6 +138,7 @@ extension AgentInputs {
             // #1837: the one member of that total with a person on the other end waiting on Dan. It is
             // what decides the pill's attention TONE now; the number it states is still the whole total.
             conversationsToConfirm: dueWork.conversationsToConfirm,
+            repliesToAnswer: dueWork.repliesToAnswer,
             // #2674: counted over the same list the stage's own number comes from, so the two halves of
             // one sentence cannot be about different sets of rows.
             reviewDeadEnds: DraftedDeadEnd.count(in: prospects),

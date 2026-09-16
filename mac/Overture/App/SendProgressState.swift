@@ -66,6 +66,8 @@ final class SendProgressState {
     // be provoked in a test: a defended invariant with no reachable failure is dead code that reads as
     // care (L90). Held as one value, the disagreement cannot be expressed.
     private(set) var departures: [String: Departure] = [:]
+    // #2598: the addresses struck but not yet gone from the store's answer.
+    private var struck: [String: Date] = [:]
 
     // The leaving rows alone, for the splice that puts them back into the date list. Stale entries are
     // filtered here too (#2729): this is what the queue's own splice reads, so a stranded departure left
@@ -124,6 +126,50 @@ final class SendProgressState {
     // One line clears the whole departure. A reason left behind would make this show's NEXT departure
     // render as whatever the last one was, and the two are drawn differently on purpose.
     func finishDeparting(_ key: String) { departures[key] = nil }
+
+    // #2598: an address Dan has struck, hidden on the PRESS rather than when the rebuild lands.
+    //
+    // Striking an address removes ONE LINE from a card that stays on screen. There is no departure to
+    // mark and no snapshot to draw from: the card is rebuilt from the store's answer, so until the write
+    // lands and the rebuild finishes, the address he just struck is still drawn. Measured 2026-09-06,
+    // that wait is 860 ms on the live shape (`FeltWaitCostTests`), and a control that does nothing
+    // visible for that long reads as broken and gets pressed again (L44).
+    //
+    // ONE mechanism rather than an optimistic path per control, which is what #2598 asks for: both ways
+    // of striking an address (a researched contact and an inherited one) mark the same thing here, and
+    // any control that removes an address from a card can use it without inventing a second rule that
+    // can drift from what the write really did.
+    //
+    // KEYED ON THE SHOW AND THE ADDRESS TOGETHER, because one address can sit on two shows: keyed on the
+    // address alone, striking it here would blank it on a card Dan never touched.
+    static func strikeKey(show: String, email: String) -> String { "\(show)|\(email)" }
+
+    // NOTHING CLEARS IT, and that is the design rather than an omission. The obvious clear, on the same
+    // timing plan a departure uses, is WRONG here: a departure's row leaves for good, so a clear after
+    // the hold is invisible, while a struck address is hidden from a card that stays, and the rebuild it
+    // is covering for takes longer than the hold. Clearing on the plan would make the address FLASH BACK
+    // and then vanish again, which is worse than the wait it replaces.
+    //
+    // So it ages out through the same ceiling a departure does, and until then it is harmless: once the
+    // rebuild lands, the address is gone from the card's own answer and nothing consults the mark. What
+    // the ceiling buys is the case where the write FAILED, where the address comes back rather than
+    // staying hidden for the session (#2729's reasoning, applied to the other transient mark).
+    func strike(_ key: String, at: Date = Date()) {
+        struck = struck.filter { !Self.isStale($0.value, now: at) }
+        struck[key] = at
+    }
+
+    func isStruck(_ key: String, now: Date = Date()) -> Bool {
+        guard let at = struck[key] else { return false }
+        return !Self.isStale(at, now: now)
+    }
+
+    // Here for the caller that wants the mark gone at once, which today is only a test and an undo.
+    func finishStriking(_ key: String) { struck[key] = nil }
+
+    private static func isStale(_ at: Date, now: Date) -> Bool {
+        now.timeIntervalSince(at) > departureCeiling
+    }
 
     private static func isStale(_ departure: Departure, now: Date) -> Bool {
         now.timeIntervalSince(departure.at) > departureCeiling

@@ -61,6 +61,8 @@ the workflow's runbook is its spec.
 
 | `feed-movement.log` (in `~/Library/Logs/Overture`) | App (`FeedMovementLog`, one line per source per successful scout; the default-file write is suppressed under tests so a run cannot inject fake movement into the evidence) | **NOBODY YET.** Written for #913, to retune `minReBaselineFraction` against real movement rather than the reasoned 0.9 guess. #913 is open and deferred, so this is a writer with no reader today, which is the whole reason these rows exist (L46) | n/a (one `key=value` line per source, ISO timestamp first so it sorts and greps by time) | none | `FeedMovementLogTests.swift` |
 | `gmail-connect-debug.log` (in `~/Library/Logs/Overture`) | App (`GmailAuthManager`, tracing the connect flow; the path is named once in `AgentLogLocation` rather than assembled at the writer, #2096) | By hand, when a connect fails. The app runs resident, so there is no console to watch it on | n/a (a plain trace log) | none | `AgentLogLocationTests.swift` (the name and the directory) |
+| `freeze-log.ndjson` (in the DATA directory, beside the store) | App (`MainThreadWatchdog`, #3435 Phase 2e: one line per main-thread stall, appended from the watchdog's OWN Dispatch queue and never from the main thread, or it could not be written during the freeze it records) | App (`FreezeReport.newlyReported`, read at launch by `RootView.reportAnyFreezes` and said once per freeze as a `.warning`; `FreezeReport.floor` is #3439's second reader, which asks for the longest stall rather than opening the file) | none (one JSON object per line: session, sequence, at, seconds, surface, load, loadAverage, passes (#3760), passSeconds (#3815), windows (#3788). The last three decode as ABSENT on a record written before each shipped, deliberately, because Dan's log holds a thousand of those and they are milestone 80's own before half. Bounded at `FreezeLog.fileCap` records, COMPACTED AT LAUNCH and never on the freeze path, because an append is safe to do while the main thread is wedged and a read, modify, write is not (L105); compaction keeps the newest and, separately, any stall strictly longer than all of them, so cheap writers cannot evict the one reading the file exists for (L191). The DATE strategy is pinned to ISO8601 in `FreezeLog.encoder`, because a file written by one version is read by the next) | none | `TheAppReportsItsOwnFreezesTests.swift`, `PrivacyOfTheFreezeLogTests.swift`, `WatchdogCostTests.swift` |
+| `card-divergence.ndjson` (in the DATA directory, beside the store) | App (`QueueView.recordCardCheck`, #3654 step 4c: one line per pass whose sampled card did not match a fresh build of the same card. Written by the VIEW and never by `QueueRenderPass`, which may not reach the filesystem) | App (`CardDivergenceReport.newlyReported`, read at launch by `RootView.reportAnyCardDivergences` and said once per record as a `.warning`) | none (one JSON object per line: session, sequence, at, fields, cardsBuilt, stage. It carries NO show identity and NO contact value, which is #3654's CORRECTION C7 answered, Dan's call 2026-09-08: the field names are constants of this app, while a natural key is built from the group name and Dan's queue is full of shows billed as one performer's own name. A repository scanner cannot see a file the running app writes beside the store, so the only defence is not putting it there (L222). Bounded at `CardDivergenceLog.fileCap`, COMPACTED AT LAUNCH AND ON THE HOURLY TICK, keeping one example of each distinct FIELD SET so a common divergence cannot evict the only record of a rare one (L191). #3811: until then this row said COMPACTED AT LAUNCH and `CardDivergenceLog.compact` had no caller anywhere in the app, so that rule had never run once and this document was the only thing saying otherwise. What it drops is now ARCHIVED to `card-divergence-archive.ndjson` beside the live file rather than deleted, on `FreezeLog`'s answer in #3763, because a compaction was the last anyone would ever have seen of those records. The archive is bounded by KIND rather than by age, deliberately unlike the freeze log's month: an age-based prune would delete exactly the rare record the compaction rescued. The DATE strategy is pinned to ISO8601, because a file written by one version is read by the next) | none | `TheAppChecksItsOwnCardsTests.swift`, `PrivacyOfTheCardDivergenceLogTests.swift` |
 | `queue-derivations.log` (in the DATA directory, not Logs) | App (`QueueRenderCounter`, **Debug builds only**; the suite is kept out of the file entirely by its own `underTests` seam, because the unit suite hosts itself in the full app and its renders were landing in the same file a real observation is read from) | By hand, plus the `derived N · <reason>` line the Debug queue draws above itself | n/a (one line per derivation, capped on write) | none | `QueueDerivationCounterTests.swift`, `QueueDerivationReasonTests.swift` |
 
 #3465: the three rows above are LOGS the app itself writes, and they were absent from this catalog
@@ -71,6 +73,11 @@ Asking the question found one immediately. `feed-movement.log` has been accumula
 per scout since #1114 and nothing has ever read it, because its only intended reader is #913, which is
 open and deferred. That is not an argument for deleting it (the evidence is exactly what #913 needs and
 cannot be reconstructed later), but it is worth being written down rather than discovered again.
+
+#3435 Phase 2e added `freeze-log.ndjson` above. Its own text said this would be "the first with a blank
+reader column"; that was already untrue when it was written, and the row is here on the honest reason
+instead. It carries a reader named in the same change, because a field only ever written looks alive to
+every is-this-used check while the purpose it was added for silently never happens (L46).
 
 One correction to #3465's own text, which said `backup.log` was already listed: it is not, and neither
 are the two resident-agent logs (`overture-agent.out.log`, `overture-agent.err.log`) or
@@ -553,8 +560,20 @@ reader were a performing arts organisation. Dan's call was to render it app-side
 found a detached run auto-approving everything.
 
 Three states, and the runbook is told all three because the honest sentence differs for each: `read` (with
-the page's bounded readable `text`, plus `truncated` when it had to be cut), `unreadable` (the page did not
-load or carried nothing), and ABSENT (there was no page to look at, or a file written before this field).
+the page's bounded readable `text`, plus `truncated` and `droppedCharacters` when it had to be cut),
+`unreadable` (the page did not load or carried nothing), and ABSENT (there was no page to look at, or a file
+written before this field).
+
+#2698 adds `droppedCharacters`, how much readable text fell past that cut, written ONLY alongside
+`truncated` and absent everywhere else. Additive and optional, so no version bump is forced and every queue
+file written before it still decodes with the field missing. It exists because `truncated: true` says the
+page continued and nothing else, so a producing credit that fell past the cut was indistinguishable, from
+inside the run, from a page that never named one, and the run then reported "no producer credited" with
+complete confidence (the #2554 failure). Absent rather than zero on a page that fitted: zero is a real
+measurement meaning the cut dropped nothing, and a page nobody cut was never measured at all (L98, L11).
+Written by `ShowListingReader.read`, the only writer of `text` and `truncated`; read by
+`docs/prep-runbook.md` §2, which is told it may not report a finished negative about a page it only half
+holds.
 The app deliberately hands over the page's TEXT rather than trying to pick "the description" out of it:
 roughly a third of the store's listing URLs point at a season calendar or an index rather than one show's
 own page, and the run, which holds the show's name, date and venue, is the only side that can tell. Read by
@@ -575,13 +594,23 @@ act are mutually exclusive per performance (never both used at once) and tie for
 Purely additive to the `provenance` string; the reader's tolerant gate (1 through 3) still accepts
 `v1.json`/`v2.json` unchanged, `v3.json` is the performer-contact spec.
 
-Version 4 (#639, #634 Phase A) adds an optional `overrideBody` to a `contacts[]` entry: a direct,
+Version 4 (#639, #634 Phase A) added an optional `overrideBody` to a `contacts[]` entry: a direct,
 second-person draft for that specific contact, meaningful only when its `provenance` is `performer`.
-The shared `draft.body` stays third-person and keeps serving any act/presenter contact on the same
-performance; a performer contact's own `overrideBody` is what actually gets sent to them instead
-(`SendService`), so a named performer is addressed directly rather than described in the third person
-they'd otherwise read about themselves in. Purely additive; the reader's tolerant gate (1 through 4)
-still accepts `v1.json`/`v2.json`/`v3.json` unchanged, `v4.json` is the override-body spec.
+It was what actually got sent to that contact, in place of the shared third-person `draft.body`.
+
+**#3549 RETIRED it, and the reader now ignores the key.** A show has ONE letter, `draft.body`,
+addressed to whoever its contacts are (`docs/prep-runbook.md` §2, "Address the one letter to the
+people it reaches"). The retirement is a WRITER-side change: no version was bumped, because an older
+payload still carrying the key decodes exactly as before and the value is dropped, so nothing that
+ever wrote this file became invalid. `v4.json` keeps its `overrideBody` entries as the record of what
+version 4 looked like. What enforces the new rule is `src/lib/prepEval.ts`, which FAILS any run that
+still emits one, and `OneLetterPerShowTests`, which fails if a second copy reappears in the app.
+
+Why it went: only the send path read it, while the card previewed, edited and badged the shared body,
+so an edit Dan made was reported as applied and could never reach the recipient (`LESSONS` L402).
+Measured on the live store 2026-09-05 before removing it: 9 contacts held one, 8 of those shows had a
+single contact so the body on screen reached nobody, and 30 shows carrying more than one performer had
+never had a per-performer letter written at all.
 
 Version 5 (#611) adds an optional `alreadyCoveredNote` on the result itself (a sibling of
 `contacts`/`draft`, not per-contact): a fit-risk Prep's own research found, e.g. the org's site
@@ -654,6 +683,46 @@ the wire rather than filtered on the way home because the point is to stop the r
 address he already knew was wrong. His report was a card reading "10 found, 4 reachable" over three
 personal accounts and the act's own domain, with the only control anywhere sitting in the draft-review
 panel, after the run had been paid for.
+
+Results version 12 (#3078) adds an optional `roleQuoted` to each contact: whether `role` is a phrase the
+page named in `sourceUrl` actually carries, or the run's own summary of what it says.
+
+`role` is unbounded free text the app derives nothing from, and nothing asked whether the word the run
+chose is on the page it cited, so a paraphrase reached the card with the same authority as a quote.
+Measured 2026-08-17: `role: "Playwright"` for a performer whose cited page says "an actor and writer" and
+carries the word once, inside the NAME OF A THEATRE in an unrelated regional credit.
+
+DECLARED rather than measured, which is the question #3078 left open and #2269 closed: every `WebFetch`
+result a run receives is PROSE written by a small model against the page, so the run never holds the page
+in bytes or markdown and there is nothing at ingest to check a role against. Measuring it needs a fetch
+this app performs itself, which #2269 records as its own proposal with its own cost.
+
+TRUE is the unremarkable value and ABSENT means nobody said, which is every contact written before this
+and every run with nothing to declare. Absence may never read as a characterisation: that would mark 270
+of the 447 contacts in the archives at once (L98, L128). Adoption is measured per run by
+`RunInstructionCompliance`, over the population the rule is ABOUT (a role resting on a cited page), so a
+run with no such contact is not accused. Written by `PrepImporter` onto `Recipient.roleIsACharacterisation`
+through `ContactRoleClaim`, re-derived on every ingest rather than latched; read by the review card, which
+keeps the role and adds "Overture's words, not the page's". Additive, so every v11 producer stays valid.
+
+Queue version 14 (#2990) adds an optional `alreadyFoundEmails` to each item: the addresses the show
+ALREADY HOLDS, so a contact re-run does not pay to rediscover and re-report people it was handed a
+moment ago. It only arises where Dan explicitly asks for one, because `PrepQueueBuilder.probedWithContact`
+sends a show that already has a contact down the `draft_only` path.
+
+Measured before it was built, across every archived run on this Mac (2026-09-06): 34 show-answers where
+an earlier run had already returned routes for that show, 18 routes rediscovered against 31 genuinely new
+ones, and 5 of the 34 returning nothing the show did not already hold.
+
+CONTEXT, NOT TARGETS, and the runbook is told so in those words: he asked for the re-run because he wants
+somebody he does not have, so a list the run read as "these are done" would make it pointless. ADDRESSES
+only, the rule `refusedEmails` follows, because the field is documented to the run as email addresses and
+a form handle in it is a value the run reads as one. ABSENT rather than empty. DISJOINT from
+`refusedEmails` by construction and by a fixture guard, because a struck address named here would put an
+address Dan refused back in front of the run as context, on the very run meant to leave it alone.
+Written by `PrepQueueService.alreadyFoundAddresses`, through the same refusal ledger the strike list is
+built from so the two cannot disagree; read by `docs/prep-runbook.md` §1. Additive, so `v1.json` through
+`v13.json` stay byte-identical and still decode with it absent.
 
 Queue version 13 (#2983) adds an optional `presenterName` to each item: the producing organisation the
 APP already holds for this show, by name, straight from the stored `presenter`. Until this field the
@@ -739,6 +808,14 @@ guidance (`overture-voice-guidance.md`) and applies only distilled tendencies, n
 (#119/#249 leak guard). The `intent` is consumed as a NON-BINDING hint (it never sets a binding
 per-recipient outcome). Additive: the tolerant gate (1 through 3) still accepts v1/v2; `queue-v3.json`
 / `results-v3.json` are the spec.
+
+`draftSubject` is RETIRED (#3891), without a version bump, because removing an optional field breaks no
+reader. The runner no longer asks for it and the app no longer declares it, so a results file from an
+older run that still carries one decodes, lands its `draftBody`, and drops the subject. An answer always
+goes out under the subject its conversation already carries (`SendService.replySubject`): the drafted
+subject used to be sent in its place, and an answer to a contact on 2026-09-14 was filed as a new
+conversation because of it. The TypeScript shape check still accepts the key as optional, for the same
+older files.
 
 ### `overture-voice-feedback.json`
 

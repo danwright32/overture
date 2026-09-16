@@ -58,10 +58,25 @@ struct SameNightRoomVariantMergeLiveStoreTests {
         defer { try? FileManager.default.removeItem(at: dir) }
 
         let ctx = ModelContext(try openContainer(at: try copyLiveStore(to: dir)))
-        SameNightTitleVariantMerge.run(in: ctx)
+        // #3496: what this actually examined, counted BEFORE the replay. A night holding one row can never
+        // offend, so the population that matters is the nights holding more than one, and counted AFTER
+        // the repair a zero cannot be told from a store that never had any (L182, L98, L11).
+        func nightsHoldingMoreThanOne(_ rows: [Prospect]) -> Int {
+            Dictionary(grouping: rows, by: { $0.performanceDate ?? "" }).filter { $0.value.count > 1 }.count
+        }
+        let before = dated((try? ctx.fetch(FetchDescriptor<Prospect>())) ?? [])
+        let candidatesBefore = nightsHoldingMoreThanOne(before)
+
+        // #3496: a whole launch, not this one pass. `DriftedRunMerge` runs BEFORE it at launch and can
+        // move rows between the groups this then judges, so replaying one pass asserts about a state the
+        // app never actually presents (L385).
+        LaunchReplay.run(in: ctx, handoffDirectory: dir)
         try ctx.save()
 
         let remaining = dated((try? ctx.fetch(FetchDescriptor<Prospect>())) ?? [])
+        print("Same-night room variant corpus: \(candidatesBefore) night(s) held more than one row before "
+              + "the launch replay, out of \(before.count) dated; "
+              + "\(nightsHoldingMoreThanOne(remaining)) after")
         var offenders: [String] = []
         for (_, night) in Dictionary(grouping: remaining, by: { $0.performanceDate ?? "" }) {
             for i in night.indices {
@@ -101,7 +116,10 @@ struct SameNightRoomVariantMergeLiveStoreTests {
         defer { try? FileManager.default.removeItem(at: dir) }
 
         let ctx = ModelContext(try openContainer(at: try copyLiveStore(to: dir)))
-        SameNightTitleVariantMerge.run(in: ctx)
+        // #3496: a whole launch, not this one pass. `DriftedRunMerge` runs BEFORE it at launch and can
+        // move rows between the groups this then judges, so replaying one pass asserts about a state the
+        // app never actually presents (L385).
+        LaunchReplay.run(in: ctx, handoffDirectory: dir)
         try ctx.save()
 
         let queued = dated((try? ctx.fetch(FetchDescriptor<Prospect>())) ?? []).filter { $0.status == .new }
@@ -148,6 +166,9 @@ struct SameNightRoomVariantMergeLiveStoreTests {
         let before = reachedOutside(rowsBefore)
         let anyHistoryBefore = rowsBefore.filter(NaturalKeyVenueMigration.hasOutreachHistory).count
 
+        // launch-replay-exempt: this asserts THIS PASS's own safety contract, not an invariant a launch
+        // restores, so it runs the pass alone. Replaying a whole launch here would attribute a row lost by
+        // any of twenty five passes to this one (#1761, #3496).
         SameNightTitleVariantMerge.run(in: ctx)
         try ctx.save()
 
@@ -172,6 +193,9 @@ struct SameNightRoomVariantMergeLiveStoreTests {
         let namedBefore = ((try? ctx.fetch(FetchDescriptor<Prospect>())) ?? [])
             .filter { ($0.venue ?? "").isEmpty == false }.count
 
+        // launch-replay-exempt: this asserts THIS PASS's own safety contract, not an invariant a launch
+        // restores, so it runs the pass alone. Replaying a whole launch here would attribute a row lost by
+        // any of twenty five passes to this one (#1761, #3496).
         SameNightTitleVariantMerge.run(in: ctx)
         try ctx.save()
 

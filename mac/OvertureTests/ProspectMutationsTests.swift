@@ -403,18 +403,19 @@ struct ProspectMutationsTests {
     }
 
     // #789: overriding the draft-lint block records the EXACT outgoing text of each BLOCKED, still
-    // PENDING recipient. A clean recipient must gain no override (a stale one would silently wave
-    // through a future bad edit to its text), and an already-sent one is left alone entirely.
+    // PENDING recipient, and an already-sent one is left alone entirely.
+    //
+    // #3549 removed this test's third recipient, a "clean" performer whose own second copy of the pitch
+    // passed the lint while the show's body failed it. With one letter per show, every pending contact
+    // reads the same text, so a contact that is clean while its neighbour is blocked cannot exist.
     @Test func overrideDraftLintRecordsOnlyTheBlockedPendingRecipientsText() throws {
         let ctx = ModelContext(try container())
         let p = makeProspect(ctx)
         p.draftBody = "Hello,\n\nSee my work at https://smugmug.com/dan."
         let blocked = Recipient(id: "a@act.example", email: "a@act.example", provenance: .act)
-        let clean = Recipient(id: "p@perf.example", email: "p@perf.example", provenance: .performer)
-        clean.overrideBody = "I photograph performing arts. Work at danwrightphotography.com."
         let alreadySent = Recipient(id: "b@present.example", email: "b@present.example", provenance: .presenter)
         alreadySent.sendState = .sent
-        p.setRecipients([blocked, clean, alreadySent])
+        p.setRecipients([blocked, alreadySent])
         try? ctx.save()
         let feedback = ActionFeedback()
 
@@ -422,7 +423,6 @@ struct ProspectMutationsTests {
 
         #expect(blocked.lintOverriddenBody == "Hello,\n\nSee my work at https://smugmug.com/dan.")
         #expect(blocked.isSendablePending)
-        #expect(clean.lintOverriddenBody == nil)
         #expect(alreadySent.lintOverriddenBody == nil)
     }
 

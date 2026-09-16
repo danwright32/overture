@@ -106,9 +106,9 @@ enum AlgoliaCalendar {
     // The feed sometimes embeds HTML (e.g. <br/>) and zero-width characters in text fields.
     // Drop tags, strip zero-width/carriage-return noise, and collapse the resulting whitespace.
     static func cleanText(_ s: String) -> String {
-        let noTags = s.replacingOccurrences(of: "<[^>]+>", with: " ", options: .regularExpression)
+        let noTags = s.strippingHTMLTags()
         let noNoise = noTags.replacingOccurrences(of: "\u{200B}", with: "").replacingOccurrences(of: "\r", with: "")
-        let collapsed = noNoise.replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+        let collapsed = noNoise.collapsingWhitespaceRuns()
         return collapsed.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 

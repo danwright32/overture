@@ -44,6 +44,27 @@ enum PrepQueueService {
     //
     // The organisation half matters as much as the show half: an address Dan struck on the ledger is one
     // this show would inherit, and the run hunting the same organisation would find it again.
+    // #2990: the addresses this show already holds, for the run's own context.
+    //
+    // DISJOINT from `struckAddresses` above by construction, and that is the one interaction that could
+    // go wrong: a struck address is one Dan refused, so naming it here would put it back in front of the
+    // run as context on the very run meant to leave it alone (L16). Judged through the SAME ledger the
+    // strike list is built from, never a second reading of it, so the two cannot disagree about one
+    // address.
+    //
+    // ADDRESSES only, the rule `refusedEmails` follows: the field is documented to the run as a list of
+    // email addresses, and a form handle in it is a value the run reads as one. Sorted, so the same store
+    // always writes byte-identical JSON. Absent, never empty.
+    private static func alreadyFoundAddresses(for p: Prospect,
+                                              refusals: ContactRefusal.Ledger) -> [String]? {
+        let orgKey = p.presenter.flatMap { OrgKey.stored(for: $0) }
+        let struck = Set(refusals.struckAddresses(showKey: p.naturalKey, orgKey: orgKey))
+        let held = p.recipients
+            .compactMap { $0.email?.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty && !struck.contains($0) }
+        return held.isEmpty ? nil : Array(Set(held)).sorted()
+    }
+
     private static func struckAddresses(for p: Prospect,
                                         refusals: ContactRefusal.Ledger) -> [String]? {
         guard !refusals.isEmpty else { return nil }
@@ -110,6 +131,10 @@ enum PrepQueueService {
                     // draft to one he already refused. Absent, never an empty list, on the shows with
                     // nothing struck. Sorted so the same store always writes byte-identical JSON.
                     refusedEmails: struckAddresses(for: p, refusals: refusals),
+                    // #2990: and the addresses the show ALREADY holds, so a contact re-run does not pay
+                    // to rediscover people it was handed a moment ago. Context, never targets: he asked
+                    // for this re-run because he wants somebody he does not have.
+                    alreadyFoundEmails: alreadyFoundAddresses(for: p, refusals: refusals),
                     // #2983: and WHO, not merely that there is a who. Through the same predicate
                     // `onlyTheActIsNamed` above uses, so the two can never disagree. A drafted pitch has
                     // the same reason to name the producing company as a check has to search for it.
@@ -170,6 +195,10 @@ enum PrepQueueService {
                     // would find and report the address Dan struck, the importer would refuse it, and he
                     // would have paid for the lookup twice over.
                     refusedEmails: struckAddresses(for: p, refusals: refusals),
+                    // #2990: and the addresses the show ALREADY holds, so a contact re-run does not pay
+                    // to rediscover people it was handed a moment ago. Context, never targets: he asked
+                    // for this re-run because he wants somebody he does not have.
+                    alreadyFoundEmails: alreadyFoundAddresses(for: p, refusals: refusals),
                     // #2983: the name behind that flag. Without it a check on a show credited to a real
                     // company was told a producer existed and never told which one, so it hunted a
                     // nameless organisation and reported `nothing_published` about one publishing its
@@ -921,17 +950,59 @@ enum PrepQueueService {
     static func runInFlight(now: Date, support: URL = StoreLocation.handoffDirectory,
                             prepMarkerURL: URL? = nil, checkMarkerURL: URL? = nil,
                             defaults: UserDefaults = .standard) -> RunKind? {
-        if isRunning(slot: .prep, markerURL: prepMarkerURL ?? RunSlot.prep.markerURL(in: support),
-                     now: now) {
+        slotStatus(now: now, support: support, prepMarkerURL: prepMarkerURL,
+                   checkMarkerURL: checkMarkerURL, defaults: defaults).inFlight
+    }
+
+    // #3646: BOTH slots and the composed answer, from ONE reading of the two markers.
+    //
+    // `runInFlight` above folds the two slots into a single `RunKind?` and is right for a reader asking
+    // "is anything going". A SURFACE needs more than that: a control is greyed while the slot IT would
+    // start is busy, and since #3015 a prep run and a check can be going at once, so `inFlight == .prep`
+    // says nothing about whether a check is also live. Reading the two separately is what the queue used
+    // to do, once per rendered card and once per date heading, which is #3646.
+    //
+    // The composition of `inFlight` lives HERE and nowhere else, so a caller that needs the per-slot
+    // facts as well cannot end up with its own slightly different version of the same rule (L30). It is
+    // the rule #2614 and #2760 wrote, unchanged: the prep slot answers first and through the legacy
+    // `prepSlotRunKind`, and the check slot answers `.reachabilityCheck` outright because only checks are
+    // ever in it.
+    //
+    // It reads the check marker even when the prep slot is busy, which `runInFlight` used to skip. That
+    // is one extra `stat` per call in the one state where a prep run is live, and it is the whole point:
+    // the fact it buys (is a check running, right now, beside the prep run) is the fact the row's own
+    // "Check again" control is greyed by, and the only alternative is the per-row read this replaces.
+    struct SlotStatus {
+        /// The prep slot's marker is beating.
+        let prepSlotRunning: Bool
+        /// The check slot's marker is beating. NOT the same question as `inFlight == .reachabilityCheck`,
+        /// which is false while a prep run holds the prep slot beside a live check.
+        let checkSlotRunning: Bool
+        /// #2614's single answer: which run a surface that NAMES the run should name.
+        let inFlight: RunKind?
+    }
+
+    static func slotStatus(now: Date, support: URL = StoreLocation.handoffDirectory,
+                           prepMarkerURL: URL? = nil, checkMarkerURL: URL? = nil,
+                           defaults: UserDefaults = .standard) -> SlotStatus {
+        let prepRunning = isRunning(slot: .prep,
+                                    markerURL: prepMarkerURL ?? RunSlot.prep.markerURL(in: support),
+                                    now: now)
+        let checkRunning = isRunning(slot: .check,
+                                     markerURL: checkMarkerURL ?? RunSlot.check.markerURL(in: support),
+                                     now: now)
+        let inFlight: RunKind?
+        if prepRunning {
             let marker = (try? ReachabilityProbeMarker.read(from: probeRunURL(in: support))) ?? nil
-            return prepSlotRunKind(runStartedAt: lastRunStartedAt(slot: .prep, defaults: defaults),
-                                   probeMarkerStartedAt: marker?.startedAt)
+            inFlight = prepSlotRunKind(runStartedAt: lastRunStartedAt(slot: .prep, defaults: defaults),
+                                       probeMarkerStartedAt: marker?.startedAt)
+        } else if checkRunning {
+            inFlight = .reachabilityCheck
+        } else {
+            inFlight = nil
         }
-        if isRunning(slot: .check, markerURL: checkMarkerURL ?? RunSlot.check.markerURL(in: support),
-                     now: now) {
-            return .reachabilityCheck
-        }
-        return nil
+        return SlotStatus(prepSlotRunning: prepRunning, checkSlotRunning: checkRunning,
+                          inFlight: inFlight)
     }
 
     // #3013: record that these shows were left out, and clear the mark from the ones this run is carrying.

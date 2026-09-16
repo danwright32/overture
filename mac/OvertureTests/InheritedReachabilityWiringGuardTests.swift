@@ -23,7 +23,10 @@ struct InheritedReachabilityWiringGuardTests {
 
     @Test func archiveReadsTheLedgerToo() {
         #expect(archiveView.contains("@Query private var orgAnswers: [OrgReachabilityAnswer]"))
-        #expect(archiveView.contains("QueueModel.items(from: prospects, answers: orgAnswers,"))
+        // #3655 Phase 5: through `scope(from:)` rather than `items(from:)`, which is the same
+        // derivation asked for rows plus a narrowed card set instead of a card per show. The ledger
+        // argument this suite is about is unchanged and still first after the rows.
+        #expect(archiveView.contains("QueueModel.scope(from: prospects, answers: orgAnswers,"))
     }
 
     // The address line reads the shared rule rather than `item.contacts` directly, or an inherited row

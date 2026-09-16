@@ -77,9 +77,6 @@ struct ReplyConversationView: View {
     // time. The Archive card is where Dan looks at what happened, so the text belongs; Send does not.
     private var draftAsRecord: some View {
         VStack(alignment: .leading, spacing: 4) {
-            if let subject = contact.replyDraftSubject, !subject.isEmpty {
-                Text(subject).font(OVType.meta).foregroundStyle(OVColor.inkSoft)
-            }
             Text(contact.replyDraftBody ?? "")
                 .font(OVType.body).foregroundStyle(OVColor.inkSoft)
                 .textSelection(.enabled)

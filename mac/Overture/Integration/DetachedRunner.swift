@@ -6,6 +6,45 @@ import Foundation
 // untouched past `staleAfter` means the run died and the guard frees itself. Extracted from
 // PrepQueueService (#184) so the two services don't duplicate the launch + marker machinery.
 enum DetachedRunner {
+    // #3646: how many marker files a stretch of work reads off disk.
+    //
+    // Every marker read in the app goes through `heartbeat` below, and every one of them really is a
+    // `stat` on the real filesystem: the marker URLs are computed properties precisely so a fresh `URL`
+    // is built each time (#1613, the comment inside `heartbeat`), which means Foundation's resource
+    // cache can never answer one of them and no caller can accidentally get a free reading.
+    //
+    // Counted HERE rather than at the call sites, for the reason `QueueRenderPass`'s own tallies record:
+    // a counter a new call site has to opt into only ever measures the costs somebody already knew
+    // about, and the defect this exists for was a marker read added per rendered card and per date
+    // heading by a change that was not thinking about disk at all. Neither cost counter beside it could
+    // see that one: `Corpus` counts sweeps over rows the pass was handed and `WorkTally` counts card
+    // construction, and a `stat` is neither (#3646's own write-up).
+    //
+    // Read through a task local, so a measurement can only ever report on work the measurer itself ran.
+    final class MarkerReadTally: @unchecked Sendable {
+        @TaskLocal static var current: MarkerReadTally?
+
+        private let lock = NSLock()
+        private var count = 0
+
+        /// How many marker files were read off disk while this tally was bound.
+        var reads: Int { lock.withLock { count } }
+
+        /// Recorded through the TYPE, so a call site does not need to know whether anybody is listening.
+        static func recordRead() {
+            guard let t = current else { return }
+            t.lock.withLock { t.count += 1 }
+        }
+
+        /// Run `body` with a fresh tally bound, and hand back what it read. The ONLY way to read the
+        /// counter, so a test cannot report on work it did not run.
+        static func measure(_ body: () -> Void) -> MarkerReadTally {
+            let tally = MarkerReadTally()
+            MarkerReadTally.$current.withValue(tally) { body() }
+            return tally
+        }
+    }
+
     static func isRunning(markerURL: URL, now: Date, staleAfter: TimeInterval) -> Bool {
         heartbeat(markerURL: markerURL, now: now, staleAfter: staleAfter) == .beating
     }
@@ -30,6 +69,10 @@ enum DetachedRunner {
         // runs out. Fixed here, once, so all three run services get it (L30).
         // #2105: the fix #1613 made here is now the shared `FileTimestamp.modifiedAt`, so the other five
         // readers get it too rather than each needing to know.
+        // #3646: the one place every marker read passes through, so this is where the reads are counted.
+        // Above the read rather than after it, so a throw or an early return could never leave a read
+        // uncounted and make a costly stretch of work report as a cheap one.
+        MarkerReadTally.recordRead()
         let touched = FileTimestamp.modifiedAt(markerURL)
         return RunHeartbeat.of(markerTouchedAt: touched, now: now, staleAfter: staleAfter)
     }

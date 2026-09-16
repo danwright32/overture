@@ -12,6 +12,14 @@ import SwiftData
 // different claim and a false one. The sentence lives in DaysOffAttention, next to the rule that decides
 // whether to show it, rather than in this view where nothing could test it (#863).
 struct DaysOffView: View {
+    // #3859: this sheet has a `StallSurface` case of its own now, so a stall recorded while it is on
+    // screen is attributed to it. #3762's rule follows from that: the surface a stall is attributed to
+    // has to count its own rebuilds, or the record reads `passes: 0`, and `0` there says the surface did
+    // not rebuild rather than that nobody counted (L11).
+    //
+    // Read as an OPTIONAL, on the same footing as every other environment object here, so a missed
+    // injection is a pass nobody counted rather than a crash.
+    @Environment(FreezeWatch.self) private var freezeWatch: FreezeWatch?
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var context
     @Environment(ActionFeedback.self) private var feedback
@@ -45,6 +53,9 @@ struct DaysOffView: View {
     @State private var confirmUnsaved = false
 
     var body: some View {
+        // #3859: this surface counts its own rebuild. Bound to `_` rather than called as a statement
+        // because `body` is a ViewBuilder, which takes a declaration and not a bare void expression.
+        let _ = freezeWatch?.recordPass()
         VStack(alignment: .leading, spacing: 0) {
             header
             Divider().overlay(OVColor.line)
@@ -169,6 +180,12 @@ struct DaysOffView: View {
         // which booking a row stands for, so a sheet with fifteen bookings opened and decoded the export
         // fifteen times to draw itself. That is #1960's defect on this same sheet and #1731's on the
         // Presenters one, which is why it is fixed here rather than filed.
+        //
+        // #3852: AND THIS COMMENT WAS THREE READS OUT OF DATE. It said the calendar was worked out once
+        // and handed down while three later lines in this same function still read `calendar` directly,
+        // so drawing this section decoded the whole export FOUR times. Found by the scan rather than by
+        // reading, which is the point of the scan: the same shape as #3837's `prepRefusal`, whose own
+        // docstring said "this reads it twice" over code that read it four times.
         let cal = calendar
         let bookings = DownbeatBridge.loadedExport().bookings
         let cancelled = cancelledRows
@@ -185,7 +202,7 @@ struct DaysOffView: View {
             // snooze silences the toolbar mark, and only that. Hiding this sentence too would put the
             // empty list straight back to reading as "you have nothing booked", which is a different
             // claim and a false one, and it is the exact misreading this whole feature exists to stop.
-            if !calendar.hasUpcomingBookedShoot(today: QueueModel.easternToday()) {
+            if !cal.hasUpcomingBookedShoot(today: QueueModel.easternToday()) {
                 Text(DaysOffAttention.noBookedShootsExplanation)
                     .font(.system(size: 11)).foregroundStyle(OVColor.rust)
                     .fixedSize(horizontal: false, vertical: true)
@@ -193,7 +210,7 @@ struct DaysOffView: View {
                 // Putting a warning away should cost Dan the ten seconds of having read what he is putting
                 // away; a one-click silence from the masthead is how a warning gets dismissed reflexively
                 // and then forgotten. Offered only while the mark is actually up.
-                if DaysOffAttention.needsALook(calendar) {
+                if DaysOffAttention.needsALook(cal) {
                     Button(DaysOffAttention.snoozeButtonTitle) { snooze() }
                         .buttonStyle(.plain).font(.system(size: 11)).foregroundStyle(OVColor.forestText)
                         .padding(.top, 2)
@@ -206,7 +223,7 @@ struct DaysOffView: View {
                     Text(DaysOffAttention.feedStalledExplanation)
                         .font(.system(size: 11)).foregroundStyle(OVColor.rust)
                         .fixedSize(horizontal: false, vertical: true)
-                    if DaysOffAttention.needsALook(calendar, feedStalled: true) {
+                    if DaysOffAttention.needsALook(cal, feedStalled: true) {
                         Button(DaysOffAttention.snoozeButtonTitle) { snooze() }
                             .buttonStyle(.plain).font(.system(size: 11)).foregroundStyle(OVColor.forestText)
                             .padding(.top, 2)

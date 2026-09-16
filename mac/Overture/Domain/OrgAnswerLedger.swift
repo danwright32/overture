@@ -62,9 +62,17 @@ enum OrgAnswerLedger {
     // hand every existing caller the fail-open answer with the compiler never naming the one that forgot
     // (L168). It is evaluated on every build rather than latched, so a run ending releases it with no
     // separate step.
+    // #3743: `corpus` is the producer index, when the caller has already built one.
+    //
+    // Defaulted to nil, meaning build it here, which is a correctness-preserving default rather than one
+    // standing for absent data (L168): the answer is identical and only the cost differs. `QueueModel.scope`
+    // passes the one it builds for the venue-brand table, which is the same index over the same shows;
+    // measured on the live store it is 27.2 ms and was being built twice per pass. What stops that call
+    // site quietly losing it is a COUNT rather than the signature: `ScopeBuildsOneProducerIndexTests`.
     static func inherited(from answers: [Answer], shows: [Show], now: Date,
                           heldKeys: Set<String>,
-                          overrides: ProducerOverrides = .none) -> [String: Inherited] {
+                          overrides: ProducerOverrides = .none,
+                          corpus prebuilt: ProducerGate.Corpus? = nil) -> [String: Inherited] {
         // Only positives, only fresh, and only with an address behind them. A positive with nothing to
         // show cannot claim there is somebody to email.
         var usable: [String: Answer] = [:]
@@ -79,7 +87,8 @@ enum OrgAnswerLedger {
 
         // #1965: the corpus facts both arms of `qualifies` need, worked out ONCE here. Each organisation
         // asked used to walk every show again, twice, inside a pass that already walks every show.
-        let corpus = ProducerGate.Corpus(shows.map { ProducerGate.Show(presenter: $0.presenter, venue: $0.venue) })
+        let corpus = prebuilt
+            ?? ProducerGate.Corpus(shows.map { ProducerGate.Show(presenter: $0.presenter, venue: $0.venue) })
         var verdictByOrg: [String: Bool] = [:]
         // #1965: and the org key per distinct presenter NAME rather than per show. Folding it is a string
         // walk, and the live store's 700-odd rows carry far fewer distinct presenters between them.

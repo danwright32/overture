@@ -41,10 +41,15 @@ struct OvationTixCalendarTests {
     ]
     """#
 
+    // #3834: the FEED's zone, never the host's. `OvationTixCalendar` parses and filters through
+    // `FeedDates`, which is Eastern by #1983's decision, so a fixture built in `.current` agrees with the
+    // code only on a Mac that happens to be set to Eastern. On this repository's only development Mac it
+    // always did, which is why it took the first hosted CI run to find it: every one of these went red on
+    // a UTC runner while the app was behaving correctly (L504, L52).
     private static func day(_ iso: String) -> Date {
         let f = DateFormatter()
         f.locale = Locale(identifier: "en_US_POSIX")
-        f.timeZone = .current
+        f.timeZone = FeedDates.defaultZone
         f.dateFormat = "yyyy-MM-dd"
         return f.date(from: iso)!
     }
@@ -95,7 +100,11 @@ struct OvationTixCalendarTests {
     // afternoon; only a day that is genuinely past is dropped. Filtering a COMPLETE feed to a stable window
     // keeps the reconcile honest: a show leaves the set only once its day is past, never from a partial read.
     @Test func keepsTodayAndLaterDroppingOnlyPastDays() throws {
-        let cal = Calendar.current
+        // The same zone `upcoming` filters in, handed in rather than inherited: it takes
+        // `zone: TimeZone = FeedDates.defaultZone`, so a fixture built in the host's zone is comparing
+        // an Eastern day boundary against a host one and passes only where they coincide (#3834).
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = FeedDates.defaultZone
         let today = cal.startOfDay(for: Date(timeIntervalSince1970: 1_800_000_000))
         let yesterday = cal.date(byAdding: .day, value: -1, to: today)!
         let tomorrow = cal.date(byAdding: .day, value: 1, to: today)!

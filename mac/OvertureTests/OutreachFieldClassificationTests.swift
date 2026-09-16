@@ -31,6 +31,10 @@ struct OutreachFieldClassificationTests {
         "email": "the address, which is what a check FINDS rather than what a send records",
         "name": "who the address belongs to",
         "role": "their job title, from the page the address came off",
+        // #3078: whose words that job title is. A fact about how the LOOKUP described somebody, on
+        // the same side of the line as `role` itself and re-derived on every ingest, so it records
+        // nothing about anybody having been written to.
+        "roleIsACharacterisation": "whether the role above is the run's summary rather than a phrase the cited page carries",
         "prospect": "the show this contact belongs to",
 
         // How the address was found. This is the whole other side of the distinction: a found address is
@@ -45,6 +49,10 @@ struct OutreachFieldClassificationTests {
         // answers about an ADDRESS rather than a record that somebody was written to.
         "looksLikeVenue": "a guard's opinion of the address",
         "looksLikeVenueDismissed": "Dan waving that guard off, an answer about the address",
+        // #2937: the same shape as the four dismissals beside it. It is an answer about WHOSE the
+        // route is, not a record that anybody was written to, and it is carried per RECIPIENT, so a
+        // row holding it has still had nothing sent from it.
+        "nameMatchOnlyDismissed": "Dan saying a guessed profile really is the person, an answer about the route",
         "contactTierRaw": "who the check judged this contact to be, a fact about the ADDRESS not about a send",
         "looksLikeAnotherPersons": "a guard's opinion of the address",
         "looksLikeAnotherPersonsDismissed": "Dan waving that guard off, an answer about the address",
@@ -64,7 +72,9 @@ struct OutreachFieldClassificationTests {
 
         // Drafted, not sent. A body exists on a contact nobody has written to yet, which is exactly the
         // state the merge is for.
-        "overrideBody": "a draft written for this contact, which is not a send",
+        // #3549: RETAINED STORAGE, read and written by nothing. Classified anyway, because this
+        // guard asks about every stored field and a retained one is still a stored field.
+        "overrideBody": "a retired second copy of a draft, which was never a send",
         "lintOverriddenBody": "a draft the lint was waved off on, still not a send",
         "greetingOverriddenBody": "a draft the greeting hold was waved off on, still not a send",
         "openingOverride": "Dan's chosen opening for a draft, still not a send",
@@ -97,7 +107,9 @@ struct OutreachFieldClassificationTests {
         "pausedByReply": "paused BECAUSE they replied, and replied is counted",
         "resolutionRaw": "how it ended, which can only follow a send",
         "outcomeSourceRaw": "who decided the ending",
-        "replyDraftSubject": "set beside replyDraftBody, which is counted",
+        "replyDraftSubject": "retained storage written by nothing since #3891, and a draft is not a send",
+        // #3891: written by the same two sends, in the same statement block, that stamp `sentAt`.
+        "pitchSubject": "the subject a send went out under, set with sentAt, which is counted",
         "replyDraftModel": "what wrote the reply draft, set beside replyDraftBody",
         "originalReplyDraftBody": "what the reply draft said before Dan edited it",
         "sentReplyBody": "set with replySentAt, which is counted",
@@ -142,6 +154,23 @@ struct OutreachFieldClassificationTests {
             + "dismissedReplyId above and not outreach for the same reason it is not",
         "attachWroteAddress": "whether the ATTACH is what put the current address here, so a detach takes "
             + "back only what it wrote; provenance of a field, not evidence anybody was contacted",
+        // #3709: both are COMPANIONS, and the companion claim is checked rather than assumed. Each is
+        // written only by `AttachConversation.attach`, which sets `conversationEverAttachedAt` in the same
+        // write and which the detach deliberately never clears, so a row carrying either necessarily
+        // carries a field this rule already counts. `attachDisplacedThreadId` is doubly covered: it can
+        // only be set on a row that already held a `gmailThreadId`, which is counted too.
+        "attachDisplacedEmail": "the address the pitch went to before a link moved the row onto whoever "
+            + "wrote back; history of an ADDRESS, and a companion of conversationEverAttachedAt, which is "
+            + "counted",
+        "attachDisplacedThreadId": "the thread the pitch went out on before a link replaced it; a "
+            + "companion of both conversationEverAttachedAt and gmailThreadId, which are counted",
+        // #3712: the same companion claim, and the strongest of the three. It is assigned FROM
+        // `gmailMessageId`, in the same write, on a row that must already hold one, and `gmailMessageId`
+        // is itself counted and is never cleared by the attach or the detach. So a row carrying this
+        // cannot exist without carrying the counted field it was copied from.
+        "attachDisplacedMessageId": "which outgoing message the row held when a link replaced its "
+            + "thread, so the threading can tell an id on the linked conversation from one on the "
+            + "displaced one; copied from gmailMessageId, which is counted and which it never moves",
         "replyCandidateSearchedAt": "when OVERTURE last read the mailbox for an answer to this pitch, "
             + "which is a record of its own looking and says nothing about anybody having been written to; "
             + "the write that proves this contact was reached is formOutreachRecordedAt, which is counted",

@@ -62,25 +62,25 @@ struct StitchedSweepIngestWiringTests {
                           sourceUrl: "https://kaufman.example/\(title)")
     }
 
-    private func ingest(monthsCovered: [String], into ctx: ModelContext) {
+    private func ingest(monthsCovered: [String], into ctx: ModelContext) async {
         let r = ScoutExtractResults(
             version: 3, generatedAt: "2026-07-13T00:00:00Z",
             results: [ScoutExtractResult(sourceId: "kaufman", verdict: .upcomingListings,
                                          events: [event("Kept")], note: nil,
                                          monthsCovered: monthsCovered)])
-        ScoutExtractIngest.ingest(r, clients: [], history: [], blocked: .empty,
+        await ScoutExtractIngest.ingest(r, clients: [], history: [], blocked: .empty,
                                   today: ScoutTestClock.beforeAllFixtures, now: now, into: ctx)
     }
 
     // THE BUG. The run reported a healthy upcoming_listings verdict, but it only read three of the four
     // months the app stitched into the pin. It returned fewer shows, not because the calendar shrank but
     // because it never looked at October, and it does not get to conclude last time's show was cancelled.
-    @Test func aRunThatMissedAStitchedMonthDoesNotMarkLastTimesShowAsMissing() throws {
+    @Test func aRunThatMissedAStitchedMonthDoesNotMarkLastTimesShowAsMissing() async throws {
         let ctx = try context()
         establishedStitchedSource(ctx)
         let stranded = showItListedLastTime(ctx)
 
-        ingest(monthsCovered: ["2026-07", "2026-08", "2026-09"], into: ctx)   // missed October
+        await ingest(monthsCovered: ["2026-07", "2026-08", "2026-09"], into: ctx)   // missed October
 
         #expect(stranded.missedScoutCount == 0)
     }
@@ -90,12 +90,12 @@ struct StitchedSweepIngestWiringTests {
     // stitched months, so the reconcile is armed and it marks the missing show gone.
     //
     // If this one ever stops incrementing, the test above has stopped testing anything.
-    @Test func aRunThatReadEveryStitchedMonthDoesMarkLastTimesShowAsMissing() throws {
+    @Test func aRunThatReadEveryStitchedMonthDoesMarkLastTimesShowAsMissing() async throws {
         let ctx = try context()
         establishedStitchedSource(ctx)
         let stranded = showItListedLastTime(ctx)
 
-        ingest(monthsCovered: stitchedMonths, into: ctx)   // read all four
+        await ingest(monthsCovered: stitchedMonths, into: ctx)   // read all four
 
         #expect(stranded.missedScoutCount == 1)
     }
@@ -103,12 +103,12 @@ struct StitchedSweepIngestWiringTests {
     // #897: a short sweep must record NO health and must NOT stamp the page as finished, mirroring the
     // partial-read path (#1012): the hash stays pending so the next scout re-reads, the unread flag stays
     // set, and the warmup counter does not advance on a page that was not read in full.
-    @Test func aShortSweepRecordsNoHealthAndLeavesThePageUnfinished() throws {
+    @Test func aShortSweepRecordsNoHealthAndLeavesThePageUnfinished() async throws {
         let ctx = try context()
         let source = establishedStitchedSource(ctx)
         showItListedLastTime(ctx)
 
-        ingest(monthsCovered: ["2026-07", "2026-08", "2026-09"], into: ctx)   // missed October
+        await ingest(monthsCovered: ["2026-07", "2026-08", "2026-09"], into: ctx)   // missed October
 
         #expect(source.pendingContentHash == "new-hash")            // hash NOT promoted
         #expect(source.lastContentHash == nil)                      // page not marked finished
@@ -118,12 +118,12 @@ struct StitchedSweepIngestWiringTests {
 
     // The contrast for health: a full sweep DOES finish the page. Proves the assertions above are the
     // short sweep being held back, not the ingest failing to record anything at all.
-    @Test func aFullSweepFinishesThePageAndAdvancesWarmup() throws {
+    @Test func aFullSweepFinishesThePageAndAdvancesWarmup() async throws {
         let ctx = try context()
         let source = establishedStitchedSource(ctx)
         showItListedLastTime(ctx)
 
-        ingest(monthsCovered: stitchedMonths, into: ctx)   // read all four
+        await ingest(monthsCovered: stitchedMonths, into: ctx)   // read all four
 
         #expect(source.lastContentHash == "new-hash")               // page finished, hash promoted
         #expect(source.pendingContentHash == nil)

@@ -40,7 +40,11 @@ cd "${SCRIPT_DIR}/.." || exit 1
 . "${SCRIPT_DIR}/lib/scratch.sh"
 
 LIVE_STORE="${OVERTURE_LIVE_STORE:-${HOME}/Library/Application Support/Overture/Overture.store}"
-DECL_ROOT="${OVERTURE_CORPUS_DECL_ROOT:-${SCRIPT_DIR}/../mac/OvertureTests}"
+# #3650: EVERY test root, not just the unhosted one. This scanned `mac/OvertureTests` alone, so
+# `mac/OvertureHostedTests` was exempt from the check written to catch exactly this defect, and the rig
+# measuring the wait Dan FEELS sat with zero recipients and zero tags while the scan reported all clear
+# (L96, L247). `mac/TestSupport` is here because a shape shared by two targets has to live there.
+DECL_ROOT="${OVERTURE_CORPUS_DECL_ROOT:-${SCRIPT_DIR}/../mac}"
 
 # How far below the live figure a declaration may sit before it is reported. The store grows every night,
 # so this is not zero: what the check exists to catch is a fixture protecting a MATERIALLY smaller world,
@@ -79,6 +83,18 @@ sql_for_dimension() {
                 echo "select count(*) from ZRECIPIENT r left join ZPROSPECT p on r.ZPROSPECT = p.Z_PK where r.ZSENDSTATERAW = 'pending' and coalesce(nullif(r.ZOVERRIDEBODY,''), nullif(p.ZDRAFTBODY,'')) is not null;" ;;
     recipientsOnDraftBodyRows)
                 echo "select count(*) from ZRECIPIENT r join ZPROSPECT p on r.ZPROSPECT = p.Z_PK where p.ZDRAFTBODY is not null and p.ZDRAFTBODY <> '';" ;;
+    # #3516: the DATE dimension. SelfBookingConflict.NightIndex buckets by night, so the self-booking
+    # check is quadratic in shows sharing a DATE and flat in row count, and nothing here could see that.
+    #
+    # BOTH, because neither describes the load on its own. The largest cluster bounds the worst single
+    # row. What the pass actually pays is the sum of each date's squared size, and those move
+    # independently: measured 2026-09-05, an even spread of 1,142 rows over 108 dates has a SMALLER
+    # largest cluster than the live store (11 against 19) and a LARGER load (12,102 against 9,037),
+    # because packing more rows into fewer dates raises the total while lowering the maximum (L391).
+    largestSingleDateCluster)
+                echo "select max(c) from (select count(*) c from ZPROSPECT where ZPERFORMANCEDATE is not null and ZPERFORMANCEDATE <> '' group by ZPERFORMANCEDATE);" ;;
+    sameNightComparisonLoad)
+                echo "select sum(c*c) from (select count(*) c from ZPROSPECT where ZPERFORMANCEDATE is not null and ZPERFORMANCEDATE <> '' group by ZPERFORMANCEDATE);" ;;
     *)          return 1 ;;
   esac
 }

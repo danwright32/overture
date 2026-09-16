@@ -145,20 +145,6 @@ struct SendConfirmationTests {
             #expect(!c.body.contains("Hi Marcus,"), "Overture must not show a greeting it will not send")
         }
 
-        // A directly-addressed performer receives their OWN second-person letter (#641/#789), not the
-        // shared third-person body. Showing the shared one would preview an email that never sends.
-        @Test func carriesAPerformersOwnLetterNotTheSharedBody() throws {
-            let ctx = ModelContext(try container())
-            let p = show(ctx, body: "Hello,\n\nThe shared third-person body.")
-            let r = contact(ctx, on: p, email: "nina@band.example", name: "Nina Ford", provenance: .performer)
-            r.overrideBody = "Hi Nina,\n\nI photograph performing arts in New York."
-
-            let c = try #require(SendConfirmation(prospect: p, signature: sig))
-
-            #expect(c.body.contains("Hi Nina,\n\nI photograph performing arts in New York."))
-            #expect(!c.body.contains("The shared third-person body."))
-        }
-
         // The failure path, and the one most likely to be silently wrong: when no styled Gmail signature
         // is stored, the send path still appends the plain-text sign-off rather than sending unsigned
         // (#1144/#1689). The preview has to show that fallback, not an unsigned email.

@@ -655,82 +655,6 @@ struct PrepImporterTests {
         #expect(p?.recipients.first?.email == "emma@performer.example")
     }
 
-    // v4 (#640, #634 Phase B): a performer contact's own direct-address `overrideBody` lands on its
-    // matching recipient, so a send to them can prefer it over the shared third-person draft body.
-    @Test func ingestsAPerformerContactWithOverrideBodyOntoItsRecipient() throws {
-        let ctx = ModelContext(try container())
-        let key = keptProspect(ctx, group: "Midnight Quartet", date: "2026-08-15", venue: "Weill Recital Hall")
-
-        let results = PrepResults(version: 4, generatedAt: "now", results: [
-            PrepResult(naturalKey: key, contacts: [
-                PrepContact(name: "Maya Chen", role: nil, email: "maya@performer.example",
-                            method: "named_decision_maker", confidence: "high", formUrl: nil,
-                            provenance: "performer", overrideBody: "I saw you're self-presenting..."),
-            ])
-        ])
-        _ = PrepImporter.ingest(results, into: ctx)
-
-        let p = try ctx.fetch(FetchDescriptor<Prospect>(predicate: #Predicate { $0.naturalKey == key })).first
-        #expect(p?.recipients.first?.overrideBody == "I saw you're self-presenting...")
-    }
-
-    // A re-run that doesn't repeat overrideBody for the same still-performer contact must not erase
-    // the existing one (the normal "never clobber on a nil field" convention), same as name/role.
-    @Test func reIngestWithoutOverrideBodyPreservesTheExistingOneForAStillPerformerContact() throws {
-        let ctx = ModelContext(try container())
-        let key = keptProspect(ctx, group: "Midnight Quartet", date: "2026-08-15", venue: "Weill Recital Hall")
-
-        _ = PrepImporter.ingest(PrepResults(version: 4, generatedAt: "now", results: [
-            PrepResult(naturalKey: key, contacts: [
-                PrepContact(name: "Maya Chen", role: nil, email: "maya@performer.example",
-                            method: "named_decision_maker", confidence: "high", formUrl: nil,
-                            provenance: "performer", overrideBody: "First draft, direct address."),
-            ])
-        ]), into: ctx)
-        // Second run corrects the role only, omitting overrideBody.
-        _ = PrepImporter.ingest(PrepResults(version: 4, generatedAt: "later", results: [
-            PrepResult(naturalKey: key, contacts: [
-                PrepContact(name: "Maya Chen", role: "Founder", email: "maya@performer.example",
-                            method: "named_decision_maker", confidence: "high", formUrl: nil,
-                            provenance: "performer", overrideBody: nil),
-            ])
-        ]), into: ctx)
-
-        let p = try ctx.fetch(FetchDescriptor<Prospect>(predicate: #Predicate { $0.naturalKey == key })).first
-        #expect(p?.recipients.first?.role == "Founder")
-        #expect(p?.recipients.first?.overrideBody == "First draft, direct address.")
-    }
-
-    // A contact reclassified AWAY from `.performer` on a later run (a research correction, or the
-    // show's `production` field changing) must have any stale overrideBody CLEARED, not preserved:
-    // overrideBody is only ever meaningful for a `.performer` recipient, so leftover second-person
-    // text on a now-generic act/presenter contact would be the same mail-merge-style mistake this
-    // whole fix exists to prevent, just triggered by a reclassification instead of the first draft.
-    @Test func reclassifyingAwayFromPerformerClearsAnyStaleOverrideBody() throws {
-        let ctx = ModelContext(try container())
-        let key = keptProspect(ctx, group: "Midnight Quartet", date: "2026-08-15", venue: "Weill Recital Hall")
-
-        _ = PrepImporter.ingest(PrepResults(version: 4, generatedAt: "now", results: [
-            PrepResult(naturalKey: key, contacts: [
-                PrepContact(name: "Maya Chen", role: nil, email: "maya@performer.example",
-                            method: "named_decision_maker", confidence: "high", formUrl: nil,
-                            provenance: "performer", overrideBody: "I saw you're self-presenting..."),
-            ])
-        ]), into: ctx)
-        // A later run decides this is really the act's own contact, not a directly-addressed performer.
-        _ = PrepImporter.ingest(PrepResults(version: 4, generatedAt: "later", results: [
-            PrepResult(naturalKey: key, contacts: [
-                PrepContact(name: "Maya Chen", role: nil, email: "maya@performer.example",
-                            method: "named_decision_maker", confidence: "high", formUrl: nil,
-                            provenance: "act", overrideBody: nil),
-            ])
-        ]), into: ctx)
-
-        let p = try ctx.fetch(FetchDescriptor<Prospect>(predicate: #Predicate { $0.naturalKey == key })).first
-        #expect(p?.recipients.first?.provenance == .act)
-        #expect(p?.recipients.first?.overrideBody == nil)
-    }
-
     @Test func decodesAndVersionGates() throws {
         let json = """
         {"version":1,"generatedAt":"now","results":[{"naturalKey":"k","contact":null,"draft":{"subject":"s","body":"b"}}]}
@@ -739,16 +663,17 @@ struct PrepImporterTests {
         #expect(decoded.results.count == 1)
         #expect(decoded.results[0].draft?.subject == "s")
 
-        // #2895 moved the ceiling to 11 (the contact `performanceCorroborated`), so the first rejected
-        // version is 12. The boundary is what matters here, not the literal number: a version ABOVE what this build
+        // #3078 moved the ceiling to 12 (the contact `roleQuoted`), so the first rejected version is 13.
+        // The boundary is what matters here, not the literal number: a version ABOVE what this build
         // understands must throw, because `PrepImporter.answeredKeys` decodes the same file with no
         // version gate at all and would otherwise stamp every show with the no-email floor while this
         // reader silently refused to upgrade it.
-        #expect(throws: PrepResultsError.unsupportedVersion(12)) {
-            try PrepResultsDecoder.decode(Data(#"{"version":12,"generatedAt":"x","results":[]}"#.utf8))
+        #expect(throws: PrepResultsError.unsupportedVersion(13)) {
+            try PrepResultsDecoder.decode(Data(#"{"version":13,"generatedAt":"x","results":[]}"#.utf8))
         }
-        // The version #2895 added decodes, so the ceiling really did move rather than the test being
-        // relaxed around it, and #2912's and #2622's still do.
+        // The version #3078 added decodes, so the ceiling really did move rather than the test being
+        // relaxed around it, and #2895's, #2912's and #2622's still do.
+        #expect(try PrepResultsDecoder.decode(Data(#"{"version":12,"generatedAt":"x","results":[]}"#.utf8)).version == 12)
         #expect(try PrepResultsDecoder.decode(Data(#"{"version":11,"generatedAt":"x","results":[]}"#.utf8)).version == 11)
         #expect(try PrepResultsDecoder.decode(Data(#"{"version":10,"generatedAt":"x","results":[]}"#.utf8)).version == 10)
         #expect(try PrepResultsDecoder.decode(Data(#"{"version":9,"generatedAt":"x","results":[]}"#.utf8)).version == 9)

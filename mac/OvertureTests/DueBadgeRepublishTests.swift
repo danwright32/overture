@@ -126,6 +126,20 @@ struct DueBadgeRepublishTests {
         #expect(DueBadge.current(from: defaults) == 0)
     }
 
+    // #3890, the guard the issue asks for: a contact waiting on Dan's answer is in the number the Dock
+    // and the menu bar read. On 2026-09-14 three were waiting and `dueWorkCount` read 0.
+    @Test func aReplyWaitingOnAnAnswerReachesTheDockAndTheMenuBar() throws {
+        let ctx = ModelContext(try container())
+        let defaults = try #require(UserDefaults(suiteName: "due-badge-\(UUID().uuidString)"))
+        let p = sentLead(ctx, key: "wrote", showOn: nil, sentAt: eastern(2026, 9, 3, 10, 0))
+        p.recipients.first?.reopenOnReply(at: eastern(2026, 9, 4, 9, 30))
+        let scheduler = ReconcileScheduler(context: ctx, replyRunAlive: { _ in false })
+
+        #expect(scheduler.republishDueBadge(now: eastern(2026, 9, 4, 10, 0), defaults: defaults) == 1)
+        #expect(DueBadge.current(from: defaults) == 1)
+        #expect(defaults.integer(forKey: DueBadge.repliesKey) == 1)
+    }
+
     // Nothing coming due arms NO timer, rather than one set far out: a timer for a change that cannot
     // happen is a promise nothing keeps, and it would sit in the process for ever.
     @Test func aStoreWithNothingComingDueArmsNothing() throws {

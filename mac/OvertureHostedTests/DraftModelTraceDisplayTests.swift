@@ -95,7 +95,6 @@ struct DraftModelTraceDisplayTests {
                                   provenance: .presenter, sendState: .sent, replied: true,
                                   lastReplyText: "We would love to talk.", resolution: nil,
                                   bounced: false, outcomeSource: nil)
-        c.replyDraftSubject = "Re: Photographs of your concert"
         c.replyDraftBody = "Thanks for writing back."
         c.replyDraftModel = replyDraftModel
         // #2934: the case this suite is about is a reply still owed an answer, which is what puts the
@@ -118,8 +117,7 @@ struct DraftModelTraceDisplayTests {
     // --- The reply stamp, end to end -----------------------------------------------------------
 
     private func context() throws -> ModelContext {
-        ModelContext(try ModelContainer(for: Schema([Prospect.self, Recipient.self]),
-                                        configurations: [ModelConfiguration(isStoredInMemoryOnly: true)]))
+        ModelContext(try TestModelContainer.inMemory([Prospect.self, Recipient.self]))
     }
 
     private func prospectWithReplier(_ ctx: ModelContext) -> (Prospect, Recipient) {
@@ -142,7 +140,6 @@ struct DraftModelTraceDisplayTests {
         ReplyClassifyResults(version: 3, generatedAt: "2026-07-13T00:00:00Z",
                              results: [ReplyClassifyResult(naturalKey: "show", intent: "interested",
                                                            recipientId: "r1",
-                                                           draftSubject: "Re: your concert",
                                                            draftBody: body)],
                              model: model)
     }

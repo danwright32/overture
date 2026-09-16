@@ -93,7 +93,21 @@ struct NoRouteFoundAdoptionMeasurementTests {
 
         // Measured nothing is its own outcome, never a reassuring zero: every count below would read as
         // "runs are behaving" on a machine that simply has no runs to read (L98).
-        guard c.files > 0, c.contacts > 0 else {
+        // #3834 SPLIT THIS IN TWO, and the split is the whole point.
+        //
+        // "This machine has no run history at all" and "this machine has run history and none of it
+        // carried a contact" were one `guard`, and only the second is a finding. The first is what every
+        // machine that is not Dan's looks like, so on the first hosted CI run this was red by
+        // construction, and a red that any other machine produces cannot be told from a real one (L411).
+        //
+        // Zero files is now reported and skipped. Zero contacts ACROSS REAL FILES still records an issue,
+        // because that is the reassuring zero the original guard was written to refuse (L98).
+        guard c.files > 0 else {
+            print("no real results files on this machine, so this census measured nothing. "
+                  + "That is the ordinary state anywhere but Dan's Mac and is not a finding.")
+            return
+        }
+        guard c.contacts > 0 else {
             Issue.record(Comment(rawValue: "no real results file on this machine carried a contact, so "
                                  + "these counts measure nothing. Files read: \(c.files)."))
             return

@@ -385,8 +385,19 @@ run_wrapper_with_stub_xcodebuild() {
 
   # flock's real job is serialising xcodebuild across worktrees, which is irrelevant here; once it
   # holds the lock it execs the rest of its arguments, and so does this.
+  # #3571: the stub also WITNESSES whether Downbeat's directory lock was already held at the moment
+  # this runner took its own file lock. That is the ordering assertion, and it can only be made from
+  # here: the order is invisible from outside, and asserting it in a comment is asserting nothing
+  # (L27). Inert unless a fixture sets the witness path, so every existing caller is unchanged.
   cat > "${bin_dir}/flock" <<'STUB'
 #!/usr/bin/env bash
+if [ -n "${FLOCK_STUB_WITNESS:-}" ]; then
+  if [ -d "${OVERTURE_DIR_LOCK:-/nonexistent}" ]; then
+    echo "dir-lock-held" >> "${FLOCK_STUB_WITNESS}"
+  else
+    echo "dir-lock-MISSING" >> "${FLOCK_STUB_WITNESS}"
+  fi
+fi
 shift
 exec "$@"
 STUB
@@ -478,10 +489,21 @@ STUB
   # real suite as "SLOWER than twice the median of the last 18 full runs (19s)". Found by reading the
   # file after a run, exactly as the same defect was found for the live-store corpus record.
   SUITE_SERIES_AFTER_RUN="${bin_dir}/suite-run-series"
+  # #3571: THE SIBLING LOCKS ARE THROWAWAY BY DEFAULT, for the same reason the series file above is
+  # (L2). The runner now takes Downbeat's machine-wide directory lock as well as its own, and flock is
+  # stubbed here while `mkdir` is not, so without this every stubbed run competes for the REAL lock
+  # with whatever else is on this Mac. Two lanes of `run-shell-fixtures.sh` then block each other for
+  # the full 1800s timeout, which is a HANG rather than a failure and took a merge run down.
+  #
+  # A caller that is testing the lock itself sets `OVERTURE_DIR_LOCK` and wins, because this defaults
+  # rather than overrides.
   output="$(PATH="${bin_dir}:${PATH}" OVERTURE_TEST_BASELINE_FILE="${baseline_file}" \
     OVERTURE_TEST_DIAGNOSTICS_DIR="${diagnostics_dir}" \
     OVERTURE_HOSTED_SUITE_RECORD="${HOSTED_RECORD_AFTER_PARALLEL}" \
     OVERTURE_SUITE_RUN_SERIES="${SUITE_SERIES_AFTER_RUN}" \
+    OVERTURE_DIR_LOCK="${OVERTURE_DIR_LOCK:-${bin_dir}/dir.lock}" \
+    OVERTURE_DIR_LOCK_TIMEOUT="${OVERTURE_DIR_LOCK_TIMEOUT:-5}" \
+    OVERTURE_DIR_LOCK_POLL="${OVERTURE_DIR_LOCK_POLL:-1}" \
     "${SCRIPT_DIR}/run-tests-locked.sh" 2>&1)"
   code=$?
   log_calls="$(grep -c . "${bin_dir}/log-calls" 2>/dev/null || echo 0)"
@@ -571,11 +593,41 @@ assert_contains "a run that died with nothing named is still retried once" \
 assert_contains "a run that died with nothing named still says so" \
   "the test run CRASHED" "${CRASH_RUN}"
 
+# #3842: a run whose tests could not be DRIVEN says so, loudly, and still passes.
+#
+# A locked screen means the WindowServer never lays out the window the scroll tests host, so those tests
+# report UNMEASURED and return rather than failing. That is the right outcome and it is also the dangerous
+# one: a skip nobody is told about would let a run report "Screen tests: verified by this run" while the
+# one mechanism no other test covers went unchecked (L98, L11).
+SCREEN_LOCKED_OUTPUT="screen-locked-unmeasured: RealScrollInvalidationTests.theDriverReallyScrolls
+screen-locked-unmeasured: ArchiveScrollDoesNotRebuildTests.aScrollBuildsNoCards
+Test run with 2400 tests in 348 suites passed after 19.462 seconds.
+** TEST SUCCEEDED **"
+SCREEN_LOCKED_RUN="$(run_wrapper_with_stub_xcodebuild "${SCREEN_LOCKED_OUTPUT}" 0)"
+
+assert_equals "a run with unmeasured screen tests still exits 0" \
+  "exit=0" "$(tail -n 1 <<< "${SCREEN_LOCKED_RUN}")"
+assert_contains "and it says they were not measured" \
+  "NOT MEASURED" "${SCREEN_LOCKED_RUN}"
+assert_contains "and it says why, in terms of the state that caused it" \
+  "screen was LOCKED" "${SCREEN_LOCKED_RUN}"
+assert_contains "and it counts them" \
+  "2 test(s) were NOT MEASURED" "${SCREEN_LOCKED_RUN}"
+assert_contains "and it NAMES them, so a reader can see which went uncovered" \
+  "RealScrollInvalidationTests.theDriverReallyScrolls" "${SCREEN_LOCKED_RUN}"
+assert_contains "and it says waking the display is not enough, which is the wrong fix somebody will try" \
+  "Waking the display is NOT enough" "${SCREEN_LOCKED_RUN}"
+
+# The other half, and it is what keeps the notice meaningful: an ordinary run says NOTHING about it. A
+# notice on every run is the noise that teaches a reader to skip the whole block (L36).
 # And a pass still passes, silently.
 PASSING_RUN="$(run_wrapper_with_stub_xcodebuild "${PASSING_OUTPUT}" 0)"
 
 assert_equals "a passing run exits 0" \
   "exit=0" "$(tail -n 1 <<< "${PASSING_RUN}")"
+
+assert_not_contains "an ordinary passing run says nothing about unmeasured screen tests" \
+  "NOT MEASURED" "${PASSING_RUN}"
 
 assert_not_contains "a passing run is never retried" \
   "Retrying once" "${PASSING_RUN}"
@@ -1568,6 +1620,130 @@ Failing tests:
 ORDINARY_RED="$(run_wrapper_with_stub_xcodebuild "${ORDINARY_RED_LOG}" 65 "" "" "" "" 8643)"
 assert_not_contains "an ordinary red is not retried" "Retrying once" "${ORDINARY_RED}"
 assert_not_contains "and is never described as truncated" "TRUNCATED" "${ORDINARY_RED}"
+
+
+# ---------------------------------------------------------------------------
+# #3571: this runner must take DOWNBEAT's lock too, so the two projects actually exclude each other.
+#
+# Downbeat's `scripts/run-tests.sh:11` says its lock "is shared with Overture deliberately". It was not:
+# Downbeat takes `mkdir` on /tmp/xcodebuild-tests.lock and this runner took `flock` on a different path,
+# so the comment read as a safety guarantee while providing none (L407). Two Mac test runs on one Mac
+# share the derived data caches, testmanagerd and the test hosts, and a run starting while a sibling is
+# mid build produces failures belonging to neither change, which is the failure that teaches people to
+# distrust a red suite.
+#
+# THE ORDER IS THE SAFETY PROPERTY, not a detail. Ovation already takes both locks, directory first and
+# file second, and its own comment records that deadlock is impossible only because no sibling takes two
+# locks. This change breaks that premise: there are now two multi-lock takers, and the one thing keeping
+# them safe is that both take them in the SAME order. So the order is asserted here rather than trusted.
+DIR_LOCK_FIXTURE_DIR="$(fixture_scratch_dir)"
+THROWAWAY_DIR_LOCK="${DIR_LOCK_FIXTURE_DIR}/xcodebuild-tests.lock"
+WITNESS="${DIR_LOCK_FIXTURE_DIR}/witness"
+
+GREEN_RUN_LOG="Test Suite 'All tests' started
+Test run with 4 tests in 1 suite passed after 1.0 seconds.
+** TEST SUCCEEDED **"
+
+: > "${WITNESS}"
+DIR_LOCK_RUN="$(OVERTURE_DIR_LOCK="${THROWAWAY_DIR_LOCK}" FLOCK_STUB_WITNESS="${WITNESS}" \
+  run_wrapper_with_stub_xcodebuild "${GREEN_RUN_LOG}" 0)"
+
+# THE SEAM ITSELF (criterion 3). Without an override the lock path is hardcoded, so no fixture can
+# exercise this without taking the REAL lock and racing whatever else is running on this Mac (L2).
+assert_contains "the run reaches the test phase with the throwaway lock path" \
+  "Test run with 4 tests" "${DIR_LOCK_RUN}"
+
+# THE ORDER: Downbeat's directory lock is already held when this runner takes its own file lock.
+assert_contains "Downbeat's directory lock is taken BEFORE this runner's own file lock" \
+  "dir-lock-held" "$(cat "${WITNESS}")"
+assert_not_contains "and never the other way round" \
+  "dir-lock-MISSING" "$(cat "${WITNESS}")"
+
+# RELEASED ON THE WAY OUT. A directory lock is not released by the kernel when its holder dies, which
+# is the whole reason Downbeat carries a stale-claim script and a 1800s timeout. One left planted here
+# blocks the next run of a DIFFERENT app for half an hour.
+assert_equals "the directory lock is released when the run ends" "no" \
+  "$([ -d "${THROWAWAY_DIR_LOCK}" ] && echo yes || echo no)"
+
+# A STALE LOCK IS CLAIMED, NOT WAITED OUT. The crash-safety criterion, demonstrated rather than
+# asserted: flock is released by the kernel when its holder dies and mkdir is not, so adopting the
+# directory lock without this would make a killed Overture run block the next one for the timeout.
+STALE_DIR_LOCK="${DIR_LOCK_FIXTURE_DIR}/stale.lock"
+mkdir -p "${STALE_DIR_LOCK}"
+# A PID that cannot be running: claimed from the dead, which is the case that matters.
+echo "overture:999999" > "${STALE_DIR_LOCK}/owner"
+: > "${WITNESS}"
+STALE_RUN="$(OVERTURE_DIR_LOCK="${STALE_DIR_LOCK}" OVERTURE_DIR_LOCK_TIMEOUT=5 \
+  FLOCK_STUB_WITNESS="${WITNESS}" \
+  run_wrapper_with_stub_xcodebuild "${GREEN_RUN_LOG}" 0)"
+assert_contains "a lock held by a dead process is claimed rather than waited out" \
+  "Test run with 4 tests" "${STALE_RUN}"
+
+# A LOCK THAT IS STILL BEING SET UP IS NOT STALE. Downbeat's runner takes the directory with `mkdir`
+# and writes its owner file immediately afterwards, so there is a window where the lock is held by a
+# live run and carries no owner. Claiming on "no owner file" alone would steal it inside that window,
+# which is worse than waiting: two Mac test runs would then be doing exactly what this lock exists to
+# prevent, and the theft would be invisible to both. So an ownerless lock is only claimed once it has
+# stayed ownerless for the grace period.
+OWNERLESS_LOCK="${DIR_LOCK_FIXTURE_DIR}/ownerless.lock"
+mkdir -p "${OWNERLESS_LOCK}"
+: > "${WITNESS}"
+OWNERLESS_RUN="$(OVERTURE_DIR_LOCK="${OWNERLESS_LOCK}" OVERTURE_DIR_LOCK_TIMEOUT=3 \
+  OVERTURE_DIR_LOCK_POLL=1 OVERTURE_DIR_LOCK_GRACE=60 FLOCK_STUB_WITNESS="${WITNESS}" \
+  run_wrapper_with_stub_xcodebuild "${GREEN_RUN_LOG}" 0)"
+assert_contains "a freshly made ownerless lock is WAITED for, not stolen" \
+  "gave up waiting" "${OWNERLESS_RUN}"
+assert_not_contains "and the run never claimed it" \
+  "claiming" "${OWNERLESS_RUN}"
+rm -rf "${OWNERLESS_LOCK}"
+
+# THE POLL INTERVAL IS INJECTABLE, so a test of the WAITING path does not wait for real (L524). The
+# arm above proves the seam works by waiting out a 3 second timeout rather than the 1800 second one.
+
+# A LOCK THAT GOES LIVE UNDERNEATH THE CLAIM IS PUT BACK, NOT DESTROYED. This is the interleaving the
+# atomic claim exists for, and the one an `rm -rf` and retry gets wrong: the lock reads dead, another
+# run takes it in the moment before the rename, and a naive claimer carries off a LIVE lock. Downbeat
+# measured that about twice in eight runs (downbeat#218).
+#
+# Driven through the runner's own pause seam rather than by racing real processes, because the window
+# is microseconds wide and mostly does not open, so a race would prove nothing (L134).
+LIVE_UNDER_LOCK="${DIR_LOCK_FIXTURE_DIR}/wentlive.lock"
+PAUSE="${DIR_LOCK_FIXTURE_DIR}/pause"
+mkdir -p "${LIVE_UNDER_LOCK}"
+echo "overture:999999" > "${LIVE_UNDER_LOCK}/owner"
+: > "${PAUSE}"
+( OVERTURE_DIR_LOCK="${LIVE_UNDER_LOCK}" OVERTURE_DIR_LOCK_TIMEOUT=3 OVERTURE_DIR_LOCK_POLL=1 \
+  OVERTURE_DIR_LOCK_PAUSE_FILE="${PAUSE}" \
+  run_wrapper_with_stub_xcodebuild "${GREEN_RUN_LOG}" 0 >/dev/null 2>&1 ) &
+WENT_LIVE_RUN_PID=$!
+# Wait for the runner to reach the seam, bounded: a wait with no deadline is a hang, not a failure.
+reached_waited=0
+while [[ ! -e "${PAUSE}.reached" ]] && [[ "${reached_waited}" -lt 200 ]]; do
+  sleep 0.05
+  reached_waited=$((reached_waited + 1))
+done
+assert_equals "the runner reaches the claim seam, so this arm measured the interleaving" "yes" \
+  "$([ -e "${PAUSE}.reached" ] && echo yes || echo no)"
+# It judged the lock dead and is about to rename it. Make it LIVE underneath, then release.
+echo "overture:$$" > "${LIVE_UNDER_LOCK}/owner"
+rm -f "${PAUSE}"
+wait "${WENT_LIVE_RUN_PID}" 2>/dev/null || true
+
+assert_equals "the live lock is still there, put back rather than destroyed" "yes" \
+  "$([ -d "${LIVE_UNDER_LOCK}" ] && echo yes || echo no)"
+assert_contains "and it still belongs to the run that took it" \
+  "overture:$$" "$(cat "${LIVE_UNDER_LOCK}/owner" 2>/dev/null || echo MISSING)"
+# Captured, then tested, rather than piped into `grep -q`: under pipefail a short circuiting consumer
+# kills the producer, so an early match and no match are indistinguishable (L183), which is the exact
+# shape `run-shell-fixtures.test.sh` refuses across the tree.
+STRANDED="$(ls -d "${LIVE_UNDER_LOCK}".stale.* 2>/dev/null || true)"
+assert_equals "and nothing was left stranded at a .stale path" "no" \
+  "$([ -n "${STRANDED}" ] && echo yes || echo no)"
+rm -rf "${LIVE_UNDER_LOCK}"
+
+# `fixture_scratch_dir` does not sweep itself, and `check-temp-dir-leaks.sh` reads the runner's
+# directory for exactly this, so what this block made it takes away again.
+rm -rf "${DIR_LOCK_FIXTURE_DIR}"
 
 if [[ "${FAILURES}" -eq 0 ]]; then
   echo "All run-tests-locked.sh stale-host fixtures passed."

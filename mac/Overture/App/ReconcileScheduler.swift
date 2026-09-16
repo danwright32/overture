@@ -200,9 +200,11 @@ final class ReconcileScheduler {
         // because this tick already holds every prospect fetched and already writes to defaults, and
         // because neither surface that draws it can hold a SwiftData query of its own. Same predicate as
         // the toolbar's Due badge, so the three can never state different numbers.
-        DueBadge.publish(DueWork.counts(prospects: after, now: now,
-                                        replyRunAlive: replyRunAlive(now)).total,
-                         into: defaults)
+        // #3890: with the replies waiting on an answer in it, and their own count beside it for the menu.
+        let due = DueWork.counts(prospects: after,
+                                 inquiries: (try? context.fetch(FetchDescriptor<Inquiry>())) ?? [],
+                                 now: now, replyRunAlive: replyRunAlive(now))
+        DueBadge.publish(due.total, replies: due.repliesToAnswer, into: defaults)
         // #3474: and again at the moment the count next changes, rather than only at the next tick.
         // Work comes due on the clock (a post-event prompt at Eastern midnight), and with the window
         // closed nothing re-renders, so these two surfaces were blind to newly due work for up to half
@@ -409,10 +411,12 @@ final class ReconcileScheduler {
     @discardableResult
     func republishDueBadge(now: Date, defaults: UserDefaults = .standard) -> Int {
         let all = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
-        let total = DueWork.counts(prospects: all, now: now, replyRunAlive: replyRunAlive(now)).total
-        DueBadge.publish(total, into: defaults)
+        let inquiries = (try? context.fetch(FetchDescriptor<Inquiry>())) ?? []
+        let due = DueWork.counts(prospects: all, inquiries: inquiries, now: now,
+                                 replyRunAlive: replyRunAlive(now))
+        DueBadge.publish(due.total, replies: due.repliesToAnswer, into: defaults)
         armBadgeRepublish(prospects: all, now: now, defaults: defaults)
-        return total
+        return due.total
     }
 
     // A ONE-SHOT timer for the next known change, re-armed each time it fires, rather than a poll: the

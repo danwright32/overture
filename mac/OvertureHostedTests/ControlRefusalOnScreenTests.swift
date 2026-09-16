@@ -30,8 +30,7 @@ struct ControlRefusalOnScreenTests {
     }
 
     private func container() throws -> ModelContainer {
-        try ModelContainer(for: Schema([Prospect.self, Recipient.self, Inquiry.self]),
-                           configurations: [ModelConfiguration(isStoredInMemoryOnly: true)])
+        try TestModelContainer.inMemory([Prospect.self, Recipient.self, Inquiry.self])
     }
 
     // MARK: - FollowUpsView's nudge and closing note
@@ -51,14 +50,14 @@ struct ControlRefusalOnScreenTests {
     // The row Dan actually meets: a contact whose address was never found. Before this the button was
     // dead and the tooltip read "Review and send", which is the wrong sentence rather than no sentence.
     @Test func aNudgeToAContactWithNoAddressSaysSoOnTheRow() throws {
-        let view = FollowUpsView(gmailConnectedOverride: true)
+        let view = FollowUpsView(prospects: [], inquiries: [], gmailConnectedOverride: true)
         let shown = try visibleRefusals(view.row(followUpRow(email: nil), since: nil, sourceCalendars: [:]))
         #expect(shown == [SendGate.noAddressReason], "shown: \(shown)")
     }
 
     // The other cause, on the same button, saying something different.
     @Test func aNudgeWithGmailDisconnectedNamesGmailInstead() throws {
-        let view = FollowUpsView(gmailConnectedOverride: false)
+        let view = FollowUpsView(prospects: [], inquiries: [], gmailConnectedOverride: false)
         let shown = try visibleRefusals(view.row(followUpRow(email: "emma@aurora.example"), since: nil, sourceCalendars: [:]))
         #expect(shown == [GmailCopy.notConnected], "shown: \(shown)")
     }
@@ -66,7 +65,7 @@ struct ControlRefusalOnScreenTests {
     // And a row that can send carries no line at all, so the sentence cannot become furniture that is
     // always on screen and therefore never read (#843).
     @Test func aSendableNudgeRowShowsNoRefusalAtAll() throws {
-        let view = FollowUpsView(gmailConnectedOverride: true)
+        let view = FollowUpsView(prospects: [], inquiries: [], gmailConnectedOverride: true)
         #expect(try visibleRefusals(view.row(followUpRow(email: "emma@aurora.example"),
                                              since: nil, sourceCalendars: [:])).isEmpty)
     }

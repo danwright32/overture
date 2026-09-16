@@ -18,11 +18,11 @@ import SwiftUI
 // render pass, empty box included. Nothing calls them until Dan types.
 struct QueueSearchBar: View {
     // The shows a stage will render, which is what this bar may find (#1580).
-    let items: () -> [QueueItem]
+    let items: () -> [QueueScopeRow]
     // Everything Overture has ever tracked, counted (never listed) so an empty result can say the show is
     // in Archive and offer the jump.
-    let archiveItems: () -> [QueueItem]
-    let onSelect: (QueueItem) -> Void
+    let archiveItems: () -> [QueueScopeRow]
+    let onSelect: (QueueScopeRow) -> Void
     let onSearchArchive: (String) -> Void
 
     @State private var query: String = ""

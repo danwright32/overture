@@ -14,7 +14,12 @@ struct SelfBookingRunNightsTests {
     private func show(_ key: String, _ nights: [String], commitment: Bool = false,
                       engagement: String? = nil, name: String = "Show",
                       times: [String: [String]] = [:]) -> SelfBookingConflict.Show {
-        SelfBookingConflict.Show(key: key, nights: nights, isCommitment: commitment,
+        // #3676: these suites test the COLLISION, which reads only `isCommitment`, so which tier a
+        // committed show carries is immaterial here. `.emailed` is used throughout, being the
+        // archetype the check was written for; the tier's own behaviour lives in
+        // SelfBookingHeaderTierTests.
+        SelfBookingConflict.Show(key: key, nights: nights,
+                                 commitment: commitment ? .emailed : nil,
                                  engagementKey: engagement, name: name, timesByNight: times)
     }
 
@@ -23,7 +28,7 @@ struct SelfBookingRunNightsTests {
     @Test func aLaterNightOfARunCollidesWithACommitment() {
         let target = show("run", ["2026-10-28", "2026-10-29"])
         let other = show("committed", ["2026-10-29"], commitment: true, name: "Orchestra A")
-        let clashes = SelfBookingConflict.conflicts(for: target, among: [other, target])
+        let clashes = BothSelfBookingReadings.conflicts(for: target, among: [other, target])
         #expect(clashes.map(\.other.name) == ["Orchestra A"])
     }
 
@@ -33,7 +38,7 @@ struct SelfBookingRunNightsTests {
     @Test func theOverlapNamesTheNightItWasFoundOn() {
         let target = show("run", ["2026-10-28", "2026-10-29"])
         let other = show("committed", ["2026-10-29"], commitment: true)
-        #expect(SelfBookingConflict.conflicts(for: target, among: [other, target]).map(\.night)
+        #expect(BothSelfBookingReadings.conflicts(for: target, among: [other, target]).map(\.night)
                 == ["2026-10-29"])
     }
 
@@ -42,7 +47,7 @@ struct SelfBookingRunNightsTests {
     @Test func aCommittedRunCollidesOnItsOwnLaterNight() {
         let target = show("candidate", ["2026-10-29"])
         let other = show("committed-run", ["2026-10-27", "2026-10-29"], commitment: true, name: "Choir B")
-        let clashes = SelfBookingConflict.conflicts(for: target, among: [other, target])
+        let clashes = BothSelfBookingReadings.conflicts(for: target, among: [other, target])
         #expect(clashes.map(\.other.name) == ["Choir B"])
         #expect(clashes.map(\.night) == ["2026-10-29"])
     }
@@ -54,8 +59,8 @@ struct SelfBookingRunNightsTests {
     @Test func aShowWithNoNightsNeverCollides() {
         let target = show("nightless", [])
         let other = show("committed", ["2026-10-29"], commitment: true)
-        #expect(SelfBookingConflict.conflicts(for: target, among: [other, target]).isEmpty)
-        #expect(SelfBookingConflict.conflicts(for: other, among: [other, target]).isEmpty)
+        #expect(BothSelfBookingReadings.conflicts(for: target, among: [other, target]).isEmpty)
+        #expect(BothSelfBookingReadings.conflicts(for: other, among: [other, target]).isEmpty)
     }
 
     // Nights are compared as a SET: a run holding the same night twice (15 rows in the live store do,
@@ -63,7 +68,7 @@ struct SelfBookingRunNightsTests {
     @Test func aRepeatedNightRaisesOneOverlapNotTwo() {
         let target = show("run", ["2026-10-29", "2026-10-29"])
         let other = show("committed", ["2026-10-29"], commitment: true)
-        #expect(SelfBookingConflict.conflicts(for: target, among: [other, target]).count == 1)
+        #expect(BothSelfBookingReadings.conflicts(for: target, among: [other, target]).count == 1)
     }
 
     // A pair sharing SEVERAL nights reports each of them, earliest first, so the copy can name the first
@@ -71,7 +76,7 @@ struct SelfBookingRunNightsTests {
     @Test func severalSharedNightsComeBackEarliestFirst() {
         let target = show("run", ["2026-10-29", "2026-10-27", "2026-10-28"])
         let other = show("committed", ["2026-10-28", "2026-10-29"], commitment: true)
-        #expect(SelfBookingConflict.conflicts(for: target, among: [other, target]).map(\.night)
+        #expect(BothSelfBookingReadings.conflicts(for: target, among: [other, target]).map(\.night)
                 == ["2026-10-28", "2026-10-29"])
     }
 
@@ -83,9 +88,9 @@ struct SelfBookingRunNightsTests {
                           times: ["2026-10-27": ["19:30"], "2026-10-31": ["14:00"]])
         let other = show("committed", ["2026-10-27", "2026-10-31"], commitment: true, name: "Orchestra A",
                          times: ["2026-10-27": ["19:45"], "2026-10-31": ["22:00"]])
-        let clashes = SelfBookingConflict.conflicts(for: target, among: [other, target])
+        let clashes = BothSelfBookingReadings.conflicts(for: target, among: [other, target])
         #expect(clashes.map(\.night) == ["2026-10-27"])
-        let workable = SelfBookingConflict.workable(for: target, among: [other, target])
+        let workable = BothSelfBookingReadings.workable(for: target, among: [other, target])
         #expect(workable.map(\.night) == ["2026-10-31"])
     }
 
@@ -95,7 +100,7 @@ struct SelfBookingRunNightsTests {
         let target = show("run", ["2026-10-27", "2026-10-31"], times: ["2026-10-27": ["19:30"]])
         let other = show("committed", ["2026-10-31"], commitment: true,
                          times: ["2026-10-27": ["09:00"]])
-        #expect(SelfBookingConflict.conflicts(for: target, among: [other, target]).map(\.night)
+        #expect(BothSelfBookingReadings.conflicts(for: target, among: [other, target]).map(\.night)
                 == ["2026-10-31"])
     }
 
@@ -107,7 +112,7 @@ struct SelfBookingRunNightsTests {
         let target = show("a", ["2026-10-28", "2026-10-29"], engagement: "The Winter Songbook")
         let other = show("b", ["2026-10-28", "2026-10-29"], commitment: true,
                          engagement: "the winter songbook.")
-        #expect(SelfBookingConflict.conflicts(for: target, among: [other, target]).isEmpty)
+        #expect(BothSelfBookingReadings.conflicts(for: target, among: [other, target]).isEmpty)
     }
 
     // Two genuinely different shows on one night are still a clash: the normalisation must not fold names
@@ -116,27 +121,30 @@ struct SelfBookingRunNightsTests {
         let target = show("a", ["2026-10-29"], engagement: "The Winter Songbook")
         let other = show("b", ["2026-10-29"], commitment: true, engagement: "Autumn Variations",
                          name: "Autumn Variations")
-        #expect(SelfBookingConflict.conflicts(for: target, among: [other, target]).map(\.other.name)
+        #expect(BothSelfBookingReadings.conflicts(for: target, among: [other, target]).map(\.other.name)
                 == ["Autumn Variations"])
     }
 
     // A show never clashes with itself however many nights it plays.
     @Test func aRunDoesNotClashWithItself() {
         let target = show("a", ["2026-10-28", "2026-10-29"], commitment: true)
-        #expect(SelfBookingConflict.conflicts(for: target, among: [target]).isEmpty)
+        #expect(BothSelfBookingReadings.conflicts(for: target, among: [target]).isEmpty)
     }
 
     // The queue-wide note asks the same question of the whole group: it may say "on this date" only when
-    // every clash in the group really is on that date.
+    // every clash in the group really is on that date. #3676 moved this onto `headerClaim`, which answers
+    // it and the tier question together, so the two cannot be asked of different clash sets.
     @Test func theGroupsNoteDropsThisDateWhenAClashIsOnALaterNight() {
         let laterRun = show("run", ["2026-10-27", "2026-10-29"])
         let sameNight = show("card", ["2026-10-27"])
         let committed = show("committed", ["2026-10-27", "2026-10-29"], commitment: true, name: "Orchestra A")
         let index = SelfBookingConflict.NightIndex([committed, laterRun, sameNight])
         // The one-night card clashes on its own date, so the note is unchanged.
-        #expect(SelfBookingConflict.everyClashIsOn("2026-10-27", for: [sameNight], in: index))
+        #expect(SelfBookingConflict.headerClaim(for: [sameNight], on: "2026-10-27", in: index)?.allOnThisDate
+                == true)
         // The run also clashes on Oct 29, which is not the header's date.
-        #expect(!SelfBookingConflict.everyClashIsOn("2026-10-27", for: [laterRun, sameNight], in: index))
+        #expect(SelfBookingConflict.headerClaim(for: [laterRun, sameNight], on: "2026-10-27",
+                                                in: index)?.allOnThisDate == false)
     }
 
     // The index is the SAME predicate as the direct call, so the cheap path a render pass uses and the
@@ -147,9 +155,9 @@ struct SelfBookingRunNightsTests {
         let all = [other, target]
         let index = SelfBookingConflict.NightIndex(all)
         #expect(SelfBookingConflict.conflicts(for: target, in: index)
-                == SelfBookingConflict.conflicts(for: target, among: all))
+                == BothSelfBookingReadings.conflicts(for: target, among: all))
         #expect(SelfBookingConflict.workable(for: target, in: index)
-                == SelfBookingConflict.workable(for: target, among: all))
+                == BothSelfBookingReadings.workable(for: target, among: all))
     }
 
     // #3323 section 1.5: the index is the SOLE comparison input, which is what lets a render pass build it
@@ -241,9 +249,9 @@ struct SelfBookingRunNightsCopyTests {
     // blocked-calendar half: the sentence was true and read false, because the eye binds the date in the
     // sentence to the header above it.
     @Test func theDateHeaderNoteSaysThisDateOnlyWhenTheClashIsOnIt() {
-        #expect(SelfBookingCopy.dateHeaderNote(allOnThisDate: true)
+        #expect(SelfBookingCopy.dateHeaderNote(.init(commitment: .emailed, allOnThisDate: true))
                 == "Another pitch is already in progress on this date")
-        #expect(SelfBookingCopy.dateHeaderNote(allOnThisDate: false)
+        #expect(SelfBookingCopy.dateHeaderNote(.init(commitment: .emailed, allOnThisDate: false))
                 == "Another pitch is already in progress on a night one of these runs plays")
     }
 }

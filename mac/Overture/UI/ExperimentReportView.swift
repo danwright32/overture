@@ -6,10 +6,19 @@ import SwiftData
 // create/end rules live in ExperimentEditing (tested); this view only renders and wires the two buttons.
 // It never declares a winner (that is #4): the bar only gates the "too few to tell" line.
 struct ExperimentReportView: View {
-    @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var context
     @Query(sort: [SortDescriptor(\Experiment.startedAt, order: .reverse)]) private var experiments: [Experiment]
-    @Query private var prospects: [Prospect]
+    // #3871: the whole store, HANDED DOWN rather than queried again here.
+    //
+    // It was `@Query private var prospects: [Prospect]`, a bare descriptor identical to the one RootView
+    // already holds. Measured 2026-09-12 by #3764 on the live store, two identical bare descriptors held
+    // by two live views share NOTHING: the second costs 99.6% of the first, 158.8 ms against 159.5 ms
+    // over 1,238 rows, against an end to end store change of 350.7 ms. So this sheet used to add a whole
+    // table read to every store change for as long as it was open.
+    //
+    // NO DEFAULT, for the reason ArchiveView's carries: an empty default renders an empty sheet that
+    // looks exactly like an empty store (L168, L67).
+    let prospects: [Prospect]
 
     @State private var selectedId: String?
     @State private var newVariantA: OpenerArchetype = .reasonFirst
@@ -26,7 +35,7 @@ struct ExperimentReportView: View {
             HStack {
                 Text("Opener A/B").font(OVType.dateHeading).foregroundStyle(OVColor.ink)
                 Spacer()
-                Button("Done") { dismiss() }
+                DoneButton()
             }
             .padding(OVSpacing.lg)
             Divider()

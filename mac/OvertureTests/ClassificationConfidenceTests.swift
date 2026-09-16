@@ -87,6 +87,8 @@ struct PendingBookingCountTests {
     }
 
     @Test func zeroForEmptyList() {
-        #expect(QueueModel.pendingBookingCount([]) == 0)
+        // #3653: the empty literal is TYPED, because the sweep is now generic over what a whole-scope
+        // consumer is allowed to know about a show and an untyped `[]` gives it nothing to infer from.
+        #expect(QueueModel.pendingBookingCount([QueueItem]()) == 0)
     }
 }

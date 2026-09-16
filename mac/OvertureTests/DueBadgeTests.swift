@@ -71,7 +71,7 @@ struct DueBadgeTests {
 
     @Test func aPublishedCountIsWhatTheSurfacesRead() {
         let d = scratchDefaults()
-        DueBadge.publish(4, into: d)
+        DueBadge.publish(4, replies: 0, into: d)
         #expect(DueBadge.current(from: d) == 4)
         #expect(DueBadge.label(count: DueBadge.current(from: d)) == "4")
     }
@@ -86,8 +86,19 @@ struct DueBadgeTests {
     // A negative can never be stored, so a bug upstream cannot reach the Dock through this door either.
     @Test func animpossibleCountCannotBeStored() {
         let d = scratchDefaults()
-        DueBadge.publish(-5, into: d)
+        DueBadge.publish(-5, replies: -2, into: d)
         #expect(DueBadge.current(from: d) == 0)
+        #expect(d.integer(forKey: DueBadge.repliesKey) == 0)
+    }
+
+    // #3890: how many of the published count are replies waiting on an answer, published beside it so the
+    // menu can name them. Dan's call, 2026-09-15: the menu bar line is the lasting signal outside the app.
+    @Test func thePublishedReplyCountIsWhatTheMenuReads() {
+        let d = scratchDefaults()
+        #expect(d.integer(forKey: DueBadge.repliesKey) == 0)
+        DueBadge.publish(4, replies: 3, into: d)
+        #expect(DueBadge.current(from: d) == 4)
+        #expect(d.integer(forKey: DueBadge.repliesKey) == 3)
     }
 
     // A glyph with a number beside it is not a sentence, so the item says what it is and what the number

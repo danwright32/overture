@@ -24,6 +24,41 @@ import Foundation
 // and the comment was the only thing in the tree asserting otherwise (#1640, #3069). Both are gone. Pure and exhaustively tested (a rule is only as real as
 // its detection). Layer 2 (an opt-in per-date probe) upgrades this to a firmer email-found/not-found.
 enum Reachability {
+
+    // #3653 step 3b.5 (milestone #80): the route cascade, as ONE rule over facts, with no model in sight.
+    //
+    // WHY IT IS HERE RATHER THAN ON `Prospect`. `Prospect.reachabilityResultFromRecipients` is the rule
+    // and its own comment says why it is one: "One definition, used by every writer, so the importer's
+    // upgrade and the row's own snapshot can never disagree about what counts as sendable." It had no
+    // seam, so a tier-one row that needs the same verdict could only re-implement it, and a rule's DATA
+    // shared while the code applying it is copied is not consolidation (L107, L263, L370).
+    //
+    // AND IT COLLAPSES THE WALKS. The cascade asked the contacts up to four separate times, once per arm.
+    // Gathering the four facts in one pass and handing them here is one walk, which is what #3653's
+    // `recipientWalks == rowsInScope` pin needs in order to be met without duplicating this rule.
+    //
+    // THE ORDER IS THE RULE and every step of it was a decision somebody recorded: an unguarded address
+    // first (#3387), an address held by a guard as WEAK rather than absent (#1324, #1798), the act's own
+    // form above a social profile because it is the stronger hand route (#1626, #2612), and a social
+    // profile above nothing because it is a route rather than the absence of one.
+    struct RouteFacts: Equatable, Sendable {
+        /// An address exists that no research guard is holding.
+        var hasUnguardedAddress: Bool = false
+        /// An address exists and a guard holds it: real, but not sendable.
+        var hasGuardedAddress: Bool = false
+        /// A form on the act's OWN site, past the venue and press guards.
+        var hasUsableContactForm: Bool = false
+        /// A social profile that takes messages, past the same guards.
+        var hasSocialRoute: Bool = false
+    }
+
+    static func result(from facts: RouteFacts) -> ProbeResult {
+        if facts.hasUnguardedAddress { return .emailFound }
+        if facts.hasGuardedAddress { return .weakContactOnly }
+        if facts.hasUsableContactForm { return .contactFormOnly }
+        return facts.hasSocialRoute ? .socialOnly : .noEmailFound
+    }
+
     // #1640: `likelyReachable` is gone with the website branch that was its only writer. A value nothing
     // produces reads as a case the classifier can reach and is never reached, which is the shape #2811 and
     // #3154 exist to find.
@@ -313,6 +348,43 @@ enum Reachability {
         // contacts) and a rule spelled twice is one that can come to mean two things (L263, L247). A
         // case added later has to answer this question rather than inherit an answer (L113).
         var meansTheSearchDidNotFinish: Bool { self == .routeNamedButNotSupplied }
+
+        // #3598: what would make this reason FALSE about the show it is stored on.
+        //
+        // Every reason here is a conclusion a check reached about a moment, and nothing updates it when
+        // the show later gains a way in. The question of whether it is still true is not one predicate,
+        // because these reasons do not all claim the same thing: some say there is no way in AT ALL, and
+        // some say only that no usable ADDRESS was found, which a contact form or a social handle is
+        // perfectly consistent with. A single "does the row hold a route" test would clear a truthful
+        // record of a finished address search on every form-only show in the store.
+        //
+        // ON THE VOCABULARY, exhaustive, for the same reason `meansTheSearchDidNotFinish` above is: a
+        // case added later has to answer this rather than inherit an answer, and the answer must not be
+        // spelled once per caller (L113, L263).
+        func isContradicted(byAddress: Bool, byAnyRoute: Bool) -> Bool {
+            switch self {
+            // "Worked out WHO, and no way to reach any of them." Any route at all is a way to reach them.
+            case .namedButNoRoute: return byAnyRoute
+            // "The search never had a target and never really ran." A route belongs to somebody, so a row
+            // holding one had a target after all.
+            case .noOneIdentified: return byAnyRoute
+            // "Named a route type and did not finish the step that finds one." A supplied route is that
+            // step having been finished.
+            case .routeNamedButNotSupplied: return byAnyRoute
+            // The four below are claims about an ADDRESS, and each says so in its own comment above: the
+            // only address found was the room's, or a press desk, or this show's people publish none, or
+            // the check stopped at a social profile without reaching one. A form on the act's own site or
+            // a handle Dan will DM leaves every one of them true, so only an address Dan can actually use
+            // contradicts them.
+            case .onlyVenueContact, .onlyPressContact, .nothingPublished, .onlySocialProfile:
+                return byAddress
+            // #2912's case, and the one reason the card actually SHOWS. It says a handle was found
+            // carrying the target's name with nothing tying it to this show, so the show still has nobody
+            // Overture can say it reaches. A second unconfirmed handle does not make that false; an
+            // address does.
+            case .unconfirmedSocialProfile: return byAddress
+            }
+        }
     }
 
     // Whether a contact names a route it does not carry. Exhaustive over `ContactMethod`, so a method
@@ -575,6 +647,44 @@ enum ReachabilityCopy {
         }
     }
 
+    // #3341: does this card's own advice ask Dan to add a contact by hand?
+    //
+    // The triage card tells him to, on most of these states, and until now there was nowhere on that card
+    // to put one: the field lives in DraftReviewView, which the row only draws under `if item.hasDraft`,
+    // so following the card's advice cost a Prep run on a show it had just called a long shot. A control
+    // that looks willing to be followed and cannot be is the shape #2629 fixed one layer down (L109).
+    //
+    // WHICH states offer it is derived from what the card SAYS rather than chosen. Five of the eight
+    // (and the default sentence) tell him to add a contact by hand or to search by name. The other three
+    // point him at another check, and `routeNamedButNotSupplied` says so outright: "another check is
+    // worth more here than a search by hand". A field inviting one there would contradict the line
+    // directly above it, and a control on a card that did not ask for it is the noise #1595 cut back.
+    //
+    // `unconfirmedSocialProfile` is deliberately in the NO group even though it asks him to act: what it
+    // asks for is a DM he sends himself, which is #2937's question about recording that, not an address
+    // to store. Answering it with this field would record a contact he never wrote to.
+    //
+    // Written as an exhaustive switch with no `default`, so a state added later cannot silently take a
+    // fallback, which is indistinguishable from a deliberate choice (L113).
+    // #3341: the button beside the triage card's route field. The field's own placeholder is a LITERAL
+    // there and in DraftReviewView, deliberately, and it is worth knowing why before anybody tidies it
+    // into a shared constant. `ReturnReachesTheDefaultButtonTests` finds a TextField by its first
+    // argument read as literal source text, and it exists because a field with no submit handler let
+    // Return press a distant default button (#2308). Sharing one constant between the two fields made
+    // BOTH invisible to that scan, which is a real loss of coverage traded for a duplicate the copy
+    // inventory already tracks under #843. Two literals, both seen by the guard, is the better trade.
+    static let addContactAction = "Add"
+
+    static func adviceAsksForAHandAddedContact(_ reason: Reachability.EmptyReason?) -> Bool {
+        guard let reason else { return true }   // the default "add a contact by hand" sentence
+        switch reason {
+        case .onlyVenueContact, .onlyPressContact, .noOneIdentified, .namedButNoRoute, .nothingPublished:
+            return true
+        case .onlySocialProfile, .unconfirmedSocialProfile, .routeNamedButNotSupplied:
+            return false
+        }
+    }
+
     static func emptyAnswerHelp(_ reason: Reachability.EmptyReason?) -> String {
         switch reason {
         case .onlyVenueContact:
@@ -628,6 +738,12 @@ enum ReachabilityCopy {
     // announcing doubt: "not confirmed" alone leaves him guessing whether the doubt is about the person,
     // the address or the show.
     static let unconfirmedProfileNote = "Name matches, nothing ties it to this show"
+    // #2937: the control beside that sentence. Dan is the one who can tell in seconds whether the handle
+    // is the person, and until now there was nowhere to say so. Short, because it sits at the end of a
+    // route line that already carries a caveat and a link, and it answers the sentence directly above it.
+    static let confirmProfileControl = "This is them"
+    static let confirmProfileHelp =
+        "Say this account really is the person on this show. Overture will treat it as a way in, so you can record the DM you send."
 
     // #1626: no email, but the act takes messages through a form on its own site. A way through that
     // costs Dan a few minutes rather than a send, so it says what he would have to do.
@@ -813,7 +929,36 @@ enum ReachabilityProbeCopy {
     // #1617: what a date says once every open show on it has an answer. It takes the button's own slot,
     // so Dan reads it exactly where he went looking for the control, and it names reachability rather
     // than saying a bare "Checked" that leaves the date line claiming nothing in particular.
+    // #2374: and WHEN. The three words alone read the same for a night answered yesterday and one
+    // answered 89 days ago, and the freshness window is 90, so the heading could not tell a settled night
+    // from one about to expire. The individual cards already carry their own staleness line; this is the
+    // heading's share of the same fact.
+    //
+    // Dan's call, 2026-09-06, on being shown the live store: add the DATE and nothing louder. Of 771
+    // future shows that day, 670 had never been checked, 100 were inside 30 days, one sat between 30 and
+    // 59, and ZERO were in the 60 to 89 band, so the state a warning would serve does not exist yet.
+    //
+    // NO YEAR, unlike `EasternDate.dayLabelWithYear`, and the reason is a property of where this renders:
+    // the marker only appears while every answer on the night is INSIDE the 90 day window, so a bare
+    // "Dec 20" can only mean the most recent one. That keeps it as quiet as #1595 and #1617 made it.
+    //
+    // A date it cannot read leaves the sentence EXACTLY as it has always been, so this can never turn a
+    // working marker into a broken one (L138: an absent value must not render as an empty one).
+    // The SENTENCE is kept as its own constant and the date composed onto it, rather than built inside
+    // the function from a local. Both generated documents read the source, so a literal that only exists
+    // inside a function disappears from them: regenerated with it inline, `docs/copy-inventory.md` listed
+    // the template "\(base) \(day)", which tells a reader nothing, and `docs/copy-surfaces.md` lost the
+    // line saying QueueView renders this sentence at all. The cold read those two exist for is the only
+    // thing that catches a placement or wording defect (#843, #915, #2210), so a change that hides a
+    // sentence from them is worse than the wording change it was making.
     static let dateCheckedMarker = "Reachability checked"
+
+    static func dateCheckedMarker(checkedOn date: Date?) -> String {
+        guard let date, let day = EasternDate.dayLabel(EasternDate.dayString(from: date)) else {
+            return dateCheckedMarker
+        }
+        return "\(dateCheckedMarker) \(day)"
+    }
     // #2268's "Check again" link on the heading, and its help, are GONE with #2371: the tick box beside
     // the date now stays on a finished date and carries that job, so the words that duplicated it have no
     // reader left. The per-CARD "Check again" (ReachabilityCopy.checkAgain) is untouched.

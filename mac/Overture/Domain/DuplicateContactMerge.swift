@@ -18,6 +18,7 @@ import SwiftData
 //     the case the store actually held: Ilan Rooke's form-only row carried no role while his address row
 //     carried "Creator & Host, Broadway Sessions", and Sabine's Instagram row carried a role her booking
 //     page row did not (L5: a blank must never beat real data in a merge).
+// survivor-inheritance-exempt: deletes Recipient, because it deletes a Recipient, never a Prospect; the show survives and only a duplicate contact on it goes (#2422, #3597)
 enum DuplicateContactMerge {
 
 
@@ -112,7 +113,6 @@ enum DuplicateContactMerge {
         if (winner.contactConfidenceRaw ?? "").isEmpty {
             winner.contactConfidenceRaw = loser.contactConfidenceRaw
         }
-        if (winner.overrideBody ?? "").isEmpty { winner.overrideBody = loser.overrideBody }
         // The form follows the same better-of-the-two rule the importer uses, so a winner chosen for its
         // ADDRESS still inherits the loser's usable booking page rather than dropping it.
         winner.contactFormURL = ContactIdentity.preferredFormURL(existing: winner.contactFormURL,

@@ -666,7 +666,7 @@ enum PageNormalizer {
             options: [.regularExpression, .caseInsensitive])
         s = s.replacingOccurrences(of: "(?s)<!--.*?-->", with: " ", options: .regularExpression)
         s = stripAttributes(from: s)
-        s = s.replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+        s = s.collapsingWhitespaceRuns()
         return s.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
@@ -768,8 +768,8 @@ enum PageNormalizer {
 
     static func visibleText(_ normalized: String) -> String {
         normalized
-            .replacingOccurrences(of: "<[^>]+>", with: " ", options: .regularExpression)
-            .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+            .strippingHTMLTags()
+            .collapsingWhitespaceRuns()
             .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
@@ -783,8 +783,8 @@ enum PageNormalizer {
                     .map { ns.substring(with: $0.range(at: 1)) }
             } ?? []
         let text = normalized
-            .replacingOccurrences(of: "<[^>]+>", with: " ", options: .regularExpression)
-            .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+            .strippingHTMLTags()
+            .collapsingWhitespaceRuns()
             .trimmingCharacters(in: .whitespacesAndNewlines)
         return text + "\n" + hrefs.joined(separator: "\n")
     }

@@ -36,7 +36,7 @@ struct QueueUndoBatchTests {
     private func row(_ key: String, from priorStatus: ReviewStatus = .new,
                      reason: String = "too_soon") -> QueueUndoEntry.Row {
         QueueUndoEntry.Row(naturalKey: key, groupName: "Org \(key)",
-                           priorStatus: priorStatus, priorShowOutcomeRaw: nil, priorDismissedAt: nil, priorConflictClearedKey: nil,
+                           priorStatus: priorStatus, priorShowOutcomeRaw: nil, priorShowOutcomeAt: nil, priorDismissedAt: nil, priorConflictClearedKey: nil,
                            resultingStatus: .dismissed, resultingShowOutcomeRaw: reason)
     }
 
@@ -141,7 +141,7 @@ struct QueueUndoBatchTests {
         let ctx = try context()
         let a = dismissedShow(ctx, "a")
         let entry = QueueUndoEntry(naturalKey: "a", groupName: "Org a", actionLabel: "Dismiss",
-                                   priorStatus: .queued, priorShowOutcomeRaw: nil, priorDismissedAt: nil, priorConflictClearedKey: nil,
+                                   priorStatus: .queued, priorShowOutcomeRaw: nil, priorShowOutcomeAt: nil, priorDismissedAt: nil, priorConflictClearedKey: nil,
                                    resultingStatus: .dismissed, resultingShowOutcomeRaw: "too_soon")
 
         #expect(QueueUndo.apply(entry, to: a, in: ctx))

@@ -19,6 +19,14 @@ import SwiftData
 // and re-resolves each show's place whenever they change. Deleting a row here is the whole of the change;
 // the queue follows on its own.
 struct ExcludedTownsView: View {
+    // #3859: this sheet has a `StallSurface` case of its own now, so a stall recorded while it is on
+    // screen is attributed to it. #3762's rule follows from that: the surface a stall is attributed to
+    // has to count its own rebuilds, or the record reads `passes: 0`, and `0` there says the surface did
+    // not rebuild rather than that nobody counted (L11).
+    //
+    // Read as an OPTIONAL, on the same footing as every other environment object here, so a missed
+    // injection is a pass nobody counted rather than a crash.
+    @Environment(FreezeWatch.self) private var freezeWatch: FreezeWatch?
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var context
     @Environment(ActionFeedback.self) private var feedback
@@ -32,6 +40,9 @@ struct ExcludedTownsView: View {
     private var listing: ExcludedTownEditing.Listing { ExcludedTownEditing.listing(in: context) }
 
     var body: some View {
+        // #3859: this surface counts its own rebuild. Bound to `_` rather than called as a statement
+        // because `body` is a ViewBuilder, which takes a declaration and not a bare void expression.
+        let _ = freezeWatch?.recordPass()
         VStack(alignment: .leading, spacing: 0) {
             header
             Divider().overlay(OVColor.line)

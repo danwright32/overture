@@ -131,7 +131,7 @@ enum FormOutreachCopy {
     // recorded form pitch is FINAL, so the refusal, its sentence and the undo they belonged to are gone
     // rather than a control being built to make them reachable (L29).
     //
-    // `FormOutreachFinalityTests` is what holds that decision now, in behaviour rather than in this
+    // `FormOutreachTests` is what holds that decision now, in behaviour rather than in this
     // comment.
 
     static let markedLine = "Sent through their form. You told Overture they replied."
@@ -180,12 +180,11 @@ enum FormPitch {
         let verdict = prospect.reachabilityResultFromRecipients
         guard verdict == .contactFormOnly || verdict == .socialOnly else { return .unavailable }
         let routes = prospect.usableContactFormURLs + prospect.socialRouteURLs
-        let candidates = prospect.recipients
-            .filter { r in
+        let candidates = Recipient.inSendOrder(
+            prospect.recipients.filter { r in
                 guard let raw = r.contactFormURL?.trimmingCharacters(in: .whitespacesAndNewlines) else { return false }
                 return routes.contains(raw)
-            }
-            .sorted { $0.sendOrderRank != $1.sendOrderRank ? $0.sendOrderRank < $1.sendOrderRank : $0.id < $1.id }
+            })
         guard let target = candidates.first,
               let formURL = target.contactFormURL?.trimmingCharacters(in: .whitespacesAndNewlines) else {
             return .unavailable

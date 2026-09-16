@@ -20,8 +20,7 @@ struct ReviewedEmailIsTheSentEmailTests {
     private let signature = OutboundSignature(html: nil, plainText: "Best,\nDan")
 
     private func context() throws -> ModelContext {
-        ModelContext(try ModelContainer(for: Schema([Prospect.self, Recipient.self]),
-                                        configurations: [ModelConfiguration(isStoredInMemoryOnly: true)]))
+        ModelContext(try TestModelContainer.inMemory([Prospect.self, Recipient.self]))
     }
 
     private func draft(_ ctx: ModelContext, body: String) -> (Prospect, Recipient) {

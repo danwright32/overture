@@ -214,12 +214,33 @@ struct PresenterLineWiringTests {
         // broke the moment a parameter was added after `now:`, and a marker that stops matching returns
         // nil, which every `contains` below is quietly false against (#2192). The name is the thing this
         // guard is actually about.
-        guard let body = SourceGuardHelper.bodyOfFunction(named: "items", in: model) else {
-            Issue.record("QueueModel.items(from:) is gone, so this guard is asking nothing")
+        // #3653: `scope`, not `items`. The builder was renamed when it started producing the cheap
+        // scope rows beside the cards, and `items` is now a one-line forwarder onto it, so a guard left
+        // on that name reads a body containing nothing but the forwarding call and every `contains`
+        // below is quietly false against it (L135, and #2192's lesson one name over).
+        guard let body = SourceGuardHelper.bodyOfFunction(named: "scope", in: model) else {
+            Issue.record("QueueModel.scope(from:) is gone, so this guard is asking nothing")
             return
         }
-        #expect(body.contains("ProducerGate.VenueBrands("))
-        #expect(body.contains("presenterLine"))
+        // #3742 RE-SPELLED, not weakened. This asserted the literal `ProducerGate.VenueBrands(` and went
+        // red when the table moved into `QueueModel.ProducerTables`, which builds it from the same corpus
+        // and hands it in so the two whole-corpus tables can be reused between passes. The rule this
+        // defends is that `scope` HAS a brand table built from the whole store, and that is still true;
+        // what broke was one rendering of it (L103). Checked against the reversal rule before changing
+        // it (L252, L430): #1598's whole-store corpus is not reversed, it is what `ProducerTables` is
+        // constructed from, and the assertion below still pins it.
+        let buildsTheTableItself = body.contains("ProducerGate.VenueBrands(")
+        let takesOneBuiltFromTheSameCorpus = body.contains("ProducerTables(") && body.contains("venueBrands")
+        #expect(buildsTheTableItself || takesOneBuiltFromTheSameCorpus,
+                Comment(rawValue: "QueueModel.scope neither builds a brand table nor takes one, so the "
+                        + "gate is inert and every house brand in the store would draw"))
+        // #3654: the per-card decoration moved out of the builder into `QueueModel.card`, which is the one
+        // place a card is made, reached both by the pass's prebuild and by a row that arrives on screen
+        // after it. Asserted THERE, or this guard would be satisfied by the table being built and say
+        // nothing about any card reading it.
+        let cardBody = SourceGuardHelper.bodyOfFunction(named: "card", in: model)
+        #expect(cardBody?.contains("presenterLine") == true,
+                "QueueModel.card no longer sets the presenter line, or is gone")
         // The corpus is the whole store, not the caller's already-filtered rows: judging brands against a
         // triaged subset would let a dismissal quietly change which names draw (the #1598 reasoning that
         // put `corpus` on this signature in the first place).

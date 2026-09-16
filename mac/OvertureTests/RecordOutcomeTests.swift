@@ -241,4 +241,121 @@ struct RecordOutcomeTests {
         #expect(said.contains("Orchestra of St Luke's"))
         #expect(said.contains("Never heard back"))
     }
+
+    // MARK: undoing a close out (#3566)
+
+    // Dan, 2026-09-05: "I'm on the reached out page and I clicked close this out on a show. then I
+    // clicked cmd+z and nothing happened. it didn't come back."
+    //
+    // Close out was never in scope when undo was narrowed to keep and dismiss (his call, 2026-07-23),
+    // and what changed since is that close out MOVED onto the row he stands on (#2112 / #2224 / #2710).
+    // It now sits beside actions that are undoable with nothing to tell them apart from the keyboard.
+    // His call, 2026-09-16: Cmd+Z, the same as keep and dismiss, rather than a separate control.
+    @Test func closingAPitchOutRecordsAnUndoEntryNamingTheEnding() throws {
+        let ctx = try context()
+        let p = pitched(ctx)
+        let undo = QueueUndoStack()
+
+        _ = ProspectMutations.recordOutcome(QueueItem(p), .theySaidNotNow, prospects: [p],
+                                            context: ctx, feedback: ActionFeedback(), undo: undo)
+
+        #expect(undo.canUndo)
+        #expect(undo.undoMenuTitle == "Undo Close out: Orchestra of St Luke's")
+    }
+
+    // The stamp goes back with the ending, and that is not tidiness. #2915 records `showOutcomeAt` so a
+    // reply arriving AFTERWARDS can be told from the reply Dan already had in hand when he closed this.
+    // Left behind by an undo, it dates an ending that no longer exists, and every later comparison is
+    // against a moment nothing on the row can explain.
+    @Test func undoingACloseOutTakesBackTheEndingAndItsStamp() throws {
+        let ctx = try context()
+        let p = pitched(ctx)
+        let undo = QueueUndoStack()
+        _ = ProspectMutations.recordOutcome(QueueItem(p), .theySaidNotNow, prospects: [p],
+                                            context: ctx, feedback: ActionFeedback(), undo: undo)
+        #expect(p.showOutcomeAt != nil)
+
+        let entry = try #require(undo.takeTop())
+        #expect(QueueUndo.apply(entry, to: p, in: ctx))
+
+        #expect(p.showOutcome == nil)
+        #expect(p.showOutcomeAt == nil)
+        #expect(p.status == .contacted)
+    }
+
+    // A close out that REPLACES an earlier ending must restore that earlier one, not clear the field.
+    // The entry holds what was there rather than an assumed inverse, which is the same reason
+    // `priorDismissedAt` is recorded rather than cleared.
+    @Test func undoingACloseOutOverAnEarlierEndingRestoresTheEarlierOne() throws {
+        let ctx = try context()
+        let p = pitched(ctx)
+        _ = ProspectMutations.recordOutcome(QueueItem(p), .neverHeardBack, prospects: [p],
+                                            context: ctx, feedback: ActionFeedback())
+        let undo = QueueUndoStack()
+
+        _ = ProspectMutations.recordOutcome(QueueItem(p), .theySaidNotNow, prospects: [p],
+                                            context: ctx, feedback: ActionFeedback(), undo: undo)
+        let entry = try #require(undo.takeTop())
+        #expect(QueueUndo.apply(entry, to: p, in: ctx))
+
+        #expect(p.showOutcome == .neverHeardBack)
+        #expect(p.showOutcomeAt != nil)
+    }
+
+    // THE GUARD, and it exists because the first version of #3566 wired ONE of three call sites.
+    //
+    // The issue named `FollowUpsView` as the Reached Out page's handler and that was taken at face
+    // value. It is a call site, but it is not the one Dan pressed: the Reached Out row's close out is
+    // `QueueView.closeOut(_:as:)`, and the full card's "Mark..." menu is a third in
+    // `ProspectRowFactory`. Two of the three went out unwired, and every test passed, because a test
+    // that drives the mutation directly hands it a stack itself and can never notice a VIEW that does
+    // not. It was caught by closing a show out in the running app and reading the Edit menu, which
+    // still named the previous action.
+    //
+    // Derived from the code rather than listed, because a hand written list checks only what somebody
+    // remembered to add and the whole defect here is a call site nobody added (L96, L30).
+    @Test func everyCloseOutCallSiteHandsInTheUndoStack() {
+        let call = "ProspectMutations.recordOutcome("
+        let candidates = AppSourceWalk.appFiles().filter { $0.text.contains(call) }
+        #expect(candidates.count >= 3,
+                "found \(candidates.count) files calling recordOutcome, too few to be scanning the app (L98)")
+
+        var unwired: [String] = []
+        for file in candidates {
+            for piece in file.text.components(separatedBy: call).dropFirst() {
+                // The call's own argument list, which ends at the first close paren that balances the
+                // one the call opened. Read rather than a fixed character count, because a window of N
+                // characters stops containing the call the day an argument is added (L518).
+                var depth = 1
+                var arguments = ""
+                for character in piece {
+                    if character == "(" { depth += 1 }
+                    if character == ")" { depth -= 1; if depth == 0 { break } }
+                    arguments.append(character)
+                }
+                if !arguments.contains("undo:") { unwired.append(file.name) }
+            }
+        }
+        let named = unwired.sorted().joined(separator: ", ")
+        #expect(unwired.isEmpty,
+                "these close out a show without handing in the undo stack, so Cmd+Z after the press reaches an older unrelated action instead (#3566): \(named)")
+    }
+
+    // The never-pitched half goes down the dismiss path, and that path already records. Asserted so the
+    // two halves of `recordOutcome` cannot drift into one recording and the other not, which from the
+    // keyboard would look like Cmd+Z working on some endings and not others (L11).
+    @Test func aNeverPitchedEndingIsUndoableToo() throws {
+        let ctx = try context()
+        let p = show(ctx, status: .queued)
+        let undo = QueueUndoStack()
+
+        _ = ProspectMutations.recordOutcome(QueueItem(p), .hadPaidWork, prospects: [p],
+                                            context: ctx, feedback: ActionFeedback(), undo: undo)
+        let entry = try #require(undo.takeTop())
+        #expect(QueueUndo.apply(entry, to: p, in: ctx))
+
+        #expect(p.status == .queued)
+        #expect(p.showOutcome == nil)
+        #expect(p.dismissedAt == nil)
+    }
 }

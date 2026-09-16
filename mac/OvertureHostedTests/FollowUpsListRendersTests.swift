@@ -26,9 +26,7 @@ struct FollowUpsListRendersTests {
     private let now = Date(timeIntervalSince1970: 1_780_000_000)   // 2026-06-27
 
     private func container() throws -> ModelContainer {
-        try ModelContainer(for: Schema([Prospect.self, Recipient.self, Inquiry.self,
-                                        WatchedSource.self]),
-                           configurations: [ModelConfiguration(isStoredInMemoryOnly: true)])
+        try TestModelContainer.inMemory([Prospect.self, Recipient.self, Inquiry.self, WatchedSource.self])
     }
 
     // A show that has been and gone, pitched and sent, which is what `PostEventPrompt` asks about. The
@@ -93,10 +91,15 @@ struct FollowUpsListRendersTests {
         return nil
     }
 
+    // #3871: the sheet receives its rows, so this harness plays RootView's part through the one shared
+    // stand-in rather than spelling the query out again here. A harness that spells it differently from
+    // the app is a harness measuring something else.
     private func sheet(_ container: ModelContainer) -> some View {
-        FollowUpsView(gmailConnectedOverride: true, replyRunAliveOverride: false)
-            .modelContainer(container)
-            .environment(ActionFeedback())
+        RowsFromStore { (rows: [Prospect]) in
+            FollowUpsView(prospects: rows, inquiries: [], gmailConnectedOverride: true, replyRunAliveOverride: false)
+        }
+        .modelContainer(container)
+        .environment(ActionFeedback())
     }
 
     // The state this suite exists for: there IS work due, so the sheet lays out a scrolling list.

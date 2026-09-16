@@ -18,20 +18,16 @@ struct DateCheckedMarkerTests {
     private let now = Date(timeIntervalSince1970: 1_780_000_100)
     private let today = "2026-09-01"
 
+    // #3654: a ROW. Everything the date-checked marker and the Check control ask about a show is
+    // answerable from one, which is what keeps a date heading from needing a card per show under it.
     private func item(_ key: String, status: ReviewStatus = .new, discipline: String = "music",
-                      location: String? = nil, date: String = "2026-09-12") -> QueueItem {
-        var i = QueueItem(id: key, groupName: key, discipline: discipline, venue: "Weill Recital Hall",
-                          performanceDate: date, sourceListingURL: nil,
-                          priorRelationship: "none", production: "self", profile: "strong",
-                          coverage: "likely_uncovered", fitScore: 6, tier: "mid", fitReason: "r",
-                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
-                          status: status)
-        i.location = location
-        return i
+                      location: String? = nil, date: String = "2026-09-12") -> QueueScopeRow {
+        QueueScopeRow(id: key, groupName: key, discipline: discipline, venue: "Weill Recital Hall",
+                      location: location, performanceDate: date, fitScore: 6, status: status)
     }
 
     // Its own fresh answer: what a check on this very show produced.
-    private func probed(_ key: String, status: ReviewStatus = .new, at: Date? = nil) -> QueueItem {
+    private func probed(_ key: String, status: ReviewStatus = .new, at: Date? = nil) -> QueueScopeRow {
         var i = item(key, status: status)
         i.reachabilityProbedAt = at ?? now.addingTimeInterval(-60)
         i.reachabilityResult = .emailFound
@@ -40,7 +36,7 @@ struct DateCheckedMarkerTests {
 
     // #1598 Phase 5: an answer paid for on another show by the same organisation. The card already prints
     // it, so the date is answered too.
-    private func inherited(_ key: String) -> QueueItem {
+    private func inherited(_ key: String) -> QueueScopeRow {
         var i = item(key)
         i.inheritedReachability = OrgAnswerLedger.Inherited(result: .emailFound,
                                                            probedAt: now.addingTimeInterval(-60),
@@ -99,7 +95,9 @@ struct DateCheckedMarkerTests {
     }
 
     @Test func anEmptyDateClaimsNothing() {
-        #expect(!QueueModel.dateReachabilityIsFullyChecked([], now: now, today: today))
+        // #3654: the empty literal is TYPED. The check is generic over what a whole-scope reader may
+        // know about a show, so a bare `[]` gives it nothing to infer from.
+        #expect(!QueueModel.dateReachabilityIsFullyChecked([QueueScopeRow](), now: now, today: today))
     }
 
     // The marker lands in the slot the Check button would have used, so Dan finds an answer exactly where
@@ -115,7 +113,16 @@ struct DateCheckedMarkerTests {
 
         let texts = try view.inspect().findAll(ViewType.Text.self)
             .map { try $0.string() }.filter { !$0.isEmpty }
-        #expect(texts == [ReachabilityProbeCopy.dateCheckedMarker])
+        // #2374: the marker now carries WHEN, so this asserts both halves. The prefix is the sentence
+        // Dan already knows, and the day label proves the date actually reached the view rather than
+        // being computed and dropped (#863: the helper being right is a separate claim from the view
+        // showing it).
+        let probedAt = try #require(answered.reachabilityProbedAt)
+        let day = try #require(EasternDate.dayLabel(EasternDate.dayString(from: probedAt)))
+        #expect(texts.count == 1)
+        let rendered = try #require(texts.first)
+        #expect(rendered.hasPrefix("Reachability checked"))
+        #expect(rendered.contains(day), "the heading rendered no date, so a night on old answers reads as fresh")
         #expect(throws: (any Error).self) {
             try view.inspect().find(button: ReachabilityProbeCopy.controlLabel)
         }

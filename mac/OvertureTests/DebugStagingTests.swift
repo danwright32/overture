@@ -453,7 +453,7 @@ final class DebugStagingTests {
             if let date = p.performanceDate, !p.performanceStartTimes.isEmpty {
                 times[date] = p.performanceStartTimes
             }
-            return SelfBookingConflict.Show(key: p.naturalKey, nights: nights, isCommitment: true,
+            return SelfBookingConflict.Show(key: p.naturalKey, nights: nights, commitment: .emailed,
                                             engagementKey: p.groupName, name: p.groupName,
                                             timesByNight: times)
         }
@@ -510,7 +510,7 @@ final class DebugStagingTests {
 
         #expect(FollowUp.dueRecipients(from: all, now: now).isEmpty,
                 "a show Dan cut is still asking to be nudged")
-        #expect(DueWork.rows(prospects: all, now: now, replyRunAlive: false).rendered == 0,
+        #expect(DueWork.rows(prospects: all, inquiries: [], now: now, replyRunAlive: false).rendered == 0,
                 "the Follow-ups sheet still draws a row for a show Dan already cut")
 
         // Undismissed, the same row is genuinely due, so the zero above is the guard doing its job
