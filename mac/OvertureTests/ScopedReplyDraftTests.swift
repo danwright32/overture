@@ -199,8 +199,10 @@ struct ScopedReplyDraftTests {
     }
 
     private static let paidRuns = [
+        // #3573: no exempt caller any more. The at-launch sweep was the one batch launch of the reply
+        // drafter, and Dan's call of 2026-09-05 removed it: nothing is spent without a press.
         PaidRun(launch: "startClassify(", scope: "only:", what: "the reply drafter",
-                unscopedCallers: ["startReplyClassifyIfNeeded"]),
+                unscopedCallers: []),
         PaidRun(launch: "startPrep(", scope: "includedKeys:", what: "a Prep run",
                 unscopedCallers: []),
     ]

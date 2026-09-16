@@ -513,7 +513,7 @@ enum ProspectMutations {
     // because a source guard can only ever see that the word `only:` is written at a call, never that a
     // real Target arrives there, and nil is exactly the value that spends across every waiting
     // conversation (L3).
-    typealias ReplyDraftLaunch = @MainActor (ModelContext, ReplyClassifyService.Target?) -> Void
+    typealias ReplyDraftLaunch = @MainActor (ModelContext, ReplyClassifyService.Target) -> Void
 
     // #2975: the seams are here so a test can watch the REAL launcher forward the scope it was handed.
     //
@@ -526,7 +526,9 @@ enum ProspectMutations {
     // cannot accidentally run against a test path. What the test drives is the whole path down to the
     // QUEUE FILE, and then reads it: the scope reaching `startClassify` is observable as the queue
     // holding one item rather than every waiting reply. A rename cannot defeat that (L103).
-    static func launchReplyDrafter(_ context: ModelContext, _ target: ReplyClassifyService.Target?,
+    // #3573: the target is REQUIRED here too, all the way down. There is no batch launch left to
+    // express, so nothing may reach `startClassify` without naming the conversation it may spend on.
+    static func launchReplyDrafter(_ context: ModelContext, _ target: ReplyClassifyService.Target,
                                    queueURL: URL = ReplyClassifyQueueBuilder.defaultURL,
                                    markerURL: URL = ReplyClassifyService.defaultMarkerURL,
                                    cancelURL: URL = ReplyClassifyService.defaultCancelURL,

@@ -34,9 +34,17 @@ enum ReplyConversationMode: CaseIterable, Equatable, Sendable {
     case closedNothingToShow
 
     static func of(hasUnhandledReply: Bool, replyIsAnswered: Bool,
-                   hasReplyDraft: Bool, isDrafting: Bool) -> ReplyConversationMode {
+                   hasReplyDraft: Bool, isDrafting: Bool,
+                   replyPostdatesDraftRequest: Bool) -> ReplyConversationMode {
         if hasUnhandledReply {
-            if hasReplyDraft { return .draftReadyToSend }
+            // #3573: a draft written BEFORE their newest message answers the message before this one, so
+            // it is not offered for sending. Dan is offered a fresh draft instead.
+            //
+            // The at-launch sweep used to redraft exactly this case, silently, on every window open. It
+            // is gone (nothing is spent without a press, Dan's call of 2026-09-05), so without this the
+            // stale draft would sit here with Send under it, which is a wrong answer offered as a ready
+            // one (L45, L109).
+            if hasReplyDraft, !replyPostdatesDraftRequest { return .draftReadyToSend }
             return isDrafting ? .drafting : .offerADraft
         }
         // Nothing below may offer a control, whatever the request stamps say: a request left over from an

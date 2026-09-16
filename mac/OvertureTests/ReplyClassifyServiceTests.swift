@@ -16,6 +16,12 @@ struct ReplyClassifyServiceTests {
 
     // A show with one replied CONTACT carrying the reply/draft state the per-recipient queue reads (#420 C2).
     @discardableResult
+    // #3573: `startClassify` takes a REQUIRED scope now, because the batch launch it used to allow (the
+    // at-launch sweep) is gone. Every start below names the conversation this fixture seeds.
+    private func only(_ key: String) -> ReplyClassifyService.Target {
+        ReplyClassifyService.Target(naturalKey: key, recipientId: key + "@act.example")
+    }
+
     private func show(_ ctx: ModelContext, key: String, replied: Bool = true,
                       replyText: String? = "Yes, let's book.", manual: Bool = false,
                       draftBody: String? = nil, repliedAt: Date? = nil, draftRequestedAt: Date? = nil) -> Prospect {
@@ -87,7 +93,7 @@ struct ReplyClassifyServiceTests {
         let queueURL = tmp(); let markerURL = tmp()
         var launches = 0
 
-        let n = try ReplyClassifyService.startClassify(from: ctx, now: Date(),
+        let n = try ReplyClassifyService.startClassify(from: ctx, now: Date(), only: only("k6"),
                                                        queueURL: queueURL, markerURL: markerURL,
                                                        launch: { launches += 1 })
         #expect(n == 1)
@@ -96,7 +102,7 @@ struct ReplyClassifyServiceTests {
 
         // Marker is fresh now: a second start must refuse (double-run guard).
         #expect(throws: (any Error).self) {
-            try ReplyClassifyService.startClassify(from: ctx, now: Date(),
+            try ReplyClassifyService.startClassify(from: ctx, now: Date(), only: only("k6"),
                                                    queueURL: queueURL, markerURL: markerURL,
                                                    launch: { launches += 1 })
         }
@@ -109,7 +115,7 @@ struct ReplyClassifyServiceTests {
         let ctx = ModelContext(try container())
         show(ctx, key: "k8", replyText: "Yes")
         let now = Date(timeIntervalSince1970: 1_800_000_000)   // well past the plausibility floor
-        _ = try ReplyClassifyService.startClassify(from: ctx, now: now,
+        _ = try ReplyClassifyService.startClassify(from: ctx, now: now, only: only("k8"),
                                                    queueURL: tmp(), markerURL: tmp(), launch: {})
         #expect(ReplyClassifyService.lastRunStartedAt == now)
     }
@@ -138,7 +144,7 @@ struct ReplyClassifyServiceTests {
         show(ctx, key: "k9", replyText: "Yes")
         var announced = 0
 
-        _ = try ReplyClassifyService.startClassify(from: ctx, now: Date(),
+        _ = try ReplyClassifyService.startClassify(from: ctx, now: Date(), only: only("k9"),
                                                    queueURL: tmp(), markerURL: tmp(),
                                                    launch: {}, announce: { announced += 1 })
         #expect(announced == 1)
@@ -154,7 +160,7 @@ struct ReplyClassifyServiceTests {
         var announced = 0
 
         #expect(throws: LaunchFailed.self) {
-            try ReplyClassifyService.startClassify(from: ctx, now: Date(),
+            try ReplyClassifyService.startClassify(from: ctx, now: Date(), only: only("k10"),
                                                    queueURL: tmp(), markerURL: tmp(),
                                                    launch: { throw LaunchFailed() },
                                                    announce: { announced += 1 })
@@ -169,12 +175,12 @@ struct ReplyClassifyServiceTests {
         show(ctx, key: "k11", replyText: "Yes")
         let queueURL = tmp(); let markerURL = tmp()
         var announced = 0
-        _ = try ReplyClassifyService.startClassify(from: ctx, now: Date(),
+        _ = try ReplyClassifyService.startClassify(from: ctx, now: Date(), only: only("k11"),
                                                    queueURL: queueURL, markerURL: markerURL,
                                                    launch: {}, announce: { announced += 1 })
 
         #expect(throws: (any Error).self) {
-            try ReplyClassifyService.startClassify(from: ctx, now: Date(),
+            try ReplyClassifyService.startClassify(from: ctx, now: Date(), only: only("k11"),
                                                    queueURL: queueURL, markerURL: markerURL,
                                                    launch: {}, announce: { announced += 1 })
         }
@@ -188,7 +194,7 @@ struct ReplyClassifyServiceTests {
         show(ctx, key: "k7", replyText: "Yes")
         let queueURL = tmp(); let markerURL = tmp()
         #expect(throws: LaunchFailed.self) {
-            try ReplyClassifyService.startClassify(from: ctx, now: Date(),
+            try ReplyClassifyService.startClassify(from: ctx, now: Date(), only: only("k7"),
                                                    queueURL: queueURL, markerURL: markerURL,
                                                    launch: { throw LaunchFailed() })
         }
