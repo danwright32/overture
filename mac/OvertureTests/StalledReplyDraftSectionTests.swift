@@ -117,7 +117,7 @@ struct StalledReplyDraftSectionTests {
     @Test func theSheetsHeaderCountsTheStalledDraftThePillSentHimFor() throws {
         let context = try makeContext()
         showWithAStalledReplyDraft(context)
-        let counts = DueWork.counts(prospects: try prospects(context), now: now, replyRunAlive: false)
+        let counts = DueWork.counts(prospects: try prospects(context), inquiries: [], now: now, replyRunAlive: false)
 
         #expect(counts.stalledReplyDrafts == 1)
         #expect(counts.total == 1, "the sheet reads \"Due \(counts.total)\" under a pill that says 1 stalled")
@@ -128,7 +128,7 @@ struct StalledReplyDraftSectionTests {
     @Test func theSheetListsARowForTheStalledDraft() throws {
         let context = try makeContext()
         showWithAStalledReplyDraft(context)
-        let listed = DueWork.rows(prospects: try prospects(context), now: now, replyRunAlive: false)
+        let listed = DueWork.rows(prospects: try prospects(context), inquiries: [], now: now, replyRunAlive: false)
 
         #expect(listed.stalledReplyDrafts.count == 1)
         #expect(listed.stalledReplyDrafts.first?.prospect.groupName == "Aurora Strings")
@@ -141,7 +141,7 @@ struct StalledReplyDraftSectionTests {
     @Test func aStalledDraftIsInNoOtherSectionSoNothingElseCoveredForIt() throws {
         let context = try makeContext()
         showWithAStalledReplyDraft(context)
-        let listed = DueWork.rows(prospects: try prospects(context), now: now, replyRunAlive: false)
+        let listed = DueWork.rows(prospects: try prospects(context), inquiries: [], now: now, replyRunAlive: false)
 
         #expect(listed.silent.isEmpty)
         #expect(listed.afterTheShow.isEmpty)
@@ -156,7 +156,7 @@ struct StalledReplyDraftSectionTests {
         showWithAStalledReplyDraft(context)
         let all = try prospects(context)
         let pill = followUpsPill(all)
-        let listed = DueWork.rows(prospects: all, now: now, replyRunAlive: false)
+        let listed = DueWork.rows(prospects: all, inquiries: [], now: now, replyRunAlive: false)
 
         #expect(pill.count == listed.stalledReplyDrafts.count,
                 "the pill says \"\(pill.detail)\" (\(pill.count)) over \(listed.stalledReplyDrafts.count) rows")
@@ -179,7 +179,7 @@ struct StalledReplyDraftSectionTests {
 
         let all = try prospects(context)
         let pill = followUpsPill(all)
-        let listed = DueWork.rows(prospects: all, now: now, replyRunAlive: false)
+        let listed = DueWork.rows(prospects: all, inquiries: [], now: now, replyRunAlive: false)
 
         #expect(pill.detail == "2 reply drafts stalled")
         #expect(pill.count == 2)
@@ -196,7 +196,7 @@ struct StalledReplyDraftSectionTests {
         showWithAStalledReplyDraft(context)
         let all = try prospects(context)
         let pill = followUpsPill(all, replyRunAlive: true)
-        let listed = DueWork.rows(prospects: all, now: now, replyRunAlive: true)
+        let listed = DueWork.rows(prospects: all, inquiries: [], now: now, replyRunAlive: true)
 
         #expect(pill.count == 0)
         #expect(listed.stalledReplyDrafts.isEmpty)

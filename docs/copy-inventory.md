@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1565 sentences**.
+Every sentence Overture can say to Dan: **1569 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -14,7 +14,7 @@ What is not, and why:
   sentences under tokens nobody reads.
 - **Nothing, if it is written as two literals joined with `+`.** Those ARE joined here, into the
   one sentence the running app says (#3155). What is still only part of what Dan reads is a
-  sentence carrying a VALUE: 562 of the 1565 below hold a
+  sentence carrying a VALUE: 564 of the 1569 below hold a
   `\(...)` where a number or a name goes, so what is printed is the template. They are counted
   here rather than listed again, because the hole is visible in the line itself; what was missing
   was any statement of how much of this document is templates.
@@ -262,6 +262,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
   - `UI/FollowUpsView.swift`
   - `UI/FollowUpsView.swift`
   - `UI/FollowUpsView.swift`
+  - `UI/FollowUpsView.swift`
 - "Voice guidance"
   - `App/RootView.swift`
   - `UI/VoiceGuidanceView.swift`
@@ -305,6 +306,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
 - "no contact"
   - `Domain/FollowUp.swift`
   - `Domain/ReplyIdentity.swift`
+  - `UI/FollowUpsView.swift`
   - `UI/FollowUpsView.swift`
   - `UI/FollowUpsView.swift`
 - "show is"
@@ -1885,6 +1887,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/AnsweredReplyNote.swift`
 "Replies can't be tracked"
     `Domain/InquiryCopy.swift`
+"Replies to answer"
+    `Domain/ReplyToAnswer.swift`
 "Reply to \(inquirerName)"
     `Domain/InquiryCopy.swift`
 "Reply-classify results couldn't save. Try again."
@@ -2086,6 +2090,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/ExcludedTownsView.swift`
 "Snoozed \(org). I'll remind you later."
     `App/ActionFeedback.swift`
+"So does anyone who wrote back and is waiting on your answer."
+    `Domain/ReplyToAnswer.swift`
 "Social DM only"
     `Domain/Reachability.swift`
 "Some changed calendars couldn't be read this run."
@@ -2655,6 +2661,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/QueueView+Model.swift`
 "Wrong match"
     `UI/ProspectRowView.swift`
+"Wrote back \(f.localizedString(for: arrivedAt, relativeTo: now))"
+    `Domain/ReplyToAnswer.swift`
 "Yes, link it"
     `Domain/ProposedConversation.swift`
 "You already answered this one."
@@ -2791,6 +2799,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/QueueView+Model.swift`
 "\(Plural.count(count, "new lead")) while you were away"
     `UI/QueueView+Model.swift`
+"\(Plural.count(count, "reply", "replies")) waiting on your answer"
+    `App/MenuBarStatus.swift`
 "\(Plural.count(count, "show")) \(Plural.word(count, "is", "are")) back in \(undoStageWord(for: priorStatuses))"
     `App/ActionFeedback.swift`
 "\(Plural.count(count, "show")) on \(dateLabel)"

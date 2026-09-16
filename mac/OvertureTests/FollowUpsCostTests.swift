@@ -80,7 +80,7 @@ struct FollowUpsCostTests {
         p.recipients.append(r)
         try ctx.save()
 
-        let rows = DueWork.rows(prospects: [p], now: now, replyRunAlive: false)
+        let rows = DueWork.rows(prospects: [p], inquiries: [], now: now, replyRunAlive: false)
         #expect(!rows.silent.isEmpty,
                 Comment(rawValue: "a contact pitched 30 days ago and never chased produced no silent "
                         + "follow-up, so this instrument is timing a derivation that returns nothing and "
@@ -115,14 +115,14 @@ struct FollowUpsCostTests {
             // Warmed first, because the first pass also faults every recipient in from SwiftData and that
             // is a cost of the FETCH rather than of the derivation the view re-runs on every body
             // evaluation. What this reading is about is the repeat.
-            _ = DueWork.rows(prospects: prospects, now: now, replyRunAlive: false)
+            _ = DueWork.rows(prospects: prospects, inquiries: [], now: now, replyRunAlive: false)
 
             let rounds = 10
             let started = Date()
             var lastRows = DueWork.Rows(afterTheShow: [], silent: [], stalledReplyDrafts: [],
                                         conversationsToConfirm: [])
             for _ in 0..<rounds {
-                lastRows = DueWork.rows(prospects: prospects, now: now, replyRunAlive: false)
+                lastRows = DueWork.rows(prospects: prospects, inquiries: [], now: now, replyRunAlive: false)
             }
             let perRun = Date().timeIntervalSince(started) / Double(rounds) * 1000
 
@@ -168,11 +168,11 @@ struct FollowUpsCostTests {
                 return
             }
             let busyNow = anchor.addingTimeInterval(60 * 60 * 24 * 7)
-            _ = DueWork.rows(prospects: prospects, now: busyNow, replyRunAlive: false)
+            _ = DueWork.rows(prospects: prospects, inquiries: [], now: busyNow, replyRunAlive: false)
             let busyStarted = Date()
             var busyRows = lastRows
             for _ in 0..<rounds {
-                busyRows = DueWork.rows(prospects: prospects, now: busyNow, replyRunAlive: false)
+                busyRows = DueWork.rows(prospects: prospects, inquiries: [], now: busyNow, replyRunAlive: false)
             }
             let busyPerRun = Date().timeIntervalSince(busyStarted) / Double(rounds) * 1000
             let busyTotal = busyRows.afterTheShow.count + busyRows.silent.count

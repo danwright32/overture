@@ -110,6 +110,11 @@ struct RootView: View {
 
     // All prospects, for the time-based follow-up due count (#45).
     @Query private var allProspects: [Prospect]
+    // #3890: hire inquiries, because a reply waiting on Dan's answer is due work whichever kind of
+    // conversation it is on, and the Due pill, its sheet and the Dock badge all state that count. Its own
+    // query rather than QueueView's handed up: the table holds a handful of rows, so the duplicate read
+    // #3846 measured for prospects costs nothing here, and QueueView's screen tests rely on its own.
+    @Query private var allInquiries: [Inquiry]
     // #805: the live store, not a snapshot taken when the window opened. A source that degrades DURING a
     // scout must light the badge on that scout, not on the next launch.
     @Query private var watchedSources: [WatchedSource]
@@ -204,9 +209,11 @@ struct RootView: View {
         let replyRunAlive = ReplyClassifyService.isRunning(now: now)
         var fingerprint = ScopeFingerprint()
         fingerprint.add(allProspects)
+        fingerprint.add(allInquiries)
         fingerprint.add(value: replyRunAlive)
         return followUpsMemo.value(fingerprint: fingerprint.finalized(), cardKeys: [], now: now) {
-            DueWork.counts(prospects: allProspects, now: now, replyRunAlive: replyRunAlive).total
+            DueWork.counts(prospects: allProspects, inquiries: allInquiries, now: now,
+                           replyRunAlive: replyRunAlive).total
         }
     }
 
@@ -1324,7 +1331,7 @@ struct RootView: View {
             .sheet(isPresented: $showPatterns) { OutcomePatternsView(prospects: allProspects) }
             .sheet(isPresented: $showInquiryIntake) { InquiryIntakeSheet() }
             .sheet(isPresented: $showFollowUps) {
-                FollowUpsView(prospects: allProspects, onOpenInArchive: { key, recipientId in
+                FollowUpsView(prospects: allProspects, inquiries: allInquiries, onOpenInArchive: { key, recipientId in
                     showFollowUps = false
                     openArchive(key: key, recipientId: recipientId)
                 }, onConnectGmail: connectGmail)

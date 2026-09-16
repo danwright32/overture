@@ -1,6 +1,7 @@
 import Foundation
 
-// #2115: the number of things owing Dan a response today, as it appears OUTSIDE the app.
+// #2115: the number of things owing Dan a response today, as it appears OUTSIDE the app. Since #3890 that
+// includes every reply waiting on his answer, which it had not since #2397.
 //
 // He asked for three surfaces and chose all three: a count on the Dock icon, a count beside the menu bar
 // glyph, and the Dock icon staying present while the count is above zero even with the main window
@@ -47,9 +48,18 @@ enum DueBadge {
     // view body would also pay the whole due-work sweep on every redraw, which is the cost L59 and L62
     // are about. The reconcile tick already has the prospects fetched and already writes to defaults.
     static let countKey = "dueWorkCount"
+    // #3890: how many of that count are replies waiting on Dan's answer, for the menu to name. Published
+    // in the same call as the total, with no default, so no writer can update one and leave the other
+    // describing a different moment (L168).
+    static let repliesKey = "dueRepliesCount"
 
-    static func publish(_ count: Int, into defaults: UserDefaults = .standard) {
+    static func publish(_ count: Int, replies: Int, into defaults: UserDefaults = .standard) {
         defaults.set(max(0, count), forKey: countKey)
+        defaults.set(max(0, replies), forKey: repliesKey)
+    }
+
+    static func currentReplies(from defaults: UserDefaults = .standard) -> Int {
+        max(0, defaults.integer(forKey: repliesKey))
     }
 
     static func current(from defaults: UserDefaults = .standard) -> Int {
