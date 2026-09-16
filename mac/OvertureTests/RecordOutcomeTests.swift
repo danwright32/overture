@@ -302,6 +302,45 @@ struct RecordOutcomeTests {
         #expect(p.showOutcomeAt != nil)
     }
 
+    // THE GUARD, and it exists because the first version of #3566 wired ONE of three call sites.
+    //
+    // The issue named `FollowUpsView` as the Reached Out page's handler and that was taken at face
+    // value. It is a call site, but it is not the one Dan pressed: the Reached Out row's close out is
+    // `QueueView.closeOut(_:as:)`, and the full card's "Mark..." menu is a third in
+    // `ProspectRowFactory`. Two of the three went out unwired, and every test passed, because a test
+    // that drives the mutation directly hands it a stack itself and can never notice a VIEW that does
+    // not. It was caught by closing a show out in the running app and reading the Edit menu, which
+    // still named the previous action.
+    //
+    // Derived from the code rather than listed, because a hand written list checks only what somebody
+    // remembered to add and the whole defect here is a call site nobody added (L96, L30).
+    @Test func everyCloseOutCallSiteHandsInTheUndoStack() {
+        let call = "ProspectMutations.recordOutcome("
+        let candidates = AppSourceWalk.appFiles().filter { $0.text.contains(call) }
+        #expect(candidates.count >= 3,
+                "found \(candidates.count) files calling recordOutcome, too few to be scanning the app (L98)")
+
+        var unwired: [String] = []
+        for file in candidates {
+            for piece in file.text.components(separatedBy: call).dropFirst() {
+                // The call's own argument list, which ends at the first close paren that balances the
+                // one the call opened. Read rather than a fixed character count, because a window of N
+                // characters stops containing the call the day an argument is added (L518).
+                var depth = 1
+                var arguments = ""
+                for character in piece {
+                    if character == "(" { depth += 1 }
+                    if character == ")" { depth -= 1; if depth == 0 { break } }
+                    arguments.append(character)
+                }
+                if !arguments.contains("undo:") { unwired.append(file.name) }
+            }
+        }
+        let named = unwired.sorted().joined(separator: ", ")
+        #expect(unwired.isEmpty,
+                "these close out a show without handing in the undo stack, so Cmd+Z after the press reaches an older unrelated action instead (#3566): \(named)")
+    }
+
     // The never-pitched half goes down the dismiss path, and that path already records. Asserted so the
     // two halves of `recordOutcome` cannot drift into one recording and the other not, which from the
     // keyboard would look like Cmd+Z working on some endings and not others (L11).
