@@ -1790,7 +1790,52 @@ enum QueueModel {
     static func groups(_ groups: [DateGroupOf<QueueScopeRow>],
                        withDeparting departing: [String: QueueItem]) -> [DateGroupOf<QueueScopeRow>] {
         guard !departing.isEmpty else { return groups }
-        return groupByDate(withDeparting(groups.flatMap(\.items), departing: departing))
+        let regrouped = groupByDate(withDeparting(groups.flatMap(\.items), departing: departing))
+        return inIncomingOrder(regrouped, incoming: groups.map(\.id))
+    }
+
+    // #3634: `groupByDate` keys its headings by FIRST APPEARANCE and `withDeparting` APPENDS the
+    // departing rows, so a night whose every row is departing first appears among those appended values
+    // and its heading is rebuilt below every later night. The queue pins its scroll to the date group at
+    // the top of the screen, and on a night dismiss that group is precisely the night being dismissed,
+    // so the scroll follows it to the far end of the window. Dan, 2026-09-07: "I dismissed a whole night
+    // and it moved me to the bottom of the scout queue. I was in september now I'm looking at may."
+    //
+    // The incoming order is restored verbatim rather than re-sorted, because it is the DERIVATION'S
+    // order and not necessarily a date one: other surfaces group on their own key, and a global sort
+    // here would silently overrule every one of them (L609). A night that exists ONLY for a departing
+    // card is absent from that order, so it has no place to be restored to and is instead placed by date
+    // among the incoming dated keys, which is where Dan was reading it a moment ago.
+    //
+    // The undated bucket is not a date and cannot be placed by one, so it sorts after every date: a
+    // departing-only `tbd` lands last rather than wherever a string compare would put it. One that was
+    // ALREADY in the incoming order keeps that position, so this cannot move it either way.
+    static func inIncomingOrder(_ regrouped: [DateGroupOf<QueueScopeRow>],
+                                incoming: [String]) -> [DateGroupOf<QueueScopeRow>] {
+        let byID = Dictionary(regrouped.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        let known = Set(incoming)
+        var arriving = regrouped.map(\.id).filter { !known.contains($0) }.sorted(by: nightPrecedes)
+
+        var ordered: [DateGroupOf<QueueScopeRow>] = []
+        for key in incoming {
+            while let next = arriving.first, nightPrecedes(next, key) {
+                if let group = byID[next] { ordered.append(group) }
+                arriving.removeFirst()
+            }
+            if let group = byID[key] { ordered.append(group) }
+        }
+        for key in arriving { if let group = byID[key] { ordered.append(group) } }
+        return ordered
+    }
+
+    // Undated sorts after every date, so it can never be placed among them. Not a string compare:
+    // "tbd" happens to sort after a "2026-" key today and would sort BEFORE one the year the dates stop
+    // starting with a digit, which is a rule nobody would have chosen (L50).
+    private static func nightPrecedes(_ a: String, _ b: String) -> Bool {
+        if a == b { return false }
+        if a == "tbd" { return false }
+        if b == "tbd" { return true }
+        return a < b
     }
 
     // #1233: the Reached-out stage groups its rows under headers keyed on the REACH-OUT date (when Dan
