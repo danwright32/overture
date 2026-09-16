@@ -718,6 +718,19 @@ final class Recipient {
     // that predicate short-circuits on, and they are here because `!hasUnhandledReply` on its own is
     // equally true of a contact that never replied, one that bounced, and one Dan stood down. A line may
     // claim only what its check actually measured (L11).
+    // #3573: their newest message arrived AFTER the draft was asked for, so the draft on file answers
+    // their previous one. One definition, read by the drafter's own eligibility rule
+    // (`ReplyClassifyService.recipientNeedsClassify`) and by what the conversation offers on screen
+    // (`ReplyConversationMode`), because those two disagreeing is how a stale draft comes to sit under a
+    // Send button (L16).
+    //
+    // Judged on `replyArrivedAt`, when they SENT it, rather than on when Overture noticed: a message that
+    // arrived before the request and was recorded after it is not a newer message.
+    var replyPostdatesDraftRequest: Bool {
+        guard let requested = replyDraftRequestedAt, let theirs = replyArrivedAt else { return false }
+        return theirs > requested
+    }
+
     var replyIsAnswered: Bool {
         replied && !bounced && resolution == nil && replyHandledAt != nil && !hasUnhandledReply
     }

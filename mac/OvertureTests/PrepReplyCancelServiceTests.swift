@@ -111,6 +111,8 @@ final class PrepReplyCancelServiceTests {
 
         _ = try ReplyClassifyService.startClassify(
             from: ctx, now: Date(),
+            // #3573: the scope is required now, so this names the conversation the fixture seeds.
+            only: ReplyClassifyService.Target(naturalKey: "k1", recipientId: "k1@act.example"),
             queueURL: dir.appendingPathComponent("queue.json"),
             markerURL: dir.appendingPathComponent("marker"),
             cancelURL: cancel,

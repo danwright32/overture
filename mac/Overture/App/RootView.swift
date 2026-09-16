@@ -1129,7 +1129,6 @@ struct RootView: View {
                 // Ingest any classifications from a prior run, then launch a classify run for replies
                 // still needing an intent (#112). Both no-op when there's nothing to do.
                 ingestReplyClassifications()
-                startReplyClassifyIfNeeded()
                 // #1878: a run that ENDED while Overture was closed still has its pair on disk with nobody
                 // to keep it, and the next run overwrites both. Archived here, before any of the settling
                 // below, and only when no run is live: a live run's results file is still being written,
@@ -2373,10 +2372,20 @@ struct RootView: View {
 
     // Launch a reply-classify run for replies still needing an intent. Throws (and is swallowed)
     // when nothing needs classifying or the runner isn't configured, so it never disrupts launch.
-    private func startReplyClassifyIfNeeded() {
-        guard !ReplyClassifyService.isRunning(now: Date()) else { return }
-        _ = try? ReplyClassifyService.startClassify(from: context, now: Date())
-    }
+    // #3573: `startReplyClassifyIfNeeded` stood here and launched the reply drafter UNSCOPED on every
+    // window open, drafting every waiting reply without a press. Dan, 2026-09-05, seeing "Drafting
+    // replies 0 of 1" with no Prep running and nothing pressed: "it shouldn't be drafting unless I ask
+    // it to?" His call was button only, so the sweep is gone rather than confirmed or throttled, and
+    // `startClassify` no longer takes an optional scope: the only way to start one is to name the
+    // conversation (`ProspectMutations.draftReply`).
+    //
+    // What the sweep also did, and what replaces it: it silently REDRAFTED a conversation whose newest
+    // message postdated its draft. That case now shows "Draft a reply" instead of a stale draft with
+    // Send under it (`ReplyConversationMode`, `Recipient.replyPostdatesDraftRequest`), so it is Dan's
+    // press rather than a spend he never asked for.
+    //
+    // `ingestReplyClassifications()` STAYS on launch: it picks up a run that finished while the app was
+    // closed, and has nothing to do with starting one.
 
     // Everything that comes due on the CLOCK rather than on something Dan did, once an hour while the
     // window is open. It is a list rather than a single call because #3796 made it one: the scout

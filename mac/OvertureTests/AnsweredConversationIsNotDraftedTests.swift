@@ -6,8 +6,11 @@ import SwiftData
 // answered.
 //
 // `recipientNeedsClassify` decided from `replied`, `lastReplyText`, `outcomeSource` and whether a reply
-// landed after the last draft request, and never read the answered stamp. `startReplyClassifyIfNeeded`
-// runs on every window open, so the run picked those conversations up again and spent on them. The draft
+// landed after the last draft request, and never read the answered stamp. The run started on every
+// window open, so it picked those conversations up again and spent on them. (#3573 has since removed
+// that sweep: a run starts only when Dan presses Draft a reply on one conversation. What this suite
+// asserts is unchanged, because every test here drives `recipientNeedsClassify` and `buildQueue`
+// directly, and they decide what a PRESSED run may spend on just as they decided it for the sweep.) The draft
 // it wrote was then not offered anywhere Dan answers from: `ReplyPanel.isOffered` is gated on
 // `hasUnhandledReply`, which is false for exactly these rows.
 //

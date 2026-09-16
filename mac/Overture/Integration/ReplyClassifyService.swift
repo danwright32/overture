@@ -32,8 +32,9 @@ enum ReplyClassifyService {
         guard r.hasUnhandledReply else { return false }
         guard r.outcomeSource != .manual else { return false }
         if r.replyDraftBody == nil { return true }
-        if let repliedAt = r.repliedAt, let requestedAt = r.replyDraftRequestedAt, repliedAt > requestedAt { return true }
-        return false
+        // #3573: through the shared property, which the conversation's own state reads too, so what the
+        // run treats as redraftable and what the screen offers cannot disagree (L16).
+        return r.replyPostdatesDraftRequest
     }
 
     // #2129: one conversation, named. The run drafts every waiting reply in a single detached, paid pass,
@@ -138,9 +139,12 @@ enum ReplyClassifyService {
 
     @discardableResult
     static func startClassify(from context: ModelContext, now: Date,
-                              // #2129: nil is the batch run (the at-launch sweep); a Target is one reply
-                              // Dan asked for by pressing Draft with AI on it.
-                              only: Target? = nil,
+                              // #2129: one reply Dan asked for by pressing Draft a reply on it.
+                              // #3573: REQUIRED, with no default. The batch run it used to allow was the
+                              // at-launch sweep, which is gone, and a defaulted nil that spends across
+                              // every waiting conversation is the one value #2944 exists to keep out of
+                              // reach (L168).
+                              only: Target,
                               queueURL: URL = ReplyClassifyQueueBuilder.defaultURL,
                               markerURL: URL = defaultMarkerURL,
                               cancelURL: URL = defaultCancelURL,

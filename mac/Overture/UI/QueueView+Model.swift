@@ -838,6 +838,9 @@ struct RecipientSnapshot: Identifiable, Equatable, Sendable {
     // Both default to the QUIET direction: a snapshot built without them offers nothing and claims
     // nothing, rather than offering a control the run would find nothing for.
     var hasUnhandledReply: Bool = false
+    // #3573: their newest message postdates the draft request, so the draft on file is stale. Carried
+    // from the contact rather than re-read here, like every other reply fact on this snapshot.
+    var replyPostdatesDraftRequest: Bool = false
     var replyIsAnswered: Bool = false
     var intentHint: String? = nil
     var replyDraftEditedByDan: Bool = false
@@ -960,7 +963,8 @@ struct RecipientSnapshot: Identifiable, Equatable, Sendable {
     // #2934: what the reply block may offer for this conversation, from the one shared rule.
     var replyConversationMode: ReplyConversationMode {
         ReplyConversationMode.of(hasUnhandledReply: hasUnhandledReply, replyIsAnswered: replyIsAnswered,
-                                 hasReplyDraft: hasReplyDraft, isDrafting: isDraftingReply)
+                                 hasReplyDraft: hasReplyDraft, isDrafting: isDraftingReply,
+                                 replyPostdatesDraftRequest: replyPostdatesDraftRequest)
     }
 
     var displayName: String {
@@ -3698,6 +3702,7 @@ extension RecipientSnapshot {
                   // whether a run is still going.
                   awaitedReplyDraftRequestedAt: r.awaitedReplyDraftRequestedAt,
                   hasUnhandledReply: r.hasUnhandledReply,
+                  replyPostdatesDraftRequest: r.replyPostdatesDraftRequest,
                   replyIsAnswered: r.replyIsAnswered,
                   intentHint: r.intentHint,
                   replyDraftEditedByDan: r.replyDraftEditedByDan,
