@@ -1775,7 +1775,7 @@ struct QueueView: View {
         }
         ProspectMutations.recordOutcome(snapshot, outcome,
                                         prospects: prospects, context: context,
-                                        feedback: feedback)
+                                        feedback: feedback, undo: undoStack)
         // Cleared after the exit plays. Never before the rebuild lands: clearing early would drop the
         // snapshot while the real row is still in the queue's answer, and the row Dan just closed out
         // would flash back onto the screen.

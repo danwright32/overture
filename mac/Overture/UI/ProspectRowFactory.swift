@@ -117,7 +117,7 @@ enum ProspectRowFactory {
             // #2395: an ending goes to the SHOW, through the one write every menu shares.
             onRecordOutcome: { outcome in
                 ProspectMutations.recordOutcome(item, outcome, prospects: prospects(),
-                                                context: context, feedback: feedback)
+                                                context: context, feedback: feedback, undo: undoStack)
             },
             onReopenOutcome: {
                 ProspectMutations.reopenOutcome(item, prospects: prospects(),
