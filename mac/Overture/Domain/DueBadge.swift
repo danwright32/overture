@@ -58,9 +58,6 @@ enum DueBadge {
         defaults.set(max(0, replies), forKey: repliesKey)
     }
 
-    static func currentReplies(from defaults: UserDefaults = .standard) -> Int {
-        max(0, defaults.integer(forKey: repliesKey))
-    }
 
     static func current(from defaults: UserDefaults = .standard) -> Int {
         max(0, defaults.integer(forKey: countKey))

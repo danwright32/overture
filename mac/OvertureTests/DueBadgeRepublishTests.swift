@@ -137,7 +137,7 @@ struct DueBadgeRepublishTests {
 
         #expect(scheduler.republishDueBadge(now: eastern(2026, 9, 4, 10, 0), defaults: defaults) == 1)
         #expect(DueBadge.current(from: defaults) == 1)
-        #expect(DueBadge.currentReplies(from: defaults) == 1)
+        #expect(defaults.integer(forKey: DueBadge.repliesKey) == 1)
     }
 
     // Nothing coming due arms NO timer, rather than one set far out: a timer for a change that cannot

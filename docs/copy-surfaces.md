@@ -63,6 +63,7 @@ A sentence written as a constant is read here at the file that RENDERS it, not o
 `Domain/DebugStaging.swift`
     SendIdentity.danWright  "Dan Wright"
 `Domain/EmptyState.swift`
+    ReplyToAnswerCopy.nothingWaiting  "So does anyone who wrote back and is waiting on your answer."
     StalledReplyDraftCopy.nothingStalled  "A reply draft that stalls before it arrives appears here too."
 `Domain/GenreGate.swift`
     GenreGateCopy.blocked  "Set this show's genre before you keep or dismiss it."
@@ -164,6 +165,7 @@ A sentence written as a constant is read here at the file that RENDERS it, not o
     ProposedConversationCopy.linked  "Linked. Overture is watching that conversation now."
     ProposedConversationCopy.question  "Is this their reply?"
     ProposedConversationCopy.section  "Conversations to confirm"
+    ReplyToAnswerCopy.section  "Replies to answer"
     SendConfirmCopy.openReview  "Review and send"
     StalledReplyDraftCopy.section  "Stalled reply drafts"
     StalledReplyDraftCopy.tryAgain  "Draft it again"

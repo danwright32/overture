@@ -75,7 +75,15 @@ struct OneRowPerGroupTests {
             r.replied = true
             r.repliedAt = daysAgo(1)
         }
-        // One post-event prompt for the show, not one per contact on the shared email.
+        // #3890: while those replies are unanswered the show owes ONE thing, the answer, and the
+        // post-event prompt yields to it. Still one row for the shared email, which is this test's subject.
+        let waiting = DueWork.counts(prospects: [p], inquiries: [], now: now, replyRunAlive: false)
+        #expect(waiting.repliesToAnswer == 1)
+        #expect(waiting.total == 1)
+
+        // Answered, the prompt comes back, and it is still one prompt for the show rather than one per
+        // contact on the shared email.
+        for r in p.recipients { r.recordAnswerSent(now: now) }
         #expect(DueWork.counts(prospects: [p], inquiries: [], now: now, replyRunAlive: false).afterTheShow == 1)
     }
 

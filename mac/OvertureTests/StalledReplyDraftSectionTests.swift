@@ -198,9 +198,12 @@ struct StalledReplyDraftSectionTests {
         let pill = followUpsPill(all, replyRunAlive: true)
         let listed = DueWork.rows(prospects: all, inquiries: [], now: now, replyRunAlive: true)
 
-        #expect(pill.count == 0)
         #expect(listed.stalledReplyDrafts.isEmpty)
-        #expect(pill.count == listed.stalledReplyDrafts.count)
+        // #3890: nothing is stalled, and the person who wrote is still waiting on an answer, so the pill
+        // states that one thing rather than zero. The pill and the rows agree, which is what this asserts.
+        #expect(listed.repliesToAnswer.count == 1)
+        #expect(pill.count == listed.rendered)
+        #expect(pill.count == 1)
     }
 
     // MARK: - The class, not the instance

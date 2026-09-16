@@ -88,17 +88,17 @@ struct DueBadgeTests {
         let d = scratchDefaults()
         DueBadge.publish(-5, replies: -2, into: d)
         #expect(DueBadge.current(from: d) == 0)
-        #expect(DueBadge.currentReplies(from: d) == 0)
+        #expect(d.integer(forKey: DueBadge.repliesKey) == 0)
     }
 
     // #3890: how many of the published count are replies waiting on an answer, published beside it so the
     // menu can name them. Dan's call, 2026-09-15: the menu bar line is the lasting signal outside the app.
     @Test func thePublishedReplyCountIsWhatTheMenuReads() {
         let d = scratchDefaults()
-        #expect(DueBadge.currentReplies(from: d) == 0)
+        #expect(d.integer(forKey: DueBadge.repliesKey) == 0)
         DueBadge.publish(4, replies: 3, into: d)
         #expect(DueBadge.current(from: d) == 4)
-        #expect(DueBadge.currentReplies(from: d) == 3)
+        #expect(d.integer(forKey: DueBadge.repliesKey) == 3)
     }
 
     // A glyph with a number beside it is not a sentence, so the item says what it is and what the number
