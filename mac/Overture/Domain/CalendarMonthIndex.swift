@@ -25,8 +25,10 @@ enum CalendarMonthIndex {
     //
     // #1571: this is the SUPPLY side of a pair. The queue only shows the next
     // [[QueueModel.leadTimeWindowDays]] days, and the relationship between the two (why they differ,
-    // and the one date a year where four months falls a day short of ninety) is written down in one
-    // place, at that constant. Read it before changing this number.
+    // and what the buffer is for) is written down in one place, at that constant. Read it before
+    // changing this number. Four months reaches 89 days at its shortest, on 31 January of a non leap
+    // year, which since #3423 took the window to 63 clears it on every date; at 90 it fell one day
+    // short on that one date, and that is why the pair is measured rather than assumed.
     static let defaultHorizon = 4
 
     // What a page's own month navigation tells us: the months we can go and read, and the months it

@@ -54,10 +54,13 @@ struct WentByRetirementTests {
 
     @Test func aShowStillToComeIsLeftAlone() throws {
         let ctx = try context()
-        let september = show(ctx, "september", date: "2026-09-19")
+        // Inside the lead time window and derived from it (#3423): the claim is that a show still to
+        // come is left alone, which needs a show the queue would still be offering.
+        let stillToCome = show(ctx, "still-to-come",
+                               date: ScoutTestClock.day(today, plus: QueueModel.leadTimeWindowDays / 2))
 
         #expect(WentByRetirement.run(in: ctx, today: today) == 0)
-        #expect(september.status == .new)
+        #expect(stillToCome.status == .new)
     }
 
     // #1540, REVERSING what this test used to assert: a run that OPENED on an earlier day is retired,
@@ -130,7 +133,8 @@ struct WentByRetirementTests {
     @Test func aRetiredShowLandsInItsOwnArchiveBucketNotDismissed() throws {
         let ctx = try context()
         let june = show(ctx, "june", date: "2026-06-27")
-        let cut = show(ctx, "cut", date: "2026-09-19", status: .dismissed)
+        let cut = show(ctx, "cut", date: ScoutTestClock.day(today, plus: QueueModel.leadTimeWindowDays / 2),
+                       status: .dismissed)
         cut.showOutcome = .notAFit
 
         WentByRetirement.run(in: ctx, today: today)
@@ -165,7 +169,7 @@ struct WentByRetirementTests {
         let ctx = try context()
         show(ctx, "past", date: "2026-06-27")
         show(ctx, "tonight", date: today)
-        show(ctx, "future", date: "2026-09-19")
+        show(ctx, "future", date: ScoutTestClock.day(today, plus: QueueModel.leadTimeWindowDays / 2))
         show(ctx, "still-running", date: "2026-07-09", runEnd: "2026-07-20")
         show(ctx, "undated", date: nil)
         let all = try ctx.fetch(FetchDescriptor<Prospect>())

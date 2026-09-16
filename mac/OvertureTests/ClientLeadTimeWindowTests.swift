@@ -45,12 +45,16 @@ struct ClientLeadTimeWindowTests {
 
     // MARK: - The ordinary window
 
-    @Test("a show that is not a past client's is offered inside 90 days and held beyond it")
+    // Derived from the window rather than written down (#3423). These dates mean "well inside", "the
+    // last day in" and "the first day out", and a literal only means that until Dan moves the number:
+    // on 2026-08-31 he did, from 90 days to nine weeks, and this test had picked the old edge.
+    @Test("a show that is not a past client's is offered inside the ordinary window and held beyond it")
     func theOrdinaryWindow() throws {
+        let window = QueueModel.leadTimeWindowDays
         let ctx = try Self.container()
-        Self.show(ctx, key: "near", date: "2026-10-01")     // 51 days out
-        Self.show(ctx, key: "edge", date: "2026-11-09")     // exactly 90 days out
-        Self.show(ctx, key: "far", date: "2026-11-10")      // 91 days out
+        Self.show(ctx, key: "near", date: ScoutTestClock.day(Self.today, plus: window / 2))
+        Self.show(ctx, key: "edge", date: ScoutTestClock.day(Self.today, plus: window))
+        Self.show(ctx, key: "far", date: ScoutTestClock.day(Self.today, plus: window + 1))
         let keys = try Self.scoutKeys(ctx, clients: .none)
         #expect(keys.contains("near"))
         #expect(keys.contains("edge"))
@@ -109,7 +113,7 @@ struct ClientLeadTimeWindowTests {
     func demandStaysInsideSupply() {
         #expect(QueueModel.clientLeadTimeWindowMonths < ClientHorizon.clientMonths,
                 "a client's display window must end before the last month its calendar is read to")
-        #expect(QueueModel.leadTimeWindowDays == 90)
+        #expect(QueueModel.leadTimeWindowDays == 63)
     }
 
     // MARK: - Nothing else applies a window

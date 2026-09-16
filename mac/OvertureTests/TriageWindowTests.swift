@@ -35,10 +35,7 @@ struct TriageWindowTests {
     // Dan ever moves the window instead of pinning a number that silently stops being the edge. The one
     // literal below keeps that arithmetic honest.
     private func day(_ offset: Int) -> String {
-        var cal = Calendar(identifier: .gregorian)
-        cal.timeZone = TimeZone(identifier: "America/New_York") ?? .gmt
-        let start = cal.date(from: DateComponents(year: 2026, month: 7, day: 12))!
-        return EasternDate.dayString(from: cal.date(byAdding: .day, value: offset, to: start)!)
+        ScoutTestClock.day(today, plus: offset)
     }
 
     @discardableResult
@@ -63,11 +60,14 @@ struct TriageWindowTests {
 
     // MARK: - The window itself
 
-    @Test("The anchor's ninetieth day is the date this suite thinks it is")
+    @Test("The anchor's sixty-third day is the date this suite thinks it is")
     func theArithmeticThisSuiteRestsOnIsCorrect() {
-        #expect(QueueModel.leadTimeWindowDays == 90)
-        #expect(day(90) == "2026-10-10", "ninety days after \(today) is 2026-10-10, not \(day(90))")
-        #expect(EasternDate.daysUntil(from: today, to: day(90)) == 90)
+        // Nine weeks, Dan's call 2026-08-31 (#3423). Pinned here as well as at the constant because the
+        // rest of this suite reads the constant, so without this line a change to it would silently
+        // move what every case below is about rather than failing.
+        #expect(QueueModel.leadTimeWindowDays == 63)
+        #expect(day(63) == "2026-09-13", "sixty-three days after \(today) is 2026-09-13, not \(day(63))")
+        #expect(EasternDate.daysUntil(from: today, to: day(63)) == 63)
     }
 
     @Test("A show past the window is not waiting to be triaged")

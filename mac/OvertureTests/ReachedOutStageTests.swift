@@ -21,8 +21,12 @@ struct ReachedOutStageTests {
 
     @discardableResult
     private func show(_ ctx: ModelContext, _ key: String, status: ReviewStatus = .new) -> Prospect {
+        // Half a window out, derived (#3423). Every case here is about which STAGE a show lands in, so
+        // the show has to be inside the lead time window or `.scout` is empty and the suite asserts
+        // about nothing. As a literal it was 69 days, which was inside 90 and is outside nine weeks.
         let p = Prospect(naturalKey: key, groupName: key, discipline: "music", venue: "Merkin Hall",
-                         performanceDate: "2026-09-19", sourceListingURL: nil,
+                         performanceDate: ScoutTestClock.day(today, plus: QueueModel.leadTimeWindowDays / 2),
+                         sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 5, tier: "mid", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,

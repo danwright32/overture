@@ -7,6 +7,11 @@ import Foundation
 // anything." And, on the other end of the pipeline: "Scout should be solely responsible for filtering
 // out based on how far away it is. If it gets to prep I want to be able to prep it."
 //
+// The NUMBER in the first sentence was superseded on 2026-08-31 (#3423): the ordinary arm is nine weeks
+// now, not 90 days. His words are kept verbatim rather than edited, because they are the record of the
+// SHAPE of the rule, which is unchanged, and that shape is what this type exists to serve. Only the
+// ordinary arm moved; he was explicit that the past client look ahead does not.
+//
 // So this value exists to answer ONE question, asked in ONE place (`StageNavigation.isWithinLeadTime`),
 // and no other stage consults a date at all.
 //
