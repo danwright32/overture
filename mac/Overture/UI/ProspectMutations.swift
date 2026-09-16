@@ -95,7 +95,8 @@ enum ProspectMutations {
     @discardableResult
     static func recordOutcome(_ item: QueueItem, _ outcome: ShowOutcome,
                               prospects: [Prospect], context: ModelContext,
-                              feedback: ActionFeedback) -> Bool {
+                              feedback: ActionFeedback,
+                              undo: QueueUndoStack? = nil) -> Bool {
         guard let model = model(for: item, in: prospects, feedback: feedback) else { return false }
         guard ShowOutcome.menu(wasPitched: model.wasPitched).contains(outcome) else {
             feedback.acknowledge(ShowOutcome.refusedLine(outcome, org: item.groupName,
@@ -103,6 +104,16 @@ enum ProspectMutations {
                                  tone: .warning)
             return false
         }
+
+        // #3566: read BEFORE either branch mutates, for the reason `setStatus` reads its four the same
+        // way: the entry records where the row actually came from rather than an inverse guessed at undo
+        // time. Captured after the refusal above, so a refused ending records nothing at all and cannot
+        // sit on the stack swallowing the next press.
+        let priorStatus = model.status
+        let priorReason = model.showOutcomeRaw
+        let priorOutcomeStamp = model.showOutcomeAt
+        let priorExit = model.dismissedAt
+        let priorClearedConflict = model.conflictClearedKey
 
         if ShowOutcome.neverPitched.contains(outcome) {
             // The never-pitched half. A show that ended without being sent to LEAVES the queue, which is
@@ -127,6 +138,20 @@ enum ProspectMutations {
             // a second home for one fact (L83). Contacts keep only routing facts: this address bounced, this
             // person replied, use this one next time.
             model.resumePausedRecipients()
+        }
+        // #3566: ONE recording site covering both branches, deliberately, because from the keyboard the
+        // two are one action. Dan, 2026-09-05: "I'm on the reached out page and I clicked close this out
+        // on a show. then I clicked cmd+z and nothing happened." Close out was outside the keep and
+        // dismiss narrowing (his call, 2026-07-23) and has since MOVED onto the row he stands on
+        // (#2112 / #2224 / #2710), where it sits beside undoable actions with nothing to tell them apart.
+        // Recording in one branch only would make Cmd+Z work on some endings and not others, which reads
+        // from the keyboard as undo being broken rather than as a scope nobody stated (L11).
+        if let undo {
+            undo.record(QueueUndoEntry(recording: "Close out", on: model,
+                                       priorStatus: priorStatus, priorShowOutcomeRaw: priorReason,
+                                       priorShowOutcomeAt: priorOutcomeStamp,
+                                       priorDismissedAt: priorExit,
+                                       priorConflictClearedKey: priorClearedConflict))
         }
         guard context.saveOrWarn(org: item.groupName, feedback: feedback) else { return false }
         feedback.acknowledge(ShowOutcome.recordedLine(outcome, org: item.groupName))
@@ -724,6 +749,8 @@ enum ProspectMutations {
         // an inverse guessed at undo time.
         let priorStatus = model.status
         let priorReason = model.showOutcomeRaw
+        // #3566: and WHEN that ending was recorded, so an undo cannot leave a stamp behind an ending it cleared.
+        let priorOutcomeStamp = model.showOutcomeAt
         let priorExit = model.dismissedAt
         let priorClearedConflict = model.conflictClearedKey
         // #16: routed through the model's own pair so the exit date is stamped on a cut and cleared on
@@ -745,7 +772,8 @@ enum ProspectMutations {
         if status == .queued { model.clearConflict() }
         if let undo, let undoLabel {
             undo.record(QueueUndoEntry(recording: undoLabel, on: model, priorStatus: priorStatus,
-                                       priorShowOutcomeRaw: priorReason, priorDismissedAt: priorExit,
+                                       priorShowOutcomeRaw: priorReason, priorShowOutcomeAt: priorOutcomeStamp,
+                                          priorDismissedAt: priorExit,
                                        priorConflictClearedKey: priorClearedConflict))
         }
         context.saveOrWarn(org: item.groupName, feedback: feedback)
@@ -785,6 +813,8 @@ enum ProspectMutations {
         let rows = targets.compactMap { model -> QueueUndoEntry.Row? in
             let priorStatus = model.status
             let priorReason = model.showOutcomeRaw
+            // #3566: and WHEN that ending was recorded, so an undo cannot leave a stamp behind an ending it cleared.
+            let priorOutcomeStamp = model.showOutcomeAt
             let priorExit = model.dismissedAt
             // #1583: a dismiss never touches the accepted clash, so this records the value it is leaving
             // alone. Passing nil instead would make undoing a bulk dismiss silently re-block every show on
@@ -813,14 +843,16 @@ enum ProspectMutations {
                 ConflictSweep.reapply(model, export: export, in: context)
                 closedRuns += 1
                 return QueueUndoEntry.Row(recording: model, priorStatus: priorStatus,
-                                          priorShowOutcomeRaw: priorReason, priorDismissedAt: priorExit,
+                                          priorShowOutcomeRaw: priorReason, priorShowOutcomeAt: priorOutcomeStamp,
+                                          priorDismissedAt: priorExit,
                                           priorConflictClearedKey: priorClearedConflict,
                                           droppedNights: [night] + releasing)
             }
             if let night, case .moved(_, let releasing) = drop {
                 ConflictSweep.reapply(model, export: export, in: context)
                 return QueueUndoEntry.Row(recording: model, priorStatus: priorStatus,
-                                          priorShowOutcomeRaw: priorReason, priorDismissedAt: priorExit,
+                                          priorShowOutcomeRaw: priorReason, priorShowOutcomeAt: priorOutcomeStamp,
+                                          priorDismissedAt: priorExit,
                                           priorConflictClearedKey: priorClearedConflict,
                                           droppedNights: [night] + releasing)
             }
@@ -828,7 +860,8 @@ enum ProspectMutations {
             // stamps it, and a show dismissed twice keeps its FIRST exit date.
             model.markDismissed(reason: reason)
             return QueueUndoEntry.Row(recording: model, priorStatus: priorStatus,
-                                      priorShowOutcomeRaw: priorReason, priorDismissedAt: priorExit,
+                                      priorShowOutcomeRaw: priorReason, priorShowOutcomeAt: priorOutcomeStamp,
+                                          priorDismissedAt: priorExit,
                                       priorConflictClearedKey: priorClearedConflict)
         }
         // #2754: nothing was written at all when every target was a run that had to be left alone, so
@@ -895,6 +928,8 @@ enum ProspectMutations {
            let model = prospects.first(where: { $0.naturalKey == item.id }) {
             let priorStatus = model.status
             let priorReason = model.showOutcomeRaw
+            // #3566: and WHEN that ending was recorded, so an undo cannot leave a stamp behind an ending it cleared.
+            let priorOutcomeStamp = model.showOutcomeAt
             let priorExit = model.dismissedAt
             let priorClearedConflict = model.conflictClearedKey
             // A card with no date at all ("date to be confirmed") has no night to drop, so it takes the
@@ -923,6 +958,7 @@ enum ProspectMutations {
                 if let undo {
                     undo.record(QueueUndoEntry(recording: "Dismiss", on: model,
                                                priorStatus: priorStatus, priorShowOutcomeRaw: priorReason,
+                                               priorShowOutcomeAt: priorOutcomeStamp,
                                                priorDismissedAt: priorExit,
                                                priorConflictClearedKey: priorClearedConflict,
                                                droppedNights: [night] + releasing))
@@ -949,6 +985,7 @@ enum ProspectMutations {
                 if let undo {
                     undo.record(QueueUndoEntry(recording: "Dismiss", on: model,
                                                priorStatus: priorStatus, priorShowOutcomeRaw: priorReason,
+                                               priorShowOutcomeAt: priorOutcomeStamp,
                                                priorDismissedAt: priorExit,
                                                priorConflictClearedKey: priorClearedConflict,
                                                droppedNights: [night] + releasing))

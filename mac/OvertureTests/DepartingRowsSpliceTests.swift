@@ -79,4 +79,41 @@ struct DepartingRowsSpliceTests {
         let undated = spliced.first { $0.id == "tbd" }
         #expect(undated?.items.map(\.id) == ["b"])
     }
+
+    // #3634. Dan, 2026-09-07: "I dismissed a whole night and it moved me to the bottom of the scout
+    // queue. I was in september now I'm looking at may."
+    //
+    // A night keeps its date position while every one of its rows is departing. The queue pins its
+    // scroll to the date group at the top of the screen, so the group Dan is reading IS the night he is
+    // dismissing: rebuilt at the end of the list, the scroll follows it there.
+    @Test func aNightWhoseEveryRowIsDepartingKeepsItsDatePosition() {
+        let groups = QueueModel.groupByDate([row("a", date: "2026-07-01"), row("c", date: "2026-07-03")])
+        let dismissed = item("b", date: "2026-07-02")
+
+        let spliced = QueueModel.groups(groups, withDeparting: ["b": dismissed])
+
+        #expect(spliced.map(\.id) == ["2026-07-01", "2026-07-02", "2026-07-03"])
+    }
+
+    // The undated bucket is not a date and cannot be placed by one. It stays last however the dated
+    // nights fall, which is what `QueueModelTests` already pins for `groupByDate` itself.
+    @Test func aDepartingOnlyUndatedNightStaysLastRatherThanTakingADatePosition() {
+        let groups = QueueModel.groupByDate([row("a", date: "2026-07-01"), row("c", date: "2026-07-03")])
+
+        let spliced = QueueModel.groups(groups, withDeparting: ["b": item("b", date: nil),
+                                                                "d": item("d", date: "2026-07-02")])
+
+        #expect(spliced.map(\.id) == ["2026-07-01", "2026-07-02", "2026-07-03", "tbd"])
+    }
+
+    // The incoming order is the derivation's, not a date sort, and the splice may not overrule it. Other
+    // callers group on their own key and order their own way, so a global sort here would silently
+    // reorder every surface that does not happen to already be in date order.
+    @Test func theIncomingOrderOfSurvivingNightsIsPreservedRatherThanSorted() {
+        let groups = QueueModel.groupByDate([row("a", date: "2026-07-05"), row("c", date: "2026-07-01")])
+
+        let spliced = QueueModel.groups(groups, withDeparting: ["b": item("b", date: "2026-07-05")])
+
+        #expect(spliced.map(\.id) == ["2026-07-05", "2026-07-01"])
+    }
 }

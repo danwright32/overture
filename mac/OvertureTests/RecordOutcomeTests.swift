@@ -241,4 +241,82 @@ struct RecordOutcomeTests {
         #expect(said.contains("Orchestra of St Luke's"))
         #expect(said.contains("Never heard back"))
     }
+
+    // MARK: undoing a close out (#3566)
+
+    // Dan, 2026-09-05: "I'm on the reached out page and I clicked close this out on a show. then I
+    // clicked cmd+z and nothing happened. it didn't come back."
+    //
+    // Close out was never in scope when undo was narrowed to keep and dismiss (his call, 2026-07-23),
+    // and what changed since is that close out MOVED onto the row he stands on (#2112 / #2224 / #2710).
+    // It now sits beside actions that are undoable with nothing to tell them apart from the keyboard.
+    // His call, 2026-09-16: Cmd+Z, the same as keep and dismiss, rather than a separate control.
+    @Test func closingAPitchOutRecordsAnUndoEntryNamingTheEnding() throws {
+        let ctx = try context()
+        let p = pitched(ctx)
+        let undo = QueueUndoStack()
+
+        _ = ProspectMutations.recordOutcome(QueueItem(p), .theySaidNotNow, prospects: [p],
+                                            context: ctx, feedback: ActionFeedback(), undo: undo)
+
+        #expect(undo.canUndo)
+        #expect(undo.undoMenuTitle == "Undo Close out: Orchestra of St Luke's")
+    }
+
+    // The stamp goes back with the ending, and that is not tidiness. #2915 records `showOutcomeAt` so a
+    // reply arriving AFTERWARDS can be told from the reply Dan already had in hand when he closed this.
+    // Left behind by an undo, it dates an ending that no longer exists, and every later comparison is
+    // against a moment nothing on the row can explain.
+    @Test func undoingACloseOutTakesBackTheEndingAndItsStamp() throws {
+        let ctx = try context()
+        let p = pitched(ctx)
+        let undo = QueueUndoStack()
+        _ = ProspectMutations.recordOutcome(QueueItem(p), .theySaidNotNow, prospects: [p],
+                                            context: ctx, feedback: ActionFeedback(), undo: undo)
+        #expect(p.showOutcomeAt != nil)
+
+        let entry = try #require(undo.takeTop())
+        #expect(QueueUndo.apply(entry, to: p, in: ctx))
+
+        #expect(p.showOutcome == nil)
+        #expect(p.showOutcomeAt == nil)
+        #expect(p.status == .contacted)
+    }
+
+    // A close out that REPLACES an earlier ending must restore that earlier one, not clear the field.
+    // The entry holds what was there rather than an assumed inverse, which is the same reason
+    // `priorDismissedAt` is recorded rather than cleared.
+    @Test func undoingACloseOutOverAnEarlierEndingRestoresTheEarlierOne() throws {
+        let ctx = try context()
+        let p = pitched(ctx)
+        _ = ProspectMutations.recordOutcome(QueueItem(p), .neverHeardBack, prospects: [p],
+                                            context: ctx, feedback: ActionFeedback())
+        let undo = QueueUndoStack()
+
+        _ = ProspectMutations.recordOutcome(QueueItem(p), .theySaidNotNow, prospects: [p],
+                                            context: ctx, feedback: ActionFeedback(), undo: undo)
+        let entry = try #require(undo.takeTop())
+        #expect(QueueUndo.apply(entry, to: p, in: ctx))
+
+        #expect(p.showOutcome == .neverHeardBack)
+        #expect(p.showOutcomeAt != nil)
+    }
+
+    // The never-pitched half goes down the dismiss path, and that path already records. Asserted so the
+    // two halves of `recordOutcome` cannot drift into one recording and the other not, which from the
+    // keyboard would look like Cmd+Z working on some endings and not others (L11).
+    @Test func aNeverPitchedEndingIsUndoableToo() throws {
+        let ctx = try context()
+        let p = show(ctx, status: .queued)
+        let undo = QueueUndoStack()
+
+        _ = ProspectMutations.recordOutcome(QueueItem(p), .hadPaidWork, prospects: [p],
+                                            context: ctx, feedback: ActionFeedback(), undo: undo)
+        let entry = try #require(undo.takeTop())
+        #expect(QueueUndo.apply(entry, to: p, in: ctx))
+
+        #expect(p.status == .queued)
+        #expect(p.showOutcome == nil)
+        #expect(p.dismissedAt == nil)
+    }
 }

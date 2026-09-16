@@ -11,6 +11,12 @@ struct FollowUpsView: View {
     // #3762: the app's own freeze instrument, read as an OPTIONAL on the same footing as every other
     // environment object here, so a missed injection is a pass nobody counted rather than a crash.
     @Environment(FreezeWatch.self) private var freezeWatch: FreezeWatch?
+    // #3566: the session undo stack, so closing a pitch out from this row is reversible with Cmd+Z the
+    // way keep and dismiss already are. OPTIONAL on the same footing as every other environment object
+    // here, and for the reason QueueView records against its own: a non-optional Observable lookup fatal
+    // errors when the object is absent, so a missed injection would crash the app and every test that
+    // builds this view directly. Nil simply means this surface records nothing.
+    @Environment(QueueUndoStack.self) private var undoStack: QueueUndoStack?
     // #3871: the whole store, HANDED DOWN rather than queried again here.
     //
     // It was `@Query private var prospects: [Prospect]`, a bare descriptor identical to the one RootView
@@ -470,7 +476,8 @@ struct FollowUpsView: View {
                                      ? { manualLinkTarget = ManualLinkTarget(prospect: p, recipient: r) }
                                      : nil) { outcome in
                         ProspectMutations.recordOutcome(QueueItem(p), outcome, prospects: prospects,
-                                                        context: context, feedback: feedback)
+                                                        context: context, feedback: feedback,
+                                                        undo: undoStack)
                     }
                 }
                 // #686: reply text, AI reply drafter, and Mark… only exist on the full card in Archive.
