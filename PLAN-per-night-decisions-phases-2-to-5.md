@@ -1,8 +1,9 @@
 # Per-night decisions, phases 2 to 5
 
 Replaces phases 2 to 5 of `PLAN-per-night-decisions-at-prep-launch-and-a-run-aware-self-booking-check.md`,
-whose phase 1 is BUILT (#3323, extended by #3676) and whose phases 3.8 and 2.7 rest on premises reversed
-by #3369 and by a clean store. Read that file's correction block for the full account. Tracking: #3957.
+whose phase 1 is BUILT (#3323, extended by #3676), whose phase 3.8 splits a gate #3369 deleted, and whose
+phase 2.7 repairs a corpus that a launch migration empties and the next scout refills (#3962). Read that
+file's correction block for the full account. Tracking: #3957.
 
 Planned with `/plan-lite` on 2026-09-17: a grilling, a draft, an independent red team, a lessons audit over
 all ~690 recorded lessons, then this revision. **Both critics were run and both are answered below.**
@@ -22,15 +23,18 @@ Row identities are primary keys only. This repository is PUBLIC (L482, #3958).
 
 ### Measurements and how to re-take them
 
-Every figure below carries the command that produced it, so it can be re-measured on the day it is next
-written rather than trusted (L316). Store figures are from a WAL consistent copy taken 2026-09-17,
-**1,257 prospects**; all `ZRUNNIGHTS` and `ZDROPPEDRUNNIGHTS` blobs decoded, 0 failures, 0 nulls.
+Every figure below carries the command or the predicate that produced it, so it can be re-measured on the
+day it is next written rather than trusted (L316). Two readings are quoted, hours apart on 2026-09-17, and
+the store grew between them: a SQL reading over a WAL consistent copy at **1,257 prospects** (all
+`ZRUNNIGHTS` and `ZDROPPEDRUNNIGHTS` blobs decoded, 0 failures, 0 nulls), and the predicate reading below at
+**1,260**. Where they differ the predicate reading wins, and part of the difference is real drift rather
+than method: this store moves by a few rows a day and by 11% in a day on some populations.
 
-**Two figures below are NOT admissible as final and are marked UNVERIFIED-BY-CODE.** They were taken in
-SQL beside the app rather than through the app's own predicates, and this project's own memory records that
-the app folds duplicates harder than SQL does and that a duplicate count here has already been wrong on an
-issue (L107). They are re-derived through the shipped predicate before the phase that depends on them
-merges, and the phase says so at the point of use.
+**RE-DERIVED 2026-09-17 by #3963.** Every figure below was re-taken through the shipped Swift predicates,
+under `RealStoreTestLock` against a `LiveStoreClone` backup, because a figure taken in SQL beside the app is
+not admissible for a design decision (L107). Corpus at that measurement: **1,260 prospects, 620 live**, a
+few hours after the 1,257 reading. One design decision did not survive it, and section 2.5 is rewritten
+below rather than annotated.
 
 ## The six answers Dan gave, plus the two collisions they produced
 
@@ -62,16 +66,23 @@ notice. Both went back to Dan, same session:
 
 Commands in `mac/`, measured 2026-09-17.
 
-- 1,257 rows: new 560, dismissed 640, contacted 48, drafted 9, queued 0, approved 0.
+- 1,257 rows at the SQL reading: new 560, dismissed 640, contacted 48, drafted 9, queued 0, approved 0.
+  1,260 rows, 620 live, hours later at the predicate reading.
 - **126 multi-night rows, 78 live.** Live histogram (nights: rows): 2:31, 3:7, 4:7, 5:2, 6:4, 7:3, 8:4,
   9:2, 10:4, 11:1, 12:6, 13:1, 16:1, 18:1, 20:3, **28:1**. **45 of 78 are two to four nights**; the worst
   case is 28 and it is live.
-- 22 rows carry a span with an EMPTY `runNights`, 9 live. **UNMEASURED: how many have gained nights since
-  #1523.** Section 3.3 depends on the answer and takes it before relying on the sentence (L460).
-- **UNVERIFIED-BY-CODE: 19 rows hold duplicate entries in `runNights`.** Re-derive through the shipped
-  fold before 3.4 merges.
-- **UNVERIFIED-BY-CODE: 310 rows carry `conflictOpen`, 68 multi-night, 45 blocked on a later night, 24 of
-  those live.** Re-derive through `Prospect.hasUnclearedConflict` before 2.4 merges.
+- 22 rows carry a span with an EMPTY `runNights`, 9 live. **MEASURED across 29 dated snapshots back to
+  2026-06-28: ZERO of them has ever gained nights**, and the one that ever held any lost them to drops.
+  Twelve consecutive daily snapshots show the cohort frozen at 22 and 9. See 3.3: the sentence saying they
+  pick their nights up on the next scout is FALSE and is deleted.
+- **19 rows hold duplicate entries in `runNights`, 11 of them live** (through `QueueModel.selfBookingNights`,
+  `QueueView+Model.swift:2665`). A control confirmed no divergence in either direction. The shape matters
+  more than the count: one LIVE `new` row stores every night of a 20 night run twice.
+- **310 rows carry `conflictOpen`, 74 multi-night, 48 blocked on a later night, 25 of those live** (through
+  `Prospect.hasUnclearedConflict` and `ConflictScope.of`). The stored column is NOT stale:
+  `ConflictSweep.reapplyAll` against a healthy Release export changed 0 of 1,260 rows.
+- **16 of 89 live multi-night runs carry TWO OR MORE blocked nights**, one of them 12 blocked nights out of
+  12. This is the figure that invalidated 2.5 as first written.
 - 41 rows carry `droppedRunNights`, 16 still `new`. 48 rows carry `sentAt`, four multi-night.
 
 ---
@@ -180,11 +191,33 @@ already set (live on two rows) would read cleared in the dialog and blocked in t
 **`conflictClearedKey` is consulted, not bypassed.** A night whose deciding day matches the cleared key is
 shown as already waived rather than re-raised, because an acknowledgement Dan gives must be consulted by
 every rule raising that question or it goes on asking after it has been answered (L330, whose evidence is
-overture#3307 in this repo). Ticking a blocked night clears the conflict through the existing
-`conflictClearedKey` path, so the badge and the picker cannot disagree afterwards (L152, L109).
+overture#3307 in this repo).
 
-The blocked set is built ONCE per open, outside the sheet, and needs a new member on `BlockedCalendar`
-returning a per-night SET: `conflict` returns one `Day?` and `decidingDay` is private (`:167`).
+**CORRECTED 2026-09-17 by #3961 and #3963: the existing waiver CANNOT hold the answer, so a per-night
+override record ships after all.** An earlier draft said ticking a blocked night clears the conflict
+through the existing `conflictClearedKey` path and that no new column was needed. That is structurally
+false. `Prospect.conflictKey` and `Prospect.conflictClearedKey` are each a single `String?`
+(`Prospect.swift:761`, `:767`) and `BlockedCalendar.conflict` returns one `Day?`, so the card level
+vocabulary cannot express "I accept the 12th but not the 14th".
+
+Measured through the shipped predicates: **89 live multi-night runs, of which 16 carry TWO OR MORE blocked
+nights** (ten with 2, two with 3, two with 4, one with 5, and one 12 night run with all 12 blocked). All 16
+are `new`, all 16 are `conflictOpen`, and **not one has a `conflictClearedKey` set**, which is exactly why
+the collision has never bitten and was invisible to the first draft. Waiving the second blocked night would
+silently overwrite the record of waiving the first, and on one run it would overwrite eleven.
+
+So `pitchedRunNights` entries carry the deciding day key when the night was blocked and ticked anyway, on
+the `DroppedNight` precedent so a clash that CHANGES under Dan re-blocks that night (#718's pattern). This
+is the old plan's `acceptedNightConflicts` in substance, and it is justified now for the reason it was not
+then: it has a LIVE reader, the row explaining why a night with a shoot on it was pitched, exercised on
+every render rather than waiting for a milestone that has shipped nothing (L46, L65). The card level
+`conflictClearedKey` stays as it is, for the card level question.
+
+**There is no shipped predicate for "which nights of this run are blocked", and this plan must add one.**
+`conflict` returns one `Day?` and `decidingDay` is private (`:167`), so without a new member returning the
+per-night SET the picker and the confirm dialog each invent their own loop and can disagree (L342, L261),
+which is the exact failure the paragraph above exists to prevent. The set is built ONCE per open, outside
+the sheet.
 
 **The default is not stable across opens, and that is stated rather than hidden.** `BlockedCalendar`
 filters `cancelledBookingIds` on every call (`:317-322`), so a booking cancelled overnight changes which
@@ -370,16 +403,37 @@ reachable and screenshot that state, because the amount of content deciding whet
 be clicked is a measured failure (L189), and a clipping region must show at rest that content continues
 past its edge (L76).
 
-22 rows carry a span and no `runNights`, 9 live. **The claim that they "pick their nights up on the next
-scout" is UNMEASURED and is taken before it is relied on** (L460): if none of the 22 has gained nights
-since #1523, those 9 live rows are permanently outside this feature and the reassuring sentence is false.
-The picker says why it cannot help them rather than rendering an empty list (L10).
+22 rows carry a span and no `runNights`, 9 live. **MEASURED 2026-09-17 across 29 dated snapshots back to
+2026-06-28, and the answer is the bad one: ZERO of the 22, and zero of the 9 live, has ever gained nights.**
+The one row that ever held any went the other way, from 4 nights to none, because they were dropped. Twelve
+consecutive daily snapshots show the cohort frozen at exactly 22 and 9.
+
+**So the sentence "they pick their nights up on the next scout" is FALSE for this cohort and is deleted.**
+Those 9 live rows are permanently outside this feature, and the picker's cannot-help state is their
+permanent condition rather than a transient edge. It says why rather than rendering an empty list (L10).
+
+The mechanism is not wholly dead, which is why the claim looked safe: the cohort was 36 in the 2026-07-28
+snapshot and 2 of the 7 still traceable gained nights as the scout first re-touched pre-#1523 rows. It has
+not touched one of today's 22 in seven weeks.
+
+**And the cohort is not what everyone has been calling it.** 2 of the 22 carry `droppedRunNights`, so they
+came through POST-#1523 machinery: `ScoutService.swift:1821` sets `runNights = DroppedNight.keeping(...)`,
+and when the drops subtract every night the list empties while the `runEndDate` correction on the next line
+only fires `if !existing.runNights.isEmpty`. **The state is reachable today**, so an empty night list means
+two different things and every consumer branching on it has to say which it assumes.
+
+**The same false sentence is in the CODE**, in `BlockedCalendar.conflict`'s own comment
+(`BlockedCalendar.swift:~296`, "They pick up their nights on the next scout"). Correcting this plan alone
+leaves it standing exactly where the next implementer reads it, so it is corrected in the same change
+(L57: a correction recorded only in a transcript recurs, because the artifact that governs never changed).
 
 ### 3.4 Duplicates
 
-The picker deduplicates on read. **The 19 is UNVERIFIED-BY-CODE and is re-derived through the shipped fold
-before this merges**, because this project's memory records a duplicate count here already having been
-wrong on an issue (L107). The upstream fold defect is filed separately.
+The picker deduplicates on read. **Re-derived 2026-09-17 through `QueueModel.selfBookingNights`: 19 rows,
+11 live, and the premise is stronger than it was written.** Nine are a simple 2 to 1; the rest run to 20 to
+19, 10 to 7 and, on a LIVE `new` row, 20 to 10, every night of a 20 night run stored twice. Without the
+deduplication that card renders twenty rows for a ten night run. The upstream fold defect is filed
+separately.
 
 ### 3.5 A partial launch, and why the obvious mechanism is the wrong one
 
@@ -543,8 +597,12 @@ shipped predicate before this merges (L629, L418).
 
 ## What this plan deliberately does NOT do
 
-- **No `acceptedNightConflicts` column.** The prep gate it existed to open was deleted (#3369). The waiver
-  it would have held is `conflictClearedKey`, which already exists and is now consulted (2.5).
+- **A per-night override record SHIPS after all**, which reverses this plan's own first draft. It is the
+  old `acceptedNightConflicts` in substance, and the reason it is justified now is not the prep gate
+  (#3369 deleted that) but that 16 of 89 live multi-night runs carry two or more blocked nights and the
+  single `conflictClearedKey` cannot hold two answers. Measured through the shipped predicates, #3963.
+  What makes it a live column rather than a dead one is that the row reads it back to explain why a night
+  with a shoot on it was pitched (L46, L65). See 2.5.
 - **No two-gate split.** Same reason. Gone, not deferred.
 - **No backfill of the 48 sent rows.** Answer 6, and it removes an idempotency hazard rather than solving it.
 - **No exclusion record for #16.** Its only named reader has never shipped an issue (milestone 66: 11 open,
@@ -561,10 +619,13 @@ L481, applied to this plan rather than only cited by it. Each blocks the section
 
 - **#3961**: nothing durable records which nights were blocked at the moment of a pitch, so a decision
   recorded as Dan's cannot be explained the next day. Gates 2.5.
-- **#3962**: two readings of the natural key corpus days apart disagree and the cause is unestablished.
-  Gates 2.11.
-- **#3963**: three figures are UNVERIFIED-BY-CODE or UNMEASURED (the duplicate count, the `conflictOpen`
-  split, and whether the 22 span-only rows ever gain nights). Each gates the section that uses it.
+- **#3962**: ANSWERED 2026-09-17. The corpus is not clean, it oscillates: a launch migration repairs it as
+  a side effect of an unrelated pass and the scout re-creates it. 2.11 is rewritten and the guard asserts
+  the signature at the writer rather than the corpus's state.
+- **#3963**: ANSWERED 2026-09-17, all four figures re-derived through the shipped predicates. The duplicate
+  premise held and is stronger; the conflict population is real and the stored column is not stale; the
+  span-only rows have NEVER gained nights, so 3.3's reassuring sentence was false and is deleted; and the
+  fourth figure, 16 of 89 live runs with two or more blocked nights, reversed 2.5's design.
 - **#3964**: the per-card cost of the two Phase 5 notices is unpriced against a surface measured at
   **0.368 ms per card over 426 cards, about 157 ms, already over the 100 ms bar**
   (`ScoutStageCardLoadLiveStoreTests.swift:56-58`). Both notices add a blob decode per card and one adds a
