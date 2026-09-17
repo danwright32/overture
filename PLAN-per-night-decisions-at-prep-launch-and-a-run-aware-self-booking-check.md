@@ -31,12 +31,17 @@ that has since been built.
   (`PrepQueue.swift:316`), and `StageNavigation.prepBlocked` is retired to a tombstone comment
   (`StageNavigation.swift:18`, `StageEmptyState.swift:18`). Prep and send are already two things. The
   sentence below reading "the prep gate and the send gate are one column" is **false today**.
-- **Phase 2.7's repair has nothing left to repair.** Measured over all 1,257 rows on 2026-09-17: **zero**
-  rows carry a `naturalKey` whose embedded date disagrees with `performanceDate`. Both rows this plan
-  names as corrupt are clean. **The writer that caused it is untouched** (`ScoutService.swift:1713-1719`
-  still writes neither branch's `naturalKey`), so the evidence is gone while the cause is not, and the
-  next occurrence has nothing to catch it. The corpus for the proposed invariant is now the **41** rows
-  carrying night drops, not 9.
+- **Phase 2.7's repair is redundant, and the defect it was written for is LIVE.** Two readings, both
+  correct, taken hours apart on 2026-09-17: zero of 1,257 rows carried a `naturalKey` disagreeing with
+  `performanceDate` at 10:36, and **19 of 1,260 did by 11:36**, including one of the two rows this plan
+  names. Nothing Dan did in between; one scout run. #3962 established why. A launch migration
+  (`NaturalKeyVenueMigration`, `LaunchMigrations.swift:115`) repairs them as a side effect of a pass
+  written for the venue half, and the scout's `.reKey` arm re-creates them by storing a key from the feed's
+  opening night (`ScoutService.swift:1318`, `:1355-1360`) which `apply` then contradicts by writing the
+  drop filtered opening into `performanceDate` (`:1712-1719`). A one time repair wins until the next scout.
+  The corpus for any invariant is the **41** rows carrying night drops, not 9, and the invariant must
+  assert the signature at the writer rather than the corpus's state, which depends only on which side of
+  that cycle the clock is on (L336, L182).
 
 ### The measurements, re-taken 2026-09-17 against a WAL consistent copy (1,257 rows, was 1,141)
 
