@@ -3,8 +3,8 @@ import Foundation
 
 // #3475: a Reached out row's date HEADING and its COUNTDOWN naming different days.
 //
-// Reported from a screenshot taken 2026-09-02 at 11:31 EDT: "Omari Banks" sat under a heading reading
-// THU Sep 3 with the row beside it reading "in 2 days", which from Sep 2 is Sep 4. "String Theory"
+// Reported from a screenshot taken 2026-09-02 at 11:31 EDT: one row sat under a heading reading
+// THU Sep 3 with the row beside it reading "in 2 days", which from Sep 2 is Sep 4. A second row
 // showed the same one day gap (heading FRI Sep 4, row "in 3 days"). The issue filed it as unconfirmed,
 // with the first job being to confirm or dismiss it.
 //
