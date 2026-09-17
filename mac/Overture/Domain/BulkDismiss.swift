@@ -83,8 +83,31 @@ enum BulkDismiss {
                    : "Dismiss all \(Plural.count(count, "show")) on \(dateLabel)"
     }
 
+    // #3305: the same title for a night only PART of which can be dismissed, because ungenred shows are
+    // now held back rather than blocking the whole action.
+    //
+    // "all" is what changes and it is not a nicety. Before #3305 the count was every show under the
+    // heading, so "Dismiss all 5 shows" was exactly true. Now a title reading "Dismiss all 2" sits
+    // directly above "2 shows have no genre read and will stay", and the two contradict each other on one
+    // surface. Caught by reading the generated copy inventory cold in the branch that renders it, which is
+    // the only thing that finds this class: each sentence was true on its own (L605).
+    //
+    // The TOTAL is derived from the two numbers rather than passed in, so the sentence cannot state a pair
+    // that disagrees with the split that produced it, and there is no third argument a caller can get
+    // wrong (L16).
+    static func menuTitle(count: Int, heldBack: Int, dateLabel: String) -> String {
+        guard heldBack > 0 else { return menuTitle(count: count, dateLabel: dateLabel) }
+        return "Dismiss \(count) of the \(count + heldBack) shows on \(dateLabel)"
+    }
+
     static func confirmTitle(count: Int, dateLabel: String) -> String {
         "\(menuTitle(count: count, dateLabel: dateLabel))?"
+    }
+
+    // #3305: the confirm says what the menu said. Built from the same title rather than reworded here, so
+    // the two surfaces cannot drift into describing one action two ways.
+    static func confirmTitle(count: Int, heldBack: Int, dateLabel: String) -> String {
+        "\(menuTitle(count: count, heldBack: heldBack, dateLabel: dateLabel))?"
     }
 
     // Names the reason every row is about to carry, then the runs that lose their later nights. Bulk

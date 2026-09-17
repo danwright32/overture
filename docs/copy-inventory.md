@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1570 sentences**.
+Every sentence Overture can say to Dan: **1573 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -14,7 +14,7 @@ What is not, and why:
   sentences under tokens nobody reads.
 - **Nothing, if it is written as two literals joined with `+`.** Those ARE joined here, into the
   one sentence the running app says (#3155). What is still only part of what Dan reads is a
-  sentence carrying a VALUE: 564 of the 1570 below hold a
+  sentence carrying a VALUE: 566 of the 1573 below hold a
   `\(...)` where a number or a name goes, so what is printed is the template. They are counted
   here rather than listed again, because the hole is visible in the line itself; what was missing
   was any statement of how much of this document is templates.
@@ -402,6 +402,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/ActionFeedback.swift`
 "1 show has been checked and left with nobody to write to. What the check claimed:"
     `UI/EmptyAnswerSection.swift`
+"1 show has no genre read and will stay."
+    `Domain/GenreGate.swift`
 "1 show on \(dateLabel) has no genre read. Set it before dismissing the night."
     `Domain/GenreGate.swift`
 "1 show stored a reason with no answer recorded beside it at all, which is a fault in the check rather than a finding about the show."
@@ -806,6 +808,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/Inquiry.swift`
 "Discard them"
     `UI/DaysOffView.swift`
+"Dismiss \(count) of the \(count + heldBack) shows on \(dateLabel)"
+    `Domain/BulkDismiss.swift`
 "Dismiss all \(Plural.count(count, "show")) on \(dateLabel)"
     `Domain/BulkDismiss.swift`
 "Dismiss all \(count)"
@@ -2887,6 +2891,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/EmptyAnswerSection.swift`
 "\(count) shows have been checked and left with nobody to write to. What the checks claimed:"
     `UI/EmptyAnswerSection.swift`
+"\(count) shows have no genre read and will stay."
+    `Domain/GenreGate.swift`
 "\(count) shows on \(dateLabel) have no genre read. Set them before dismissing the night."
     `Domain/GenreGate.swift`
 "\(count) shows stored a reason with no answer recorded beside them at all, which is a fault in the check rather than a finding about those shows."

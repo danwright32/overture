@@ -59,6 +59,10 @@ struct NightDismiss: Identifiable {
     let runs: [String]
     // The narrower set: the shows that play only on this night. Empty when there is no choice to make.
     let keysOnlyThisNight: [String]
+    // #3305: how many of the night are NOT going, so the confirm can name the same pair the menu did.
+    // Carried rather than recomputed here: the split that produced it is the one decision, and a second
+    // derivation on this side could disagree with the title Dan just read (L70).
+    let heldBack: Int
     // #3365: through BulkDismiss, never restated here. It was a second copy of the same rule, and the
     // rule has just gained a condition (a one-night reason offers no choice); a copy would have kept
     // the buttons and the sentence above them disagreeing about whether there was one (#863).
@@ -157,7 +161,8 @@ struct QueueSheetHost<Content: View>: View {
             // how much he is about to bury, and which run loses its later dates with it.
             .sheet(item: $sheets.pendingNightDismiss) { pending in
                 SelfBookingConfirmSheet(
-                    title: BulkDismiss.confirmTitle(count: pending.keys.count, dateLabel: pending.dateLabel),
+                    title: BulkDismiss.confirmTitle(count: pending.keys.count, heldBack: pending.heldBack,
+                                                    dateLabel: pending.dateLabel),
                     message: BulkDismiss.confirmMessage(count: pending.keys.count, reason: pending.reason,
                                                         runs: pending.runs, dateLabel: pending.dateLabel,
                                                         offeringChoice: pending.offersChoice),
