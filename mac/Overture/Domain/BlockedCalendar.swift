@@ -290,10 +290,23 @@ struct BlockedCalendar: Equatable, Sendable {
     // once." Splitting a weekly series into its nights would have given him sixteen cards for one pitch,
     // which is the clutter measured in #1558.
     //
-    // An empty `nights` falls back to the old span walk, deliberately. Every prospect already in the store
-    // predates this and records none, and for those the span is genuinely all we know: clearing their
-    // conflicts on no evidence would be the one direction of this change that could lose a real clash. They
-    // pick up their nights on the next scout.
+    // An empty `nights` falls back to the old span walk, deliberately. For those rows the span is genuinely
+    // all we know: clearing their conflicts on no evidence would be the one direction of this change that
+    // could lose a real clash.
+    //
+    // #3963, measured 2026-09-17: this used to end "They pick up their nights on the next scout." That is
+    // FALSE and was never measured. Across 29 dated snapshots back to 2026-06-28, ZERO of the 22 rows in
+    // this state has ever gained nights, and the cohort has sat at exactly 22 (9 of them live) for twelve
+    // consecutive daily snapshots. The one row that ever held nights lost them to drops. The mechanism is
+    // not wholly dead (the cohort was 36 on 2026-07-28 and a few gained nights as the scout first
+    // re-touched pre-#1523 rows) but it has not reached one of today's 22 in seven weeks.
+    //
+    // And this is NOT only a pre-#1523 legacy population, which is the other thing the old sentence
+    // implied. 2 of the 22 carry `droppedRunNights`, so they arrived here through today's machinery:
+    // `ScoutService.swift:1821` sets `runNights = DroppedNight.keeping(...)`, and when the drops subtract
+    // every night the list empties while the `runEndDate` correction on the next line only runs
+    // `if !existing.runNights.isEmpty`. So the row keeps a span it has no nights for, and an empty night
+    // list means two different things to every reader that branches on it.
     func conflict(performanceDate: String?, runEndDate: String?, nights: [String] = []) -> Day? {
         guard let performanceDate else { return nil }   // "date to be confirmed" collides with nothing
         guard nights.isEmpty else {
