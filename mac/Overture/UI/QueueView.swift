@@ -849,10 +849,17 @@ struct QueueView: View {
                 // Computed queue-wide (against all items, not just this stage's rows) so it stays visible
                 // even after the other show moves to another stage. Single tier: any real commitment on the
                 // date shows it. The per-row marker names the specific clashing show; this is the date flag.
-                // Not shown in Scout (untriaged candidates are not commitments Dan is protecting yet).
+                // #2689: shown on EVERY stage, Scout included. It used to be gated `focusedStage != .scout`
+                // under the reason "untriaged candidates are not commitments Dan is protecting yet", which
+                // conflates the two sides of the comparison. Only the OTHER shows' commitment matters, and
+                // `SelfBookingConflict.NightIndex.init` already enforces that by construction, keeping a
+                // show only `where show.isCommitment`. So a Scout row can never mark another Scout row, the
+                // gate protected against nothing, and it cost the warning at the one moment the night is
+                // actually chosen: Keep lives on Scout, so the first time Dan learned a date already held a
+                // committed pitch was at Review, one screen too late (his question, 2026-08-13).
                 // #1772: `data.items`, not `self.items`. This runs for every date heading the list
                 // draws, and reading the computed property rebuilt the whole queue from the store each time.
-                if focusedStage != .scout, let note = QueueModel.selfBookingNote(group.items, on: group.id, in: data.selfBooking) {
+                if let note = QueueModel.selfBookingNote(group.items, on: group.id, in: data.selfBooking) {
                     HStack(spacing: 4) {
                         Image(systemName: "calendar.badge.exclamationmark")
                         Text(note)
@@ -1594,19 +1601,15 @@ struct QueueView: View {
         } else {
             // #1219/#1246: the persistent self double-booking marker, on the row itself so it travels with
             // the show and never vanishes when the OTHER show changes stage. Names the clashing show(s).
-            // Not in Scout (untriaged candidates are not commitments Dan is protecting yet).
+            // #2689: on every stage, Scout included, for the reason written out at the date header above.
             // #1772: `data.items`, not `self.items`. This runs for every CARD, so reading the computed
             // property rebuilt the entire queue once per card on every render pass.
-            let selfBookingMarker = focusedStage != .scout
-                ? QueueModel.selfBookingRowMarker(for: item, in: data.selfBooking)
-                : nil
+            let selfBookingMarker = QueueModel.selfBookingRowMarker(for: item, in: data.selfBooking)
             // #1699 part 3: the same night, when the published curtain times prove Dan can work both.
             // Nothing to decide, so it is not gold and carries no warning icon: gold is reserved for what
             // he can act on, and this line exists only so a doubled-up night does not go silent entirely.
             // Nil whenever the row also has a real clash, so the two lines never stack.
-            let workableNote = focusedStage != .scout
-                ? QueueModel.selfBookingWorkableNote(for: item, in: data.selfBooking)
-                : nil
+            let workableNote = QueueModel.selfBookingWorkableNote(for: item, in: data.selfBooking)
             VStack(alignment: .leading, spacing: 4) {
                 if let marker = selfBookingMarker {
                     HStack(spacing: 4) {
