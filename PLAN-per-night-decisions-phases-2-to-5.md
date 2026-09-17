@@ -280,23 +280,51 @@ this shipped with nothing recorded" gets its own sentence and its own consequenc
 Beside the label, the dates the frozen sent body names are shown **read only**, sourced and labelled the
 same way 2.7 discriminates them.
 
-### 2.11 The guard, not the repair
+### 2.11 The guard, and the defect is LIVE
 
-Zero of 1,257 rows carry a `naturalKey` whose embedded date disagrees with `performanceDate`. Both rows the
-superseded plan names as corrupt are clean.
+**CORRECTED 2026-09-17, later the same day, by #3962. An earlier draft of this section said the corpus was
+clean and the repair redundant. That reading was true for about an hour.**
 
-**Before the repair is dropped, which of three things happened is established and recorded**: the rows were
-repaired by something (what?), the earlier measurement was wrong, or they were re-keyed back and will be
-again. Two readings of one store days apart disagree, and resolving that in the direction that deletes work
-without naming the cause is how the evidence for a diagnosis gets destroyed (L216, L277). **#3962**, and
-it gates this section rather than following it.
+Re-verified directly against a copy of the live store: **1,260 rows, 19 of them carrying a `naturalKey`
+whose embedded date disagrees with `performanceDate`**, and pk 361, one of the two the superseded plan
+named, is among them. The "zero of 1,257" reading was taken between the 10:36 launch and the scout run that
+followed it.
 
-The writer is untouched (`ScoutService.swift:1713-1719` writes neither branch's `naturalKey`), so the guard
-ships regardless, over the 41 rows carrying drops. It asserts the **signature** of the failure, never the
-data's current emptiness, or a count driven to zero stops being read as a measurement (L68, L182). It
-reports through `LiveCorpusReport` (`mac/OvertureTests/LiveCorpusReport.swift`), which #3276 shipped on
-2026-08-31 and which survives a parallel run, rather than cloning the print-to-stdout pattern as first
-written (L501, L325).
+**It oscillates, because a repair and a writer are fighting.** The launch backups record it: 19 drifted in
+three of the twelve snapshots and 0 in the rest, and a backup shows 19 exactly when a scout ran during the
+previous session.
+
+- **The repair** is `NaturalKeyVenueMigration.run`, called unconditionally every launch from
+  `LaunchMigrations.swift:115`. It is not a date repair by intent: it groups by
+  `Prospect.scoutAnchoredNaturalKey` (`Prospect.swift:1662`), which embeds `performanceDate`, and re-keys
+  any singleton whose stored key differs (`NaturalKeyVenueMigration.swift:74-77`). The date half is
+  corrected as a SIDE EFFECT of a pass written for the venue half, and nothing names or counts it.
+- **The writer** is the `.reKey` arm of `ScoutService` (around `:1355-1360`), which stores a key computed
+  at `:1318` from the FEED's opening night, after which `apply` overwrites `performanceDate` with the
+  DROP FILTERED opening (`:1712-1719`). Pre-subtraction date into the key, post-subtraction date into the
+  field, same call, in that order.
+
+An earlier draft named `:1713-1719` as the cause. That is only the half that moves `performanceDate`; the
+defect is the disagreement between the two writes, 350 lines apart.
+
+**So the guard must NOT be a live store invariant.** A "zero drifted rows" assertion flips red or green on
+whether a scout has run since the last launch, with nothing changed but the clock: green at 10:36 today,
+red at 11:36 (L336, L182). It asserts the **signature at the writer** instead, that the key the `.reKey`
+arm stores and the `performanceDate` that `apply` then assigns name the same night. That is a unit level
+assertion, it fails today, and a launch cannot quieten it (L68).
+
+Anything the guard does report over the live store goes through `LiveCorpusReport`
+(`mac/OvertureTests/LiveCorpusReport.swift`), which #3276 shipped on 2026-08-31 and which survives a
+parallel run, rather than cloning the print-to-stdout pattern as first written (L501, L325).
+
+**And this is written down because removing it is easy to do by accident:** the repair only works because
+an unrelated venue migration happens to re-key on a property that embeds the date. Whoever narrows
+`NaturalKeyVenueMigration` to the venue half deletes the repair without knowing it existed, and the
+oscillation stops at the drifted end.
+
+One row is permanently clean and is not evidence against any of this: pk 914's only dropped night and its
+own `performanceDate` are both past, the show has left the feed, and nothing will re-key it again. The two
+rows the superseded plan named are the live case and the retired one, not two instances of one story.
 
 ---
 
@@ -521,8 +549,11 @@ shipped predicate before this merges (L629, L418).
 - **No backfill of the 48 sent rows.** Answer 6, and it removes an idempotency hazard rather than solving it.
 - **No exclusion record for #16.** Its only named reader has never shipped an issue (milestone 66: 11 open,
   0 closed). The evidence gap this leaves is **#3961**, filed rather than waved through.
-- **No repair of the natural key corpus.** Nothing left to repair. The guard ships instead, gated on
-  **#3962** establishing why the corpus went clean.
+- **No repair of the natural key corpus**, and NOT because there is nothing to repair. #3962 answered on
+  2026-09-17: 19 rows are drifted right now, a launch migration repairs them as a side effect of an
+  unrelated pass, and the scout re-creates them on its next run. A one time repair would win until the
+  next scout. The guard ships instead, asserting the signature at the writer rather than the corpus's
+  state, because the corpus's state depends only on which side of that cycle the clock is on (2.11).
 
 ## The gating issues, filed WITH the phases
 
