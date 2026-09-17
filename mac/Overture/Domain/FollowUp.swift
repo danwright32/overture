@@ -297,9 +297,17 @@ enum FollowUp {
         let venueClause = (venue?.isEmpty == false) ? " at \(venue!)" : ""
         let greeting = Salutation.greeting(for: contactName)
         if attempt >= FollowUpConfig().maxFollowUps {
-            return greeting + "\n\nOne last note on photographing \(groupName)\(venueClause). "
-                + "If it would be useful down the line I'm glad to help, and if not, no need to reply. "
-                + "I'll leave it here either way."
+            // #3856, Dan's own wording, taken verbatim from the send review on 2026-09-12. What it
+            // replaced offered something it never named ("If it would be useful down the line I'm glad to
+            // help": useful how, help with what), and then said "no need to reply" a second time in other
+            // words ("I'll leave it here either way"). His reading of it: "this email makes no sense".
+            //
+            // It still has to read as a GOODBYE, because #2651 suppresses the after-show closing note for
+            // anyone who has received this one, on the premise that it already said goodbye. "one last
+            // time" is what carries that, and `theFinalNudgeStillReadsAsAGoodbye` asserts it rather than
+            // leaving the premise living in a comment (L3).
+            return greeting + "\n\nI'm following up one last time about photographing "
+                + "\(groupName)\(venueClause). If the timing doesn't work, no need to reply."
         }
         return greeting + "\n\nI wanted to follow up on my earlier note about photographing \(groupName)\(venueClause). "
             + "If a few sample frames from similar performances would be useful, I'm glad to send some over.\n\n"

@@ -115,9 +115,16 @@ enum PostEventPrompt {
         guard let dayAfter = dayAfterShow(p.performanceDate) else { return nil }
         // A re-anchor from a note already sent steps the prompt forward instead of nagging.
         if let anchored = r.conversationRemindedAt, anchored >= dayAfter { return nil }
-        // #2651: the final follow-up has already said goodbye in Dan's voice ("If it would be useful down
-        // the line I'm glad to help, and if not, no need to reply. I'll leave it here either way."), so a
-        // closing note after it would reopen the conversation only to close it a second time. To a
+        // #2651: the final follow-up has already said goodbye in Dan's voice, so a closing note after it
+        // would reopen the conversation only to close it a second time.
+        //
+        // #3856: this used to QUOTE that goodbye word for word, and then #3856 reworded it, which is
+        // exactly how a comment comes to describe text that is not there any more (L32). The premise this
+        // suppression rests on is now asserted instead, by `theFinalNudgeStillReadsAsAGoodbye`, so it
+        // fails a run rather than quietly going stale beside the thing it describes (L41).
+        //
+        // That rewording does NOT overturn the decision recorded below. What #2651 rejected was making the
+        // final nudge STOP saying goodbye; #3856 changed its words while keeping it one, so both hold. To a
         // stranger who has ignored two emails that reads as a third unsolicited contact rather than as
         // grace, and the scheduling makes it ordinary: any lead scouted far enough ahead exhausts its
         // follow-ups well before the date arrives.

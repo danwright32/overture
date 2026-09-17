@@ -55,10 +55,39 @@ struct FollowUpTests {
         let first = FollowUp.nudgeBody(contactName: "Emma", groupName: "Acme Choir", venue: nil, attempt: 1)
         let final = FollowUp.nudgeBody(contactName: "Emma", groupName: "Acme Choir", venue: nil, attempt: 2)
         #expect(first != final)                                   // not a verbatim repeat
-        #expect(final.contains("One last note"))                  // signals it's the last touch
+        #expect(final.contains("one last time"))                  // signals it's the last touch
         #expect(final.lowercased().contains("no need to reply"))  // soft, low-pressure close
-        #expect(final.contains("—") == false)                     // still in voice
+        #expect(final.contains("\u{2014}") == false)                     // still in voice
         for banned in ["love to", "thrilled", "excited", "!"] { #expect(final.lowercased().contains(banned) == false) }
+    }
+
+    // #3856. Dan, reading it in the send review 2026-09-12: "this email makes no sense. 'If it would be
+    // useful down the line I'm glad to help' is so weird". Three separate faults, asserted separately so a
+    // future rewrite cannot reintroduce one of them while fixing another.
+    @Test func theFinalNudgeSaysWhatItIsAboutAndSaysItOnce() {
+        let final = FollowUp.nudgeBody(contactName: "Emma", groupName: "Acme Choir",
+                                       venue: "Weill Recital Hall", attempt: 2)
+
+        // 1 and 2: "If it would be useful down the line" and "I'm glad to help" both left the reader to
+        // guess what "it" and "help" were. The email now names the thing it is about.
+        #expect(final.contains("photographing Acme Choir at Weill Recital Hall"))
+        #expect(!final.lowercased().contains("glad to help"))
+        #expect(!final.lowercased().contains("down the line"))
+
+        // 3: "no need to reply" followed by "I'll leave it here either way" is one sentence said twice in
+        // different words, on a surface where every sentence is one Dan is signing (L605).
+        #expect(!final.lowercased().contains("leave it here"))
+        #expect(final.components(separatedBy: "no need to reply").count - 1 == 1)
+    }
+
+    // #2651 suppresses the after-show closing note for anyone who already received the final nudge,
+    // BECAUSE that nudge has already said goodbye. #3856 rewords it, so the premise that other feature
+    // rests on is asserted here rather than left to the comment that quotes it (L3, L61).
+    @Test func theFinalNudgeStillReadsAsAGoodbye() {
+        let final = FollowUp.nudgeBody(contactName: "Emma", groupName: "Acme Choir", venue: nil, attempt: 2)
+
+        #expect(final.contains("last"))
+        #expect(final.lowercased().contains("no need to reply"))
     }
 
     // #610: "Hello," (Dan's preferred wording), not "Hi there,", when there's no contact name.

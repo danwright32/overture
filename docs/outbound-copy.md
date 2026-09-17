@@ -1,6 +1,6 @@
 # Outbound copy
 
-Every sentence Overture sends OUT under Dan's name: **11 sentences**.
+Every sentence Overture sends OUT under Dan's name: **10 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it and fails when it is stale, the
 same way `docs/copy-inventory.md` does.
@@ -22,19 +22,17 @@ three days earlier, because nothing ever put it in front of a person.
     `Domain/OutboundSignature.swift`
 "Following up: photographs for \(groupName)"
     `Domain/FollowUp.swift`
-"I'll leave it here either way."
-    `Domain/FollowUp.swift`
 "If a few sample frames from similar performances would be useful, I'm glad to send some over.\n\n"
-    `Domain/FollowUp.swift`
-"If it would be useful down the line I'm glad to help, and if not, no need to reply. "
     `Domain/FollowUp.swift`
 "No problem if the timing isn't right."
     `Domain/FollowUp.swift`
 "Re: \(base)"
     `Domain/FollowUp.swift`
+"\(groupName)\(venueClause). If the timing doesn't work, no need to reply."
+    `Domain/FollowUp.swift`
 "\n\nI wanted to follow up on my earlier note about photographing \(groupName)\(venueClause). "
     `Domain/FollowUp.swift`
-"\n\nOne last note on photographing \(groupName)\(venueClause). "
+"\n\nI'm following up one last time about photographing "
     `Domain/FollowUp.swift`
 "your upcoming performance"
     `Domain/FollowUp.swift`
