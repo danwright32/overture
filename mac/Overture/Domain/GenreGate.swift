@@ -30,6 +30,19 @@ enum GenreGateCopy {
     // Names the DATE rather than saying "tonight". The date-heading menu this appears under covers any
     // night in the queue, most of them weeks out, so "tonight" would be false on nearly every one of
     // them. It is the same `dateLabel` the heading above it already carries, so the two agree.
+    // #3305: the OTHER half, for a night that is being partly dismissed. It counts rather than naming,
+    // Dan's call 2026-09-16: on a night of four naming them is fine, on a night of twenty it is a wall of
+    // titles inside a context menu, and the detail already sits on each remaining card's own row gate.
+    //
+    // It does NOT repeat the date. This sits directly under the menu title, which already carries it, and
+    // a fact stated twice on one surface is what L605 names. `nightBlocked` below does name the date,
+    // because there it is the only sentence on screen.
+    static func nightHeldBack(count: Int) -> String {
+        count == 1
+            ? "1 show has no genre read and will stay."
+            : "\(count) shows have no genre read and will stay."
+    }
+
     static func nightBlocked(count: Int, dateLabel: String) -> String {
         count == 1
             ? "1 show on \(dateLabel) has no genre read. Set it before dismissing the night."
@@ -58,11 +71,30 @@ enum GenreGate {
         blocks(discipline: discipline) ? GenreGateCopy.blocked : nil
     }
 
-    // How many of a night's shows are blocked, and the sentence naming that count. Nil when the night can
-    // be dismissed, so the caller has one thing to ask rather than a count it has to interpret.
-    static func nightRefusal(disciplines: [String], dateLabel: String) -> String? {
-        let blocked = disciplines.filter { blocks(discipline: $0) }.count
-        guard blocked > 0 else { return nil }
-        return GenreGateCopy.nightBlocked(count: blocked, dateLabel: dateLabel)
+    // #3305: a PARTITION of the night rather than a yes or no.
+    //
+    // This replaced `nightRefusal`, which returned a refusal sentence the moment ANY show under the
+    // heading was unread, so two ungenred shows blocked two perfectly genred ones. That was the
+    // whole-night clause of #2687's scope and Dan reversed it on 2026-08-30: "I should be able to bulk
+    // dismiss all shows with a genre if some have genres and some dont."
+    //
+    // It answers with the KEYS rather than a count, so the caller filters the rows it is about to act on
+    // through the same decision that produced the number Dan reads, and the two cannot disagree (L16).
+    // A count alone would leave the caller to re-derive which rows it named.
+    struct NightSplit: Equatable, Sendable {
+        let dismissableKeys: [String]
+        let heldBack: Int
+
+        // The night that still refuses whole. Distinguished from an EMPTY night, which holds nothing back
+        // and has nothing to say: both have no dismissable keys, and treating them alike would put a
+        // "0 shows have no genre read" sentence under a heading covering nothing (L11).
+        var everythingHeldBack: Bool { dismissableKeys.isEmpty && heldBack > 0 }
+    }
+
+    // Labelled tuple elements on purpose: two bare `[String]` parameters would be transposable at every
+    // call site, and a reversed call here would silently gate on the keys and dismiss by discipline (L455).
+    static func nightSplit(_ shows: [(key: String, discipline: String)]) -> NightSplit {
+        NightSplit(dismissableKeys: shows.filter { !blocks(discipline: $0.discipline) }.map(\.key),
+                   heldBack: shows.filter { blocks(discipline: $0.discipline) }.count)
     }
 }

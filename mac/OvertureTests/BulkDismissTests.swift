@@ -112,6 +112,41 @@ struct BulkDismissTests {
         #expect(BulkDismiss.menuTitle(count: 1, dateLabel: "Jul 24") == "Dismiss the show on Jul 24")
     }
 
+    // #3305: "all" stops being true the moment the night is partly dismissed. Before that change the count
+    // WAS every show under the heading, so "all 5" was accurate; now ungenred shows are held back, and a
+    // title saying "Dismiss all 2" sitting directly above "2 shows have no genre read and will stay"
+    // contradicts itself on one surface.
+    //
+    // Found by reading the generated inventory cold, in the branch that renders it, which is the only
+    // thing that catches this class: every sentence here was individually true (AGENTS.md).
+    @Test func theMenuDropsAllWhenSomeOfTheNightIsHeldBack() {
+        #expect(BulkDismiss.menuTitle(count: 2, heldBack: 2, dateLabel: "Jul 24")
+                == "Dismiss 2 of the 4 shows on Jul 24")
+        // The total is DERIVED here rather than passed, so the two numbers in the sentence cannot disagree
+        // with each other or with the split that produced them (L16).
+        #expect(BulkDismiss.menuTitle(count: 1, heldBack: 3, dateLabel: "Jul 24")
+                == "Dismiss 1 of the 4 shows on Jul 24")
+    }
+
+    // And with nothing held back it is unchanged, because then "all" is exactly what it does. Asserted so
+    // the new parameter cannot quietly reword the ordinary night, which is most of them.
+    @Test func theMenuStillSaysAllWhenTheWholeNightGoes() {
+        #expect(BulkDismiss.menuTitle(count: 5, heldBack: 0, dateLabel: "Jul 24")
+                == "Dismiss all 5 shows on Jul 24")
+        #expect(BulkDismiss.menuTitle(count: 1, heldBack: 0, dateLabel: "Jul 24")
+                == "Dismiss the show on Jul 24")
+    }
+
+    // #3305: and the confirm agrees with the menu it was reached from. The menu now says "Dismiss 2 of the
+    // 4 shows on Jul 24"; a confirm answering "Dismiss all 2 shows on Jul 24?" would be the same action
+    // described two ways, one surface apart, on the last screen before several shows leave the queue.
+    @Test func theConfirmSaysWhatTheMenuSaidWhenPartOfTheNightIsHeldBack() {
+        #expect(BulkDismiss.confirmTitle(count: 2, heldBack: 2, dateLabel: "Jul 24")
+                == "Dismiss 2 of the 4 shows on Jul 24?")
+        #expect(BulkDismiss.confirmTitle(count: 5, heldBack: 0, dateLabel: "Jul 24")
+                == "Dismiss all 5 shows on Jul 24?")
+    }
+
     // The count again, on the confirm itself: this is the last thing Dan sees before several shows leave
     // the queue at once, and the issue's requirement is that it states exactly how many.
     @Test func theConfirmAsksAboutTheCountAndTheNight() {

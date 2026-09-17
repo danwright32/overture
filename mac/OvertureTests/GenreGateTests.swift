@@ -43,31 +43,78 @@ struct GenreGateTests {
 
     // MARK: the whole night
 
-    // One confirm covering many shows, so it says HOW MANY are blocked. A single-show sentence here would
-    // tell Dan nothing about which of the night's rows he has to go and fix.
-    @Test func theNightRefusalNamesHowManyAreBlocked() {
-        let night = [Discipline.opera.rawValue, Discipline.other.rawValue,
-                     Discipline.dance.rawValue, Discipline.other.rawValue]
+    // #3305 REVERSES the whole-night half of #2687. Dan, 2026-08-30: "I should be able to bulk dismiss all
+    // shows with a genre if some have genres and some dont." Measured the same day on a queue of 579: two
+    // ungenred shows under a heading of four blocked the two that were perfectly well genred, and at the
+    // rate #2687 itself measured (357 of 584 undecided rows carrying no genre) almost every night holds at
+    // least one, so the bulk control opened and then only ever explained why it would not run.
+    //
+    // The ROW level gate on Keep and on a single show's Dismiss is NOT reversed and is asserted unchanged
+    // above. `theNightRefusalNamesHowManyAreBlocked` was deleted rather than adjusted, because it asserted
+    // that SOME blocked refuses the night, which is precisely the decision reversed here (L252).
+    @Test func aNightWithSomeGenresUnreadTakesTheRestAndCountsWhatStays() {
+        let night = [(key: "a", discipline: Discipline.opera.rawValue),
+                     (key: "b", discipline: Discipline.other.rawValue),
+                     (key: "c", discipline: Discipline.dance.rawValue),
+                     (key: "d", discipline: Discipline.other.rawValue)]
 
-        #expect(GenreGate.nightRefusal(disciplines: night, dateLabel: "Aug 19")
-                == GenreGateCopy.nightBlocked(count: 2, dateLabel: "Aug 19"))
-        #expect(GenreGateCopy.nightBlocked(count: 2, dateLabel: "Aug 19").contains("2 shows on Aug 19"))
-        // Singular reads as English, because a night with one unread show is the common case near the end
-        // of a triage pass.
-        #expect(GenreGateCopy.nightBlocked(count: 1, dateLabel: "Aug 19").contains("1 show on Aug 19"))
-        // And it names the DATE, never "tonight": this menu covers any night in the queue, most of them
-        // weeks out. Caught by reading the generated inventory cold rather than by any test.
-        #expect(!GenreGateCopy.nightBlocked(count: 2, dateLabel: "Aug 19").contains("tonight"))
+        let split = GenreGate.nightSplit(night)
+
+        #expect(split.dismissableKeys == ["a", "c"])
+        #expect(split.heldBack == 2)
+        #expect(split.everythingHeldBack == false)
     }
 
-    // And a night with nothing blocked is not refused, which is the half that keeps the control usable. A
-    // gate that fired on every night would be switched off within a day (L93).
-    @Test func aNightWithEveryGenreSetIsNotRefused() {
-        #expect(GenreGate.nightRefusal(disciplines: [Discipline.opera.rawValue,
-                                                     Discipline.theater.rawValue],
-                                       dateLabel: "Aug 19") == nil)
-        // An empty night has nothing to block either: nil, never a "0 shows" sentence.
-        #expect(GenreGate.nightRefusal(disciplines: [], dateLabel: "Aug 19") == nil)
+    // The half that still refuses. A night where nothing can be read has no reduced action to offer, so it
+    // must not fall through to a menu of reasons over an empty key set: that would be a control that looks
+    // like it worked and dismissed nothing (L100).
+    @Test func aNightWithNoGenreReadAtAllIsStillHeldEntirely() {
+        let night = [(key: "a", discipline: Discipline.other.rawValue),
+                     (key: "b", discipline: "")]
+
+        let split = GenreGate.nightSplit(night)
+
+        #expect(split.dismissableKeys.isEmpty)
+        #expect(split.heldBack == 2)
+        #expect(split.everythingHeldBack)
+    }
+
+    // The rule that SURVIVES the reversal, re-expressed against the new shape rather than deleted: a night
+    // with every genre set is acted on whole, and an empty night holds nothing back rather than reporting a
+    // zero (L430, which is the other half of L252: confirm the decision was reversed before deleting).
+    @Test func aNightWithEveryGenreSetHoldsNothingBack() {
+        let every = GenreGate.nightSplit([(key: "a", discipline: Discipline.opera.rawValue),
+                                          (key: "b", discipline: Discipline.theater.rawValue)])
+        #expect(every.dismissableKeys == ["a", "b"])
+        #expect(every.heldBack == 0)
+        #expect(every.everythingHeldBack == false)
+
+        let none = GenreGate.nightSplit([])
+        #expect(none.dismissableKeys.isEmpty)
+        #expect(none.heldBack == 0)
+        // An empty night is not "everything held back": there is nothing to hold and nothing to say.
+        #expect(none.everythingHeldBack == false)
+    }
+
+    // Dan's call, 2026-09-16: COUNT the held back rather than naming them. On a night of four naming them
+    // is fine; on a night of twenty it is a wall of titles inside a context menu, and the detail already
+    // sits on each remaining card's own row level gate, which is where the correcting control is.
+    @Test func theHeldBackSentenceCountsThemAndSaysTheyStay() {
+        #expect(GenreGateCopy.nightHeldBack(count: 2).contains("2 shows"))
+        #expect(GenreGateCopy.nightHeldBack(count: 2).contains("stay"))
+        // Singular reads as English, and is the common case near the end of a triage pass.
+        #expect(GenreGateCopy.nightHeldBack(count: 1).contains("1 show has"))
+        // It does NOT repeat the date. The menu title above it already carries it, and one fact stated
+        // twice on one surface is the defect L605 names.
+        #expect(!GenreGateCopy.nightHeldBack(count: 2).contains("Aug"))
+    }
+
+    // The refusal for a night nothing can be read on keeps naming the DATE, because there it IS the only
+    // sentence on screen. Unchanged by #3305; asserted here so the reversal cannot take it with it.
+    @Test func theAllHeldNightRefusalStillNamesTheDate() {
+        #expect(GenreGateCopy.nightBlocked(count: 2, dateLabel: "Aug 19").contains("2 shows on Aug 19"))
+        #expect(GenreGateCopy.nightBlocked(count: 1, dateLabel: "Aug 19").contains("1 show on Aug 19"))
+        #expect(!GenreGateCopy.nightBlocked(count: 2, dateLabel: "Aug 19").contains("tonight"))
     }
 
     // MARK: the three controls actually ask
@@ -111,12 +158,19 @@ struct GenreGateTests {
         let body = try String(SourceGuard.functionBody(
             named: "nightDismissMenu", in: SourceGuardHelper.source("Overture/UI/QueueView.swift")))
 
-        #expect(body.contains("GenreGate.nightRefusal"),
+        #expect(body.contains("GenreGate.nightSplit"),
                 "the whole-night dismiss no longer consults the genre gate")
-        // Asked of the shows the action would actually TAKE, not of everything drawn under the heading,
-        // so the count names the same rows the reasons would have dismissed (L16).
-        #expect(body.contains("plan.keys.contains"),
-                "the night's blocked count is no longer scoped to the shows the plan covers")
+        // #3305 inverted which of these two is scoped to the other. It used to ask the gate about the
+        // shows the PLAN covered; now the gate decides first and the plan is built from what survives, so
+        // the count Dan reads and the rows the action takes come from one decision (L16). Asserted on the
+        // filter rather than on the symbol alone, because a body that called `nightSplit` and then planned
+        // over every row under the heading would satisfy the line above while dismissing ungenred shows.
+        #expect(body.contains("split.dismissableKeys.contains"),
+                "the night's plan is no longer built from the shows the genre gate allows")
+        // And the night nothing can be read on still refuses whole rather than offering reasons over an
+        // empty key set, which is the half of #2687 that #3305 did NOT reverse.
+        #expect(body.contains("split.everythingHeldBack"),
+                "a night with no genre read anywhere no longer refuses")
     }
 
     // MARK: what stays exempt
