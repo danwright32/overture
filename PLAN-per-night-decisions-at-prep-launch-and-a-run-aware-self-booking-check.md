@@ -2,15 +2,104 @@
 
 > Planned with /plan-council on 2026-08-30. 23 agents. The framing was locked in conversation with Dan the same day; the eight decisions it treats as constraints are quoted in the brief.
 
-## READ THIS FIRST: the plan is NOT clean
+## READ THIS FIRST, 2026-09-17: PHASE 1 SHIPPED, AND PHASES 2 TO 5 ARE BEING REPLANNED
 
-The correction loop is bounded at two rounds and both were spent, so the plan below is returned carrying its remaining problems rather than with them fixed.
+Everything below this block is the document exactly as it landed on 2026-08-30. **Not one word of it has
+been reworded**, because each paragraph is a dated measurement and rewriting one destroys the record
+(L277). What follows here is the correction, written beside it rather than over it.
 
-- Reality check verdict: **needs-fixes**, 9 claims still broken, 33 confirmed.
-- Lessons audit verdict: **violations**, 9 violations, against 354 lessons read.
-- Preflight: repo readable True, hosted schema False (correct, this project has no hosted database).
+**Do not build Phases 2 to 5 from the text below.** Dan's call, 2026-09-17, in session: replan them with
+`/plan-lite`. Tracking issue: **#3957**. The reason is not that the numbers went stale. It is that the
+design reasons from two premises that Dan himself reversed after this was written, and from a Phase 1
+that has since been built.
 
-## The plan
+### What shipped, so the plan below describes work already done
+
+- **Phase 1 is BUILT**, as #3323 via PR #3470, merged 2026-09-02. `SelfBookingConflict.Show` carries
+  `nights` and `timesByNight`, collisions come back as an `Overlap` naming the night, the index is built
+  once per pass (`QueueModel.selfBookingIndex`, guarded by `SelfBookingIndexAgreesWithTheScanTests`), and
+  the `engagementKey` exemption already moved to `GroupNameMatch.normalize`. Phases 1.1 to 1.6 are done.
+- **Phase 1.3's commitment rule was then EXTENDED** by #3676. `isCommitment` became a discriminated
+  `Commitment` enum with three ranked cases (`booked`, `emailed`, `prepped`), on Dan's call of 2026-09-07:
+  "Prepping is not committing to pitching." The plan below treats commitment as one boolean.
+
+### What was REVERSED, so the plan below solves problems that no longer exist
+
+- **Phase 3.8 is moot.** Its entire purpose is splitting one stored column into a prep gate and a send
+  gate. #3369 / #3366 (PR #3472) **deleted the prep conflict gate outright**, on Dan's call of 2026-09-01:
+  "Maybe warn me, but let me do it." `PrepQueue.needsPrep` no longer takes or reads `hasUnclearedConflict`
+  (`PrepQueue.swift:316`), and `StageNavigation.prepBlocked` is retired to a tombstone comment
+  (`StageNavigation.swift:18`, `StageEmptyState.swift:18`). Prep and send are already two things. The
+  sentence below reading "the prep gate and the send gate are one column" is **false today**.
+- **Phase 2.7's repair has nothing left to repair.** Measured over all 1,257 rows on 2026-09-17: **zero**
+  rows carry a `naturalKey` whose embedded date disagrees with `performanceDate`. Both rows this plan
+  names as corrupt are clean. **The writer that caused it is untouched** (`ScoutService.swift:1713-1719`
+  still writes neither branch's `naturalKey`), so the evidence is gone while the cause is not, and the
+  next occurrence has nothing to catch it. The corpus for the proposed invariant is now the **41** rows
+  carrying night drops, not 9.
+
+### The measurements, re-taken 2026-09-17 against a WAL consistent copy (1,257 rows, was 1,141)
+
+Every `ZRUNNIGHTS` and `ZDROPPEDRUNNIGHTS` blob decoded, 0 failures and 0 nulls, which closes Open Risk 2
+below: none of these figures carries an unmeasured fraction.
+
+| The plan says | 2026-09-17 |
+| --- | --- |
+| 1,141 rows: new 732, dismissed 389, contacted 20, **zero** queued/drafted/approved | 1,257 rows: new 560, dismissed 640, contacted 48, **drafted 9**, queued 0, approved 0 |
+| 125 multi-night rows, 96 live, longest live run **23** nights | 126 multi-night, **78** live, longest live run **28** nights |
+| 9 rows carry `droppedRunNights`, 4 still `new` | **41** rows, **16** still `new` |
+| 20 rows have `sentAt`, exactly **one** multi-night | **48** rows, **four** multi-night |
+| 81 rows `conflictOpen`, 13 multi-night, ten blocked on a later night and **every one dismissed** | **310** rows, **68** multi-night, **45** blocked on a later night of which **24 are LIVE** |
+| `conflictClearedKey` set on **zero** rows, so nothing may lean on "never used" | Set on **two** rows. The card level waiver now has observed live use |
+| `PrepQueueBuilder.version = 13`, so the bump is v13 to v14 | Version is **14** (`PrepQueue.swift:270`), so the bump is **v14 to v15**. `docs/contracts.md:30` still lists 1 to 13 and is stale |
+| 22 rows span with empty `runNights`, 12 live, 4 also `conflictOpen` | 22 rows, **9** live, **6** also `conflictOpen` |
+| 15 rows hold duplicate entries in `runNights` | **19** |
+| The live exposure set is nine rows | **Eleven** rows |
+
+Phase 1.4's firing-rate simulations (16/17, 9/21, 17/29, and the 5-to-96-run sweep) are **superseded, not
+re-measured**. The plan itself ruled them inadmissible as Python reimplementations (L107), and the rule
+they reimplement has since changed twice, so re-running them would measure a rule that no longer exists.
+The shipped code's own measurement, dated 2026-09-01 in `SelfBookingConflict.swift:16-18`, is that
+opening-night-only comparison missed 14 of the 30 live-versus-committed collisions across 13 rows.
+
+### What is STILL TRUE of the nine audit violations
+
+Re-checked against HEAD on 2026-09-17, so the replan inherits the live ones rather than all nine:
+
+- **Still standing: 1, 2, 5, 6, 7, 8**, and reality-check item 2 (`RunNightDrop.Outcome` has five cases and
+  `.alreadyDropped` is answered nowhere; it is what a re-skipped night hits).
+- **Violation 3 is partly overtaken**: the counting holds (three writers) but the prep half of its harm is
+  gone with the gate, so the stale-state hazard is now one-sided, on send only. `ConflictSweep.reapply`
+  already re-derives from `runNights`, so a picker has a shared recompute to join rather than invent.
+- **Violation 4 describes the plan's sentence, not the code**: `SendService.deliver` already claims the
+  recipient durably before the network call and confirms after, and a crash leaves the row visibly stuck.
+  The Phase 2.5 write has to be placed inside that existing structure, not invent one.
+- **Violation 9 is NO LONGER TRUE**: #3276 closed 2026-08-31 and shipped `LiveCorpusReport`, the file
+  channel the violation asks for. Phase 2.7 must clone **that**, not the pattern as first written (L501).
+- **Reality-check item 1 is RESOLVED**: `QueueItem` carries `runNights` (`QueueView+Model.swift:224`).
+- Two violations should point at patterns this repo already settled rather than inventing them: **6** at
+  `recordHeldBack` / `heldBackNote` (#3013, a durable per-row note), and **8** at the `LaunchMigrations`
+  convention, whose three-way rule (idempotent by construction, a `UserDefaults` stamp with injected
+  `defaults:` and `now:` seams, or a stored boundary date) already answers "assume it runs twice".
+
+### A tenth item both audits missed, and it is a privacy one
+
+This document **breaks its own identity rule**, which is stated two sections below as a deliverable:
+row identities are named by primary key and status only, never by show title, never by venue. Four lines
+named a real show by title, with its status and the date its pitch was sent, in a repository that
+`gh repo view --json visibility` reports as PUBLIC. Those four are corrected below to the primary key the
+rest of the document uses. Neither the reality check nor the lessons audit caught it, though both read
+this document and it carries the rule they were checking against. The guards could not: both read email
+addresses and URL hosts, so a show title is outside them by construction. Filed as **#3958**, and recorded
+as a cross-project rule (L482).
+
+### One live defect this plan predicted, now happening
+
+pk 433's sent body names two dates. Its stored `runNights` now holds **one**, because the feed re-folded
+the run after the pitch went out. Overture can no longer say what that email promised a stranger, which is
+exactly the failure Phase 2.5 exists to prevent, on real outreach that has already left.
+
+## The plan as it landed on 2026-08-30, unedited below this line
 
 ## What this is, in plain terms
 
@@ -585,7 +674,7 @@ A runbook edit means `scripts/eval-prep-runbook.sh --yes` should be run before s
 ### Clash First, Picker Filed (`clash-first`)
 Ship only the half that is bleeding: make the self-booking check read every night on both sides of the comparison, and repair the natural-key corruption the per-night drop mechanism has already caused, before anything makes that mechanism common. No picker, no new stored field, no contract bump, no runbook or brand-voice edit. The bet is that the reported defect (Oct 29 invisible to the double-booking check while a pitch offering that night has already gone out) is a pure read-side fix over data the store already holds, and that the per-night decision screen is a separate feature that should not be blocked behind it. It also buys the panel's most alarming finding time to be settled: Z_PK 361 already carries a naturalKey dated to a night Dan dropped, one corruption in the nine rows that have ever used the drop path, and the picker would take that path to 84 live multi-night rows carrying up to 23 nights each.
 
-Key choices: Phase 0 before anything else: ScoutService.apply must move naturalKey with performanceDate through the same three-answer keyAvailability read dropNight uses, refusing on taken or unreadable; add a live-store invariant test (no row's key date outside its runNights) with a printed corpus count and a real UNMEASURED state; repair Z_PK 361 dry-run on a store copy first.; SelfBookingConflict.Show carries nights plus a per-night times map sourced from the stored nightStartTimes, and results carry the colliding night, so gapMinutes can never lend one night's curtain to a different night.; Reuse ConflictScope for the copy rather than reinventing it: every SelfBookingCopy sentence says 'on this date' under a header that is the opening night, which becomes a claim the check never measured the moment nights expand. This is #1501 already solved on the calendar half.; Fallback asymmetry written down beside the code: empty runNights falls back to performanceDate alone on BOTH sides, never BlockedCalendar's span walk, which would manufacture clashes on the dark nights of a sixteen-Tuesday series.; Only in-progress pitches expand on the other side. Prospect.isBooked is a row flag naming no night, so a booked run still contributes its opening night alone and the Downbeat calendar half keeps ownership of booked work.; Index the queue by night once per render pass; selfBookingConflicts already filters all 1,023 rows per row rendered and night expansion multiplies that by up to 23.; Dedupe runNights at every read (17 rows hold duplicates, Z_PK 353 lists each of 10 dates twice) and file the upstream fold defect separately.; Correct the two stale premises in the same change: SelfBookingConflict.swift's own comment and issue #1986's body.; The eight decisions become a filed milestone with the panel's measured corrections attached (contract is at v13, String Theory is contacted and sent, keeps are inferred from absence), not code.
+Key choices: Phase 0 before anything else: ScoutService.apply must move naturalKey with performanceDate through the same three-answer keyAvailability read dropNight uses, refusing on taken or unreadable; add a live-store invariant test (no row's key date outside its runNights) with a printed corpus count and a real UNMEASURED state; repair Z_PK 361 dry-run on a store copy first.; SelfBookingConflict.Show carries nights plus a per-night times map sourced from the stored nightStartTimes, and results carry the colliding night, so gapMinutes can never lend one night's curtain to a different night.; Reuse ConflictScope for the copy rather than reinventing it: every SelfBookingCopy sentence says 'on this date' under a header that is the opening night, which becomes a claim the check never measured the moment nights expand. This is #1501 already solved on the calendar half.; Fallback asymmetry written down beside the code: empty runNights falls back to performanceDate alone on BOTH sides, never BlockedCalendar's span walk, which would manufacture clashes on the dark nights of a sixteen-Tuesday series.; Only in-progress pitches expand on the other side. Prospect.isBooked is a row flag naming no night, so a booked run still contributes its opening night alone and the Downbeat calendar half keeps ownership of booked work.; Index the queue by night once per render pass; selfBookingConflicts already filters all 1,023 rows per row rendered and night expansion multiplies that by up to 23.; Dedupe runNights at every read (17 rows hold duplicates, Z_PK 353 lists each of 10 dates twice) and file the upstream fold defect separately.; Correct the two stale premises in the same change: SelfBookingConflict.swift's own comment and issue #1986's body.; The eight decisions become a filed milestone with the panel's measured corrections attached (contract is at v13, pk 433 is contacted and sent, keeps are inferred from absence), not code.
 
 Cost: Free and the cheapest of the three. No new services, no new stored field, no SwiftData migration, no contract version, no runbook edit, so no token-spending eval run and no copy-inventory cold read beyond the reworded clash sentences.
 
@@ -614,7 +703,7 @@ C2 Consolidation (25): 8.5. Highest of the three on pure mechanism count. Reuses
 C3 Fidelity (20): 4. Implements none of the eight. It escalates them honestly as a filed milestone with corrections attached rather than reversing or absorbing any, which is the right way to fall short, but falling short of the central ask is still the largest fidelity gap here.
 C4 Nightly loop (15): 7. No picker means no clicks, but also no benefit: the 22 unjudged nights of a 23-night run keep going to strangers. Noise cost measured and bounded today (20 marked nights to 21).
 C5 Cost (10): 10. Cheapest. No contract bump, no runbook edit, so no eval run and no copy-document cold read.
-Its red team's primary objection is the most operationally important finding in the whole panel and I am carrying it into the winner rather than against this option: String Theory is contacted with sentAt today, so the exposure is live and six new rows share 2026-10-29 with nothing warning.
+Its red team's primary objection is the most operationally important finding in the whole panel and I am carrying it into the winner rather than against this option: pk 433 is contacted with sentAt today, so the exposure is live and six new rows share 2026-10-29 with nothing warning.
 
 **drops-only: 7** C1 Correctness/honesty (30): 5.5. Strong on structure and I confirmed its two best factual catches: PrepQueue.swift:234 really is version 13, so v13 to v14 is right where the brief said v7 to v8, and RunNightDrop's restoreNights is already plural for exactly the reason its dropNights argument gives. The ordering hazard it names is real and would bite silently, since dropping an opening night moves naturalKey and the sheet's selection is a Set of those keys. But its own stated accepted limitation is precisely what criterion 1 is scored on: a Keep leaves no trace, so a night the feed adds after the picker ran is silently kept and marked spoken-for though nobody judged it, and Overture then asserts a night to a stranger that nobody ever decided about. That is the defect the feature exists to remove, shipped as a design property. It also omits Phase 0 while being the option that takes the drop path from nine rows to routine traffic, which repeats a recorded mistake class (L15, L145) and does nothing to prevent it, and the writer that produced the one corrupt row is verifiably still open in ScoutService. Its red team's first objection stands on code I checked: BlockedCalendar is only ever built from the scout's own data, and conflictKey is one column, so decision 5's 'name the clashing shoot for each blocked night' has no stored fact behind it for the second blocked night.
 C2 Consolidation (25): 8. Derived kept nights through one accessor read by five consumers, no parallel array, dropNight expressed in terms of an atomic dropNights, one new field forced by a type signature rather than chosen. Docked because half the deliverable, the night-list versus night-list comparison, appears in none of its nine key choices, so the SelfBookingConflict.Show reshape and its copy layer are unenumerated work.
@@ -636,10 +725,10 @@ Cost does not force the cheap option. All three are free; the winner adds no rec
 
 The red-team objection I weighted heaviest, and verified myself, does not kill it: conflictKey, conflictClearedKey and conflictOpen are one column each with three writers and six gate call sites reading one boolean, so decisions 5 and 6 need a named per-night home for "this blocked night was waived". That gap is real, it is the same class as the defect that started this work, and it applies to Drops Only too (which at least names acceptedNightConflicts). It is a scope item to add before building, not a reason to prefer a weaker option, so I am grafting the middle option's acceptedNightConflicts field in as the answer and requiring the PR body's sibling enumeration to cover the conflict columns.
 
-Two things from Clash First's red team change the sequencing rather than the choice, and both must be honoured. First, String Theory is contacted with sentAt stamped today, not drafted: the pitch naming both nights has gone, and six new rows share 2026-10-29 with no warning firing. So the clash fix plus Phase 0 ships as phase 1, ahead of the picker, and Dan gets told the same day not to keep anything on 2026-10-29 until it lands. Second, the premise went stale at #1523, not #1174, and #1523 is the PR that built runNights and made BlockedCalendar run-aware while leaving its sibling untouched; the PR body must say that, because AGENTS.md's rule 3 is the mechanism that should have caught it.
+Two things from Clash First's red team change the sequencing rather than the choice, and both must be honoured. First, pk 433 is contacted with sentAt stamped today, not drafted: the pitch naming both nights has gone, and six new rows share 2026-10-29 with no warning firing. So the clash fix plus Phase 0 ships as phase 1, ahead of the picker, and Dan gets told the same day not to keep anything on 2026-10-29 until it lands. Second, the premise went stale at #1523, not #1174, and #1523 is the PR that built runNights and made BlockedCalendar run-aware while leaving its sibling untouched; the PR body must say that, because AGENTS.md's rule 3 is the mechanism that should have caught it.
 
 ### Runner up ideas grafted in
-1. Ship Clash First's phase 1 FIRST inside the winner, and treat it as time-critical rather than as backlog: Z_PK 433 String Theory is `contacted` with sentAt stamped 2026-08-30, so the two-night promise is already out and six `new` rows share 2026-10-29 with no warning. Give Dan a same-day heads-up (do not keep anything on 2026-10-29 until the fix lands) rather than letting the repair wait behind the picker.
+1. Ship Clash First's phase 1 FIRST inside the winner, and treat it as time-critical rather than as backlog: Z_PK 433 is `contacted` with sentAt stamped 2026-08-30, so the two-night promise is already out and six `new` rows share 2026-10-29 with no warning. Give Dan a same-day heads-up (do not keep anything on 2026-10-29 until the fix lands) rather than letting the repair wait behind the picker.
 2. Carry a per-night times MAP, not the card's startTimes, and return the colliding NIGHT in the result. This is the one place night expansion can produce a wrong reassurance instead of a wrong warning: without it a Saturday matinee's eight-hour gap can quiet a Tuesday clash through workableGapMinutes.
 3. Write the fallback asymmetry down beside the code: empty runNights falls back to performanceDate ALONE on both sides of the self-booking check, never to BlockedCalendar's span walk. I confirmed BlockedCalendar.conflict falls back to EasternDate.days(from:through:) on empty nights; copying that here would manufacture clashes on the dark nights of a sixteen-Tuesday series across the 15 to 25 live rows that have a span and no nights.
 4. Reuse ConflictScope for the clash copy rather than reinventing it (#1501 already solved this on the calendar half). Every SelfBookingCopy sentence says 'on this date' under a header keyed to the opening night, which becomes a claim the check never measured the instant nights expand (L263).
