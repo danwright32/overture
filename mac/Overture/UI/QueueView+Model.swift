@@ -2741,11 +2741,40 @@ enum QueueModel {
 
     // #3323: the row marker, assembled here so the view does not have to hold the night and the names
     // together itself (the #863 rule: a sentence built in a view is invisible to the copy inventory).
+    // #3686: the strongest commitment clashing with this row, the shows AT that tier, and the earliest
+    // night they clash on. Nil when the row is clear.
+    //
+    // Deliberately one walk producing all three, rather than three helpers each walking the overlaps:
+    // the tier, the names and the night have to describe the SAME set of shows, and three independent
+    // reads could disagree the moment one of them changed (L16).
+    static func rowMarkerParts(for item: some QueueScopeFacts, in index: SelfBookingConflict.NightIndex)
+        -> (commitment: SelfBookingConflict.Show.Commitment, names: [String], night: String?)? {
+        let overlaps = selfBookingConflicts(for: item, in: index)
+        // An overlap can only come from a committed show, so an empty tier list means an empty clash list.
+        guard let strongest = overlaps.compactMap({ $0.other.commitment }).max(by: { $0.rank < $1.rank })
+        else { return nil }
+        let atTier = overlaps.filter { $0.other.commitment == strongest }
+        var seen = Set<String>()
+        let names = atTier.compactMap { seen.insert($0.other.key).inserted ? $0.other.name : nil }
+        return (strongest, names, atTier.first?.night)
+    }
+
     static func selfBookingRowMarker(for item: some QueueScopeFacts,
                                      in index: SelfBookingConflict.NightIndex) -> String? {
-        SelfBookingCopy.rowMarker(selfBookingConflictNames(for: item, in: index),
-                                  clashNight: selfBookingClashNight(for: item, in: index),
-                                  performanceDate: item.performanceDate)
+        // #3686: the strongest commitment on the night decides the wording, and only the shows AT that
+        // tier are named by it, which is exactly what `headerClaim` already does for the date header
+        // (`SelfBookingConflict.swift`). One rule, asked once, so the row and the header can never give
+        // different answers to "what has this night got on it" (L261, L342).
+        //
+        // A night holding a booked shoot and a sent pitch therefore speaks as booked and names the booked
+        // show. The pitch is not mentioned on this row, and that is the deliberate cost of one sentence:
+        // the stronger claim is the one that decides whether Dan can work the night at all.
+        rowMarkerParts(for: item, in: index).flatMap { parts in
+            SelfBookingCopy.rowMarker(parts.names,
+                                      clashNight: parts.night,
+                                      performanceDate: item.performanceDate,
+                                      commitment: parts.commitment)
+        }
     }
 
     // #1244: the self-booking warning shown at the send-confirm moment, as one shared helper so BOTH send

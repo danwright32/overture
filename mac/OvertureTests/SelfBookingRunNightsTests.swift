@@ -185,7 +185,7 @@ struct SelfBookingRunNightsCopyTests {
     // not acquire a date it never needed.
     @Test func aClashOnTheCardsOwnNightIsUnchanged() {
         #expect(SelfBookingCopy.rowMarker(["Orchestra A"], clashNight: "2026-10-29",
-                                          performanceDate: "2026-10-29")
+                                          performanceDate: "2026-10-29", commitment: .emailed)
                 == "Also pitching Orchestra A on this date")
     }
 
@@ -193,7 +193,7 @@ struct SelfBookingRunNightsCopyTests {
     // when the problem is four nights later.
     @Test func aClashOnALaterNightNamesTheNight() {
         #expect(SelfBookingCopy.rowMarker(["Orchestra A"], clashNight: "2026-10-29",
-                                          performanceDate: "2026-10-27")
+                                          performanceDate: "2026-10-27", commitment: .emailed)
                 == "Also pitching Orchestra A on Oct 29")
     }
 
@@ -201,14 +201,14 @@ struct SelfBookingRunNightsCopyTests {
     // the wrong night is worse than naming none (L11).
     @Test func anUnreadableNightSaysLaterInTheRunRatherThanThisDate() {
         #expect(SelfBookingCopy.rowMarker(["Orchestra A"], clashNight: "not-a-date",
-                                          performanceDate: "2026-10-27")
+                                          performanceDate: "2026-10-27", commitment: .emailed)
                 == "Also pitching Orchestra A on a later night of this run")
     }
 
     // No night measured at all is the same case: it may not claim the card's own date.
     @Test func noNightAtAllStillDoesNotClaimThisDate() {
         #expect(SelfBookingCopy.rowMarker(["Orchestra A"], clashNight: nil,
-                                          performanceDate: "2026-10-27")
+                                          performanceDate: "2026-10-27", commitment: .emailed)
                 == "Also pitching Orchestra A on a later night of this run")
     }
 
@@ -249,9 +249,9 @@ struct SelfBookingRunNightsCopyTests {
     // blocked-calendar half: the sentence was true and read false, because the eye binds the date in the
     // sentence to the header above it.
     @Test func theDateHeaderNoteSaysThisDateOnlyWhenTheClashIsOnIt() {
-        #expect(SelfBookingCopy.dateHeaderNote(.init(commitment: .emailed, allOnThisDate: true))
+        #expect(SelfBookingCopy.dateHeaderNote(.init(commitment: .emailed, allOnThisDate: true, night: nil))
                 == "Another pitch is already in progress on this date")
-        #expect(SelfBookingCopy.dateHeaderNote(.init(commitment: .emailed, allOnThisDate: false))
+        #expect(SelfBookingCopy.dateHeaderNote(.init(commitment: .emailed, allOnThisDate: false, night: nil))
                 == "Another pitch is already in progress on a night one of these runs plays")
     }
 }

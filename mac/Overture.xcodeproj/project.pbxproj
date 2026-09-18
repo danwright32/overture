@@ -1156,6 +1156,7 @@
 		84EC6B9F1E9FA07EB74AA12D /* FollowUpsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 420EC153064F83BE06351CC9 /* FollowUpsView.swift */; };
 		84F2B198166270B48CFCCBCF /* ProspectRowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D9834539BA47D783475B28C /* ProspectRowView.swift */; };
 		84F7E3CCE36ACBC3F0BB59A7 /* ManualDraftTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 52C647D1FA9632C5067B9B2F /* ManualDraftTests.swift */; };
+		84F9EE40837BC33E7FD58B3C /* SelfBookingCopyNamesTheNightAndTheTierTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2EEB408AED02044A09104A74 /* SelfBookingCopyNamesTheNightAndTheTierTests.swift */; };
 		85278C746B159D744E7CA73C /* ReplyGap.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9C8250080030BD14FDDEBBB /* ReplyGap.swift */; };
 		8545FC9EE3C2C87C4E1D99E6 /* ScoutClassify.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5016365F2BAD55F7C90CBA95 /* ScoutClassify.swift */; };
 		854F6B08FE4452948F427F99 /* DuplicateContactGuard.swift in Sources */ = {isa = PBXBuildFile; fileRef = A14670939A1D0902000A4FE2 /* DuplicateContactGuard.swift */; };
@@ -2529,6 +2530,7 @@
 		2DF6FD6CCBA9E2C5315F4DD0 /* OneWordPerCountedThingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OneWordPerCountedThingTests.swift; sourceTree = "<group>"; };
 		2E72BB44F88E4022A76846AF /* LiveRunLabelViewStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveRunLabelViewStateTests.swift; sourceTree = "<group>"; };
 		2E9658B5B6212F50195FCDA6 /* ReplyTriageDue.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReplyTriageDue.swift; sourceTree = "<group>"; };
+		2EEB408AED02044A09104A74 /* SelfBookingCopyNamesTheNightAndTheTierTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SelfBookingCopyNamesTheNightAndTheTierTests.swift; sourceTree = "<group>"; };
 		2F3180AAE3A0F32C65075DFF /* SecureFileWriteTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecureFileWriteTests.swift; sourceTree = "<group>"; };
 		2F34829E1A2048C9B0C22788 /* CardCheckShipsInReleaseTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardCheckShipsInReleaseTests.swift; sourceTree = "<group>"; };
 		2F6556AF12C03406F0E47CD6 /* DismissReasonMigrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DismissReasonMigrationTests.swift; sourceTree = "<group>"; };
@@ -4953,6 +4955,7 @@
 				2F3180AAE3A0F32C65075DFF /* SecureFileWriteTests.swift */,
 				A6A24C0EDD3F72C6E15DC128 /* SeedTableCensusLiveStoreTests.swift */,
 				4AAC96C322499E916539DF69 /* SelfBookingConflictTests.swift */,
+				2EEB408AED02044A09104A74 /* SelfBookingCopyNamesTheNightAndTheTierTests.swift */,
 				F7E0C48C80DE809AA0FD14B0 /* SelfBookingHeaderTierTests.swift */,
 				1061CFE591228E70958802C6 /* SelfBookingIndexAgreesWithTheScanTests.swift */,
 				00265246BC8B07D3CA9C5099 /* SelfBookingRunNightsTests.swift */,
@@ -7739,6 +7742,7 @@
 				A71BD417F07AA6D986878502 /* SelfBookingConfirmSheet.swift in Sources */,
 				C8C5F65371435D353BBF36D3 /* SelfBookingConflict.swift in Sources */,
 				C1912F6E6CE736C16D483A1E /* SelfBookingConflictTests.swift in Sources */,
+				84F9EE40837BC33E7FD58B3C /* SelfBookingCopyNamesTheNightAndTheTierTests.swift in Sources */,
 				30B23EEE36055437680FE97A /* SelfBookingHeaderTierTests.swift in Sources */,
 				9AF121E22C95115B975396E0 /* SelfBookingIndexAgreesWithTheScanTests.swift in Sources */,
 				A3821F1BA9072DE2C50AD80C /* SelfBookingRunNightsTests.swift in Sources */,

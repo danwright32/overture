@@ -58,16 +58,36 @@ struct SelfBookingHeaderTierTests {
                 == "You are already shooting another show on this date")
     }
 
-    // The run variants split the same way, so there are FOUR header sentences and not two. A clash on a
-    // later night of a run in the group may not say "on this date": that would be a claim about the header
-    // it sits under that the check never measured (#1501, #3323).
-    @Test func bothSentencesHaveARunVariant() {
+    // The later-night variants split the same way, so there are SIX header sentences and not two. A clash
+    // on a later night of a run in the group may never say "on this date": that would be a claim about the
+    // header it sits under that the check never measured (#1501, #3323).
+    //
+    // #3672 split the later-night case in half. When every clash at the tier falls on ONE night, the
+    // sentence names it, because the night was already known where the sentence is composed and Dan was
+    // otherwise left hunting for it. When they fall on SEVERAL, it keeps the vague wording, because naming
+    // one of them would present it as the whole story (L11).
+    @Test func aSingleLaterNightIsNamedForBothTiers() {
         let run = show("run", ["2026-09-29", "2026-09-30"])
         let sentLater = show("sent", ["2026-09-30"], .emailed, name: "Orchestra A")
         #expect(SelfBookingCopy.dateHeaderNote(claim([run], on: "2026-09-29", among: [run, sentLater]))
-                == "Another pitch is already in progress on a night one of these runs plays")
+                == "Another pitch is already in progress on Sep 30")
         let bookedLater = show("booked", ["2026-09-30"], .booked, name: "Choir B")
         #expect(SelfBookingCopy.dateHeaderNote(claim([run], on: "2026-09-29", among: [run, bookedLater]))
+                == "You are already shooting another show on Sep 30")
+    }
+
+    // And the vague wording survives for the case it was written for, which is the only case that can
+    // still honestly use it.
+    @Test func severalLaterNightsKeepTheRunWordingForBothTiers() {
+        let run = show("run", ["2026-09-29", "2026-09-30", "2026-10-01"])
+        let sentA = show("sentA", ["2026-09-30"], .emailed, name: "Orchestra A")
+        let sentB = show("sentB", ["2026-10-01"], .emailed, name: "Choir B")
+        #expect(SelfBookingCopy.dateHeaderNote(claim([run], on: "2026-09-29", among: [run, sentA, sentB]))
+                == "Another pitch is already in progress on a night one of these runs plays")
+        let bookedA = show("bookedA", ["2026-09-30"], .booked, name: "Quartet C")
+        let bookedB = show("bookedB", ["2026-10-01"], .booked, name: "Quintet D")
+        #expect(SelfBookingCopy.dateHeaderNote(claim([run], on: "2026-09-29",
+                                                     among: [run, bookedA, bookedB]))
                 == "You are already shooting another show on a night one of these runs plays")
     }
 
