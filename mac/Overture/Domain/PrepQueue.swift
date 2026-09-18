@@ -255,8 +255,9 @@ extension Prospect: PrepEligibilityFacts {}
 // #3369: it used to be THREE rules, the third being an open date conflict refusing the show outright. That
 // gate is gone: a clash warns at launch and never decides.
 enum PrepRunIntent: Equatable, Sendable {
-    // The next run will not take this show up at all: it is untriaged, dismissed, already drafted with
-    // no re-prep asked for, or kept on a night Dan cannot work.
+    // The next run will not take this show up at all: it is untriaged, dismissed, or already drafted with
+    // no re-prep asked for. A clash with a night Dan cannot work is NOT a reason any more (#3369): the
+    // show is still taken up and the clash is named at launch instead.
     case notQueued
     // The full prep: research a contact, then write the email.
     case contactsAndDraft
@@ -343,9 +344,10 @@ enum PrepQueueBuilder {
 
     // #1666: the one accessor a surface asks for "what happens to this show at the next Prep run".
     // Composed of the two rules that decide it, never a third statement of either: `needsPrepEligible`
-    // says whether the run takes the show up at all (the conflict gate included), and `prepMode` says
-    // which half of the work it does. `probedWithContact` is not defaulted, for the same reason
-    // `needsPrep`'s conflict gate is not: a default is how a caller forgets a gate invisibly.
+    // says whether the run takes the show up at all (status, draft and the re-prep requests, and nothing
+    // about a date clash since #3369 removed that gate), and `prepMode` says which half of the work it
+    // does. `probedWithContact` is not defaulted, for the reason #1666 recorded above `needsPrep`: a
+    // default is how a caller forgets an argument invisibly.
     static func nextRunIntent<Facts: PrepEligibilityFacts>(for p: Facts,
                                                            probedWithContact: Bool) -> PrepRunIntent {
         guard needsPrepEligible(p) else { return .notQueued }
@@ -460,7 +462,8 @@ enum PrepQueueBuilder {
     }
 
     // `houses` is deliberately NOT defaulted, and it is the only argument here without a default, for the
-    // same reason `needsPrep`'s conflict gate is not: a defaulted empty set is exactly how the producer
+    // reason #1666 recorded above `needsPrep` (where a defaulted argument, since retired by #3369, was
+    // silently wrong from the day it shipped): a defaulted empty set is exactly how the producer
     // gate's promotion override spent months looking wired while every call site quietly passed nothing
     // (#1679). Required, forgetting it is a compile error rather than a silently house-less run that sends
     // the model hunting the building's own inbox.
