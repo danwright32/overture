@@ -426,7 +426,15 @@ struct QueueRenderPassWorkUnitCostTests {
     // has to hold the overlaps anyway in order to read their commitment tier. Pinned at the new number,
     // not loosened to a ceiling: this counter exists so a change that moves work is VISIBLE, and a bound
     // that both readings satisfy would have hidden this one in the direction that looks harmless.
-    private static let allowedSelfBookingShowsExaminedOnScreen = 260
+    //
+    // #3686 then took it from 260 to 196, the same shape one layer down. `selfBookingRowMarker` asked the
+    // index TWICE per clashing row, once through `selfBookingConflictNames` and again through
+    // `selfBookingClashNight`, because the names and the night were fetched separately.
+    // `QueueModel.rowMarkerParts` now derives the tier, the names and the night from ONE walk, which it
+    // has to do anyway: those three have to describe the same set of shows, and three independent reads
+    // could disagree the moment one of them changed (L16). Cheaper is the side effect; agreeing is the
+    // reason.
+    private static let allowedSelfBookingShowsExaminedOnScreen = 196
 
     // Scout, held separately from the figure above so the two stages cannot hide each other's movement.
     //
@@ -445,10 +453,14 @@ struct QueueRenderPassWorkUnitCostTests {
     //
     // Worth knowing before re-pinning it: this assertion lives in `QueueRenderPassWorkUnitCostTests`, NOT
     // in `QueueRenderPassCostTests`, which shares this file. Scoping a run to the file's first suite name
-    // runs 3 unrelated tests, exits 0, and never reaches this line, which is how the wrong 260 survived a
+    // runs 3 unrelated tests, exits 0, and never reaches this line, which is how a wrong value survived a
     // green run (L100: an operation that matches nothing it was aimed at reports success about something
     // else).
-    private static let allowedSelfBookingShowsExaminedOnScout = 432
+    //
+    // 432 to 324 in #3686, for the same reason the Review figure above fell: the row marker's names and
+    // night now come from one walk rather than two. Scout stays the larger of the pair because it renders
+    // the untriaged rows and there are more of them.
+    private static let allowedSelfBookingShowsExaminedOnScout = 324
 
     // The per-contact multiplier, pinned separately so a change that moves work between the send-group
     // build and the card build is visible even when the total holds. Measured, not read off the code.
