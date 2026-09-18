@@ -89,12 +89,17 @@ struct SelfBookingScreenWorkMirrorTests {
         }
     }
 
-    // The gate that makes the Scout figure zero, asserted directly so a change that starts asking on Scout
-    // is a red test rather than a number that quietly grows.
-    @Test("the row marker and the date note are both gated off Scout")
-    func bothScreenQuestionsAreGatedOffScout() {
-        #expect(SourceGuardHelper.containsCode(
-            "if focusedStage != .scout, let note = QueueModel.selfBookingNote(", in: queueView))
-        #expect(SourceGuardHelper.containsCode("let selfBookingMarker = focusedStage != .scout", in: queueView))
-    }
+    // #2689 DELETED `bothScreenQuestionsAreGatedOffScout`, which asserted that the row marker and the date
+    // note were both gated `focusedStage != .scout`. That gate is gone: the markers now show on Scout,
+    // which is the stage Keep happens on, and the index only holds commitments so a Scout row can never
+    // mark another Scout row.
+    //
+    // DELETED rather than adjusted, deliberately. A test asserting a decision that has since been reversed
+    // is not stale coverage, it is the guard defending the rejected behaviour, and editing it to match the
+    // new answer keeps a vote for the old one in the suite (L252). `scripts/find-tests-naming.sh` names
+    // this file for exactly this reason.
+    //
+    // What replaces it is not an inverted copy here. `ScoutShowsTheSelfBookingClashTests` owns the new
+    // rule, counts the remaining gates so its failure says how many are left, and reads through
+    // `normalizedCode` so a comment recording the old gate cannot satisfy or break it.
 }

@@ -428,10 +428,27 @@ struct QueueRenderPassWorkUnitCostTests {
     // that both readings satisfy would have hidden this one in the direction that looks harmless.
     private static let allowedSelfBookingShowsExaminedOnScreen = 260
 
-    // And zero again on Scout, because the view asks nothing there (`focusedStage != .scout` gates both
-    // the row marker and the date-heading note). Held separately so a change that starts asking on Scout
-    // is visible rather than absorbed into the number above.
-    private static let allowedSelfBookingShowsExaminedOnScout = 0
+    // Scout, held separately from the figure above so the two stages cannot hide each other's movement.
+    //
+    // This was 0, with a comment saying the view asks nothing on Scout because `focusedStage != .scout`
+    // gated both the row marker and the date-heading note. #2689 removed that gate: Keep happens on Scout,
+    // and the warning was arriving one screen later than the decision it is about. So Scout now asks the
+    // same three questions every other stage asks, and this number is the measured consequence rather than
+    // a bound anybody chose. The old comment is quoted here rather than deleted because it is the reason
+    // the figure moved, and a number that changes with no recorded cause is the thing this pin exists to
+    // prevent.
+    //
+    // MEASURED 2026-09-18, by setting this to a wrong number and reading what the failure reported:
+    // `onScout.selfBookingShowsExamined → 432`. Not reasoned, and not copied from the figure above: a
+    // first attempt DID copy 260 from Review on the assumption the two stages would agree, and they do
+    // not. Scout renders the untriaged rows and there are more of them.
+    //
+    // Worth knowing before re-pinning it: this assertion lives in `QueueRenderPassWorkUnitCostTests`, NOT
+    // in `QueueRenderPassCostTests`, which shares this file. Scoping a run to the file's first suite name
+    // runs 3 unrelated tests, exits 0, and never reaches this line, which is how the wrong 260 survived a
+    // green run (L100: an operation that matches nothing it was aimed at reports success about something
+    // else).
+    private static let allowedSelfBookingShowsExaminedOnScout = 432
 
     // The per-contact multiplier, pinned separately so a change that moves work between the send-group
     // build and the card build is visible even when the total holds. Measured, not read off the code.
@@ -664,7 +681,12 @@ struct QueueRenderPassWorkUnitCostTests {
     // does, and the danger is that it drifts (L263), so `SelfBookingScreenWorkMirrorTests` asserts the
     // view's render path asks exactly these three and no others.
     static func askTheScreensSelfBookingQuestions(_ data: QueueView.RenderData, stage: StageFocus) {
-        guard stage != .scout else { return }
+        // #2689 removed the `guard stage != .scout else { return }` that used to stand here. The view no
+        // longer gates these three on the stage, so a mirror that skipped Scout would be describing a
+        // screen that does not exist, and its pinned Scout figure would measure nothing while reading as a
+        // number somebody had chosen (L63). The `stage` parameter is kept because the callers pass it and
+        // it names which figure each measurement belongs to.
+        _ = stage
         for group in data.dateGroups {
             _ = QueueModel.selfBookingNote(group.items, on: group.id, in: data.selfBooking)
         }
