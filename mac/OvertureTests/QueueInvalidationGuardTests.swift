@@ -338,11 +338,15 @@ struct QueueInvalidationGuardTests {
             // brace and a trailing space) counted every presenter twice, and the guard then reported the
             // correct code as two surfaces, which is the shape a guard must not have: it would be
             // switched off rather than believed (L93). Seen while writing it.
-            let needle = ".sheet(item: $sheets.\(flag))"
+            //
+            // #1743: a presentation may carry an `onDismiss:`, so the needle ends at the flag and the next
+            // character decides. `)` and `,` are disjoint, so a site is still counted exactly once.
+            let needle = ".sheet(item: $sheets.\(flag)"
             var presenters = 0
             for path in swift {
                 let text = SourceGuardHelper.source("Overture/\(path)")
-                presenters += text.components(separatedBy: needle).count - 1
+                presenters += text.components(separatedBy: needle).dropFirst()
+                    .filter { $0.hasPrefix(")") || $0.hasPrefix(",") }.count
             }
             #expect(presenters == 1,
                     Comment(rawValue: "\(presenters) surfaces present `\(flag)`. Exactly one may: two "

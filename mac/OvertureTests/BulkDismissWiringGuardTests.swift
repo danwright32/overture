@@ -72,7 +72,10 @@ struct BulkDismissWiringGuardTests {
         // The dismissal itself happens on the sheet's own buttons and nowhere else, and it reaches the
         // queue's own `dismissNight` through the one closure the host is given. Both ends, or the sheet
         // could call something else entirely while this stayed green.
-        #expect(sheetsFile.contains("onProceed: { onDismissNight(pending,"))
+        // #1743: the proceed now also keeps what the dismissal answered (the day off offer), so the call
+        // sits on the right of an assignment. Matched as code, so the line break it gained does not matter.
+        #expect(SourceGuardHelper.containsCode("onProceed: { dayOffAfterNightDismiss = onDismissNight(pending,",
+                                               in: sheetsFile))
         #expect(queue.contains("onDismissNight: { pending, keys in dismissNight(pending, keys: keys) }"))
     }
 
@@ -94,7 +97,8 @@ struct BulkDismissWiringGuardTests {
         // disappearing.
         #expect(sheetsFile.contains("onAlternative: pending.offersChoice"))
         #expect(sheetsFile.contains("onDismissNight(pending, pending.keysOnlyThisNight)"))
-        #expect(sheetsFile.contains("onProceed: { onDismissNight(pending, pending.keys)"))
+        #expect(SourceGuardHelper.containsCode(
+            "onProceed: { dayOffAfterNightDismiss = onDismissNight(pending, pending.keys)", in: sheetsFile))
     }
 
     // And the narrower way out is offered only when the night actually holds both kinds. A sheet offering

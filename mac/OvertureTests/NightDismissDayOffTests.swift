@@ -173,7 +173,7 @@ struct NightDismissDayOffTests {
         let onDismiss = sheets.components(separatedBy: ".sheet(item: $sheets.pendingNightDismiss, onDismiss: {")
             .dropFirst().first?.prefix(700) ?? ""
         #expect(onDismiss.contains("dayOffOffer.request(offer)"))
-        #expect(queue.contains("sheets.dayOffAfterNightDismiss ="))
+        #expect(sheets.contains("dayOffAfterNightDismiss = onDismissNight(pending, pending.keys)"))
         #expect(queue.contains("nightDate: pending.date"))
         // Nothing in the queue raises the night's offer directly.
         #expect(!queue.contains("dayOffOffer.request("))
