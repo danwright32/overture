@@ -53,6 +53,16 @@ struct BlockedCalendar: Equatable, Sendable {
     enum Kind: String, Equatable, Sendable, Codable {
         case bookedShoot        // Downbeat says he is working
         case dayOff             // Dan says he is away
+
+        // #1421: how hard a clash of this kind is, higher is harder. A booked shoot is work he has taken
+        // and cannot move; a day off is his own and he can wave it through. Read by `Day.decidesBefore`,
+        // the one ordering `conflict` uses. Exhaustive, so a third kind has to say where it sits.
+        var severity: Int {
+            switch self {
+            case .bookedShoot: return 1
+            case .dayOff: return 0
+            }
+        }
     }
 
     struct Day: Equatable, Sendable {
@@ -72,7 +82,8 @@ struct BlockedCalendar: Equatable, Sendable {
         // about Jul 24 and makes the quiet cards beside it look broken.
         //
         // It says "a later night", never "one night". The stored conflict key holds ONE day (`conflict`
-        // below returns the earliest blocked night via `.min`), so Overture does not know whether one night
+        // below returns the most severe blocked night, earliest among equals, #1421), so Overture does not
+        // know whether one night
         // of the run is out or three, and claiming a count would be false about Dan's calendar the first
         // time two were. That is the same class of error as copying the line onto every card in the date
         // group, which is what #1501 was asked for and declined.
@@ -128,6 +139,14 @@ struct BlockedCalendar: Equatable, Sendable {
         private static let separator: Character = "|"
 
         var key: String { "\(kind.rawValue)\(Day.separator)\(date)\(Day.separator)\(name ?? "")" }
+
+        // #1421: which of two blocked nights of one run decides it. The harder kind first, then the earlier
+        // date. The name is the last tie break only so the answer never depends on the order the nights
+        // arrived in; two days on one date cannot both reach here, since `decidingDay` hands on one.
+        static func decidesBefore(_ a: Day, _ b: Day) -> Bool {
+            if a.kind.severity != b.kind.severity { return a.kind.severity > b.kind.severity }
+            return (a.date, a.name ?? "") < (b.date, b.name ?? "")
+        }
 
         init(date: String, kind: Kind, name: String?) {
             self.date = date
@@ -307,15 +326,21 @@ struct BlockedCalendar: Equatable, Sendable {
     // every night the list empties while the `runEndDate` correction on the next line only runs
     // `if !existing.runNights.isEmpty`. So the row keeps a span it has no nights for, and an empty night
     // list means two different things to every reader that branches on it.
+    //
+    // #1421: the night that decides is the most SEVERE blocked night of the run, and the earliest only among
+    // equals. It used to be the earliest alone, in both arms below. A run stores ONE conflict key and Dan's
+    // "I can shoot this anyway" is recorded against it, so a day off he had waved through on an early night
+    // kept the key unchanged when a booked shoot landed on a later night, and the run stayed clear over a
+    // night he is working: #901's trap, reopened across kinds.
     func conflict(performanceDate: String?, runEndDate: String?, nights: [String] = []) -> Day? {
         guard let performanceDate else { return nil }   // "date to be confirmed" collides with nothing
         guard nights.isEmpty else {
-            return nights.compactMap(decidingDay).min { $0.date < $1.date }
+            return nights.compactMap(decidingDay).min(by: Day.decidesBefore)
         }
         let lastNight = EasternDate.runLastNight(runEndDate: runEndDate, performanceDate: performanceDate)
         return EasternDate.days(from: performanceDate, through: lastNight ?? performanceDate)
             .compactMap(decidingDay)
-            .min { $0.date < $1.date }
+            .min(by: Day.decidesBefore)
     }
 
     // Everything blocked, for the Days off sheet: EVERY booked shoot, not one per date (#2693). Sorted by

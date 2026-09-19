@@ -95,14 +95,46 @@ struct BlockedCalendarTests {
         #expect(cal.conflict(performanceDate: "2026-11-14", runEndDate: "2026-11-17") == nil)
     }
 
-    // The EARLIEST clash is the one reported, so the note names the first night he'd miss rather than
-    // whichever day happened to hash first.
-    @Test func theEarliestClashInARunIsTheOneReported() {
-        let cal = BlockedCalendar.build(availability: .measured, 
+    // #1421: AMONG CLASHES OF ONE KIND, the earliest is the one reported, so the note names the first
+    // night he'd miss rather than whichever day happened to hash first. This used to be the whole rule
+    // ("the EARLIEST clash is the one reported"); it is now the tie break under severity, which the cross
+    // kind test below pins.
+    @Test func amongClashesOfOneKindTheEarliestIsReported() {
+        let cal = BlockedCalendar.build(availability: .measured,
             bookings: [booking("Later Shoot", "2026-11-17"), booking("Earlier Shoot", "2026-11-15")],
             exportedBlockedDates: [], daysOff: [])
 
         #expect(cal.conflict(performanceDate: "2026-11-14", runEndDate: "2026-11-18")?.name == "Earlier Shoot")
+        #expect(cal.conflict(performanceDate: "2026-11-14", runEndDate: "2026-11-18",
+                             nights: ["2026-11-14", "2026-11-15", "2026-11-17"])?.name == "Earlier Shoot")
+
+        let daysOffOnly = BlockedCalendar.build(availability: .measured, bookings: [], exportedBlockedDates: [],
+                                                daysOff: [dayOff("2026-11-17", "2026-11-17", note: "Later"),
+                                                          dayOff("2026-11-15", "2026-11-15", note: "Earlier")])
+        #expect(daysOffOnly.conflict(performanceDate: "2026-11-14", runEndDate: "2026-11-18")?.name == "Earlier")
+    }
+
+    // #1421, THE behaviour change. A run whose EARLY night is one of Dan's own days off and whose LATER
+    // night is a booked shoot reports the booked shoot, by the span walk and by the real nights alike.
+    //
+    // A run stores ONE conflict key, and "I can shoot this anyway" is recorded against that key. While the
+    // earliest night decided, waving the day off through cleared the whole run, and the booked shoot
+    // behind it was never shown to him: #901's trap reopened across kinds. A booked shoot is the clash he
+    // cannot move, so it decides wherever it falls in the run.
+    @Test func aLaterBookedShootOutranksAnEarlierDayOffAcrossTheRun() {
+        let cal = BlockedCalendar.build(availability: .measured,
+                                        bookings: [booking("Smith Recital", "2026-11-17")],
+                                        exportedBlockedDates: [],
+                                        daysOff: [dayOff("2026-11-14", "2026-11-15", note: "Rehearsal")])
+
+        let bySpan = cal.conflict(performanceDate: "2026-11-14", runEndDate: "2026-11-18")
+        #expect(bySpan?.kind == .bookedShoot)
+        #expect(bySpan?.date == "2026-11-17")
+
+        let byNights = cal.conflict(performanceDate: "2026-11-14", runEndDate: "2026-11-18",
+                                    nights: ["2026-11-14", "2026-11-15", "2026-11-17"])
+        #expect(byNights?.kind == .bookedShoot)
+        #expect(byNights?.date == "2026-11-17")
     }
 
     // An undated listing ("date to be confirmed") cannot collide with anything, and must not be treated

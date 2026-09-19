@@ -165,7 +165,7 @@ enum WindowCensus {
 
     // Suspends for as long as the task lives. Not a wait for a condition and not a poll: there is nothing to
     // check, because the only thing that ends it is cancellation, which resumes this directly.
-    private static func suspendUntilCancelled() async {
+    static func suspendUntilCancelled() async {
         await withTaskGroup(of: Void.self) { group in
             group.addTask {
                 _ = try? await Task.sleep(nanoseconds: UInt64.max)

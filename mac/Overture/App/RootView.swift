@@ -136,6 +136,9 @@ struct RootView: View {
     // #3435 Phase 2e: the app watches its own main thread and writes what it finds. Held here because
     // this is the view that outlives every sheet, so the watch spans a session rather than a screen.
     @State private var freezeWatch = FreezeWatch()
+    // #1421: the blocked calendar, built once and handed every change by `ConflictSweep.reapplyAll`. Owned
+    // here, where the store's context is, and injected below so the Days off sheet reads the same value.
+    @State private var availability = AvailabilitySnapshot()
     // And STOOD DOWN when this window goes away. Overture is a menu bar app that sits with no window most
     // of the day, and an idle surface must pay nothing (Dan's standing rule, and L353). The first version
     // of the watchdog claimed to stand down and nothing called anything.
@@ -335,9 +338,12 @@ struct RootView: View {
         feedback.acknowledge(answer.text, tone: answer.resolved ? .info : .warning)
     }
 
+    // #1421: read from the app's one cached calendar. This used to build it here, so every redraw of the
+    // main window decoded the Downbeat export and fetched every day off and cancellation to draw one
+    // toolbar button.
     private var daysOffReason: DaysOffAttention.Reason {
         DaysOffAttention.reason(
-            ScoutService.blockedCalendar(export: DownbeatBridge.loadedExport(), context: context),
+            availability.calendar,
             feedStalled: DownbeatFeedFreshness.isStalled(lastNewAt: feedLastNewAt, now: Date()))
     }
 
@@ -1203,6 +1209,9 @@ struct RootView: View {
             // control covers the case where Dan runs that import mid-session.
             .task { readShootHistoryHealth() }
             .task { readDownbeatHealth() }
+            // #1421: built at launch, then kept current by the sweep. Detached when the task is cancelled, so
+            // a rebuilt window scene leaves no observer behind.
+            .task { await availability.attachUntilCancelled(to: context) }
             // #2879: keep the "couldn't read" line current. Once at launch, because the launch ingests
             // have already run by then, and then on a tick, because most of these files are read by
             // background work (a run watcher, the reconcile scheduler) that has no way to reach this
@@ -1425,6 +1434,7 @@ struct RootView: View {
             // rather than reached for, on the same footing as the two above, and read as an OPTIONAL by
             // the surfaces so a missed injection is a pass nobody counted rather than a crash.
             .environment(freezeWatch)
+            .environment(availability)   // #1421: the Days off sheet reads the calendar this view keeps
             // #1414: the Edit menu's Undo raises a token on the App; the reversal happens HERE, where
             // the context, the live rows and the feedback banner all exist.
             .onChange(of: undoRequest.token) { _, _ in performQueueUndo() }
