@@ -33,7 +33,7 @@ struct ReachabilityVerdictRefreshTests {
     private func defaults() -> UserDefaults {
         // Its own suite per test, so one test's "already run" flag can never answer for another's, and
         // nothing touches this Mac's real defaults.
-        let d = UserDefaults(suiteName: "refresh-\(UUID().uuidString)")!
+        let d = ScratchDefaults.make("refresh")
         return d
     }
 

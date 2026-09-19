@@ -178,6 +178,6 @@ struct ResettleKeepsAFoundContactTests {
     }
 
     private func freshDefaults() -> UserDefaults {
-        UserDefaults(suiteName: "resettle-\(UUID().uuidString)")!
+        ScratchDefaults.make("resettle")
     }
 }

@@ -24,7 +24,7 @@ struct TestsCannotReachSharedStateTests {
     // part of the rule: a guard that only says no is one somebody works around.
     private static let forbidden: [(api: String, instead: String)] = [
         ("UserDefaults.standard",
-         "UserDefaults(suiteName: \"<something>-\\(UUID().uuidString)\"), which every test here already does"),
+         "ScratchDefaults.make(\"<label>\"), which names a private suite and deletes it afterwards (#3774)"),
         ("NSHomeDirectory()",
          "a temp directory the test makes and asserts on"),
         ("homeDirectoryForCurrentUser",
@@ -46,6 +46,10 @@ struct TestsCannotReachSharedStateTests {
             "the guard that forbids this API in the APP's source, so it has to name it to search for it.",
         "TestsCannotReachSharedStateTests.swift":
             "this file, which names every API it forbids.",
+        "ScratchDefaults.swift":
+            "the helper that DELETES the tests' own defaults files from ~/Library/Preferences (#3774). It "
+            + "has to name the real folder to clean it, it touches only files carrying its own prefix, and "
+            + "its sweep is proved against a temp directory standing in for that folder.",
     ]
 
     // Through AppSourceWalk, never a private enumerator: the walk is what REFUSES when it comes back
@@ -101,80 +105,71 @@ struct TestsCannotReachSharedStateTests {
         }
     }
 
-    // #3272: and the defaults suite a test builds is SCOPED TO ITSELF, so two tests can never be handed
-    // the same one.
+    // #3774: and the ONLY way a test builds a defaults suite is `ScratchDefaults.make`.
     //
-    // The rule above forbids `UserDefaults.standard`, which is the location the app shares. This is the
-    // shape beside it: a private suite with a FIXED name is not shared with the app, but it IS shared
-    // with every other test that spells the same name, and with every earlier run on this Mac, since a
-    // defaults domain is a file that persists. Measured 2026-08-31 across all test sources: 69 of 75
-    // call sites already scoped their name with a UUID and six did not, five of them in one file reusing
-    // names that had once been suite names.
+    // #3272 put a rule here that every suite a test built carried a UUID, so two tests could never share
+    // one. It held, and it was the wrong question: every one of those unique suites is a real file in
+    // `~/Library/Preferences`, and nothing deleted any of them. Measured 2026-09-10, that folder held
+    // 745,089 files, 528 of them real preferences, and listing it took minutes; cleared by hand that day,
+    // it was back to 67,696 by 2026-09-19. The ten sites that called `removePersistentDomain` leaked too,
+    // because that call empties the domain and LEAVES THE FILE (measured, see ScratchDefaults.swift).
     //
-    // Judged over a WINDOW back to the enclosing declaration rather than the call's own line, because
-    // the ordinary correct spelling builds the name a line or two above the call and a per-line rule
-    // would flag every one of them. Found by writing it that way first: it condemned the five sites this
-    // very change had just fixed.
-    private static let defaultsSuiteWindow = 25
-
-    // A helper that takes the suite NAME as an argument cannot carry the UUID itself; its callers do.
-    // Named with the reason, and asserted below to still need it, on the same terms as `exempt` above.
+    // A rule every call site must opt into cannot be enforced by a scan (L621), so the scan now enforces
+    // the one thing that can be: a raw `UserDefaults(suiteName:` anywhere in the test sources outside the
+    // helper itself. Uniqueness and cleanup both live in the helper, so neither can be forgotten.
     private static let defaultsSuiteExempt: [String: String] = [
-        "OneFailingShowStopsOnlyItselfTests.swift":
-            "scratchDefaults(_ name:) takes the name from its callers, and both of them build it as "
-            + "\"omnifocus-...-\\(UUID().uuidString)\".",
+        "ScratchDefaults.swift":
+            "the helper itself, which is the one place a suite is built and the one place it is removed.",
         "TestsCannotReachSharedStateTests.swift":
             "this file, which has to name the API in order to forbid it.",
     ]
 
-    @Test("every defaults suite a test builds is scoped to that test")
-    func everyDefaultsSuiteIsScoped() throws {
+    // Whether a line of Swift builds a defaults suite directly. A COMMENT is not a call, and LaunchReplay
+    // once had to reword a comment to get past a scan that could not tell them apart (#3767).
+    static func buildsARawSuite(_ line: String) -> Bool {
+        let code = line.components(separatedBy: "//").first ?? line
+        return code.contains("UserDefaults(suiteName:")
+    }
+
+    @Test("every defaults suite a test builds comes from ScratchDefaults")
+    func everyDefaultsSuiteComesFromTheHelper() throws {
         let files = Self.testSourceFiles()
         #expect(files.count > 100, "the walk found \(files.count) test files, which is not the suite")
 
         var offenders: [String] = []
         var examined = 0
-        for file in files where Self.defaultsSuiteExempt[file.name] == nil {
+        for file in files {
             let lines = file.text.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
-            for (index, line) in lines.enumerated() where line.contains("UserDefaults(suiteName:") {
-                examined += 1
-                let from = max(0, index - Self.defaultsSuiteWindow)
-                if !lines[from...index].contains(where: { $0.contains("UUID()") }) {
+            for (index, line) in lines.enumerated() {
+                if line.contains("ScratchDefaults.make(") { examined += 1 }
+                if Self.defaultsSuiteExempt[file.name] == nil, Self.buildsARawSuite(line) {
                     offenders.append("\(file.name):\(index + 1)  \(line.trimmingCharacters(in: .whitespaces))")
                 }
             }
         }
 
-        // Zero subjects is UNMEASURED, never clean: if the API were renamed this guard would report a
-        // perfectly scoped tree while examining nothing (L98).
+        // Zero subjects is UNMEASURED, never clean: if the helper were renamed this would report a tidy
+        // tree while examining nothing (L98).
         #expect(examined > 30,
-                "examined \(examined) UserDefaults(suiteName:) call sites, which is too few to be measuring the tree")
+                "found \(examined) ScratchDefaults.make call sites, which is too few to be measuring the tree")
         #expect(offenders.isEmpty, """
-            A test builds a defaults suite whose name is fixed, so every other test spelling that name, \
-            and every earlier run on this Mac, shares it (#3272):
+            A test builds a defaults suite directly. Every one is a real file in ~/Library/Preferences, and \
+            nothing deletes it (#3774):
             \(offenders.joined(separator: "\n"))
-            Scope it: UserDefaults(suiteName: "<something>-\\(UUID().uuidString)").
+            Use ScratchDefaults.make("<label>"), which names it uniquely and removes it at process exit.
             """)
     }
 
-    // The control for the rule above, on the same terms as the one below it: a guard that reports no
-    // offenders and a guard whose pattern matches nothing look identical (L70).
-    @Test("the scoping rule still recognises a fixed name")
-    func theScopingRuleStillWorks() {
-        let fixed = ["@Test func f() {", "    let d = UserDefaults(suiteName: \"FixedName\")!", "}"]
-        let scoped = ["@Test func f() {",
-                      "    let suite = \"scoped-\\(UUID().uuidString)\"",
-                      "    let d = UserDefaults(suiteName: suite)!",
-                      "}"]
-        func flagged(_ lines: [String]) -> Bool {
-            for (index, line) in lines.enumerated() where line.contains("UserDefaults(suiteName:") {
-                let from = max(0, index - Self.defaultsSuiteWindow)
-                if !lines[from...index].contains(where: { $0.contains("UUID()") }) { return true }
-            }
-            return false
-        }
-        #expect(flagged(fixed), "the rule did not flag a fixed suite name")
-        #expect(!flagged(scoped), "the rule flagged a correctly scoped one")
+    // The control for the rule above: a guard that reports no offenders and a guard whose pattern matches
+    // nothing look identical (L70).
+    @Test("the defaults rule still recognises a raw suite, and not a comment about one")
+    func theDefaultsRuleStillWorks() {
+        #expect(Self.buildsARawSuite("    let d = UserDefaults(suiteName: \"x-\\(UUID().uuidString)\")!"),
+                "the rule did not flag a raw suite, even one with a UUID in its name")
+        #expect(!Self.buildsARawSuite("    // never build a UserDefaults(suiteName: here"),
+                "the rule flagged a comment")
+        #expect(!Self.buildsARawSuite("    let d = ScratchDefaults.make(\"x\")"),
+                "the rule flagged the helper")
     }
 
     // And every exemption from THAT rule is still needed, on the same terms as the ones above: an

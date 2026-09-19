@@ -60,7 +60,7 @@ struct DownbeatFeedFreshnessTests {
 
     // MARK: - The store
 
-    private func scratch() -> UserDefaults { UserDefaults(suiteName: "feed-freshness-\(UUID().uuidString)")! }
+    private func scratch() -> UserDefaults { ScratchDefaults.make("feed-freshness") }
     private func booking(_ id: String, endDate: String) -> OvertureBooking {
         OvertureBooking(id: id, clientId: "c", clientDisplayName: "C", shootName: "S",
                         startDate: endDate, endDate: endDate, venueId: nil, venueName: "V")

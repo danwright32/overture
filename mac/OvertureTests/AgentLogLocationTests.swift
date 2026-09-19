@@ -296,7 +296,7 @@ struct AgentLogLocationTests {
         defer { try? FileManager.default.removeItem(at: dir) }
         let file = dir.appendingPathComponent("overture-agent.problems.log")
         try String(repeating: "x", count: 2_048).write(to: file, atomically: true, encoding: .utf8)
-        let defaults = UserDefaults(suiteName: "agentlog-test-\(UUID().uuidString)")!
+        let defaults = ScratchDefaults.make("agentlog-test")
 
         AgentLogLocation.recordViewed(problemsLog: file, into: defaults)
 

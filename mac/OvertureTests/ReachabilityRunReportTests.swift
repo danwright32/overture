@@ -123,7 +123,7 @@ struct ReachabilityProbeReportWiringTests {
     }
 
     private func freshDefaults() -> UserDefaults {
-        UserDefaults(suiteName: "probe-report-\(UUID().uuidString)")!
+        ScratchDefaults.make("probe-report")
     }
 
     // L2: every file the ingest reads points inside this test's own temp directory. Left at their defaults

@@ -23,7 +23,7 @@ struct NativePathPlacementTests {
     private let now = Date(timeIntervalSince1970: 1_800_000_000)
 
     private func defaults() -> UserDefaults {
-        UserDefaults(suiteName: "NativePathPlacementTests-\(UUID().uuidString)")!
+        ScratchDefaults.make("NativePathPlacementTests")
     }
 
     // Carnegie's own row: the native path only records onto a source that exists, and this is the one row

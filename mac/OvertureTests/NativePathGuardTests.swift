@@ -34,7 +34,7 @@ struct NativePathGuardTests {
     private let now = Date(timeIntervalSince1970: 1_800_000_000)
 
     private func defaults() -> UserDefaults {
-        UserDefaults(suiteName: "NativePathGuardTests-\(UUID().uuidString)")!
+        ScratchDefaults.make("NativePathGuardTests")
     }
 
     private func event(_ title: String, venue: String?) -> ExtractedEvent {
@@ -167,7 +167,7 @@ struct NativePathCannotCancelTests {
             extractor: StubSourceExtractor(listing: ExtractedListing(events: events,
                                                                      verdict: .upcomingListings)),
             now: now,
-            defaults: UserDefaults(suiteName: "NativeCancel-\(UUID().uuidString)")!)
+            defaults: ScratchDefaults.make("NativeCancel"))
     }
 
     // #1472: an UNRELATED show is no longer sheltered by somebody else's blank venue field. This feed came

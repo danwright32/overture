@@ -49,7 +49,7 @@ struct UnfinishedCheckTests {
     }
 
     private func freshDefaults() -> UserDefaults {
-        UserDefaults(suiteName: "unfinished-\(UUID().uuidString)")!
+        ScratchDefaults.make("unfinished")
     }
 
     // INGREDIENT 1. A check finished while Overture was closed. Its marker and its results are both on
@@ -234,7 +234,7 @@ struct FailedAnswerSaveTests {
                     downbeatURL: d.appendingPathComponent("no-downbeat.json"),
                     historyURL: d.appendingPathComponent("no-history.json"),
                     into: ctx, now: Date(),
-                    defaults: UserDefaults(suiteName: "failed-stamp-\(UUID().uuidString)")!)
+                    defaults: ScratchDefaults.make("failed-stamp"))
             })
 
         let settled = try #require(report)
@@ -276,7 +276,7 @@ struct FailedAnswerSaveTests {
                     downbeatURL: d.appendingPathComponent("no-downbeat.json"),
                     historyURL: d.appendingPathComponent("no-history.json"),
                     into: ctx, now: Date(),
-                    defaults: UserDefaults(suiteName: "gave-up-\(UUID().uuidString)")!)
+                    defaults: ScratchDefaults.make("gave-up"))
             })
 
         let settled = try #require(report)

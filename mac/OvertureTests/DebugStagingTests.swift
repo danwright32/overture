@@ -381,7 +381,7 @@ final class DebugStagingTests {
     // MARK: - #1245: the one-action visual-QA seed (draft + signature + same-date double-booking).
 
     private func qaDefaults() -> UserDefaults {
-        UserDefaults(suiteName: "DebugStagingVisualQATests-\(UUID().uuidString)")!
+        ScratchDefaults.make("DebugStagingVisualQATests")
     }
 
     @Test @MainActor func visualQAScenarioSeedsADraftInReviewWithAReachableRecipient() throws {

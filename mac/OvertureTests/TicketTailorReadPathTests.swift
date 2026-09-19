@@ -50,7 +50,7 @@ struct TicketTailorReadPathTests {
             pin: { _, id in URL(fileURLWithPath: "/tmp/\(id).html") },
             launch: { _ in box.launched = true },
             now: now,
-            defaults: UserDefaults(suiteName: "ttrp-\(UUID().uuidString)")!)
+            defaults: ScratchDefaults.make("ttrp"))
 
         // The widget was parsed natively: its one show reached runNative's ingest (found), for free...
         #expect(outcome.found == 1)
@@ -78,7 +78,7 @@ struct TicketTailorReadPathTests {
             pin: { _, id in URL(fileURLWithPath: "/tmp/\(id).html") },
             launch: { _ in box.launched = true },
             now: now,
-            defaults: UserDefaults(suiteName: "ttrp-\(UUID().uuidString)")!)
+            defaults: ScratchDefaults.make("ttrp"))
 
         #expect((try ctx.fetch(FetchDescriptor<Prospect>())).isEmpty)
         #expect(box.launched == false)              // still no paid read

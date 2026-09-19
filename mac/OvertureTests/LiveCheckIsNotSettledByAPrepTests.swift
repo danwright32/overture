@@ -41,7 +41,7 @@ struct LiveCheckIsNotSettledByAPrepTests {
     }
 
     private func freshDefaults() -> UserDefaults {
-        UserDefaults(suiteName: "live-check-3009-\(UUID().uuidString)")!
+        ScratchDefaults.make("live-check-3009")
     }
 
     private func newProspect(_ ctx: ModelContext, group: String) -> String {

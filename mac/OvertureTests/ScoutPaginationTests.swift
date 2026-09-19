@@ -72,7 +72,7 @@ struct ScoutPaginationTests {
             session: stubSession(),
             pin: { _, id in URL(fileURLWithPath: "/tmp/\(id).html") }, launch: { _ in },
             now: july2026(),
-            defaults: UserDefaults(suiteName: "scout-pag-\(UUID().uuidString)")!)
+            defaults: ScratchDefaults.make("scout-pag"))
 
         // Four months stitched from the site's own month index, not just July, the page it landed on.
         // November is past the four-month horizon and must not be read.
@@ -102,7 +102,7 @@ struct ScoutPaginationTests {
             session: stubSession(),
             pin: { _, id in URL(fileURLWithPath: "/tmp/\(id).html") }, launch: { _ in },
             now: july2026(),
-            defaults: UserDefaults(suiteName: "scout-pag-\(UUID().uuidString)")!)
+            defaults: ScratchDefaults.make("scout-pag"))
 
         // Only the months actually read are recorded as stitched; October is not silently counted present.
         #expect(kaufman.pendingPageMonths == ["2026-07", "2026-08", "2026-09"])
@@ -129,7 +129,7 @@ struct ScoutPaginationTests {
             session: stubSession(),
             pin: { _, id in URL(fileURLWithPath: "/tmp/\(id).html") }, launch: { _ in },
             now: july2026(),
-            defaults: UserDefaults(suiteName: "scout-pag-\(UUID().uuidString)")!)
+            defaults: ScratchDefaults.make("scout-pag"))
 
         // November is now within the (twelve-month) client horizon and gets read, where the default
         // four-month source stopped at October.

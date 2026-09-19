@@ -10,7 +10,7 @@ import Foundation
 @Suite("OmniFocus sync runner (#268)")
 struct OmniFocusSyncRunnerTests {
     private func freshDefaults() -> UserDefaults {
-        let d = UserDefaults(suiteName: "of-runner-\(UUID().uuidString)")!
+        let d = ScratchDefaults.make("of-runner")
         return d
     }
 

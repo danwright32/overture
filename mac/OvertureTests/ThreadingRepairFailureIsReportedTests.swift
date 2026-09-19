@@ -29,7 +29,7 @@ struct ThreadingRepairFailureIsReportedTests {
             // #3272: UUID scoped, and no `?? .standard` fallback. That fallback would have handed the
             // REAL shared defaults to a test, by a spelling the guard forbidding `UserDefaults.standard`
             // cannot see, and it is unreachable in practice, so it was a silent hole rather than safety.
-            defaults: UserDefaults(suiteName: "overture.tests.2679-\(UUID().uuidString)")!,
+            defaults: ScratchDefaults.make("overture.tests.2679"),
             repairThreading: { _ in repair })
     }
 

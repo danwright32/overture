@@ -54,7 +54,7 @@ struct WrittenOffBacklogTests {
     // field has to come back with it.
     @Test func everyMarkedRowWasContradictingTheSameVerdict() throws {
         let ctx = ModelContext(try container())
-        let d = UserDefaults(suiteName: "backlog-\(UUID().uuidString)")!
+        let d = ScratchDefaults.make("backlog")
         let key = Prospect.makeNaturalKey(groupName: "Marked By The Real Pass",
                                           performanceDate: "2027-04-18", venue: "Rowan Hall")
         let p = Prospect(naturalKey: key, groupName: "Marked By The Real Pass", discipline: "music",

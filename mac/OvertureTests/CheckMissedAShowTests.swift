@@ -56,7 +56,7 @@ struct CheckMissedAShowTests {
     }
 
     private func freshDefaults() -> UserDefaults {
-        UserDefaults(suiteName: "missed-\(UUID().uuidString)")!
+        ScratchDefaults.make("missed")
     }
 
     private func answer(_ key: String) -> PrepResult {

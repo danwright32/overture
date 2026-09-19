@@ -23,7 +23,7 @@ struct GuardedArgumentCostTests {
     // days off to build a calendar, and the first line of the rule that reads it returns as soon as Dan
     // has snoozed the mark.
     @Test func aSnoozedDaysOffMarkNeverBuildsTheCalendar() {
-        let defaults = UserDefaults(suiteName: "geo-1960-\(UUID().uuidString)")!
+        let defaults = ScratchDefaults.make("geo-1960")
         defaults.set(Date().addingTimeInterval(3_600).timeIntervalSince1970, forKey: DaysOffAttention.snoozeKey)
         var built = 0
         let calendar = { () -> BlockedCalendar in
@@ -39,7 +39,7 @@ struct GuardedArgumentCostTests {
 
     // And an un-snoozed mark still reads it and still answers, so the guard has not swallowed the feature.
     @Test func anUnsnoozedDaysOffMarkStillReadsTheCalendarAndAnswers() {
-        let defaults = UserDefaults(suiteName: "geo-1960-\(UUID().uuidString)")!
+        let defaults = ScratchDefaults.make("geo-1960")
         var built = 0
         let calendar = { () -> BlockedCalendar in
             built += 1
