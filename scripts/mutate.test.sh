@@ -28,6 +28,9 @@ export OVERTURE_MUTATE_LOG_DIR="${WORK}/mutate-logs"
 # OVERTURE_MUTATE_LOG reaches every inner run, and all of them write into the outer run's log (L439). The
 # ownership check below refused exactly that the first time it was tried, which is how it was found.
 unset OVERTURE_MUTATE_LOG
+# #3923: the same for the runner. Every run below names its own, and the default-runner cases need it
+# UNSET, which an outer mutation's OVERTURE_MUTATE_RUNNER would silently undo.
+unset OVERTURE_MUTATE_RUNNER OVERTURE_MUTATE_DEFAULT_RUNNER
 
 SUBJECT="${WORK}/Subject.swift"
 write_subject() { printf 'struct Subject {\n    static let answer = "yes"\n}\n' > "${SUBJECT}"; }
