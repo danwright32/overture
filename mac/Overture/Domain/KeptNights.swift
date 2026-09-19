@@ -11,7 +11,8 @@ import Foundation
 // #3312: which wins, chronology or Dan's ticks? CHRONOLOGY, declared here and derived everywhere else. A
 // night already behind us cannot be shot, so it is never offered by the picker (`PrepNightPlan.build`),
 // never kept here, and `PrepQueueItem.openingNightPassed` is the same `upcoming` fact seen from the
-// opening night. `KeptNightsAgreeWithChronologyTests` fails if the two ever disagree.
+// opening night. `KeptNightsTests.theKeptNightsAndOpeningNightPassedNeverDisagree` fails if the two ever
+// disagree.
 enum KeptNights {
 
     // "More than three": a span is allowed from four contiguous nights up.

@@ -252,7 +252,10 @@ struct QueueItem: Identifiable, Equatable, Sendable {
 
     // #3326 (plan 2.8): the skipped night this draft names, which holds the send. Nil when it names none.
     func skippedNightNamedInDraft(today: String = EasternDate.today()) -> String? {
-        guard case .namesASkippedNight(_, let night)? = eventDateFinding(today: today) else { return nil }
+        // Asked through `blocksTheSend`, the one place that says which findings hold a send, so a finding
+        // added later that also blocks cannot be missed here while the warning shows it.
+        guard let finding = eventDateFinding(today: today), finding.blocksTheSend,
+              case .namesASkippedNight(_, let night) = finding else { return nil }
         return night
     }
 
