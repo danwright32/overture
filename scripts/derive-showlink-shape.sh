@@ -17,9 +17,20 @@ set -euo pipefail
 # (Prospect.swift:1651 to :1655), and no SQLite expression or rewrite of it here reproduces either. What
 # this does instead is read the folded title and folded venue back OUT of each row's own stored
 # ZNATURALKEY, which ScoutService wrote THROUGH that Swift fold. So the buckets are the shipped ones even
-# though no Swift runs, and what remains approximate is only the clustering inside a bucket. Phase 0
-# build three still has to re-derive these through ShowLink itself, and until it does, nothing printed
-# here is pinned as a constant.
+# though no Swift runs, and what remains approximate is only the clustering inside a bucket.
+#
+# WHERE IT DISAGREES WITH THE SHIPPED RULE, measured 2026-09-19 once ShowLink existed to compare
+# against. On the QUEUE the two agree exactly: 596 rows, 6 groups, largest 2, 3 refused pairs. Over the
+# whole store they do not, and ShowLink finds 19 groups against this command's 16. Both differences are
+# this command's blind spots and neither is fixable here:
+#   - ShowLink recomputes the fold from the row's CURRENT scout-anchored fields, while this reads the
+#     fold as it was STORED in ZNATURALKEY when the row was last written. 6 rows carry a scoutVenue
+#     differing from their venue.
+#   - ShowLink unions Dan's DROPPED nights into the night set, because a group joined through a night he
+#     then drops must not split back into fragments. 41 rows carry at least one dropped night, 112 in
+#     total, and no SQL expression can decode them.
+# So where the two disagree, ShowLinkCorpusShapeTests is right and this is not. Quote this for a figure
+# nobody can otherwise re-take; never quote it as a statement of what the app does.
 #
 # THE POPULATIONS ARE THE POINT. #3772's claim 3 was that Phase 3 sent somebody to screenshot a group
 # that is not on the surface it named. So this prints the shape of FOUR populations separately, never one

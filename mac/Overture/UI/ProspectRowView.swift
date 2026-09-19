@@ -189,6 +189,7 @@ struct ProspectRowView: View {
                     relatedRunNote
                     heldBackNote
                     linkedEngagementNote
+                    storedMoreThanOnceNote
                     orgDoNotContactFlag
                     bookingSuggestionFlag
                     alreadyCoveredFlag
@@ -586,6 +587,22 @@ struct ProspectRowView: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    // #3282: the store holds this show more than once and, until this, nothing anywhere said so. The
+    // false cancellation warning #3921 fixed was only the symptom of it that happened to be visible.
+    //
+    // Beside `linkedEngagementNote` and in the same treatment, because it answers the same kind of
+    // question about the same show: that one says the production also plays elsewhere, this says the
+    // app is holding it twice. Faint rather than gold: it is a fact Dan needs while triaging, not an
+    // action he can take here, and the controls that let him settle it are their own work.
+    @ViewBuilder private var storedMoreThanOnceNote: some View {
+        if let note = QueueModel.storedMoreThanOnceNote(item) {
+            Text(note)
+                .font(OVType.tag)
+                .foregroundStyle(OVColor.inkSoft)
+                .padding(.top, 2)
         }
     }
 
