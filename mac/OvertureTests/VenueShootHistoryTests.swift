@@ -251,7 +251,7 @@ struct VenueShootHistoryKeepsNoTitlesTests {
         let held = Self.strings(in: history)
         #expect(!held.isEmpty, "reflection found no strings at all, so this is measuring nothing")
         for note in [Self.privateNote, Self.bookingNote, Self.rehearsalNote] {
-            #expect(!held.contains(note), "a calendar title outlived the rehearsal rule: \(note)")
+            #expect(!held.contains { $0.contains(note) }, "a calendar title outlived the rehearsal rule: \(note)")
         }
     }
 }
