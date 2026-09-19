@@ -776,9 +776,13 @@ final class Prospect {
     // Swift. That is the #863 bug by construction: the button would light up for a show the Prep run then
     // refuses to work on, and Dan would click Prep and watch it find nothing.
     //
-    // So the flag is written in exactly three places (setScoutConflict, clearConflict, restoreConflict),
-    // it is what `hasUnclearedConflict` reads, and it is what the #Predicate reads. One column, one truth,
-    // and no way for the button and the work-list to disagree.
+    // So the flag is assigned only inside `setScoutConflict`, `clearConflict` and `restoreConflictClearance`.
+    // `restoreConflict` assigns nothing: it calls `restoreConflictClearance(nil)`. The callers outside the
+    // model are ScoutService, DayOff, ProspectMutations and QueueUndoStack. QueueUndoStack is the one that
+    // calls `restoreConflictClearance` directly, restoring the clearance an undone action replaced. Both
+    // lists are derived from the code and checked by ConflictOpenWritersGuardTests (#3968), so follow them
+    // rather than a search. It is what `hasUnclearedConflict` reads, and it is what the #Predicate reads.
+    // One column, one truth, and no way for the button and the work-list to disagree.
     var conflictOpen: Bool = false
 
     // The Downbeat booking id that auto-booked this prospect (#203). Recorded at auto-book
