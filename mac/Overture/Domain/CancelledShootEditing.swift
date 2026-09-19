@@ -13,6 +13,17 @@ enum CancelledShootEditing {
         (try? context.fetch(FetchDescriptor<CancelledShoot>())) ?? []
     }
 
+    // #3406: the waved through shoots the Days off sheet still LISTS, the sibling of `DayOffEditing.upcoming`
+    // and `BlockedCalendar.upcomingBookedShoots` on the same sheet. A cancellation is about a BOOKING, which
+    // can run several nights, and the row's own date is only the night Dan pressed it on, so it is past once
+    // the booking's LAST night is. A booking the export no longer carries is judged by the row's own date.
+    // A filter, never a deletion: the rows still stand as the override the calendar applies.
+    static func upcoming(_ rows: [CancelledShoot], bookings: [OvertureBooking],
+                         today: String) -> [CancelledShoot] {
+        let lastNight = Dictionary(bookings.map { ($0.id, $0.endDate) }, uniquingKeysWith: max)
+        return rows.filter { max($0.startDate, lastNight[$0.bookingId] ?? $0.startDate) >= today }
+    }
+
     // Which bookings a row on the sheet is about.
     //
     // The sheet draws `BlockedCalendar.Day`s, which carry a date and a shoot NAME and deliberately not a
