@@ -151,7 +151,7 @@ struct PresenterWithheldRecheckTests {
     // Stamped ONCE. A boundary recomputed every launch would walk forward with the clock and close the
     // window behind whichever rows had not been reached yet.
     @Test func theBoundaryIsStampedOnceAndThenNeverMoves() throws {
-        let defaults = UserDefaults(suiteName: "presenter-withheld-\(UUID().uuidString)")!
+        let defaults = ScratchDefaults.make("presenter-withheld")
         defer { defaults.removeObject(forKey: PresenterWithheldRecheck.boundaryKey) }
 
         let first = PresenterWithheldRecheck.boundary(defaults: defaults, now: boundary)
@@ -171,7 +171,7 @@ struct PresenterWithheldRecheckTests {
                             result: .noEmailFound, probedAt: before)
         let named = show(ctx, "Broadway's Bad Guys!", presenter: nil,
                          result: .noEmailFound, probedAt: before)
-        let defaults = UserDefaults(suiteName: "presenter-withheld-launch-\(UUID().uuidString)")!
+        let defaults = ScratchDefaults.make("presenter-withheld-launch")
         defer { defaults.removeObject(forKey: PresenterWithheldRecheck.boundaryKey) }
 
         _ = LaunchMigrations.run(in: ctx, possibleMatchInputs: { _ in nil },

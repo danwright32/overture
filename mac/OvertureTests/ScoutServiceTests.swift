@@ -499,7 +499,7 @@ struct ScoutServiceTests {
     }
 
     @Test func healthyFeedCountPersistenceRoundTrips() {
-        let defaults = UserDefaults(suiteName: "feedcount-\(UUID().uuidString)")!
+        let defaults = ScratchDefaults.make("feedcount")
         #expect(ScoutService.lastHealthyFeedCount(in: defaults) == 0)   // unset = no baseline
         ScoutService.recordHealthyFeedCount(42, in: defaults)
         #expect(ScoutService.lastHealthyFeedCount(in: defaults) == 42)
@@ -508,7 +508,7 @@ struct ScoutServiceTests {
     // #152: the persisted feed-health state self-heals across scouts — a full feed sets the
     // baseline, then three consecutive stable smaller feeds re-baseline to the new normal.
     @Test func feedHealthStatePersistsAndSelfHeals() {
-        let defaults = UserDefaults(suiteName: "feedhealth-\(UUID().uuidString)")!
+        let defaults = ScratchDefaults.make("feedhealth")
         #expect(ScoutService.feedHealthState(in: defaults).baseline == 0)   // unset = no baseline
         func scout(_ count: Int) {
             let next = FeedReconcile.updatedHealth(ScoutService.feedHealthState(in: defaults), currentCount: count)

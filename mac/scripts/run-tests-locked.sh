@@ -1057,6 +1057,29 @@ main() {
     done <<< "${SCREEN_LOCKED_SKIPS}"
   fi
 
+  # #3774: whether the tests left their defaults files behind in ~/Library/Preferences.
+  #
+  # Every test suite of defaults is a real file there, and until #3774 nothing deleted any of them: 745,089
+  # files on 2026-09-10, 528 of them real. `ScratchDefaults` now removes each at process exit and sweeps
+  # any left by a process that died first, so after a run the count of files whose owner has EXITED should
+  # be zero. Said here, after the workers are gone, because no test can observe its own process exiting.
+  #
+  # A REPORT and not a failure, deliberately: the folder is shared by every worktree on this Mac, and a
+  # worker another lane's run crashed a moment ago is indistinguishable here from one of this run's, so a
+  # red would blame whichever run happened to finish next (L93). A count that stays above zero run after
+  # run is the leak; one that clears on the next run was a crash the sweep dealt with.
+  local scratch_left
+  scratch_left="$(scratch_defaults_left_behind "${OVERTURE_PREFERENCES_DIR:-${HOME}/Library/Preferences}")"
+  if [[ "${scratch_left}" == "UNMEASURED" ]]; then
+    echo "run-tests-locked.sh: test defaults left in Preferences: UNMEASURED, the folder could not be read." >&2
+  elif [[ "${scratch_left}" -gt 0 ]]; then
+    echo >&2
+    echo "run-tests-locked.sh: ${scratch_left} test defaults file(s) are still in ~/Library/Preferences although" >&2
+    echo "the test process that made them has exited, so their cleanup did not run (#3774). A crashed worker" >&2
+    echo "leaves them and the next test process sweeps them, so read this as a leak only if it stays above" >&2
+    echo "zero run after run." >&2
+  fi
+
   # #2322: no test started at all, and the evidence says the machine rather than the change. Said
   # before the crash branch below, and INSTEAD of it, because a crashed host and a machine that
   # cannot start any test want different actions and must never share one message.
@@ -1221,6 +1244,26 @@ crash_restart_report() {
   echo "  The second is an attribution and not a finding: a crash between tests is recorded against"
   echo "  whichever test was current, and that test may not have run a line of its own body."
   echo "  The evidence is the crash report, not this run: ~/Library/Logs/DiagnosticReports/"
+}
+
+# #3774: how many of ScratchDefaults' files in <dir> belong to a process that is no longer running, or
+# UNMEASURED when the folder cannot be read. The owner is the pid in the name, which ScratchDefaults puts
+# there for its own sweep, so this and the sweep agree on what "ours" and "left behind" mean. Asked with
+# `ps` rather than `kill -0`, which also fails for a process that is alive but not ours to signal, and
+# the REAL `/bin/ps` by path: this runner's own fixture puts a stub `ps` on PATH for the test-host
+# sweep, and through it every owner read as alive and the count was silently zero (found that way).
+scratch_defaults_left_behind() {
+  local dir="$1" file pid count=0
+  [[ -d "${dir}" && -r "${dir}" ]] || { echo "UNMEASURED"; return 0; }
+  for file in "${dir}"/overture-test-scratch.*.plist; do
+    [[ -e "${file}" ]] || continue
+    pid="${file##*/overture-test-scratch.}"
+    pid="${pid%%.*}"
+    [[ "${pid}" =~ ^[0-9]+$ ]] || continue
+    /bin/ps -p "${pid}" >/dev/null 2>&1 && continue
+    count=$(( count + 1 ))
+  done
+  echo "${count}"
 }
 
 # Allow this file to be sourced (e.g. by a test fixture) without running main, so

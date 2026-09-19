@@ -502,6 +502,7 @@ STUB
     OVERTURE_HOSTED_SUITE_RECORD="${HOSTED_RECORD_AFTER_PARALLEL}" \
     OVERTURE_SUITE_RUN_SERIES="${SUITE_SERIES_AFTER_RUN}" \
     OVERTURE_DIR_LOCK="${OVERTURE_DIR_LOCK:-${bin_dir}/dir.lock}" \
+    OVERTURE_PREFERENCES_DIR="${OVERTURE_PREFERENCES_DIR:-${bin_dir}}" \
     OVERTURE_DIR_LOCK_TIMEOUT="${OVERTURE_DIR_LOCK_TIMEOUT:-5}" \
     OVERTURE_DIR_LOCK_POLL="${OVERTURE_DIR_LOCK_POLL:-1}" \
     "${SCRIPT_DIR}/run-tests-locked.sh" 2>&1)"
@@ -1744,6 +1745,25 @@ rm -rf "${LIVE_UNDER_LOCK}"
 # `fixture_scratch_dir` does not sweep itself, and `check-temp-dir-leaks.sh` reads the runner's
 # directory for exactly this, so what this block made it takes away again.
 rm -rf "${DIR_LOCK_FIXTURE_DIR}"
+
+# --- #3774: test defaults left in Preferences by a process that has exited ---------------------------
+#
+# Counted in a stand-in folder, never the real one (L2). Only OUR prefix with a DEAD owner counts: a live
+# process's file is still in use, and anybody else's file is none of this runner's business.
+PREFS_DIR="$(fixture_scratch_dir)"
+: > "${PREFS_DIR}/overture-test-scratch.999999.left-$$.plist"
+: > "${PREFS_DIR}/overture-test-scratch.$$.in-use.plist"
+: > "${PREFS_DIR}/gmail-sig-test-something.plist"
+: > "${PREFS_DIR}/overture-test-scratch.notapid.x.plist"
+assert_equals "one file whose owner has exited is counted, and only that one" \
+  "1" "$(scratch_defaults_left_behind "${PREFS_DIR}")"
+assert_equals "a folder that cannot be read is UNMEASURED, never zero" \
+  "UNMEASURED" "$(scratch_defaults_left_behind "${PREFS_DIR}/missing")"
+# And the run says so, through the real wrapper, with its folder pointed here.
+PREFS_RUN="$(OVERTURE_PREFERENCES_DIR="${PREFS_DIR}" run_wrapper_with_stub_xcodebuild "${GREEN_RUN_LOG}" 0)"
+assert_contains "a run names the files left behind" \
+  "1 test defaults file(s) are still in ~/Library/Preferences" "${PREFS_RUN}"
+rm -rf "${PREFS_DIR}"
 
 if [[ "${FAILURES}" -eq 0 ]]; then
   echo "All run-tests-locked.sh stale-host fixtures passed."

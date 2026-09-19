@@ -14,7 +14,7 @@ struct ScoutCancelTests {
     }
 
     private func defaults() -> UserDefaults {
-        UserDefaults(suiteName: "ScoutCancelTests-\(UUID().uuidString)")!
+        ScratchDefaults.make("ScoutCancelTests")
     }
 
     @discardableResult
@@ -102,7 +102,7 @@ final class ScoutExtractCancelServiceTests {
         try sandboxes.make(named: "scout-extract-cancel")
     }
     private func defaults() -> UserDefaults {
-        UserDefaults(suiteName: "ScoutExtractCancelServiceTests-\(UUID().uuidString)")!
+        ScratchDefaults.make("ScoutExtractCancelServiceTests")
     }
     private let item = ScoutExtractQueueItem(sourceId: "x", orgName: "Org", listingsURL: "https://x.test/e",
                                              pagePath: "/tmp/x.html")

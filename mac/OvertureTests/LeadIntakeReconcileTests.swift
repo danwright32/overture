@@ -31,7 +31,7 @@ struct LeadIntakeReconcileTests {
 
     private func model(_ event: ScoutExtractEvent) -> LeadIntakeModel {
         LeadIntakeModel(
-            defaults: UserDefaults(suiteName: "LeadIntakeReconcileTests-\(UUID().uuidString)")!,
+            defaults: ScratchDefaults.make("LeadIntakeReconcileTests"),
             fetch: { url in
                 FetchedPage(normalizedHTML: Self.realPageHTML, finalURL: url.absoluteString, contentHash: "h")
             },

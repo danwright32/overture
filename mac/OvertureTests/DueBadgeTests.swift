@@ -63,10 +63,7 @@ struct DueBadgeTests {
     // MARK: carrying the count to the surfaces that draw it
 
     private func scratchDefaults() -> UserDefaults {
-        let suite = "due-badge-\(UUID().uuidString)"
-        let d = UserDefaults(suiteName: suite)!
-        d.removePersistentDomain(forName: suite)
-        return d
+        ScratchDefaults.make("due-badge")
     }
 
     @Test func aPublishedCountIsWhatTheSurfacesRead() {

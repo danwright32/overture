@@ -83,7 +83,7 @@ struct StaleMarkerNeverClaimsAPrepRunTests {
         let d = dir()
         let runMarker = RunSlot.prep.markerURL(in: d)
         let probeMarker = PrepQueueService.probeRunURL(in: d)
-        let defaults = UserDefaults(suiteName: "RunKindGuard-\(UUID().uuidString)")!
+        let defaults = ScratchDefaults.make("RunKindGuard")
         let now = Date(timeIntervalSince1970: 1_780_000_000)
         try liveRunMarker(at: runMarker, startedAt: now)
         try ReachabilityProbeMarker.write(
@@ -100,7 +100,7 @@ struct StaleMarkerNeverClaimsAPrepRunTests {
         let d = dir()
         let runMarker = RunSlot.prep.markerURL(in: d)
         let probeMarker = PrepQueueService.probeRunURL(in: d)
-        let defaults = UserDefaults(suiteName: "RunKindGuard-\(UUID().uuidString)")!
+        let defaults = ScratchDefaults.make("RunKindGuard")
         let now = Date(timeIntervalSince1970: 1_780_000_000)
         try liveRunMarker(at: runMarker, startedAt: now)
         try ReachabilityProbeMarker.write(

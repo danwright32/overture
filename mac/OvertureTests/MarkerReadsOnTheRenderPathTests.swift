@@ -70,7 +70,7 @@ final class SlotStatusTests {
     private let sandboxes = TemporarySandboxes()
 
     private func emptyDefaults() -> UserDefaults {
-        UserDefaults(suiteName: "slot-status-\(UUID().uuidString)") ?? .standard
+        ScratchDefaults.make("slot-status")
     }
 
     // Two markers, two reads, whatever the answer turns out to be. This is what the queue pays once per

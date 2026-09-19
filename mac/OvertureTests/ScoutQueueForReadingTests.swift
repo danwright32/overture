@@ -17,7 +17,7 @@ struct ScoutQueueForReadingTests {
     }
 
     private func defaults() -> UserDefaults {
-        UserDefaults(suiteName: "ScoutQueueForReadingTests-\(UUID().uuidString)")!
+        ScratchDefaults.make("ScoutQueueForReadingTests")
     }
 
     @discardableResult

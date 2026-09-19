@@ -15,7 +15,7 @@ struct WatchGapLineOnScreenTests {
     private let now = Date(timeIntervalSince1970: 1_700_000_000)
 
     private func scratch() throws -> UserDefaults {
-        try #require(UserDefaults(suiteName: "watch-line-\(UUID().uuidString)"))
+        ScratchDefaults.make("watch-line")
     }
 
     // A Mac that has been running Overture since before `at`, with `sleptSeconds` of observed sleep.

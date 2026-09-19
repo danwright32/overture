@@ -72,7 +72,7 @@ struct OmniFocusReadCostTests {
     }
 
     private func freshDefaults() throws -> UserDefaults {
-        try #require(UserDefaults(suiteName: "of-readcost-\(UUID().uuidString)"))
+        ScratchDefaults.make("of-readcost")
     }
 
     // The clock is injected rather than read, so this asserts the duration REPORTED and not what else

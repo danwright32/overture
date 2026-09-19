@@ -20,7 +20,7 @@ struct RunBoundaryViolationTests {
     }
 
     private func defaults() -> UserDefaults {
-        UserDefaults(suiteName: "Boundary-\(UUID().uuidString)")!
+        ScratchDefaults.make("Boundary")
     }
 
     // The runner's own words, which is what the app has to recognise. Copied from `slot_check_foreign_results`

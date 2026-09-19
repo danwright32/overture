@@ -169,13 +169,11 @@ struct PartlyFailedOmniFocusRunTests {
     }
 
     private func scratchDefaults(_ name: String) throws -> UserDefaults {
-        let d = try #require(UserDefaults(suiteName: name))
-        d.removePersistentDomain(forName: name)
-        return d
+        ScratchDefaults.make(name)
     }
 
     @Test func aPartlyFailedRunIsRecordedAsAFailureNamingTheShow() async throws {
-        let defaults = try scratchDefaults("omnifocus-partial-\(UUID().uuidString)")
+        let defaults = try scratchDefaults("omnifocus-partial")
         let now = Date(timeIntervalSince1970: 1_780_000_000)
         let task = OmniFocusSync.DesiredTask(kind: .replyTriage, naturalKey: "the singalong|2026-10-25|a park",
                                              recipientId: "a@example.invalid", title: "t", note: "n",
@@ -199,7 +197,7 @@ struct PartlyFailedOmniFocusRunTests {
     }
 
     @Test func aCleanRunAfterOneStillRecordsSuccessAndClearsTheWarning() async throws {
-        let defaults = try scratchDefaults("omnifocus-clean-\(UUID().uuidString)")
+        let defaults = try scratchDefaults("omnifocus-clean")
         let now = Date(timeIntervalSince1970: 1_780_000_000)
         let task = OmniFocusSync.DesiredTask(kind: .replyTriage, naturalKey: "a show|2026-10-25|a park",
                                              recipientId: "a@example.invalid", title: "t", note: "n",

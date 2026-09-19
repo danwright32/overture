@@ -111,7 +111,7 @@ struct DueBadgeRepublishTests {
     // recomputes from the STORE, so a change Dan made a moment ago is in the number.
     @Test func republishingTakesTheCountFromTheStoreAsItIsNow() throws {
         let ctx = ModelContext(try container())
-        let defaults = try #require(UserDefaults(suiteName: "due-badge-\(UUID().uuidString)"))
+        let defaults = ScratchDefaults.make("due-badge")
         let p = sentLead(ctx, key: "ended", showOn: "2026-09-01", sentAt: eastern(2026, 8, 20, 10, 0))
         let scheduler = ReconcileScheduler(context: ctx, replyRunAlive: { _ in false })
         let now = eastern(2026, 9, 4, 14, 0)
@@ -130,7 +130,7 @@ struct DueBadgeRepublishTests {
     // and the menu bar read. On 2026-09-14 three were waiting and `dueWorkCount` read 0.
     @Test func aReplyWaitingOnAnAnswerReachesTheDockAndTheMenuBar() throws {
         let ctx = ModelContext(try container())
-        let defaults = try #require(UserDefaults(suiteName: "due-badge-\(UUID().uuidString)"))
+        let defaults = ScratchDefaults.make("due-badge")
         let p = sentLead(ctx, key: "wrote", showOn: nil, sentAt: eastern(2026, 9, 3, 10, 0))
         p.recipients.first?.reopenOnReply(at: eastern(2026, 9, 4, 9, 30))
         let scheduler = ReconcileScheduler(context: ctx, replyRunAlive: { _ in false })

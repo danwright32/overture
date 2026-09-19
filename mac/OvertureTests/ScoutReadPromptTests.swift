@@ -18,7 +18,7 @@ struct ScoutReadPromptTests {
     }
 
     private func defaults() -> UserDefaults {
-        UserDefaults(suiteName: "ScoutReadPromptTests-\(UUID().uuidString)")!
+        ScratchDefaults.make("ScoutReadPromptTests")
     }
 
     @discardableResult

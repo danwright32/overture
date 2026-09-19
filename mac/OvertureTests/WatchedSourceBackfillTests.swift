@@ -19,7 +19,7 @@ struct WatchedSourceBackfillTests {
     }
 
     private func defaults() -> UserDefaults {
-        UserDefaults(suiteName: "WatchedSourceBackfillTests-\(UUID().uuidString)")!
+        ScratchDefaults.make("WatchedSourceBackfillTests")
     }
 
     private func prospect(_ name: String, url: String?) -> Prospect {

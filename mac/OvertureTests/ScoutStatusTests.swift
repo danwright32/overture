@@ -17,9 +17,7 @@ struct ScoutStatusTests {
 
     @MainActor
     @Test func recordsAndReadsBackTheLastScoutTime() {
-        let suite = "scout-test-\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suite)!
-        defer { defaults.removePersistentDomain(forName: suite) }
+        let defaults = ScratchDefaults.make("scout-test")
 
         #expect(ScoutService.lastScoutedAt(in: defaults) == nil)
         let when = Date(timeIntervalSince1970: 1_500_000)

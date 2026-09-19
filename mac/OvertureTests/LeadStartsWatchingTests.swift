@@ -32,7 +32,7 @@ struct LeadStartsWatchingTests {
     private func model(url: String = "https://bargemusic.org/events",
                        verdict: PageVerdict = .upcomingListings) -> LeadIntakeModel {
         let m = LeadIntakeModel(
-            defaults: UserDefaults(suiteName: "LeadStartsWatchingTests-\(UUID().uuidString)")!,
+            defaults: ScratchDefaults.make("LeadStartsWatchingTests"),
             fetch: { u in
                 FetchedPage(normalizedHTML: Self.realPageHTML, finalURL: url, contentHash: "h")
             },

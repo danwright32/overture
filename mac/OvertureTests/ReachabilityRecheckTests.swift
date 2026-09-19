@@ -279,7 +279,7 @@ struct ReachabilityRecheckSettleTests {
     }
 
     private func freshDefaults() -> UserDefaults {
-        UserDefaults(suiteName: "recheck-\(UUID().uuidString)")!
+        ScratchDefaults.make("recheck")
     }
 
     @Test func aCheckThatAnswersTheShowSpendsTheRequest() throws {

@@ -231,7 +231,7 @@ struct ReconcileSchedulerTests {
         #expect(p.conflictNote == nil)
     }
 
-    private func freshDefaults() -> UserDefaults { UserDefaults(suiteName: "sched-\(UUID().uuidString)")! }
+    private func freshDefaults() -> UserDefaults { ScratchDefaults.make("sched") }
 
     // #2091: the tick is where the watch heartbeat is written, and that wiring is a separate claim from
     // WatchGap's own arithmetic being right (L3: built is not wired). Driven through the REAL tick rather

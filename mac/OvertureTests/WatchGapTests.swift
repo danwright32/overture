@@ -238,10 +238,7 @@ struct WatchGapTests {
     // MARK: the stored side
 
     private func scratch(_ name: String) throws -> UserDefaults {
-        let suite = "overture.watchgap.test.\(name).\(UUID().uuidString)"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defaults.removePersistentDomain(forName: suite)
-        return defaults
+        ScratchDefaults.make("overture-watchgap-test-\(name)")
     }
 
     @Test func theHeartbeatAndOutageSurviveARelaunch() throws {
