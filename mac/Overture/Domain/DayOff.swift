@@ -142,6 +142,24 @@ enum DayOffEditing {
         (try? context.fetch(FetchDescriptor<DayOff>(sortBy: [SortDescriptor(\.startDate)]))) ?? []
     }
 
+    // #3406: the ranges the sheet LISTS, which are the ones not finished yet. A range ending today is still
+    // live, so a multi day block stays on the list through its last night. Compared against the Eastern
+    // day the queue uses (`QueueModel.easternToday()`, passed in), never the raw device clock.
+    //
+    // A filter, never a deletion: the past rows are Dan's record of when he was away, and hiding them is a
+    // preference about what the sheet SHOWS (L116). The scout's calendar still reads every row.
+    nonisolated static func upcoming(_ rows: [DayOff], today: String) -> [DayOff] {
+        rows.filter { $0.endDate >= today }
+    }
+
+    // #3406: what the list says when it has nothing to list. With past blocks and nothing ahead, the
+    // invitation below would read as a claim he had never blocked a day, so that case gets its own line.
+    nonisolated static func emptyListSentence(hasPastRanges: Bool) -> String {
+        hasPastRanges
+            ? "Nothing blocked from today on."
+            : "Nothing blocked. Add a vacation and Overture will stop pitching you for those nights."
+    }
+
     // What the scout reads: the stored rows as pure ranges, so BlockedCalendar (and every test of it)
     // never touches SwiftData.
     static func ranges(in context: ModelContext) -> [DayOffRange] {

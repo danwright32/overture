@@ -197,9 +197,17 @@ struct BlockedCalendar: Equatable, Sendable {
     // His own days off are deliberately not counted: a vacation says nothing about the work he has taken
     // on, and letting one silence this would hide the gap the moment he blocked his first week.
     func hasUpcomingBookedShoot(today: String) -> Bool {
-        byDate.values.contains { days in
-            days.contains { $0.kind == .bookedShoot && $0.date >= today }
-        }
+        !upcomingBookedShoots(today: today).isEmpty
+    }
+
+    // #2694: the booked shoots from today on, for the Days off sheet's list. A shoot Dan already worked is
+    // clutter on a list whose job is the nights he cannot be pitched for, and Downbeat exports every booking
+    // with no date floor, so each finished shoot would join it for good. Filtered HERE rather than in `build`,
+    // deliberately: a past date blocking nothing costs nothing, and narrowing the calendar would move the
+    // conflict keys. One predicate for the list and for `hasUpcomingBookedShoot` above, so the sheet's
+    // "nothing booked" sentence and the rows beneath it cannot disagree (L16). Tonight is still ahead.
+    func upcomingBookedShoots(today: String) -> [Day] {
+        days.filter { $0.kind == .bookedShoot && $0.date >= today }
     }
 
     // Nothing blocked at all: the state Overture has been in its whole life.
