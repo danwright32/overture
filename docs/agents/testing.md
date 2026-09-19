@@ -389,6 +389,13 @@ the measurement it came from lives here. Read the entry before the rule decides 
   matters when two runs are handed one `OVERTURE_MUTATE_LOG` by hand. The first proof of that check found
   exactly this: a fixture run as a mutation's runner INHERITS the outer run's `OVERTURE_MUTATE_LOG`, so
   every inner run wrote into the outer log (L439), and `scripts/mutate.test.sh` now unsets it.
+  **Since #3923 a FILE passed as a scope to the Swift runner is refused as `SCOPE NOT FOR THIS RUNNER`**,
+  before anything is mutated. The Swift runner does not recognise a path such as a shell fixture, runs
+  the whole suite instead, and the verdict used to be CAUGHT about a suite unrelated to the file
+  (measured 2026-09-15 proving #3680). Only a recognisable file is refused (a `.sh`, `.ts` or `.js` name,
+  or any existing file), because xcodebuild's own options take values that do not start with a dash. And
+  a run in which `run-tests-locked.sh` **gave up waiting for the shared lock** is now `NOTHING RAN`,
+  naming the lock: no test ran, and it used to read as CAUGHT (seen 2026-09-18 in another lane's proof).
   **Since #3240 every proof also says how much of itself was BUILD rather than tests.** That issue asked
   whether the one to four proofs a PR body carries could share one build, and the measurement says there
   is nothing to share: each proof mutates a different file, each is already incremental on top of the
