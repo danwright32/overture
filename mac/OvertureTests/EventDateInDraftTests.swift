@@ -22,7 +22,7 @@ struct EventDateInDraftTests {
                          date: String? = "2026-03-10", runEnd: String? = nil,
                          today: String? = nil) -> EventDateFinding? {
         EventDateInDraft.finding(subject: subject, body: body, performanceDate: date,
-                                 runEndDate: runEnd, today: today ?? self.today)
+                                 runEndDate: runEnd, today: today ?? self.today, kept: nil, skipped: [])
     }
 
     // MARK: - The accept side, which is the half that protects a good draft (L104)
@@ -100,12 +100,16 @@ struct EventDateInDraftTests {
         #expect(finding(body, date: "2026-03-10", runEnd: "2026-03-14") == nil, "\(body)")
     }
 
-    // The span's FAR END is what carries this one: the opening night has gone, so "March 10 to 14" is only
-    // acceptable through the nights BETWEEN its two numbers. Without this case the span expansion was
-    // never needed by any test, and deleting it SURVIVED the suite (L159: a negative asserted in a
-    // fixture where the positive could not happen).
-    @Test func aSpanCountsThroughItsMiddleWhenTheOpeningNightHasGone() {
+    // #3326 REVERSED the decision this test used to defend. It asserted that "March 10 to 14" was fine on
+    // the 12th because the span's middle reached an upcoming night, which was the "ANY named day is
+    // acceptable" rule. Dan's answer 2 (2026-09-17) is that an email may never name a night outside what
+    // is being offered, and a span reaching back over a passed opening names that opening. The span
+    // expansion itself is still needed, and the corpus case "a skipped night inside a span" is what now
+    // fails without it.
+    @Test func aSpanReachingBackOverAPassedOpeningIsAFinding() {
         #expect(finding("your run March 10 to 14", date: "2026-03-10", runEnd: "2026-03-14",
+                        today: "2026-03-12") != nil)
+        #expect(finding("your run March 12 to 14", date: "2026-03-10", runEnd: "2026-03-14",
                         today: "2026-03-12") == nil)
     }
 

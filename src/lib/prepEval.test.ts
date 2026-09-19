@@ -593,6 +593,7 @@ describe("prep-eval fixtures", () => {
       "carnegie-citywide-press-inbox",
       "five-named-performers-none-dropped",
       "host-venue-not-target",
+      "kept-nights-named-never-the-span",
       "listed-house-is-refused",
       "listing-credits-an-individual-producer",
       "listing-credits-the-producing-company",

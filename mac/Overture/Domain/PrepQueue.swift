@@ -198,6 +198,19 @@ struct PrepQueueItem: Codable, Equatable, Sendable {
     // an individual rather than a company is still carried, because the run's job is to reach whoever is
     // in charge and a solo producer is exactly that.
     var presenterOnRecord: String? = nil
+    // v15 (#3326, #3285): the nights this pitch may name, from `KeptNights`: every upcoming night of a
+    // multi-night run that Dan did not skip at Prep launch. Until this field the drafter was sent the
+    // opening and the closing night and told to name the span, so "your run, March 10 to 14" offered
+    // every night between, including dark nights of a weekly series and nights Dan had said no to.
+    //
+    // ABSENT, never empty, on a single-night show and on a run whose nights were never recorded: those
+    // keep the old run-dates rule exactly, and the runbook says so.
+    var keptNights: [String]? = nil
+    // v15: whether the email may name `keptNights` as a span ("March 10 to 14") or must name them one by
+    // one. Decided in `KeptNights.namesAsSpan`, the ONE place the threshold and the contiguity rule live
+    // (Dan, 2026-09-17: a span only when contiguous AND more than three), so the runbook carries the
+    // answer rather than a second copy of the arithmetic. Absent exactly when `keptNights` is.
+    var keptNightsAsSpan: Bool? = nil
 }
 
 // What the app read at a show's own listing URL, handed to the Prep run as material for the draft.
@@ -268,7 +281,7 @@ enum PrepRunIntent: Equatable, Sendable {
 }
 
 enum PrepQueueBuilder {
-    static let version = 14
+    static let version = 15
 
     // #1666: the wire vocabulary of a queue item's `reprepMode` (#367), named rather than written out at
     // each use, so the string that crosses to the run and the string a surface reads back are one spelling.

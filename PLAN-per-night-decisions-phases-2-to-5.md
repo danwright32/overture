@@ -390,6 +390,14 @@ rows the superseded plan named are the live case and the retired one, not two in
 
 ## Phase 3: the picker
 
+**BUILT 2026-09-19 (#3325, PR #3999).** `PrepNightPlan` built once per open from a calendar rebuilt at that
+moment (#3311), the sheet's per-run disclosure, and `PrepNightCommitting` (record, save, then launch). Three
+departures, each stated in the PR and the code: skipping the LAST night leaves the show out of the run and
+points Dan at the card's Dismiss rather than dismissing from the picker (so the picker never re-keys a row
+and 3.2's hazard is unreachable from it); 3.5's stored refusal cause is not built, because all four causes
+came from the dismissal route the picker does not take; and 3.8's undo is the drop's undo, made exact in
+Phase 2, since a Prep launch has never been undoable. A passed night is never offered (#3312).
+
 ### 3.1 Where it lives, what it costs, and when it opens
 
 A `DisclosureGroup` per run inside `PrepSelectionSheet`, which already stages keys in view state, already
@@ -535,6 +543,13 @@ action changed is not its inverse and any copy calling it reversible is a claim 
 ---
 
 ## Phase 4: the drafter, on both sides of the language boundary
+
+**BUILT 2026-09-19 (#3326).** Queue v15 carries `keptNights` and `keptNightsAsSpan`, decided in
+`KeptNights` (the one home of the threshold and the contiguity rule). `EventDateInDraft.finding` and its
+TypeScript twin take the kept and skipped nights, require EVERY named day to be acceptable, and return a
+blocking `namesASkippedNight` that the send refuses (2.8, carried here from Phase 2). Chronology wins over a
+tick (#3312). The brand voice drift check now holds 27 anchors, not the 24 section 4.2 counted, one of them
+this rule's.
 
 ### 4.1 The handoff
 

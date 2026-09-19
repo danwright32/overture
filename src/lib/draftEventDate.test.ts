@@ -12,8 +12,9 @@ const corpus = JSON.parse(
 ) as {
   version: number;
   cases: Array<{
-    name: string; expect: "ok" | "missing" | "wrong"; today: string;
+    name: string; expect: "ok" | "missing" | "wrong" | "skipped" | "omits"; today: string;
     performanceDate: string; runEndDate?: string; subject?: string; body: string;
+    keptNights?: string[]; skippedNights?: string[];
   }>;
 };
 
@@ -27,15 +28,16 @@ describe("the date a pitch names (#2864)", () => {
       expect(eventDateVerdict({
         subject: c.subject, body: c.body, performanceDate: c.performanceDate,
         runEndDate: c.runEndDate, today: c.today,
+        keptNights: c.keptNights, skippedNights: c.skippedNights,
       })).toBe(c.expect);
     });
   }
 
   // The corpus itself has to exercise all three verdicts, or a drift to all-accept would pass every
   // case above while proving nothing.
-  it("the corpus exercises all three verdicts", () => {
+  it("the corpus exercises every verdict", () => {
     const seen = new Set(corpus.cases.map((c) => c.expect));
-    expect([...seen].sort()).toEqual(["missing", "ok", "wrong"]);
+    expect([...seen].sort()).toEqual(["missing", "ok", "omits", "skipped", "wrong"]);
   });
 
   // A figure that is not a date must never rescue a draft, which is why this does not hunt for numbers.

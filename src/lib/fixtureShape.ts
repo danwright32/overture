@@ -82,7 +82,7 @@ const PROVENANCE = ["act", "performer", "presenter"] as const;
 // presenterOnRecord at v13+ #2983, alreadyFoundEmails at v14+ #2990)
 export function assertPrepQueueShape(data: unknown, file: string, expectedVersion: number): void {
   const root = requireObject(data, file, "(root)");
-  const version = requireVersion(root.version, file, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]);
+  const version = requireVersion(root.version, file, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]);
   if (version !== expectedVersion) fail(file, `version ${version} does not match filename version ${expectedVersion}`);
   requireString(root.generatedAt, file, "generatedAt");
   // #1720 v7: the RUN-LEVEL house list, the organisations the app has judged to be the building rather
@@ -141,6 +141,9 @@ export function assertPrepQueueShape(data: unknown, file: string, expectedVersio
   // them. Forbidden on older versions for the same reason as every field above: a runner predating the
   // rule would ignore it and go on re-reporting people the show was handed a moment ago.
   const alreadyFoundEmailsFieldAllowed = version >= 14;
+  // #3326 v15: the nights a pitch may name, and whether as a span. Forbidden earlier for the reason every
+  // field above is: a runner predating the rule would ignore it and name the whole span again.
+  const keptNightsFieldAllowed = version >= 15;
   items.forEach((item, i) => {
     const o = requireObject(item, file, `items[${i}]`);
     requireString(o.naturalKey, file, `items[${i}].naturalKey`);
@@ -262,6 +265,33 @@ export function assertPrepQueueShape(data: unknown, file: string, expectedVersio
       }
     } else if (o.alreadyFoundEmails !== undefined) {
       fail(file, `items[${i}].alreadyFoundEmails must not be present before version 14`);
+    }
+    if (keptNightsFieldAllowed) {
+      // Absent together or present together: a span flag about no nights, or nights with no answer on how
+      // to name them, is a half-written item the drafter cannot follow.
+      if ((o.keptNights === undefined) !== (o.keptNightsAsSpan === undefined)) {
+        fail(file, `items[${i}].keptNights and keptNightsAsSpan must be present together`);
+      }
+      if (o.keptNights !== undefined) {
+        if (!Array.isArray(o.keptNights)) fail(file, `items[${i}].keptNights must be an array`);
+        if ((o.keptNights as unknown[]).length === 0) {
+          fail(file, `items[${i}].keptNights must be absent rather than empty`);
+        }
+        (o.keptNights as unknown[]).forEach((n, j) => {
+          requireString(n, file, `items[${i}].keptNights[${j}]`);
+          if (typeof n === "string" && !/^\d{4}-\d{2}-\d{2}$/.test(n)) {
+            fail(file, `items[${i}].keptNights[${j}] must be a yyyy-MM-dd day`);
+          }
+        });
+      }
+      if (o.keptNightsAsSpan !== undefined && typeof o.keptNightsAsSpan !== "boolean") {
+        fail(file, `items[${i}].keptNightsAsSpan must be a boolean`);
+      }
+    } else {
+      if (o.keptNights !== undefined) fail(file, `items[${i}].keptNights must not be present before version 15`);
+      if (o.keptNightsAsSpan !== undefined) {
+        fail(file, `items[${i}].keptNightsAsSpan must not be present before version 15`);
+      }
     }
     // v13 (#2983): the producing organisation the app already holds. A blank is refused for the reason
     // the field exists: an empty value reads to the run as a named nobody, which is the same withholding

@@ -20,18 +20,21 @@ these files (see `RunSlot`), so a written path can name the other, still-running
 destroy the drafts it has already paid for.
 
 - **Read:** the WORK-LIST the prompt names
-  (`PrepQueue` version `14`: a run-level `houses[]` (see "The queue names the houses" in §1),
+  (`PrepQueue` version `15`: a run-level `houses[]` (see "The queue names the houses" in §1),
   plus `items[]` each with `naturalKey`, `groupName`, `venue`,
   `performanceDate`, `runEndDate`, `discipline`, `sourceListingURL`,
   `possibleMatchName`, `priorRelationship`, `production`, `reprepMode`,
   `openingNightPassed`, `experimentArmInstruction`, `alsoAnswersFor`, `showListing`, `onlyTheActIsNamed`,
-  `venueHistory`, `organisationNamedOnListing`, `refusedEmails`, `alreadyFoundEmails`, `presenterOnRecord`). `production` is `self` / `agency` / `unknown`; a v1 item omits it
+  `venueHistory`, `organisationNamedOnListing`, `refusedEmails`, `alreadyFoundEmails`, `presenterOnRecord`,
+  `keptNights`, `keptNightsAsSpan`). `production` is `self` / `agency` / `unknown`; a v1 item omits it
   (treat as `unknown`). `reprepMode` is `draft_only` / `contacts_only`; absent (the normal case
   for a fresh, never-drafted prospect) means do both, exactly as today. See "Re-prep mode" under
   "Per prospect" below for what each value means for that item. `runEndDate` is the run's closing
   night (absent for a single-night show); `openingNightPassed` is `true` only for a run whose
-  opening night has already passed while later dates remain (absent otherwise). See "Run dates"
-  under the show-date rule below. `experimentArmInstruction` (v5, #5) is the opener archetype this
+  opening night has already passed while later dates remain (absent otherwise). `keptNights` (v15,
+  #3326) is the nights Dan is pitching on a multi-night run, and `keptNightsAsSpan` says whether you may
+  name them as a span; both are absent on a single night and on a run whose nights were never recorded.
+  See "Run dates" under the show-date rule below. `experimentArmInstruction` (v5, #5) is the opener archetype this
   item MUST use when it belongs to an active A/B experiment; absent (the normal case, no active
   experiment) means use the normal #362 rotation. See "Opener archetype" in §2 for its precedence.
   `alsoAnswersFor` (v6, #1597) is a list of OTHER `naturalKey`s this one item answers for; absent
@@ -1161,14 +1164,24 @@ rate-flexibility in a cold email.
 details reads as careless and undercuts the researched-your-specific-show impression the targeting
 is built on. A draft must never request ANY field the work-list already supplies.
 
-**Run dates (#1122).** When an item carries a `runEndDate`, it is a multi-night run, not a single
-date: `performanceDate` is the opening night and `runEndDate` is the closing night. Reference the
-run, e.g. "your run at BAM, March 10 to 14", not just the opening date. When `openingNightPassed`
-is `true`, the opening night has already gone by while later dates remain: pitch only the remaining
+**Run dates (#1122, #3326).** When an item carries `keptNights`, those are the nights Dan is pitching,
+and they are the ONLY nights the email may name. Name them as dates ("your shows on March 10, 17 and
+24"). Name them as a span ("your run at BAM, March 10 to 14") only when `keptNightsAsSpan` is `true`;
+Overture decides that for each item from the nights themselves (a span only when they are contiguous
+and more than three), so do not work it out yourself. Never name a night Dan left out, whether on its
+own or inside a span that reaches across it: a span whose nights are not all in `keptNights` offers
+nights he has said no to or that the show does not play, and the app refuses to send a draft naming a
+night he skipped. Name every kept night: leaving one out understates the offer.
+
+When an item carries a `runEndDate` but NO `keptNights`, the run's nights were never recorded:
+`performanceDate` is the opening night and `runEndDate` is the closing night, so reference the run,
+e.g. "your run at BAM, March 10 to 14", not just the opening date. When `openingNightPassed` is
+`true`, the opening night has already gone by while later dates remain: pitch only the remaining
 dates and NEVER name or reference the passed opening night (writing "your March 10 opening" when
 March 10 is behind us reads as a stale, unread listing). Say "the remaining performances" or name a
 specific still-upcoming date from the run; when in doubt, refer to the run's closing night, which is
-always still ahead in this case.
+always still ahead in this case. `keptNights` never holds a passed night, so this is already true of
+every item that carries it.
 
 **No performative enthusiasm (Dan).** Keep it level and professional, not eager.
 Avoid "I'd love to", "exactly the kind of work I love", "thrilled", "so excited",

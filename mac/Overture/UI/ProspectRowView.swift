@@ -34,6 +34,7 @@ struct ProspectRowView: View {
     var onSend: () -> Void = {}
     var onOverrideGreeting: () -> Void = {}
     var onOverrideDraftLint: () -> Void = {}
+    var onPitchNightAfterAll: (_ night: String) -> Void = { _ in }   // #3326
     var onDismissReply: () -> Void = {}
     // #1752: Dan says where this card's ROOM is. Optional rather than a no-op default, because the
     // control is only drawn where something is wired to handle it: a link that silently does nothing is
@@ -220,6 +221,7 @@ struct ProspectRowView: View {
                     onSend: onSend,
                     onOverrideGreeting: onOverrideGreeting,
                     onOverrideDraftLint: onOverrideDraftLint,
+                    onPitchNightAfterAll: onPitchNightAfterAll,
                     onDismissReply: onDismissReply,
                     onBeginFormPitch: onBeginFormPitch,
                     onRecordFormPitch: onRecordFormPitch,

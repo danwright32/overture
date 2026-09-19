@@ -21,6 +21,8 @@ struct DraftReviewView: View {
     var onOverrideGreeting: () -> Void = {}
     // #789: Dan's confirmed override of the draft-lint send block, same two-step alert shape.
     var onOverrideDraftLint: () -> Void = {}
+    // #3326: pitch a night Dan skipped after all, the second way out of a draft that names it.
+    var onPitchNightAfterAll: (_ night: String) -> Void = { _ in }
     var onDismissReply: () -> Void = {}
     // #1630: the copy-then-confirm control for a show reachable only through the act's own form.
     var onBeginFormPitch: (_ recipientId: String, _ formURL: String) -> Void = { _, _ in }
@@ -358,6 +360,7 @@ struct DraftReviewView: View {
         // meant July 18 for a July 25 show, and the sent draft that proved it had `draftEditedByDan` set.
         if let dateWarning = item.eventDateWarning() {
             DraftIssueFlags(findings: [], notes: [dateWarning])
+            skippedNightControl
         }
         // #2007: and stand down on text he WROTE for the same reason they stand down on text he edited.
         // The decision is DraftReviewNotes', tested, not this view's.
@@ -395,6 +398,17 @@ struct DraftReviewView: View {
     // #2127: one implementation, in DraftIssueFlags, so the cold draft and the reply draft cannot drift.
     @ViewBuilder private func issueFlags(_ findings: [DraftIssue]) -> some View {
         DraftIssueFlags(findings: findings)
+    }
+
+    // #3326 (plan 2.8): the skipped night this draft names, asked once per render of the card.
+    private var skippedNight: String? { item.skippedNightNamedInDraft() }
+
+    // The second way out, beside the finding that names the night (the first is Edit, already on the row).
+    @ViewBuilder private var skippedNightControl: some View {
+        if let night = skippedNight {
+            Button(DraftReviewNotes.pitchNightAfterAll(night)) { onPitchNightAfterAll(night) }
+                .buttonStyle(.plain).font(.system(size: 10)).foregroundStyle(OVColor.inkSoft)
+        }
     }
 
     // #2050: every reason this draft will not go out, shown beside whichever button is currently offering
@@ -499,7 +513,8 @@ struct DraftReviewView: View {
                             .background(Capsule().fill(OVColor.forest))
                     }
                     .buttonStyle(.plain)
-                    .disabled(!gmailConnected || !item.hasPendingRecipient)
+                    // #3326: a draft naming a night Dan skipped does not open the send review at all.
+                    .disabled(!gmailConnected || !item.hasPendingRecipient || skippedNight != nil)
                     .help(GmailCopy.sendHelp(connected: gmailConnected,
                                              whenConnected: SendConfirmCopy.openReviewHelp("email")))
                     Button("Unapprove") { onUnapprove() }
@@ -530,6 +545,8 @@ struct DraftReviewView: View {
                 }
                 .buttonStyle(.plain)
                 // Says only what the button does not: nothing is recorded until he confirms.
+                // #3326: the same hold as the email send: a pitch naming a skipped night is not copied out.
+                .disabled(skippedNight != nil)
                 .help("Nothing is recorded until you confirm you sent it.")
                 Button("Edit") {
                     draftSubject = item.draftSubject ?? ""

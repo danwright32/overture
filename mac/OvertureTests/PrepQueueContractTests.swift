@@ -81,9 +81,9 @@ struct PrepQueueContractTests {
         #expect(roundTripped == expected)
     }
 
-    @Test func theBuilderNowStampsVersion14() {
+    @Test func theBuilderNowStampsVersion15() {
         let q = PrepQueueBuilder.build(from: [], generatedAt: "2026-06-25T00:00:00.000Z", houses: [])
-        #expect(q.version == 14)
+        #expect(q.version == 15)
     }
 
     // v13 (#2983): an item may name the producing organisation the APP already holds, which until this
@@ -105,7 +105,7 @@ struct PrepQueueContractTests {
         #expect(v12.items.allSatisfy { $0.presenterOnRecord == nil })
     }
 
-    @Test(arguments: 1...14)
+    @Test(arguments: 1...15)
     func noFixtualderrClaimsTheActIsAllThereIsWhileNamingAProducer(version: Int) throws {
         let decoded = try JSONDecoder().decode(PrepQueue.self, from: try fixture("v\(version).json"))
         for item in decoded.items where item.onlyTheActIsNamed == true {
@@ -121,6 +121,30 @@ struct PrepQueueContractTests {
     // this one, so a later fixture cannot introduce the contradiction the field exists to avoid: a struck
     // address named here would put an address Dan refused back in front of the run as context, on the
     // very run meant to leave it alone (L16).
+    // v15 (#3326): an item may name the nights its pitch may offer, and whether as a span. Additive, so
+    // every earlier fixture still decodes with both absent, and the two are absent together.
+    @Test func theV15FixtureNamesTheKeptNights() throws {
+        let decoded = try JSONDecoder().decode(PrepQueue.self, from: try fixture("v15.json"))
+        #expect(decoded.version == 15)
+        #expect(decoded.items[0].keptNights == ["2026-03-10", "2026-03-12", "2026-03-14"])
+        #expect(decoded.items[0].keptNightsAsSpan == false)
+        #expect(decoded.items[1].keptNights == nil)
+        let v14 = try JSONDecoder().decode(PrepQueue.self, from: try fixture("v14.json"))
+        #expect(v14.items.allSatisfy { $0.keptNights == nil && $0.keptNightsAsSpan == nil })
+    }
+
+    @Test(arguments: 1...15)
+    func keptNightsAndTheirSpanFlagArePresentTogether(version: Int) throws {
+        let decoded = try JSONDecoder().decode(PrepQueue.self, from: try fixture("v\(version).json"))
+        for item in decoded.items {
+            #expect((item.keptNights == nil) == (item.keptNightsAsSpan == nil))
+            if let kept = item.keptNights {
+                #expect(item.keptNightsAsSpan == KeptNights.namesAsSpan(kept),
+                        "the fixture's span flag disagrees with the rule that decides it")
+            }
+        }
+    }
+
     @Test func theV14FixtureNamesTheAddressesTheShowAlreadyHolds() throws {
         let decoded = try JSONDecoder().decode(PrepQueue.self, from: try fixture("v14.json"))
         #expect(decoded.version == 14)
@@ -131,7 +155,7 @@ struct PrepQueueContractTests {
         #expect(v13.items.allSatisfy { $0.alreadyFoundEmails == nil })
     }
 
-    @Test(arguments: 1...14)
+    @Test(arguments: 1...15)
     func noFixtureNamesAnAddressItAlsoRefuses(version: Int) throws {
         let decoded = try JSONDecoder().decode(PrepQueue.self, from: try fixture("v\(version).json"))
         for item in decoded.items {
