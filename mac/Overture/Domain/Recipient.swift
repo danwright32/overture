@@ -323,6 +323,11 @@ final class Recipient {
     // falls back to the show's copy for all three. Written by `SendService.deliver` and
     // `SendService.sendJointly`; read only through `Prospect.conversationSubject(for:)`.
     var pitchSubject: String?
+    // #3959 (plan 2.7): the nights THIS contact's email promised, frozen at send and never rewritten by a
+    // scout. Read only through `Recipient.promisedNights`, written only by `Recipient.freezePromise`. Nil
+    // on every contact sent before this shipped and on every contact never sent; which of the two is a
+    // question about `sentAt`, not about this field.
+    var promisedNightsRaw: String?
     // #2715: what the attach found here before detection overwrote it, so the compensating detach
     // (#2719) can put it back. `reopenOnReply` clears a `.stoodDown` resolution and nulls the three
     // draft-baseline fields, and nothing else in the app remembers any of them, so without capturing

@@ -247,6 +247,17 @@ struct RootView: View {
     @AppStorage(DownbeatBookingFeedStore.lastCarriedEndDateKey) private var feedLastCarriedEndDate = ""
     @AppStorage(DownbeatBookingFeedStore.lastCarriedAtKey) private var feedLastCarriedAt: Double = 0
 
+    // #2495: the roster check's own facts, read reactively for the same reason. The current client count
+    // is `feedClientCount` above, one measurement shared by both checks; the verdicts stay separate.
+    @AppStorage(DownbeatBookingFeedStore.exportReadableKey) private var feedExportReadable = false
+    @AppStorage(DownbeatBookingFeedStore.lastRosterCountKey) private var feedLastRosterCount = 0
+    @AppStorage(DownbeatBookingFeedStore.lastRosterAtKey) private var feedLastRosterAt: Double = 0
+
+    private var clientsEmptied: DownbeatBookingFeed.RosterEmptied? {
+        DownbeatBookingFeed.rosterEmptied(exportReadable: feedExportReadable, clientCount: feedClientCount,
+                                          lastRosterCount: feedLastRosterCount, lastRosterAt: feedLastRosterAt)
+    }
+
     private var bookingsVanished: DownbeatBookingFeed.Vanished? {
         let now = Date()
         return DownbeatBookingFeed.vanished(clientCount: feedClientCount,
@@ -696,6 +707,8 @@ struct RootView: View {
                   // screen would ever say it had gone stale.
                   notices: AppNotices.current(omniFocusFailure: omniFocusFailure,
                                               bookingsVanished: bookingsVanished,
+                                              // #2495: and the export whose client list emptied.
+                                              clientsEmptied: clientsEmptied,
                                               shootHistory: shootHistoryHealth,
                                               // #2879: and any handoff file the app is reading and
                                               // cannot read, which used to be indistinguishable from a

@@ -89,6 +89,25 @@ Commands in `mac/`, measured 2026-09-17.
 
 ## Phase 2: the record
 
+**BUILT 2026-09-18 (#3324).** What shipped, and where it departs from the text below:
+
+- `PlayingNights` (`mac/Overture/Domain/PlayingNights.swift`) is the one answer to "which nights does this
+  run play" (#3286). The calendar check, the self-booking check and the night drop all switch on it, and
+  each states its own answer to the span-only case at the switch.
+- `NightDecision` and `Prospect.pitchedRunNights` / `skippedRunNights` (2.1 to 2.4, 2.6), with the per-night
+  accepted clash key (2.5 as corrected), and `BlockedCalendar.blockedNights`, the per-night set.
+- `Recipient.promisedNights` (2.7), frozen by every writer that marks a contact sent.
+- The 2.11 writer guard, and the writer FIXED so it passes: the `.reKey` arm now stores the key of the night
+  `apply` lands on, from one shared function (`ScoutService.scoutOpening`).
+- **Premise re-checked, three changes.** 3.3's false sentence in `BlockedCalendar.conflict` had already been
+  corrected by #3963 before this was built. 2.9 names "the `.sending` recovery path" as where a stuck send's
+  promise comes from, and there is no such path: nothing in the app ever moves a `.sending` contact to
+  sent, `isSendStuck` only surfaces it for Dan to resolve in Gmail. So a stuck send's promise is never
+  stamped and it reads as `notStamped`, which is the honest account.
+- **Moved, not dropped.** 2.8's send-time check reads `skippedRunNights`, which only the Phase 3 picker
+  writes, and the plan already ties its predicate change to 4.2, so it ships with Phase 4 (#3326). 2.10's
+  label is a render of the reached-out row and ships with Phase 5 (#3327, #3567).
+
 ### 2.1 Three lists, and why the untick gets its own
 
 The red team's first blocking finding: `RunNightDrop.dropNight` (`RunNightDrop.swift:194-196`) takes a
@@ -225,6 +244,14 @@ nights pre-tick. The `origin` field is what makes this legible: a `chosen` entry
 left, whatever the default was that day. Nothing durable records the blocked set at the moment of the
 pitch, and that is a real gap: **#3961**, filed with this plan, because "why was this night unticked on
 the 17th" is otherwise unanswerable on the 18th.
+
+**DECIDED 2026-09-18, building Phase 2 (#3961's own finding, 2026-09-17).** The blocked set per open is
+NOT recorded, and so "why was this night unticked on the 17th" stays unanswerable on the 18th,
+deliberately: the set is a derivation that moves whenever a booking is cancelled, and storing it per open
+stores a shifting derivation. What IS recorded is the only part that is Dan's own act and that nothing
+else can reconstruct: a night he ticked DESPITE a clash carries that clash's deciding day key
+(`NightDecision.acceptedClashKey`). Its live reader is the picker (Phase 3), which shows such a night as
+already waived while the key still matches and re-blocks it when the clash changes under him.
 
 ### 2.6 The scout rewrites `runNights`, so both new lists need a fold rule
 

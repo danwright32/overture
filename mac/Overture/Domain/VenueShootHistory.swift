@@ -31,15 +31,15 @@ struct VenueShootHistory: Equatable {
         }
     }
 
-    // One night Dan shot at a venue, after the two sources are merged and rehearsals absorbed.
-    // Carries its title so the review card can show WHAT is behind a band rather than asking Dan
-    // to trust a bare word (#1897).
-    struct Shoot: Equatable, Sendable {
-        var date: String
-        var titles: [String]
-    }
-
-    private let byVenue: [String: [Shoot]]
+    // #1904: the nights Dan shot at each venue key, after the two sources are merged and rehearsals
+    // absorbed. DATES ONLY. A calendar title can carry a private note about one client (a rate, a deposit,
+    // a discount), and this is read while pitching a different one. The title's only job is the rehearsal
+    // rule, which runs inside `init`, so no title outlives it. `Shoot`, which carried the titles for the
+    // review card #1897 built, went with that card in #2093, and `shoots(for:)` had no caller after it.
+    //
+    // The file itself still holds the titles: the rehearsal rule needs them at load, and the local low
+    // count venue report (#1902) reads them there. Neither keeps one in memory past its own run.
+    private let datesByVenue: [String: [String]]
 
     // Carnegie's key, resolved through the same function everything else uses. NOT a check against
     // `Entry.parent`: `entry(for: "Carnegie Hall")?.parent` is nil (it maps to the plain Manhattan
@@ -73,7 +73,7 @@ struct VenueShootHistory: Equatable {
             }
         }
 
-        byVenue = titlesByVenueDate.mapValues { Self.absorbingRehearsals($0) }
+        datesByVenue = titlesByVenueDate.mapValues { Self.absorbingRehearsals($0) }
     }
 
     // A dress rehearsal the night before its own performance is ONE engagement, not two.
@@ -89,7 +89,7 @@ struct VenueShootHistory: Equatable {
     // kills that one: `[DCINY] Mozart's Messiah` and `[DCINY] A Winter's Light` are consecutive
     // nights and the same client but two different concerts, and Greenwich House Theater has two
     // DIFFERENT clients on consecutive nights.
-    private static func absorbingRehearsals(_ titlesByDate: [String: [String]]) -> [Shoot] {
+    private static func absorbingRehearsals(_ titlesByDate: [String: [String]]) -> [String] {
         let performanceDates = titlesByDate
             .filter { _, titles in titles.contains { !isRehearsal($0) } }
             .map(\.key)
@@ -102,8 +102,8 @@ struct VenueShootHistory: Equatable {
                     return abs(gap) <= 2
                 }
             }
-            .map { Shoot(date: $0.key, titles: $0.value.sorted()) }
-            .sorted { $0.date < $1.date }
+            .map(\.key)
+            .sorted()
     }
 
     // copy-inventory:ignore-start  Words MATCHED in Dan's own calendar titles, never shown to him (#1887)
@@ -125,7 +125,7 @@ struct VenueShootHistory: Equatable {
     func band(for venue: String?) -> Band? {
         guard let key = VenuePlaces.canonicalKey(for: venue) else { return nil }
         if let carnegie = Self.carnegieKey, key == carnegie { return nil }
-        return Band.forCount(byVenue[key]?.count ?? 0)
+        return Band.forCount(datesByVenue[key]?.count ?? 0)
     }
 
     // BOTH halves of the hybrid, composed in ONE place: the calendar backfill and Downbeat's own
@@ -138,14 +138,5 @@ struct VenueShootHistory: Equatable {
         VenueShootHistory(shoots: ShootHistory.loadWithHealth(now: Date()).shoots,
                           bookings: DownbeatBridge.loadedExport().bookings,
                           today: today)
-    }
-
-    // What is behind the band, for the review card. Without this, a wrong band and a right one
-    // look identical to Dan, and this feature asserts a fact about him to a stranger with nothing
-    // he can check it against.
-    func shoots(for venue: String?) -> [Shoot] {
-        guard let key = VenuePlaces.canonicalKey(for: venue) else { return [] }
-        if let carnegie = Self.carnegieKey, key == carnegie { return [] }
-        return byVenue[key] ?? []
     }
 }

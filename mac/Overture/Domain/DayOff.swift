@@ -193,8 +193,7 @@ enum ConflictSweep {
     @discardableResult
     static func reapply(_ p: Prospect, export: DayOffEditing.Export, in context: ModelContext) -> Bool {
         let calendar = ScoutService.blockedCalendar(export: export, context: context)
-        let key = calendar.conflict(performanceDate: p.performanceDate, runEndDate: p.runEndDate,
-                                    nights: p.runNights)?.key
+        let key = calendar.conflict(p.playingNights)?.key   // #3286: the one answer to "which nights"
         guard key != p.conflictKey else { return false }
         p.setScoutConflict(key)
         return true
@@ -207,8 +206,7 @@ enum ConflictSweep {
 
         var changed = 0
         for p in prospects {
-            let key = calendar.conflict(performanceDate: p.performanceDate, runEndDate: p.runEndDate,
-                                        nights: p.runNights)?.key
+            let key = calendar.conflict(p.playingNights)?.key
             guard key != p.conflictKey else { continue }
             p.setScoutConflict(key)
             changed += 1

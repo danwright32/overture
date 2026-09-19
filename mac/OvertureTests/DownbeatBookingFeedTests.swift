@@ -110,13 +110,13 @@ struct DownbeatBookingFeedTests {
     // healthy export, then the same feed refreshed with its clients intact and its shoots gone.
     @Test func thestoreCarriesTheBreakFromOneObservationToTheNext() {
         let defaults = scratch()
-        DownbeatBookingFeedStore.record(clientCount: 30,
+        DownbeatBookingFeedStore.record(clientCount: 30, health: .ok,
                                         bookings: [booking("a", endDate: "2026-08-14"),
                                                    booking("b", endDate: "2027-06-13")],
                                         today: today, now: nowOnToday, into: defaults)
         #expect(DownbeatBookingFeedStore.vanished(today: today, now: nowOnToday, defaults: defaults) == nil)
 
-        DownbeatBookingFeedStore.record(clientCount: 30, bookings: [], today: today, now: nowOnToday,
+        DownbeatBookingFeedStore.record(clientCount: 30, health: .ok, bookings: [], today: today, now: nowOnToday,
                                         into: defaults)
         #expect(DownbeatBookingFeedStore.vanished(today: today, now: nowOnToday, defaults: defaults)
                 == DownbeatBookingFeed.Vanished(bookingCount: 2,
@@ -127,11 +127,11 @@ struct DownbeatBookingFeedTests {
     // reports nothing. Nothing has to remember to clear it.
     @Test func thestoredBreakRetiresItselfOnceThoseNightsHavePassed() {
         let defaults = scratch()
-        DownbeatBookingFeedStore.record(clientCount: 30,
+        DownbeatBookingFeedStore.record(clientCount: 30, health: .ok,
                                         bookings: [booking("a", endDate: "2026-08-14"),
                                                    booking("b", endDate: "2026-08-15")],
                                         today: today, now: nowOnToday, into: defaults)
-        DownbeatBookingFeedStore.record(clientCount: 30, bookings: [], today: today, now: nowOnToday,
+        DownbeatBookingFeedStore.record(clientCount: 30, health: .ok, bookings: [], today: today, now: nowOnToday,
                                         into: defaults)
         #expect(DownbeatBookingFeedStore.vanished(today: "2026-08-14", now: nowOnToday,
                                                   defaults: defaults) != nil)
@@ -143,7 +143,7 @@ struct DownbeatBookingFeedTests {
     // which this check leaves alone, and it does not destroy the evidence on the way past.
     @Test func areadThatFoundNoExportRecordsNoClientsAndKeepsTheEvidence() {
         let defaults = scratch()
-        DownbeatBookingFeedStore.record(clientCount: 30,
+        DownbeatBookingFeedStore.record(clientCount: 30, health: .ok,
                                         bookings: [booking("a", endDate: "2026-08-14"),
                                                    booking("b", endDate: "2027-06-13")],
                                         today: today, now: nowOnToday, into: defaults)
@@ -221,7 +221,7 @@ struct DownbeatBookingFeedBootstrapTests {
         let defaults = scratch()
         seedLegacy(ids(17), lastNewAt: nowOnToday.addingTimeInterval(-3600), into: defaults)
 
-        DownbeatBookingFeedStore.record(clientCount: 30, bookings: [], today: today, now: nowOnToday,
+        DownbeatBookingFeedStore.record(clientCount: 30, health: .ok, bookings: [], today: today, now: nowOnToday,
                                         into: defaults)
 
         let verdict = try #require(DownbeatBookingFeedStore.vanished(today: today, now: nowOnToday,
@@ -236,14 +236,14 @@ struct DownbeatBookingFeedBootstrapTests {
     @Test func adatedExportSupersedesTheMigratedEvidence() throws {
         let defaults = scratch()
         seedLegacy(ids(17), lastNewAt: nowOnToday.addingTimeInterval(-3600), into: defaults)
-        DownbeatBookingFeedStore.record(clientCount: 30, bookings: [], today: today, now: nowOnToday,
+        DownbeatBookingFeedStore.record(clientCount: 30, health: .ok, bookings: [], today: today, now: nowOnToday,
                                         into: defaults)
 
-        DownbeatBookingFeedStore.record(clientCount: 30,
+        DownbeatBookingFeedStore.record(clientCount: 30, health: .ok,
                                         bookings: [booking("a", endDate: "2026-08-14"),
                                                    booking("b", endDate: "2027-06-13")],
                                         today: today, now: nowOnToday, into: defaults)
-        DownbeatBookingFeedStore.record(clientCount: 30, bookings: [], today: today, now: nowOnToday,
+        DownbeatBookingFeedStore.record(clientCount: 30, health: .ok, bookings: [], today: today, now: nowOnToday,
                                         into: defaults)
 
         let verdict = try #require(DownbeatBookingFeedStore.vanished(today: today, now: nowOnToday,
@@ -256,7 +256,7 @@ struct DownbeatBookingFeedBootstrapTests {
     // so a long-lived seen-ids set can never overwrite what an export actually said.
     @Test func themigrationNeverOverwritesHistoryTheExportWrote() {
         let defaults = scratch()
-        DownbeatBookingFeedStore.record(clientCount: 30,
+        DownbeatBookingFeedStore.record(clientCount: 30, health: .ok,
                                         bookings: [booking("a", endDate: "2026-08-14"),
                                                    booking("b", endDate: "2027-06-13")],
                                         today: today, now: nowOnToday, into: defaults)
@@ -275,7 +275,7 @@ struct DownbeatBookingFeedBootstrapTests {
         let defaults = scratch()
         let lastNew = nowOnToday
         seedLegacy(ids(17), lastNewAt: lastNew, into: defaults)
-        DownbeatBookingFeedStore.record(clientCount: 30, bookings: [], today: today, now: nowOnToday,
+        DownbeatBookingFeedStore.record(clientCount: 30, health: .ok, bookings: [], today: today, now: nowOnToday,
                                         into: defaults)
 
         let justInside = lastNew.addingTimeInterval(27 * 86_400)
@@ -293,7 +293,7 @@ struct DownbeatBookingFeedBootstrapTests {
         DownbeatFeedFreshnessStore.save(
             DownbeatFeedFreshness.State(seenBookingIds: ids(17), lastNewUpcomingBookingAt: 0),
             into: defaults)
-        DownbeatBookingFeedStore.record(clientCount: 30, bookings: [], today: today, now: nowOnToday,
+        DownbeatBookingFeedStore.record(clientCount: 30, health: .ok, bookings: [], today: today, now: nowOnToday,
                                         into: defaults)
         #expect(defaults.integer(forKey: DownbeatBookingFeedStore.lastCarriedCountKey) == 0)
         #expect(DownbeatBookingFeedStore.vanished(today: today, now: nowOnToday, defaults: defaults) == nil)
@@ -304,7 +304,7 @@ struct DownbeatBookingFeedBootstrapTests {
     @Test func asingleLegacyIdIsBelowTheFloorAndIsNotMigrated() {
         let defaults = scratch()
         seedLegacy(ids(1), lastNewAt: nowOnToday, into: defaults)
-        DownbeatBookingFeedStore.record(clientCount: 30, bookings: [], today: today, now: nowOnToday,
+        DownbeatBookingFeedStore.record(clientCount: 30, health: .ok, bookings: [], today: today, now: nowOnToday,
                                         into: defaults)
         #expect(defaults.integer(forKey: DownbeatBookingFeedStore.lastCarriedCountKey) == 0)
         #expect(DownbeatBookingFeedStore.vanished(today: today, now: nowOnToday, defaults: defaults) == nil)
@@ -316,7 +316,7 @@ struct DownbeatBookingFeedBootstrapTests {
         let defaults = scratch()
         defaults.set("not-an-array", forKey: DownbeatFeedFreshnessStore.seenIdsKey)
         defaults.set(nowOnToday.timeIntervalSince1970, forKey: DownbeatFeedFreshnessStore.lastNewAtKey)
-        DownbeatBookingFeedStore.record(clientCount: 30, bookings: [], today: today, now: nowOnToday,
+        DownbeatBookingFeedStore.record(clientCount: 30, health: .ok, bookings: [], today: today, now: nowOnToday,
                                         into: defaults)
         #expect(defaults.integer(forKey: DownbeatBookingFeedStore.lastCarriedCountKey) == 0)
         #expect(DownbeatBookingFeedStore.vanished(today: today, now: nowOnToday, defaults: defaults) == nil)
@@ -326,7 +326,7 @@ struct DownbeatBookingFeedBootstrapTests {
     // has been observed to go missing.
     @Test func nolegacyEvidenceAtAllLeavesTheCheckSilent() {
         let defaults = scratch()
-        DownbeatBookingFeedStore.record(clientCount: 30, bookings: [], today: today, now: nowOnToday,
+        DownbeatBookingFeedStore.record(clientCount: 30, health: .ok, bookings: [], today: today, now: nowOnToday,
                                         into: defaults)
         #expect(DownbeatBookingFeedStore.vanished(today: today, now: nowOnToday, defaults: defaults) == nil)
     }

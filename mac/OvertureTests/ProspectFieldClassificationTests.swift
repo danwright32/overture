@@ -75,6 +75,8 @@ struct ProspectFieldClassificationTests {
         "runSourceURLs": "the pages the run's nights were read off",
         "runNights": "the nights the listing gives",
         "droppedRunNights": "nights the scout dropped, recomputed on the next read",
+        "pitchedRunNights": "which nights Dan means to offer; a decision about a pitch, never evidence one reached anybody",
+        "skippedRunNights": "Dan's per-night pass, recorded at Prep launch beside the pitched list, never evidence of an outreach",
         "performanceStartTimes": "start times from the listing",
         "startTimesVary": "derived from the times above",
         "nightStartTimes": "start times per night, from the listing",

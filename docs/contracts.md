@@ -773,6 +773,13 @@ quotes. The importer does no venue folding on purpose, so this file cannot becom
 vocabulary drifting from the three the app already has; `VenuePlaces.canonicalKey` folds it. `date`
 is already the Eastern day (81 of 381 events are evening shows whose UTC day is the next one).
 
+`title` is free text from Dan's own calendar and can carry a private note about one client (a rate,
+a deposit, a discount), so it is treated as private (#1904). Its one reader in the app is the rehearsal
+rule inside `VenueShootHistory.init`, which drops every title once it has run: nothing displays one and
+nothing sends one to a run. The file keeps them because that rule needs them at every load, and the
+local low count venue report (#1902) reads them from the file and prints them on this Mac only. A title
+used in a test or fixture is invented, and a real one is never pasted into an issue or a PR.
+
 Four `VEVENT` shapes never reach the file, and the importer names each one it refused rather than
 guessing: `RRULE`, `RECURRENCE-ID`, `STATUS:CANCELLED`, and an all-day `DTSTART` (no time zone to
 date it by). Refusing is the only behaviour that cannot be silently wrong: a parser that expanded a

@@ -841,6 +841,20 @@ final class Prospect {
     // card exactly as it is.
     var droppedRunNights: [String] = []
 
+    // #3324 (plan 2.1): the nights Dan is OFFERING, and the nights he PASSED ON without dismissing
+    // anything. Self-describing "night|epoch|origin" entries read through `NightDecision`, never parsed
+    // at a call site, and written only by `recordNightDecisions`, which refuses a night in both.
+    //
+    // Deliberately NOT `droppedRunNights`: an untick carries no reason and must never reach the #16
+    // funnel (Dan, 2026-09-17). Both are left alone by the scout's `runNights` fold, the OPPOSITE choice
+    // from the dropped list: a drop is subtracted so it stays dropped, a decision is retained so it stays
+    // evidence, and a night that leaves the feed and comes back is honoured rather than asked again.
+    //
+    // Empty on every row that predates this, which reads as "nobody judged these nights" and is true.
+    // An older build cannot see either column and treats every judged night as simply present.
+    var pitchedRunNights: [String] = []
+    var skippedRunNights: [String] = []
+
     // #1699: the curtain time(s) of this card, as "HH:mm", in the order the source published them.
     //
     // Empty on every row that predates this and on every source that publishes no time, which is the

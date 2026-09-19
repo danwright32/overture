@@ -206,6 +206,7 @@ struct SearchCoversEveryContactFieldTests {
                 "originalReplyDraftBody", "sentReplyBody", "attachPriorOriginalReplyDraftBody",
                 "greetingOverriddenBody", "openingOverride", "attachedThreadSubject", "pitchSubject",
                 "replyProposedSubject", "lastReplyText", "sendError",
+                "promisedNightsRaw",   // #3959: dates read out of a sent letter, a fact about its text
             ],
             // A way IN rather than a person. The card already labels a contact form by its site, and the
             // host is shared by every act on it, so matching a URL would return whole platforms at once.

@@ -110,6 +110,9 @@ enum SendService {
             recipient.gmailThreadId = receipt.threadId
             recipient.gmailMessageId = receipt.messageID
             recipient.pitchSubject = mail.subject   // #3891: what THIS conversation is called
+            // #3959: what THIS email promised, from the words that actually went.
+            recipient.freezePromise(subject: mail.subject, body: pitch,
+                                    performanceDate: prospect.performanceDate)
             recipient.replyTrackingDegraded = receipt.threadIdDegraded
             recipient.threadingDegraded = receipt.messageIDDegraded   // #2647
             recipient.sendError = nil
@@ -458,6 +461,8 @@ enum SendService {
                 r.gmailThreadId = receipt.threadId
                 r.gmailMessageId = receipt.messageID
                 r.pitchSubject = mail.subject   // #3891: one email, so one subject for every member
+                r.freezePromise(subject: mail.subject, body: pitch,   // #3959: and one promise
+                                performanceDate: prospect.performanceDate)
                 r.replyTrackingDegraded = receipt.threadIdDegraded
                 r.threadingDegraded = receipt.messageIDDegraded   // #2647
                 r.sendGroupId = groupId
