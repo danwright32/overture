@@ -774,9 +774,11 @@ vocabulary drifting from the three the app already has; `VenuePlaces.canonicalKe
 is already the Eastern day (81 of 381 events are evening shows whose UTC day is the next one).
 
 `title` is free text from Dan's own calendar and can carry a private note about one client (a rate,
-a deposit, a discount), so it is treated as private (#1904). Its one reader in the app is the rehearsal
-rule inside `VenueShootHistory.init`, which drops every title once it has run: nothing displays one and
-nothing sends one to a run. The file keeps them because that rule needs them at every load, and the
+a deposit, a discount), so it is treated as private (#1904). It has two readers in the app. The rehearsal
+rule inside `VenueShootHistory.init` drops every title once it has run. `ShootRecord.clientTag` (#1424)
+reads only the `[Client]` bracket at the START of a title, and the Sources sheet shows that client name,
+never the rest of the title, to Dan on his own Mac. Nothing displays a whole title and nothing sends one
+to a run. The file keeps them because that rule needs them at every load, and the
 local low count venue report (#1902) reads them from the file and prints them on this Mac only. A title
 used in a test or fixture is invented, and a real one is never pasted into an issue or a PR.
 

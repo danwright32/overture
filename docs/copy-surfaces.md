@@ -282,6 +282,7 @@ A sentence written as a constant is read here at the file that RENDERS it, not o
     ClientTagCopy.optionAlwaysNoClient  "Without naming a client"
     ClientTagCopy.optionAutomatic  "Automatic (match Downbeat)"
     ClientTagCopy.optionNever  "Never a returning client"
+    CoverageCopy.calendarSectionTitle  "Calendar clients Downbeat doesn't list"
     CoverageCopy.dismissLabel  "Set aside"
     CoverageCopy.restoreLabel  "Put back"
     CoverageCopy.sectionTitle  "Returning clients not covered"
