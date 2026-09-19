@@ -91,25 +91,34 @@ TOKEN_PATH = re.compile(r"https?://([^/]+)/showdetails/([^/?#]+)")
 
 
 def unarchive_strings(blob):
-    """Every string inside an NSKeyedArchiver NSArray blob, in order.
+    """Every string inside an NSKeyedArchiver NSArray blob, or None where the blob could not be read.
 
     runNights and runSourceURLs are [String] and SwiftData stores them as archived blobs, so no SQL
     expression can read them and this is the only way in.
+
+    None and [] are kept apart deliberately. An EMPTY list is a row that genuinely lists no nights, and
+    falling back to its performanceDate ... runEndDate span is correct. A blob that would not DECODE is
+    a row whose nights this command could not read, and spanning it silently would compute a group
+    count over different data from the one the reader believes they are being given (L215). Every
+    caller counts the Nones and the run prints the total.
     """
     if not blob:
         return []
     try:
         plist = plistlib.loads(blob)
     except Exception:
-        return []
+        return None
     objects = plist.get("$objects", [])
 
     def resolve(value):
         return objects[value.data] if isinstance(value, plistlib.UID) else value
 
-    root = resolve(plist.get("$top", {}).get("root"))
+    try:
+        root = resolve(plist.get("$top", {}).get("root"))
+    except (IndexError, AttributeError):
+        return None
     if not isinstance(root, dict) or "NS.objects" not in root:
-        return []
+        return None
     return [v for v in (resolve(i) for i in root["NS.objects"]) if isinstance(v, str)]
 
 
@@ -117,7 +126,9 @@ def key_fields(natural_key):
     """The folded title and folded venue ScoutService wrote, read back out of the row's own key.
 
     The key is "foldedTitle|openingNight|foldedVenue" and the venue is taken as everything after the
-    second separator, because a folded venue may itself contain one.
+    second separator, because a folded venue may itself contain one. None where the key is absent or
+    is not that shape, which is counted and reported rather than dropping the row quietly: a row
+    missing from every population changes every figure here and would say nothing.
     """
     if not natural_key:
         return None
@@ -167,11 +178,25 @@ except Exception as error:
     sys.exit(2)
 
 rows = []
+unreadable_keys = 0
+unreadable_night_lists = 0
+unreadable_url_lists = 0
 for pk, natural_key, status, performance_date, run_end, nights_blob, urls_blob, listing in raw:
     fields = key_fields(natural_key)
     if fields is None:
+        unreadable_keys += 1
         continue
     folded_title, folded_venue = fields
+
+    decoded_nights = unarchive_strings(nights_blob)
+    if decoded_nights is None:
+        unreadable_night_lists += 1
+        decoded_nights = []
+    decoded_urls = unarchive_strings(urls_blob)
+    if decoded_urls is None:
+        unreadable_url_lists += 1
+        decoded_urls = []
+
     rows.append({
         "pk": pk,
         "title": folded_title,
@@ -179,8 +204,8 @@ for pk, natural_key, status, performance_date, run_end, nights_blob, urls_blob, 
         "status": status,
         "performanceDate": performance_date,
         "runEndDate": run_end,
-        "nights": set(unarchive_strings(nights_blob)) or span(performance_date, run_end),
-        "tokens": tokens_for(listing, unarchive_strings(urls_blob)),
+        "nights": set(decoded_nights) or span(performance_date, run_end),
+        "tokens": tokens_for(listing, decoded_urls),
     })
 
 # A venue that stamps ONE token across its whole season would otherwise fuse the season into one card.
@@ -259,7 +284,12 @@ def is_future(row):
 
 
 future = [r for r in rows if is_future(r)]
-print(f"asof={ASOF} storeRows={len(rows)} discardedTokens={len(poisoned)}")
+print(f"asof={ASOF} storeRows={len(rows)} discardedTokens={len(poisoned)}"
+      f" unreadableKeys={unreadable_keys} unreadableNightLists={unreadable_night_lists}"
+      f" unreadableUrlLists={unreadable_url_lists}")
+if unreadable_keys or unreadable_night_lists or unreadable_url_lists:
+    print("WARNING: some rows could not be read in full, so every figure below is over less than the"
+          " store holds. An unreadable row is not an empty one.")
 print("approximate= buckets are the shipped fold read back out of ZNATURALKEY; clustering is not Swift")
 report("queue", [r for r in future if r["status"] != "dismissed"])
 report("future", future)

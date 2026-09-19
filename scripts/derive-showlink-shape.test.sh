@@ -79,6 +79,12 @@ PY
 
 # Prints the value of one field for one population from a derivation's output, so a case asserts on a
 # number rather than on a whole block of text.
+# The same, for a field on the header line that stands over the whole run rather than one population.
+field_for_header() {
+  local out="$1" field="$2"
+  echo "${out}" | tr ' ' '\n' | awk -F= -v f="${field%=}" '$1 == f { print $2 }'
+}
+
 field_for() {
   local out="$1" population="$2" field="$3"
   echo "${out}" | awk -v p="${population}" -v f="${field}" '
@@ -166,6 +172,41 @@ make_store "${WORK}/tixr.store" <<'ROWS'
 ROWS
 out="$("${DERIVE}" --store "${WORK}/tixr.store" --asof 2026-09-19)"
 assert_eq "a tixr slug is never a production token" "0" "$(field_for "${out}" queue groups=)"
+
+# --- an input this command could not read is never counted as an ordinary empty one -------------------
+#
+# Both of these fall back to something plausible: a runNights blob that will not decode falls back to the
+# performanceDate ... runEndDate span, and a row whose natural key has no separators is dropped from every
+# population. Either is a figure quietly computed over different data from the one the reader believes,
+# on a command whose whole output is numbers that get quoted into issue bodies and plans (L215, L11).
+
+make_store "${WORK}/badblob.store" <<'ROWS'
+1	a show	2026-10-02	asylum nyc	new	2026-10-02	2026-10-05
+ROWS
+python3 - "${WORK}/badblob.store" <<'PY'
+import sqlite3, sys
+db = sqlite3.connect(sys.argv[1])
+db.execute("update ZPROSPECT set ZRUNNIGHTS = ? where Z_PK = 1", (b"not an archive at all",))
+db.commit()
+PY
+out="$("${DERIVE}" --store "${WORK}/badblob.store" --asof 2026-09-19)"
+assert_eq "a night list that will not decode is counted, not silently spanned" "1" \
+  "$(field_for_header "${out}" unreadableNightLists=)"
+
+make_store "${WORK}/badkey.store" <<'ROWS'
+1	a show	2026-10-02	asylum nyc	new	2026-10-02	2026-10-05
+ROWS
+python3 - "${WORK}/badkey.store" <<'PY'
+import sqlite3, sys
+db = sqlite3.connect(sys.argv[1])
+db.execute("update ZPROSPECT set ZNATURALKEY = 'no separators here' where Z_PK = 1")
+db.commit()
+PY
+out="$("${DERIVE}" --store "${WORK}/badkey.store" --asof 2026-09-19)"
+assert_eq "a row whose key cannot be read is counted, not silently dropped" "1" \
+  "$(field_for_header "${out}" unreadableKeys=)"
+assert_eq "and it is not counted among the rows that were grouped" "0" \
+  "$(field_for "${out}" store rows=)"
 
 # --- the populations are separated, which is the whole of #3772's claim 3 -----------------------------
 
