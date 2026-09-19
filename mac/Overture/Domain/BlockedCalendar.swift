@@ -180,8 +180,9 @@ struct BlockedCalendar: Equatable, Sendable {
     // The one day that answers "is this date blocked, and why". Everything else on the date is a fact for
     // the sheet to list, never a second answer to that question.
     //
-    // Every entry under a date shares that date and that kind: `build` either puts one day off there or
-    // replaces the whole list with booked shoots, so this and a scan of the whole list can never disagree
+    // Every entry under a date shares that date and that kind: `build` either puts Dan's days off there
+    // (every overlapping range, #2792) or replaces the whole list with booked shoots, so this and a scan of
+    // the whole list can never disagree
     // about whether the date is blocked or by which kind. The list is only ever richer in NAMES.
     private func decidingDay(_ date: String) -> Day? { byDate[date]?.first }
 
@@ -241,17 +242,24 @@ struct BlockedCalendar: Equatable, Sendable {
         let datesStillHoldingAShoot = Set(live
             .flatMap { EasternDate.days(from: $0.startDate, through: $0.endDate) })
 
-        // Dan's own days first, so a booked shoot lands on top of one where they collide. One entry per
-        // date: two of his own ranges overlapping is one decision of his, and both ranges are listed in
-        // full on the sheet from the stored rows, so nothing here is the only record of either.
+        // Dan's own days first, so a booked shoot lands on top of one where they collide.
         //
-        // Sorted for the same reason the bookings below are: where two of his ranges cover one date, the
-        // last one written decides which note the stored key quotes, and a key that moved with the order
-        // the rows came back in would re-block a night he had already waved through.
+        // #2792: EVERY range on a date, the same treatment #2791 gave the bookings below, so the file has
+        // one rule rather than two. It used to keep one entry per date and discard the other range's note.
+        //
+        // Sorted for the same reason the bookings are, and the deciding day is the one that decided BEFORE
+        // this change: the last range in sort order, which used to overwrite the others. Each range is
+        // therefore put in FRONT of what the date already holds, so index 0 is still that range and every
+        // stored key and every "I can shoot this anyway" across an overlap is exactly what it was. Keeping
+        // the list in the other order would have re-blocked those runs for no change in his calendar.
         for range in daysOff.sorted(by: { ($0.startDate, $0.endDate, $0.note ?? "")
                                           < ($1.startDate, $1.endDate, $1.note ?? "") }) {
             for date in EasternDate.days(from: range.startDate, through: range.endDate) {
-                cal.byDate[date] = [Day(date: date, kind: .dayOff, name: range.note)]
+                let day = Day(date: date, kind: .dayOff, name: range.note)
+                // Two ranges alike in note on one date are ONE fact, as two alike bookings are: the same key
+                // and the same row. The later one still moves to the front, as it would have overwritten.
+                cal.byDate[date, default: []].removeAll { $0 == day }
+                cal.byDate[date, default: []].insert(day, at: 0)
             }
         }
 

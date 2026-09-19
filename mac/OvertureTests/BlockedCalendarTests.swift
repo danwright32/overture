@@ -340,6 +340,39 @@ struct BlockedCalendarTests {
                 == other.conflict(performanceDate: "2026-11-14", runEndDate: nil)?.key)
     }
 
+    // #2792: Dan's half now keeps EVERY overlapping range on a date, as the booking half has since #2791,
+    // rather than one entry per date with the other note thrown away.
+    //
+    // And the day that DECIDES does not move. Before this, the last range in sort order overwrote the
+    // earlier ones, so it was the one whose note the stored key quoted. Keeping all of them must leave that
+    // exact key in first place, or every run Dan waved through across an overlap would block again for no
+    // change in his calendar. So the expectation names the note that decided before the change.
+    @Test func overlappingDaysOffAreAllKeptAndTheOneThatDecidedStillDecides() {
+        let early = dayOff("2026-11-10", "2026-11-16", note: "Vacation")
+        let late = dayOff("2026-11-14", "2026-11-22", note: "Away for a wedding")
+        let cal = BlockedCalendar.build(availability: .measured, bookings: [], exportedBlockedDates: [],
+                                        daysOff: [early, late])
+
+        let onTheOverlap = cal.days.filter { $0.date == "2026-11-14" }
+        #expect(Set(onTheOverlap.map(\.name)) == ["Vacation", "Away for a wedding"])
+        #expect(onTheOverlap.allSatisfy { $0.kind == .dayOff })
+        #expect(cal.conflict(performanceDate: "2026-11-14", runEndDate: nil)?.name == "Away for a wedding")
+
+        // Off the overlap, each range still stands alone.
+        #expect(cal.days.filter { $0.date == "2026-11-10" }.map(\.name) == ["Vacation"])
+        #expect(cal.days.filter { $0.date == "2026-11-22" }.map(\.name) == ["Away for a wedding"])
+    }
+
+    // Two ranges alike in note covering one date are ONE fact, as two alike bookings are: the same key and
+    // the same row, never two entries the sheet could only draw with a shared id.
+    @Test func twoAlikeDaysOffOnADateAreOneEntry() {
+        let cal = BlockedCalendar.build(availability: .measured, bookings: [], exportedBlockedDates: [],
+                                        daysOff: [dayOff("2026-11-14", "2026-11-15", note: "Away"),
+                                                  dayOff("2026-11-15", "2026-11-16", note: "Away")])
+
+        #expect(cal.days.filter { $0.date == "2026-11-15" }.count == 1)
+    }
+
     // Precedence is unchanged where a booked shoot lands on a day off, and the day off does not turn up in
     // the sheet's booked list beside the shoots that outranked it.
     @Test func aDayOffUnderTwoBookedShootsIsNotListedAtAll() {
