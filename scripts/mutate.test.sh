@@ -23,6 +23,11 @@ trap 'rm -rf "${WORK}"' EXIT
 # #3984: every run below gets a log of its own, and they land here rather than in the real directory under
 # /tmp, so this fixture's runs neither litter it nor count toward anybody else's (L2).
 export OVERTURE_MUTATE_LOG_DIR="${WORK}/mutate-logs"
+# And a log named by whoever started THIS fixture is not inherited by the runs inside it. When this fixture
+# is itself the runner of a mutation (which is how its own guards are proved), the outer run's
+# OVERTURE_MUTATE_LOG reaches every inner run, and all of them write into the outer run's log (L439). The
+# ownership check below refused exactly that the first time it was tried, which is how it was found.
+unset OVERTURE_MUTATE_LOG
 
 SUBJECT="${WORK}/Subject.swift"
 write_subject() { printf 'struct Subject {\n    static let answer = "yes"\n}\n' > "${SUBJECT}"; }
