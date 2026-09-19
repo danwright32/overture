@@ -195,10 +195,33 @@ enum NaturalKeyVenueMigration {
             byDisplay[display, default: []].append(anchor)
         }
 
+        // #3780: OLDEST FIRST, and this sort is the whole fix. `stillInTheFeed` takes the first live
+        // row and its comment always said "`members` is ordered oldest first by every caller"; that was
+        // true of `SameNightTitleVariantMerge`, which sorts and says why, and false here. The list below
+        // is built by walking a Dictionary (`byDisplay`, and `byAnchor` beneath it), and Swift randomises
+        // Dictionary iteration order per process, so which row survived a merge could differ between two
+        // launches on identical data (L343).
+        //
+        // Fixed HERE rather than in the picker, deliberately. A picker that imposed its own order would
+        // override the caller that had already chosen a good one, and #1886 depends on that choice: the
+        // oldest live row is the one whose key the scout sends next, so any other survivor turns a
+        // rename into a re-key at the following launch. That is not theory; it is what
+        // `MergedRoomNameKeepsTheScoutsKeyTests` caught when this was first fixed the other way round.
+        //
+        // The tie-break is the natural key, which is `@Attribute(.unique)`, so the order is TOTAL: the
+        // same on every machine and every launch, not merely settled within one run.
+        let inOrder = { (rows: [Prospect]) -> [Prospect] in
+            rows.sorted {
+                $0.ingestedAt == $1.ingestedAt
+                    ? $0.naturalKey < $1.naturalKey
+                    : $0.ingestedAt < $1.ingestedAt
+            }
+        }
+
         var out: [(key: String, members: [Prospect])] = []
         var taken: Set<String> = []
         for (_, anchors) in byDisplay where anchors.count > 1 {
-            let members = anchors.flatMap { byAnchor[$0] ?? [] }
+            let members = inOrder(anchors.flatMap { byAnchor[$0] ?? [] })
             // The freshest row's OWN anchored key. `ingestedAt` is rewritten on every re-scout, so it
             // means LAST SEEN, which is exactly the question being asked here.
             guard let freshest = members.max(by: { $0.ingestedAt < $1.ingestedAt }) else { continue }
@@ -206,7 +229,7 @@ enum NaturalKeyVenueMigration {
             taken.formUnion(anchors)
         }
         for (anchor, members) in byAnchor where !taken.contains(anchor) {
-            out.append((key: anchor, members: members))
+            out.append((key: anchor, members: inOrder(members)))
         }
         return out
     }
@@ -253,8 +276,21 @@ enum NaturalKeyVenueMigration {
     // beside the other rungs the three deleting passes share, so "is this row in the feed" has one
     // definition rather than one per pass (L263).
     //
-    // `members` is ordered oldest first by every caller, so where several are live this keeps each
-    // ladder's existing age tie-break instead of introducing a second one.
+    // #3582/#3379: the row the source is STILL listing, meaning the last sweep matched it. Named here,
+    // beside the other rungs the three deleting passes share, so "is this row in the feed" has one
+    // definition rather than one per pass (L263).
+    //
+    // IT HONOURS THE CALLER'S ORDER, and that is the contract rather than an accident, which #3780 and
+    // its first attempted fix both got wrong in opposite directions. `SameNightTitleVariantMerge` sorts
+    // its cluster oldest first ON PURPOSE, saying so at the sort, and #1886 depends on the result: the
+    // oldest live row is the one whose key the scout will send next, so a survivor chosen any other way
+    // turns a rename into a re-key at the following launch and the row stops being matchable. Replacing
+    // this with a freshest-wins rule of its own made `MergedRoomNameKeepsTheScoutsKeyTests` go red,
+    // which is that decision's guard doing its job (L252).
+    //
+    // So the fix for #3780 is NOT here. This function was never the defect; the defect was a caller that
+    // handed it a list nothing ordered, and `groupsOfOneShow` below is now the one that sorts. A picker that
+    // imposed its own order would have overridden the one caller that had chosen a good one.
     static func stillInTheFeed(_ members: [Prospect]) -> Prospect? {
         members.first { $0.missedScoutCount == 0 }
     }
