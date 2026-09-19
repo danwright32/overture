@@ -336,19 +336,42 @@ struct BlockedCalendar: Equatable, Sendable {
     // list means two different things to every reader that branches on it.
     //
     // #1421: the night that decides is the most SEVERE blocked night of the run, and the earliest only among
-    // equals. It used to be the earliest alone, in both arms below. A run stores ONE conflict key and Dan's
-    // "I can shoot this anyway" is recorded against it, so a day off he had waved through on an early night
-    // kept the key unchanged when a booked shoot landed on a later night, and the run stayed clear over a
-    // night he is working: #901's trap, reopened across kinds.
+    // equals. It used to be the earliest alone. A run stores ONE conflict key and Dan's "I can shoot this
+    // anyway" is recorded against it, so a day off he had waved through on an early night kept the key
+    // unchanged when a booked shoot landed on a later night, and the run stayed clear over a night he is
+    // working: #901's trap, reopened across kinds.
+    //
+    // #3286: the empty-list fallback is decided by `PlayingNights`, and this function only picks from
+    // `blockedNights`, so the card's one stored key and the per-night set can never disagree about which
+    // nights are out (L342, L261).
+    func conflict(_ playing: PlayingNights) -> Day? {
+        blockedNights(playing).min(by: Day.decidesBefore)
+    }
+
+    // The same question in its unpacked form, for a caller holding the three fields rather than a row
+    // (the scout's assembled prospect, and the tests). A forwarder, never a second rule.
     func conflict(performanceDate: String?, runEndDate: String?, nights: [String] = []) -> Day? {
-        guard let performanceDate else { return nil }   // "date to be confirmed" collides with nothing
-        guard nights.isEmpty else {
-            return nights.compactMap(decidingDay).min(by: Day.decidesBefore)
+        conflict(PlayingNights.of(runNights: nights, performanceDate: performanceDate, runEndDate: runEndDate))
+    }
+
+    // #3961 / plan 2.5: EVERY blocked night of this run, one deciding day per night, in date order.
+    //
+    // `conflict` returns one `Day?` and the card stores one key, so the card level vocabulary cannot say
+    // "the 12th is out and so is the 14th". Measured 2026-09-17 through the shipped predicates, 16 of 89
+    // live multi-night runs carry TWO OR MORE blocked nights, one of them all twelve of twelve. A picker
+    // that asks per night needs the set, and it needs it from HERE: `decidingDay` is private, so without
+    // this member the picker and the confirm dialog would each write their own loop and could disagree.
+    //
+    // A span-only row walks its span, for the reason `conflict` always has: for those rows the span is
+    // all that is known, and clearing a clash on no evidence is the direction that loses safety.
+    func blockedNights(_ playing: PlayingNights) -> [Day] {
+        let candidates: [String]
+        switch playing {
+        case .recorded(let nights): candidates = nights
+        case .spanOnly(let opening, let lastNight): candidates = EasternDate.days(from: opening, through: lastNight)
+        case .undated: return []   // "date to be confirmed" collides with nothing
         }
-        let lastNight = EasternDate.runLastNight(runEndDate: runEndDate, performanceDate: performanceDate)
-        return EasternDate.days(from: performanceDate, through: lastNight ?? performanceDate)
-            .compactMap(decidingDay)
-            .min(by: Day.decidesBefore)
+        return candidates.compactMap(decidingDay).sorted { $0.date < $1.date }
     }
 
     // Everything blocked, for the Days off sheet: EVERY booked shoot, not one per date (#2693). Sorted by
