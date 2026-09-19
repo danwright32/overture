@@ -71,6 +71,20 @@ extension Recipient {
 }
 
 extension PerformanceStatus {
+    // #3669: the pitch has ENDED without a shoot, whoever ended it: they said not now, they said no, or
+    // Dan turned them down. The night it was on is his again. Exhaustive rather than a list of the
+    // statuses that qualify, so a status added later breaks the build here instead of being excluded by
+    // omission, which is how `stoodDown` was left holding its night while the two lost states freed theirs.
+    //
+    // Deliberately not named "lost": `stoodDown` is Dan's own decision, which the "Why lost?" note on
+    // the draft card does not describe, so `isLost` keeps its narrower meaning for that reader.
+    var endedWithoutAShoot: Bool {
+        switch self {
+        case .lostDoorOpen, .lostNotInterested, .stoodDown: return true
+        case .new, .active, .booked: return false
+        }
+    }
+
     // The read-only label shown on the review surface now the editable lead outcome picker is gone
     // (#447): a show's status is derived from its contacts, not hand-set at the lead level.
     var label: String {

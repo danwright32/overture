@@ -1330,8 +1330,11 @@ final class Prospect {
         // states. The one thing it keeps raising, its post-event closing note, is carved out inside
         // ConversationReminder rather than here, so this stays the plain "no routine work" answer and
         // the exception lives in exactly one place.
-        case .booked, .lostDoorOpen, .lostNotInterested, .stoodDown: return true
-        case .active, .new: return outcome == .lostSoft || outcome == .lostHard
+        // #3669: the three ended states come from `endedWithoutAShoot`, the same answer the self booking
+        // check reads, so the two cannot drift apart over which endings count as closed.
+        case .booked: return true
+        case .lostDoorOpen, .lostNotInterested, .stoodDown, .active, .new:
+            return performanceStatus.endedWithoutAShoot || outcome == .lostSoft || outcome == .lostHard
         }
     }
 

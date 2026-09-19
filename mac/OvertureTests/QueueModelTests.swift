@@ -1006,6 +1006,50 @@ struct SelfBookingWiringTests {
         #expect(QueueModel.selfBookingIsCommitment(booked("c", "2026-08-01", "Org C")))  // booked still wins
     }
 
+    // #3669: every way of closing out a SENT pitch frees its night except Booked. Enumerated from the enum
+    // (every ending that reads as a pitch status), never a hand list, so an ending added later is asked
+    // this question by construction rather than excluded by omission (L113). The expected answer is the
+    // rule as Dan states it, not the predicate under test read back (L70).
+    //
+    // Built through a real Prospect and `QueueItem(p)`, because the status the check reads is derived
+    // from the ending in `PerformanceStatus.of`, and a hand-built item would skip exactly that step.
+    @Test func everyPitchedEndingButBookedFreesTheNight() {
+        let pitched = ShowOutcome.allCases.filter { $0.asPerformanceStatus != nil }
+        #expect(pitched.count >= 6, "the pitched endings are read off the enum; finding fewer means the filter broke")
+        for ending in pitched {
+            let p = Prospect(naturalKey: "k-\(ending.rawValue)", groupName: "Org \(ending.rawValue)",
+                             discipline: "music", venue: "V", performanceDate: "2026-08-01",
+                             sourceListingURL: nil, priorRelationship: "none", production: "self",
+                             profile: "neutral", coverage: "unknown", fitScore: 3, tier: "mid",
+                             fitReason: "r", matchedClientName: nil, possibleMatchSource: nil,
+                             possibleMatchName: nil)
+            p.status = .contacted
+            p.sentAt = Date()
+            p.showOutcome = ending
+            let committed = QueueModel.selfBookingIsCommitment(QueueItem(p))
+            #expect(committed == (ending == .booked),
+                    "a sent pitch closed as \(ending.label) \(committed ? "still holds" : "frees") its night")
+        }
+    }
+
+    // #3669's sibling path to the same status: a show whose emailed contacts Dan stood down one by one
+    // reads `stoodDown` with no recorded ending at all, and frees its night for the same reason.
+    @Test func aPitchStoodDownContactByContactFreesTheNight() {
+        let p = Prospect(naturalKey: "k", groupName: "G", discipline: "music", venue: "V",
+                         performanceDate: "2026-08-01", sourceListingURL: nil,
+                         priorRelationship: "none", production: "self", profile: "neutral",
+                         coverage: "unknown", fitScore: 3, tier: "mid", fitReason: "r",
+                         matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil)
+        let r = Recipient(id: "c@e.com", email: "c@e.com", provenance: .act)
+        r.sendState = .sent
+        r.resolution = .stoodDown
+        p.setRecipients([r])
+        p.status = .contacted
+        p.sentAt = Date()
+        #expect(p.performanceStatus == .stoodDown)
+        #expect(!QueueModel.selfBookingIsCommitment(QueueItem(p)))
+    }
+
     // #1244: the send-confirm self-booking warning is one shared helper, so the main queue's send path and
     // the Archive send path surface a same-date clash identically and can't drift. It names the clashing show
     // when the date already holds a committed OTHER show, and is nil when the date is clear.
