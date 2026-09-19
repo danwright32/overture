@@ -238,7 +238,7 @@ struct OmniFocusSyncTests {
     }
 
     @Test func configDefaultsOffWith14DayHorizonAndRoundTrips() {
-        let defaults = UserDefaults(suiteName: "of-sync-test-\(UUID().uuidString)")!
+        let defaults = ScratchDefaults.make("of-sync-test")
         let blank = OmniFocusSyncConfig.loaded(from: defaults)
         #expect(blank.enabled == false)   // opt-in: off until Dan turns it on
         #expect(blank.horizonDays == 14)

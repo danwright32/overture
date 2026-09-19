@@ -1057,6 +1057,29 @@ main() {
     done <<< "${SCREEN_LOCKED_SKIPS}"
   fi
 
+  # #3774: whether the tests left their defaults files behind in ~/Library/Preferences.
+  #
+  # Every test suite of defaults is a real file there, and until #3774 nothing deleted any of them: 745,089
+  # files on 2026-09-10, 528 of them real. `ScratchDefaults` now removes each at process exit and sweeps
+  # any left by a process that died first, so after a run the count of files whose owner has EXITED should
+  # be zero. Said here, after the workers are gone, because no test can observe its own process exiting.
+  #
+  # REMOVED and REPORTED, and not a failure, deliberately: the folder is shared by every worktree on this
+  # Mac, and a worker another lane's run crashed a moment ago is indistinguishable here from one of this
+  # run's, so a red would blame whichever run happened to finish next (L93). And the app host running the
+  # screen tests is always ended by a signal, so it leaves its files on every run by design.
+  local scratch_left
+  scratch_left="$(scratch_defaults_left_behind "${OVERTURE_PREFERENCES_DIR:-${HOME}/Library/Preferences}")"
+  if [[ "${scratch_left}" == "UNMEASURED" ]]; then
+    echo "run-tests-locked.sh: test defaults left in Preferences: UNMEASURED, the folder could not be read." >&2
+  elif [[ "${scratch_left}" -gt 0 ]]; then
+    echo >&2
+    echo "run-tests-locked.sh: removed ${scratch_left} test defaults file(s) from ~/Library/Preferences that a" >&2
+    echo "test process had left behind when it exited without its own cleanup (#3774). The app host that" >&2
+    echo "runs the screen tests is ended by a signal and always leaves some; a pure test worker leaving them" >&2
+    echo "means it crashed." >&2
+  fi
+
   # #2322: no test started at all, and the evidence says the machine rather than the change. Said
   # before the crash branch below, and INSTEAD of it, because a crashed host and a machine that
   # cannot start any test want different actions and must never share one message.
@@ -1221,6 +1244,32 @@ crash_restart_report() {
   echo "  The second is an attribution and not a finding: a crash between tests is recorded against"
   echo "  whichever test was current, and that test may not have run a line of its own body."
   echo "  The evidence is the crash report, not this run: ~/Library/Logs/DiagnosticReports/"
+}
+
+# #3774: REMOVES ScratchDefaults' files in <dir> whose process is no longer running, and prints how many,
+# or UNMEASURED when the folder cannot be read.
+#
+# Removes rather than only counts because of what the first full run found: the three left behind all came
+# from the HOSTED target, whose test process is the app host, which xcodebuild ends with a signal, so no
+# exit handler in it ever runs. Left for the next test process's sweep, a machine that only ever runs one
+# worktree's suite would carry each run's hosted files until the next run. The rule is the helper's own
+# sweep, our prefix and a dead owner, so this cannot touch a live test's file or anybody else's (L444). The owner is the pid in the name, which ScratchDefaults puts
+# there for its own sweep, so this and the sweep agree on what "ours" and "left behind" mean. Asked with
+# `ps` rather than `kill -0`, which also fails for a process that is alive but not ours to signal, and
+# the REAL `/bin/ps` by path: this runner's own fixture puts a stub `ps` on PATH for the test-host
+# sweep, and through it every owner read as alive and the count was silently zero (found that way).
+scratch_defaults_left_behind() {
+  local dir="$1" file pid count=0
+  [[ -d "${dir}" && -r "${dir}" ]] || { echo "UNMEASURED"; return 0; }
+  for file in "${dir}"/overture-test-scratch.*.plist; do
+    [[ -e "${file}" ]] || continue
+    pid="${file##*/overture-test-scratch.}"
+    pid="${pid%%.*}"
+    [[ "${pid}" =~ ^[0-9]+$ ]] || continue
+    /bin/ps -p "${pid}" >/dev/null 2>&1 && continue
+    rm -f "${file}" && count=$(( count + 1 ))
+  done
+  echo "${count}"
 }
 
 # Allow this file to be sourced (e.g. by a test fixture) without running main, so

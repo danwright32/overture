@@ -55,10 +55,29 @@ enum DayOffEditing {
     // The add form's editable state, snapshotted when it opens and again when Done is pressed, so the
     // sheet can tell a real edit from a form Dan merely opened and left alone (#928). Days are the ISO
     // strings the pickers resolve to, so a time-of-day drift can never read as a date change.
+    // #3620: the add form blocks either a range of days or one weekday every week.
+    enum AddKind: Equatable, Sendable {
+        case someDays
+        case everyWeek
+    }
+
+    // #3620: the form's confirm button names what it will block, so the weekly one says which weekday.
+    static func addConfirmTitle(kind: AddKind, weekday: Int) -> String {
+        switch kind {
+        case .someDays: return "Block these days"
+        case .everyWeek: return "Block every \(WeeklyDayOffEditing.weekdayName(weekday) ?? "week")"
+        }
+    }
+
     struct AddDraft: Equatable, Sendable {
         var startDay: String
         var endDay: String
         var note: String
+        // #3620: the weekly half of the same form. Defaulted, so a draft of a range reads as it always did.
+        var kind: AddKind = .someDays
+        var weekday: Int = 4
+        var firstDay: String? = nil
+        var lastDay: String? = nil
     }
 
     // #901 walk fix / #928: whether closing the sheet should ask first. It should when the add form is
@@ -74,6 +93,11 @@ enum DayOffEditing {
         return draft.startDay != baseline.startDay
             || draft.endDay != baseline.endDay
             || trimmed(draft.note) != trimmed(baseline.note)
+            // #3620: a weekday picked or a bound set is an edit too, and so is switching to a weekly block.
+            || draft.kind != baseline.kind
+            || draft.weekday != baseline.weekday
+            || draft.firstDay != baseline.firstDay
+            || draft.lastDay != baseline.lastDay
     }
 
     // #2254, from Dan's walk of the days off form on 2026-08-07: moving First day forward to 8/10 left
@@ -216,7 +240,9 @@ enum ConflictSweep {
         // app's one cached calendar learns of it. Unconditional: a new day off that flags no show still
         // changes the calendar the Days off sheet draws. Handed the value just judged against, never a
         // second build, so the screen and the queue cannot disagree about which nights are taken.
-        AvailabilitySnapshot.publish(calendar, bookings: export.bookings, for: context)
+        AvailabilitySnapshot.publish(calendar, bookings: export.bookings,
+                                     readability: BlockedCalendar.Availability(health: export.health),
+                                     for: context)
         return changed
     }
 }

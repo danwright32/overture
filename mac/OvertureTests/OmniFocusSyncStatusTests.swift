@@ -7,7 +7,7 @@ import Foundation
 @Suite("OmniFocus sync status (#239)")
 struct OmniFocusSyncStatusTests {
     private func freshDefaults() -> UserDefaults {
-        let d = UserDefaults(suiteName: "ofstatus-\(UUID().uuidString)")!
+        let d = ScratchDefaults.make("ofstatus")
         return d
     }
 

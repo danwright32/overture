@@ -35,7 +35,7 @@ final class PrepResultsConsumedOnceTests {
     }
 
     private func defaults() -> UserDefaults {
-        UserDefaults(suiteName: "PrepConsumedOnce-\(UUID().uuidString)")!
+        ScratchDefaults.make("PrepConsumedOnce")
     }
 
     @discardableResult

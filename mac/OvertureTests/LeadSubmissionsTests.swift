@@ -17,9 +17,7 @@ import Foundation
 @Suite("Lead submissions (#799)")
 struct LeadSubmissionsTests {
     private func scratch() -> UserDefaults {
-        let d = UserDefaults(suiteName: "LeadSubmissionsTests-\(UUID().uuidString)")!
-        d.removePersistentDomain(forName: d.description)
-        return d
+        ScratchDefaults.make("LeadSubmissionsTests")
     }
 
     @Test func alinkIsNotSubmittedUntilItIsActuallyAdded() {

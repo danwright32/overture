@@ -104,7 +104,7 @@ struct DownbeatBookingFeedTests {
 
     // MARK: - The store
 
-    private func scratch() -> UserDefaults { UserDefaults(suiteName: "booking-feed-\(UUID().uuidString)")! }
+    private func scratch() -> UserDefaults { ScratchDefaults.make("booking-feed") }
 
     // The whole sequence Dan lived through, through the persisted values the masthead actually reads: a
     // healthy export, then the same feed refreshed with its clients intact and its shoots gone.
@@ -197,7 +197,7 @@ struct DownbeatBookingFeedTests {
 struct DownbeatBookingFeedBootstrapTests {
     private let today = "2026-08-10"
     private var nowOnToday: Date { EasternDate.date(from: "2026-08-10")!.addingTimeInterval(12 * 3600) }
-    private func scratch() -> UserDefaults { UserDefaults(suiteName: "feed-bootstrap-\(UUID().uuidString)")! }
+    private func scratch() -> UserDefaults { ScratchDefaults.make("feed-bootstrap") }
 
     private func booking(_ id: String, endDate: String) -> OvertureBooking {
         OvertureBooking(id: id, clientId: "c", clientDisplayName: "DCINY", shootName: "S",

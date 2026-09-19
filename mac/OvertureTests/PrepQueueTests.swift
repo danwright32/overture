@@ -166,7 +166,7 @@ struct PrepQueueTests {
             .appendingPathComponent("probe-live-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: dir) }
-        let d = UserDefaults(suiteName: "IsProbeRunning-\(UUID().uuidString)")!
+        let d = ScratchDefaults.make("IsProbeRunning")
 
         // No run at all.
         #expect(PrepQueueService.isProbeRunning(now: Date(), support: dir, defaults: d) == false)

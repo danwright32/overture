@@ -54,7 +54,7 @@ struct DownbeatRosterEmptiedTests {
 
     // MARK: - The store, through the one recorder the reconcile tick and the notice's re-read share
 
-    private func scratch() -> UserDefaults { UserDefaults(suiteName: "roster-feed-\(UUID().uuidString)")! }
+    private func scratch() -> UserDefaults { ScratchDefaults.make("roster-feed") }
 
     @Test func theStoreCarriesTheBreakFromOneObservationToTheNextAndClearsOnARealRoster() {
         let defaults = scratch()

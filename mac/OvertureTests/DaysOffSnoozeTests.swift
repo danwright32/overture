@@ -25,7 +25,7 @@ struct DaysOffSnoozeTests {
     }
 
     private func defaults() -> UserDefaults {
-        UserDefaults(suiteName: "daysoff-\(UUID().uuidString)")!
+        ScratchDefaults.make("daysoff")
     }
 
     // MARK: - A past shoot proves nothing about now

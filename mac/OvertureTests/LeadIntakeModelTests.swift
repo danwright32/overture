@@ -59,7 +59,7 @@ struct LeadIntakeModelTests {
                        launch: @escaping ([ScoutExtractQueueItem]) throws -> Void = { _ in },
                        results: @escaping (String) -> ScoutExtractResults? = { _ in nil })
     -> LeadIntakeModel {
-        LeadIntakeModel(defaults: UserDefaults(suiteName: "LeadIntakeModelTests-\(UUID().uuidString)")!,
+        LeadIntakeModel(defaults: ScratchDefaults.make("LeadIntakeModelTests"),
                         fetch: fetch,
                         pin: { _, _ in URL(fileURLWithPath: "/tmp/pinned.html") },
                         launch: launch,
@@ -232,7 +232,7 @@ struct LeadIntakeModelTests {
     // unreachable, which is why it replaces a freshness check rather than sitting beside one.
     @Test func aLinkAlreadyAddedIsRefusedTheSecondTime() async throws {
         let ctx = try context()
-        let scratch = UserDefaults(suiteName: "LeadIntakeModelTests-\(UUID().uuidString)")!
+        let scratch = ScratchDefaults.make("LeadIntakeModelTests")
         let event = ScoutExtractEvent(title: "Brooklyn Youth Chorus", presenter: "Brooklyn Youth Chorus",
                                       venue: "Merkin Hall", performanceDate: "2026-09-19",
                                       sourceUrl: "https://org.example/a")
@@ -262,7 +262,7 @@ struct LeadIntakeModelTests {
     // whose shows he dropped, must be retryable: refusing it would strand him with no way back in.
     @Test func aLinkThatProducedNothingCanBeTriedAgain() async throws {
         let ctx = try context()
-        let defaults = UserDefaults(suiteName: "LeadIntakeModelTests-\(UUID().uuidString)")!
+        let defaults = ScratchDefaults.make("LeadIntakeModelTests")
         // A page that reads fine and carries no usable shows: nothing lands, so nothing was handed over.
         let make = { LeadIntakeModel(defaults: defaults,
                                      fetch: LeadIntakeModelTests.okFetch,
@@ -422,7 +422,7 @@ struct LeadIntakeDeadRunTests {
                        results: @escaping (String) -> ScoutExtractResults? = { _ in nil })
     -> LeadIntakeModel {
         LeadIntakeModel(
-            defaults: UserDefaults(suiteName: "LeadIntakeDeadRunTests-\(UUID().uuidString)")!,
+            defaults: ScratchDefaults.make("LeadIntakeDeadRunTests"),
             fetch: { url in
                 FetchedPage(normalizedHTML: Self.realPageHTML, finalURL: url.absoluteString,
                             contentHash: "h")

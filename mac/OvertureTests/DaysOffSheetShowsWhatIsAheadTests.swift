@@ -116,7 +116,7 @@ struct DaysOffSheetShowsWhatIsAheadTests {
 
         let mine = try #require(SourceGuardHelper.propertyBody("private var myDaysOff: some View {", in: sheet))
         #expect(mine.contains("DayOffEditing.upcoming(daysOff, today: today)"))
-        #expect(mine.contains("count: shown.count"))
+        #expect(mine.contains("count: shownRules.count + shown.count"))   // #3620: the weekly rules are rows too
         #expect(mine.contains("ForEach(shown)"))
         #expect(mine.contains("DayOffEditing.emptyListSentence(hasPastRanges:"))
         #expect(!mine.contains("ForEach(daysOff)"), "the sheet lists every range ever blocked again")

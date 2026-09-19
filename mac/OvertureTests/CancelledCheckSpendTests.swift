@@ -129,7 +129,7 @@ struct CancelledCheckSpendTests {
             historyURL: dir.appendingPathComponent("history.json"),
             cancelURL: cancelURL,
             into: ctx, now: Date(timeIntervalSince1970: 1_780_000_000),
-            defaults: UserDefaults(suiteName: UUID().uuidString)!))
+            defaults: ScratchDefaults.make("cancelled-check-spend")))
 
         #expect(report.cancelled, "the settle must notice the stop the runner was obeying")
         #expect(report.attentionMessage?.contains("stopped") == true)
@@ -171,7 +171,7 @@ struct CancelledCheckSpendTests {
             historyURL: dir.appendingPathComponent("history.json"),
             cancelURL: dir.appendingPathComponent("prep-cancel"),
             into: ctx, now: Date(timeIntervalSince1970: 1_780_000_000),
-            defaults: UserDefaults(suiteName: UUID().uuidString)!))
+            defaults: ScratchDefaults.make("cancelled-check-spend")))
 
         #expect(!report.cancelled)
         #expect(report.attentionMessage?.contains("stopped") != true)

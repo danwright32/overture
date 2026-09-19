@@ -15,7 +15,7 @@ import Foundation
 struct GmailSignatureDarkBackgroundTests {
 
     private func freshDefaults() -> UserDefaults {
-        UserDefaults(suiteName: "gmail-sig-dark-test-\(UUID().uuidString)")!
+        ScratchDefaults.make("gmail-sig-dark-test")
     }
 
     // The real thing, measured, not a shape invented to make the rule fire (L48).

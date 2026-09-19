@@ -61,6 +61,25 @@ struct PrepQueueVersionsAreDocumentedTests {
             """)
     }
 
+    // #3326: the CATALOGUE row, which nothing read. It said "1 to 13" while the builder was at 14, because
+    // the test above reads only the paragraphs, and the row is the first thing anybody reading the table
+    // meets. Every version from 1 to the builder's own must be listed there.
+    static func catalogueVersions(in document: String) -> [Int]? {
+        guard let row = document.components(separatedBy: "\n")
+            .first(where: { $0.hasPrefix("| `overture-prep-queue.json` |") }) else { return nil }
+        let cells = row.components(separatedBy: "|").map { $0.trimmingCharacters(in: .whitespaces) }
+        guard cells.count > 4 else { return nil }
+        return cells[4].components(separatedBy: ",")
+            .compactMap { Int($0.trimmingCharacters(in: .whitespaces)) }
+    }
+
+    @Test func theCatalogueRowListsEveryVersion() throws {
+        let listed = try #require(Self.catalogueVersions(in: Self.contracts),
+                                  "no catalogue row for overture-prep-queue.json was found, so this checked nothing")
+        #expect(listed == Array(1...PrepQueueBuilder.version),
+                "docs/contracts.md lists prep queue versions \(listed); the builder writes \(PrepQueueBuilder.version)")
+    }
+
     // The reader itself, driven both ways, because a guard that can only ever say "all present" is one
     // nobody has seen work (L1). Also pins the boundary: a document naming only version 1 must not be
     // read as describing 11.

@@ -35,7 +35,7 @@ struct BothRunsMayGoAtOnceTests {
     }
 
     private func freshDefaults() -> UserDefaults {
-        UserDefaults(suiteName: "both-runs-3015-\(UUID().uuidString)")!
+        ScratchDefaults.make("both-runs-3015")
     }
 
     private func makeLive(_ slot: RunSlot, in support: URL) throws {

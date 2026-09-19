@@ -1429,6 +1429,21 @@ enum ProspectMutations {
         context.saveOrWarn(org: item.groupName, feedback: feedback)
     }
 
+    // #3326 (plan 2.8): the second way out of a draft naming a night Dan skipped: pitch that night after
+    // all. Through the one writer, recorded as `chosen` because he pressed it, and saved or said.
+    static func pitchNightAfterAll(_ item: QueueItem, night: String, prospects: [Prospect],
+                                   context: ModelContext, feedback: ActionFeedback, now: Date = Date()) {
+        guard let model = model(for: item, in: prospects, feedback: feedback) else { return }
+        do {
+            try model.recordNightDecisions(pitched: [NightDecision(night: night, at: now, origin: .chosen)],
+                                           skipped: [])
+        } catch {
+            feedback.acknowledge(DraftReviewNotes.nightCouldNotBePitched(night), tone: .warning)
+            return
+        }
+        context.saveOrWarn(org: item.groupName, feedback: feedback)
+    }
+
     static func rejectBooking(_ item: QueueItem, prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
         guard let model = model(for: item, in: prospects, feedback: feedback) else { return }
         model.rejectAutoBooking(bookingId: model.autoBookedFromBookingId, now: Date())

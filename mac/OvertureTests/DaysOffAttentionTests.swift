@@ -23,7 +23,7 @@ struct DaysOffAttentionTests {
     private let today = "2026-11-01"
     private let now = Date(timeIntervalSince1970: 1_762_000_000)
     private func scratchDefaults() -> UserDefaults {
-        UserDefaults(suiteName: "days-off-attention-\(UUID().uuidString)")!
+        ScratchDefaults.make("days-off-attention")
     }
     private func calendarWithUpcomingShoot() -> BlockedCalendar {
         BlockedCalendar.build(availability: .measured, bookings: [booking("2026-11-14")], exportedBlockedDates: [], daysOff: [])

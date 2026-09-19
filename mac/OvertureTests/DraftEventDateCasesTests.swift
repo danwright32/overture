@@ -24,6 +24,8 @@ struct DraftEventDateCasesTests {
             var runEndDate: String?
             var subject: String?
             var body: String
+            var keptNights: [String]?      // #3326
+            var skippedNights: [String]?
         }
         var version: Int
         var cases: [Case]
@@ -40,12 +42,15 @@ struct DraftEventDateCasesTests {
         for c in corpus.cases {
             let finding = EventDateInDraft.finding(subject: c.subject, body: c.body,
                                                    performanceDate: c.performanceDate,
-                                                   runEndDate: c.runEndDate, today: c.today)
+                                                   runEndDate: c.runEndDate, today: c.today,
+                                                   kept: c.keptNights, skipped: c.skippedNights ?? [])
             let verdict: String
             switch finding {
             case .none: verdict = "ok"
             case .some(.namesNoDate): verdict = "missing"
             case .some(.namesADifferentDate): verdict = "wrong"
+            case .some(.namesASkippedNight): verdict = "skipped"
+            case .some(.omitsAKeptNight): verdict = "omits"
             }
             #expect(verdict == c.expect, "\(c.name): expected \(c.expect), got \(verdict)")
         }
@@ -60,6 +65,7 @@ struct DraftEventDateCasesTests {
         #expect(byVerdict["ok", default: 0] >= 10)
         #expect(byVerdict["missing", default: 0] >= 2)
         #expect(byVerdict["wrong", default: 0] >= 4)
-        #expect(Set(byVerdict.keys) == ["ok", "missing", "wrong"])
+        #expect(byVerdict["skipped", default: 0] >= 2)
+        #expect(Set(byVerdict.keys) == ["ok", "missing", "wrong", "skipped", "omits"])
     }
 }
