@@ -124,7 +124,7 @@ jobs:
       # whose log has scrolled past is the one worth having the artifact for.
       - name: Keep the run's diagnostics
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: mac-test-diagnostics
           path: ~/.overture-mac-test-diagnostics
