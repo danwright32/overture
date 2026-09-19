@@ -102,25 +102,27 @@ struct VenueKeySplitTests {
     }
 }
 
-// #1899's one measurement against Dan's real files, read only. Opt in, and SKIPPED everywhere by default,
-// because both files exist only on Dan's Mac:
+// #1899's measurement against Dan's real files, read only. Opt in, and SKIPPED everywhere by default. It
+// never finds a real file by itself: the paths are handed in by whoever runs it, so a test run can only
+// read live data when somebody has typed the paths (L2, and `TestsCannotReachSharedStateTests`).
 //
-//     TEST_RUNNER_OVERTURE_VENUE_SPLIT_LIVE=1 mac/scripts/run-tests-locked.sh \
-//         -only-testing:OvertureTests/VenueKeySplitLiveMeasurement
+//     TEST_RUNNER_OVERTURE_VENUE_SPLIT_SHOOTS="$HOME/Library/Application Support/Overture/overture-shoot-history.json" \
+//     TEST_RUNNER_OVERTURE_VENUE_SPLIT_EXPORT="$HOME/Library/Application Support/Overture/downbeat-export.json" \
+//         mac/scripts/run-tests-locked.sh -only-testing:OvertureTests/VenueKeySplitLiveMeasurement
 //
-// Prints venue names only (public businesses), never a client or a title.
+// Prints venue names and keys only (public businesses), never a client or a title.
 @Suite("Venue key split, measured on the live files (#1899, opt-in)")
 struct VenueKeySplitLiveMeasurement {
-    static var enabled: Bool { ProcessInfo.processInfo.environment["OVERTURE_VENUE_SPLIT_LIVE"] == "1" }
+    static var shootsPath: String? { ProcessInfo.processInfo.environment["OVERTURE_VENUE_SPLIT_SHOOTS"] }
+    static var exportPath: String? { ProcessInfo.processInfo.environment["OVERTURE_VENUE_SPLIT_EXPORT"] }
 
-    @Test(.enabled(if: VenueKeySplitLiveMeasurement.enabled))
-    func measureTheLiveFiles() {
-        let dir = URL(fileURLWithPath: NSHomeDirectory())
-            .appendingPathComponent("Library/Application Support/Overture")
+    @Test(.enabled(if: VenueKeySplitLiveMeasurement.shootsPath != nil
+                   && VenueKeySplitLiveMeasurement.exportPath != nil))
+    func measureTheLiveFiles() throws {
         let now = Date()
-        let shoots = ShootHistory.loadWithHealth(from: dir.appendingPathComponent("overture-shoot-history.json"),
+        let shoots = ShootHistory.loadWithHealth(from: URL(fileURLWithPath: try #require(Self.shootsPath)),
                                                  now: now)
-        let export = DownbeatBridge.loadWithHealth(from: dir.appendingPathComponent("downbeat-export.json"),
+        let export = DownbeatBridge.loadWithHealth(from: URL(fileURLWithPath: try #require(Self.exportPath)),
                                                    now: now)
         let calendarKeys = Set(shoots.shoots.compactMap { VenuePlaces.canonicalKey(for: $0.venue) })
         let bookingKeys = Set(export.bookings.compactMap { VenuePlaces.canonicalKey(for: $0.venueName) })
@@ -137,6 +139,6 @@ struct VenueKeySplitLiveMeasurement {
         for key in bookingKeys.subtracting(calendarKeys).sorted() {
             print("venue-key-split:   no calendar shoot uses key \(key)")
         }
-        #expect(!shoots.shoots.isEmpty, "read no shoots from the live file, so nothing was measured")
+        #expect(!shoots.shoots.isEmpty, "read no shoots from the file given, so nothing was measured")
     }
 }
