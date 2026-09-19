@@ -275,6 +275,11 @@ struct RootView: View {
     // looked, so the masthead says nothing rather than vouching for a file nobody has opened.
     @State private var shootHistoryHealth: ShootHistory.Health?
 
+    // #1899: rooms Downbeat and the Shoots calendar name two ways that fold apart. Held rather than derived
+    // per render for the reason above (it decodes both files), read at launch and again whenever either
+    // file is re-read from its own line, so fixing the name and re-reading clears it on the spot.
+    @State private var venueSplits: [VenueKeySplit.Split] = []
+
     // #3298: whether the Downbeat export can be read at all, for the masthead line that says Overture does
     // not know which nights Dan is already shooting. Held rather than derived per render for exactly the
     // reason above: answering it decodes a JSON file and this view is on the render path. nil until
@@ -710,6 +715,7 @@ struct RootView: View {
                                               // #2495: and the export whose client list emptied.
                                               clientsEmptied: clientsEmptied,
                                               shootHistory: shootHistoryHealth,
+                                              venueSplits: venueSplits,
                                               // #2879: and any handoff file the app is reading and
                                               // cannot read, which used to be indistinguishable from a
                                               // file that was simply not there yet.
@@ -755,12 +761,17 @@ struct RootView: View {
                           // unreadable-export line would leave that exact line standing after a good
                           // export had landed (L12).
                           readDownbeatHealth()
+                          // #1899: and the room names, which read this same export.
+                          venueSplits = VenueKeySplit.current()
                       // #1900: Dan has run the shoot-history import, so read the file again through the
                       // same call the launch load uses (pressing this and relaunching can never reach
                       // different verdicts) and SAY what it found. A finished import clears the line on
                       // the spot; an import that did not take leaves it standing, and that outcome is
                       // the whole reason the press answers rather than changing nothing in silence.
-                      case .recheckShootHistory: rereadShootHistoryHealth()
+                      case .recheckShootHistory:
+                          rereadShootHistoryHealth()
+                          // #1899: and the room names, which read this same file.
+                          venueSplits = VenueKeySplit.current()
                       }
                   },
                   onShowFollowUps: { showFollowUps = true },
@@ -1221,6 +1232,7 @@ struct RootView: View {
             // launch is enough for a file only a manual import rewrites, and the notice's own re-read
             // control covers the case where Dan runs that import mid-session.
             .task { readShootHistoryHealth() }
+            .task { venueSplits = VenueKeySplit.current() }
             .task { readDownbeatHealth() }
             // #1421: built at launch, then kept current by the sweep. Detached when the task is cancelled, so
             // a rebuilt window scene leaves no observer behind.
