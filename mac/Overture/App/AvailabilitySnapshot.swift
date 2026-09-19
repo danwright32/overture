@@ -36,6 +36,11 @@ final class AvailabilitySnapshot {
     // The export's bookings, beside the calendar built from them, because the sheet's unblock control has
     // to say WHICH booking a row stands for and must not decode the export again to find out (#2692).
     private(set) var bookings: [OvertureBooking] = []
+    // #3311: whether the export this calendar was built from could be READ. An unreadable export builds a
+    // calendar with no booked shoots in it, which looks exactly like a free diary, so a surface marking
+    // nights as clear or blocked has to be able to say "could not check" instead (L98). The Prep picker is
+    // the first reader.
+    private(set) var readability: BlockedCalendar.Availability = .measured
     // How many times this snapshot has been built or handed a calendar. The render path's measurement
     // reads it: a surface that redraws a hundred times and leaves this unmoved is paying nothing per redraw.
     private(set) var builds = 0
@@ -89,12 +94,14 @@ final class AvailabilitySnapshot {
         guard let context else { return }
         let export = loadExport()
         adopt(Published(calendar: ScoutService.blockedCalendar(export: export, context: context),
-                        bookings: export.bookings))
+                        bookings: export.bookings,
+                        readability: BlockedCalendar.Availability(health: export.health)))
     }
 
     private func adopt(_ published: Published) {
         calendar = published.calendar
         bookings = published.bookings
+        readability = published.readability
         builds += 1
     }
 
@@ -103,15 +110,17 @@ final class AvailabilitySnapshot {
     struct Published: Sendable {
         let calendar: BlockedCalendar
         let bookings: [OvertureBooking]
+        let readability: BlockedCalendar.Availability
     }
 
     static let rebuilt = Notification.Name("Overture.AvailabilitySnapshot.rebuilt")
     static let payloadKey = "published"
 
     // Called by `ConflictSweep.reapplyAll` with the calendar it just judged the queue against.
-    static func publish(_ calendar: BlockedCalendar, bookings: [OvertureBooking], for context: ModelContext) {
+    static func publish(_ calendar: BlockedCalendar, bookings: [OvertureBooking],
+                        readability: BlockedCalendar.Availability, for context: ModelContext) {
         NotificationCenter.default.post(
             name: rebuilt, object: context.container,
-            userInfo: [payloadKey: Published(calendar: calendar, bookings: bookings)])
+            userInfo: [payloadKey: Published(calendar: calendar, bookings: bookings, readability: readability)])
     }
 }
