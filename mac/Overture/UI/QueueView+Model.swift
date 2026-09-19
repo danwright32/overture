@@ -2662,10 +2662,17 @@ enum QueueModel {
     // manufactures a warning rather than finding one. `BlockedCalendar.conflict` falls back the OTHER way
     // for its own stated reason, and the asymmetry is deliberate: there, clearing a real clash on no
     // evidence is what loses safety; here, inventing one is.
+    //
+    // #3286: the "which nights" question itself is `PlayingNights`, shared with the calendar check and the
+    // night drop. What stays HERE is only this reader's answer to the span-only case, stated at the switch
+    // so it cannot be forgotten: the opening night alone, for the reason above.
     static func selfBookingNights(_ i: some QueueScopeFacts) -> [String] {
-        let recorded = Set(i.runNights).sorted()
-        if !recorded.isEmpty { return recorded }
-        return i.performanceDate.map { [$0] } ?? []
+        switch PlayingNights.of(runNights: i.runNights, performanceDate: i.performanceDate,
+                                runEndDate: i.runEndDate) {
+        case .recorded(let nights): return nights
+        case .spanOnly(let opening, _): return [opening]
+        case .undated: return []
+        }
     }
 
     static func selfBookingShow(_ i: some QueueScopeFacts) -> SelfBookingConflict.Show {

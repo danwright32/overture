@@ -204,8 +204,14 @@ extension Prospect {
         // it dead: every case it excluded (no recorded nights, one night, the last night left) is already
         // excluded by one of these two, so nothing could tell whether it was there. An untested condition
         // that cannot change an answer is worse than no condition (L29).
-        guard runNights.contains(night) else { return .wholeShow }
-        let remaining = runNights.filter { $0 != night }
+        //
+        // #3286: asked through `PlayingNights`, the shared answer. A span-only or undated row has no
+        // `recordedNights`, so it refuses here for the reason above; that is this reader's own choice and
+        // differs from the calendar check's span walk on purpose, since a night nobody recorded cannot be
+        // picked off. The recorded list arrives deduplicated, so a row storing a night twice (19 rows did
+        // on 2026-09-17) drops it once and keeps no ghost copy.
+        guard let playing = playingNights.recordedNights, playing.contains(night) else { return .wholeShow }
+        let remaining = playing.filter { $0 != night }
         guard !remaining.isEmpty else { return .wholeShow }
 
         // #2754: settled BEFORE the first write, so a refusal leaves the row exactly as it was rather
@@ -250,6 +256,9 @@ extension Prospect {
         droppedRunNights.append(contentsOf: released.map {
             DroppedNight(night: $0, reason: .duplicate, at: now).stored
         })
+        // #3324 (plan 2.4): a dropped night is in no other list, decided in the same write, so no reader
+        // can ever meet a night that is pitched and dropped at once.
+        forgetNightDecisions(for: [night] + released)
 
         // Nothing of this row's own is left. The key does NOT move: there is no free night to move it
         // to, and the whole point of the walk was that those nights belong to other cards. The caller

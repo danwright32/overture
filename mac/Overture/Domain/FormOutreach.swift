@@ -222,6 +222,9 @@ extension Prospect {
         recipient.formOutreachURL = formURL
         recipient.sentAt = now
         recipient.sendState = .sent
+        // #3959: the words pasted into the form are as much a promise as an email's.
+        recipient.freezePromise(subject: draftSubject, body: recipient.effectiveBody ?? "",
+                                performanceDate: performanceDate)
         if sentAt == nil {
             sentAt = now
             priorRelationshipAtSend = priorRelationship

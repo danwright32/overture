@@ -95,6 +95,11 @@ enum EventDateInDraft {
     // month name with a number, a numeric M/D form, or a bare ordinal in a sentence that names a month.
     // A figure that is not a date must never rescue a draft (a rate, a delivery window, a ticket price),
     // which is the whole reason this does not simply hunt for numbers.
+    // #3959: the version of the extraction below, stamped on every frozen promise (`PromisedNights`).
+    // Bump it whenever `namedDays` would read the same text differently, so a stored promise can be told
+    // apart from what today's extractor would say and a later reading can DISAGREE rather than overwrite.
+    static let namedDaysVersion = 1
+
     static func namedDays(in text: String, assumingYearOf reference: String) -> [NamedDay] {
         let referenceYear = Int(reference.prefix(4)) ?? 0
         var found: [NamedDay] = []

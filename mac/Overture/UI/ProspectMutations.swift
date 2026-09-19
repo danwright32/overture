@@ -827,6 +827,7 @@ enum ProspectMutations {
             // live multi-night run, so a single-night show on the same date is dismissed exactly as it
             // is today.
             let night = model.performanceDate
+            let priorDecisions = NightDecisionLists(model)   // #3324: the drop removes entries, undo restores
             let drop = RunNightDrop.isAboutOneNight(reason)
                 ? night.map { model.dropNight($0, reason: reason, now: now, in: context) }
                 : nil
@@ -846,7 +847,8 @@ enum ProspectMutations {
                                           priorShowOutcomeRaw: priorReason, priorShowOutcomeAt: priorOutcomeStamp,
                                           priorDismissedAt: priorExit,
                                           priorConflictClearedKey: priorClearedConflict,
-                                          droppedNights: [night] + releasing)
+                                          droppedNights: [night] + releasing,
+                                          priorNightDecisions: priorDecisions)
             }
             if let night, case .moved(_, let releasing) = drop {
                 ConflictSweep.reapply(model, export: export, in: context)
@@ -854,7 +856,8 @@ enum ProspectMutations {
                                           priorShowOutcomeRaw: priorReason, priorShowOutcomeAt: priorOutcomeStamp,
                                           priorDismissedAt: priorExit,
                                           priorConflictClearedKey: priorClearedConflict,
-                                          droppedNights: [night] + releasing)
+                                          droppedNights: [night] + releasing,
+                                          priorNightDecisions: priorDecisions)
             }
             // #16: the model's own setter, so the exit date is stamped here exactly as a per-card dismiss
             // stamps it, and a show dismissed twice keeps its FIRST exit date.
@@ -938,6 +941,7 @@ enum ProspectMutations {
             // Asked ONCE and switched on. `dropNight` performs the drop, so a second call to read a
             // second case of the same answer would be a second drop.
             let night = model.performanceDate
+            let priorDecisions = NightDecisionLists(model)   // #3324: the drop removes entries, undo restores
             let drop = night.map { model.dropNight($0, reason: reason, now: now, in: context) }
             // A store that could not answer says so and changes nothing. It returns rather than falling
             // through, and that is the point of it: falling through would dismiss the whole run, which is
@@ -961,7 +965,8 @@ enum ProspectMutations {
                                                priorShowOutcomeAt: priorOutcomeStamp,
                                                priorDismissedAt: priorExit,
                                                priorConflictClearedKey: priorClearedConflict,
-                                               droppedNights: [night] + releasing))
+                                               droppedNights: [night] + releasing,
+                                          priorNightDecisions: priorDecisions))
                 }
                 guard context.saveOrWarn(org: item.groupName, feedback: feedback) else { return }
                 // Said, never silent. The whole card going is a bigger event than the one night Dan
@@ -988,7 +993,8 @@ enum ProspectMutations {
                                                priorShowOutcomeAt: priorOutcomeStamp,
                                                priorDismissedAt: priorExit,
                                                priorConflictClearedKey: priorClearedConflict,
-                                               droppedNights: [night] + releasing))
+                                               droppedNights: [night] + releasing,
+                                          priorNightDecisions: priorDecisions))
                 }
                 context.saveOrWarn(org: item.groupName, feedback: feedback)
                 // #2997: silent when the drop was only Dan's night, which is the ordinary case and

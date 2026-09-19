@@ -1356,7 +1356,42 @@ enum ScoutService {
                 // All three do the same thing here: re-key to the new key and update in place. Safe only
                 // because the exact-key read above proved nobody holds it, which is why a read that could
                 // not answer refuses the row below rather than arriving here (#2758).
-                match.naturalKey = key
+                //
+                // #3324 (plan 2.11): the key stored is the key of the night the row LANDS on, which is the
+                // opening `apply` is about to assign, not the feed's. They differ whenever Dan dropped the
+                // opening night: the feed still lists it, `apply` keeps it dropped, and storing the feed's
+                // key beside the kept date left 19 of 1,260 rows (measured 2026-09-17) whose key named a
+                // night their card does not play, repaired at every launch by an unrelated venue pass and
+                // re-created by the next scout. ONE function answers the opening for both writes now.
+                let landing = Self.scoutOpening(fed: enriched.performanceDate, fedNights: enriched.runNights,
+                                                existing: match,
+                                                lookup: { try Prospect.stored(key: $0, in: context) })
+                let anchored = Prospect.makeNaturalKey(groupName: enriched.groupName,
+                                                       performanceDate: landing, venue: enriched.venue)
+                if anchored != key {
+                    // The feed's key was proven free above; the landing key was not, so it is asked here,
+                    // before any write, with the row itself counting as free.
+                    switch match.keyAvailability(anchored, in: context) {
+                    case .free:
+                        break
+                    case .unreadable:
+                        unreadableStore += 1
+                        unreadableKeys.append(anchored)
+                        continue
+                    case .taken:
+                        // Another card holds the night this row would land on. Moving onto it would merge
+                        // two cards (the #2754 measurement), and storing the feed's key would re-create the
+                        // drift this arm exists to stop. So the row is left exactly as it was this run and
+                        // the reason is logged; the next scout asks again.
+                        // copy-inventory:ignore-start  developer diagnostic log, not the app's own voice
+                        AgentLog.problem("#3324 ScoutService re-key: \(match.naturalKey) would land on \(anchored), which another card holds; left untouched this run.")
+                        // copy-inventory:ignore-end
+                        continue
+                    }
+                }
+                match.naturalKey = anchored
+                // Seen under the key it now holds, so the feed reconcile below reads it as present.
+                seenKeys.insert(anchored)
                 apply(enriched, to: match, now: scoutNow,
                       storedByKey: { try Prospect.stored(key: $0, in: context) })
                 updated += 1
@@ -1666,6 +1701,16 @@ enum ScoutService {
 
     // #3001: `storedByKey` is how a night RELEASED to another card is re-checked at fold time. Required
     // rather than defaulted, so a caller cannot quietly get the old subtract-forever behaviour (L168).
+    // #2691 / #3324: the opening night a stored row carries after this scout. The feed's own opening,
+    // UNLESS Dan dropped it, in which case the earliest night left once his drops are subtracted, and the
+    // row's current date if nothing is left. One answer, read by `apply` for `performanceDate` and by the
+    // `.reKey` arm for the key it stores (plan 2.11: two writes computing this separately disagreed).
+    static func scoutOpening(fed: String?, fedNights: [String], existing: Prospect,
+                             lookup: (String) throws -> Prospect?) -> String? {
+        guard let fed, DroppedNight.all(on: existing).contains(where: { $0.night == fed }) else { return fed }
+        return DroppedNight.keeping(fedNights, on: existing, lookup: lookup).min() ?? existing.performanceDate
+    }
+
     private static func apply(_ p: AssembledProspect, to existing: Prospect, now: Date,
                               storedByKey: (String) throws -> Prospect?) {
         // #1274: track the latest scout-emitted name always, so a "reset to scout name" restores the
@@ -1710,13 +1755,11 @@ enum ScoutService {
         // to a night he explicitly said no to, which is the same silent undo the nights subtraction below
         // prevents, one field over. `keeping` answers the feed's own date whenever nothing was dropped,
         // so an ordinary show is untouched.
-        if let fed = p.performanceDate, DroppedNight.all(on: existing).contains(where: { $0.night == fed }) {
-            existing.performanceDate = DroppedNight.keeping(p.runNights, on: existing,
-                                                            lookup: storedByKey).min()
-                ?? existing.performanceDate
-        } else {
-            existing.performanceDate = p.performanceDate
-        }
+        //
+        // #3324: asked through `scoutOpening`, the same function the `.reKey` arm stores its key from, so
+        // the key and this date cannot name different nights.
+        existing.performanceDate = scoutOpening(fed: p.performanceDate, fedNights: p.runNights,
+                                                existing: existing, lookup: storedByKey)
         existing.sourceListingURL = p.sourceListingURL
         existing.seriesId = p.seriesId   // #1260 Phase 2: keep the merged-concert identity current
         // #1663/#1845: the classification block (discipline, production, profile, coverage, fitReason) all
