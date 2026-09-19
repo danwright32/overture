@@ -2394,6 +2394,23 @@ enum QueueModel {
     // down on the first show Dan keeps, and reading the gate here would take the marker off the header the
     // moment he said "I can shoot this anyway". That decision is about whether to PITCH the show; the
     // calendar is blocked either way, and the header's job is to say what the day is.
+    // #3622 (Dan's call, 2026-09-18): the calendar clash sentence a CARD shows, or nil. "It can go from
+    // pretty much everywhere": a blocked LATER night of a run is shown only where Dan picks a run's nights at
+    // Prep launch, so on a card only the night the card is filed under is spoken.
+    //
+    // One exception, and it is not a matter of taste: a kept show whose clash landed after the keep is HELD
+    // from sending (`Recipient.isSendablePending` refuses on `hasUnclearedConflict`, whichever night it is
+    // on), and "I can shoot this anyway" beside this sentence is the only way to release it. Hiding the
+    // sentence there would leave a send refused with nothing on the card saying why (L109).
+    //
+    // A clash whose two dates cannot be compared is not quietly dropped: it keeps the loud case, exactly as
+    // the colour does.
+    static func cardConflictNote(_ item: QueueItem) -> String? {
+        guard item.hasConflict, let note = item.conflictNote else { return nil }
+        if conflictScope(item) == .laterInTheRun, !(item.hasUnclearedConflict && item.isKept) { return nil }
+        return note
+    }
+
     static func groupIsUnavailable(_ items: [some QueueScopeFacts]) -> Bool {
         items.contains { $0.hasConflict && conflictScope($0) == .thisNight }
     }
@@ -2712,6 +2729,21 @@ enum QueueModel {
         SelfBookingConflict.conflicts(for: selfBookingShow(item), in: index)
     }
 
+    // #3622 (Dan's call, 2026-09-18): the clashes on the night this row is FILED UNDER, and no other. A run's
+    // clash on a later night is no longer spoken on a row, a date header or the send confirm; it is shown
+    // only where Dan chooses a run's nights, at Prep launch, which keeps reading `selfBookingConflicts`
+    // (every night) through `selfBookingClash`.
+    //
+    // A row with no date of its own has no night to be "later" than, so it keeps every clash, which is what
+    // `SelfBookingCopy.laterNight` already treats as the row's own night.
+    static func selfBookingCardConflicts(for item: some QueueScopeFacts,
+                                         in index: SelfBookingConflict.NightIndex)
+        -> [SelfBookingConflict.Overlap] {
+        let all = selfBookingConflicts(for: item, in: index)
+        guard let own = item.performanceDate else { return all }
+        return all.filter { $0.night == own }
+    }
+
     static func hasSelfBookingConflict(for item: some QueueScopeFacts,
                                        in index: SelfBookingConflict.NightIndex) -> Bool {
         !selfBookingConflicts(for: item, in: index).isEmpty
@@ -2756,16 +2788,19 @@ enum QueueModel {
     // Deliberately one walk producing all three, rather than three helpers each walking the overlaps:
     // the tier, the names and the night have to describe the SAME set of shows, and three independent
     // reads could disagree the moment one of them changed (L16).
+    //
+    // #3622: over the clashes on the row's OWN night only (`selfBookingCardConflicts`), so the night is no
+    // longer one of the parts: it is always the row's own.
     static func rowMarkerParts(for item: some QueueScopeFacts, in index: SelfBookingConflict.NightIndex)
-        -> (commitment: SelfBookingConflict.Show.Commitment, names: [String], night: String?)? {
-        let overlaps = selfBookingConflicts(for: item, in: index)
+        -> (commitment: SelfBookingConflict.Show.Commitment, names: [String])? {
+        let overlaps = selfBookingCardConflicts(for: item, in: index)
         // An overlap can only come from a committed show, so an empty tier list means an empty clash list.
         guard let strongest = overlaps.compactMap({ $0.other.commitment }).max(by: { $0.rank < $1.rank })
         else { return nil }
         let atTier = overlaps.filter { $0.other.commitment == strongest }
         var seen = Set<String>()
         let names = atTier.compactMap { seen.insert($0.other.key).inserted ? $0.other.name : nil }
-        return (strongest, names, atTier.first?.night)
+        return (strongest, names)
     }
 
     static func selfBookingRowMarker(for item: some QueueScopeFacts,
@@ -2779,10 +2814,7 @@ enum QueueModel {
         // show. The pitch is not mentioned on this row, and that is the deliberate cost of one sentence:
         // the stronger claim is the one that decides whether Dan can work the night at all.
         rowMarkerParts(for: item, in: index).flatMap { parts in
-            SelfBookingCopy.rowMarker(parts.names,
-                                      clashNight: parts.night,
-                                      performanceDate: item.performanceDate,
-                                      commitment: parts.commitment)
+            SelfBookingCopy.rowMarker(parts.names, commitment: parts.commitment)
         }
     }
 
@@ -2792,9 +2824,12 @@ enum QueueModel {
     // queue, so a clash with a show in any stage still counts.
     static func sendSelfBookingWarning(for item: QueueItem,
                                        in index: SelfBookingConflict.NightIndex) -> String? {
-        SelfBookingCopy.confirmWarning(selfBookingConflictNames(for: item, in: index),
-                                       clashNight: selfBookingClashNight(for: item, in: index),
-                                       performanceDate: item.performanceDate)
+        // #3622: the clashes on the show's own night only, like the row it is sent from.
+        var seen = Set<String>()
+        let names = selfBookingCardConflicts(for: item, in: index).compactMap { overlap in
+            seen.insert(overlap.other.key).inserted ? overlap.other.name : nil
+        }
+        return SelfBookingCopy.confirmWarning(names)
     }
 
     // The queue-wide date-header note: shown when any row in this date group faces a self-booking conflict
