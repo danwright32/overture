@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1585 sentences**.
+Every sentence Overture can say to Dan: **1589 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -14,7 +14,7 @@ What is not, and why:
   sentences under tokens nobody reads.
 - **Nothing, if it is written as two literals joined with `+`.** Those ARE joined here, into the
   one sentence the running app says (#3155). What is still only part of what Dan reads is a
-  sentence carrying a VALUE: 571 of the 1585 below hold a
+  sentence carrying a VALUE: 572 of the 1589 below hold a
   `\(...)` where a number or a name goes, so what is printed is the template. They are counted
   here rather than listed again, because the hole is visible in the line itself; what was missing
   was any statement of how much of this document is templates.
@@ -646,6 +646,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/DayOffRangeFields.swift`
 "Built-in towns you took back onto the queue. Skip again to undo."
     `UI/ExcludedTownsView.swift`
+"Calendar clients Downbeat doesn't list"
+    `Domain/ClientCoverage.swift`
 "Calendar page"
     `UI/AddLeadSheet.swift`
 "Came back empty \(runs) \(runWord) in a row, and hasn't listed a show for \(days) \(dayWord). Check the link."
@@ -884,6 +886,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/PostEventPrompt.swift`
 "Event passed, they replied, say how it ended"
     `Domain/PostEventPrompt.swift`
+"Every client tagged in your Shoots calendar is in Downbeat, covered by a watched source, or set aside below."
+    `Domain/ClientCoverage.swift`
 "Every one is a one-off hunt, so none of them share an answer."
     `Domain/ProbeSelection.swift`
 "Every one of the \(Plural.count(vanished.bookingCount, "shoot")) Downbeat was exporting has gone at once, "
@@ -2186,6 +2190,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ClientTagCopy.swift`
 "Tagged as returning client \(namedClient): shows surface up to a year ahead."
     `Domain/ClientTagCopy.swift`
+"Tagged in your Shoots calendar, but no watched source treats them as a returning client, so their next season would not surface a year ahead. Add a source for them, or tag an existing one below."
+    `Domain/ClientCoverage.swift`
 "Take \(address) off this reply and stop this show emailing it"
     `Domain/ReplyPanel.swift`
 "Take this source off the watchlist. You can put it back any time"
@@ -2824,6 +2830,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/QueueView+Model.swift`
 "\(Plural.count(count, "reply", "replies")) waiting on your answer"
     `App/MenuBarStatus.swift`
+"\(Plural.count(count, "shoot")), most recently \(when)"
+    `Domain/ClientCoverage.swift`
 "\(Plural.count(count, "show")) \(Plural.word(count, "is", "are")) back in \(undoStageWord(for: priorStatuses))"
     `App/ActionFeedback.swift`
 "\(Plural.count(count, "show")) on \(dateLabel)"
