@@ -110,6 +110,7 @@ struct OutreachFieldClassificationTests {
         "replyDraftSubject": "retained storage written by nothing since #3891, and a draft is not a send",
         // #3891: written by the same two sends, in the same statement block, that stamp `sentAt`.
         "pitchSubject": "the subject a send went out under, set with sentAt, which is counted",
+        "promisedNightsRaw": "the nights a send promised, frozen in the same write as sentAt, which is counted",
         "replyDraftModel": "what wrote the reply draft, set beside replyDraftBody",
         "originalReplyDraftBody": "what the reply draft said before Dan edited it",
         "sentReplyBody": "set with replySentAt, which is counted",

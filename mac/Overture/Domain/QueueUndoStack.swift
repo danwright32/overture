@@ -86,6 +86,17 @@ struct QueueUndoEntry: Equatable, Sendable {
         // nothing anywhere able to put them back (L97).
         var droppedNights: [String] = []
 
+        // #3324 (plan 3.8): the per-night decision lists as they stood BEFORE a night drop, which removes
+        // the dropped nights' entries. nil for every action that does not drop a night, so restoring it is
+        // skipped rather than writing lists nothing took away.
+        var priorNightDecisions: NightDecisionLists? = nil
+
+        // #3373: the draft a drop deleted when it sent a kept row back to Scout, so the undo can put back
+        // every field the drop changed rather than just the night and the stage (L574). nil for every other
+        // action, and for a drop that left the row's stage alone, which is also the undo's cue to leave the
+        // draft fields exactly as they are.
+        var priorDraft: KeptNightDrop.Draft?
+
         // Is the row still exactly how this action left it? If anything moved it since (a background
         // writer, a later action of Dan's, a scout import), undoing would clobber something newer, so this
         // row no longer applies.
@@ -207,7 +218,8 @@ extension QueueUndoEntry.Row {
     init(recording prospect: Prospect,
          priorStatus: ReviewStatus, priorShowOutcomeRaw: String?, priorShowOutcomeAt: Date?,
          priorDismissedAt: Date?,
-         priorConflictClearedKey: String?, droppedNights: [String] = []) {
+         priorConflictClearedKey: String?, droppedNights: [String] = [],
+         priorNightDecisions: NightDecisionLists? = nil) {
         self.init(naturalKey: prospect.naturalKey,
                   groupName: prospect.groupName,
                   priorStatus: priorStatus,
@@ -217,7 +229,8 @@ extension QueueUndoEntry.Row {
                   priorConflictClearedKey: priorConflictClearedKey,
                   resultingStatus: prospect.status,
                   resultingShowOutcomeRaw: prospect.showOutcomeRaw,
-                  droppedNights: droppedNights)
+                  droppedNights: droppedNights,
+                  priorNightDecisions: priorNightDecisions)
     }
 }
 
@@ -226,19 +239,16 @@ extension QueueUndoEntry {
     init(recording actionLabel: String, on prospect: Prospect,
          priorStatus: ReviewStatus, priorShowOutcomeRaw: String?, priorShowOutcomeAt: Date?,
          priorDismissedAt: Date?,
-         priorConflictClearedKey: String?, droppedNights: [String] = []) {
-        let row = Row(recording: prospect, priorStatus: priorStatus,
+         priorConflictClearedKey: String?, droppedNights: [String] = [],
+         priorNightDecisions: NightDecisionLists? = nil,
+         priorDraft: KeptNightDrop.Draft? = nil) {
+        var row = Row(recording: prospect, priorStatus: priorStatus,
                       priorShowOutcomeRaw: priorShowOutcomeRaw, priorShowOutcomeAt: priorShowOutcomeAt,
                       priorDismissedAt: priorDismissedAt,
-                      priorConflictClearedKey: priorConflictClearedKey, droppedNights: droppedNights)
-        self.init(naturalKey: row.naturalKey, groupName: row.groupName, actionLabel: actionLabel,
-                  priorStatus: row.priorStatus, priorShowOutcomeRaw: row.priorShowOutcomeRaw,
-                  priorShowOutcomeAt: row.priorShowOutcomeAt,
-                  priorDismissedAt: row.priorDismissedAt,
-                  priorConflictClearedKey: row.priorConflictClearedKey,
-                  resultingStatus: row.resultingStatus,
-                  resultingShowOutcomeRaw: row.resultingShowOutcomeRaw,
-                  droppedNights: row.droppedNights)
+                      priorConflictClearedKey: priorConflictClearedKey, droppedNights: droppedNights,
+                      priorNightDecisions: priorNightDecisions)
+        row.priorDraft = priorDraft
+        self.init(actionLabel: actionLabel, batchLabel: nil, primaryRow: row, otherRows: [])
     }
 }
 
@@ -308,6 +318,8 @@ enum QueueUndo {
                 blocked += 1
                 continue
             }
+            // #3324: the drop removed the dropped nights' decision entries, so the inverse puts them back.
+            if let lists = row.priorNightDecisions { prospect.restoreNightDecisions(lists) }
             prospect.status = row.priorStatus
             prospect.showOutcomeRaw = row.priorShowOutcomeRaw
             // #3566: with its stamp, or a cleared ending leaves behind the moment it was recorded.
@@ -318,6 +330,9 @@ enum QueueUndo {
             // so restoring it is a no-op for every action that never touched it, and there is no "did this
             // one accept a clash" flag to get wrong.
             prospect.restoreConflictClearance(row.priorConflictClearedKey)
+            // #3373: the draft a kept row lost when its night was dropped. Only when the drop took one,
+            // so an undo of any other action never writes over a draft Dan has now.
+            if let draft = row.priorDraft { prospect.restoreKeptNightDraft(draft) }
         }
         return Outcome(restored: applicable.count - blocked, total: entry.rows.count)
     }
