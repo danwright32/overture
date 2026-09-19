@@ -236,6 +236,11 @@ struct SubtitleVariantMatchTests {
         do {
             let dir = try sandboxes.make(named: "subtitle-variant-ingest")
             guard let clone = try LiveStoreClone.makeClone(in: dir) else {
+                // SAYS SO rather than returning quietly. This test passes either way, so a silent
+                // return is indistinguishable from a run that walked the store and found nothing to
+                // report, which is the one reading that would be wrong (L11, L98). No figure is
+                // printed on this path, because a run that measured nothing must never print one.
+                print("Subtitle arm at ingest: UNMEASURED, the live store could not be cloned.")
                 await RealStoreTestLock.shared.release()
                 return
             }
