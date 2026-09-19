@@ -32,7 +32,7 @@ enum ContradictedCancellation {
                                            storedEnd: candidate.runEndDate,
                                            incomingStart: flagged.performanceDate,
                                            incomingEnd: flagged.runEndDate) else { return false }
-            return GroupNameMatch.isConfident(candidate.groupName, flagged.groupName)
+            return GroupNameMatch.isSameShowTitle(candidate.groupName, flagged.groupName)
         }
     }
 
@@ -66,7 +66,7 @@ enum ContradictedCancellation {
                                                storedEnd: candidate.runEndDate,
                                                incomingStart: flagged.performanceDate,
                                                incomingEnd: flagged.runEndDate) else { return false }
-                return GroupNameMatch.isConfident(candidate.groupName, flagged.groupName)
+                return GroupNameMatch.isSameShowTitle(candidate.groupName, flagged.groupName)
             }
             if twin != nil { contradicted.insert(flagged.naturalKey) }
         }

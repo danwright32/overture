@@ -202,6 +202,20 @@ struct ContradictedCancellationTests {
             print("Contradicted cancellation corpus: \(flagged.count) future row(s) flagged gone, "
                   + "of \(onScreen.count) on screen; \(contradicted.count) contradicted by a live twin")
 
+            // #3917: WHICH pairs, and WHICH arm admitted each, on every run. A count alone cannot say
+            // whether the subtitle arm added a row that should never have been joined, and that is the
+            // only question worth asking about a rule that withholds a cancellation warning. The arm is
+            // recomputed here from the two public predicates rather than read out of
+            // `ContradictedCancellation`, so a run reports what the rule DID rather than what it says
+            // it does.
+            for row in contradicted.sorted(by: { ($0.venue ?? "") < ($1.venue ?? "") }) {
+                guard let twin = ContradictedCancellation.liveTwin(of: row, among: all) else { continue }
+                let arm = GroupNameMatch.isConfident(twin.groupName, row.groupName)
+                    ? "isConfident" : "subtitle"
+                print("  contradicted[\(arm)] \(row.groupName) :: \(twin.groupName) "
+                      + "@ \(row.venue ?? "no venue") missed=\(row.missedScoutCount)")
+            }
+
             // ASSERTED THROUGH WHAT IS DRAWN, never through the stored field, and the difference is the
             // whole point of the fix. `disappearedFromFeed` on the model stays true: the row really has
             // missed thirteen sweeps, and #3278's first half, which stops the duplicate being minted at

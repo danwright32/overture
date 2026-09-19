@@ -1506,7 +1506,13 @@ enum ScoutService {
             let sharesURL = (p.sourceListingURL.map { candidates.contains($0) } ?? false)
                 || !Set(p.runSourceURLs).isDisjoint(with: candidates)
             guard sharesURL else { return false }
-            return sameVenue(p.venue, venue) && GroupNameMatch.isConfident(p.groupName, groupName)
+            // #3917: `isSameShowTitle`, not `isConfident`, and the shared URL above is what licenses it.
+            // A source that drops or adds a parenthetical keeps publishing the same link, and
+            // `isConfident` refuses a one word title outright and anything under 0.6 containment below
+            // that, so the arm missed exactly the drift it exists to catch. Measured over the live store
+            // before it was changed (`SubtitleVariantMatchTests`): 3 pairs are newly joined here and all
+            // three are one show, including Dan's own Jalopy open mic pair from #1590.
+            return sameVenue(p.venue, venue) && GroupNameMatch.isSameShowTitle(p.groupName, groupName)
         }
     }
 
