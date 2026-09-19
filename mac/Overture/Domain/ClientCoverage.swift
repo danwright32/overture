@@ -225,7 +225,7 @@ enum CoverageCopy {
     static let calendarSectionTitle = "Calendar clients Downbeat doesn't list"
     static func calendarExplanation(hasFlagged: Bool) -> String {
         hasFlagged
-            ? "Clients tagged in your Shoots calendar that aren't in Downbeat and no watched source treats as a returning client, so their next season would not surface a year ahead. Add a source for them, or tag an existing one below."
+            ? "Tagged in your Shoots calendar, but no watched source treats them as a returning client, so their next season would not surface a year ahead. Add a source for them, or tag an existing one below."
             : "Every client tagged in your Shoots calendar is in Downbeat, covered by a watched source, or set aside below."
     }
 
