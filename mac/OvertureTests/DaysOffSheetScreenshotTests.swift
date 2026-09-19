@@ -35,7 +35,7 @@ struct DaysOffSheetScreenshotTests {
     // and reading `.container` from one whose container has gone traps inside SwiftData.
     private func seededContainer() throws -> ModelContainer {
         let container = try ModelContainer(
-            for: Schema([Prospect.self, Recipient.self, DayOff.self, CancelledShoot.self]),
+            for: Schema([Prospect.self, Recipient.self, DayOff.self, CancelledShoot.self, WeeklyDayOff.self]),
             configurations: [ModelConfiguration(isStoredInMemoryOnly: true)])
         let ctx = container.mainContext
         // Twelve past ranges, the shape Dan saw on 2026-08-31, and seven ahead, one of them running today.
@@ -48,6 +48,13 @@ struct DaysOffSheetScreenshotTests {
             ctx.insert(DayOff(startDate: day(offset), endDate: day(offset + (note == "Residency" ? 29 : 0)),
                               note: note))
         }
+        // #3620: a standing weekly rule with one week freed, and a bounded one that has already ended.
+        let wednesday = WeeklyDayOff(weekday: 4, note: "Empire Harmony rehearsal")
+        if let nextWednesday = (1...7).map({ day($0) }).first(where: { WeeklyBlock(weekday: 4).blocks($0) }) {
+            wednesday.freedDates = [nextWednesday]
+        }
+        ctx.insert(wednesday)
+        ctx.insert(WeeklyDayOff(weekday: 2, lastDate: day(-3), note: "Summer class"))
         ctx.insert(CancelledShoot(bookingId: "b0", shootName: "Spring Showcase", startDate: day(-60)))
         ctx.insert(CancelledShoot(bookingId: "b13", shootName: "Autumn Benefit", startDate: day(3)))
         try ctx.save()
@@ -88,15 +95,38 @@ struct DaysOffSheetScreenshotTests {
         snapshot.attach(to: ctx)
         defer { snapshot.detach() }
 
+        // A second pair with no shoots in the export, because the sheet caps its scroll area and at the real
+        // count the booked shoots fill it: without this the "Days you blocked" rows are below the fold.
+        let noShoots = AvailabilitySnapshot(loadExport: { (bookings: [], blockedDates: [], health: .ok) })
+        noShoots.attach(to: ctx)
+        defer { noShoots.detach() }
+
+        // #3620: the weekly fields, on the add form's own sunk surface and padding. The sheet opens its form
+        // from private state, so the fields are drawn on their own rather than through the sheet.
         for dark in [false, true] {
-            let view = DaysOffView()
-                .environment(\.modelContext, ctx)
-                .modelContainer(container)
-                .environment(ActionFeedback())
-                .environment(snapshot)
-            let url = URL(fileURLWithPath: dir).appendingPathComponent("days-off-\(dark ? "dark" : "light").png")
-            try render(view, dark: dark, to: url)
+            let fields = WeeklyDayOffFields(weekday: .constant(4), hasFirst: .constant(true),
+                                            first: .constant(Date()), hasLast: .constant(false),
+                                            last: .constant(Date()), note: .constant("Empire Harmony rehearsal"))
+                .padding(OVSpacing.lg)
+                .frame(width: 560, alignment: .leading)
+                .background(OVColor.surfaceSunk)
+            let url = URL(fileURLWithPath: dir).appendingPathComponent("weekly-fields-\(dark ? "dark" : "light").png")
+            try render(fields, dark: dark, to: url)
             print("days-off-sheet: drew \(url.path)")
+        }
+
+        for (name, shown) in [("days-off", snapshot), ("days-off-blocked-only", noShoots)] {
+            for dark in [false, true] {
+                let view = DaysOffView()
+                    .environment(\.modelContext, ctx)
+                    .modelContainer(container)
+                    .environment(ActionFeedback())
+                    .environment(shown)
+                let url = URL(fileURLWithPath: dir)
+                    .appendingPathComponent("\(name)-\(dark ? "dark" : "light").png")
+                try render(view, dark: dark, to: url)
+                print("days-off-sheet: drew \(url.path)")
+            }
         }
     }
 }
