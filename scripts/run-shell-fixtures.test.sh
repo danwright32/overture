@@ -1019,6 +1019,36 @@ run_shell_fixtures "${UNOWNED}" >/dev/null 2>&1
 assert_equals "a declaration carrying no issue number does not exempt anything" "1" "$?"
 assert_equals "and that leak is ended too" "0" "$(wait_for_no_process_matching 'sleep 300')"
 
+# --- #3682: a fixture that never finishes is ENDED at a deadline, and named ---------------------------
+#
+# The stall guard only warns, so a spinning fixture ran for 5h37m (2026-09-07). A deadline of one second
+# stands in for the real one, and the fixture sleeps far longer than any wait here could survive, so a
+# run that returns at all proves the deadline ended it. Timed by the runner returning, not by a fixed
+# sleep in this file (L290).
+HANGING="${TMP_DIR}/hanging.test.sh"
+printf '#!/usr/bin/env bash\necho "ok - started"\nsleep 299\necho "ok - never reached"\n' > "${HANGING}"
+chmod +x "${HANGING}"
+HANG_STARTED="${SECONDS}"
+HANG_OUTPUT="$(OVERTURE_FIXTURE_TIMEOUT_SECONDS=1 run_shell_fixtures "${HANGING}" "${PASSING}" 2>&1)"
+HANG_STATUS=$?
+HANG_TOOK=$(( SECONDS - HANG_STARTED ))
+assert_equals "a fixture past its deadline fails the run" "1" "${HANG_STATUS}"
+case "${HANG_OUTPUT}" in
+  *"hanging.test.sh TIMED OUT: still running after 1s"*) echo "ok - and it is named as timed out, with the deadline" ;;
+  *) echo "FAIL - a hung fixture was not named as timed out"; echo "${HANG_OUTPUT}" | tail -20; FAILURES=$((FAILURES + 1)) ;;
+esac
+assert_equals "the run ended at the deadline rather than waiting the fixture out" "1" \
+  "$([[ "${HANG_TOOK}" -lt 60 ]] && echo 1 || echo 0)"
+assert_equals "and the hung fixture's process is gone" "0" "$(wait_for_no_process_matching 'sleep 299')"
+case "${HANG_OUTPUT}" in
+  *"passing.test.sh"*) echo "ok - and the fixture beside it still ran" ;;
+  *) echo "FAIL - the fixture beside the hung one was not run"; FAILURES=$((FAILURES + 1)) ;;
+esac
+
+# And the deadline does not fire on a fixture that finishes in time: its timer is gone with it.
+OVERTURE_FIXTURE_TIMEOUT_SECONDS=30 run_shell_fixtures "${PASSING}" >/dev/null 2>&1
+assert_equals "a fixture inside its deadline passes as before" "0" "$?"
+
 # Zero subjects examined is UNMEASURED, never clean (L98). A process group that could not be read and a
 # process group with nothing left in it leave the same empty answer, and only one of them is a pass.
 SURVIVORS_NONE="$(fixture_surviving_processes "")"
