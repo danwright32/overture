@@ -220,6 +220,22 @@ enum CoverageCopy {
     static let dismissLabel = "Set aside"
     static let restoreLabel = "Put back"
 
+    // #1424: the clients in Dan's Shoots calendar that Downbeat does not list. Worded like the Downbeat
+    // box above it rather than in a new voice, and explained in the same way in both states (#1547).
+    static let calendarSectionTitle = "Calendar clients Downbeat doesn't list"
+    static func calendarExplanation(hasFlagged: Bool) -> String {
+        hasFlagged
+            ? "Clients tagged in your Shoots calendar that aren't in Downbeat and no watched source treats as a returning client, so their next season would not surface a year ahead. Add a source for them, or tag an existing one below."
+            : "Every client tagged in your Shoots calendar is in Downbeat, covered by a watched source, or set aside below."
+    }
+
+    // "3 shoots, most recently Oct 12, 2025". The year is always given: these are facts about the past,
+    // routinely more than a year back, and "Oct 12" alone reads as this coming October.
+    static func calendarShoots(count: Int, lastShoot: String) -> String {
+        let when = EasternDate.date(from: lastShoot).map(EasternDate.dayLabelWithYear) ?? lastShoot
+        return "\(Plural.count(count, "shoot")), most recently \(when)"
+    }
+
     // Shown under a gap row when a watched source is probably this client but the name does not match.
     static func nearMiss(sourceName: String) -> String {
         "A source \"\(sourceName)\" may be them: check its name, or tag it a returning client."
