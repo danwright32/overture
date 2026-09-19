@@ -377,9 +377,18 @@ the measurement it came from lives here. Read the entry before the rule decides 
   output rather than passing silently.
   `OVERTURE_MUTATE_RUNNER` swaps the runner, which is how to drive the shell fixtures or vitest instead
   of the Swift suite. Since #2972 the run's FULL log is KEPT at a named path and printed as `full log:`
-  (`/tmp/overture-mutate-run.log`, moved with `OVERTURE_MUTATE_LOG`): only the last 25 lines go to the
+  (named with `OVERTURE_MUTATE_LOG`): only the last 25 lines go to the
   screen, and the exact failure text this file demands in a PR body routinely sits just above that cut,
   which used to mean running the whole mutation again for evidence the run had already produced.
+  **Since #3984 every run's log is its OWN file**, under `/tmp/overture-mutate-runs/` (pruned after a
+  day), where it used to be one fixed `/tmp/overture-mutate-run.log` shared by every worktree. Every
+  verdict is read back out of that log, so with several agent lanes mutating at once each judged whatever
+  another had last written: measured 2026-09-18, one run reported CAUGHT from a log naming another lane's
+  failing test. The log's first line now names the run that owns it, and a run that finds it replaced
+  refuses as `LOG OVERWRITTEN` rather than reporting a verdict about somebody else's output, which still
+  matters when two runs are handed one `OVERTURE_MUTATE_LOG` by hand. The first proof of that check found
+  exactly this: a fixture run as a mutation's runner INHERITS the outer run's `OVERTURE_MUTATE_LOG`, so
+  every inner run wrote into the outer log (L439), and `scripts/mutate.test.sh` now unsets it.
   **Since #3240 every proof also says how much of itself was BUILD rather than tests.** That issue asked
   whether the one to four proofs a PR body carries could share one build, and the measurement says there
   is nothing to share: each proof mutates a different file, each is already incremental on top of the
