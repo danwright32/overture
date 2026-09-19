@@ -95,16 +95,16 @@ struct SelfBookingCopyTests {
     // A blank groupName never leaves a hole in the sentence; it reads as "another show".
     @Test func aBlankNameReadsAsAnotherShow() {
         #expect(SelfBookingCopy.othersPhrase([""]) == "another show")
-        #expect(SelfBookingCopy.rowMarker(["  "], clashNight: nil, performanceDate: nil, commitment: .emailed) == "Also pitching another show on this date")
+        #expect(SelfBookingCopy.rowMarker(["  "], commitment: .emailed) == "Also pitching another show on this date")
     }
 
     // The row marker and the confirm warning both name the clashing show and are nil on a clear date.
     @Test func markerAndConfirmNameTheShowAndAreNilWhenClear() {
-        #expect(SelfBookingCopy.rowMarker(["Orchestra A"], clashNight: "2026-08-01", performanceDate: "2026-08-01", commitment: .emailed) == "Also pitching Orchestra A on this date")
-        #expect(SelfBookingCopy.confirmWarning(["Orchestra A"], clashNight: "2026-08-01", performanceDate: "2026-08-01")
+        #expect(SelfBookingCopy.rowMarker(["Orchestra A"], commitment: .emailed) == "Also pitching Orchestra A on this date")
+        #expect(SelfBookingCopy.confirmWarning(["Orchestra A"])
                 == "You already have a pitch in progress for Orchestra A on this date.")
-        #expect(SelfBookingCopy.rowMarker([], clashNight: nil, performanceDate: nil, commitment: .emailed) == nil)
-        #expect(SelfBookingCopy.confirmWarning([], clashNight: nil, performanceDate: nil) == nil)
+        #expect(SelfBookingCopy.rowMarker([], commitment: .emailed) == nil)
+        #expect(SelfBookingCopy.confirmWarning([]) == nil)
     }
 
     // The prep-launch confirm names each prepping show and what it clashes with; nil when nothing clashes.
