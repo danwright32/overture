@@ -196,6 +196,11 @@ enum ConflictSweep {
             changed += 1
         }
         if changed > 0 { try? context.save() }
+        // #1421: every change to what the calendar is built from passes through here, so this is where the
+        // app's one cached calendar learns of it. Unconditional: a new day off that flags no show still
+        // changes the calendar the Days off sheet draws. Handed the value just judged against, never a
+        // second build, so the screen and the queue cannot disagree about which nights are taken.
+        AvailabilitySnapshot.publish(calendar, bookings: export.bookings, for: context)
         return changed
     }
 }

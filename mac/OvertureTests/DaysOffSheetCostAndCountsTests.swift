@@ -45,13 +45,13 @@ struct DaysOffSheetCostAndCountsTests {
     // properties, which SwiftUI re-reads on every access.
     @Test func theSectionWorksThemOutOnceAndHandsThemDown() throws {
         let body = try #require(SourceGuardHelper.propertyBody("private var bookedShoots: some View {", in: sheet))
-        #expect(body.contains("let cal = calendar"))
-        #expect(body.contains("let bookings = DownbeatBridge.loadedExport().bookings"))
+        // #1421: the calendar and the bookings come from the app's cached snapshot, so the section decodes
+        // the export ZERO times where it used to decode it once (and before #3852, four times).
+        #expect(body.contains("let cal = availability.calendar"))
+        #expect(body.contains("let bookings = availability.bookings"))
         #expect(body.contains("let cancelled = cancelledRows"))
-        // Counted rather than merely present: one read is the fix, and a second one added later beside it
-        // is the defect coming back in a form a `contains` check would not notice.
-        #expect(body.components(separatedBy: "DownbeatBridge.loadedExport()").count - 1 == 1,
-                "exactly one export read in the whole section")
+        #expect(!body.contains("DownbeatBridge.loadedExport()"), "the section decodes the export itself again")
+        #expect(!body.contains("blockedCalendar("), "the section builds its own calendar again")
     }
 
     // DEFECT 2. The "Booked shoots" heading counted the nights still blocked, and the section then drew
