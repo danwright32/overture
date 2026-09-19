@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1584 sentences**.
+Every sentence Overture can say to Dan: **1615 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -14,7 +14,7 @@ What is not, and why:
   sentences under tokens nobody reads.
 - **Nothing, if it is written as two literals joined with `+`.** Those ARE joined here, into the
   one sentence the running app says (#3155). What is still only part of what Dan reads is a
-  sentence carrying a VALUE: 571 of the 1584 below hold a
+  sentence carrying a VALUE: 590 of the 1615 below hold a
   `\(...)` where a number or a name goes, so what is printed is the template. They are counted
   here rather than listed again, because the hole is visible in the line itself; what was missing
   was any statement of how much of this document is templates.
@@ -140,8 +140,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
   - `Domain/VoiceGuidanceGuard.swift`
   - `Domain/VoiceNotesProtector.swift`
 - "Block these days"
+  - `Domain/DayOff.swift`
   - `UI/BlockDaysSheet.swift`
-  - `UI/DaysOffView.swift`
   - `UI/DaysOffView.swift`
 - "Carnegie Hall"
   - `Domain/WatchedSourceBackfill.swift`
@@ -545,6 +545,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/EventClassifier.swift`
 "Agent logged a problem: open agent logs"
     `App/MenuBarStatus.swift`
+"All \(total) nights"
+    `Domain/PrepSelectionCopy.swift`
 "All caught up"
     `Domain/PrepStatus.swift`
 "All of these are included. Uncheck any you would rather not prep in this run."
@@ -631,9 +633,14 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/ActionFeedback.swift`
 "Block days off"
     `UI/BlockDaysSheet.swift`
+"Block every \(WeeklyDayOffEditing.weekdayName(weekday) ?? "week")"
+    `Domain/DayOff.swift`
+"Block it again"
+    `UI/DaysOffView.swift`
 "Block some days"
     `Domain/DayOff.swift`
 "Block these days"
+    `Domain/DayOff.swift`
     `UI/BlockDaysSheet.swift`
     `UI/DaysOffView.swift`
 "Booked shoots"
@@ -896,6 +903,14 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/PostEventPrompt.swift`
 "Event passed, they replied, say how it ended"
     `Domain/PostEventPrompt.swift`
+"Every \(day)"
+    `Domain/WeeklyDayOff.swift`
+"Every \(day) from \(first)"
+    `Domain/WeeklyDayOff.swift`
+"Every \(day) until \(last)"
+    `Domain/WeeklyDayOff.swift`
+"Every \(day), \(first) to \(last)"
+    `Domain/WeeklyDayOff.swift`
 "Every client tagged in your Shoots calendar is in Downbeat, covered by a watched source, or set aside below."
     `Domain/ClientCoverage.swift`
 "Every one is a one-off hunt, so none of them share an answer."
@@ -910,6 +925,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/RootView.swift`
 "Every show here is already in the \(runNoun) that is running. Wait for it to finish and try again."
     `Integration/PrepQueueService.swift`
+"Every week"
+    `UI/DaysOffView.swift`
 "Everyone found here is on the show without running it: a co-performer, a music director or a guest. Nobody with a say over the booking was found. The listing's credits are usually where the producer is named, and you can add them by hand."
     `Domain/Reachability.swift`
 "Everything found here represents them rather than runs the show: a manager, an agent, a publicist or a booking agency. That may still get you an answer, but nobody who owns the show was found. The listing's credits are usually where the producer is named."
@@ -957,6 +974,12 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/InquiryCopy.swift`
 "Found the people, no way to reach any of them"
     `Domain/EmptyAnswerReport.swift`
+"Free on \(EasternDate.dayLabel(date) ?? date)"
+    `Domain/WeeklyDayOff.swift`
+"Free one date"
+    `Domain/WeeklyDayOff.swift`
+"Free this date"
+    `UI/DaysOffView.swift`
 "Freshly found events waiting for you to keep or dismiss."
     `Domain/AgentRoster.swift`
 "From Downbeat"
@@ -1146,6 +1169,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/ProspectRowFactory.swift`
 "Learning from \(org)'s email again"
     `App/ActionFeedback.swift`
+"Left out of this run because its nights changed while the sheet was open: "
+    `Domain/PrepSelectionCopy.swift`
 "Left out of your last contact check: a prep run was already working on this one."
     `UI/QueueView+Model.swift`
 "Left out of your last prep run: a contact check was already working on this one."
@@ -1313,6 +1338,10 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/DaysOffAttention.swift`
 "No new shows landed in the queue from that page."
     `UI/LeadIntakeModel.swift`
+"No night is ticked, so this show stays out of this run. To dismiss it, use Dismiss on its card."
+    `Domain/PrepSelectionCopy.swift`
+"No nights"
+    `Domain/PrepSelectionCopy.swift`
 "No one to follow up with"
     `UI/QueueView.swift`
 "No outcomes yet. Once you've sent and recorded results, booking and response rates show up here."
@@ -1672,6 +1701,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/OmniFocusSync.swift`
 "Overture needs OmniFocus permission"
     `Integration/OmniFocusUserNotifier.swift`
+"Overture never recorded which nights this run plays, so it is prepped for the whole run."
+    `Domain/PrepSelectionCopy.swift`
 "Overture only links a conversation to a pitch that has actually gone out. Nothing has been sent to this contact yet."
     `Domain/AttachConversation.swift`
 "Overture opened with \(live) \(live == 1 ? "show" : "shows"). Its most recent backup holds \(previous). Nothing has been changed. If that drop is a surprise, quit Overture and restore a backup before working: every launch takes another backup, and only the last ten are kept."
@@ -1724,8 +1755,12 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/ReachedOutRowChrome.swift`
 "Performs today, too close to book"
     `UI/QueueView+Model.swift`
+"Pick a day of the week."
+    `Domain/WeeklyDayOff.swift`
 "Pick two different styles to compare."
     `UI/ExperimentReportView.swift`
+"Pitch \(EasternDate.dayLabel(night) ?? night) after all"
+    `Domain/DraftReviewNotes.swift`
 "Pitch copied for \(org)"
     `App/ActionFeedback.swift`
 "Pitching other shows that night"
@@ -1752,6 +1787,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/PrepLaunchCopy.swift`
 "Prep anyway"
     `Domain/PrepLaunchCopy.swift`
+"Prep did not start: the nights you chose could not be saved. \(underlying)"
+    `Domain/PrepNightCommitting.swift`
 "Prep kept"
     `App/RootView.swift`
 "Prep manually"
@@ -2123,6 +2160,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/Reachability.swift`
 "Some changed calendars couldn't be read this run."
     `Domain/ScoutWarnings.swift`
+"Some days"
+    `UI/DaysOffView.swift`
 "Some of your shows may be missing"
     `App/StoreShrinkCheck.swift`
 "Some results came back under an unknown source and were ignored this run."
@@ -2445,6 +2484,10 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/BuildFreshnessPanel.swift`
 "This copy was built from unmerged code"
     `Domain/BuildFreshnessPanel.swift`
+"This draft leaves out a night you're pitching. You're pitching \(show)."
+    `Domain/EventDateInDraft.swift`
+"This draft says \(named), a night you left out of this pitch. It won't send until the draft drops it or you pitch that night after all."
+    `Domain/EventDateInDraft.swift`
 "This draft says \(named). The show is \(show)."
     `Domain/EventDateInDraft.swift`
 "This draft won't send: \(what.isEmpty ? "a blocking issue" : what)."
@@ -2635,6 +2678,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/VenueParser.swift`
 "Weak contact only"
     `Domain/Reachability.swift`
+"Week of \(EasternDate.dayLabel(start) ?? start)"
+    `Domain/PrepSelectionCopy.swift`
 "Weill Recital Hall"
     `Domain/VenueParser.swift`
 "Went by"
@@ -2656,6 +2701,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/RootView.swift`
 "Who this goes to"
     `UI/SendConfirmSheet.swift`
+"Why (optional): rehearsal, class, anything"
+    `UI/WeeklyDayOffFields.swift`
 "Why (optional): vacation, family, anything"
     `UI/DayOffRangeFields.swift`
 "Why lost? (optional note)"
@@ -2780,6 +2827,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/InquiryCopy.swift`
 "You've said none of the messages Overture found are them. It'll keep looking while this pitch is open."
     `Domain/ProposedConversation.swift`
+"Your Downbeat calendar could not be read, so no night here is checked against it."
+    `Domain/PrepSelectionCopy.swift`
 "Your Downbeat client export is \(days) days old, so a client booked since then may be missing from this list."
     `Domain/ClientCoverage.swift`
 "Your Downbeat client export is \(days) days old. Recently booked clients may be missing, so some warm leads could look cold. Open Downbeat to refresh it."
@@ -2824,6 +2873,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ReachedOutQueue.swift`
 "\(Discipline.other.label). Set it."
     `UI/QueueView+Model.swift`
+"\(EasternDate.dayLabel(night) ?? night) is no longer a night of this run, so it could not be pitched."
+    `Domain/DraftReviewNotes.swift`
 "\(Plural.count(count, "new lead")) while you were away"
     `UI/QueueView+Model.swift`
 "\(Plural.count(count, "reply", "replies")) waiting on your answer"
@@ -2940,6 +2991,12 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/Reachability.swift`
 "\(dates), \(shows)"
     `Domain/ProbeSelection.swift`
+"\(day) isn't one of the \(weekdayName)s this blocks."
+    `Domain/WeeklyDayOff.swift`
+"\(day.reason(scope: .thisNight)) You cleared this on the card."
+    `Domain/PrepSelectionCopy.swift`
+"\(day.reason(scope: .thisNight)) You pitched it anyway last time."
+    `Domain/PrepSelectionCopy.swift`
 "\(deferredCount) venues are still waiting to be checked."
     `UI/ScoutSummaryView.swift`
 "\(denied) web calls"
@@ -2978,6 +3035,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/OmniFocusSync.swift`
 "\(first) and \(rest) other\(rest == 1 ? "" : "s")"
     `Domain/SelfBookingConflict.swift`
+"\(first) to \(last)"
+    `Domain/EventDateInDraft.swift`
 "\(first), \(names[1]) and \(names.count - 2) more"
     `Domain/OmniFocusSync.swift`
 "\(found) times"
@@ -3209,6 +3268,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/QueueView+Model.swift`
 "\(shortMonth(calendar.component(.month, from: d))) \(calendar.component(.day, from: d))"
     `Domain/EasternDate.swift`
+"\(shortWeekday(calendar.component(.weekday, from: d))) \(label)"
+    `Domain/EasternDate.swift`
 "\(show) is on a date you already have a pitch in progress for \(others)."
     `Domain/SelfBookingConflict.swift`
 "\(show) plays \(label), when you already have a pitch in progress for \(others)."
@@ -3253,6 +3314,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/SourceYield.swift`
 "\(tally.replied + tally.booked) replied"
     `Domain/OutcomePatterns.swift`
+"\(ticked) of \(Plural.count(total, "night"))"
+    `Domain/PrepSelectionCopy.swift`
 "\(titleRejected) of \(total) shows had no title, so Overture won't mark anything from this source as gone until it can read its pages again."
     `Domain/SourceReadability.swift`
 "\(titleRejected) of \(total) shows had no title."
