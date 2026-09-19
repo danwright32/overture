@@ -214,6 +214,34 @@ enum AppNotices {
             action: .recheckDownbeatExport)
     }
 
+    // #1899: Downbeat and the Shoots calendar name a room two ways that fold apart, so the room's history
+    // is split and a pitch there counts only part of it. A warning, because what it costs is invisible by
+    // construction: a pitch that under-reports looks exactly like one that is right.
+    //
+    // One line however many rooms, with every pair in the help, for the reason `couldNotRead` gives: a line
+    // per room would be the surface that gets ignored. The remedy names what Dan can change himself, the
+    // name Downbeat uses, and the re-read is the one the other Downbeat lines offer, which also re-runs
+    // this check.
+    static func venueHistorySplit(_ splits: [VenueKeySplit.Split]) -> AppNotice? {
+        guard let first = splits.first else { return nil }
+        let pairs = splits.map { split -> String in
+            let night = EasternDate.date(from: split.date).map { EasternDate.dayLabelWithYear($0) } ?? split.date
+            return "Downbeat: \(VenueKeySplit.displayName(split.downbeatVenue)). "
+                + "Calendar: \(VenueKeySplit.displayName(split.calendarVenue)). Both on \(night)."
+        }.joined(separator: "\n")
+        let text = splits.count == 1
+            ? "Downbeat calls a room \"\(VenueKeySplit.displayName(first.downbeatVenue))\" that your Shoots calendar calls \"\(VenueKeySplit.displayName(first.calendarVenue))\", so a pitch there counts only some of the times you've shot it."
+            : "Downbeat and your Shoots calendar name \(splits.count) rooms differently, so a pitch at any of them counts only some of the times you've shot it."
+        return AppNotice(
+            text: text,
+            tone: .warning,
+            help: "Each name has a shoot on the same night, one in Downbeat and one on your calendar, which "
+                + "is how Overture knows they are one room. Use the calendar's name for it in Downbeat, "
+                + "re-export, then re-read it here.\n"
+                + pairs,
+            action: .recheckDownbeatExport)
+    }
+
     // #1900: the shoot history file is missing, unreadable, or months past its window.
     //
     // The verdict has existed since #1895 and reached nobody: `VenueShootHistory.current()` took the
@@ -386,6 +414,8 @@ enum AppNotices {
                         // #2495: the export's client list emptied from a remembered roster.
                         clientsEmptied: DownbeatBookingFeed.RosterEmptied? = nil,
                         shootHistory: ShootHistory.Health? = nil,
+                        // #1899: rooms Downbeat and the Shoots calendar name two ways that fold apart.
+                        venueSplits: [VenueKeySplit.Split] = [],
                         unreadableFiles: [HandoffReadFailures.Failure] = [],
                         // #2888: endpoints whose bodies Overture cannot read. Only the FAILING ones,
                         // which the register decides, so this list is never a per-response warning.
@@ -417,6 +447,7 @@ enum AppNotices {
         if let notice = responsesNotUnderstood(failingResponses) { notices.append(notice) }
         if let notice = pitchesBounced(bouncedPitches) { notices.append(notice) }
         if let shootHistory, let notice = shootHistoryWarning(shootHistory) { notices.append(notice) }
+        if let notice = venueHistorySplit(venueSplits) { notices.append(notice) }
         if let text = status.text {
             notices.append(AppNotice(text: text,
                                      tone: status.priority == .warning ? .warning : .receipt,
