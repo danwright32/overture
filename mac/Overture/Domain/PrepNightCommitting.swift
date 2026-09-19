@@ -35,11 +35,17 @@ enum PrepNightCommitting {
                       save: (ModelContext) throws -> Void = { try $0.save() }) throws -> Outcome {
         var launching: [Prospect] = []
         var leftOut: [String] = []
+        // What each written row held before, so a save that fails can put the rows back by hand. A context
+        // rollback was measured NOT to restore these lists on an already saved row, which would leave
+        // decisions in memory that the store never recorded, read by everything until the next relaunch.
+        var before: [(Prospect, NightDecisionLists)] = []
         for key in choice.keys.sorted() {
             guard let p = try Prospect.stored(key: key, in: context) else { continue }
             if let commit = choice.commits[key] {
                 do {
+                    let prior = NightDecisionLists(p)
                     try p.recordNightDecisions(pitched: commit.pitched, skipped: commit.skipped)
+                    before.append((p, prior))
                 } catch is Prospect.NightDecisionRefusal {
                     leftOut.append(p.groupName)
                     continue
@@ -50,7 +56,7 @@ enum PrepNightCommitting {
         do {
             try save(context)
         } catch {
-            context.rollback()
+            for (p, prior) in before { p.restoreNightDecisions(prior) }
             throw SaveFailed(underlying: error.localizedDescription)
         }
         return Outcome(launchKeys: Set(launching.map(\.naturalKey)), leftOut: leftOut)

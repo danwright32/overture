@@ -1774,7 +1774,8 @@ struct RootView: View {
     private func openPrepSelection() {
         availability.rebuildNow()
         prepNightPlan = PrepNightPlan.build(prospects: toPrep, calendar: availability.calendar,
-                                            availability: availability.readability)
+                                            availability: availability.readability,
+                                            today: QueueModel.easternToday())
         showPrepSelection = true
     }
 

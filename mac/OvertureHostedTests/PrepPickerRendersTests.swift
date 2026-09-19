@@ -3,6 +3,7 @@ import Foundation
 import SwiftData
 import SwiftUI
 import AppKit
+@testable import Overture
 
 // #3325, plan 3.3: the Prep picker at the real count, looked at rather than assumed (L606).
 //
@@ -20,7 +21,7 @@ import AppKit
 @Suite("The Prep picker at 28 nights and at 2 (#3325)")
 struct PrepPickerRendersTests {
 
-    private static var shotsDirectory: String? {
+    nonisolated private static var shotsDirectory: String? {
         guard let dir = ProcessInfo.processInfo.environment["OVERTURE_PICKER_SHOTS"], !dir.isEmpty else { return nil }
         return dir
     }
@@ -101,7 +102,7 @@ struct PrepPickerRendersTests {
         let run = prospect(ctx, name: "The Lineup Revue", venue: "The Green Room", nights: nights)
         let other = prospect(ctx, name: "Chamber Night", venue: "Weill Recital Hall", nights: ["2026-11-14"])
         let cal = calendar(blocking: blocked.map { nights[$0] })
-        let plan = PrepNightPlan.build(prospects: [run, other], calendar: cal, availability: .measured)
+        let plan = PrepNightPlan.build(prospects: [run, other], calendar: cal, availability: .measured, today: "2026-09-01")
         let view = PrepSelectionSheet(prospects: [run, other], plan: plan,
                                       now: { Date(timeIntervalSince1970: 1_790_000_000) }, onRun: { _ in })
         return (view, [run, other])

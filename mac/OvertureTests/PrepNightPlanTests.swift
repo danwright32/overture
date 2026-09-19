@@ -49,7 +49,7 @@ struct PrepNightPlanTests {
     @Test func blockedNightsStartUntickedNamedAndTheRunOpens() throws {
         let ctx = ModelContext(try container())
         let p = run(ctx)
-        let plan = PrepNightPlan.build(prospects: [p], calendar: calendar, availability: .measured)
+        let plan = PrepNightPlan.build(prospects: [p], calendar: calendar, availability: .measured, today: "2026-09-01")
         let n = try nights(plan, p)
         #expect(n.map(\.date) == Self.nights)
         #expect(n.map(\.defaultTicked) == [true, false, true, false])
@@ -61,7 +61,7 @@ struct PrepNightPlanTests {
     @Test func aCleanRunStaysClosedWithEveryNightTicked() throws {
         let ctx = ModelContext(try container())
         let p = run(ctx, nights: ["2026-12-04", "2026-12-11"])
-        let plan = PrepNightPlan.build(prospects: [p], calendar: calendar, availability: .measured)
+        let plan = PrepNightPlan.build(prospects: [p], calendar: calendar, availability: .measured, today: "2026-09-01")
         #expect(try nights(plan, p).allSatisfy(\.defaultTicked))
         #expect(plan.runs[p.naturalKey]?.opensByDefault == false)
     }
@@ -73,7 +73,7 @@ struct PrepNightPlanTests {
         let gala = try #require(calendar.blockedNights(.recorded(["2026-11-13"])).first)
         p.setScoutConflict(gala.key)
         p.clearConflict()
-        let plan = PrepNightPlan.build(prospects: [p], calendar: calendar, availability: .measured)
+        let plan = PrepNightPlan.build(prospects: [p], calendar: calendar, availability: .measured, today: "2026-09-01")
         let n = try nights(plan, p)
         guard case .waived = n[1].clash else { Issue.record("the cleared clash was raised again"); return }
         #expect(n[1].defaultTicked)
@@ -90,7 +90,7 @@ struct PrepNightPlanTests {
                                              NightDecision(night: "2026-11-13", at: now, origin: .chosen,
                                                            acceptedClashKey: gala.key)],
                                    skipped: [])
-        let same = PrepNightPlan.build(prospects: [p], calendar: calendar, availability: .measured)
+        let same = PrepNightPlan.build(prospects: [p], calendar: calendar, availability: .measured, today: "2026-09-01")
         guard case .accepted = try nights(same, p)[1].clash else { Issue.record("not read as accepted"); return }
         #expect(try nights(same, p)[1].defaultTicked)
 
@@ -99,7 +99,7 @@ struct PrepNightPlanTests {
                                                                      startDate: "2026-11-13", endDate: "2026-11-13",
                                                                      venueId: nil, venueName: "Hall")],
                                           exportedBlockedDates: [], daysOff: [])
-        let changed = PrepNightPlan.build(prospects: [p], calendar: other, availability: .measured)
+        let changed = PrepNightPlan.build(prospects: [p], calendar: other, availability: .measured, today: "2026-09-01")
         guard case .blocked = try nights(changed, p)[1].clash else {
             Issue.record("a different shoot on an accepted night did not block it again"); return
         }
@@ -111,7 +111,7 @@ struct PrepNightPlanTests {
         let p = run(ctx, nights: ["2026-12-04", "2026-12-11"])
         try p.recordNightDecisions(pitched: [NightDecision(night: "2026-12-04", at: now, origin: .chosen)],
                                    skipped: [NightDecision(night: "2026-12-11", at: now, origin: .chosen)])
-        let plan = PrepNightPlan.build(prospects: [p], calendar: calendar, availability: .measured)
+        let plan = PrepNightPlan.build(prospects: [p], calendar: calendar, availability: .measured, today: "2026-09-01")
         #expect(try nights(plan, p).map(\.defaultTicked) == [true, false])
     }
 
@@ -119,10 +119,10 @@ struct PrepNightPlanTests {
     @Test func anUnreadableCalendarIsItsOwnStateAndMarksNoNight() throws {
         let ctx = ModelContext(try container())
         let p = run(ctx)
-        let plan = PrepNightPlan.build(prospects: [p], calendar: calendar, availability: .unknown)
+        let plan = PrepNightPlan.build(prospects: [p], calendar: calendar, availability: .unknown, today: "2026-09-01")
         #expect(plan.calendar == .couldNotRead)
         #expect(try nights(plan, p).allSatisfy { $0.clash == .clear })
-        let read = PrepNightPlan.build(prospects: [p], calendar: calendar, availability: .measured)
+        let read = PrepNightPlan.build(prospects: [p], calendar: calendar, availability: .measured, today: "2026-09-01")
         #expect(read.calendar == .read)
     }
 
@@ -134,7 +134,7 @@ struct PrepNightPlanTests {
         span.runEndDate = "2026-10-12"
         let single = run(ctx, name: "Single", nights: ["2026-10-20"])
         let doubled = run(ctx, name: "Doubled", nights: ["2026-12-04", "2026-12-04", "2026-12-11", "2026-12-11"])
-        let plan = PrepNightPlan.build(prospects: [span, single, doubled], calendar: .empty, availability: .measured)
+        let plan = PrepNightPlan.build(prospects: [span, single, doubled], calendar: .empty, availability: .measured, today: "2026-09-01")
         #expect(plan.runs[span.naturalKey]?.nights == .notRecorded)
         #expect(plan.runs[single.naturalKey]?.nights == .single)
         #expect(try nights(plan, doubled).map(\.date) == ["2026-12-04", "2026-12-11"])
@@ -145,7 +145,7 @@ struct PrepNightPlanTests {
     @Test func theCommitRecordsHowItWasMadeAndWhichClashWasAccepted() throws {
         let ctx = ModelContext(try container())
         let p = run(ctx)
-        let plan = PrepNightPlan.build(prospects: [p], calendar: calendar, availability: .measured)
+        let plan = PrepNightPlan.build(prospects: [p], calendar: calendar, availability: .measured, today: "2026-09-01")
         let gala = try #require(calendar.blockedNights(.recorded(["2026-11-13"])).first)
         let opened = try #require(plan.commit(key: p.naturalKey, ticked: ["2026-11-06", "2026-11-13"],
                                               opened: true, now: now))
@@ -163,12 +163,25 @@ struct PrepNightPlanTests {
     @Test func theConfirmAsksOnlyAboutTickedNightsTheCalendarBlocks() throws {
         let ctx = ModelContext(try container())
         let p = run(ctx)
-        let plan = PrepNightPlan.build(prospects: [p], calendar: calendar, availability: .measured)
+        let plan = PrepNightPlan.build(prospects: [p], calendar: calendar, availability: .measured, today: "2026-09-01")
         let none = plan.calendarClashes(forKeys: [p.naturalKey], ticks: [p.naturalKey: ["2026-11-06"]], among: [])
         #expect(none.isEmpty)
         let one = plan.calendarClashes(forKeys: [p.naturalKey],
                                        ticks: [p.naturalKey: ["2026-11-06", "2026-11-13"]], among: [])
         #expect(one.map(\.note) == ["You're already shooting Gala on Nov 13."])
+    }
+
+    // #3312: chronology wins over a tick. A night already behind us is not offered, so the picker can never
+    // record a choice the drafter would then be told to overrule.
+    @Test func aNightAlreadyPastIsNotOffered() throws {
+        let ctx = ModelContext(try container())
+        let p = run(ctx)
+        let plan = PrepNightPlan.build(prospects: [p], calendar: .empty, availability: .measured,
+                                       today: "2026-11-14")
+        #expect(try nights(plan, p).map(\.date) == ["2026-11-20", "2026-11-27"])
+        let last = PrepNightPlan.build(prospects: [p], calendar: .empty, availability: .measured,
+                                       today: "2026-11-21")
+        #expect(last.runs[p.naturalKey]?.nights == .single, "one night left is the row's own checkbox")
     }
 
     // MARK: the commit against the store (plan 3.6)
@@ -177,7 +190,7 @@ struct PrepNightPlanTests {
         let ctx = ModelContext(try container())
         let p = run(ctx)
         try ctx.save()
-        let plan = PrepNightPlan.build(prospects: [p], calendar: calendar, availability: .measured)
+        let plan = PrepNightPlan.build(prospects: [p], calendar: calendar, availability: .measured, today: "2026-09-01")
         let commit = try #require(plan.commit(key: p.naturalKey, ticked: ["2026-11-06", "2026-11-20"],
                                               opened: true, now: now))
         let outcome = try PrepNightCommitting.apply(
@@ -195,7 +208,7 @@ struct PrepNightPlanTests {
         let moved = run(ctx, name: "Moved")
         let fine = run(ctx, name: "Fine", nights: ["2026-12-04", "2026-12-11"])
         try ctx.save()
-        let plan = PrepNightPlan.build(prospects: [moved, fine], calendar: .empty, availability: .measured)
+        let plan = PrepNightPlan.build(prospects: [moved, fine], calendar: .empty, availability: .measured, today: "2026-09-01")
         let c1 = try #require(plan.commit(key: moved.naturalKey, ticked: Set(Self.nights), opened: false, now: now))
         let c2 = try #require(plan.commit(key: fine.naturalKey, ticked: ["2026-12-04"], opened: true, now: now))
         moved.runNights = Array(Self.nights.dropLast())   // the 27th left the feed after the sheet opened
@@ -214,7 +227,7 @@ struct PrepNightPlanTests {
         let ctx = ModelContext(try container())
         let p = run(ctx)
         try ctx.save()
-        let plan = PrepNightPlan.build(prospects: [p], calendar: .empty, availability: .measured)
+        let plan = PrepNightPlan.build(prospects: [p], calendar: .empty, availability: .measured, today: "2026-09-01")
         let commit = try #require(plan.commit(key: p.naturalKey, ticked: Set(Self.nights), opened: false, now: now))
         #expect(throws: PrepNightCommitting.SaveFailed.self) {
             try PrepNightCommitting.apply(PrepSelectionSheet.Choice(keys: [p.naturalKey],

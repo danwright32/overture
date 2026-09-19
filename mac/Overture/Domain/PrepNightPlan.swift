@@ -81,26 +81,31 @@ struct PrepNightPlan: Equatable {
 
     static let empty = PrepNightPlan(calendar: .read, runs: [:])
 
+    // #3312: `today` is REQUIRED (L168). A night already behind us is never offered: the drafter is told
+    // to leave a passed night out (`PrepQueueItem.openingNightPassed`), so offering it here would be a
+    // choice the next step overrules, which is worse than not offering it. Chronology wins over a tick,
+    // and the kept nights sent to the drafter come from the same `upcoming` filter (`KeptNights`).
     @MainActor
     static func build(prospects: [Prospect], calendar: BlockedCalendar,
-                      availability: BlockedCalendar.Availability) -> PrepNightPlan {
+                      availability: BlockedCalendar.Availability, today: String) -> PrepNightPlan {
         let read: CalendarRead = availability == .measured ? .read : .couldNotRead
         var runs: [String: Run] = [:]
         for p in prospects {
-            runs[p.naturalKey] = run(for: p, calendar: calendar, read: read)
+            runs[p.naturalKey] = run(for: p, calendar: calendar, read: read, today: today)
         }
         return PrepNightPlan(calendar: read, runs: runs)
     }
 
     @MainActor
-    static func run(for p: Prospect, calendar: BlockedCalendar, read: CalendarRead) -> Run {
+    static func run(for p: Prospect, calendar: BlockedCalendar, read: CalendarRead, today: String) -> Run {
         let playing = p.playingNights
         let nights: [String]
         switch playing {
         case .undated: return Run(key: p.naturalKey, groupName: p.groupName, nights: .single, opensByDefault: false)
         case .spanOnly:
             return Run(key: p.naturalKey, groupName: p.groupName, nights: .notRecorded, opensByDefault: false)
-        case .recorded(let recorded):
+        case .recorded(let all):
+            let recorded = all.filter { $0 >= today }
             guard recorded.count > 1 else {
                 return Run(key: p.naturalKey, groupName: p.groupName, nights: .single, opensByDefault: false)
             }

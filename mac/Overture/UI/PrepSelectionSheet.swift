@@ -213,11 +213,15 @@ struct PrepSelectionSheet: View {
             DisclosureGroup(isExpanded: expandedBinding(for: row.id)) {
                 // Built INSIDE the disclosure's closure (plan 3.1): the sheet is not a lazy container,
                 // so nights built outside would be constructed for every run whether or not it is open.
+                let weeks = PrepSelectionCopy.weeks(nights.map(\.date))
                 VStack(alignment: .leading, spacing: 2) {
-                    ForEach(PrepSelectionCopy.weeks(nights.map(\.date)), id: \.label) { week in
-                        Text(week.label)
-                            .font(.system(size: 11, weight: .semibold)).foregroundStyle(OVColor.inkFaint)
-                            .padding(.top, 4)
+                    ForEach(weeks, id: \.label) { week in
+                        // A run inside one week needs no week heading: its nights already say which days.
+                        if weeks.count > 1 {
+                            Text(week.label)
+                                .font(.system(size: 11, weight: .semibold)).foregroundStyle(OVColor.inkFaint)
+                                .padding(.top, 4)
+                        }
                         ForEach(nights.filter { week.nights.contains($0.date) }) { night in
                             nightRow(night, run: row.id)
                         }
