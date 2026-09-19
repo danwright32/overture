@@ -20,6 +20,9 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MUTATE="${HERE}/mutate.sh"
 WORK="$(fixture_scratch_dir)"
 trap 'rm -rf "${WORK}"' EXIT
+# #3984: every run below gets a log of its own, and they land here rather than in the real directory under
+# /tmp, so this fixture's runs neither litter it nor count toward anybody else's (L2).
+export OVERTURE_MUTATE_LOG_DIR="${WORK}/mutate-logs"
 
 SUBJECT="${WORK}/Subject.swift"
 write_subject() { printf 'struct Subject {\n    static let answer = "yes"\n}\n' > "${SUBJECT}"; }
@@ -691,6 +694,77 @@ assert_equals "and the file is untouched" "${BEFORE}" "$(cat "${REPO_SUBJECT}")"
 OUT="$(OVERTURE_MUTATE_ALLOW_DIRTY=1 OVERTURE_MUTATE_RUNNER="${RED_RUNNER}" "${MUTATE}" "${REPO_SUBJECT}" 's/"maybe"/"no"/' 2>&1)"
 assert_contains "the override lets it through" "${OUT}" "CAUGHT"
 assert_contains "and says it was used" "${OUT}" "OVERTURE_MUTATE_ALLOW_DIRTY"
+
+# --- #3984: two mutations going at once each judge their OWN run ------------------------------------
+#
+# The log used to be one fixed path, and every verdict is read back out of it, so two lanes mutating at
+# once judged whichever run wrote last. Measured 2026-09-18: a run reported CAUGHT from a log naming
+# another lane's failing test. The interleaving is forced with marker files rather than raced (L134):
+# ALPHA's runner starts, waits for BETA's to have finished, and only then prints, so BETA's whole run
+# happens inside ALPHA's. Every wait is bounded, so a broken handshake fails rather than hangs (L110).
+make_handshake_runner() {
+  local name="$1" test_name="$2" wait_for="$3" signal="$4" path="${WORK}/runner-hs-$1.sh"
+  {
+    echo '#!/usr/bin/env bash'
+    echo ": > '${WORK}/${name}-started'"
+    if [[ -n "${wait_for}" ]]; then
+      echo "for _ in \$(seq 1 200); do [ -e '${WORK}/${wait_for}' ] && break; sleep 0.05; done"
+    fi
+    echo "printf '%s Test \"%s\" failed after 0.01 seconds with 1 issue.\n' '${X}' '${test_name}'"
+    echo "printf '%s Test run with 12 tests in 2 suites failed after 0.1 seconds with 1 issue.\n' '${X}'"
+    [[ -n "${signal}" ]] && echo ": > '${WORK}/${signal}'"
+    echo 'exit 1'
+  } > "${path}"
+  chmod +x "${path}"
+  echo "${path}"
+}
+await_marker() {
+  local marker="$1"
+  for _ in $(seq 1 200); do [[ -e "${WORK}/${marker}" ]] && return 0; sleep 0.05; done
+  return 1
+}
+SUBJECT_A="${WORK}/Alpha.swift"; SUBJECT_B="${WORK}/Beta.swift"
+run_the_pair() {
+  rm -f "${WORK}"/alpha-started "${WORK}"/beta-started "${WORK}/beta-done"
+  printf 'let answer = "yes"\n' > "${SUBJECT_A}"
+  printf 'let answer = "yes"\n' > "${SUBJECT_B}"
+  local alpha_runner beta_runner alpha_pid
+  alpha_runner="$(make_handshake_runner alpha "the alpha guard" beta-done "")"
+  beta_runner="$(make_handshake_runner beta "the beta guard" "" beta-done)"
+  OVERTURE_MUTATE_RUNNER="${alpha_runner}" "${MUTATE}" "${SUBJECT_A}" 's/"yes"/"no"/' \
+    > "${WORK}/alpha.out" 2>&1 &
+  alpha_pid=$!
+  await_marker alpha-started || fail "the alpha run never started, so the pair measured nothing"
+  OVERTURE_MUTATE_RUNNER="${beta_runner}" "${MUTATE}" "${SUBJECT_B}" 's/"yes"/"no"/' \
+    > "${WORK}/beta.out" 2>&1
+  wait "${alpha_pid}"
+}
+
+# By default: each run has a file of its own, so each verdict names its own test and only its own.
+run_the_pair
+ALPHA_OUT="$(cat "${WORK}/alpha.out")"; BETA_OUT="$(cat "${WORK}/beta.out")"
+assert_contains "the slower of two concurrent runs is judged on its own test" "${ALPHA_OUT}" "the alpha guard"
+assert_not_contains "and never reports the other run's failure as its own" "${ALPHA_OUT}" "the beta guard"
+assert_contains "the faster one is judged on its own test" "${BETA_OUT}" "the beta guard"
+assert_not_contains "and never on the slower one's" "${BETA_OUT}" "the alpha guard"
+ALPHA_LOG="$(printf '%s\n' "${ALPHA_OUT}" | sed -n 's/.*full log: //p' | tail -1)"
+BETA_LOG="$(printf '%s\n' "${BETA_OUT}" | sed -n 's/.*full log: //p' | tail -1)"
+assert_equals "and the two runs name two different logs" "1" \
+  "$([[ -n "${ALPHA_LOG}" && "${ALPHA_LOG}" != "${BETA_LOG}" ]] && echo 1 || echo 0)"
+assert_contains "in the directory the fixture pointed them at" "${ALPHA_LOG}" "${WORK}/mutate-logs/"
+
+# And when somebody DOES give both runs one log by hand, the run whose log was taken over refuses rather
+# than reading the other's output as its verdict, which is the shape of the 2026-09-18 incident exactly.
+SHARED_LOG="${WORK}/shared.log"
+export OVERTURE_MUTATE_LOG="${SHARED_LOG}"
+run_the_pair
+unset OVERTURE_MUTATE_LOG
+ALPHA_OUT="$(cat "${WORK}/alpha.out")"; BETA_OUT="$(cat "${WORK}/beta.out")"
+assert_contains "a run whose shared log was overwritten refuses" "${ALPHA_OUT}" "LOG OVERWRITTEN"
+ALPHA_VERDICT="$(grep -E '^(CAUGHT|SURVIVED|NOTHING RAN|NOT PROOF|LOG OVERWRITTEN)' <<< "${ALPHA_OUT}" | head -1)"
+assert_equals "and reports no verdict about the other run" \
+  "LOG OVERWRITTEN - another run wrote to ${SHARED_LOG} while this one was running." "${ALPHA_VERDICT}"
+assert_contains "while the run that owns the log is judged normally" "${BETA_OUT}" "CAUGHT"
 
 if [[ "${FAILURES:-0}" -ne 0 ]]; then
   echo "${FAILURES} failure(s)"
