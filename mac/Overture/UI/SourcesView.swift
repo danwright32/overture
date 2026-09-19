@@ -71,6 +71,12 @@ struct SourcesView: View {
     // It is recomputed by the .onChange below ONLY when ClientCoverage.signature changes (a source name /
     // tag, the client list, or the dismissed set), never on an unrelated redraw.
     @State private var coverageResult = ClientCoverage.Result.empty
+    // #1424: the clients in Dan's Shoots calendar Overture does not know, beside the Downbeat check. The
+    // shoots are read once when the sheet opens (a file, not a query) and the result is recomputed on the
+    // same gate as the Downbeat list, since it reads the same sources, clients and set asides.
+    @State private var calendarShoots: [ShootRecord] = []
+    @State private var calendarResult = CalendarClientCoverage.Result.empty
+    @State private var showSetAsideCalendarClients = false
 
     // #1429: every source's lifetime tally, computed in ONE pass over prospects and CACHED, the same
     // signature-then-recompute pattern #1356/#1374 used for the coverage list on this very sheet. The old
@@ -248,6 +254,9 @@ struct SourcesView: View {
                             // field brings it straight back without recomputing anything.
                             if !data.isSearching {
                                 coverageSection
+                                // #1424: the calendar's clients Downbeat does not list, directly under the
+                                // Downbeat check it complements. Absent when there is nothing to say.
+                                calendarClientsSection
                                 // #1752: the rooms no table can place, each with what is waiting on it and
                                 // somewhere to answer. Hidden while searching for the same reason the
                                 // coverage list is: it is a fact about the whole queue, not a search result.
@@ -304,6 +313,11 @@ struct SourcesView: View {
             // list once on load, which is what the "Always" override submenu below relies on so it does
             // not re-sort every time a row's menu is built (#1429).
             clientRoster?.reload()
+            // #1424: the imported shoot history. A missing or unreadable file yields no shoots here and
+            // is already said in the masthead (`AppNotices.shootHistoryWarning`), so this section simply
+            // has nothing to show rather than a second wording of the same fault.
+            calendarShoots = ShootHistory.loadWithHealth(now: Date()).shoots
+            recomputeCalendarClients()
         }
         // Recompute the cached coverage result AND the per-source returning-client flags ONLY when their
         // real inputs change. The signature is cheap to evaluate every redraw; the O(clients x sources)
@@ -315,6 +329,7 @@ struct SourcesView: View {
                   initial: true) {
             coverageResult = ClientCoverage.result(sources: sources, clients: clients,
                                                    dismissedIds: Set(dismissedCoverage.map(\.clientId)))
+            recomputeCalendarClients()
             // #3645: the flags and the window are ONE verdict, so they are decided by ONE fuzzy match and
             // the window is folded out of the map. Asking `ClientHorizon.clientSourceIds` here as well
             // would run the whole O(clients x sources) match a second time for an answer already in hand.
@@ -373,6 +388,92 @@ struct SourcesView: View {
                 }
             }
         }
+    }
+
+    private func recomputeCalendarClients() {
+        calendarResult = CalendarClientCoverage.result(shoots: calendarShoots, clients: clients,
+                                                       sources: sources,
+                                                       setAsideIds: Set(dismissedCoverage.map(\.clientId)))
+    }
+
+    // #1424: the real clients in the Shoots calendar that Downbeat does not list and no watched source
+    // treats as a returning client. All the deciding lives in `CalendarClientCoverage`; this renders it.
+    //
+    // Not shown while Downbeat's export is unavailable: "not in Downbeat" measured against a list that
+    // could not be read would flag every client in the calendar, and the Downbeat box above already says
+    // why nothing can be judged (L11).
+    @ViewBuilder
+    private var calendarClientsSection: some View {
+        let flagged = calendarResult.flagged
+        let setAside = calendarResult.setAside
+        if CoverageCopy.unavailable(clientsHealth) == nil, !flagged.isEmpty || !setAside.isEmpty {
+            VStack(alignment: .leading, spacing: OVSpacing.xs) {
+                HStack(spacing: OVSpacing.xxs) {
+                    Image(systemName: "calendar.badge.exclamationmark").font(.system(size: 11))
+                    Text(CoverageCopy.calendarSectionTitle).font(.system(size: 12, weight: .semibold))
+                }
+                .foregroundStyle(OVColor.ink)
+                Text(CoverageCopy.calendarExplanation(hasFlagged: !flagged.isEmpty))
+                    .font(.system(size: 11)).foregroundStyle(OVColor.inkSoft)
+                    .fixedSize(horizontal: false, vertical: true)
+                if !flagged.isEmpty {
+                    VStack(spacing: 0) {
+                        ForEach(flagged, id: \.key) { client in
+                            calendarClientRow(client)
+                            if client.key != flagged.last?.key { Divider().overlay(OVColor.line) }
+                        }
+                    }
+                    .background(OVColor.surface)
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
+                    .overlay(RoundedRectangle(cornerRadius: 6).stroke(OVColor.line))
+                }
+                if !setAside.isEmpty {
+                    DisclosureGroup(isExpanded: $showSetAsideCalendarClients) {
+                        VStack(spacing: 0) {
+                            ForEach(setAside, id: \.key) { client in
+                                HStack {
+                                    Text(client.name).font(.system(size: 11)).foregroundStyle(OVColor.inkSoft)
+                                    Spacer()
+                                    Button(CoverageCopy.restoreLabel) {
+                                        restoreCoverageClient(CalendarClientCoverage.setAsideKey(client))
+                                    }
+                                    .buttonStyle(.plain).font(.system(size: 11)).foregroundStyle(OVColor.forestText)
+                                }
+                                .padding(.vertical, OVSpacing.xxs)
+                            }
+                        }
+                    } label: {
+                        Text(CoverageCopy.ignoredDisclosure(count: setAside.count))
+                            .font(.system(size: 11)).foregroundStyle(OVColor.inkFaint)
+                    }
+                }
+            }
+        }
+    }
+
+    private func calendarClientRow(_ client: CalendarClient) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: OVSpacing.xs) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(client.name).font(.system(size: 12)).foregroundStyle(OVColor.ink)
+                Text(CoverageCopy.calendarShoots(count: client.shootCount, lastShoot: client.lastShoot))
+                    .font(.system(size: 11)).foregroundStyle(OVColor.inkSoft)
+                if let near = client.untaggedSourceName {
+                    Text(CoverageCopy.nearMiss(sourceName: near))
+                        .font(.system(size: 11)).foregroundStyle(OVColor.gold)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            Spacer()
+            Button(CoverageCopy.dismissLabel) {
+                let key = CalendarClientCoverage.setAsideKey(client)
+                CoverageDismissEditing.dismiss(clientId: key, into: context)
+                feedback.acknowledge(CoverageCopy.dismissedAck(name: client.name),
+                                     action: .init(label: "Undo") { restoreCoverageClient(key) })
+            }
+            .buttonStyle(.plain).font(.system(size: 11)).foregroundStyle(OVColor.inkSoft)
+        }
+        .padding(.vertical, OVSpacing.xs)
+        .padding(.horizontal, OVSpacing.sm)
     }
 
     // #1752: the rooms Overture could not place, as questions Dan can answer rather than as a statistic.

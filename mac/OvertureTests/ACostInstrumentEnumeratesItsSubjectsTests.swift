@@ -69,6 +69,10 @@ struct ACostInstrumentEnumeratesItsSubjectsTests {
         "SourcesSheetClose": "a struct init over four booleans of this view's own editing state, plus copy",
         "CoverageCopy": "copy, not a derivation",
         "CoverageDismissEditing": "reached only from a control's action closure, never from a redraw",
+        // #1424: the calendar clients box. Neither runs on a plain redraw: the body reads the CACHED
+        // `calendarResult`, exactly as it reads `coverageResult`.
+        "ShootHistory": "read once in the sheet's .task when it opens, a file read, never on a redraw",
+        "CalendarClientCoverage": "recomputed only in the .task and on the ClientCoverage.signature change gate, the body reads its cached result; the row closures call setAsideKey, a string join",
     ]
 
     // WHY THE LIST STOPS AT TWO SURFACES, which is #3849's own fourth question. `RootView` and
