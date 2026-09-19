@@ -129,7 +129,7 @@ struct LiveStoreCopyGuardTests {
         for name in ["OrgAnswerMigrationDryRunTests", "InquiryMigrationDryRunTests",
                      "JointSendMigrationDryRunTests", "ReplyAudienceMigrationDryRunTests",
                      "CatchAllFitReasonRetirementTests", "ContactFormReachabilityTests",
-                     "CancelledShootMigrationDryRunTests"] {
+                     "CancelledShootMigrationDryRunTests", "WeeklyDayOffMigrationDryRunTests"] {
             let url = Self.testsRoot.appendingPathComponent("\(name).swift")
             let text = try String(contentsOf: url, encoding: .utf8)
             #expect(text.contains("LiveStoreClone.makeClone(in:")

@@ -24,6 +24,8 @@ struct DaysOffView: View {
     @Environment(\.modelContext) private var context
     @Environment(ActionFeedback.self) private var feedback
     @Query(sort: \DayOff.startDate) private var daysOff: [DayOff]
+    // #3620: the weekly rules, listed as the rules they are, one row each, never as their Wednesdays.
+    @Query(sort: \WeeklyDayOff.createdAt) private var weeklyRules: [WeeklyDayOff]
 
     // #1421: the app's one cached calendar, rather than one built on every render of this sheet. It is the
     // value `ConflictSweep.reapplyAll` last judged the queue against, handed over before any add, remove,
@@ -46,6 +48,17 @@ struct DaysOffView: View {
     @State private var newEnd = Date()
     @State private var newNote = ""
     @State private var addMessage: String?
+    // #3620: which kind of block the add form is for, and the weekly half of its fields.
+    @State private var addKind: DayOffEditing.AddKind = .someDays
+    @State private var newWeekday = 4
+    @State private var newHasFirst = false
+    @State private var newFirst = Date()
+    @State private var newHasLast = false
+    @State private var newLast = Date()
+    // #3620: the rule whose "free one date" picker is open, the date in it, and why it was refused.
+    @State private var freeingRule: PersistentIdentifier?
+    @State private var freeDate = Date()
+    @State private var freeMessage: String?
     // #928: the add form's state as it was when Dan opened it, so Done can tell a real edit (a moved picker
     // or a typed note) from a form he only opened and left alone, and nag only for the former.
     @State private var addBaseline: DayOffEditing.AddDraft?
@@ -91,7 +104,11 @@ struct DaysOffView: View {
     private var currentDraft: DayOffEditing.AddDraft {
         DayOffEditing.AddDraft(startDay: EasternDate.dayString(from: newStart),
                                endDay: EasternDate.dayString(from: newEnd),
-                               note: newNote)
+                               note: newNote,
+                               kind: addKind,
+                               weekday: newWeekday,
+                               firstDay: newHasFirst ? EasternDate.dayString(from: newFirst) : nil,
+                               lastDay: newHasLast ? EasternDate.dayString(from: newLast) : nil)
     }
 
     // Done, but not at the cost of the range he just typed: the decision lives in the tested helper, so
@@ -125,9 +142,26 @@ struct DaysOffView: View {
 
     private var addForm: some View {
         VStack(alignment: .leading, spacing: OVSpacing.xs) {
-            // #924: the date fields are shared with the block-these-days picker a dismissal opens, so the
-            // two forms cannot drift.
-            DayOffRangeFields(start: $newStart, end: $newEnd, note: $newNote)
+            // #3620: a range of days, or one weekday every week. One form with a switch rather than a
+            // second button in the header, so there is still one way in to blocking anything.
+            Picker("Block", selection: $addKind) {
+                Text("Some days").tag(DayOffEditing.AddKind.someDays)
+                Text("Every week").tag(DayOffEditing.AddKind.everyWeek)
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .fixedSize()
+            .onChange(of: addKind) { _, _ in addMessage = nil }
+
+            switch addKind {
+            case .someDays:
+                // #924: the date fields are shared with the block-these-days picker a dismissal opens, so
+                // the two forms cannot drift.
+                DayOffRangeFields(start: $newStart, end: $newEnd, note: $newNote)
+            case .everyWeek:
+                WeeklyDayOffFields(weekday: $newWeekday, hasFirst: $newHasFirst, first: $newFirst,
+                                   hasLast: $newHasLast, last: $newLast, note: $newNote)
+            }
 
             if let addMessage {
                 Text(addMessage).font(.system(size: 11)).foregroundStyle(OVColor.rust)
@@ -136,7 +170,7 @@ struct DaysOffView: View {
 
             HStack {
                 Spacer()
-                Button("Block these days") { add() }
+                Button(DayOffEditing.addConfirmTitle(kind: addKind, weekday: newWeekday)) { add() }
             }
         }
         // #901 walk fix: `lg`, matching the header and the section list above and below it. At `md` the
@@ -150,9 +184,20 @@ struct DaysOffView: View {
     // which is why .notSaved leaves it open: closing it is this screen's way of saying the range was
     // blocked, and it must not say that over a write that failed.
     private func add() {
-        switch DayOffMutations.add(start: EasternDate.dayString(from: newStart),
-                                   end: EasternDate.dayString(from: newEnd),
-                                   note: newNote, context: context, feedback: feedback) {
+        let outcome: DayOffMutations.AddOutcome
+        switch addKind {
+        case .someDays:
+            outcome = DayOffMutations.add(start: EasternDate.dayString(from: newStart),
+                                          end: EasternDate.dayString(from: newEnd),
+                                          note: newNote, context: context, feedback: feedback)
+        case .everyWeek:
+            outcome = WeeklyDayOffMutations.add(
+                weekday: newWeekday,
+                firstDate: newHasFirst ? EasternDate.dayString(from: newFirst) : nil,
+                lastDate: newHasLast ? EasternDate.dayString(from: newLast) : nil,
+                note: newNote, context: context, feedback: feedback)
+        }
+        switch outcome {
         case .added:
             addMessage = nil; newNote = ""; showAdd = false
         case .refused(let text):
@@ -344,15 +389,23 @@ struct DaysOffView: View {
     private var myDaysOff: some View {
         // #3406: the ranges not finished yet. The count drops with the filter, which is correct: it counts
         // the rows beneath it, and the past rows are still in the store.
+        //
+        // #3620: the weekly rules come FIRST, because a standing rule blocks more nights than any range on
+        // the list, and one whose last date has gone is filtered the same way (#3406). The heading counts
+        // both, since both are rows beneath it.
         let today = QueueModel.easternToday()
         let shown = DayOffEditing.upcoming(daysOff, today: today)
+        let shownRules = WeeklyDayOffEditing.upcoming(weeklyRules, today: today)
         return VStack(alignment: .leading, spacing: OVSpacing.xs) {
-            sectionHeading("Days you blocked", systemImage: "calendar", count: shown.count)
+            sectionHeading("Days you blocked", systemImage: "calendar", count: shownRules.count + shown.count)
 
-            if shown.isEmpty {
-                Text(DayOffEditing.emptyListSentence(hasPastRanges: !daysOff.isEmpty))
+            if shown.isEmpty && shownRules.isEmpty {
+                Text(DayOffEditing.emptyListSentence(hasPastRanges: !daysOff.isEmpty || !weeklyRules.isEmpty))
                     .font(.system(size: 12)).foregroundStyle(OVColor.inkSoft)
             } else {
+                ForEach(shownRules) { rule in
+                    weeklyRuleRow(rule, today: today)
+                }
                 ForEach(shown) { row in
                     HStack(spacing: OVSpacing.sm) {
                         Text(QueueModel.runDateLabel(start: row.startDate, end: row.endDate))
@@ -368,6 +421,73 @@ struct DaysOffView: View {
                 }
             }
         }
+    }
+
+    // #3620: one weekly rule, as ONE row: the weekday and its bounds in Dan's words, his note, and the
+    // dates he has freed from it that are still ahead. Freeing a date opens a picker in place, under the row
+    // it belongs to, rather than a second sheet.
+    private func weeklyRuleRow(_ rule: WeeklyDayOff, today: String) -> some View {
+        let isFreeing = freeingRule == rule.persistentModelID
+        let freed = rule.freedDates.filter { $0 >= today }.sorted()
+        return VStack(alignment: .leading, spacing: 1) {
+            HStack(spacing: OVSpacing.sm) {
+                Text(WeeklyDayOffEditing.label(weekday: rule.weekday, firstDate: rule.firstDate,
+                                               lastDate: rule.lastDate))
+                    .font(.system(size: 12, weight: .medium)).foregroundStyle(OVColor.ink)
+                if let note = rule.note {
+                    Text(note).font(.system(size: 12)).foregroundStyle(OVColor.inkSoft)
+                }
+                Spacer()
+                Button(WeeklyDayOffEditing.freeButtonTitle(isOpen: isFreeing)) {
+                    freeMessage = nil
+                    freeingRule = isFreeing ? nil : rule.persistentModelID
+                }
+                .buttonStyle(.plain).font(.system(size: 11)).foregroundStyle(OVColor.forestText)
+                Button("Remove") { removeRule(rule) }
+                    .buttonStyle(.plain).font(.system(size: 11)).foregroundStyle(OVColor.forestText)
+            }
+            ForEach(freed, id: \.self) { date in
+                HStack(spacing: OVSpacing.sm) {
+                    Text(WeeklyDayOffEditing.freedLine(date))
+                        .font(.system(size: 11)).foregroundStyle(OVColor.inkSoft)
+                    Button("Block it again") {
+                        WeeklyDayOffMutations.reblock(date, on: rule, context: context, feedback: feedback)
+                    }
+                    .buttonStyle(.plain).font(.system(size: 11)).foregroundStyle(OVColor.forestText)
+                }
+            }
+            if isFreeing {
+                HStack(spacing: OVSpacing.md) {
+                    DatePicker("Date", selection: $freeDate, displayedComponents: .date)
+                        .datePickerStyle(.compact).font(.system(size: 12))
+                    Button("Free this date") { free(from: rule) }
+                    Spacer(minLength: OVSpacing.sm)
+                }
+                .padding(.top, OVSpacing.xxs)
+                if let freeMessage {
+                    Text(freeMessage).font(.system(size: 11)).foregroundStyle(OVColor.rust)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+        .padding(.vertical, 3)
+    }
+
+    private func free(from rule: WeeklyDayOff) {
+        switch WeeklyDayOffMutations.free(EasternDate.dayString(from: freeDate), from: rule,
+                                          context: context, feedback: feedback) {
+        case .freed:
+            freeMessage = nil; freeingRule = nil
+        case .refused(let text):
+            freeMessage = text
+        case .notSaved:
+            break
+        }
+    }
+
+    private func removeRule(_ rule: WeeklyDayOff) {
+        if freeingRule == rule.persistentModelID { freeingRule = nil }
+        WeeklyDayOffMutations.remove(rule, context: context, feedback: feedback)
     }
 
     // #1417: lives in DayOffMutations now, so the removal, its Undo, and the rule that neither claims

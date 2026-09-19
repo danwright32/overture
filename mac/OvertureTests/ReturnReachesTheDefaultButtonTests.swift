@@ -39,6 +39,9 @@ struct ReturnReachesTheDefaultButtonTests {
     //   DayOffRangeFields' note field, in the Days off sheet: Return presses Done, which asks first
     //   whenever the add form was edited (#928's `closeNeedsConfirmation`). Protected already.
     //
+    //   WeeklyDayOffFields' note field, in the same sheet (#3620): the same protection, because the weekly
+    //   half of the form is part of the same draft `closeNeedsConfirmation` compares.
+    //
     //   SourcesView's two add-a-source fields: THE DEFECT (#2308). Both now carry `.onSubmit`, so they
     //   no longer appear here at all. They are named in this comment rather than in the list for that
     //   reason: if either loses its handler, the pair comes back and this test fails.
@@ -60,6 +63,8 @@ struct ReturnReachesTheDefaultButtonTests {
              field: "Why (optional): vacation, family, anything"),
         Pair(defaultButtonFile: "DaysOffView.swift", fieldFile: "DayOffRangeFields.swift",
              field: "Why (optional): vacation, family, anything"),
+        Pair(defaultButtonFile: "DaysOffView.swift", fieldFile: "WeeklyDayOffFields.swift",
+             field: "Why (optional): rehearsal, class, anything"),
     ]
 
     @Test func everyPairThatExistsHasBeenLookedAt() {

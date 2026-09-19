@@ -1912,6 +1912,9 @@ enum ScoutService {
                               // #2692: the shoots Dan has said are not happening. Read HERE, in the one
                               // place every surface builds its calendar through, so the sheet, the scout
                               // and the conflict sweep cannot disagree about which nights are blocked.
-                              cancelledBookingIds: CancelledShootEditing.cancelledIds(in: context))
+                              cancelledBookingIds: CancelledShootEditing.cancelledIds(in: context),
+                              // #3620: Dan's weekly rules, read here for the same reason: one place every
+                              // surface builds its calendar through.
+                              weeklyBlocks: WeeklyDayOffEditing.blocks(in: context))
     }
 }

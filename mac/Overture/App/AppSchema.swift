@@ -39,6 +39,9 @@ enum AppSchema {
                                       // for the same reason as the rest, and keyed on the BOOKING id, so
                                       // a row left behind can never suppress a future booking landing on
                                       // the same date.
+        WeeklyDayOff.self,            // #3620: one weekday blocked every week. Independent for the same
+                                      // reason as the rest, and stored as the rule Dan typed, never as
+                                      // the weeks it covers.
     ]
 
     static var schema: Schema { Schema(models) }

@@ -362,3 +362,18 @@ the measurement it came from lives here. Read the entry before the rule decides 
   and says so in its own output rather than leaving it to whoever reads it.
   Three outcomes, the same as the hang reader's: `1` reports are on record, `0` the directories it could
   read hold none and it names them, `2` UNMEASURED because not one could be read.
+
+## Asking what is behind a small room's band
+
+- **Asking what is behind a small room's band: `scripts/report-small-venues.sh` (#1902).** Opt in, run by
+  hand, and the natural moment is right after re-importing the Shoots calendar. It lists every room Dan
+  has shot 1 to 4 times with each calendar entry and Downbeat booking behind its band, because one stray
+  entry (a training session, a reception) at a room that small moves a pitch from "you've photographed
+  here before" to "a few shows here", and no keyword filter can catch it without dropping real shoots.
+  The band is `VenueShootHistory`'s own and rooms are grouped by `VenuePlaces.canonicalKey`, so the report
+  says what a pitch would. It runs one opt-in Swift suite, `SmallVenueReportLive`, and hands it the file
+  paths itself, so no test can read live data unless somebody asked for this report.
+  **The output is private.** Calendar titles can carry a client's payment notes (#1904): it prints on this
+  Mac, deletes its scratch folder, and is never pasted into GitHub or an issue.
+  Two outcomes: `0` the report printed, where an empty one is a real answer, and `2` UNMEASURED, when the
+  shoot history is unreadable, the Swift run failed, or it wrote no report.

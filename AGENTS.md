@@ -283,6 +283,8 @@ the subject named below.
 - **Scrolling the running app from a script**: `scripts/scroll-wheel.sh`, which DRIVES DAN'S MACHINE
   and refuses without `--yes`. It confirms the scroll landed, because a scroll that did nothing and
   a surface that does not rebuild on scroll read identically.
+- **What is behind a small room's band**: `scripts/report-small-venues.sh`. Opt in. Its output holds
+  calendar titles, which can carry client payment notes, so it stays on this Mac and never reaches GitHub.
 - **Measuring two runs going at once**: `scripts/measure-concurrent-runs.sh`. It spends REAL usage,
   plans and launches nothing without `--yes`, and is a Dan at the machine job rather than an agent one.
 
