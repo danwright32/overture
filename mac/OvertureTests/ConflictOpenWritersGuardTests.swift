@@ -45,8 +45,11 @@ struct ConflictOpenWritersGuardTests {
 
     // Every (file, enclosing function) that assigns the flag, read from code with comments stripped.
     private static func derivedWriters() -> [(file: String, function: String)] {
-        let assignment = try! Regex(#"\bconflictOpen\s*=(?!=)"#)
-        let function = try! Regex(#"\bfunc\s+(\w+)"#)
+        // No `\b`: Swift's default word boundary is Unicode's, under which `p.conflictOpen` is ONE word, so
+        // `\bconflictOpen` never matched an assignment through a receiver. Seen: a `p.conflictOpen = true`
+        // planted in DayOff passed this guard until the boundary was spelled out (#3968).
+        let assignment = try! Regex(#"(?:^|[^A-Za-z0-9_])conflictOpen\s*=(?!=)"#)
+        let function = try! Regex(#"(?:^|[^A-Za-z0-9_])func\s+(\w+)"#)
         var found: [(file: String, function: String)] = []
         for file in AppSourceWalk.appFiles() {
             let lines = SwiftSource.scannableLines(in: file.text, skipping: [])
@@ -65,7 +68,7 @@ struct ConflictOpenWritersGuardTests {
     // which is how `restoreConflict` reaches the flag).
     private static func derivedCallerFiles(writers: Set<String>) -> Set<String> {
         let modelSource = SourceGuardHelper.source("Overture/Domain/Prospect.swift")
-        let declared = modelSource.matches(of: try! Regex(#"\bfunc\s+(\w+)\("#))
+        let declared = modelSource.matches(of: try! Regex(#"(?:^|[^A-Za-z0-9_])func\s+(\w+)\("#))
             .compactMap { $0.output[1].substring.map(String.init) }
         let relays = declared.filter { name in
             guard !writers.contains(name),
@@ -75,7 +78,7 @@ struct ConflictOpenWritersGuardTests {
         // An INSTANCE call, on a receiver spelled in lower case (`prospect.`, `model.`, `p?.`). A static of
         // the same name on another type (`ProspectMutations.clearConflict(`) is not a call on the model.
         let names = writers.union(relays).sorted().joined(separator: "|")
-        let instanceCall = try! Regex(#"\b[a-z_][A-Za-z0-9_]*[?!]?\.(?:"# + names + #")\("#)
+        let instanceCall = try! Regex(#"(?:^|[^A-Za-z0-9_])[a-z_][A-Za-z0-9_]*[?!]?\.(?:"# + names + #")\("#)
         var files: Set<String> = []
         for file in AppSourceWalk.appFiles() where file.name != model {
             if SourceGuardHelper.normalizedCode(file.text).contains(instanceCall) {
