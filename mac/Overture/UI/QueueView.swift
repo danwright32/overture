@@ -643,7 +643,9 @@ struct QueueView: View {
     // remainder of the hold and then normally. That is a worse frame than a clean restore and a better one
     // than the row reappearing with no explanation, and it settles within `SendDelightTiming`'s own
     // window rather than persisting: nothing here can outlive `departureCeiling` (#2729).
-    private func dismissNight(_ pending: NightDismiss, keys: [String]) {
+    // #1743: answers the day off offer the dismissal produced, for `QueueSheetHost` to raise once the
+    // confirmation has gone. Raised here it would be asked for in the tick that sheet is closing.
+    private func dismissNight(_ pending: NightDismiss, keys: [String]) -> DayOffOfferRequest.Pending? {
         // Marked BEFORE the write, for #2417's reason exactly: SendProgressState's writes notify only the
         // views that read it, so this costs one card each, while the mutation that follows saves and makes
         // SwiftData rebuild every card. Doing the cheap visible thing first is what makes the control
@@ -657,9 +659,10 @@ struct QueueView: View {
         withAnimation(.easeOut(duration: 0.15)) {
             for item in departing { sendState.depart(item.id, as: item, because: .closedOut) }
         }
-        ProspectMutations.dismissAll(keys, reason: pending.reason, dateLabel: pending.dateLabel,
-                                     prospects: prospects, context: context, feedback: feedback,
-                                     undo: undoStack)
+        let offer = ProspectMutations.dismissAll(keys, reason: pending.reason, dateLabel: pending.dateLabel,
+                                                 nightDate: pending.date,
+                                                 prospects: prospects, context: context, feedback: feedback,
+                                                 undo: undoStack)
         // Cleared after the exit plays, never before the rebuild lands: clearing early would drop the
         // snapshots while the real rows are still in the queue's answer, and the whole night would flash
         // back onto the screen.
@@ -669,6 +672,7 @@ struct QueueView: View {
                 for item in departing { sendState.finishDeparting(item.id) }
             }
         }
+        return offer
     }
 
     private func queueScroll(_ data: RenderData) -> some View {
@@ -932,7 +936,8 @@ struct QueueView: View {
             Section(BulkDismiss.menuTitle(count: plan.count, heldBack: split.heldBack, dateLabel: group.monthDay)) {
                 ForEach(ShowOutcome.neverPitched, id: \.self) { reason in
                     Button(reason.label) {
-                        sheets.pendingNightDismiss = NightDismiss(dateLabel: group.monthDay, reason: reason,
+                        sheets.pendingNightDismiss = NightDismiss(dateLabel: group.monthDay, date: group.id,
+                                                           reason: reason,
                                                            keys: plan.keys, runs: plan.runsPastTheNight,
                                                            keysOnlyThisNight: plan.keysOnlyThisNight,
                                                            heldBack: split.heldBack)

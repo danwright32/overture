@@ -10,17 +10,37 @@ import Observation
 @Observable
 final class DayOffOfferRequest {
     struct Pending: Identifiable, Equatable {
-        let id: String        // the show's natural key, stable so .sheet(item:) keys cleanly
-        let org: String
-        let start: String     // yyyy-MM-dd, pre-filled into the picker as the run's opening night
-        let end: String       // yyyy-MM-dd, its closing night
+        // Stable so .sheet(item:) keys cleanly: the show's natural key, or for a whole night (#1743) a
+        // night-shaped id, since a night holds many shows and no single one is the subject.
+        let id: String
+        // The picker's sentence, composed by `DayOffOffer` (the #863 rule: never in the view).
+        let subtitle: String
+        // #1473: the key of the undo entry the block folds into, so one Cmd+Z takes back both. For one
+        // show it is that show; for a night it is the batch entry's first row, which is what
+        // `QueueUndoStack.attachBlockedDaysOff` matches on.
+        let dismissKey: String
+        let start: String     // yyyy-MM-dd, the night that was dismissed
+        let end: String       // yyyy-MM-dd, the same night (#2373)
+
+        // #1743: the whole-night offer.
+        static func night(date: String, dateLabel: String, count: Int, dismissKey: String,
+                          offer: DayOffOffer.Offer) -> Pending {
+            Pending(id: "night|\(date)",
+                    subtitle: DayOffOffer.nightPickerSubtitle(count: count, dateLabel: dateLabel),
+                    dismissKey: dismissKey, start: offer.start, end: offer.end)
+        }
     }
 
     var pending: Pending?
 
     func request(key: String, org: String, start: String, end: String) {
+        request(Pending(id: key, subtitle: DayOffOffer.pickerSubtitle(org: org), dismissKey: key,
+                        start: start, end: end))
+    }
+
+    func request(_ offer: Pending) {
         QueueWriteTrace.note(QueueWriteTrace.dayOffOffer)
-        pending = Pending(id: key, org: org, start: start, end: end)
+        pending = offer
     }
 
     func clear() {

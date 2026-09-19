@@ -1011,6 +1011,7 @@
 		718254CE703B61B88A0811C8 /* InquiryReportingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0C1F7540ABFD5AAAFC09B9D /* InquiryReportingTests.swift */; };
 		718875B9DA6EC3C4A3A324AE /* OrganisationsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D423382B562659893C95B54B /* OrganisationsView.swift */; };
 		7196E5ACB9D700E98A249597 /* ConflictScopeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A03317854E755484CBC8F1FC /* ConflictScopeTests.swift */; };
+		71ACCD428838DAF5CF3F064E /* NightDismissDayOffTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8FE3768DF406299B6BCBE9F2 /* NightDismissDayOffTests.swift */; };
 		71C5D97F445EB84124181143 /* SendFailureLine.swift in Sources */ = {isa = PBXBuildFile; fileRef = E04454C008A40315381B7306 /* SendFailureLine.swift */; };
 		71EAF37346F8355D8279E1EF /* UnverifiedContactMarkTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C1DAB479090B66EA2CACF04 /* UnverifiedContactMarkTests.swift */; };
 		71F9D818853DFC81AFD7569C /* AttachedConversationChannelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6A484CA10BA948EF24864F2 /* AttachedConversationChannelTests.swift */; };
@@ -3265,6 +3266,7 @@
 		8F094DF405DE188BA1E6A847 /* SourceGrade.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourceGrade.swift; sourceTree = "<group>"; };
 		8F212A4F8F3D053EB58FAE59 /* ProbeDurationHistory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProbeDurationHistory.swift; sourceTree = "<group>"; };
 		8F518441FAAA42A56D2E5A00 /* OnboardingStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingStateTests.swift; sourceTree = "<group>"; };
+		8FE3768DF406299B6BCBE9F2 /* NightDismissDayOffTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NightDismissDayOffTests.swift; sourceTree = "<group>"; };
 		8FEDA1F78AE7B4ED5B77970D /* ReachabilityProbeQueueTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReachabilityProbeQueueTests.swift; sourceTree = "<group>"; };
 		8FF62B2593B3C2A5C41DDC76 /* InquiryRowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InquiryRowView.swift; sourceTree = "<group>"; };
 		9038C83ED9383B9FBE531FC9 /* NotALivePerformanceGenreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotALivePerformanceGenreTests.swift; sourceTree = "<group>"; };
@@ -4647,6 +4649,7 @@
 				AB07D82C222E7F97D9C929C5 /* NearMissNamesTests.swift */,
 				2036F525F19E0746DA4F082B /* NeverReadSourceNeedsALookTests.swift */,
 				0495E456E24128B3FE9220DA /* NightDecisionTests.swift */,
+				8FE3768DF406299B6BCBE9F2 /* NightDismissDayOffTests.swift */,
 				28A145330FE5F360D88E2019 /* NightTimesParsedOncePerShowTests.swift */,
 				F387F966C644517D2EC8E768 /* NoAuthorityReachedTests.swift */,
 				619962CF9A81A1D9080846E4 /* NobodyToPursueTests.swift */,
@@ -7297,6 +7300,7 @@
 				DC31A5FCC6DCCE22BBDE9A82 /* NextReachOut.swift in Sources */,
 				4C77C3D817B8D22E552CA594 /* NightDecision.swift in Sources */,
 				CB38BA2F6644E263765649F2 /* NightDecisionTests.swift in Sources */,
+				71ACCD428838DAF5CF3F064E /* NightDismissDayOffTests.swift in Sources */,
 				72CCCBCD55CBA2B446EFC62D /* NightTimesParsedOncePerShowTests.swift in Sources */,
 				B757367B2A4CAA9086532A25 /* NoAuthorityReachedTests.swift in Sources */,
 				A3EAF9F46F682C26E1FE74C2 /* NoClosingNoteAfterTheShowTests.swift in Sources */,

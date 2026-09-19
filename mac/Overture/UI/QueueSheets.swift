@@ -54,6 +54,9 @@ struct SelfBookingGuard: Identifiable {
 // between the menu and the button cannot widen what he agreed to.
 struct NightDismiss: Identifiable {
     let dateLabel: String
+    // #1743: the night itself (yyyy-MM-dd), which the day off offer is for. Required rather than defaulted,
+    // so a caller cannot forget it and quietly lose the offer (L168).
+    let date: String
     let reason: ShowOutcome
     let keys: [String]
     let runs: [String]
@@ -122,7 +125,9 @@ struct QueueSheetHost<Content: View>: View {
     // #1597: cleared when a probe is approved, so the bar Dan ticked empties with the run he started.
     let probeSelection: ProbeSelectionState
     let onProbe: (Set<String>) -> Void
-    let onDismissNight: (NightDismiss, [String]) -> Void
+    // #1743: answers the day off offer the dismissal produced, if any, so this host can hold it until the
+    // confirmation has gone.
+    let onDismissNight: (NightDismiss, [String]) -> DayOffOfferRequest.Pending?
     let onRowNudge: (PendingRowNudge, String?) -> Void
     let content: () -> Content
 
@@ -130,6 +135,13 @@ struct QueueSheetHost<Content: View>: View {
     // and every ancestor of this view already provides both.
     @Environment(\.modelContext) private var context
     @Environment(ActionFeedback.self) private var feedback
+    // #1743: the picker RootView presents, raised from the confirmation's onDismiss below.
+    @Environment(DayOffOfferRequest.self) private var dayOffOffer
+    // #1743: the offer a whole-night dismiss produced, HELD until the confirmation sheet has actually gone.
+    // Raising it while that sheet is still dismissing is the known SwiftUI failure: the second sheet
+    // silently never appears, and every mutation test stays green (L3). Kept here rather than on
+    // `QueueSheetState`, because it is not a sheet of the queue's: nothing presents it but this host.
+    @State private var dayOffAfterNightDismiss: DayOffOfferRequest.Pending?
 
     var body: some View {
         content()
@@ -159,7 +171,14 @@ struct QueueSheetHost<Content: View>: View {
             }
             // #1500: confirm a whole night before it goes. The count is the point: Dan has to know exactly
             // how much he is about to bury, and which run loses its later dates with it.
-            .sheet(item: $sheets.pendingNightDismiss) { pending in
+            .sheet(item: $sheets.pendingNightDismiss, onDismiss: {
+                // #1743: only now, with the confirmation gone, is the day off picker asked for. Raised in
+                // `onProceed` itself it would be asked for in the tick this sheet is closing, and would
+                // silently never appear.
+                guard let offer = dayOffAfterNightDismiss else { return }
+                dayOffAfterNightDismiss = nil
+                dayOffOffer.request(offer)
+            }) { pending in
                 SelfBookingConfirmSheet(
                     title: BulkDismiss.confirmTitle(count: pending.keys.count, heldBack: pending.heldBack,
                                                     dateLabel: pending.dateLabel),
@@ -175,9 +194,15 @@ struct QueueSheetHost<Content: View>: View {
                         ? BulkDismiss.confirmProceedOnlyThisNight(count: pending.keysOnlyThisNight.count)
                         : nil,
                     onAlternative: pending.offersChoice
-                        ? { onDismissNight(pending, pending.keysOnlyThisNight); sheets.pendingNightDismiss = nil }
+                        ? {
+                            dayOffAfterNightDismiss = onDismissNight(pending, pending.keysOnlyThisNight)
+                            sheets.pendingNightDismiss = nil
+                        }
                         : nil,
-                    onProceed: { onDismissNight(pending, pending.keys); sheets.pendingNightDismiss = nil },
+                    onProceed: {
+                        dayOffAfterNightDismiss = onDismissNight(pending, pending.keys)
+                        sheets.pendingNightDismiss = nil
+                    },
                     onCancel: { sheets.pendingNightDismiss = nil })
             }
             // #1436: compose and send Dan's reply to a hire inquiry, through the SAME screen a scouted

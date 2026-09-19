@@ -52,4 +52,10 @@ enum DayOffOffer {
     static func pickerSubtitle(org: String) -> String {
         "You dismissed \(org) because the dates don't work. Block the days you can't shoot, and Overture will stop pitching you for them."
     }
+
+    // #1743: the same sentence for a whole night, which holds many shows and no single one to name. Worded
+    // like the one above rather than in a new voice; the count is the rows that actually went (L12).
+    static func nightPickerSubtitle(count: Int, dateLabel: String) -> String {
+        "You dismissed \(Plural.count(count, "show")) on \(dateLabel) because the date doesn't work. Block the days you can't shoot, and Overture will stop pitching you for them."
+    }
 }

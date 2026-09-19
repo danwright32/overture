@@ -382,9 +382,12 @@ final class QueueUndoStack {
     // Undo for the block either way.
     @discardableResult
     func attachBlockedDaysOff(start: String, end: String, toDismissOf naturalKey: String) -> Bool {
+        // #1743: "a dismiss" includes a DROP. "Date conflict" drops one night of a live run (#2691), which
+        // leaves the row's status alone, so a status-only test refused the block for every run, on the
+        // single card and at the head of a whole-night batch alike, and the day off outlived the undo.
         guard var top = entries.last,
               top.naturalKey == naturalKey,
-              top.resultingStatus == .dismissed,
+              top.rows.contains(where: { $0.resultingStatus == .dismissed || !$0.droppedNights.isEmpty }),
               top.blockedDays == nil else { return false }
         QueueWriteTrace.note(QueueWriteTrace.undoStack)
         top.blockedDays = QueueUndoEntry.BlockedDays(start: start, end: end)

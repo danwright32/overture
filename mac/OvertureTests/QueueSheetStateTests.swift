@@ -106,7 +106,7 @@ struct QueueSheetStateTests {
         check("pendingProbe", raise: { sheets.pendingProbe = ProbeConfirm(keys: ["k9"], dateLabel: "Nov 14") },
               clear: { sheets.pendingProbe = nil })
         check("pendingNightDismiss",
-              raise: { sheets.pendingNightDismiss = NightDismiss(dateLabel: "Nov 14", reason: .wentBy,
+              raise: { sheets.pendingNightDismiss = NightDismiss(dateLabel: "Nov 14", date: "2026-11-14", reason: .wentBy,
                                                                  keys: ["k1"], runs: [],
                                                                  keysOnlyThisNight: ["k1"], heldBack: 0) },
               clear: { sheets.pendingNightDismiss = nil })

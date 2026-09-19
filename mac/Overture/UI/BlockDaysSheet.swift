@@ -39,7 +39,7 @@ struct BlockDaysSheet: View {
         VStack(alignment: .leading, spacing: OVSpacing.md) {
             VStack(alignment: .leading, spacing: 2) {
                 Text("Block days off").font(OVType.dateHeading).foregroundStyle(OVColor.ink)
-                Text(DayOffOffer.pickerSubtitle(org: pending.org))
+                Text(pending.subtitle)
                     .font(.system(size: 12)).foregroundStyle(OVColor.inkSoft)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -66,7 +66,7 @@ struct BlockDaysSheet: View {
         let ok = ProspectMutations.blockDaysOff(start: EasternDate.dayString(from: start),
                                                 end: EasternDate.dayString(from: end),
                                                 note: note, context: context, feedback: feedback,
-                                                undo: undo, undoDismissOf: pending.id)
+                                                undo: undo, undoDismissOf: pending.dismissKey)
         if ok { offer.clear(); dismiss() }
     }
 }

@@ -207,7 +207,9 @@ struct UndoDismissWithDayOffWiringTests {
         let root = source("Overture/App/RootView.swift")
         let sheet = source("Overture/UI/BlockDaysSheet.swift")
         #expect(root.contains("BlockDaysSheet(pending: pending, undo: undoStack)"))
-        #expect(sheet.contains("undo: undo, undoDismissOf: pending.id"))
+        // #1743: the key the block folds into is carried on the offer, because a whole night's offer has
+        // a night-shaped id and folds into the batch entry's first row.
+        #expect(sheet.contains("undo: undo, undoDismissOf: pending.dismissKey"))
     }
 
     // #1500 moved the call from one row to every row in the entry; the claim guarded here is unchanged and
