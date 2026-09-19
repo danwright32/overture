@@ -27,7 +27,7 @@ the workflow's runbook is its spec.
 | `downbeat-export.json` | Downbeat app (separate repo) | App (`DownbeatBridge.decode`) | 1 or above: a MINIMUM with no ceiling, not a set (#3193). See the note in the section below | `fixtures/downbeat-export/` | `DownbeatExportContractTests.swift` |
 | `overture-history.json` | Importer (`scripts/import-history.ts`) | App (`[HistoryRecord]`) | none (plain array; `email` added additively in #762) | `fixtures/local-history/` | `LocalHistoryContractTests.swift` |
 | `overture-shoot-history.json` | Importer (`scripts/import-shoot-history.ts`) | App (`ShootHistory`) | 1 | `fixtures/shoot-history/` | `ShootHistoryContractTests.swift` |
-| `overture-prep-queue.json` | App (`PrepQueueBuilder.encode`) | Prep run (workflow) | 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13 | `fixtures/prep-queue/` | `PrepQueueContractTests.swift` |
+| `overture-prep-queue.json` | App (`PrepQueueBuilder.encode`) | Prep run (workflow) | 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15 | `fixtures/prep-queue/` | `PrepQueueContractTests.swift` |
 | `overture-prep-results.json` | Prep run (workflow) writes the results; then **`prep-run.sh`** adds five top-level keys of its own (`model`, `runCost`, `webCalls`, `runKind`, `runSlot`, all via `lib/models.sh`, after the workflow has finished). See the note below the table. | App (`PrepImporter` / `PrepResultsDecoder`; it ignores all five of those keys. `RecordedRunCost` reads `runCost` and `runKind`) | 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11 | `fixtures/prep-results/` (`run-metadata-complete-v8.json` and `run-metadata-partial-v8.json` carry all five) | `PrepResultsContractTests.swift`, `PrepResultsRunMetadataContractTests.swift`, `ResultsFileNamesItsRunKindTests.swift`, `lib/models.test.sh` |
 | `overture-prep-progress.json` | `prep-run.sh` **only**: seeds it, then derives every update from `overture-prep-results.json` itself (`lib/progress-watcher.sh`'s `update_progress_from_results`, the same helper scout uses). #1023: the workflow never writes this file; it rewrites the results file incrementally and the script counts its entries, so a run that forgets to self-report can no longer leave the count wrong. | App (`PrepProgressDecoder`) | 1 | `fixtures/prep-progress/` | `PrepProgressContractTests.swift`, `lib/progress-watcher.test.sh` |
 | `prep-run-archives/<yyyyMMdd-HHmmss>/` | App (`PrepRunArchive.archiveFinishedRun`, #1878: on every run completion, and at launch for a run that ended while Overture was closed) | By hand today (the evidence for "did the run do what the runbook told it to"), and the intended source of history for #1616's wait estimate | n/a: the folder holds byte copies of the two files above under their live names, so each keeps its own version | `fixtures/prep-queue/`, `fixtures/prep-results/` (the same fixtures, read by the archive's own tests) | `PrepRunArchiveTests.swift` |
@@ -704,6 +704,22 @@ of the 447 contacts in the archives at once (L98, L128). Adoption is measured pe
 run with no such contact is not accused. Written by `PrepImporter` onto `Recipient.roleIsACharacterisation`
 through `ContactRoleClaim`, re-derived on every ingest rather than latched; read by the review card, which
 keeps the role and adds "Overture's words, not the page's". Additive, so every v11 producer stays valid.
+
+Queue version 15 (#3326, #3285) adds two optional fields to each item: `keptNights`, the nights the pitch
+may name, and `keptNightsAsSpan`, whether it may name them as a span. Until this version the drafter was
+sent the opening and closing night and told to reference the span ("your run, March 10 to 14"), which
+offered every night between them, including the dark nights of a weekly series and, once the Prep picker
+shipped (#3325), nights Dan had said no to. `keptNights` is every upcoming night of a multi-night run that
+he did not skip at Prep launch (`KeptNights.of`); `keptNightsAsSpan` is `KeptNights.namesAsSpan`, the ONE
+place Dan's rule of 2026-09-17 lives (a span only when the nights are contiguous AND more than three), so
+the runbook carries the answer for each item rather than a second copy of the arithmetic. Chronology wins
+over a tick (#3312): a night already behind us is never kept, and `openingNightPassed` is the same fact
+judged against the same `today`. Both are ABSENT, never empty, on a single-night show and on a run whose
+nights were never recorded, and those keep the old run-dates rule. Written by `PrepQueueService.buildQueue`;
+read by `docs/prep-runbook.md` ("Run dates") and scored by `src/lib/draftEventDate.ts` through
+`prepEval.ts`, which is why the TypeScript half changed in the same commit. The reachability check's
+builder does not set them: it never drafts. Additive, so `v1.json` through `v14.json` stay byte-identical
+and still decode with both absent.
 
 Queue version 14 (#2990) adds an optional `alreadyFoundEmails` to each item: the addresses the show
 ALREADY HOLDS, so a contact re-run does not pay to rediscover and re-report people it was handed a

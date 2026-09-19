@@ -683,7 +683,8 @@ function checkExpectation(entry: ResultEntry, allContacts: Contact[], exp: PrepE
  * not change as real time walks past the fixture's own dates (L130).
  */
 function checkEventDate(entries: ResultEntry[], failures: string[],
-                        show: { performanceDate?: string; runEndDate?: string; today: string }): void {
+                        show: { performanceDate?: string; runEndDate?: string; today: string;
+                                keptNights?: string[]; skippedNights?: string[] }): void {
   if (!show.performanceDate) return;
   entries.forEach((entry, i) => {
     const draft = (entry as { draft?: { subject?: string; body?: string } }).draft;
@@ -691,18 +692,24 @@ function checkEventDate(entries: ResultEntry[], failures: string[],
     const verdict = eventDateVerdict({
       subject: draft.subject, body: draft.body,
       performanceDate: show.performanceDate, runEndDate: show.runEndDate, today: show.today,
+      keptNights: show.keptNights, skippedNights: show.skippedNights,
     });
     if (verdict === "missing") {
       failures.push(`results[${i}].draft: names no date for this show in the subject or the body; it is ${show.performanceDate} (#2864)`);
     } else if (verdict === "wrong") {
       failures.push(`results[${i}].draft: names a date that is not this show's; it is ${show.performanceDate} (#2864)`);
+    } else if (verdict === "skipped") {
+      failures.push(`results[${i}].draft: names a night left out of this pitch; the kept nights are ${(show.keptNights ?? []).join(", ")} (#3326)`);
+    } else if (verdict === "omits") {
+      failures.push(`results[${i}].draft: leaves out a kept night; the kept nights are ${(show.keptNights ?? []).join(", ")} (#3326)`);
     }
   });
 }
 
 export function evaluatePrepResult(produced: unknown, expected: PrepEvalExpectation,
                                    ctx?: { name?: string; scope?: EvalScope;
-                                           show?: { performanceDate?: string; runEndDate?: string; today: string } }): EvalResult {
+                                           show?: { performanceDate?: string; runEndDate?: string; today: string;
+                                                    keptNights?: string[]; skippedNights?: string[] } }): EvalResult {
   const name = ctx?.name ?? expected.description;
   const failures: string[] = [];
 
@@ -754,11 +761,13 @@ export function evaluateFixture(fixture: PrepEvalFixture, produced: unknown,
   // check compares the draft against the same fact the drafter was given rather than against anything
   // the output claims about itself. `today` defaults to the fixture's own performance date, which makes
   // a stored sample's verdict independent of when it is scored (L130); a live run passes the real day.
-  const input = fixture.input as { performanceDate?: string; runEndDate?: string };
+  // #3326: and the kept nights the item carried (v15), so a draft is scored against the nights Dan chose.
+  const input = fixture.input as { performanceDate?: string; runEndDate?: string; keptNights?: string[] };
   return evaluatePrepResult(produced, fixture.expected, {
     name: fixture.name,
     scope: opts?.scope,
     show: { performanceDate: input.performanceDate, runEndDate: input.runEndDate,
+            keptNights: input.keptNights,
             today: opts?.today ?? input.performanceDate ?? "1970-01-01" },
   });
 }

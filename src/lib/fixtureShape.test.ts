@@ -69,7 +69,7 @@ describe("prep-queue fixture shapes", () => {
   it("covers exactly the known prep-queue files", () => {
     expect(files.sort()).toEqual([
       // Lexicographic, because the assertion compares against files.sort(): "v10" sorts next to "v1".
-      "v1.json", "v10.json", "v11.json", "v12.json", "v13.json", "v14.json", "v2.json", "v3.json",
+      "v1.json", "v10.json", "v11.json", "v12.json", "v13.json", "v14.json", "v15.json", "v2.json", "v3.json",
       "v4.json", "v5.json", "v6.json", "v7.json", "v8.json", "v9.json",
     ]);
   });
@@ -89,6 +89,22 @@ describe("prep-queue fixture shapes", () => {
     mutated.items[0].alreadyFoundEmails = ["someone@example.com"];
     expect(() => assertPrepQueueShape(mutated, "v13.json", 13))
       .toThrow(/alreadyFoundEmails.*before version 14/);
+  });
+
+  // #3326: the kept nights are a v15 addition, rejected on an older fixture and required in pairs.
+  it("rejects v15 kept nights appearing in a v14 fixture", () => {
+    const mutated = readJson("prep-queue", "v14.json") as { items: Array<Record<string, unknown>> };
+    mutated.items[0].keptNights = ["2026-03-10"];
+    mutated.items[0].keptNightsAsSpan = false;
+    expect(() => assertPrepQueueShape(mutated, "v14.json", 14))
+      .toThrow(/keptNights must not be present before version 15/);
+  });
+
+  it("rejects kept nights without their span answer", () => {
+    const mutated = readJson("prep-queue", "v15.json") as { items: Array<Record<string, unknown>> };
+    delete mutated.items[0].keptNightsAsSpan;
+    expect(() => assertPrepQueueShape(mutated, "v15.json", 15))
+      .toThrow(/keptNights and keptNightsAsSpan must be present together/);
   });
 
   it("rejects an already-found address that the same item also refuses", () => {

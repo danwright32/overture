@@ -138,7 +138,11 @@ enum PrepQueueService {
                     // #2983: and WHO, not merely that there is a who. Through the same predicate
                     // `onlyTheActIsNamed` above uses, so the two can never disagree. A drafted pitch has
                     // the same reason to name the producing company as a check has to search for it.
-                    presenterOnRecord: OrganiserNaming.namedOrganiser(presenter: p.presenter)
+                    presenterOnRecord: OrganiserNaming.namedOrganiser(presenter: p.presenter),
+                    // #3326: the nights this pitch may name, and whether as a span. `today` is the same
+                    // one `openingNightPassed` above is judged against, so chronology decides both (#3312).
+                    keptNights: KeptNights.of(p, today: today),
+                    keptNightsAsSpan: KeptNights.of(p, today: today).map(KeptNights.namesAsSpan)
                 )
             }
         return PrepQueueBuilder.build(from: items, generatedAt: generatedAt, houses: houses(from: context))

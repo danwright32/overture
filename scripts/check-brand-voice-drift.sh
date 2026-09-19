@@ -74,6 +74,10 @@ BRAND_VOICE_ANCHORS=(
   # antecedent nobody wrote. An anchor because it is the seam of two rules that are each right on their
   # own side, so either source losing it puts the pronoun straight back within reach.
   "names what it is about rather than pointing at it"
+  # #3326: the email names the nights Dan KEPT at Prep launch, and never one he left out (Dan, 2026-09-17,
+  # answers 2 and 8). The app refuses to send a draft naming a skipped night, so a drafter taught the old
+  # "reference the run's span" rule from either source would write drafts that cannot send.
+  "never name a night Dan left out"
   # #1824: describe Dan, never categorize the recipient. The phrase that broke this rule ("working with
   # performing arts organizations in New York", sent to one singer-songwriter) was in neither source, which
   # is precisely why the rule now has to be in BOTH: a model with no instruction either way will assemble

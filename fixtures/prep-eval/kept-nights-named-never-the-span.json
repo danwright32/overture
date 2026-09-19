@@ -1,0 +1,63 @@
+{
+  "name": "kept-nights-named-never-the-span",
+  "rule": "#3326: a run carrying keptNights names exactly those nights, one by one when keptNightsAsSpan is false, and never a night between them that Dan left out, not even inside a span.",
+  "input": {
+    "naturalKey": "northbeam-players|2026-03-10|the-example-stage",
+    "groupName": "Northbeam Players",
+    "venue": "The Example Stage",
+    "performanceDate": "2026-03-10",
+    "runEndDate": "2026-03-24",
+    "keptNights": [
+      "2026-03-10",
+      "2026-03-24"
+    ],
+    "keptNightsAsSpan": false,
+    "discipline": "theater",
+    "websiteURL": "https://northbeam.example",
+    "sourceListingURL": "https://examplestage.example/northbeam",
+    "priorRelationship": "none",
+    "production": "self"
+  },
+  "sources": [
+    {
+      "label": "The Example Stage listing",
+      "url": "https://examplestage.example/northbeam",
+      "content": "Northbeam Players present Tidewater, Tuesdays March 10, March 17 and March 24, 2026, at The Example Stage."
+    },
+    {
+      "label": "Northbeam Players own site",
+      "url": "https://northbeam.example/contact",
+      "content": "Northbeam Players, an ensemble theatre company. Company manager: Rhea Colton, rhea@northbeam.example."
+    }
+  ],
+  "expected": {
+    "description": "Name March 10 and March 24, the kept nights, and never March 17 or a span from the 10th to the 24th.",
+    "requireSomeContact": true,
+    "requirePortfolioLink": true
+  },
+  "sampleCompliantOutput": {
+    "version": 8,
+    "generatedAt": "2026-07-18T00:00:00.000Z",
+    "results": [
+      {
+        "naturalKey": "northbeam-players|2026-03-10|the-example-stage",
+        "contacts": [
+          {
+            "provenance": "act",
+            "name": "Rhea Colton",
+            "email": "rhea@northbeam.example",
+            "method": "named_person",
+            "confidence": "high",
+            "sourceUrl": "https://northbeam.example/contact"
+          }
+        ],
+        "showSummaryAbsentReason": "no_listing_page",
+        "draft": {
+          "subject": "Photographing Tidewater on March 10 and March 24",
+          "body": "My name is Dan and I'm a professional arts photographer here in NYC. I'm writing about Tidewater at The Example Stage, and specifically your performances on March 10 and March 24. I work in an unobtrusive documentary style, no flash and no interruption, so the audience stays with the play rather than noticing a photographer. I've been photographing at Carnegie Hall for close to ten years, and you can see my portfolio at danwrightphotography.com. If you don't already have someone covering those two nights, I'd be glad to talk through your photography plans. I look forward to hearing from you.",
+          "variant": "reason-first"
+        }
+      }
+    ]
+  }
+}
