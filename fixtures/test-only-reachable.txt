@@ -21,12 +21,15 @@ DownbeatExport.swift:venueId
 GeoRefusals.swift:resolvedPlaceCount
 InquiryReporting.swift:lostAfter
 InquiryReporting.swift:openPredicate
+NightDecision.swift:recordNightDecisions  # #3324 shipped the record ahead of its writer's caller. The Prep picker (#3325), the next PR in the per-night lane, calls it at launch; remove this line in that change.
+NightDecision.swift:unjudgedNights  # #3324 shipped the enumerable unjudged set ahead of its reader. Phase 5's new-nights marker (#3327) reads it; remove this line in that change.
 OmniFocusSync.swift:completionIsCarriedBack
 OutcomeStats.swift:autoBookingRate
 OutcomeStats.swift:manualBookingRate
 PrepQueueButton.swift:canStart
 PrepResults.swift:allowance
 PrepResults.swift:capPerItem
+PromisedNights.swift:promisedNights  # #3959 freezes the promise at send now so no send is lost to the gap; its reader is the reached-out row (#3567, #3327). Remove this line in that change.
 Prospect.swift:classificationConfidence
 Prospect.swift:draftNeedsSalutationReview
 Prospect.swift:draftSalutationReviewOverriddenBody
