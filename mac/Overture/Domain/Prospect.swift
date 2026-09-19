@@ -776,9 +776,13 @@ final class Prospect {
     // Swift. That is the #863 bug by construction: the button would light up for a show the Prep run then
     // refuses to work on, and Dan would click Prep and watch it find nothing.
     //
-    // So the flag is written in exactly three places (setScoutConflict, clearConflict, restoreConflict),
-    // it is what `hasUnclearedConflict` reads, and it is what the #Predicate reads. One column, one truth,
-    // and no way for the button and the work-list to disagree.
+    // So the flag is assigned only inside `setScoutConflict`, `clearConflict` and `restoreConflictClearance`.
+    // `restoreConflict` assigns nothing: it calls `restoreConflictClearance(nil)`. The callers outside the
+    // model are ScoutService, DayOff, ProspectMutations and QueueUndoStack. QueueUndoStack is the one that
+    // calls `restoreConflictClearance` directly, restoring the clearance an undone action replaced. Both
+    // lists are derived from the code and checked by ConflictOpenWritersGuardTests (#3968), so follow them
+    // rather than a search. It is what `hasUnclearedConflict` reads, and it is what the #Predicate reads.
+    // One column, one truth, and no way for the button and the work-list to disagree.
     var conflictOpen: Bool = false
 
     // The Downbeat booking id that auto-booked this prospect (#203). Recorded at auto-book
@@ -1344,8 +1348,11 @@ final class Prospect {
         // states. The one thing it keeps raising, its post-event closing note, is carved out inside
         // ConversationReminder rather than here, so this stays the plain "no routine work" answer and
         // the exception lives in exactly one place.
-        case .booked, .lostDoorOpen, .lostNotInterested, .stoodDown: return true
-        case .active, .new: return outcome == .lostSoft || outcome == .lostHard
+        // #3669: the three ended states come from `endedWithoutAShoot`, the same answer the self booking
+        // check reads, so the two cannot drift apart over which endings count as closed.
+        case .booked: return true
+        case .lostDoorOpen, .lostNotInterested, .stoodDown, .active, .new:
+            return performanceStatus.endedWithoutAShoot || outcome == .lostSoft || outcome == .lostHard
         }
     }
 

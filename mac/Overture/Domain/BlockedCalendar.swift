@@ -53,6 +53,16 @@ struct BlockedCalendar: Equatable, Sendable {
     enum Kind: String, Equatable, Sendable, Codable {
         case bookedShoot        // Downbeat says he is working
         case dayOff             // Dan says he is away
+
+        // #1421: how hard a clash of this kind is, higher is harder. A booked shoot is work he has taken
+        // and cannot move; a day off is his own and he can wave it through. Read by `Day.decidesBefore`,
+        // the one ordering `conflict` uses. Exhaustive, so a third kind has to say where it sits.
+        var severity: Int {
+            switch self {
+            case .bookedShoot: return 1
+            case .dayOff: return 0
+            }
+        }
     }
 
     struct Day: Equatable, Sendable {
@@ -72,7 +82,8 @@ struct BlockedCalendar: Equatable, Sendable {
         // about Jul 24 and makes the quiet cards beside it look broken.
         //
         // It says "a later night", never "one night". The stored conflict key holds ONE day (`conflict`
-        // below returns the earliest blocked night via `.min`), so Overture does not know whether one night
+        // below returns the most severe blocked night, earliest among equals, #1421), so Overture does not
+        // know whether one night
         // of the run is out or three, and claiming a count would be false about Dan's calendar the first
         // time two were. That is the same class of error as copying the line onto every card in the date
         // group, which is what #1501 was asked for and declined.
@@ -129,6 +140,14 @@ struct BlockedCalendar: Equatable, Sendable {
 
         var key: String { "\(kind.rawValue)\(Day.separator)\(date)\(Day.separator)\(name ?? "")" }
 
+        // #1421: which of two blocked nights of one run decides it. The harder kind first, then the earlier
+        // date. The name is the last tie break only so the answer never depends on the order the nights
+        // arrived in; two days on one date cannot both reach here, since `decidingDay` hands on one.
+        static func decidesBefore(_ a: Day, _ b: Day) -> Bool {
+            if a.kind.severity != b.kind.severity { return a.kind.severity > b.kind.severity }
+            return (a.date, a.name ?? "") < (b.date, b.name ?? "")
+        }
+
         init(date: String, kind: Kind, name: String?) {
             self.date = date
             self.kind = kind
@@ -161,8 +180,9 @@ struct BlockedCalendar: Equatable, Sendable {
     // The one day that answers "is this date blocked, and why". Everything else on the date is a fact for
     // the sheet to list, never a second answer to that question.
     //
-    // Every entry under a date shares that date and that kind: `build` either puts one day off there or
-    // replaces the whole list with booked shoots, so this and a scan of the whole list can never disagree
+    // Every entry under a date shares that date and that kind: `build` either puts Dan's days off there
+    // (every overlapping range, #2792) or replaces the whole list with booked shoots, so this and a scan of
+    // the whole list can never disagree
     // about whether the date is blocked or by which kind. The list is only ever richer in NAMES.
     private func decidingDay(_ date: String) -> Day? { byDate[date]?.first }
 
@@ -222,17 +242,24 @@ struct BlockedCalendar: Equatable, Sendable {
         let datesStillHoldingAShoot = Set(live
             .flatMap { EasternDate.days(from: $0.startDate, through: $0.endDate) })
 
-        // Dan's own days first, so a booked shoot lands on top of one where they collide. One entry per
-        // date: two of his own ranges overlapping is one decision of his, and both ranges are listed in
-        // full on the sheet from the stored rows, so nothing here is the only record of either.
+        // Dan's own days first, so a booked shoot lands on top of one where they collide.
         //
-        // Sorted for the same reason the bookings below are: where two of his ranges cover one date, the
-        // last one written decides which note the stored key quotes, and a key that moved with the order
-        // the rows came back in would re-block a night he had already waved through.
+        // #2792: EVERY range on a date, the same treatment #2791 gave the bookings below, so the file has
+        // one rule rather than two. It used to keep one entry per date and discard the other range's note.
+        //
+        // Sorted for the same reason the bookings are, and the deciding day is the one that decided BEFORE
+        // this change: the last range in sort order, which used to overwrite the others. Each range is
+        // therefore put in FRONT of what the date already holds, so index 0 is still that range and every
+        // stored key and every "I can shoot this anyway" across an overlap is exactly what it was. Keeping
+        // the list in the other order would have re-blocked those runs for no change in his calendar.
         for range in daysOff.sorted(by: { ($0.startDate, $0.endDate, $0.note ?? "")
                                           < ($1.startDate, $1.endDate, $1.note ?? "") }) {
             for date in EasternDate.days(from: range.startDate, through: range.endDate) {
-                cal.byDate[date] = [Day(date: date, kind: .dayOff, name: range.note)]
+                let day = Day(date: date, kind: .dayOff, name: range.note)
+                // Two ranges alike in note on one date are ONE fact, as two alike bookings are: the same key
+                // and the same row. The later one still moves to the front, as it would have overwritten.
+                cal.byDate[date, default: []].removeAll { $0 == day }
+                cal.byDate[date, default: []].insert(day, at: 0)
             }
         }
 
@@ -308,11 +335,17 @@ struct BlockedCalendar: Equatable, Sendable {
     // `if !existing.runNights.isEmpty`. So the row keeps a span it has no nights for, and an empty night
     // list means two different things to every reader that branches on it.
     //
-    // #3286: the empty-list fallback is now decided by `PlayingNights`, and this function only says what
-    // it does with each case. The earliest of `blockedNights`, so the card's one stored key and the
-    // per-night set can never name different days as the first one out (L342, L261).
+    // #1421: the night that decides is the most SEVERE blocked night of the run, and the earliest only among
+    // equals. It used to be the earliest alone. A run stores ONE conflict key and Dan's "I can shoot this
+    // anyway" is recorded against it, so a day off he had waved through on an early night kept the key
+    // unchanged when a booked shoot landed on a later night, and the run stayed clear over a night he is
+    // working: #901's trap, reopened across kinds.
+    //
+    // #3286: the empty-list fallback is decided by `PlayingNights`, and this function only picks from
+    // `blockedNights`, so the card's one stored key and the per-night set can never disagree about which
+    // nights are out (L342, L261).
     func conflict(_ playing: PlayingNights) -> Day? {
-        blockedNights(playing).first
+        blockedNights(playing).min(by: Day.decidesBefore)
     }
 
     // The same question in its unpacked form, for a caller holding the three fields rather than a row

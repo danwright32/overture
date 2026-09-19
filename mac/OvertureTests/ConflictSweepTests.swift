@@ -141,4 +141,27 @@ struct ConflictSweepTests {
 
         #expect(p.conflictNote == "You're already shooting Nguyen Recital on Nov 18.")
     }
+
+    // #1421: a day off Dan waved through on an EARLY night of a run must not hide a booked shoot on a
+    // LATER night of the same run. The run stores one key; when the earliest night decided, that key stayed
+    // the day off he had already cleared, so the booking landing on Nov 17 changed nothing he could see and
+    // the run stayed sendable over a night he is working.
+    @Test func aWavedThroughDayOffDoesNotMaskABookedShootLaterInTheRun() throws {
+        let ctx = try context()
+        let p = show(ctx, on: "2026-11-14", runEnd: "2026-11-18")
+        DayOffEditing.add(start: "2026-11-14", end: "2026-11-15", note: "Rehearsal",
+                          export: (bookings: [], blockedDates: [], health: .ok), into: ctx)
+        #expect(p.hasUnclearedConflict)
+        p.clearConflict()                                              // "I can shoot this anyway"
+        try ctx.save()
+        #expect(p.hasUnclearedConflict == false)
+
+        let booking = OvertureBooking(id: "b1", clientId: "c1", clientDisplayName: "A Client",
+                                      shootName: "Nguyen Recital", startDate: "2026-11-17",
+                                      endDate: "2026-11-17", venueId: nil, venueName: "V")
+        ConflictSweep.reapplyAll(export: (bookings: [booking], blockedDates: [], health: .ok), in: ctx)
+
+        #expect(p.hasUnclearedConflict)                                // the booking is a new fact
+        #expect(p.conflictNote == "A later night of this run is out: you're already shooting Nguyen Recital on Nov 17.")
+    }
 }

@@ -25,11 +25,12 @@ struct DaysOffView: View {
     @Environment(ActionFeedback.self) private var feedback
     @Query(sort: \DayOff.startDate) private var daysOff: [DayOff]
 
-    // Built fresh on each render from the export plus the rows above, so the sheet cannot show a calendar
-    // that disagrees with the one the scout will use.
-    private var calendar: BlockedCalendar {
-        ScoutService.blockedCalendar(export: DownbeatBridge.loadedExport(), context: context)
-    }
+    // #1421: the app's one cached calendar, rather than one built on every render of this sheet. It is the
+    // value `ConflictSweep.reapplyAll` last judged the queue against, handed over before any add, remove,
+    // cancel or restore returns, so the sheet still cannot show a calendar that disagrees with the queue.
+    // Required rather than optional: a missed injection drawing an empty calendar would read as "nothing
+    // booked", which is the one false claim this sheet exists to prevent.
+    @Environment(AvailabilitySnapshot.self) private var availability
 
     // #925: bound, not merely read, so pressing "Hide this for a week" redraws this sheet and the toolbar
     // behind it at once. Read through DaysOffAttention, never interpreted here: the value is a timestamp,
@@ -186,8 +187,11 @@ struct DaysOffView: View {
         // so drawing this section decoded the whole export FOUR times. Found by the scan rather than by
         // reading, which is the point of the scan: the same shape as #3837's `prepRefusal`, whose own
         // docstring said "this reads it twice" over code that read it four times.
-        let cal = calendar
-        let bookings = DownbeatBridge.loadedExport().bookings
+        //
+        // #1421: the calendar and the bookings now come from the app's snapshot, so drawing this section
+        // decodes the export ZERO times. `cancelledRows` is still a store fetch, and still read once.
+        let cal = availability.calendar
+        let bookings = availability.bookings
         let cancelled = cancelledRows
         let cancelledIds = Set(cancelled.map(\.bookingId))
         let live = cal.days.filter { $0.kind == .bookedShoot }
