@@ -849,12 +849,20 @@ enum ProspectMutations {
                                           droppedNights: [night] + releasing)
             }
             if let night, case .moved(_, let releasing) = drop {
+                // #3373: the same rule as the card's own menu. A kept row goes back to Scout and loses
+                // its draft; undetectable from Scout today, where nothing on a night is kept, and pinned
+                // here so the two controls cannot disagree the day that changes (L30).
+                let deletedDraft = model.returnToScoutIfKept(priorStatus: priorStatus, droppedNight: night,
+                                                             filedUnder: night)
                 ConflictSweep.reapply(model, export: export, in: context)
-                return QueueUndoEntry.Row(recording: model, priorStatus: priorStatus,
-                                          priorShowOutcomeRaw: priorReason, priorShowOutcomeAt: priorOutcomeStamp,
-                                          priorDismissedAt: priorExit,
-                                          priorConflictClearedKey: priorClearedConflict,
-                                          droppedNights: [night] + releasing)
+                var row = QueueUndoEntry.Row(recording: model, priorStatus: priorStatus,
+                                             priorShowOutcomeRaw: priorReason,
+                                             priorShowOutcomeAt: priorOutcomeStamp,
+                                             priorDismissedAt: priorExit,
+                                             priorConflictClearedKey: priorClearedConflict,
+                                             droppedNights: [night] + releasing)
+                row.priorDraft = deletedDraft
+                return row
             }
             // #16: the model's own setter, so the exit date is stamped here exactly as a per-card dismiss
             // stamps it, and a show dismissed twice keeps its FIRST exit date.
@@ -976,6 +984,12 @@ enum ProspectMutations {
                 return
             }
             if let night, case .moved(let opening, let releasing) = drop {
+                // #3373 (Dan's call, 2026-09-18): the keep was about the night he just dropped, so a kept,
+                // drafted or approved row goes back to Scout on its next night, and its draft goes with it
+                // so no email naming the dropped night can be sent. Before the sweep, so the clash the
+                // sweep derives is judged for the row as it now stands.
+                let deletedDraft = model.returnToScoutIfKept(priorStatus: priorStatus, droppedNight: night,
+                                                             filedUnder: night)
                 // #2691 trap 5: the badge reports the earliest blocked night of the run, so dropping the
                 // blocked one has to re-ask. Through the shared sweep, so the badge after a drop and the
                 // badge after a day off edit cannot be computed two different ways (L16).
@@ -988,7 +1002,8 @@ enum ProspectMutations {
                                                priorShowOutcomeAt: priorOutcomeStamp,
                                                priorDismissedAt: priorExit,
                                                priorConflictClearedKey: priorClearedConflict,
-                                               droppedNights: [night] + releasing))
+                                               droppedNights: [night] + releasing,
+                                               priorDraft: deletedDraft))
                 }
                 context.saveOrWarn(org: item.groupName, feedback: feedback)
                 // #2997: silent when the drop was only Dan's night, which is the ordinary case and
