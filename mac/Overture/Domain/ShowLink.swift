@@ -117,20 +117,50 @@ enum ShowLink {
         return Set(EasternDate.days(from: opening, through: closing))
     }
 
+    // A row with its two folds taken ONCE.
+    //
+    // Once rather than at each site that needs them, and it is worth the extra type. Measured on the
+    // live store 2026-09-19, folding per site cost 100.7 ms a pass over 1,268 rows against 43.9 ms for
+    // `ContradictedCancellation` built beside it in the same function, and `QueueModel.scope` runs this
+    // on EVERY queue rebuild. The folds are the expensive part: `TitleNormalization.normalizeForKey`
+    // and `VenueNormalization.normalizeForKey` each walk and rewrite a string, and they were running
+    // twice a row, once to bucket and once to build the token discard map.
+    private struct Folded {
+        let row: Row
+        let title: String
+        let venue: String
+
+        init(_ row: Row) {
+            self.row = row
+            self.title = foldedTitle(row.groupName)
+            self.venue = foldedVenue(row.venue)
+        }
+
+        var bucketKey: String { title + "|" + venue }
+    }
+
     // Rows sharing a folded title and a folded venue, in no particular order.
-    private static func buckets(_ rows: [Row]) -> [[Row]] {
-        var byFold: [String: [Row]] = [:]
-        for row in rows {
-            byFold[foldedTitle(row.groupName) + "|" + foldedVenue(row.venue), default: []].append(row)
+    private static func buckets(_ folded: [Folded]) -> [[Folded]] {
+        var byFold: [String: [Folded]] = [:]
+        for one in folded {
+            byFold[one.bucketKey, default: []].append(one)
         }
         return Array(byFold.values)
     }
 
     // The tokens this row may be joined by, after the discard below has been applied.
-    private static func usableTokens(_ rows: [Row]) -> [String: Set<String>] {
+    //
+    // Over EVERY row, and an attempt to narrow it to the rows in contested buckets is recorded here
+    // because it is the obvious optimisation and it is wrong. A token joins only inside a bucket, so it
+    // reads as though a row alone under its folded title and venue cannot matter. It can: the DISCARD is
+    // keyed on the token and the VENUE, not on the bucket, so a row sitting alone under its own title is
+    // exactly how a venue stamping one token across its season reveals itself. Narrowing it made
+    // `discardsATokenThatAppearsUnderTwoTitlesAtOneVenue` go red, which is the guard working. Measured
+    // 2026-09-19 it also saved 0.6 ms of 67, so there was nothing to buy.
+    private static func usableTokens(_ folded: [Folded]) -> [String: Set<String>] {
         var raw: [String: Set<String>] = [:]
-        for row in rows {
-            raw[row.id] = Set(row.sourceURLs.compactMap(ProductionToken.inURL))
+        for one in folded {
+            raw[one.row.id] = Set(one.row.sourceURLs.compactMap(ProductionToken.inURL))
         }
         // A venue that stamps ONE token across its whole season would otherwise fuse the season onto
         // one card. So a token appearing under more than one folded title at one venue key is discarded
@@ -139,39 +169,44 @@ enum ShowLink {
         // over 211 venuetix rows), which is the point. It costs nothing now and refuses the failure on
         // the day a venue starts, rather than leaving it to be noticed.
         var titlesPerToken: [String: Set<String>] = [:]
-        for row in rows {
-            let venue = foldedVenue(row.venue)
-            for token in raw[row.id] ?? [] {
-                titlesPerToken[token + "|" + venue, default: []].insert(foldedTitle(row.groupName))
+        for one in folded {
+            for token in raw[one.row.id] ?? [] {
+                titlesPerToken[token + "|" + one.venue, default: []].insert(one.title)
             }
         }
         let poisoned = Set(titlesPerToken.filter { $0.value.count > 1 }.keys.map {
             String($0.prefix(upTo: $0.range(of: "|", options: .backwards)?.lowerBound ?? $0.endIndex))
         })
-        for row in rows {
-            raw[row.id]?.subtract(poisoned)
+        guard !poisoned.isEmpty else { return raw }
+        for one in folded {
+            raw[one.row.id]?.subtract(poisoned)
         }
         return raw
     }
 
     // Every group, including the rows that stand alone, so one walk answers both callers.
     private static func clusters(_ rows: [Row]) -> [[Row]] {
-        let tokens = usableTokens(rows)
+        let folded = rows.map(Folded.init)
+        let tokens = usableTokens(folded)
         var out: [[Row]] = []
-        for bucket in buckets(rows) {
+        for bucket in buckets(folded) {
             if bucket.count == 1 {
-                out.append(bucket)
+                out.append([bucket[0].row])
                 continue
             }
-            let nightsByID = Dictionary(uniqueKeysWithValues: bucket.map { ($0.id, nights(of: $0)) })
-            var find = DisjointSet(bucket.map(\.id))
-            for (index, left) in bucket.enumerated() {
-                for right in bucket[(index + 1)...] where joins(left, right, nightsByID, tokens) {
+            let members = bucket.map(\.row)
+            // The night set is taken once a row too, for the same reason the folds are: the pairwise
+            // walk below would otherwise rebuild it for each comparison, and a bucket of 15 rows is
+            // over a hundred of them.
+            let nightsByID = Dictionary(uniqueKeysWithValues: members.map { ($0.id, nights(of: $0)) })
+            var find = DisjointSet(members.map(\.id))
+            for (index, left) in members.enumerated() {
+                for right in members[(index + 1)...] where joins(left, right, nightsByID, tokens) {
                     find.union(left.id, right.id)
                 }
             }
             var byRoot: [String: [Row]] = [:]
-            for row in bucket { byRoot[find.root(row.id), default: []].append(row) }
+            for row in members { byRoot[find.root(row.id), default: []].append(row) }
             out.append(contentsOf: byRoot.values)
         }
         return out
@@ -215,14 +250,16 @@ enum ShowLink {
     // Per PAIR and never one per bucket, because a bucket of three rows none of which intersect is
     // three separate questions: on the live store, Gross Prophets at Asylum NYC is exactly that.
     static func nearMisses(_ rows: [Row]) -> [NearMiss] {
-        let tokens = usableTokens(rows)
+        let folded = rows.map(Folded.init)
+        let tokens = usableTokens(folded)
         var out: [NearMiss] = []
-        for bucket in buckets(rows) where bucket.count > 1 {
-            let nightsByID = Dictionary(uniqueKeysWithValues: bucket.map { ($0.id, nights(of: $0)) })
-            var find = DisjointSet(bucket.map(\.id))
+        for bucket in buckets(folded) where bucket.count > 1 {
+            let members = bucket.map(\.row)
+            let nightsByID = Dictionary(uniqueKeysWithValues: members.map { ($0.id, nights(of: $0)) })
+            var find = DisjointSet(members.map(\.id))
             var refused: [(Row, Row)] = []
-            for (index, left) in bucket.enumerated() {
-                for right in bucket[(index + 1)...] {
+            for (index, left) in members.enumerated() {
+                for right in members[(index + 1)...] {
                     if joins(left, right, nightsByID, tokens) {
                         find.union(left.id, right.id)
                     } else {

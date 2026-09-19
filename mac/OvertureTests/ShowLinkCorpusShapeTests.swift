@@ -121,6 +121,69 @@ struct ShowLinkCorpusShapeTests {
         }
     }
 
+    // MARK: what the pass costs, against the one already sitting beside it
+
+    /// The MEDIAN of five runs with its spread. One reading is not a yardstick: measured on this Mac
+    /// 2026-09-19, the whole live-store pass came out 644.9 ms and then 1184.9 ms on IDENTICAL code, and
+    /// the prospect fetch inside it read 182.7, 242.0 and 447.1 ms across three runs of the same bytes.
+    /// A difference smaller than that is not visible to any single reading (L224, L395, L656).
+    private func medianMilliseconds(_ work: () -> Void) -> (median: Double, low: Double, high: Double) {
+        var runs: [Double] = []
+        for _ in 0..<5 {
+            let started = DispatchTime.now().uptimeNanoseconds
+            work()
+            runs.append(Double(DispatchTime.now().uptimeNanoseconds - started) / 1_000_000)
+        }
+        runs.sort()
+        return (runs[runs.count / 2], runs[0], runs[runs.count - 1])
+    }
+
+    // `QueueModel.scope` now builds this table on every queue rebuild, over the whole corpus, so what it
+    // costs is a fair question and "it is only string folding" is not an answer (L353).
+    //
+    // Judged against `ContradictedCancellation.contradictedKeys`, which is the whole-corpus pass built
+    // immediately beside it in the same function, rather than against a fixed millisecond count. A fixed
+    // number measures whatever else this Mac is running; a ratio against a neighbour measured in the SAME
+    // run does not, because both arms pay the same load (L224). The neighbour is also the right one on
+    // the merits: it is the pass this repository already accepted the cost of for the same population.
+    @Test(.enabled(if: liveStoreExists, "no live store on this machine"))
+    func theGroupingCostsNoMoreThanThePassBesideIt() async throws {
+        await RealStoreTestLock.shared.acquire()
+        do {
+            let dir = try sandboxes.make(named: "showlink-cost")
+            guard let clone = try LiveStoreClone.makeClone(in: dir) else {
+                await RealStoreTestLock.shared.release()
+                return
+            }
+            let ctx = ModelContext(try container(at: clone))
+            let all = try ctx.fetch(FetchDescriptor<Prospect>())
+
+            // Mapping the rows is part of what the scope builder pays, so it is inside the measured work
+            // rather than hoisted out of it, which would measure a cheaper thing than the app runs.
+            let mine = medianMilliseconds { _ = ShowLink.group(all.map(ShowLink.Row.init)) }
+            let neighbour = medianMilliseconds { _ = ContradictedCancellation.contradictedKeys(among: all) }
+
+            print("""
+            ShowLink pass cost, over \(all.count) rows
+              ShowLink.group                  \(String(format: "%.1f", mine.median)) ms             (\(String(format: "%.1f", mine.low)) to \(String(format: "%.1f", mine.high)))
+              ContradictedCancellation beside it \(String(format: "%.1f", neighbour.median)) ms             (\(String(format: "%.1f", neighbour.low)) to \(String(format: "%.1f", neighbour.high)))
+            """)
+
+            // Three times the neighbour, not one times it, and the ceiling is deliberately far above the
+            // reading rather than just over it, so crossing it is a change in kind and not noise (L172).
+            #expect(mine.median < neighbour.median * 3,
+                    Comment(rawValue: "the grouping costs \(String(format: "%.1f", mine.median)) ms "
+                            + "against \(String(format: "%.1f", neighbour.median)) ms for the pass built "
+                            + "beside it over the same rows"))
+
+            try? FileManager.default.removeItem(at: clone)
+            await RealStoreTestLock.shared.release()
+        } catch {
+            await RealStoreTestLock.shared.release()
+            throw error
+        }
+    }
+
     private func distinctGroups(_ grouped: [String: [String]]) -> Int {
         Set(grouped.map { Set([$0.key] + $0.value) }).count
     }
