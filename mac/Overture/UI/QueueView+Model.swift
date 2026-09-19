@@ -270,6 +270,11 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     // #939: the same production at OTHER venues nearby (a recurring Carnegie community-calendar
     // pattern), distinct from partOfRelatedRun above (which means the same venue, a separate run).
     var linkedEngagementMembers: [EngagementLink.Member] = []
+    // #3282: the OTHER rows holding this same show, by natural key. Distinct from both neighbours
+    // above: `partOfRelatedRun` is one show's separate runs at one venue, `linkedEngagementMembers` is
+    // one production at DIFFERENT venues, and this is the same production at the same venue stored more
+    // than once, which is a fault in the store rather than a fact about the engagement.
+    var sameShowKeys: [String] = []
     // #3013: this show was left out of the last run Dan started, because another run was already on it.
     // The slot named is the run he PRESSED, not the one holding it, because that is what makes the
     // sentence actionable. nil for every show that was not left out, which is almost all of them.
@@ -3132,10 +3137,17 @@ enum QueueModel {
         // contradiction. Judging it against a filtered set would let the warning come back for exactly
         // the rows Dan has already dealt with.
         let contradictedCancellations = ContradictedCancellation.contradictedKeys(among: corpus ?? prospects)
+        // #3282: over the UNFILTERED corpus for the same reason `contradictedCancellations` above is.
+        // The second row holding this show may itself be dismissed, or outside the queue's date window,
+        // and a duplicate the caller's scope happens to exclude is still a duplicate. Judging it against
+        // the caller's rows would make a card stop admitting the fault as soon as Dan dealt with the
+        // other half of it.
+        let sameShowGroups = ShowLink.group((corpus ?? prospects).map(ShowLink.Row.init))
         let pre = CardPreamble(linked: linked, inherited: inherited, venueBrands: venueBrands,
                                rowCounts: rowCounts, calendarBySourceId: calendarBySourceId,
                                overrides: overrides, clients: clients,
                                contradictedCancellations: contradictedCancellations,
+                               sameShowGroups: sameShowGroups,
                                now: now, day: day)
 
         var rows: [QueueScopeRow] = []
@@ -3208,6 +3220,8 @@ enum QueueModel {
         // asking it per card would walk the store once per card drawn. On the preamble it is built with
         // the other whole-corpus tables and read by each card as a set membership test.
         let contradictedCancellations: Set<String>
+        // #3282: for each row's natural key, the OTHER keys holding the same show.
+        let sameShowGroups: [String: [String]]
         let now: Date
         let day: String
 
@@ -3343,6 +3357,8 @@ enum QueueModel {
         if pre.contradictedCancellations.contains(p.naturalKey) {
             item.disappearedFromFeed = false
         }
+        // #3282: the store holding this show more than once, said on the card rather than nowhere.
+        item.sameShowKeys = pre.sameShowGroups[p.naturalKey] ?? []
         // #1731: only meaningful where the verdict IS the building; nil otherwise.
         item.readAsTheBuildingReason = pre.venueBrands.contains(p.presenter)
             ? OrganisationListing.buildingReason(
@@ -3554,6 +3570,25 @@ enum QueueModel {
             // guessing which run it was, and never drop the note entirely: the show really was skipped.
             return "Left out of your last run: another run was already working on this one."
         }
+    }
+
+    // #3282: the card saying the store holds this show more than once. Nothing anywhere said so before,
+    // and the false cancellation warning #3921 fixed was only the symptom of it that was visible.
+    //
+    // A COUNT rather than a list of the others, deliberately, and the reason is measured: every one of
+    // the six groups on the queue today holds exactly two rows, so naming the sibling would repeat the
+    // card's own title back at Dan on every real case. The archive's largest group is twelve, where a
+    // list would be a wall of identical text (L579). Collapsing them onto one card is the eventual
+    // answer and is its own work; this is the card admitting the fault in the meantime.
+    static func storedMoreThanOnceNote(_ item: QueueItem) -> String? {
+        let others = item.sameShowKeys.count
+        guard others > 0 else { return nil }
+        // About the STORE, not about the screen, and the distinction is not pedantry: the other row may
+        // be dismissed or outside the queue's window, so a sentence promising another CARD would send
+        // Dan looking for something he cannot see. A message may claim only what its check measured
+        // (L11), and what this one measured is how many rows hold this show.
+        return others == 1 ? "This show is stored twice."
+                           : "This show is stored \(others + 1) times."
     }
 
     static func linkedEngagementNote(_ item: QueueItem) -> String? {
