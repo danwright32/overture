@@ -54,6 +54,9 @@ struct SelfBookingGuard: Identifiable {
 // between the menu and the button cannot widen what he agreed to.
 struct NightDismiss: Identifiable {
     let dateLabel: String
+    // #1743: the night itself (yyyy-MM-dd), which the day off offer is for. Required rather than defaulted,
+    // so a caller cannot forget it and quietly lose the offer (L168).
+    let date: String
     let reason: ShowOutcome
     let keys: [String]
     let runs: [String]
@@ -98,6 +101,10 @@ final class QueueSheetState {
     var pendingProbe: ProbeConfirm?
     // #1500: a whole night waiting to be buried.
     var pendingNightDismiss: NightDismiss?
+    // #1743: the day off offer a whole-night dismiss produced, held until the confirmation sheet has
+    // actually gone. Raising it while that sheet is still dismissing is the known SwiftUI failure: the
+    // second sheet silently never appears, and every mutation test stays green (L3).
+    var dayOffAfterNightDismiss: DayOffOfferRequest.Pending?
 
     /// Whether anything at all is being asked. Used by the tests that drive two at once, and by nothing
     /// on the render path: a reader here would put every sheet write back on whoever read it.
@@ -130,6 +137,8 @@ struct QueueSheetHost<Content: View>: View {
     // and every ancestor of this view already provides both.
     @Environment(\.modelContext) private var context
     @Environment(ActionFeedback.self) private var feedback
+    // #1743: the picker RootView presents, raised from the confirmation's onDismiss below.
+    @Environment(DayOffOfferRequest.self) private var dayOffOffer
 
     var body: some View {
         content()
@@ -159,7 +168,14 @@ struct QueueSheetHost<Content: View>: View {
             }
             // #1500: confirm a whole night before it goes. The count is the point: Dan has to know exactly
             // how much he is about to bury, and which run loses its later dates with it.
-            .sheet(item: $sheets.pendingNightDismiss) { pending in
+            .sheet(item: $sheets.pendingNightDismiss, onDismiss: {
+                // #1743: only now, with the confirmation gone, is the day off picker asked for. Raised in
+                // `onProceed` itself it would be asked for in the tick this sheet is closing, and would
+                // silently never appear.
+                guard let offer = sheets.dayOffAfterNightDismiss else { return }
+                sheets.dayOffAfterNightDismiss = nil
+                dayOffOffer.request(offer)
+            }) { pending in
                 SelfBookingConfirmSheet(
                     title: BulkDismiss.confirmTitle(count: pending.keys.count, heldBack: pending.heldBack,
                                                     dateLabel: pending.dateLabel),

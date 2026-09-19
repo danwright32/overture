@@ -786,12 +786,19 @@ enum ProspectMutations {
     // rows that date group is actually rendering, so a filter or a search that narrows the night narrows
     // this with it, and nothing is buried that was not on screen.
     //
-    // Deliberately does NOT offer to capture the date as a day off the way a single calendar-reason
-    // dismiss does (#924). Dan's call, 2026-07-26: a bulk dismiss should stay quiet.
+    // #1743 (Dan, 2026-07-29): a calendar reason on a whole night OFFERS to block that night, through the
+    // same `DayOffOffer` rule the single card dismiss uses. "Not this night" said about every show on a
+    // date is where the offer is most earned. The offer is RETURNED rather than raised here, because the
+    // caller is closing a confirmation sheet in the same moment and a second sheet asked for in that tick
+    // silently never appears; the caller raises it once the first has gone (`QueueSheetHost`).
+    // `nightDate` is the night itself (yyyy-MM-dd), and nil offers nothing.
+    @discardableResult
     static func dismissAll(_ keys: [String], reason: ShowOutcome, dateLabel: String,
+                           nightDate: String? = nil,
                            prospects: [Prospect], context: ModelContext, feedback: ActionFeedback,
                            undo: QueueUndoStack? = nil, now: Date = Date(),
-                           export: DayOffEditing.Export = DownbeatBridge.loadedExport()) {
+                           export: DayOffEditing.Export = DownbeatBridge.loadedExport())
+        -> DayOffOfferRequest.Pending? {
         let byKey = Dictionary(prospects.map { ($0.naturalKey, $0) }, uniquingKeysWith: { first, _ in first })
         // Two rows are skipped rather than recorded: one whose key has no prospect left (deleted at runtime
         // by NaturalKeyVenueMigration), and one this exact action already dismissed for this exact reason
@@ -799,7 +806,10 @@ enum ProspectMutations {
         // next Cmd+Z doing nothing while looking exactly like a working undo.
         let targets = keys.compactMap { byKey[$0] }
             .filter { !($0.status == .dismissed && $0.showOutcome == reason) }
-        guard !targets.isEmpty else { return }
+        guard !targets.isEmpty else { return nil }
+        // #1743: read BEFORE anything moves. A night already blocked shows as a clash on the night itself
+        // on every show filed there, which is exactly the single card's own `alreadyBlocked` fact.
+        let nightAlreadyBlocked = targets.contains { $0.conflictScope == .thisNight }
 
         // #2754: a run the store could not answer about is left ENTIRELY alone, neither moved nor
         // dismissed, and counted here so the acknowledgment can say so. Dismissing it whole instead would
@@ -886,11 +896,11 @@ enum ProspectMutations {
                                                                       dateLabel: dateLabel),
                                      tone: .warning)
             }
-            return
+            return nil
         }
         // #1417: nothing is claimed and nothing is made undoable until the write is confirmed. An undo
         // entry for a dismissal that never reached disk would put back rows that never left.
-        guard context.saveOrWarn(org: dateLabel, feedback: feedback) else { return }
+        guard context.saveOrWarn(org: dateLabel, feedback: feedback) else { return nil }
         if let undo,
            let entry = QueueUndoEntry.batch(actionLabel: "Dismiss",
                                             label: BulkDismiss.undoLabel(count: rows.count,
@@ -917,6 +927,15 @@ enum ProspectMutations {
             feedback.acknowledge(ActionAck.nightDismissed(count: rows.count, reason: reason,
                                                           dateLabel: dateLabel))
         }
+        // #1743: the night Dan named and no wider, even when a show on it runs past it (his call,
+        // 2026-07-29, and #2373's rule for every offer). Keyed to the batch entry's first row so the block
+        // folds into the same undo (#1473).
+        // The undated group ("tbd") is not a night, and a picker opened on it would fall back to today.
+        guard let nightDate, EasternDate.date(from: nightDate) != nil, let first = rows.first,
+              let o = DayOffOffer.offer(reason: reason, performanceDate: nightDate,
+                                        alreadyBlocked: nightAlreadyBlocked) else { return nil }
+        return .night(date: nightDate, dateLabel: dateLabel, count: rows.count,
+                      dismissKey: first.naturalKey, offer: o)
     }
 
     // #924: dismiss for a reason, then, when that reason is about the calendar, OFFER to capture the date

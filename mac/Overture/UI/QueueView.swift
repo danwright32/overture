@@ -657,9 +657,13 @@ struct QueueView: View {
         withAnimation(.easeOut(duration: 0.15)) {
             for item in departing { sendState.depart(item.id, as: item, because: .closedOut) }
         }
-        ProspectMutations.dismissAll(keys, reason: pending.reason, dateLabel: pending.dateLabel,
-                                     prospects: prospects, context: context, feedback: feedback,
-                                     undo: undoStack)
+        // #1743: the offer is HELD, not raised: the confirmation sheet is closing in this same tick, and
+        // `QueueSheetHost` raises it from that sheet's onDismiss.
+        sheets.dayOffAfterNightDismiss =
+            ProspectMutations.dismissAll(keys, reason: pending.reason, dateLabel: pending.dateLabel,
+                                         nightDate: pending.date,
+                                         prospects: prospects, context: context, feedback: feedback,
+                                         undo: undoStack)
         // Cleared after the exit plays, never before the rebuild lands: clearing early would drop the
         // snapshots while the real rows are still in the queue's answer, and the whole night would flash
         // back onto the screen.
@@ -932,7 +936,8 @@ struct QueueView: View {
             Section(BulkDismiss.menuTitle(count: plan.count, heldBack: split.heldBack, dateLabel: group.monthDay)) {
                 ForEach(ShowOutcome.neverPitched, id: \.self) { reason in
                     Button(reason.label) {
-                        sheets.pendingNightDismiss = NightDismiss(dateLabel: group.monthDay, reason: reason,
+                        sheets.pendingNightDismiss = NightDismiss(dateLabel: group.monthDay, date: group.id,
+                                                           reason: reason,
                                                            keys: plan.keys, runs: plan.runsPastTheNight,
                                                            keysOnlyThisNight: plan.keysOnlyThisNight,
                                                            heldBack: split.heldBack)

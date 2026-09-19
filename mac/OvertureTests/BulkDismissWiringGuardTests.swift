@@ -59,13 +59,15 @@ struct BulkDismissWiringGuardTests {
         #expect(queue.contains("sheets.pendingNightDismiss = NightDismiss("))
         // #3658: the PRESENTATION is the host's. Both halves are asserted, because the claim spans two
         // files now and checking either alone leaves the other free to be deleted (L280).
-        #expect(sheetsFile.contains(".sheet(item: $sheets.pendingNightDismiss)"))
+        // #1743: the presentation now carries an onDismiss, which raises the day off offer once the
+        // confirmation has gone (NightDismissDayOffTests pins what it does).
+        #expect(sheetsFile.contains(".sheet(item: $sheets.pendingNightDismiss, onDismiss:"))
         // A first-party branded sheet, not a stock system dialog (#1249, and Dan's standing preference).
         // #2726: named at THIS presentation. `SelfBookingConfirmSheet(` occurs three times in the host
         // (the self-booking guard, the probe confirm, and this one), so a bare search for it was answered
         // by either of the other two and would have passed with the night-dismiss sheet deleted (L135).
         #expect(SourceGuardHelper.containsCode(
-            ".sheet(item: $sheets.pendingNightDismiss) { pending in SelfBookingConfirmSheet(",
+            "dayOffOffer.request(offer) }) { pending in SelfBookingConfirmSheet(",
             in: sheetsFile))
         // The dismissal itself happens on the sheet's own buttons and nowhere else, and it reaches the
         // queue's own `dismissNight` through the one closure the host is given. Both ends, or the sheet
