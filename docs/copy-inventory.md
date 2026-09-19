@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1607 sentences**.
+Every sentence Overture can say to Dan: **1612 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -14,7 +14,7 @@ What is not, and why:
   sentences under tokens nobody reads.
 - **Nothing, if it is written as two literals joined with `+`.** Those ARE joined here, into the
   one sentence the running app says (#3155). What is still only part of what Dan reads is a
-  sentence carrying a VALUE: 582 of the 1607 below hold a
+  sentence carrying a VALUE: 587 of the 1612 below hold a
   `\(...)` where a number or a name goes, so what is printed is the template. They are counted
   here rather than listed again, because the hole is visible in the line itself; what was missing
   was any statement of how much of this document is templates.
@@ -1755,6 +1755,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/WeeklyDayOff.swift`
 "Pick two different styles to compare."
     `UI/ExperimentReportView.swift`
+"Pitch \(EasternDate.dayLabel(night) ?? night) after all"
+    `Domain/DraftReviewNotes.swift`
 "Pitch copied for \(org)"
     `App/ActionFeedback.swift`
 "Pitching other shows that night"
@@ -2478,6 +2480,10 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/BuildFreshnessPanel.swift`
 "This copy was built from unmerged code"
     `Domain/BuildFreshnessPanel.swift`
+"This draft leaves out a night you're pitching. You're pitching \(show)."
+    `Domain/EventDateInDraft.swift`
+"This draft says \(named), a night you left out of this pitch. It won't send until the draft drops it or you pitch that night after all."
+    `Domain/EventDateInDraft.swift`
 "This draft says \(named). The show is \(show)."
     `Domain/EventDateInDraft.swift`
 "This draft won't send: \(what.isEmpty ? "a blocking issue" : what)."
@@ -2861,6 +2867,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ReachedOutQueue.swift`
 "\(Discipline.other.label). Set it."
     `UI/QueueView+Model.swift`
+"\(EasternDate.dayLabel(night) ?? night) is no longer a night of this run, so it could not be pitched."
+    `Domain/DraftReviewNotes.swift`
 "\(Plural.count(count, "new lead")) while you were away"
     `UI/QueueView+Model.swift`
 "\(Plural.count(count, "reply", "replies")) waiting on your answer"
@@ -3021,6 +3029,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/OmniFocusSync.swift`
 "\(first) and \(rest) other\(rest == 1 ? "" : "s")"
     `Domain/SelfBookingConflict.swift`
+"\(first) to \(last)"
+    `Domain/EventDateInDraft.swift`
 "\(first), \(names[1]) and \(names.count - 2) more"
     `Domain/OmniFocusSync.swift`
 "\(found) times"

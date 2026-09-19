@@ -81,9 +81,9 @@ struct PrepQueueContractTests {
         #expect(roundTripped == expected)
     }
 
-    @Test func theBuilderNowStampsVersion14() {
+    @Test func theBuilderNowStampsVersion15() {
         let q = PrepQueueBuilder.build(from: [], generatedAt: "2026-06-25T00:00:00.000Z", houses: [])
-        #expect(q.version == 14)
+        #expect(q.version == 15)
     }
 
     // v13 (#2983): an item may name the producing organisation the APP already holds, which until this
