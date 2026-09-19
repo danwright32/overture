@@ -140,6 +140,28 @@ enum EasternDate {
 
     static func longMonth(_ component: Int) -> String { longMonths[(component - 1 + 12) % 12] }
 
+    // #3325: the one list of weekday names. The queue's date headers read it too, so a night in the Prep
+    // picker and the header above its card can never spell one day two ways.
+    private static let shortWeekdays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+
+    static func shortWeekday(_ component: Int) -> String { shortWeekdays[(component - 1 + 7) % 7] }
+
+    // "Fri Nov 6": a night as the Prep picker lists it, where the weekday is the point (a run's nights
+    // are usually the same few weekdays, and that is how Dan reasons about which he can shoot).
+    static func weekdayDayLabel(_ day: String) -> String? {
+        guard let d = date(from: day), let label = dayLabel(day) else { return nil }
+        return "\(shortWeekday(calendar.component(.weekday, from: d))) \(label)"
+    }
+
+    // The Monday that starts the week this day falls in, as a day string. Nil for an unparseable day.
+    static func weekStart(_ day: String) -> String? {
+        guard let d = date(from: day) else { return nil }
+        let weekday = calendar.component(.weekday, from: d)          // Sunday is 1
+        let back = (weekday + 5) % 7                                  // days since Monday
+        guard let monday = calendar.date(byAdding: .day, value: -back, to: d) else { return nil }
+        return dayString(from: monday)
+    }
+
     // A day string as Dan reads it: "Nov 14". Nil for an unparseable day, so a caller has to say what it
     // wants to show instead rather than being handed a plausible-looking wrong date.
     static func dayLabel(_ day: String) -> String? {

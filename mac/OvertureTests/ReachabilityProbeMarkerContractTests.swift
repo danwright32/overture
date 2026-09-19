@@ -190,7 +190,7 @@ struct UnreadableCheckMarkerTests {
     }
 
     private func freshDefaults() -> UserDefaults {
-        UserDefaults(suiteName: "probe-marker-contract-\(UUID().uuidString)")!
+        ScratchDefaults.make("probe-marker-contract")
     }
 
     private func writeResults(_ url: URL, _ results: PrepResults) throws {

@@ -377,9 +377,25 @@ the measurement it came from lives here. Read the entry before the rule decides 
   output rather than passing silently.
   `OVERTURE_MUTATE_RUNNER` swaps the runner, which is how to drive the shell fixtures or vitest instead
   of the Swift suite. Since #2972 the run's FULL log is KEPT at a named path and printed as `full log:`
-  (`/tmp/overture-mutate-run.log`, moved with `OVERTURE_MUTATE_LOG`): only the last 25 lines go to the
+  (named with `OVERTURE_MUTATE_LOG`): only the last 25 lines go to the
   screen, and the exact failure text this file demands in a PR body routinely sits just above that cut,
   which used to mean running the whole mutation again for evidence the run had already produced.
+  **Since #3984 every run's log is its OWN file**, under `/tmp/overture-mutate-runs/` (pruned after a
+  day), where it used to be one fixed `/tmp/overture-mutate-run.log` shared by every worktree. Every
+  verdict is read back out of that log, so with several agent lanes mutating at once each judged whatever
+  another had last written: measured 2026-09-18, one run reported CAUGHT from a log naming another lane's
+  failing test. The log's first line now names the run that owns it, and a run that finds it replaced
+  refuses as `LOG OVERWRITTEN` rather than reporting a verdict about somebody else's output, which still
+  matters when two runs are handed one `OVERTURE_MUTATE_LOG` by hand. The first proof of that check found
+  exactly this: a fixture run as a mutation's runner INHERITS the outer run's `OVERTURE_MUTATE_LOG`, so
+  every inner run wrote into the outer log (L439), and `scripts/mutate.test.sh` now unsets it.
+  **Since #3923 a FILE passed as a scope to the Swift runner is refused as `SCOPE NOT FOR THIS RUNNER`**,
+  before anything is mutated. The Swift runner does not recognise a path such as a shell fixture, runs
+  the whole suite instead, and the verdict used to be CAUGHT about a suite unrelated to the file
+  (measured 2026-09-15 proving #3680). Only a recognisable file is refused (a `.sh`, `.ts` or `.js` name,
+  or any existing file), because xcodebuild's own options take values that do not start with a dash. And
+  a run in which `run-tests-locked.sh` **gave up waiting for the shared lock** is now `NOTHING RAN`,
+  naming the lock: no test ran, and it used to read as CAUGHT (seen 2026-09-18 in another lane's proof).
   **Since #3240 every proof also says how much of itself was BUILD rather than tests.** That issue asked
   whether the one to four proofs a PR body carries could share one build, and the measurement says there
   is nothing to share: each proof mutates a different file, each is already incremental on top of the
@@ -556,6 +572,14 @@ the measurement it came from lives here. Read the entry before the rule decides 
     have. Both ends are counted, not just finishes: with eight lanes, seven fast ones would otherwise mask
     a hung one for as long as work remained. It WARNS rather than kills, for #2577's reason. Retune with
     `OVERTURE_FIXTURE_STALL_LIMIT_SECONDS` and `OVERTURE_FIXTURE_STALL_CHECK_SECONDS`.
+    **Since #3682 each fixture also has a DEADLINE, and one past it is ENDED and named `TIMED OUT`.**
+    A warning is not enough on its own, and the measurement says why: on 2026-09-07
+    `check-pure-suite-imports.test.sh` spun at 100% CPU for 5h37m, orphaned to launchd after whatever ran
+    it had gone, so the watcher had gone with its runner and nothing was left to speak. The deadline is a
+    timer in its own process group started beside each fixture, so it outlives a dead runner. It defaults
+    to 600s, about ten times the slowest fixture under a full parallel sweep, and moves with
+    `OVERTURE_FIXTURE_TIMEOUT_SECONDS`. The spin itself was #3718's per-file `grep` exhausting the process
+    table under eight lanes, already fixed; this is the class, for the next fixture that never returns.
   - **Anything asking a yes or no question with `cmd | grep -q`: WRONG under `pipefail`, and it fails
     in the direction that reads as a clean answer (#3275).** `grep -q` exits on its first match, which
     kills the producer with SIGPIPE, and `set -o pipefail` makes that 141 the pipeline's status, so the

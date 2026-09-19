@@ -357,7 +357,7 @@ struct ReachabilityProbeCompletionTests {
     }
 
     private func freshDefaults() -> UserDefaults {
-        let d = UserDefaults(suiteName: "probe-\(UUID().uuidString)")!
+        let d = ScratchDefaults.make("probe")
         return d
     }
 }

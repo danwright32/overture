@@ -83,6 +83,11 @@ enum SendService {
         guard let pitch = OutgoingPitch.text(for: recipient, of: prospect),
               let mail = OutgoingMail(to: [email], subject: prospect.draftSubject ?? "", body: pitch)
         else { return false }
+        // #3326 (plan 2.8): a pitch naming a night Dan skipped never leaves, whatever the screen allowed.
+        // Refused here, before the claim, so nothing is left at `.sending`.
+        guard KeptNights.skippedNightNamed(subject: mail.subject, body: pitch, on: prospect,
+                                           today: EasternDate.dayString(from: now)) == nil
+        else { return false }
 
         // Claim this recipient before the network await (#475/#476). Nothing here awaits, so on the
         // MainActor this check-then-claim-then-persist is atomic with respect to any other call
@@ -431,6 +436,10 @@ enum SendService {
               let sharedBody = prospect.draftBody,
               let mail = OutgoingMail(to: group.compactMap(\.email),
                                       subject: prospect.draftSubject ?? "", body: pitch)
+        else { return false }
+        // #3326: the same refusal as the single send, on the one email the whole group shares.
+        guard KeptNights.skippedNightNamed(subject: mail.subject, body: pitch, on: prospect,
+                                           today: EasternDate.dayString(from: now)) == nil
         else { return false }
 
         // Claim ALL of them or none, before the network call, on the same reasoning as `deliver`'s single

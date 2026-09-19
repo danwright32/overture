@@ -169,9 +169,7 @@ struct ScoutSourceInjectionTests {
                                      kind: .algolia)
         ctx.insert(carnegie)
         let stub = StubSourceExtractor(error: StubSourceExtractor.Failure.unreachable)
-        let suite = "ScoutSourceFailureTests-\(UUID().uuidString)"
-        let scratch = UserDefaults(suiteName: suite)!
-        scratch.removePersistentDomain(forName: suite)
+        let scratch = ScratchDefaults.make("ScoutSourceFailureTests")
 
         let outcome = try await ScoutService.runScout(into: ctx, extractor: stub, defaults: scratch)
 
@@ -191,7 +189,6 @@ struct ScoutSourceInjectionTests {
         // the two facts this whole design exists to keep apart.
         #expect(outcome.warning?.localizedCaseInsensitiveContains("data format") == false)
 
-        scratch.removePersistentDomain(forName: "ScoutSourceFailureTests")
     }
 
     // The rule the loop exists for: one source going down must not cost Dan the rest of his watchlist.
@@ -205,9 +202,7 @@ struct ScoutSourceInjectionTests {
             ctx.insert(WatchedSource(sourceId: org, orgName: org,
                                      listingsURL: "https://\(org).example/events", kind: .html))
         }
-        let suite = "ScoutLoopTests-\(UUID().uuidString)"
-        let scratch = UserDefaults(suiteName: suite)!
-        scratch.removePersistentDomain(forName: suite)
+        let scratch = ScratchDefaults.make("ScoutLoopTests")
 
         let stub = StubSourceExtractor(listing: ExtractedListing(events: [], verdict: .upcomingListings))
         let outcome = try await ScoutService.runScout(
@@ -232,7 +227,6 @@ struct ScoutSourceInjectionTests {
         let fine = outcome.sources.first { $0.sourceId == "fine" }
         #expect(fine?.state == .queuedForReading)   // its page changed and Dan started this run
 
-        scratch.removePersistentDomain(forName: "ScoutLoopTests")
     }
 
     // Dan's 4th decision, at the level of the whole run: the automatic daily scout checks every source
@@ -243,9 +237,7 @@ struct ScoutSourceInjectionTests {
             configurations: [ModelConfiguration(isStoredInMemoryOnly: true)]))
         ctx.insert(WatchedSource(sourceId: "org", orgName: "Org",
                                  listingsURL: "https://org.example/events", kind: .html))
-        let suite = "ScoutWatchOnlyTests-\(UUID().uuidString)"
-        let scratch = UserDefaults(suiteName: suite)!
-        scratch.removePersistentDomain(forName: suite)
+        let scratch = ScratchDefaults.make("ScoutWatchOnlyTests")
 
         let stub = StubSourceExtractor(listing: ExtractedListing(events: [], verdict: .upcomingListings))
         let outcome = try await ScoutService.runScout(
@@ -261,7 +253,6 @@ struct ScoutSourceInjectionTests {
         let org = outcome.sources.first { $0.sourceId == "org" }
         #expect(org?.state == .changedNotRead)   // noticed, flagged, and not a token spent on it
 
-        scratch.removePersistentDomain(forName: "ScoutWatchOnlyTests")
     }
 
     // The SUCCESS path of the scout's entry point, which had no test at all: a source returns shows,
@@ -279,9 +270,7 @@ struct ScoutSourceInjectionTests {
         let ctx = ModelContext(try ModelContainer(
             for: Schema([Prospect.self, WatchedSource.self]),
             configurations: [ModelConfiguration(isStoredInMemoryOnly: true)]))
-        let suite = "ScoutSourceInjectionTests-\(UUID().uuidString)"
-        let scratch = UserDefaults(suiteName: suite)!
-        scratch.removePersistentDomain(forName: suite)
+        let scratch = ScratchDefaults.make("ScoutSourceInjectionTests")
 
         // Carnegie's row, as the #800 backfill leaves it on a real store.
         let carnegie = WatchedSource(sourceId: WatchedSource.carnegieId, orgName: "Carnegie Hall",
@@ -314,7 +303,6 @@ struct ScoutSourceInjectionTests {
         #expect(carnegie.lastSucceededAt != nil)
         #expect(ScoutService.lastHealthyFeedCount(in: scratch) == 0)   // the old global key is dead
 
-        scratch.removePersistentDomain(forName: "ScoutSourceInjectionTests")
     }
 
     // A source cannot mark anything gone until it has a feed history of its own. One successful check is
@@ -325,9 +313,7 @@ struct ScoutSourceInjectionTests {
         let ctx = ModelContext(try ModelContainer(
             for: Schema([Prospect.self, WatchedSource.self]),
             configurations: [ModelConfiguration(isStoredInMemoryOnly: true)]))
-        let suite = "ScoutWarmupTests-\(UUID().uuidString)"
-        let scratch = UserDefaults(suiteName: suite)!
-        scratch.removePersistentDomain(forName: suite)
+        let scratch = ScratchDefaults.make("ScoutWarmupTests")
 
         ctx.insert(WatchedSource(sourceId: WatchedSource.carnegieId, orgName: "Carnegie Hall",
                                  kind: .algolia))
@@ -352,7 +338,6 @@ struct ScoutSourceInjectionTests {
         #expect(stored.missedScoutCount == 0)
         #expect(stored.disappearedFromFeed == false)
 
-        scratch.removePersistentDomain(forName: "ScoutWarmupTests")
     }
 }
 

@@ -285,7 +285,7 @@ struct LaunchMigrationsTests {
 
             #expect(LaunchMigrations.run(
                 in: context,
-                defaults: UserDefaults(suiteName: "launch-3453-\(UUID().uuidString)")!,
+                defaults: ScratchDefaults.make("launch-3453"),
                 handoffDirectory: handoff))
 
             #expect(p.reachabilityResult == nil)
@@ -321,7 +321,7 @@ struct LaunchMigrationsTests {
 
         LaunchMigrations.run(
             in: context,
-            defaults: UserDefaults(suiteName: "launch-3598-\(UUID().uuidString)")!,
+            defaults: ScratchDefaults.make("launch-3598"),
             handoffDirectory: URL(fileURLWithPath: "/nonexistent-3598-handoff"))
 
         #expect(p.reachabilityEmptyReason == nil, Comment(rawValue:

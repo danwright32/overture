@@ -180,7 +180,7 @@ struct GroupedAnswerCreditTests {
     // A per-test defaults suite, so the consumed-results fingerprint one test writes can never make the
     // next test's ingest skip (L2: a test must be structurally unable to touch shared state).
     private func freshDefaults() -> UserDefaults {
-        UserDefaults(suiteName: "grouped-credit-\(UUID().uuidString)")!
+        ScratchDefaults.make("grouped-credit")
     }
 
     // The whole issue, end to end: one paid lookup, eight shows in the real case, three here. Every show

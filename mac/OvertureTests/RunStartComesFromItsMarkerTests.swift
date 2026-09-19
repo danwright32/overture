@@ -23,7 +23,7 @@ struct RunStartComesFromItsMarkerTests {
 
     // A private suite, never `.standard`: a test may not reach real shared state (#2540, L2).
     private func defaults() -> UserDefaults {
-        UserDefaults(suiteName: "run-start-\(UUID().uuidString)")!
+        ScratchDefaults.make("run-start")
     }
 
     // THE invariant, and the state the incident was in: a marker just created, with the previous run's

@@ -184,7 +184,20 @@ struct BlockedCalendar: Equatable, Sendable {
     // (every overlapping range, #2792) or replaces the whole list with booked shoots, so this and a scan of
     // the whole list can never disagree
     // about whether the date is blocked or by which kind. The list is only ever richer in NAMES.
-    private func decidingDay(_ date: String) -> Day? { byDate[date]?.first }
+    //
+    // #3620: and where nothing is stored on the date, the first weekly rule that blocks it. A rule is never
+    // expanded into `byDate` (see `WeeklyBlock`: an expansion needs a horizon, and a horizon reads every
+    // night past it as free), so it is asked here, of the one date, with no limit on how far out that date
+    // is. Stored entries decide first, so a range Dan typed or a shoot he took on the same night keeps the
+    // key it already had, and no clearance moves because a rule arrived under it.
+    private func decidingDay(_ date: String) -> Day? {
+        if let stored = byDate[date]?.first { return stored }
+        return weekly.first { $0.blocks(date) }.map { Day(date: date, kind: .dayOff, name: $0.note) }
+    }
+
+    // #3620: Dan's weekly rules, in an order settled in `build` so which rule decides a date never depends on
+    // the order the store returned them in.
+    private var weekly: [WeeklyBlock] = []
 
     // Whether Downbeat has told us about any shoot from today ONWARD (#925).
     //
@@ -230,8 +243,16 @@ struct BlockedCalendar: Equatable, Sendable {
                       bookings: [OvertureBooking],
                       exportedBlockedDates: [String],
                       daysOff: [DayOffRange],
-                      cancelledBookingIds: Set<String> = []) -> BlockedCalendar {
+                      cancelledBookingIds: Set<String> = [],
+                      weeklyBlocks: [WeeklyBlock] = []) -> BlockedCalendar {
         var cal = BlockedCalendar()
+        // #3620: defaulted to none, which is the unsafe direction (a forgotten rule blocks fewer nights), so
+        // it is guarded where it matters instead: `ScoutService.blockedCalendar` is the one production caller
+        // and passes the stored rules, and `WeeklyDayOffTests` fails on a second production caller.
+        cal.weekly = weeklyBlocks.sorted {
+            ($0.weekday, $0.firstDate ?? "", $0.lastDate ?? "", $0.note ?? "")
+                < ($1.weekday, $1.firstDate ?? "", $1.lastDate ?? "", $1.note ?? "")
+        }
         // #3298 stored `availability` on the calendar as a `blockedDaysAreUnknown` flag. Dan's call,
         // 2026-09-02: removed. Nothing read it. The masthead notice reads the export's health directly and
         // is the surface that actually tells him the nights are unknown, so the flag was a second value
@@ -385,6 +406,10 @@ struct BlockedCalendar: Equatable, Sendable {
     // Everything blocked, for the Days off sheet: EVERY booked shoot, not one per date (#2693). Sorted by
     // date, then by name so two shoots on one night keep their order, and so the list cannot reshuffle
     // between redraws the way a dictionary's would.
+    //
+    // #3620: the nights of a WEEKLY rule are deliberately not in this list. A rule has no last night to list
+    // up to (a standing one never ends), so it is answered by `decidingDay` one date at a time instead, and
+    // the sheet lists the stored rule as one row. This list's one reader asks it for booked shoots only.
     var days: [Day] {
         byDate.values.flatMap { $0 }.sorted { ($0.date, $0.name ?? "") < ($1.date, $1.name ?? "") }
     }

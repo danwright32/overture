@@ -10,6 +10,16 @@ import Foundation
 // Pure functions, never a computation inside the body: a rule computed in a view is a rule no test can
 // reach, and two of those have already drifted here under a green suite (#863, #876).
 enum DraftReviewNotes {
+    // #3326 (plan 2.8): the button beside a draft naming a night Dan skipped, and what it says when the
+    // night is no longer one of the run's (a scout moved it while the card was open).
+    static func pitchNightAfterAll(_ night: String) -> String {
+        "Pitch \(EasternDate.dayLabel(night) ?? night) after all"
+    }
+
+    static func nightCouldNotBePitched(_ night: String) -> String {
+        "\(EasternDate.dayLabel(night) ?? night) is no longer a night of this run, so it could not be pitched."
+    }
+
 
     // #2545: the greeting lives in the body now, so nothing composes one on top of it and the two ways
     // it can be wrong both stop the send. Each has its own sentence, because they want opposite fixes:

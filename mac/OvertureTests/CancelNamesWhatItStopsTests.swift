@@ -32,7 +32,7 @@ struct CancelNamesWhatItStopsTests {
     }
 
     private func freshDefaults() -> UserDefaults {
-        UserDefaults(suiteName: "cancel-3012-\(UUID().uuidString)")!
+        ScratchDefaults.make("cancel-3012")
     }
 
     private func makeLive(_ slot: RunSlot, in support: URL) throws {

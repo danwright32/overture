@@ -10,10 +10,7 @@ import Darwin
 @Suite("How much of a gap the Mac spent asleep (#2220)")
 struct SystemSleepTests {
     private func scratch(_ name: String) throws -> UserDefaults {
-        let suite = "overture.sleep.test.\(name).\(UUID().uuidString)"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defaults.removePersistentDomain(forName: suite)
-        return defaults
+        ScratchDefaults.make("overture-sleep-test-\(name)")
     }
 
     private let epoch = Date(timeIntervalSince1970: 1_700_000_000)

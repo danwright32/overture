@@ -214,6 +214,21 @@ extension Prospect {
         let remaining = playing.filter { $0 != night }
         guard !remaining.isEmpty else { return .wholeShow }
 
+        // #3325 (plan 3.7): a night that is NOT the run's opening. The comment above says no control can
+        // reach one, and today that is true; the branch ships anyway, specified as writes, because the
+        // walk below is built on the opening being the night dropped and would move the card's date and
+        // key onto a night nobody asked about. For a middle or closing night: no walk, nothing released,
+        // the night leaves `runNights`, `performanceDate` and the key stay, and `runEndDate` follows the
+        // kept nights, so dropping the CLOSING night moves the end of the span (twelve readers take the
+        // span from that field).
+        if let opening = performanceDate, night != opening, remaining.contains(opening) {
+            droppedRunNights.append(DroppedNight(night: night, reason: reason, at: now).stored)
+            forgetNightDecisions(for: [night])
+            runNights = remaining
+            runEndDate = remaining.max()
+            return .moved(to: opening, releasing: [])
+        }
+
         // #2754: settled BEFORE the first write, so a refusal leaves the row exactly as it was rather
         // than describing a run it no longer carries. MEASURED on the live store 2026-08-15: 8 of 98
         // multi-night runs would land on a key another card already holds, because a weekly series is

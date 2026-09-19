@@ -17,7 +17,7 @@ struct CheckDoesNotDisturbTheOtherSlotTests {
     }
 
     private func defaults() -> UserDefaults {
-        UserDefaults(suiteName: "PerSlot-\(UUID().uuidString)")!
+        ScratchDefaults.make("PerSlot")
     }
 
     private func tmpDir() throws -> URL {

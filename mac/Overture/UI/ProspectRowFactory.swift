@@ -102,6 +102,10 @@ enum ProspectRowFactory {
             onSend: onSend,
             onOverrideGreeting: { ProspectMutations.overrideGreeting(item, prospects: prospects(), context: context, feedback: feedback) },
             onOverrideDraftLint: { ProspectMutations.overrideDraftLint(item, prospects: prospects(), context: context, feedback: feedback) },
+            onPitchNightAfterAll: { night in
+                ProspectMutations.pitchNightAfterAll(item, night: night, prospects: prospects(),
+                                                     context: context, feedback: feedback)
+            },
             onDismissReply: { ProspectMutations.dismissReply(item, prospects: prospects(), context: context, feedback: feedback) },
             // #1752: Dan says where this card's room is. The answer is stored against the ROOM, so it
             // reaches every show played there and every show that arrives there later, which is why it

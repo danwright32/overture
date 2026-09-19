@@ -35,7 +35,7 @@ struct GmailReplySearchOnDemandTests {
     private let now = Date(timeIntervalSince1970: 1_786_000_000)
 
     private func scratchDefaults() throws -> UserDefaults {
-        try #require(UserDefaults(suiteName: "reply-search-on-demand-\(UUID().uuidString)"))
+        ScratchDefaults.make("reply-search-on-demand")
     }
 
     private func show(_ ctx: ModelContext, key: String = "k") -> Prospect {

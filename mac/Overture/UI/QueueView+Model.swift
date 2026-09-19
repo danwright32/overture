@@ -222,6 +222,9 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     // through `DroppedNight.keeping`). Empty on rows stored before #1523, which is why every reader has to
     // say what it does with an empty list rather than treating it as "no nights".
     var runNights: [String] = []
+    // #3326: the nights Dan left out of this run's pitch at Prep launch (`Prospect.skippedRunNights`), so
+    // the draft check can refuse a draft naming one. Empty for every row he never opened the picker on.
+    var skippedNights: [String] = []
 
     // #2864: whether the cold pitch names the show's own night, and never a different one. Advisory,
     // and DELIBERATELY not suppressed on a draft Dan edited, which is the one combination this lint did
@@ -232,10 +235,28 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     //
     // `today` is a parameter so a test pins both ends of the comparison rather than one (L130).
     func eventDateWarning(today: String = EasternDate.today()) -> String? {
+        eventDateFinding(today: today)?.message
+    }
+
+    // #3326: the one finding, asked once, so the warning and the send block read the same answer (L16).
+    func eventDateFinding(today: String = EasternDate.today()) -> EventDateFinding? {
         guard let body = draftBody else { return nil }
+        let playing = PlayingNights.of(runNights: runNights, performanceDate: performanceDate,
+                                       runEndDate: runEndDate)
         return EventDateInDraft.finding(subject: draftSubject, body: body,
                                         performanceDate: performanceDate, runEndDate: runEndDate,
-                                        today: today)?.message
+                                        today: today,
+                                        kept: KeptNights.of(playing, skipped: Set(skippedNights), today: today),
+                                        skipped: skippedNights)
+    }
+
+    // #3326 (plan 2.8): the skipped night this draft names, which holds the send. Nil when it names none.
+    func skippedNightNamedInDraft(today: String = EasternDate.today()) -> String? {
+        // Asked through `blocksTheSend`, the one place that says which findings hold a send, so a finding
+        // added later that also blocks cannot be missed here while the warning shows it.
+        guard let finding = eventDateFinding(today: today), finding.blocksTheSend,
+              case .namesASkippedNight(_, let night) = finding else { return nil }
+        return night
     }
 
     // #1699: the curtain time(s) this card may state, and whether a run's nights disagree. Both come
@@ -3569,8 +3590,8 @@ enum QueueModel {
     private static let easternCalendar = EasternDate.calendar
     private static func day(_ iso: String) -> Date? { EasternDate.date(from: iso) }
 
-    private static let weekdays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
-    private static func shortWeekday(_ component: Int) -> String { weekdays[(component - 1 + 7) % 7] }
+    // #3325: the weekday names moved to EasternDate beside the month names, one list for the whole app.
+    private static func shortWeekday(_ component: Int) -> String { EasternDate.shortWeekday(component) }
     // #901: the month names moved to EasternDate, which now also renders the single-day label the
     // blocked-calendar note needs ("Nov 14"). One list of month names, not two drifting ones.
     private static func shortMonth(_ component: Int) -> String { EasternDate.shortMonth(component) }
@@ -3803,6 +3824,7 @@ extension QueueItem {
             conflictBlockedDate: conflictBlockedDate,
             runEndDate: p.runEndDate,
             runNights: p.runNights,                           // #3323
+            skippedNights: p.skippedNightDecisions.map(\.night),   // #3326
             performanceStartTimes: p.performanceStartTimes,   // #1699
             startTimesVary: p.startTimesVary,                 // #1699
             nightStartTimes: p.nightStartTimes,               // #1699

@@ -38,7 +38,7 @@ struct HeldShowsAreExcludedTests {
     }
 
     private func freshDefaults() -> UserDefaults {
-        UserDefaults(suiteName: "held-2765-\(UUID().uuidString)")!
+        ScratchDefaults.make("held-2765")
     }
 
     private func makeLive(_ slot: RunSlot, in support: URL) throws {

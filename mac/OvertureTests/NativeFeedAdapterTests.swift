@@ -230,7 +230,7 @@ struct NativeFeedAdapterTests {
                                   listingsURL: "https://org.example/events", kind: .html)
         ctx.insert(opera); ctx.insert(venue); ctx.insert(ovation); ctx.insert(plain)
 
-        WatchedSourceBackfill.run(in: ctx, defaults: UserDefaults(suiteName: "nfa-\(UUID())")!)
+        WatchedSourceBackfill.run(in: ctx, defaults: ScratchDefaults.make("nfa"))
 
         #expect(opera.kind == .operaAmericaFeed)
         #expect(venue.kind == .venueTixFeed)
@@ -264,7 +264,7 @@ struct NativeFeedAdapterTests {
             extractorRegistry: { $0?.sourceId == "greenroom" ? viaRegistry : nil },
             fetch: { url, _, _ in FetchedPage(normalizedHTML: "", finalURL: url.absoluteString, contentHash: "h") },
             pin: { _, id in URL(fileURLWithPath: "/tmp/\(id).html") }, launch: { _ in },
-            defaults: UserDefaults(suiteName: "nfa-dispatch-\(UUID().uuidString)")!)
+            defaults: ScratchDefaults.make("nfa-dispatch"))
 
         let stored = try ctx.fetch(FetchDescriptor<Prospect>())
         #expect(stored.contains { $0.groupName.contains("Luigi") })

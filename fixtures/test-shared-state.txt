@@ -20,3 +20,5 @@ mac/OvertureTests/SourceFetcherTests.swift:status  # PageStubURLProtocol, held b
 mac/OvertureTests/SourceFetcherTests.swift:statusByURL  # PageStubURLProtocol, held by .sharesTheNetworkStub (#3234)
 mac/OvertureTests/SourceFetcherTests.swift:transportError  # PageStubURLProtocol, held by .sharesTheNetworkStub (#3234)
 mac/OvertureTests/SourceFetcherTests.swift:transportErrorsByURL  # PageStubURLProtocol, held by .sharesTheNetworkStub (#3234)
+mac/TestSupport/ScratchDefaults.swift:armed  # ScratchDefaults, behind its own NSLock; tests only ever APPEND suite names, which cannot collide (#3774)
+mac/TestSupport/ScratchDefaults.swift:made  # ScratchDefaults, behind its own NSLock; tests only ever APPEND suite names, which cannot collide (#3774)

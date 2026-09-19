@@ -41,6 +41,12 @@ struct StageOnlyNavWiringGuardTests {
     // RootView threads the Prep-start closure into the SAME per-run selection sheet the toolbar menu and
     // Cmd+P open, so there is one Prep-start path, not two.
     @Test func rootViewWiresOnStartPrepToTheSelectionSheet() {
-        #expect(rootView.contains("onStartPrep: { showPrepSelection = true }"))
+        // #3325: through `openPrepSelection`, which builds the night plan from a freshly rebuilt calendar
+        // and then raises the same sheet.
+        #expect(rootView.contains("onStartPrep: { openPrepSelection() }"))
+        guard let body = SourceGuardHelper.bodyOfFunction(named: "openPrepSelection", in: rootView) else {
+            Issue.record("expected openPrepSelection's body"); return
+        }
+        #expect(body.contains("showPrepSelection = true"))
     }
 }

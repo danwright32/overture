@@ -9,7 +9,9 @@
 // corpus, `fixtures/draft-event-date/cases.json` (L26), exactly as the ask rule is (#2531). The SWIFT
 // side is the declared source of truth; this one follows it.
 
-export type EventDateVerdict = "ok" | "missing" | "wrong";
+// #3326: "skipped" is a draft naming a night Dan left out at Prep launch, the one verdict the app BLOCKS
+// on; "omits" is a draft leaving out a night he kept. Both mirror `EventDateFinding` one for one.
+export type EventDateVerdict = "ok" | "missing" | "wrong" | "skipped" | "omits";
 
 const MONTHS = "jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?"
   + "|sep(?:t)?(?:ember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?";
@@ -111,18 +113,28 @@ function nights(performanceDate: string, runEndDate?: string): string[] {
  * `today` is required, never a bare `new Date()`: this compares a stored date against a clock, so the
  * clock is an input the corpus pins rather than a fact that walks cases into other cases (L130).
  */
+//
+// #3326 (answer 2, 2026-09-17): `keptNights` is what the queue item carried (v15), and `skippedNights` the
+// nights Dan left out. When `keptNights` is given it IS the acceptable set. And EVERY named day must be
+// acceptable, where it used to be enough that ANY was: "never name a night outside the kept set" is the
+// rule, and the Swift half inverted in the same commit.
 export function eventDateVerdict(args: {
   subject?: string; body: string; performanceDate?: string; runEndDate?: string; today: string;
+  keptNights?: string[]; skippedNights?: string[];
 }): EventDateVerdict {
-  const { subject, body, performanceDate, runEndDate, today } = args;
+  const { subject, body, performanceDate, runEndDate, today, keptNights, skippedNights } = args;
   if (!performanceDate) return "ok";
   const all = nights(performanceDate, runEndDate);
   if (all.length === 0) return "ok";
   // The runbook forbids naming an opening night that has gone, so a passed night does not count while
   // the run still has one left. A run wholly in the past has none to prefer and accepts any of its own.
   const upcoming = all.filter((d) => d >= today);
-  const acceptable = new Set(upcoming.length > 0 ? upcoming : all);
+  const acceptable = new Set(keptNights ?? (upcoming.length > 0 ? upcoming : all));
   const named = namedDays([subject, body].filter(Boolean).join("\n"), performanceDate);
   if (named.length === 0) return "missing";
-  return named.some((n) => acceptable.has(n.day)) ? "ok" : "wrong";
+  const skipped = new Set(skippedNights ?? []);
+  if (named.some((n) => skipped.has(n.day))) return "skipped";
+  if (!named.every((n) => acceptable.has(n.day))) return "wrong";
+  if (keptNights && !keptNights.every((k) => named.some((n) => n.day === k))) return "omits";
+  return "ok";
 }

@@ -22,6 +22,21 @@ enum EventDateFinding: Equatable, Sendable {
     case namesADifferentDate(named: String, show: String)
     // No date-shaped phrase anywhere in the subject or the body.
     case namesNoDate(show: String)
+    // #3326 (plan 2.8): the draft names a night Dan SKIPPED at Prep launch. The one finding here that
+    // BLOCKS the send. Dan's answer 2 said the email may "never" name a night he skipped, and answer 8
+    // (2026-09-17): the app has proof, so it refuses rather than labels (L67). He has two ways out, fix the
+    // draft or pitch the night after all, and the row offers both.
+    case namesASkippedNight(named: String, night: String)
+    // #3326: the draft leaves out a night he kept. Advisory: it understates the offer, it does not
+    // misstate it.
+    case omitsAKeptNight(show: String)
+
+    // Whether this finding holds the send. Only the skipped night: every other finding is Dan's to wave
+    // through, which is what he asked for on the date rule (#2864).
+    var blocksTheSend: Bool {
+        if case .namesASkippedNight = self { return true }
+        return false
+    }
 
     // Both sentences state the FACT rather than asking Dan to go and check one, and the contradiction
     // carries both dates: the whole reason this warns rather than blocks is that he keeps the final
@@ -32,6 +47,10 @@ enum EventDateFinding: Equatable, Sendable {
             return "This draft says \(named). The show is \(show)."
         case .namesNoDate(let show):
             return "No date for this show appears in the subject or the body. The show is \(show)."
+        case .namesASkippedNight(let named, _):
+            return "This draft says \(named), a night you left out of this pitch. It won't send until the draft drops it or you pitch that night after all."
+        case .omitsAKeptNight(let show):
+            return "This draft leaves out a night you're pitching. You're pitching \(show)."
         }
     }
 }
@@ -41,9 +60,18 @@ enum EventDateInDraft {
     // `today` is a parameter, never a bare `Date()`: this compares a stored date against the clock, so
     // the clock is an input the tests pin rather than a fact that walks fixtures into different cases as
     // real time passes (L130).
+    //
+    // #3326 (plan 4.2, answer 2): `kept` is the nights Dan is pitching (`KeptNights`), nil where there is no
+    // per-night answer (a single night, or a run whose nights were never recorded), and `skipped` the nights
+    // he left out at Prep launch. Both are REQUIRED at every call: a default standing for "no nights" would
+    // let a caller that forgot pass a draft naming a skipped night as clean (L168).
+    //
+    // And the predicate is INVERTED from "any named day is acceptable" to "every named day is acceptable",
+    // which is what "never name a night outside the kept set" means. It ships with the runbook edit that
+    // tells the drafter the same thing, so the check and the instruction change in one commit.
     static func finding(subject: String?, body: String,
                         performanceDate: String?, runEndDate: String?,
-                        today: String) -> EventDateFinding? {
+                        today: String, kept: [String]?, skipped: [String]) -> EventDateFinding? {
         guard let performanceDate, EasternDate.date(from: performanceDate) != nil else { return nil }
         let nights = EasternDate.days(from: performanceDate,
                                       through: EasternDate.runLastNight(runEndDate: runEndDate,
@@ -57,14 +85,34 @@ enum EventDateInDraft {
         // every night of it counts again: that is the state a pitch already sent is read back in, and
         // without it this would contradict every correct draft on a show that has happened.
         let upcoming = nights.filter { $0 >= today }
-        let acceptable = Set(upcoming.isEmpty ? nights : upcoming)
+        let acceptable = Set(kept ?? (upcoming.isEmpty ? nights : upcoming))
+        let show = kept.map(keptLabel) ?? label(nights: nights, acceptable: acceptable)
 
         let named = namedDays(in: [subject, body].compactMap { $0 }.joined(separator: "\n"),
                               assumingYearOf: performanceDate)
-        guard let first = named.first else { return .namesNoDate(show: label(nights: nights, acceptable: acceptable)) }
-        if named.contains(where: { acceptable.contains($0.day) }) { return nil }
-        return .namesADifferentDate(named: first.text,
-                                    show: label(nights: nights, acceptable: acceptable))
+        guard !named.isEmpty else { return .namesNoDate(show: show) }
+        let skippedSet = Set(skipped)
+        if let bad = named.first(where: { skippedSet.contains($0.day) }) {
+            return .namesASkippedNight(named: bad.text, night: bad.day)
+        }
+        if let stray = named.first(where: { !acceptable.contains($0.day) }) {
+            return .namesADifferentDate(named: stray.text, show: show)
+        }
+        if let kept, !Set(kept).isSubset(of: Set(named.map(\.day))) {
+            return .omitsAKeptNight(show: show)
+        }
+        return nil
+    }
+
+    // The kept nights as the warning quotes them back: a span when `KeptNights` says the email may name one,
+    // otherwise every night, so the sentence never offers him a night he left out.
+    static func keptLabel(_ kept: [String]) -> String {
+        let sorted = kept.sorted()
+        let spelled = sorted.map { EasternDate.longDayLabel($0) ?? $0 }
+        guard let first = spelled.first, let last = spelled.last else { return "" }
+        if KeptNights.namesAsSpan(sorted) { return "\(first) to \(last)" }
+        guard spelled.count > 1 else { return first }
+        return spelled.dropLast().joined(separator: ", ") + " and " + last
     }
 
     // How the show's own date is written back to Dan: one night as "March 10", a run as "March 12 to 14",

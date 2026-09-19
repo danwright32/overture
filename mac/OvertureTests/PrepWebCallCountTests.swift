@@ -88,7 +88,7 @@ final class PrepWebCallCountTests {
 
         let outcome = PrepImporter.consumeIfNew(slot: .prep, 
             at: url, into: ctx,
-            defaults: UserDefaults(suiteName: "PrepWebCalls-\(UUID().uuidString)")!)
+            defaults: ScratchDefaults.make("PrepWebCalls"))
 
         #expect(outcome?.webCalls?.total == 47)
         #expect(PrepRunSummary.notes(for: outcome ?? PrepImporter.Outcome())
@@ -243,7 +243,7 @@ final class PrepWebCallCountTests {
 
         let outcome = PrepImporter.consumeIfNew(slot: .prep, 
             at: url, into: ctx,
-            defaults: UserDefaults(suiteName: "PrepWebCalls-\(UUID().uuidString)")!)
+            defaults: ScratchDefaults.make("PrepWebCalls"))
 
         #expect(outcome?.webCalls?.denied == 2)
         // #2387: the sentence NAMES THE ROUTE now, and this is the whole way through: the
@@ -271,7 +271,7 @@ final class PrepWebCallCountTests {
 
         let outcome = PrepImporter.consumeIfNew(slot: .prep,
             at: url, into: ctx,
-            defaults: UserDefaults(suiteName: "PrepWebCalls-\(UUID().uuidString)")!)
+            defaults: ScratchDefaults.make("PrepWebCalls"))
 
         #expect(outcome?.webCalls?.deniedByRoute == nil)
         #expect(PrepRunSummary.notes(for: outcome ?? PrepImporter.Outcome())

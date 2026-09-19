@@ -125,8 +125,7 @@ struct TheAppReportsItsOwnFreezesTests {
     }
 
     private func defaults(_ name: String) -> UserDefaults {
-        let d = UserDefaults(suiteName: "freeze-report-\(name)-\(UUID().uuidString)")!
-        return d
+        ScratchDefaults.make("freeze-report-\(name)")
     }
 
     // THE STATE THIS DESIGN TURNS ON. A file with nothing in it means EITHER that nothing froze OR that

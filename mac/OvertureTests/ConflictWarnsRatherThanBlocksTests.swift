@@ -249,6 +249,14 @@ struct PrepCalendarClashWiringTests {
 
     // BOTH prep entry points ask. Gating only the "Prep these N" sheet leaves the per-row Re-prep able to
     // spend with no warning, which is the hole #1219's own red team found on this exact pair.
+    @Test func thePlanHandsEveryRowWithoutPerNightChoicesToTheCardLevelCheck() {
+        let plan = SourceGuardHelper.source("Overture/Domain/PrepNightPlan.swift")
+        #expect(!plan.isEmpty, "the guard read no source")
+        #expect(SourceGuardHelper.containsCode(
+            "var clashes = QueueModel.calendarClashesForPrep(forKeys: keys.subtracting(perNightKeys), among: items)",
+            in: plan))
+    }
+
     @Test func bothPrepEntryPointsAskForTheCalendarHalf() {
         let sheet = SourceGuardHelper.source("Overture/UI/PrepSelectionSheet.swift")
         let queue = SourceGuardHelper.source("Overture/UI/QueueView.swift")
@@ -259,7 +267,10 @@ struct PrepCalendarClashWiringTests {
         for (name, source) in [("PrepSelectionSheet", sheet), ("QueueView", queue)] {
             #expect(source.contains("let calendar = PrepLaunchCopy.calendarClashMessage("),
                     "\(name) does not bind the calendar clash message")
-            #expect(source.contains("QueueModel.calendarClashesForPrep("),
+            // #3325: the sheet asks through `PrepNightPlan.calendarClashes`, which judges a per-night run on
+            // its ticked nights and hands every other row to `calendarClashesForPrep` (asserted below).
+            #expect(source.contains("QueueModel.calendarClashesForPrep(")
+                        || source.contains("plan.calendarClashes(forKeys:"),
                     "\(name) does not ask for the calendar clashes")
             #expect(source.contains("PrepLaunchCopy.combinedMessage(selfBooking: selfBooking,"),
                     "\(name) does not combine the two halves into one sheet")

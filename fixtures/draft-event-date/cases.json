@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "rule": "A pitch must name the show's own date, in the subject or the body, and must never name a different one (#2864). Shared by DraftEventDateCasesTests (Swift, EventDateInDraft) and draftEventDateCases.test.ts (TypeScript, prepEval.eventDateVerdict). The Swift side is the source of truth: it is what runs on Dan's screen.",
+  "rule": "A pitch must name the show's own date, in the subject or the body, and must never name a different one (#2864). Where the item carries keptNights (#3326), every named day must be a kept night, a named skipped night is its own verdict (the app blocks the send on it), and a kept night left out is advisory. Shared by DraftEventDateCasesTests (Swift, EventDateInDraft) and draftEventDateCases.test.ts (TypeScript, prepEval.eventDateVerdict). The Swift side is the source of truth: it is what runs on Dan's screen.",
   "cases": [
     { "name": "body names the date", "expect": "ok", "today": "2026-03-01", "performanceDate": "2026-03-10",
       "body": "I'd love to photograph your March 10 concert." },
@@ -44,7 +44,7 @@
       "body": "your run March 10 to 14" },
     { "name": "a run named by a hyphenated span", "expect": "ok", "today": "2026-03-01", "performanceDate": "2026-03-10", "runEndDate": "2026-03-14",
       "body": "March 10-14" },
-    { "name": "a span whose only acceptable nights are inside it", "expect": "ok", "today": "2026-03-12", "performanceDate": "2026-03-10", "runEndDate": "2026-03-14",
+    { "name": "a span reaching back over a passed opening names that opening (#3326: every named day must be acceptable)", "expect": "wrong", "today": "2026-03-12", "performanceDate": "2026-03-10", "runEndDate": "2026-03-14",
       "body": "your run March 10 to 14" },
     { "name": "a span that ends before the run does", "expect": "wrong", "today": "2026-03-01", "performanceDate": "2026-03-20", "runEndDate": "2026-03-24",
       "body": "your run March 10 to 14" },
@@ -55,6 +55,27 @@
     { "name": "a still upcoming night of an opened run", "expect": "ok", "today": "2026-03-12", "performanceDate": "2026-03-10", "runEndDate": "2026-03-14",
       "body": "your March 13 performance" },
     { "name": "a run wholly in the past accepts any of its own nights", "expect": "ok", "today": "2026-04-01", "performanceDate": "2026-03-10", "runEndDate": "2026-03-14",
-      "body": "your March 10 concert" }
+      "body": "your March 10 concert" },
+    { "name": "every kept night named one by one", "expect": "ok", "today": "2026-03-01", "performanceDate": "2026-03-10", "runEndDate": "2026-03-24",
+      "keptNights": ["2026-03-10", "2026-03-17", "2026-03-24"], "skippedNights": [],
+      "body": "your Tuesday shows on March 10, March 17 and March 24" },
+    { "name": "four contiguous kept nights named as a span", "expect": "ok", "today": "2026-03-01", "performanceDate": "2026-03-10", "runEndDate": "2026-03-13",
+      "keptNights": ["2026-03-10", "2026-03-11", "2026-03-12", "2026-03-13"], "skippedNights": [],
+      "body": "your run March 10 to 13" },
+    { "name": "a span over kept nights that are not contiguous offers a dark night", "expect": "wrong", "today": "2026-03-01", "performanceDate": "2026-03-10", "runEndDate": "2026-03-24",
+      "keptNights": ["2026-03-10", "2026-03-17", "2026-03-24"], "skippedNights": [],
+      "body": "your run March 10 to 24" },
+    { "name": "a night Dan skipped is named", "expect": "skipped", "today": "2026-03-01", "performanceDate": "2026-03-10", "runEndDate": "2026-03-24",
+      "keptNights": ["2026-03-10", "2026-03-24"], "skippedNights": ["2026-03-17"],
+      "body": "your shows on March 10, March 17 and March 24" },
+    { "name": "a skipped night inside a span", "expect": "skipped", "today": "2026-03-01", "performanceDate": "2026-03-10", "runEndDate": "2026-03-13",
+      "keptNights": ["2026-03-10", "2026-03-11", "2026-03-13"], "skippedNights": ["2026-03-12"],
+      "body": "your run March 10 to 13" },
+    { "name": "a kept night is left out", "expect": "omits", "today": "2026-03-01", "performanceDate": "2026-03-10", "runEndDate": "2026-03-24",
+      "keptNights": ["2026-03-10", "2026-03-17", "2026-03-24"], "skippedNights": [],
+      "body": "your show on March 10" },
+    { "name": "no date at all on a run with kept nights", "expect": "missing", "today": "2026-03-01", "performanceDate": "2026-03-10", "runEndDate": "2026-03-24",
+      "keptNights": ["2026-03-10", "2026-03-24"], "skippedNights": [],
+      "body": "I'd be glad to photograph the run." }
   ]
 }
