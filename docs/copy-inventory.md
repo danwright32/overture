@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1581 sentences**.
+Every sentence Overture can say to Dan: **1595 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -14,7 +14,7 @@ What is not, and why:
   sentences under tokens nobody reads.
 - **Nothing, if it is written as two literals joined with `+`.** Those ARE joined here, into the
   one sentence the running app says (#3155). What is still only part of what Dan reads is a
-  sentence carrying a VALUE: 568 of the 1581 below hold a
+  sentence carrying a VALUE: 575 of the 1595 below hold a
   `\(...)` where a number or a name goes, so what is printed is the template. They are counted
   here rather than listed again, because the hole is visible in the line itself; what was missing
   was any statement of how much of this document is templates.
@@ -140,8 +140,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
   - `Domain/VoiceGuidanceGuard.swift`
   - `Domain/VoiceNotesProtector.swift`
 - "Block these days"
+  - `Domain/DayOff.swift`
   - `UI/BlockDaysSheet.swift`
-  - `UI/DaysOffView.swift`
   - `UI/DaysOffView.swift`
 - "Carnegie Hall"
   - `Domain/WatchedSourceBackfill.swift`
@@ -631,9 +631,14 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/ActionFeedback.swift`
 "Block days off"
     `UI/BlockDaysSheet.swift`
+"Block every \(WeeklyDayOffEditing.weekdayName(weekday) ?? "week")"
+    `Domain/DayOff.swift`
+"Block it again"
+    `UI/DaysOffView.swift`
 "Block some days"
     `Domain/DayOff.swift`
 "Block these days"
+    `Domain/DayOff.swift`
     `UI/BlockDaysSheet.swift`
     `UI/DaysOffView.swift`
 "Booked shoots"
@@ -892,6 +897,14 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/PostEventPrompt.swift`
 "Event passed, they replied, say how it ended"
     `Domain/PostEventPrompt.swift`
+"Every \(day)"
+    `Domain/WeeklyDayOff.swift`
+"Every \(day) from \(first)"
+    `Domain/WeeklyDayOff.swift`
+"Every \(day) until \(last)"
+    `Domain/WeeklyDayOff.swift`
+"Every \(day), \(first) to \(last)"
+    `Domain/WeeklyDayOff.swift`
 "Every client tagged in your Shoots calendar is in Downbeat, covered by a watched source, or set aside below."
     `Domain/ClientCoverage.swift`
 "Every one is a one-off hunt, so none of them share an answer."
@@ -906,6 +919,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/RootView.swift`
 "Every show here is already in the \(runNoun) that is running. Wait for it to finish and try again."
     `Integration/PrepQueueService.swift`
+"Every week"
+    `UI/DaysOffView.swift`
 "Everyone found here is on the show without running it: a co-performer, a music director or a guest. Nobody with a say over the booking was found. The listing's credits are usually where the producer is named, and you can add them by hand."
     `Domain/Reachability.swift`
 "Everything found here represents them rather than runs the show: a manager, an agent, a publicist or a booking agency. That may still get you an answer, but nobody who owns the show was found. The listing's credits are usually where the producer is named."
@@ -953,6 +968,12 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/InquiryCopy.swift`
 "Found the people, no way to reach any of them"
     `Domain/EmptyAnswerReport.swift`
+"Free on \(EasternDate.dayLabel(date) ?? date)"
+    `Domain/WeeklyDayOff.swift`
+"Free one date"
+    `Domain/WeeklyDayOff.swift`
+"Free this date"
+    `UI/DaysOffView.swift`
 "Freshly found events waiting for you to keep or dismiss."
     `Domain/AgentRoster.swift`
 "From Downbeat"
@@ -1720,6 +1741,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/ReachedOutRowChrome.swift`
 "Performs today, too close to book"
     `UI/QueueView+Model.swift`
+"Pick a day of the week."
+    `Domain/WeeklyDayOff.swift`
 "Pick two different styles to compare."
     `UI/ExperimentReportView.swift`
 "Pitch copied for \(org)"
@@ -2119,6 +2142,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/Reachability.swift`
 "Some changed calendars couldn't be read this run."
     `Domain/ScoutWarnings.swift`
+"Some days"
+    `UI/DaysOffView.swift`
 "Some of your shows may be missing"
     `App/StoreShrinkCheck.swift`
 "Some results came back under an unknown source and were ignored this run."
@@ -2652,6 +2677,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/RootView.swift`
 "Who this goes to"
     `UI/SendConfirmSheet.swift`
+"Why (optional): rehearsal, class, anything"
+    `UI/WeeklyDayOffFields.swift`
 "Why (optional): vacation, family, anything"
     `UI/DayOffRangeFields.swift`
 "Why lost? (optional note)"
@@ -2934,6 +2961,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/Reachability.swift`
 "\(dates), \(shows)"
     `Domain/ProbeSelection.swift`
+"\(day) isn't one of the \(weekdayName)s this blocks."
+    `Domain/WeeklyDayOff.swift`
 "\(deferredCount) venues are still waiting to be checked."
     `UI/ScoutSummaryView.swift`
 "\(denied) web calls"
