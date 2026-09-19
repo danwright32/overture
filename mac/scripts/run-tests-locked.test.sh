@@ -1755,14 +1755,21 @@ PREFS_DIR="$(fixture_scratch_dir)"
 : > "${PREFS_DIR}/overture-test-scratch.$$.in-use.plist"
 : > "${PREFS_DIR}/gmail-sig-test-something.plist"
 : > "${PREFS_DIR}/overture-test-scratch.notapid.x.plist"
-assert_equals "one file whose owner has exited is counted, and only that one" \
+assert_equals "one file whose owner has exited is removed and counted, and only that one" \
   "1" "$(scratch_defaults_left_behind "${PREFS_DIR}")"
+assert_equals "the dead owner's file is gone" "no" \
+  "$([ -e "${PREFS_DIR}/overture-test-scratch.999999.left-$$.plist" ] && echo yes || echo no)"
+assert_equals "a live owner's file is left alone" "yes" \
+  "$([ -e "${PREFS_DIR}/overture-test-scratch.$$.in-use.plist" ] && echo yes || echo no)"
+assert_equals "and so is a file that is not ours" "yes" \
+  "$([ -e "${PREFS_DIR}/gmail-sig-test-something.plist" ] && echo yes || echo no)"
 assert_equals "a folder that cannot be read is UNMEASURED, never zero" \
   "UNMEASURED" "$(scratch_defaults_left_behind "${PREFS_DIR}/missing")"
 # And the run says so, through the real wrapper, with its folder pointed here.
+: > "${PREFS_DIR}/overture-test-scratch.999998.left-again.plist"
 PREFS_RUN="$(OVERTURE_PREFERENCES_DIR="${PREFS_DIR}" run_wrapper_with_stub_xcodebuild "${GREEN_RUN_LOG}" 0)"
-assert_contains "a run names the files left behind" \
-  "1 test defaults file(s) are still in ~/Library/Preferences" "${PREFS_RUN}"
+assert_contains "a run names the files it removed" \
+  "removed 1 test defaults file(s) from ~/Library/Preferences" "${PREFS_RUN}"
 rm -rf "${PREFS_DIR}"
 
 if [[ "${FAILURES}" -eq 0 ]]; then

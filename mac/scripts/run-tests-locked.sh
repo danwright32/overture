@@ -1064,20 +1064,20 @@ main() {
   # any left by a process that died first, so after a run the count of files whose owner has EXITED should
   # be zero. Said here, after the workers are gone, because no test can observe its own process exiting.
   #
-  # A REPORT and not a failure, deliberately: the folder is shared by every worktree on this Mac, and a
-  # worker another lane's run crashed a moment ago is indistinguishable here from one of this run's, so a
-  # red would blame whichever run happened to finish next (L93). A count that stays above zero run after
-  # run is the leak; one that clears on the next run was a crash the sweep dealt with.
+  # REMOVED and REPORTED, and not a failure, deliberately: the folder is shared by every worktree on this
+  # Mac, and a worker another lane's run crashed a moment ago is indistinguishable here from one of this
+  # run's, so a red would blame whichever run happened to finish next (L93). And the app host running the
+  # screen tests is always ended by a signal, so it leaves its files on every run by design.
   local scratch_left
   scratch_left="$(scratch_defaults_left_behind "${OVERTURE_PREFERENCES_DIR:-${HOME}/Library/Preferences}")"
   if [[ "${scratch_left}" == "UNMEASURED" ]]; then
     echo "run-tests-locked.sh: test defaults left in Preferences: UNMEASURED, the folder could not be read." >&2
   elif [[ "${scratch_left}" -gt 0 ]]; then
     echo >&2
-    echo "run-tests-locked.sh: ${scratch_left} test defaults file(s) are still in ~/Library/Preferences although" >&2
-    echo "the test process that made them has exited, so their cleanup did not run (#3774). A crashed worker" >&2
-    echo "leaves them and the next test process sweeps them, so read this as a leak only if it stays above" >&2
-    echo "zero run after run." >&2
+    echo "run-tests-locked.sh: removed ${scratch_left} test defaults file(s) from ~/Library/Preferences that a" >&2
+    echo "test process had left behind when it exited without its own cleanup (#3774). The app host that" >&2
+    echo "runs the screen tests is ended by a signal and always leaves some; a pure test worker leaving them" >&2
+    echo "means it crashed." >&2
   fi
 
   # #2322: no test started at all, and the evidence says the machine rather than the change. Said
@@ -1246,8 +1246,14 @@ crash_restart_report() {
   echo "  The evidence is the crash report, not this run: ~/Library/Logs/DiagnosticReports/"
 }
 
-# #3774: how many of ScratchDefaults' files in <dir> belong to a process that is no longer running, or
-# UNMEASURED when the folder cannot be read. The owner is the pid in the name, which ScratchDefaults puts
+# #3774: REMOVES ScratchDefaults' files in <dir> whose process is no longer running, and prints how many,
+# or UNMEASURED when the folder cannot be read.
+#
+# Removes rather than only counts because of what the first full run found: the three left behind all came
+# from the HOSTED target, whose test process is the app host, which xcodebuild ends with a signal, so no
+# exit handler in it ever runs. Left for the next test process's sweep, a machine that only ever runs one
+# worktree's suite would carry each run's hosted files until the next run. The rule is the helper's own
+# sweep, our prefix and a dead owner, so this cannot touch a live test's file or anybody else's (L444). The owner is the pid in the name, which ScratchDefaults puts
 # there for its own sweep, so this and the sweep agree on what "ours" and "left behind" mean. Asked with
 # `ps` rather than `kill -0`, which also fails for a process that is alive but not ours to signal, and
 # the REAL `/bin/ps` by path: this runner's own fixture puts a stub `ps` on PATH for the test-host
@@ -1261,7 +1267,7 @@ scratch_defaults_left_behind() {
     pid="${pid%%.*}"
     [[ "${pid}" =~ ^[0-9]+$ ]] || continue
     /bin/ps -p "${pid}" >/dev/null 2>&1 && continue
-    count=$(( count + 1 ))
+    rm -f "${file}" && count=$(( count + 1 ))
   done
   echo "${count}"
 }

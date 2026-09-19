@@ -46,6 +46,10 @@ struct TestsCannotReachSharedStateTests {
             "the guard that forbids this API in the APP's source, so it has to name it to search for it.",
         "TestsCannotReachSharedStateTests.swift":
             "this file, which names every API it forbids.",
+        "ScratchDefaults.swift":
+            "the helper that DELETES the tests' own defaults files from ~/Library/Preferences (#3774). It "
+            + "has to name the real folder to clean it, it touches only files carrying its own prefix, and "
+            + "its sweep is proved against a temp directory standing in for that folder.",
     ]
 
     // Through AppSourceWalk, never a private enumerator: the walk is what REFUSES when it comes back
