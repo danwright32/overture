@@ -33,7 +33,7 @@ final class DeadRunWriteOffRepairTests {
     }
 
     private func defaults() -> UserDefaults {
-        UserDefaults(suiteName: "dead-run-repair-\(UUID().uuidString)")!
+        ScratchDefaults.make("dead-run-repair")
     }
 
     private let probedAt = Date(timeIntervalSince1970: 1_756_580_000)

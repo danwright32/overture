@@ -173,8 +173,7 @@ struct TheAppChecksItsOwnCardsTests {
     // an empty file with one.
     @Test func theReaderTellsNeverLookedApartFromEverythingMatched() throws {
         let support = URL(fileURLWithPath: "/nowhere-\(UUID().uuidString)")
-        let defaults = UserDefaults(suiteName: "card-divergence-\(UUID().uuidString)")!
-        defer { defaults.removePersistentDomain(forName: defaults.description) }
+        let defaults = ScratchDefaults.make("card-divergence")
 
         let neverLooked = CardDivergenceReport.newlyReported(in: support, defaults: defaults,
                                                              read: { _ in .init(fileWasAbsent: true) })
@@ -192,8 +191,7 @@ struct TheAppChecksItsOwnCardsTests {
 
     @Test func aDivergenceIsSaidOncePerRecord() throws {
         let support = URL(fileURLWithPath: "/nowhere-\(UUID().uuidString)")
-        let defaults = UserDefaults(suiteName: "card-divergence-\(UUID().uuidString)")!
-        defer { defaults.removePersistentDomain(forName: defaults.description) }
+        let defaults = ScratchDefaults.make("card-divergence")
         let record = CardDivergenceRecord(session: "s", sequence: 1, at: Date(),
                                           fields: ["presenterLine"], cardsBuilt: 20, stage: "scout")
         let read: (URL) -> CardDivergenceLog.Read = { _ in .init(records: [record]) }

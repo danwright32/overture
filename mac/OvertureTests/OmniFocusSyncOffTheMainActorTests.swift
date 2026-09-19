@@ -11,7 +11,7 @@ import Foundation
 @Suite("OmniFocus sync runs off the main actor (#3419)")
 struct OmniFocusSyncOffTheMainActorTests {
     private func freshDefaults() -> UserDefaults {
-        UserDefaults(suiteName: "of-offmain-\(UUID().uuidString)")!
+        ScratchDefaults.make("of-offmain")
     }
 
     private final class ThreadRecordingClient: OmniFocusClient, @unchecked Sendable {

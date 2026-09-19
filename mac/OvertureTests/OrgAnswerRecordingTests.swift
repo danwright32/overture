@@ -16,7 +16,7 @@ struct OrgAnswerRecordingTests {
     private let now = Date(timeIntervalSince1970: 1_800_000_000)
 
     private func freshDefaults() -> UserDefaults {
-        UserDefaults(suiteName: "org-answer-\(UUID().uuidString)")!
+        ScratchDefaults.make("org-answer")
     }
 
     @discardableResult

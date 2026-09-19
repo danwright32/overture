@@ -38,9 +38,8 @@ enum LaunchReplay {
         // `TestsCannotReachSharedStateTests.everyDefaultsSuiteIsScoped` scans for that literal and cannot
         // tell a comment about it from a call to it. Spelled out, this comment was reported as a test
         // building an unscoped defaults suite (#3767).
-        let suiteName = "overture-launch-replay-\(UUID().uuidString)"
-        let isolated = UserDefaults(suiteName: suiteName)!
-        defer { isolated.removePersistentDomain(forName: suiteName) }
+        // #3774: the helper also deletes the FILE at process exit, which removing the domain never did.
+        let isolated = ScratchDefaults.make("overture-launch-replay")
 
         return LaunchMigrations.run(in: context,
                                     // The recheck judges against two files a test process does not have,

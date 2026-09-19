@@ -52,7 +52,7 @@ struct TicketTailorEndToEndTests {
             },
             pin: { _, id in URL(fileURLWithPath: "/tmp/\(id).html") },
             launch: { _ in box.launched = true },
-            defaults: UserDefaults(suiteName: "tt-e2e-\(UUID().uuidString)")!)
+            defaults: ScratchDefaults.make("tt-e2e"))
 
         let stored = try ctx.fetch(FetchDescriptor<Prospect>())
         let p = try #require(stored.first { $0.groupName == "Autumn Chamber Concert" },
@@ -93,7 +93,7 @@ struct TicketTailorEndToEndTests {
             pin: { _, id in URL(fileURLWithPath: "/tmp/\(id).html") },
             launch: { _ in },
             now: injectedNow,
-            defaults: UserDefaults(suiteName: "tt-e2e-1302-\(UUID().uuidString)")!)
+            defaults: ScratchDefaults.make("tt-e2e-1302"))
 
         let stored = try ctx.fetch(FetchDescriptor<Prospect>())
         let p = try #require(stored.first { $0.groupName == "Autumn Chamber Concert" },

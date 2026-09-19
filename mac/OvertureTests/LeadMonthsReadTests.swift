@@ -34,7 +34,7 @@ struct LeadMonthsReadTests {
         + "</ul>"
 
     private func model(_ page: FetchedPage) -> LeadIntakeModel {
-        LeadIntakeModel(defaults: UserDefaults(suiteName: "LeadMonthsRead-\(UUID().uuidString)")!,
+        LeadIntakeModel(defaults: ScratchDefaults.make("LeadMonthsRead"),
                         fetch: { _ in page },
                         pin: { _, _ in URL(fileURLWithPath: "/tmp/pinned.html") },
                         launch: { _ in },

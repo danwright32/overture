@@ -29,6 +29,7 @@ set -uo pipefail
 #   PERL VARIABLE     the expression carries an unescaped perl variable, which is almost never meant.
 #   SCOPE MISSED THE FILE  the scope ran real tests, but none that name the mutated file (#3098).
 #   LOG OVERWRITTEN   another run wrote to this run's log, so its verdict would be about theirs (#3984).
+#   SCOPE NOT FOR THIS RUNNER  a file was passed as a scope to the Swift runner, which cannot run it (#3923).
 #
 # The last three are the three ways a MALFORMED INSTRUCTION used to be reported as a verdict. Each was
 # measured: a build failure was folded into CAUGHT ("the compiler caught it"), which is true of a
@@ -273,7 +274,10 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # because the whole of it is testable without paying for a mutation run, which driving mutate.sh is not.
 # shellcheck source=lib/mutation-scope.sh
 source "${REPO_ROOT}/scripts/lib/mutation-scope.sh"
-RUNNER="${OVERTURE_MUTATE_RUNNER:-${REPO_ROOT}/mac/scripts/run-tests-locked.sh}"
+# #3923: OVERTURE_MUTATE_DEFAULT_RUNNER stands in for the Swift runner while it is still treated AS the
+# Swift runner, so the fixture can prove the scope refusal below without a real build ever starting if
+# the refusal breaks (L2). Nothing else sets it.
+RUNNER="${OVERTURE_MUTATE_RUNNER:-${OVERTURE_MUTATE_DEFAULT_RUNNER:-${REPO_ROOT}/mac/scripts/run-tests-locked.sh}}"
 
 # The runner has to be one command this shell can actually run, and that is proved BEFORE anything is
 # mutated (#2846).
@@ -306,6 +310,34 @@ if ! command -v "${RUNNER}" >/dev/null 2>&1; then
   echo "  Refused rather than reported, because a runner that cannot start exits non-zero having tested"
   echo "  nothing, and this script would otherwise call that CAUGHT (#2846)."
   exit 2
+fi
+
+# #3923: a scope the Swift runner cannot run is refused, before the file is touched.
+#
+# Trailing scopes go straight to the runner. Given a shell fixture's PATH as a scope, the Swift runner
+# does not recognise it, runs the WHOLE Swift suite instead, fails for some unrelated reason, and this
+# script reported `CAUGHT - the suite went red` about a suite that had nothing to do with the file.
+# Measured 2026-09-15 while proving #3680: ten minutes spent, and a verdict about a different suite.
+#
+# Only when the runner is the default Swift one, because a custom runner decides for itself what its
+# arguments mean. And only a scope that is recognisably a FILE: an xcodebuild option takes values that do
+# not start with a dash (`-parallel-testing-enabled YES`, `-resultBundlePath <dir>`), so "does not start
+# with a dash" alone would refuse the ordinary case (L93). A script or source name, or any existing
+# regular file, is never something xcodebuild runs as a test.
+if [[ -z "${OVERTURE_MUTATE_RUNNER:-}" ]]; then
+  for scope in "$@"; do
+    [[ "${scope}" == -* ]] && continue
+    if [[ "${scope}" == *.sh || "${scope}" == *.ts || "${scope}" == *.js || -f "${scope}" ]]; then
+      echo "SCOPE NOT FOR THIS RUNNER - ${scope} is a file, and the runner is the Swift suite, which"
+      echo "  cannot run it. Nothing was mutated and nothing was run."
+      echo
+      echo "  Handed to the Swift runner it is not recognised, the WHOLE Swift suite runs instead, and"
+      echo "  whatever that suite does is reported as a verdict about a guard it never ran (#3923)."
+      echo "  To drive a shell fixture or vitest, point OVERTURE_MUTATE_RUNNER at a small executable"
+      echo "  wrapper script that runs it, and pass no scope."
+      exit 2
+    fi
+  done
 fi
 
 # #3792: a target carrying UNCOMMITTED changes is refused, before the file is touched.
@@ -739,6 +771,17 @@ SHAPE="$(grep -oE "Test run with [0-9]+ tests? in [0-9]+ suites?" "${RUN_LOG}" |
 # a run that had really run and gone red on exactly the assertion under test was reported NOTHING RAN.
 # A dumped source line is preceded by `echo "` or by indentation, so anchoring to the line start covers
 # both this and #3035's comment case, and both have a fixture below.
+# #3923 and the sibling the coordinating session saw on 2026-09-18: the runner gave up waiting for the
+# shared test lock, so NO test ran, and it exits non-zero. Read as a red run that named no test, that
+# was reported as CAUGHT. Its own give-up line is the evidence, anchored at the start of a line for the
+# same reason as the check below (a failing fixture that PRINTS the runner's source must not trigger it).
+if grep -qE "^run-tests-locked\.sh: gave up waiting" "${RUN_LOG}"; then
+  echo "NOTHING RAN - the runner never got the shared test lock, so no test ran and this says nothing"
+  echo "  about any guard. Another run on this Mac held it for the whole wait; the lines above name it."
+  echo "  Run the mutation again once that run has finished."
+  exit 2
+fi
+
 if grep -qE "^(NOTHING RAN\b|[A-Za-z0-9._-]+: NOTHING RAN\b)" "${RUN_LOG}"; then
   echo "NOTHING RAN - the run executed no tests, so this says nothing about any guard."
   echo "  Check the scope: $*"

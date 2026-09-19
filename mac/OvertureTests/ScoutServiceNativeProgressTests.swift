@@ -16,7 +16,7 @@ struct ScoutServiceNativeProgressTests {
     }
 
     private func defaults() -> UserDefaults {
-        UserDefaults(suiteName: "ScoutServiceNativeProgressTests-\(UUID().uuidString)")!
+        ScratchDefaults.make("ScoutServiceNativeProgressTests")
     }
 
     @discardableResult

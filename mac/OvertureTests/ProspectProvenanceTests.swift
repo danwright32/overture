@@ -79,7 +79,7 @@ struct ProspectProvenanceTests {
             into: ctx,
             extractor: StubSourceExtractor(listing: ExtractedListing(events: [carnegie],
                                                                      verdict: .upcomingListings)),
-            defaults: UserDefaults(suiteName: "ProvenanceTests-\(UUID().uuidString)")!)
+            defaults: ScratchDefaults.make("ProvenanceTests"))
 
         #expect(try stored(ctx).first?.sourceIds == [WatchedSource.carnegieId])
     }

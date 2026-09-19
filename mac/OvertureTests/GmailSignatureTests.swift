@@ -7,9 +7,7 @@ import Foundation
 @Suite("Gmail signature fetch and cache (#1144)")
 struct GmailSignatureTests {
     private func freshDefaults() -> UserDefaults {
-        let d = UserDefaults(suiteName: "gmail-sig-test-\(UUID().uuidString)")!
-        d.removePersistentDomain(forName: "gmail-sig-test")
-        return d
+        ScratchDefaults.make("gmail-sig-test")
     }
 
     // MARK: - Store
