@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1578 sentences**.
+Every sentence Overture can say to Dan: **1580 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -14,7 +14,7 @@ What is not, and why:
   sentences under tokens nobody reads.
 - **Nothing, if it is written as two literals joined with `+`.** Those ARE joined here, into the
   one sentence the running app says (#3155). What is still only part of what Dan reads is a
-  sentence carrying a VALUE: 571 of the 1578 below hold a
+  sentence carrying a VALUE: 572 of the 1580 below hold a
   `\(...)` where a number or a name goes, so what is printed is the template. They are counted
   here rather than listed again, because the hole is visible in the line itself; what was missing
   was any statement of how much of this document is templates.
@@ -439,6 +439,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/Reachability.swift`
 "A check worked out who is putting this on and found no way to reach any of them, so it kept none of them. The listing still names them, and a search by name often turns up an address the check missed."
     `Domain/Reachability.swift`
+"A client list doesn't shrink as dates pass the way the shoots in it do, so an empty one reads as a broken export rather than a change in Downbeat. Re-export it from Downbeat, then re-read it here."
+    `Domain/AppNotice.swift`
 "A contact on this show is held back by a check (a venue guess, a press address, a duplicate, the salutation, or the draft lint). Look at it below: dismissing the check releases the email."
     `UI/DraftReviewView.swift`
 "A hard bounce means the mail was rejected outright, so the show has stopped being chased and nobody has seen the pitch. Open the show to fix the address and pitch again. If the address is fine and the bounce was wrong, Not really bounced on the contact clears it."
@@ -842,6 +844,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "Downbeat clients no watched source treats as a returning client, so their next season would not surface a year ahead. Add a source for them, or tag an existing one below."
     `Domain/ClientCoverage.swift`
 "Downbeat's export carries no shoots at all, though \(vanished.bookingCount) have come through it before, "
+    `Domain/AppNotice.swift`
+"Downbeat's export lists no clients, though it had \(emptied.clientCount) as recently as \(seen), so Overture can't recognise the organisations you already work with."
     `Domain/AppNotice.swift`
 "Draft a reply"
     `UI/ReplyConversationView.swift`

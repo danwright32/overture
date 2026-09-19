@@ -101,6 +101,56 @@ enum DownbeatBookingFeed {
     }
 }
 
+// #2495: the mirror case #2478 scoped out. An export that is current, well formed and correctly versioned,
+// whose CLIENT list has emptied. It passes everything the empty booking list passed, and worse, it switches
+// #2478's own verdict off, since that one requires a populated client list. Clients feed past-client
+// recognition and booking matching, so a vanished roster lets Overture pitch organisations Dan already works
+// with.
+//
+// Same shape as #2478 and the same evidence mechanism (`DownbeatBookingFeedStore.record`, one recorder for
+// the reconcile tick and the notice's re-read): remember how many clients a READABLE export last carried,
+// and treat a drop to none from a remembered roster at or above `vanishedFloor` as a broken feed. The floor
+// is the booking check's own, for the same reason: one client going is what deleting one looks like.
+//
+// ITS OWN VERDICT, not a branch of `vanished` (L53): the two ask different questions, and folding them into
+// one answer would let a pass on one erase a failure on the other.
+//
+// IT DOES NOT RETIRE ITSELF WITH TIME, deliberately, and the verdict takes no clock so that is structural.
+// The booking check can age out because shoots leave the export one at a time as their dates pass; a client
+// list has no dates and does not shrink as time passes (every client with past work stays on it), so there
+// is no moment after which an empty roster becomes the honest reading. It clears when an export lists
+// clients again, which is also the remedy the line names. If Dan ever genuinely empties his Downbeat roster
+// this would stand until he adds one back; that trade is accepted because the silent failure costs pitches
+// to people he already works with, and a roster emptied on purpose is not a state his business reaches.
+//
+// A file that is missing or unreadable arrives with no clients too, and says nothing HERE: it has its own
+// line (`AppNotices.downbeatAvailabilityUnknown`). Readability is recorded on the SAME observation as the
+// count, never taken from a separate read, so the two can never describe different files (L420).
+extension DownbeatBookingFeed {
+    struct RosterEmptied: Equatable, Sendable {
+        // How many clients the last readable export that listed any carried.
+        var clientCount: Int
+        // When that export was read, so the line can say how recently the roster was there.
+        var lastSeenAt: Double
+    }
+
+    static func rosterEmptied(exportReadable: Bool, clientCount: Int,
+                              lastRosterCount: Int, lastRosterAt: Double) -> RosterEmptied? {
+        guard exportReadable else { return nil }
+        guard clientCount == 0 else { return nil }
+        guard lastRosterCount >= vanishedFloor else { return nil }
+        return RosterEmptied(clientCount: lastRosterCount, lastSeenAt: lastRosterAt)
+    }
+
+    // Whether an observation actually READ an export. A stale file was read; its roster is real, only old.
+    static func wasRead(_ health: DownbeatBridge.Health) -> Bool {
+        switch health {
+        case .ok, .stale: return true
+        case .missing, .unreadable: return false
+        }
+    }
+}
+
 // Persistence for the check, in UserDefaults beside DownbeatFeedFreshness's own tracking (it is not user
 // data and not a cross-boundary hand-off). Each fact lives in its own key so the masthead can read them
 // reactively with @AppStorage, and so this check's state can never be confused with the stall clock's.
@@ -110,6 +160,11 @@ enum DownbeatBookingFeedStore {
     static let lastCarriedCountKey = "downbeatFeedLastCarriedCount"
     static let lastCarriedEndDateKey = "downbeatFeedLastCarriedEndDate"
     static let lastCarriedAtKey = "downbeatFeedLastCarriedAt"
+    // #2495: the roster check's own facts. The current count is `clientCountKey`, shared with #2478 because
+    // it is one measurement of one file; the verdicts stay separate.
+    static let exportReadableKey = "downbeatFeedExportReadable"
+    static let lastRosterCountKey = "downbeatFeedLastRosterCount"
+    static let lastRosterAtKey = "downbeatFeedLastRosterAt"
 
     // Arm the check from what the app already remembers, ONCE.
     //
@@ -147,10 +202,20 @@ enum DownbeatBookingFeedStore {
 
     // Record one observation. The tick passes what it has already loaded; `observe` below reads the file
     // for a caller that has not. Both land here, so the two can never judge the same export differently.
-    static func record(clientCount: Int, bookings: [OvertureBooking], today: String, now: Date,
-                       into defaults: UserDefaults = .standard) {
+    // #2495: `health` is required, not defaulted: it is what separates an export that listed no clients
+    // from a file nobody could read, and a default is how a caller would forget to say which.
+    static func record(clientCount: Int, health: DownbeatBridge.Health, bookings: [OvertureBooking],
+                       today: String, now: Date, into defaults: UserDefaults = .standard) {
         bootstrapFromSeenIds(into: defaults)
         defaults.set(clientCount, forKey: clientCountKey)
+        let read = DownbeatBookingFeed.wasRead(health)
+        defaults.set(read, forKey: exportReadableKey)
+        // Only a roster that was really there is remembered. An empty or unread one leaves the last real
+        // roster in place, so the export that lost it cannot erase the record that convicts it (L5).
+        if read && clientCount > 0 {
+            defaults.set(clientCount, forKey: lastRosterCountKey)
+            defaults.set(now.timeIntervalSince1970, forKey: lastRosterAtKey)
+        }
         defaults.set(bookings.filter { $0.endDate >= today }.count, forKey: upcomingBookingCountKey)
         guard let carried = DownbeatBookingFeed.carried(bookings: bookings, today: today) else { return }
         defaults.set(carried.count, forKey: lastCarriedCountKey)
@@ -163,7 +228,7 @@ enum DownbeatBookingFeedStore {
     static func observe(from url: URL = DownbeatBridge.defaultURL, now: Date,
                         into defaults: UserDefaults = .standard) {
         let loaded = DownbeatBridge.loadWithHealth(from: url, now: now)
-        record(clientCount: loaded.clients.count, bookings: loaded.bookings,
+        record(clientCount: loaded.clients.count, health: loaded.health, bookings: loaded.bookings,
                today: EasternDate.today(now), now: now, into: defaults)
     }
 
@@ -175,5 +240,12 @@ enum DownbeatBookingFeedStore {
                                      lastCarriedEndDate: defaults.string(forKey: lastCarriedEndDateKey) ?? "",
                                      lastCarriedAt: defaults.double(forKey: lastCarriedAtKey),
                                      today: today, now: now)
+    }
+
+    static func rosterEmptied(defaults: UserDefaults = .standard) -> DownbeatBookingFeed.RosterEmptied? {
+        DownbeatBookingFeed.rosterEmptied(exportReadable: defaults.bool(forKey: exportReadableKey),
+                                          clientCount: defaults.integer(forKey: clientCountKey),
+                                          lastRosterCount: defaults.integer(forKey: lastRosterCountKey),
+                                          lastRosterAt: defaults.double(forKey: lastRosterAtKey))
     }
 }
