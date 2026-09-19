@@ -253,10 +253,36 @@ enum NaturalKeyVenueMigration {
     // beside the other rungs the three deleting passes share, so "is this row in the feed" has one
     // definition rather than one per pass (L263).
     //
-    // `members` is ordered oldest first by every caller, so where several are live this keeps each
-    // ladder's existing age tie-break instead of introducing a second one.
+    // DETERMINISTIC, never `first` on a list whose order the caller did not choose (#3780). The pick
+    // decides what `carryTheFeedIdentity` copies onto the survivor before the losers are DELETED, so an
+    // arbitrary one is an arbitrary `sourceListingURL`, `runSourceURLs` and `sourceIds` on the row that
+    // lives, and for the callers that adopt it, an arbitrary natural key.
+    //
+    // This comment used to say "`members` is ordered oldest first by every caller", and that was false
+    // for one of the two. Measured 2026-09-19: `SameNightTitleVariantMerge` does sort, by `ingestedAt`
+    // ascending, though Swift's sort is not stable so rows sharing a stamp still tied arbitrarily. The
+    // caller in THIS file does not sort at all: `partition` builds `members` with
+    // `anchors.flatMap { byAnchor[$0] ?? [] }` inside `for (_, anchors) in byDisplay`, and `byDisplay`
+    // is a Dictionary, whose iteration order Swift randomises per process. So which row's identity
+    // survived a merge could differ between two launches on the same data, and the comment asserting it
+    // could not is why nobody looked (L343, L419).
+    //
+    // FRESHEST FIRST because `ingestedAt` is rewritten on every re-scout, so it means LAST SEEN, which
+    // is exactly the question "which row is the feed still publishing". `partition`'s own `freshest`
+    // picks the same way for the same reason, and this now agrees with it rather than answering a
+    // neighbouring question differently.
+    //
+    // Then the NATURAL KEY, which is unique by construction, so the tie-break is a total order rather
+    // than another coin toss: the same answer on every machine and every launch, not merely a stable
+    // one within a run.
     static func stillInTheFeed(_ members: [Prospect]) -> Prospect? {
-        members.first { $0.missedScoutCount == 0 }
+        members
+            .filter { $0.missedScoutCount == 0 }
+            .min {
+                $0.ingestedAt == $1.ingestedAt
+                    ? $0.naturalKey < $1.naturalKey
+                    : $0.ingestedAt > $1.ingestedAt
+            }
     }
 
     // #3379: whatever only the LIVE row knew, carried onto the survivor before that row is deleted, so a
