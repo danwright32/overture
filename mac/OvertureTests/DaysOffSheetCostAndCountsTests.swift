@@ -49,7 +49,7 @@ struct DaysOffSheetCostAndCountsTests {
         // the export ZERO times where it used to decode it once (and before #3852, four times).
         #expect(body.contains("let cal = availability.calendar"))
         #expect(body.contains("let bookings = availability.bookings"))
-        #expect(body.contains("let cancelled = cancelledRows"))
+        #expect(body.contains("let allCancelled = cancelledRows"))   // #3406: then filtered to what is ahead
         #expect(!body.contains("DownbeatBridge.loadedExport()"), "the section decodes the export itself again")
         #expect(!body.contains("blockedCalendar("), "the section builds its own calendar again")
     }

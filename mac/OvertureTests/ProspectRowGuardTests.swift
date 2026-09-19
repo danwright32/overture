@@ -144,7 +144,14 @@ struct ProspectRowRestoreGuardTests {
         // #1583: the SENTENCE renders on `hasConflict`, not on the gate, so accepting a clash stops the
         // blocking and not the telling. Reading the gate here is the regression this pins: it would take the
         // clash off the card the instant Dan kept the show, which is the state he most needs to still see.
-        #expect(body.contains("item.hasConflict"))
+        //
+        // #3622: which sentence the card shows moved to `QueueModel.cardConflictNote`, so the view must ask
+        // it, and the rule there must still read `hasConflict` rather than the gate. The behaviour itself is
+        // pinned by `LaterNightStaysOffTheCardTests.anAcceptedClashOnItsOwnNightStillShows`.
+        #expect(body.contains("QueueModel.cardConflictNote(item)"))
+        let model = SourceGuardHelper.source("Overture/UI/QueueView+Model.swift")
+        let rule = model.components(separatedBy: "static func cardConflictNote(").dropFirst().first ?? ""
+        #expect(rule.prefix(400).contains("guard item.hasConflict"))
         // #1583: the surviving accept control is gated on the show being KEPT already, because on an
         // untriaged card Keep itself is the acceptance and a second control asks one judgment twice.
         #expect(body.contains("item.hasUnclearedConflict && item.isKept"))

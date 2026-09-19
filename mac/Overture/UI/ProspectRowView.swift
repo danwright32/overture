@@ -1069,7 +1069,9 @@ struct ProspectRowView: View {
     // a quiet tinted capsule buried in the left-hand tag stack, which he walked straight past.
     private var actions: some View {
         VStack(alignment: .trailing, spacing: OVSpacing.xs) {
-            if item.hasConflict, let note = item.conflictNote {
+            // #3622: which clash sentence a card shows is `QueueModel.cardConflictNote`'s to decide, so a
+            // blocked LATER night of a run stays off every card and the rule is reachable by a test.
+            if let note = QueueModel.cardConflictNote(item) {
                 // #1583: the "Partly booked" / "Unavailable" pill that used to sit here is gone, and with it
                 // the "I can shoot this anyway" item hidden inside its menu. The pill was two things
                 // pretending to be one control: a badge restating the sentence directly beneath it (both
