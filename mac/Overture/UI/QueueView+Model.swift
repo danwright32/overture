@@ -3534,8 +3534,8 @@ enum QueueModel {
     private static let easternCalendar = EasternDate.calendar
     private static func day(_ iso: String) -> Date? { EasternDate.date(from: iso) }
 
-    private static let weekdays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
-    private static func shortWeekday(_ component: Int) -> String { weekdays[(component - 1 + 7) % 7] }
+    // #3325: the weekday names moved to EasternDate beside the month names, one list for the whole app.
+    private static func shortWeekday(_ component: Int) -> String { EasternDate.shortWeekday(component) }
     // #901: the month names moved to EasternDate, which now also renders the single-day label the
     // blocked-calendar note needs ("Nov 14"). One list of month names, not two drifting ones.
     private static func shortMonth(_ component: Int) -> String { EasternDate.shortMonth(component) }

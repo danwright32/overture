@@ -165,6 +165,9 @@ struct RootView: View {
     // #1435/#1436: the "Log an inquiry" intake sheet, opened from the same grouped menu as "Add a lead".
     @State private var showInquiryIntake = false
     @State private var showPrepSelection = false   // #953: the per-run "which kept shows to prep" picker
+    // #3325 / #3311: the nights the picker offers, built ONCE as the sheet opens, from a calendar rebuilt at
+    // that moment, so a booking or day off changed since the last sweep is already in it.
+    @State private var prepNightPlan: PrepNightPlan = .empty
     // #1130: the detached run's takeover progress screen, and #1824's in-app listing-page read that runs
     // before the run launches. #2760: PER SLOT, in one value, because these were three single `@State`
     // values shared by both launches: the first run to finish dismissed the takeover out from under the
@@ -766,7 +769,7 @@ struct RootView: View {
                   onShowFollowUps: { showFollowUps = true },
                   // #1129: the Prep stage's discoverable "Prep these N" button opens the same #953 per-run
                   // selection sheet the toolbar menu and Cmd+P do, so there is one Prep-start path, not two.
-                  onStartPrep: { showPrepSelection = true },
+                  onStartPrep: { openPrepSelection() },
                   // #1880: the per-row Re-prep launches through the SAME core the batch does, so it shows
                   // "Reading show pages" while the app renders the show's listing page rather than
                   // "Prepping" for that whole stretch.
@@ -831,7 +834,7 @@ struct RootView: View {
                         // Dan can hold a long lead-time show out of this run. The sheet defaults the
                         // selection by performance date and hands back exactly the rows he chose.
                         Button {
-                            showPrepSelection = true
+                            openPrepSelection()
                         } label: {
                             Label("Prep kept", systemImage: "envelope.badge")
                         }
@@ -1365,8 +1368,8 @@ struct RootView: View {
                 // needs neither, and this call no longer reads the export off disk to present a sheet.
                 // #3493: `allItems`, not a second `allProspects.map(QueueItem.init)` written inline. Two
                 // definitions of one question can each be changed without the other (L263, L370).
-                PrepSelectionSheet(prospects: toPrep,
-                                   allItems: allItems) { includedKeys in startPrep(includedKeys: includedKeys) }
+                PrepSelectionSheet(prospects: toPrep, allItems: allItems,
+                                   plan: prepNightPlan) { choice in startPrep(choice: choice) }
             }
             // #1130: the Prep run's takeover, mirroring the scout's (#1034). A detached Prep run takes
             // minutes, so it gets the same prominent working/still-alive/stalled screen instead of only a
@@ -1763,6 +1766,33 @@ struct RootView: View {
             onListingProgress: { done, total in
                 takeover.recordListingProgress(.prep, completed: done, total: total, at: Date())
             })
+    }
+
+    // #3325 / #3311: the calendar is rebuilt from disk at the moment the picker opens, never inside the sheet,
+    // and the plan is built from it once. Reading the calendar on every redraw of the sheet is the shape
+    // #1421 took off the render path.
+    private func openPrepSelection() {
+        availability.rebuildNow()
+        prepNightPlan = PrepNightPlan.build(prospects: toPrep, calendar: availability.calendar,
+                                            availability: availability.readability)
+        showPrepSelection = true
+    }
+
+    // #3325 (plan 3.6): the night choices are committed and SAVED before anything launches, and a save that
+    // fails stops the launch. The keys launched come back from the rows, never from the sheet.
+    private func startPrep(choice: PrepSelectionSheet.Choice) {
+        let outcome: PrepNightCommitting.Outcome
+        do {
+            outcome = try PrepNightCommitting.apply(choice, in: context)
+        } catch {
+            reportError(error.localizedDescription)
+            return
+        }
+        if !outcome.leftOut.isEmpty {
+            feedback.acknowledge(PrepSelectionCopy.leftOut(outcome.leftOut), tone: .warning)
+        }
+        guard !outcome.launchKeys.isEmpty else { return }
+        startPrep(includedKeys: outcome.launchKeys)
     }
 
     private func startPrep(includedKeys: Set<String>) {

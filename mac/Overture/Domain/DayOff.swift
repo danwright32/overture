@@ -198,7 +198,9 @@ enum ConflictSweep {
         // app's one cached calendar learns of it. Unconditional: a new day off that flags no show still
         // changes the calendar the Days off sheet draws. Handed the value just judged against, never a
         // second build, so the screen and the queue cannot disagree about which nights are taken.
-        AvailabilitySnapshot.publish(calendar, bookings: export.bookings, for: context)
+        AvailabilitySnapshot.publish(calendar, bookings: export.bookings,
+                                     readability: BlockedCalendar.Availability(health: export.health),
+                                     for: context)
         return changed
     }
 }
