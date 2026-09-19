@@ -55,6 +55,17 @@ struct LaterNightStaysOffTheCardTests {
         #expect(QueueModel.cardConflictNote(q) == "You blocked Oct 27 (Invented Retreat).")
     }
 
+    // #1583, unchanged: accepting a clash stops the blocking, not the telling. A kept card whose own night
+    // is blocked still says so after Keep cleared it.
+    @Test("an accepted clash on the card's own night still shows")
+    func anAcceptedClashOnItsOwnNightStillShows() {
+        var q = row("one", "2026-10-27", status: .queued)
+        q.conflictBlockedDate = "2026-10-27"
+        q.conflictNote = "You blocked Oct 27 (Invented Retreat)."
+        q.hasUnclearedConflict = false
+        #expect(QueueModel.cardConflictNote(q) == "You blocked Oct 27 (Invented Retreat).")
+    }
+
     // The one case the sentence still carries weight on a card: the clash holds the send, and the control
     // that releases it sits beside the sentence (L109).
     @Test("a kept card whose later night is still holding the send keeps the sentence")
