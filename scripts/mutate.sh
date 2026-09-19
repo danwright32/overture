@@ -28,6 +28,7 @@ set -uo pipefail
 #   MISPLACED FLAG    a flag was passed where a test scope goes, so it was never read (#2993).
 #   PERL VARIABLE     the expression carries an unescaped perl variable, which is almost never meant.
 #   SCOPE MISSED THE FILE  the scope ran real tests, but none that name the mutated file (#3098).
+#   LOG OVERWRITTEN   another run wrote to this run's log, so its verdict would be about theirs (#3984).
 #
 # The last three are the three ways a MALFORMED INSTRUCTION used to be reported as a verdict. Each was
 # measured: a build failure was folded into CAUGHT ("the compiler caught it"), which is true of a
@@ -98,11 +99,13 @@ guard.
   [test-scope ...]    optional, passed straight through to the test runner
                       (e.g. -only-testing:OvertureTests/RunSlotTests)
 
-  OVERTURE_MUTATE_LOG      where the run's full log is kept (default /tmp/overture-mutate-run.log).
-                           It is KEPT after the run and its path is printed, so the exact failure text a
-                           PR body needs is one `cat` away rather than a second full run (#2972). One
-                           fixed name, overwritten each run: two mutations going at once would share it,
-                           which is what this override is for.
+  OVERTURE_MUTATE_LOG      where the run's full log is kept. By default every run gets a file of its
+                           OWN under /tmp/overture-mutate-runs/ (#3984), so two mutations going at once
+                           can never read each other's failures. It is KEPT after the run and its path
+                           is printed, so the exact failure text a PR body needs is one `cat` away
+                           rather than a second full run (#2972). Setting this names the file instead;
+                           a run whose log another run overwrote is refused as LOG OVERWRITTEN rather
+                           than judged on somebody else's output.
 
   OVERTURE_MUTATE_RUNNER   the command to run instead of the Swift suite. The seam this script's own
                            fixture uses; also how to drive the shell fixtures or vitest instead. ONE
@@ -638,19 +641,67 @@ fi
 # supposed to have been seen to fail, that is a tax on the most-used verification step here, and it pushes
 # toward quoting a summary instead of the real text.
 #
-# One fixed name, overwritten per run, rather than a dated file per run: the log is wanted for the run
-# that just happened, and a directory of them would need its own retention rule to stop growing.
+# #3984: a file of this run's OWN, never one shared name. It used to be one fixed path,
+# `/tmp/overture-mutate-run.log`, overwritten per run, on the reasoning that the log is wanted for the run
+# that just happened. That holds for one run at a time and nothing else: every verdict below is READ BACK
+# out of this file, so two mutations going at once (several agent lanes, each in its own worktree) each
+# judged whatever the other had last written. Measured 2026-09-18 with four lanes mutating in parallel:
+# one run reported CAUGHT from a log naming another lane's failing test, and a mutation of a calendar
+# conflict printed another lane's failures as its own. A guard recorded as seen to fail on that evidence
+# was never seen to fail (L1, L420).
+#
+# So the default is `mktemp` in a directory, and the directory has the retention rule a file per run
+# needs: anything of ours older than a day goes. A day, not a count, because a count prunes by how many
+# runs started since, and a fixture sweep in another worktree starts dozens in seconds, which would delete
+# a long Swift proof's log while it was still being written. No run here lasts a day.
 #
 # In /tmp rather than $TMPDIR, which is the point of keeping it at all: run-shell-fixtures.sh gives each
 # fixture a private TMPDIR and then FAILS a fixture that leaves anything in it, so a log written there is
 # swept away by the very mechanism this exists to survive. Its own guard caught that. /tmp is where this
-# repo already keeps cross-run artifacts (the shared xcodebuild lock).
-RUN_LOG="${OVERTURE_MUTATE_LOG:-/tmp/overture-mutate-run.log}"
-: > "${RUN_LOG}"
+# repo already keeps cross-run artifacts (the shared xcodebuild lock). `OVERTURE_MUTATE_LOG_DIR` moves the
+# directory, which is how this script's own fixture keeps its many runs out of the real one (L2).
+mutate_run_log_path() {
+  local dir="${OVERTURE_MUTATE_LOG_DIR:-/tmp/overture-mutate-runs}" stale
+  mkdir -p "${dir}" 2>/dev/null || return 1
+  while IFS= read -r stale; do
+    [[ -n "${stale}" ]] && rm -f "${stale}"
+  done < <(find "${dir}" -maxdepth 1 -type f -name '*-mutate.*' -mmin +1440 2>/dev/null)
+  mktemp "${dir}/$(date +%Y%m%d-%H%M%S)-mutate.XXXXXX" 2>/dev/null
+}
+
+if [[ -n "${OVERTURE_MUTATE_LOG:-}" ]]; then
+  RUN_LOG="${OVERTURE_MUTATE_LOG}"
+elif ! RUN_LOG="$(mutate_run_log_path)" || [[ -z "${RUN_LOG}" ]]; then
+  echo "NO LOG - nothing was run, because no log of this run's own could be made."
+  echo "  Every verdict is read back out of that log, so running without one would judge nothing."
+  echo "  Set OVERTURE_MUTATE_LOG to a file only this run writes to."
+  exit 2
+fi
+
+# #3984: the log's FIRST line names this run, and the verdict is only read while it still does.
+#
+# A file of its own by default cannot be written by another run, but OVERTURE_MUTATE_LOG names one by hand,
+# and two runs given the same name are exactly the incident above. A run that finds its first line gone
+# knows somebody else truncated the file it is about to judge, so it refuses rather than reporting a verdict
+# drawn from output it did not produce. A process id plus the time is unique on one Mac, since two live
+# processes never share a pid.
+RUN_TOKEN="# mutate.sh run $$ $(date +%s) ${TARGET}"
+printf '%s\n' "${RUN_TOKEN}" > "${RUN_LOG}"
 RUN_STARTED_AT=${SECONDS}
-"${RUNNER}" "$@" > "${RUN_LOG}" 2>&1
+# APPENDED, so the token above stays the first line for as long as nobody else writes here.
+"${RUNNER}" "$@" >> "${RUN_LOG}" 2>&1
 RUN_STATUS=$?
 RUN_ELAPSED=$(( SECONDS - RUN_STARTED_AT ))
+
+if [[ "$(head -n 1 "${RUN_LOG}" 2>/dev/null)" != "${RUN_TOKEN}" ]]; then
+  echo "LOG OVERWRITTEN - another run wrote to ${RUN_LOG} while this one was running."
+  echo "  ${EXPRESSION}"
+  echo
+  echo "  Refused rather than reported: every verdict is read back out of that file, and it now holds"
+  echo "  somebody else's output, so a CAUGHT or a SURVIVED here would be about THEIR run (#3984)."
+  echo "  Give each run its own OVERTURE_MUTATE_LOG, or leave it unset and each run gets its own file."
+  exit 2
+fi
 
 sed 's/^/  | /' "${RUN_LOG}" | tail -n 25
 echo
