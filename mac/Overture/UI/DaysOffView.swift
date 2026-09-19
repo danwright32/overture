@@ -192,9 +192,15 @@ struct DaysOffView: View {
         // decodes the export ZERO times. `cancelledRows` is still a store fetch, and still read once.
         let cal = availability.calendar
         let bookings = availability.bookings
-        let cancelled = cancelledRows
-        let cancelledIds = Set(cancelled.map(\.bookingId))
-        let live = cal.days.filter { $0.kind == .bookedShoot }
+        let today = QueueModel.easternToday()
+        let allCancelled = cancelledRows
+        // EVERY cancellation, past ones included, because "what is still holding this night" is a question
+        // about the override the calendar applies, not about which rows are listed.
+        let cancelledIds = Set(allCancelled.map(\.bookingId))
+        // #2694 / #3406: each list shows what is still AHEAD. Shoots already worked and cancellations whose
+        // last night has gone are filtered, never deleted, and each heading counts what it lists.
+        let cancelled = CancelledShootEditing.upcoming(allCancelled, bookings: bookings, today: today)
+        let live = cal.upcomingBookedShoots(today: today)
         return VStack(alignment: .leading, spacing: OVSpacing.xs) {
             // #2692 follow-up: counts the LIVE rows, and the waved-through ones are counted under their
             // own heading below rather than being drawn under this number. A count is a promise about the
@@ -206,7 +212,7 @@ struct DaysOffView: View {
             // snooze silences the toolbar mark, and only that. Hiding this sentence too would put the
             // empty list straight back to reading as "you have nothing booked", which is a different
             // claim and a false one, and it is the exact misreading this whole feature exists to stop.
-            if !cal.hasUpcomingBookedShoot(today: QueueModel.easternToday()) {
+            if !cal.hasUpcomingBookedShoot(today: today) {
                 Text(DaysOffAttention.noBookedShootsExplanation)
                     .font(.system(size: 11)).foregroundStyle(OVColor.rust)
                     .fixedSize(horizontal: false, vertical: true)
@@ -336,14 +342,18 @@ struct DaysOffView: View {
     // MARK: - Dan's half: his to add and remove
 
     private var myDaysOff: some View {
-        VStack(alignment: .leading, spacing: OVSpacing.xs) {
-            sectionHeading("Days you blocked", systemImage: "calendar", count: daysOff.count)
+        // #3406: the ranges not finished yet. The count drops with the filter, which is correct: it counts
+        // the rows beneath it, and the past rows are still in the store.
+        let today = QueueModel.easternToday()
+        let shown = DayOffEditing.upcoming(daysOff, today: today)
+        return VStack(alignment: .leading, spacing: OVSpacing.xs) {
+            sectionHeading("Days you blocked", systemImage: "calendar", count: shown.count)
 
-            if daysOff.isEmpty {
-                Text("Nothing blocked. Add a vacation and Overture will stop pitching you for those nights.")
+            if shown.isEmpty {
+                Text(DayOffEditing.emptyListSentence(hasPastRanges: !daysOff.isEmpty))
                     .font(.system(size: 12)).foregroundStyle(OVColor.inkSoft)
             } else {
-                ForEach(daysOff) { row in
+                ForEach(shown) { row in
                     HStack(spacing: OVSpacing.sm) {
                         Text(QueueModel.runDateLabel(start: row.startDate, end: row.endDate))
                             .font(.system(size: 12, weight: .medium)).foregroundStyle(OVColor.ink)
