@@ -60,11 +60,19 @@ enum ProspectRowFactory {
                     offeredEarlyAsAClient: Bool = false,
                     showingTooFar: Bool = false,
                     userExcludedTowns: Set<String> = [],
-                    allowedSeedTowns: Set<String> = []) -> some View {
+                    allowedSeedTowns: Set<String> = [],
+                    // #1819: called after a Keep that really landed, so the caller can offer to clear the
+                    // rest of that night. Nil on a surface that offers nothing (Archive, previews).
+                    onKept: (() -> Void)? = nil) -> some View {
         let row = ProspectRowView(
             item: item,
             today: today,
-            onKeep: { ProspectMutations.setStatus(item, .queued, nil, prospects: prospects(), context: context, feedback: feedback, undo: undoStack, undoLabel: "Keep") },
+            onKeep: {
+                let live = prospects()
+                ProspectMutations.setStatus(item, .queued, nil, prospects: live, context: context, feedback: feedback, undo: undoStack, undoLabel: "Keep")
+                // #1819: only a Keep that actually landed offers to clear the night (L12).
+                if live.first(where: { $0.naturalKey == item.id })?.status == .queued { onKept?() }
+            },
             onDismiss: { reason in ProspectMutations.dismissForReason(item, reason, prospects: prospects(), context: context, feedback: feedback, offer: dayOffOffer, undo: undoStack) },
             onUnapprove: { ProspectMutations.setStatus(item, .drafted, nil, prospects: prospects(), context: context, feedback: feedback) },
             // #1824: the launch renders this show's listing page first, so it is awaited from a task rather
