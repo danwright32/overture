@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1589 sentences**.
+Every sentence Overture can say to Dan: **1593 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -14,7 +14,7 @@ What is not, and why:
   sentences under tokens nobody reads.
 - **Nothing, if it is written as two literals joined with `+`.** Those ARE joined here, into the
   one sentence the running app says (#3155). What is still only part of what Dan reads is a
-  sentence carrying a VALUE: 572 of the 1589 below hold a
+  sentence carrying a VALUE: 575 of the 1593 below hold a
   `\(...)` where a number or a name goes, so what is printed is the template. They are counted
   here rather than listed again, because the hole is visible in the line itself; what was missing
   was any statement of how much of this document is templates.
@@ -835,11 +835,17 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/ProspectRowFactory.swift`
 "Don't want to shoot this"
     `Domain/ShowOutcome.swift`
+"Downbeat and your Shoots calendar name \(splits.count) rooms differently, so a pitch at any of them counts only some of the times you've shot it."
+    `Domain/AppNotice.swift`
+"Downbeat calls a room \"\(VenueKeySplit.displayName(first.downbeatVenue))\" that your Shoots calendar calls \"\(VenueKeySplit.displayName(first.calendarVenue))\", so a pitch there counts only some of the times you've shot it."
+    `Domain/AppNotice.swift`
 "Downbeat clients no watched source treats as a returning client, so their next season would not surface a year ahead. Add a source for them, or tag an existing one below."
     `Domain/ClientCoverage.swift`
 "Downbeat's export carries no shoots at all, though \(vanished.bookingCount) have come through it before, "
     `Domain/AppNotice.swift`
 "Downbeat's export lists no clients, though it had \(emptied.clientCount) as recently as \(seen), so Overture can't recognise the organisations you already work with."
+    `Domain/AppNotice.swift`
+"Downbeat: \(VenueKeySplit.displayName(split.downbeatVenue)). Calendar: \(VenueKeySplit.displayName(split.calendarVenue)). Both on \(night)."
     `Domain/AppNotice.swift`
 "Draft a reply"
     `UI/ReplyConversationView.swift`
@@ -861,6 +867,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/AgentRoster.swift`
 "Due (\(count))"
     `Domain/DueWork.swift`
+"Each name has a shoot on the same night, one in Downbeat and one on your calendar, which is how Overture knows they are one room. Use the calendar's name for it in Downbeat, re-export, then re-read it here.\n"
+    `Domain/AppNotice.swift`
 "Each pair counts as two organisations, so nothing found for one is ever reused for the other. Some are real typos and some are simply different names."
     `UI/OrganisationsView.swift`
 "Edit details..."
