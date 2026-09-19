@@ -26,35 +26,14 @@ import Foundation
 @Suite("The self-booking copy names the night and the right tier (#3672, #3686)")
 struct SelfBookingCopyNamesTheNightAndTheTierTests {
 
-    // MARK: - #3672: the header names the night when it can
+    // MARK: - the header, which since #3622 speaks only about its own date
 
-    @Test("A clash on one named night is named, rather than called a night of the run")
-    func theHeaderNamesASingleClashNight() {
-        let claim = SelfBookingConflict.HeaderClaim(commitment: .emailed,
-                                                    allOnThisDate: false,
-                                                    night: "2026-10-02")
-        #expect(SelfBookingCopy.dateHeaderNote(claim) == "Another pitch is already in progress on Oct 2",
-                Comment(rawValue:
-                    "The header still refuses to say which night it found the clash on, though the night "
-                    + "was known where the sentence was composed. Dan had to go hunting for it."))
-    }
-
-    @Test("A booked clash on one named night says shooting, not pitching")
-    func theHeaderNamesTheNightForABookedClash() {
-        let claim = SelfBookingConflict.HeaderClaim(commitment: .booked,
-                                                    allOnThisDate: false,
-                                                    night: "2026-10-02")
-        #expect(SelfBookingCopy.dateHeaderNote(claim)
-                == "You are already shooting another show on Oct 2")
-    }
-
-    @Test("Clashes on SEVERAL nights keep the vague wording, because naming one would claim it is the whole story")
+    @Test("A header with no readable date keeps the run wording, since it cannot say on this date")
     func severalNightsAreNotNarrowedToOne() {
-        // This is the honest case and the reason the vague sentence exists at all. A group whose rows clash
-        // on two different nights may not present either as the answer (L11): the check measured two.
+        // Since #3622 the only way to reach this sentence: a known header date counts only its own clashes,
+        // so `allOnThisDate` is false only when the date could not be read (L11).
         let claim = SelfBookingConflict.HeaderClaim(commitment: .emailed,
-                                                    allOnThisDate: false,
-                                                    night: nil)
+                                                    allOnThisDate: false)
         #expect(SelfBookingCopy.dateHeaderNote(claim)
                 == "Another pitch is already in progress on a night one of these runs plays")
     }
@@ -62,8 +41,7 @@ struct SelfBookingCopyNamesTheNightAndTheTierTests {
     @Test("A clash on the header's own date is unchanged")
     func theOnThisDateWordingIsUntouched() {
         let claim = SelfBookingConflict.HeaderClaim(commitment: .emailed,
-                                                    allOnThisDate: true,
-                                                    night: "2026-09-25")
+                                                    allOnThisDate: true)
         #expect(SelfBookingCopy.dateHeaderNote(claim) == "Another pitch is already in progress on this date")
     }
 
@@ -72,8 +50,7 @@ struct SelfBookingCopyNamesTheNightAndTheTierTests {
         // #3676, Dan 2026-09-07: "Prepping is not committing to pitching." Unchanged by this work, and
         // asserted so that adding a night to the claim cannot quietly give prepped a sentence.
         let claim = SelfBookingConflict.HeaderClaim(commitment: .prepped,
-                                                    allOnThisDate: false,
-                                                    night: "2026-10-02")
+                                                    allOnThisDate: false)
         #expect(SelfBookingCopy.dateHeaderNote(claim) == nil)
     }
 
@@ -81,10 +58,7 @@ struct SelfBookingCopyNamesTheNightAndTheTierTests {
 
     @Test("A booked show on the night is not described as being pitched")
     func theRowMarkerDoesNotCallABookedShowAPitch() {
-        let marker = SelfBookingCopy.rowMarker(["Ravel and Ives"],
-                                               clashNight: nil,
-                                               performanceDate: nil,
-                                               commitment: .booked)
+        let marker = SelfBookingCopy.rowMarker(["Ravel and Ives"], commitment: .booked)
         #expect(marker == "Already shooting Ravel and Ives on this date", Comment(rawValue:
             "The row marker still says somebody is pitching a show that is already booked, which is the "
             + "half of #3676 that Dan's settlement that day did not cover."))
@@ -92,10 +66,7 @@ struct SelfBookingCopyNamesTheNightAndTheTierTests {
 
     @Test("A sent pitch on the night still reads as a pitch")
     func theRowMarkerKeepsThePitchWordingForASentPitch() {
-        let marker = SelfBookingCopy.rowMarker(["Ravel and Ives"],
-                                               clashNight: nil,
-                                               performanceDate: nil,
-                                               commitment: .emailed)
+        let marker = SelfBookingCopy.rowMarker(["Ravel and Ives"], commitment: .emailed)
         #expect(marker == "Also pitching Ravel and Ives on this date")
     }
 
@@ -104,39 +75,14 @@ struct SelfBookingCopyNamesTheNightAndTheTierTests {
         // Deliberately NOT nil, unlike the header. Dan pointed at "Also pitching X on this date" as the
         // thing that already covers a prepped show and said it does (#3686's own write-up). The row and
         // the header differ here on purpose, and this test is what stops somebody "consolidating" them.
-        let marker = SelfBookingCopy.rowMarker(["Ravel and Ives"],
-                                               clashNight: nil,
-                                               performanceDate: nil,
-                                               commitment: .prepped)
+        let marker = SelfBookingCopy.rowMarker(["Ravel and Ives"], commitment: .prepped)
         #expect(marker == "Also pitching Ravel and Ives on this date")
-    }
-
-    @Test("A booked clash on a later night names that night with the booked verb")
-    func theBookedVerbSurvivesTheLaterNightBranch() {
-        // The tier and the night are two independent branches in one sentence, so each combination has to
-        // be exercised: a fix that only reached the "on this date" arm would leave the later-night arm
-        // still claiming a booked show is being pitched (L517).
-        let marker = SelfBookingCopy.rowMarker(["Ravel and Ives"],
-                                               clashNight: "2026-10-29",
-                                               performanceDate: "2026-10-02",
-                                               commitment: .booked)
-        #expect(marker == "Already shooting Ravel and Ives on Oct 29")
-    }
-
-    @Test("A booked clash on an unnameable later night still uses the booked verb")
-    func theBookedVerbSurvivesTheUnnamedBranch() {
-        let marker = SelfBookingCopy.rowMarker(["Ravel and Ives"],
-                                               clashNight: nil,
-                                               performanceDate: "2026-10-02",
-                                               commitment: .booked)
-        #expect(marker == "Already shooting Ravel and Ives on a later night of this run")
     }
 
     @Test("No names still means no marker, whatever the tier")
     func noNamesMeansNoMarker() {
         for commitment in [SelfBookingConflict.Show.Commitment.booked, .emailed, .prepped] {
-            #expect(SelfBookingCopy.rowMarker([], clashNight: nil, performanceDate: nil,
-                                              commitment: commitment) == nil,
+            #expect(SelfBookingCopy.rowMarker([], commitment: commitment) == nil,
                     Comment(rawValue: "An empty name list produced a marker for \(commitment)."))
         }
     }

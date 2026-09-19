@@ -206,46 +206,26 @@ enum SelfBookingConflict {
     // #3323's half is unchanged and is why `allOnThisDate` exists at all: the note sits under a header
     // naming ONE date, so it may only say "on this date" when the clash really is on it. A run in the group
     // clashing on a later night makes the sentence read as a claim about the header above it (#1501).
+    //
+    // #3622 (Dan's call, 2026-09-18): only clashes ON the header's date are counted, so a run filed under it
+    // that clashes on a later night no longer raises a sentence here at all. That made #3672's named night
+    // unreachable for a known date, so it was deleted with the case it served rather than left as a field
+    // nothing could set.
     struct HeaderClaim: Equatable {
         let commitment: Show.Commitment
         let allOnThisDate: Bool
-
-        // #3672: the ONE night every clash at this tier falls on, so the header can name it instead of
-        // saying "a night one of these runs plays" and leaving the reader to go hunting. Dan read that
-        // sentence under a Sep 25 header on 2026-09-07 and could not tell whether the clash was Sep 25 or a
-        // later night of a run filed there.
-        //
-        // Nil in the two cases where naming a night would be a claim the check did not measure (L11):
-        // when the clashes are spread over SEVERAL nights, because presenting one of them as the answer
-        // says the others are not there; and when they are all on the header's own date, where
-        // `allOnThisDate` already carries it and a named date would repeat the header above it.
-        let night: String?
     }
 
     static func headerClaim(for group: [Show], on date: String?, in index: NightIndex) -> HeaderClaim? {
+        // An UNKNOWN header date may not claim "on this date": it would assert a date nothing measured, so
+        // it counts every clash and falls to the run wording, which is true of any night (L11). A known date
+        // counts only the clashes on it (#3622).
         let overlaps = group.flatMap { conflicts(for: $0, in: index) }
+            .filter { date == nil || $0.night == date }
         // An overlap can only come from a committed show, so an empty tier list means an empty clash list.
         guard let strongest = overlaps.compactMap({ $0.other.commitment }).max(by: { $0.rank < $1.rank })
         else { return nil }
-        let atTier = overlaps.filter { $0.other.commitment == strongest }
-        // #3672: the single night, or nil when there is more than one. Taken over the TIER's overlaps and
-        // not all of them, so the night named always belongs to the commitment the sentence is about.
-        let nights = Set(atTier.map(\.night))
-        let theOneNight = nights.count == 1 ? nights.first : nil
-
-        // An UNKNOWN header date may not claim "on this date": it would assert a date nothing measured, so
-        // it falls to the run wording, which is true of any night (L11).
-        //
-        // #3672 deliberately leaves this arm alone and does NOT name the night here, though it could. That
-        // is a recorded decision with its own test (`anUnknownHeaderDateFallsToTheRunWording`), and it is
-        // not the case Dan reported: his was a KNOWN header date whose clash was on a later night. Widening
-        // a reversal past the case that motivated it reverses decisions nobody asked about (L542).
-        guard let date else {
-            return HeaderClaim(commitment: strongest, allOnThisDate: false, night: nil)
-        }
-        let allHere = atTier.allSatisfy { $0.night == date }
-        return HeaderClaim(commitment: strongest, allOnThisDate: allHere,
-                           night: allHere ? nil : theOneNight)
+        return HeaderClaim(commitment: strongest, allOnThisDate: date != nil)
     }
 
     private static func isAClash(_ target: Show, _ overlap: Overlap) -> Bool {
@@ -333,23 +313,23 @@ enum SelfBookingCopy {
     // under the date it appears to be about. That is #1501's defect exactly, on the other half of the
     // system: the sentence was true and read false, because the eye binds the date in the sentence to the
     // header above it.
+    //
+    // #3622 (Dan's call, 2026-09-18): a clash on a LATER night of a run is no longer the header's business.
+    // `headerClaim` only counts clashes on the header's own date now, so a known date always speaks "on this
+    // date", and the run wording survives for the one case that cannot say it: a header with no readable
+    // date. The named-night middle branch #3672 added went with the case it served. The later night is
+    // still shown where Dan chooses a run's nights, at Prep launch (`prepConfirmMessage` below, and the
+    // per-night picker #3325 is building).
     static func dateHeaderNote(_ claim: SelfBookingConflict.HeaderClaim?) -> String? {
         guard let claim else { return nil }
-        // #3672 added the middle branch of each pair: the night, when every clash at this tier is on ONE
-        // night and it is not the header's own date. Whole literals per branch, never assembled from a
-        // verb plus a tail, because the copy inventory lists each literal separately and a sentence built
-        // in pieces reaches the cold read in pieces (#843).
-        let named = claim.night.flatMap(EasternDate.dayLabel)
         switch claim.commitment {
         case .prepped:
             return nil
         case .emailed:
             if claim.allOnThisDate { return "Another pitch is already in progress on this date" }
-            if let named { return "Another pitch is already in progress on \(named)" }
             return "Another pitch is already in progress on a night one of these runs plays"
         case .booked:
             if claim.allOnThisDate { return "You are already shooting another show on this date" }
-            if let named { return "You are already shooting another show on \(named)" }
             return "You are already shooting another show on a night one of these runs plays"
         }
     }
@@ -432,24 +412,20 @@ enum SelfBookingCopy {
     // difference is deliberate rather than an oversight to consolidate away: Dan pointed at
     // "Also pitching X on this date" as the thing that already covers a prepped show and said it does.
     //
-    // Six whole literals, one per branch, for the reason above: a marker assembled from a verb plus a tail
+    // Whole literals, one per branch, for the reason above: a marker assembled from a verb plus a tail
     // would reach the copy inventory as fragments and the line Dan meets would appear nowhere (#843).
-    static func rowMarker(_ names: [String], clashNight: String?, performanceDate: String?,
-                          commitment: SelfBookingConflict.Show.Commitment) -> String? {
+    //
+    // #3622 (Dan's call, 2026-09-18): the row speaks only about the night it is filed under. Its caller hands
+    // it the clashes on that night alone (`QueueModel.selfBookingCardConflicts`), so the later-night wording
+    // this used to carry ("on Oct 29", "on a later night of this run") is gone from every row. A later night
+    // is still named where Dan picks a run's nights, at Prep launch.
+    static func rowMarker(_ names: [String], commitment: SelfBookingConflict.Show.Commitment) -> String? {
         guard let others = othersPhrase(names) else { return nil }
-        switch (commitment, laterNight(clashNight: clashNight, performanceDate: performanceDate)) {
-        case (.booked, .thisNight):
+        switch commitment {
+        case .booked:
             return "Already shooting \(others) on this date"
-        case (.booked, .named(let label)):
-            return "Already shooting \(others) on \(label)"
-        case (.booked, .unnamed):
-            return "Already shooting \(others) on a later night of this run"
-        case (_, .thisNight):
+        case .emailed, .prepped:
             return "Also pitching \(others) on this date"
-        case (_, .named(let label)):
-            return "Also pitching \(others) on \(label)"
-        case (_, .unnamed):
-            return "Also pitching \(others) on a later night of this run"
         }
     }
 
@@ -484,17 +460,12 @@ enum SelfBookingCopy {
         return "Also pitching \(name) at \(times), \(hours) hour\(plural) \(side) this one"
     }
 
-    // The confirm-to-proceed warning shown at Prep-launch and at Send.
-    static func confirmWarning(_ names: [String], clashNight: String?,
-                               performanceDate: String?) -> String? {
+    // The confirm-to-proceed warning shown at Send.
+    //
+    // #3622 (Dan's call, 2026-09-18): like the row, about the show's own night only, so the later-night
+    // branches went with the decision. Its caller passes the clashes on that night alone.
+    static func confirmWarning(_ names: [String]) -> String? {
         guard let others = othersPhrase(names) else { return nil }
-        switch laterNight(clashNight: clashNight, performanceDate: performanceDate) {
-        case .thisNight:
-            return "You already have a pitch in progress for \(others) on this date."
-        case .named(let label):
-            return "You already have a pitch in progress for \(others) on \(label)."
-        case .unnamed:
-            return "You already have a pitch in progress for \(others) on a later night of this run."
-        }
+        return "You already have a pitch in progress for \(others) on this date."
     }
 }

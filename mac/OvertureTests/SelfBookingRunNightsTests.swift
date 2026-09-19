@@ -131,10 +131,10 @@ struct SelfBookingRunNightsTests {
         #expect(BothSelfBookingReadings.conflicts(for: target, among: [target]).isEmpty)
     }
 
-    // The queue-wide note asks the same question of the whole group: it may say "on this date" only when
-    // every clash in the group really is on that date. #3676 moved this onto `headerClaim`, which answers
-    // it and the tier question together, so the two cannot be asked of different clash sets.
-    @Test func theGroupsNoteDropsThisDateWhenAClashIsOnALaterNight() {
+    // The queue-wide note asks the same question of the whole group. #3622 (Dan's call, 2026-09-18): a
+    // clash on a LATER night of a run filed under the header is no longer the header's business at all, so
+    // it is not counted, rather than turning the sentence vague as it did before (#3323).
+    @Test func theGroupsNoteIgnoresAClashOnALaterNight() {
         let laterRun = show("run", ["2026-10-27", "2026-10-29"])
         let sameNight = show("card", ["2026-10-27"])
         let committed = show("committed", ["2026-10-27", "2026-10-29"], commitment: true, name: "Orchestra A")
@@ -142,9 +142,14 @@ struct SelfBookingRunNightsTests {
         // The one-night card clashes on its own date, so the note is unchanged.
         #expect(SelfBookingConflict.headerClaim(for: [sameNight], on: "2026-10-27", in: index)?.allOnThisDate
                 == true)
-        // The run also clashes on Oct 29, which is not the header's date.
+        // The run also clashes on Oct 29, which is not the header's date, and that clash is not counted.
         #expect(SelfBookingConflict.headerClaim(for: [laterRun, sameNight], on: "2026-10-27",
-                                                in: index)?.allOnThisDate == false)
+                                                in: index)?.allOnThisDate == true)
+        // A run whose ONLY clash is on a later night raises nothing under the header at all.
+        let runAlone = show("alone", ["2026-10-27", "2026-10-30"])
+        let laterOnly = show("later", ["2026-10-30"], commitment: true, name: "Orchestra B")
+        #expect(SelfBookingConflict.headerClaim(for: [runAlone], on: "2026-10-27",
+                                                in: SelfBookingConflict.NightIndex([laterOnly, runAlone])) == nil)
     }
 
     // The index is the SAME predicate as the direct call, so the cheap path a render pass uses and the
@@ -181,46 +186,9 @@ struct SelfBookingRunNightsTests {
 // exactly, on the other half of the system).
 @Suite("Run-aware self double-booking copy (#3323)")
 struct SelfBookingRunNightsCopyTests {
-    // A clash on the card's OWN night reads exactly as it always has. This is the common case and it must
-    // not acquire a date it never needed.
-    @Test func aClashOnTheCardsOwnNightIsUnchanged() {
-        #expect(SelfBookingCopy.rowMarker(["Orchestra A"], clashNight: "2026-10-29",
-                                          performanceDate: "2026-10-29", commitment: .emailed)
-                == "Also pitching Orchestra A on this date")
-    }
-
-    // A clash on a LATER night names that night, so Dan is not told a date header's night is the problem
-    // when the problem is four nights later.
-    @Test func aClashOnALaterNightNamesTheNight() {
-        #expect(SelfBookingCopy.rowMarker(["Orchestra A"], clashNight: "2026-10-29",
-                                          performanceDate: "2026-10-27", commitment: .emailed)
-                == "Also pitching Orchestra A on Oct 29")
-    }
-
-    // An unreadable night falls back to saying it is later in the run, never to "on this date": naming
-    // the wrong night is worse than naming none (L11).
-    @Test func anUnreadableNightSaysLaterInTheRunRatherThanThisDate() {
-        #expect(SelfBookingCopy.rowMarker(["Orchestra A"], clashNight: "not-a-date",
-                                          performanceDate: "2026-10-27", commitment: .emailed)
-                == "Also pitching Orchestra A on a later night of this run")
-    }
-
-    // No night measured at all is the same case: it may not claim the card's own date.
-    @Test func noNightAtAllStillDoesNotClaimThisDate() {
-        #expect(SelfBookingCopy.rowMarker(["Orchestra A"], clashNight: nil,
-                                          performanceDate: "2026-10-27", commitment: .emailed)
-                == "Also pitching Orchestra A on a later night of this run")
-    }
-
-    // The send and prep confirmations carry the same distinction, since those are the committing moments.
-    @Test func theConfirmWarningNamesTheLaterNightToo() {
-        #expect(SelfBookingCopy.confirmWarning(["Orchestra A"], clashNight: "2026-10-29",
-                                               performanceDate: "2026-10-29")
-                == "You already have a pitch in progress for Orchestra A on this date.")
-        #expect(SelfBookingCopy.confirmWarning(["Orchestra A"], clashNight: "2026-10-29",
-                                               performanceDate: "2026-10-27")
-                == "You already have a pitch in progress for Orchestra A on Oct 29.")
-    }
+    // #3622 (Dan's call, 2026-09-18) deleted the row marker's and the send confirm's later-night branches
+    // along with the tests that asserted them (L252): neither is handed a later-night clash any more. The
+    // Prep launch confirm below is where a later night is still named.
 
     // The prep-launch confirm names the night, as its OWN sentence rather than a clause bolted onto the
     // existing one. "is on a date ... for Orchestra A, on Oct 29" reads as two competing dates: the
@@ -249,9 +217,9 @@ struct SelfBookingRunNightsCopyTests {
     // blocked-calendar half: the sentence was true and read false, because the eye binds the date in the
     // sentence to the header above it.
     @Test func theDateHeaderNoteSaysThisDateOnlyWhenTheClashIsOnIt() {
-        #expect(SelfBookingCopy.dateHeaderNote(.init(commitment: .emailed, allOnThisDate: true, night: nil))
+        #expect(SelfBookingCopy.dateHeaderNote(.init(commitment: .emailed, allOnThisDate: true))
                 == "Another pitch is already in progress on this date")
-        #expect(SelfBookingCopy.dateHeaderNote(.init(commitment: .emailed, allOnThisDate: false, night: nil))
+        #expect(SelfBookingCopy.dateHeaderNote(.init(commitment: .emailed, allOnThisDate: false))
                 == "Another pitch is already in progress on a night one of these runs plays")
     }
 }
