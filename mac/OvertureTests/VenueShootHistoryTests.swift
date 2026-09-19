@@ -214,3 +214,44 @@ struct VenueShootHistoryTests {
         #expect(band("Asylum NYC", shoots: shoots) == nil)
     }
 }
+
+// #1904: a calendar title can carry a private note about ONE client (what they paid, what they were
+// promised), and this model is read while pitching a DIFFERENT one. The title's only job here is the
+// rehearsal rule, so once that rule has run the model keeps no title at all.
+//
+// Measured by reflection over the whole built value rather than by asking a property, because the defect
+// is a title surviving ANYWHERE inside it, including in a field added later. The titles are invented.
+@Suite("Shoot history keeps no calendar titles (#1904)")
+struct VenueShootHistoryKeepsNoTitlesTests {
+    private static let privateNote = "Invented Ensemble: deposit paid, 999 per hour, loyalty discount"
+    private static let bookingNote = "Invented Booking: balance of 4321 due on the night"
+    private static let rehearsalNote = "Invented Ensemble dress rehearsal, paid 888 in advance"
+
+    // Every string reachable from `value`, however deeply nested.
+    private static func strings(in value: Any) -> [String] {
+        if let s = value as? String { return [s] }
+        return Mirror(reflecting: value).children.flatMap { strings(in: $0.value) }
+    }
+
+    @Test func noTitleSurvivesTheRehearsalRule() {
+        let history = VenueShootHistory(
+            shoots: [ShootRecord(venue: "Abrons Arts Center", date: "2024-11-13", title: Self.rehearsalNote),
+                     ShootRecord(venue: "Abrons Arts Center", date: "2024-11-14", title: Self.privateNote),
+                     ShootRecord(venue: "Roulette Intermedium", date: "2025-02-01", title: Self.privateNote)],
+            bookings: [OvertureBooking(id: "b1", clientId: "c", clientDisplayName: "Invented Client",
+                                       shootName: Self.bookingNote, startDate: "2025-03-01",
+                                       endDate: "2025-03-01", venueId: nil, venueName: "Roulette Intermedium")],
+            today: "2026-07-31")
+
+        // The rule still did its work with the titles before dropping them: the dress rehearsal the night
+        // before its performance is absorbed, so Abrons counts once.
+        #expect(history.band(for: "Abrons Arts Center") == .shotBefore)
+        #expect(history.band(for: "Roulette Intermedium") == .aFew)
+
+        let held = Self.strings(in: history)
+        #expect(!held.isEmpty, "reflection found no strings at all, so this is measuring nothing")
+        for note in [Self.privateNote, Self.bookingNote, Self.rehearsalNote] {
+            #expect(!held.contains { $0.contains(note) }, "a calendar title outlived the rehearsal rule: \(note)")
+        }
+    }
+}
