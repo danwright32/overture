@@ -565,6 +565,14 @@ the measurement it came from lives here. Read the entry before the rule decides 
     have. Both ends are counted, not just finishes: with eight lanes, seven fast ones would otherwise mask
     a hung one for as long as work remained. It WARNS rather than kills, for #2577's reason. Retune with
     `OVERTURE_FIXTURE_STALL_LIMIT_SECONDS` and `OVERTURE_FIXTURE_STALL_CHECK_SECONDS`.
+    **Since #3682 each fixture also has a DEADLINE, and one past it is ENDED and named `TIMED OUT`.**
+    A warning is not enough on its own, and the measurement says why: on 2026-09-07
+    `check-pure-suite-imports.test.sh` spun at 100% CPU for 5h37m, orphaned to launchd after whatever ran
+    it had gone, so the watcher had gone with its runner and nothing was left to speak. The deadline is a
+    timer in its own process group started beside each fixture, so it outlives a dead runner. It defaults
+    to 600s, about ten times the slowest fixture under a full parallel sweep, and moves with
+    `OVERTURE_FIXTURE_TIMEOUT_SECONDS`. The spin itself was #3718's per-file `grep` exhausting the process
+    table under eight lanes, already fixed; this is the class, for the next fixture that never returns.
   - **Anything asking a yes or no question with `cmd | grep -q`: WRONG under `pipefail`, and it fails
     in the direction that reads as a clean answer (#3275).** `grep -q` exits on its first match, which
     kills the producer with SIGPIPE, and `set -o pipefail` makes that 141 the pipeline's status, so the

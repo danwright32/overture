@@ -584,7 +584,27 @@ set -m
 started_at="${SECONDS}"
 ( set +e; TMPDIR="${scratch}/tmp-${idx}" OVERTURE_FIXTURE_TMPDIR_SCOPED=1 "${fixture}" >"${scratch}/log-${idx}" 2>&1; echo "$?" > "${scratch}/status-${idx}" ) &
 job=$!
+# #3682: a DEADLINE, so a fixture that never finishes is ended and named rather than left spinning.
+#
+# The stall guard only WARNS, and it lives in the runner, so it dies with the runner. Measured 2026-09-07:
+# `check-pure-suite-imports.test.sh` spun at 100% CPU for 5h37m, orphaned to launchd after whatever ran it
+# had gone, and a second time for 9m44s inside a merge until it was killed by hand. Nothing ended either.
+# This timer is its own process group, started beside the fixture, so it outlives a dead runner and still
+# ends the fixture. The limit is an order of magnitude over the slowest fixture measured here (about a
+# minute under a full parallel sweep), so it fires on a hang and never on a slow machine.
+deadline_seconds="${OVERTURE_FIXTURE_TIMEOUT_SECONDS:-600}"
+( sleep "${deadline_seconds}"
+  if kill -0 -- "-${job}" 2>/dev/null; then
+    echo "${deadline_seconds}" > "${scratch}/timedout-${idx}"
+    kill -TERM -- "-${job}" 2>/dev/null
+    sleep 2
+    kill -KILL -- "-${job}" 2>/dev/null
+  fi ) >/dev/null 2>&1 &
+deadline=$!
 wait "${job}"
+# The fixture is over either way, so the timer has nothing left to guard. Its GROUP, so its sleep goes too.
+kill -- "-${deadline}" 2>/dev/null
+wait "${deadline}" 2>/dev/null
 set +m
 # Recorded BEFORE the group is ended, or the report would be of a group this line had just emptied.
 fixture_surviving_processes "${job}" > "${scratch}/leaked-${idx}"
@@ -659,7 +679,15 @@ WRAPPER
     echo "==> ${fixture}  (${seconds}s)"
     cat "${scratch}/log-${i}" 2>/dev/null || true
     rc="$(cat "${scratch}/status-${i}" 2>/dev/null || echo 1)"
-    if [[ "${rc}" -ne 0 ]]; then
+    if [[ -f "${scratch}/timedout-${i}" ]]; then
+      # #3682: said by name, because a fixture ended at its deadline did not fail an assertion. It never
+      # finished, and that is the finding to go and look at.
+      echo "FAIL - ${fixture} TIMED OUT: still running after $(cat "${scratch}/timedout-${i}")s, so it was ended."
+      echo "  It did not fail an assertion; it never finished. A fixture spinning at full CPU was measured"
+      echo "  running for 5h37m before this existed (#3682). Run it alone to see where it stops."
+      echo "  OVERTURE_FIXTURE_TIMEOUT_SECONDS moves the deadline."
+      failures=$((failures + 1))
+    elif [[ "${rc}" -ne 0 ]]; then
       echo "FAIL - ${fixture}"
       # #2850: a fixture that failed may have failed because of a broken pipe rather than because
       # anything is wrong, which is the whole point of that check. Said on THIS branch as well, because
