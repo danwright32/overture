@@ -27,7 +27,7 @@ struct PrepPickerRendersTests {
     }
 
     private func container() throws -> ModelContainer {
-        try ModelContainer(for: AppSchema.schema, configurations: [ModelConfiguration(isStoredInMemoryOnly: true)])
+        try TestModelContainer.inMemory(AppSchema.models)
     }
 
     // Friday and Saturday of each week from a pinned Friday: a weekend series, so 28 nights is fourteen
@@ -103,8 +103,7 @@ struct PrepPickerRendersTests {
         let other = prospect(ctx, name: "Chamber Night", venue: "Weill Recital Hall", nights: ["2026-11-14"])
         let cal = calendar(blocking: blocked.map { nights[$0] })
         let plan = PrepNightPlan.build(prospects: [run, other], calendar: cal, availability: .measured, today: "2026-09-01")
-        let view = PrepSelectionSheet(prospects: [run, other], plan: plan,
-                                      now: { Date(timeIntervalSince1970: 1_790_000_000) }, onRun: { _ in })
+        let view = PrepSelectionSheet(prospects: [run, other], plan: plan, onRun: { _ in })
         return (view, [run, other])
     }
 

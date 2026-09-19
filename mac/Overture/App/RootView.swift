@@ -1368,8 +1368,8 @@ struct RootView: View {
                 // needs neither, and this call no longer reads the export off disk to present a sheet.
                 // #3493: `allItems`, not a second `allProspects.map(QueueItem.init)` written inline. Two
                 // definitions of one question can each be changed without the other (L263, L370).
-                PrepSelectionSheet(prospects: toPrep, allItems: allItems,
-                                   plan: prepNightPlan) { choice in startPrep(choice: choice) }
+                PrepSelectionSheet(prospects: toPrep, plan: prepNightPlan,
+                                   allItems: allItems) { choice in startPrep(choice: choice) }
             }
             // #1130: the Prep run's takeover, mirroring the scout's (#1034). A detached Prep run takes
             // minutes, so it gets the same prominent working/still-alive/stalled screen instead of only a

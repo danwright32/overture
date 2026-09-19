@@ -69,8 +69,8 @@ struct PrepSelectionSheet: View {
     // The clock the commit is stamped with. Injected so a rendering or a test does not read the wall clock.
     private let now: () -> Date
 
-    init(prospects: [Prospect], allItems: [QueueItem] = [], plan: PrepNightPlan = .empty,
-         now: @escaping () -> Date = Date.init,
+    init(prospects: [Prospect], plan: PrepNightPlan = .empty,
+         now: @escaping () -> Date = Date.init, allItems: [QueueItem] = [],
          onRun: @escaping (Choice) -> Void) {
         self.onRun = onRun
         self.allItems = allItems
