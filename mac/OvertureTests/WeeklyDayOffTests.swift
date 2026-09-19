@@ -223,6 +223,9 @@ struct WeeklyDayOffTests {
                 == "Every Wednesday from Feb 3")
         #expect(WeeklyDayOffEditing.label(weekday: wednesday, firstDate: "2027-02-03", lastDate: "2027-06-30")
                 == "Every Wednesday, Feb 3 to Jun 30")
+        #expect(WeeklyDayOffEditing.freedLine("2026-09-23") == "Free on Sep 23")
+        #expect(WeeklyDayOffEditing.freeButtonTitle(isOpen: false) == "Free one date")
+        #expect(WeeklyDayOffEditing.freeButtonTitle(isOpen: true) == "Cancel")
     }
 
     // #3406 for the third list: a bounded rule whose last date has gone is no longer listed; a standing one

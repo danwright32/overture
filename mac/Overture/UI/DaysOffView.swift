@@ -438,7 +438,7 @@ struct DaysOffView: View {
                     Text(note).font(.system(size: 12)).foregroundStyle(OVColor.inkSoft)
                 }
                 Spacer()
-                Button(isFreeing ? "Cancel" : "Free one date") {
+                Button(WeeklyDayOffEditing.freeButtonTitle(isOpen: isFreeing)) {
                     freeMessage = nil
                     freeingRule = isFreeing ? nil : rule.persistentModelID
                 }
@@ -448,7 +448,7 @@ struct DaysOffView: View {
             }
             ForEach(freed, id: \.self) { date in
                 HStack(spacing: OVSpacing.sm) {
-                    Text("Free on \(EasternDate.dayLabel(date) ?? date)")
+                    Text(WeeklyDayOffEditing.freedLine(date))
                         .font(.system(size: 11)).foregroundStyle(OVColor.inkSoft)
                     Button("Block it again") {
                         WeeklyDayOffMutations.reblock(date, on: rule, context: context, feedback: feedback)

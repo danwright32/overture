@@ -167,6 +167,15 @@ enum WeeklyDayOffEditing {
         return .freed
     }
 
+    // The row's "free one date" control, which is its own Cancel while the picker is open (the #885 rule:
+    // copy computed in a view body is copy no test can read).
+    nonisolated static func freeButtonTitle(isOpen: Bool) -> String { isOpen ? "Cancel" : "Free one date" }
+
+    // A date freed from the rule, as the line under its row says it.
+    nonisolated static func freedLine(_ date: String) -> String {
+        "Free on \(EasternDate.dayLabel(date) ?? date)"
+    }
+
     // Why a date could not be freed, naming the weekday, since the usual cause is a date on the wrong one.
     nonisolated static func freeRefusal(date: String, weekday: Int) -> String {
         let day = EasternDate.dayLabel(date) ?? date
