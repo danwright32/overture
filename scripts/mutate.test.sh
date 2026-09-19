@@ -28,6 +28,9 @@ export OVERTURE_MUTATE_LOG_DIR="${WORK}/mutate-logs"
 # OVERTURE_MUTATE_LOG reaches every inner run, and all of them write into the outer run's log (L439). The
 # ownership check below refused exactly that the first time it was tried, which is how it was found.
 unset OVERTURE_MUTATE_LOG
+# #3923: the same for the runner. Every run below names its own, and the default-runner cases need it
+# UNSET, which an outer mutation's OVERTURE_MUTATE_RUNNER would silently undo.
+unset OVERTURE_MUTATE_RUNNER OVERTURE_MUTATE_DEFAULT_RUNNER
 
 SUBJECT="${WORK}/Subject.swift"
 write_subject() { printf 'struct Subject {\n    static let answer = "yes"\n}\n' > "${SUBJECT}"; }
@@ -699,6 +702,49 @@ assert_equals "and the file is untouched" "${BEFORE}" "$(cat "${REPO_SUBJECT}")"
 OUT="$(OVERTURE_MUTATE_ALLOW_DIRTY=1 OVERTURE_MUTATE_RUNNER="${RED_RUNNER}" "${MUTATE}" "${REPO_SUBJECT}" 's/"maybe"/"no"/' 2>&1)"
 assert_contains "the override lets it through" "${OUT}" "CAUGHT"
 assert_contains "and says it was used" "${OUT}" "OVERTURE_MUTATE_ALLOW_DIRTY"
+
+# --- #3923: a scope the Swift runner cannot run is refused, never reported ---------------------------
+#
+# Given a shell fixture's path as a scope, the Swift runner ran the WHOLE suite instead and the verdict
+# was CAUGHT about a suite unrelated to the file (2026-09-15, proving #3680). The stand-in below is
+# treated as the DEFAULT runner, and it goes red, so a refusal that broke would read CAUGHT here rather
+# than starting a real build (L2).
+write_subject
+OUT="$(OVERTURE_MUTATE_DEFAULT_RUNNER="${RED_RUNNER}" "${MUTATE}" "${SUBJECT}" 's/"yes"/"no"/' \
+  scripts/verify-and-merge-branch.test.sh 2>&1)"
+STATUS=$?
+VERDICT="$(grep -E '^(CAUGHT|SURVIVED|NOTHING RAN|NOT PROOF|SCOPE NOT FOR THIS RUNNER)' <<< "${OUT}" | head -1)"
+assert_contains "a shell fixture passed as a Swift scope is refused" "${VERDICT}" "SCOPE NOT FOR THIS RUNNER"
+assert_not_contains "and is never reported as caught" "${OUT}" "CAUGHT - the suite went red"
+assert_equals "and does not exit 0" "1" "$([ "${STATUS}" -ne 0 ] && echo 1 || echo 0)"
+assert_equals "and the file is untouched" 'struct Subject {
+    static let answer = "yes"
+}' "$(cat "${SUBJECT}")"
+
+# What a Swift scope really looks like is not refused: a -only-testing path, and an option with a value.
+write_subject
+OUT="$(OVERTURE_MUTATE_DEFAULT_RUNNER="${RED_RUNNER}" "${MUTATE}" "${SUBJECT}" 's/"yes"/"no"/' \
+  -only-testing:OvertureTests/SubjectTests -parallel-testing-enabled YES 2>&1)"
+assert_contains "a real Swift scope and an option value still run" "${OUT}" "CAUGHT"
+assert_not_contains "and are not refused" "${OUT}" "SCOPE NOT FOR THIS RUNNER"
+
+# A custom runner decides for itself what its arguments mean, so a path is passed through to it.
+write_subject
+OUT="$(OVERTURE_MUTATE_RUNNER="${RED_RUNNER}" "${MUTATE}" "${SUBJECT}" 's/"yes"/"no"/' some/fixture.test.sh 2>&1)"
+assert_not_contains "a custom runner is handed a path without refusal" "${OUT}" "SCOPE NOT FOR THIS RUNNER"
+
+# --- the runner gave up on the shared lock: nothing ran, so never CAUGHT ------------------------------
+#
+# Seen 2026-09-18 in another lane's mutation: run-tests-locked.sh gave up waiting 1800s for the shared
+# lock, exited 3 having run no test, and this reported CAUGHT. The runner's own words, verbatim.
+STARVED_RUNNER="$(make_runner starved 3 "run-tests-locked.sh: gave up waiting 1800s for /tmp/xcodebuild-tests.lock (Downbeat's lock).
+  One holder the whole time with nothing running is a run that died holding it.")"
+write_subject
+OUT="$(OVERTURE_MUTATE_RUNNER="${STARVED_RUNNER}" "${MUTATE}" "${SUBJECT}" 's/"yes"/"no"/' 2>&1)"
+VERDICT="$(grep -E '^(CAUGHT|SURVIVED|NOTHING RAN|NOT PROOF)' <<< "${OUT}" | head -1)"
+assert_contains "a runner that never got the lock is NOTHING RAN" "${VERDICT}" "NOTHING RAN"
+assert_contains "and says it was the lock" "${VERDICT}" "never got the shared test lock"
+assert_not_contains "and is never CAUGHT" "${OUT}" "CAUGHT - the suite went red"
 
 # --- #3984: two mutations going at once each judge their OWN run ------------------------------------
 #
