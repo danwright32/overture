@@ -2605,12 +2605,14 @@ enum QueueModel {
     // the boolean this replaced, so no row changes whether it collides at all; what is new is that each arm
     // now names itself, because the date header has to tell an emailed pitch from a merely prepped one.
     //
-    // The two `nil` arms are why "emailed" here already means "and not closed out": a lost pitch frees the
+    // The two `nil` arms are why "emailed" here already means "and not closed out": an ended pitch frees the
     // date (#1248) and any other dismissed show is dead, and both are decided BEFORE `sentAt` is read.
     static func selfBookingCommitment(_ i: some QueueScopeFacts) -> SelfBookingConflict.Show.Commitment? {
         if i.isBooked { return .booked }                       // a confirmed shoot (outcome/performanceStatus booked)
         if i.showOutcome == .hadPaidWork { return .booked }    // dismissed BECAUSE booked elsewhere: still committed
-        if i.isLost { return nil }                             // #1248: a pitch marked lost frees the date, even if it was sent
+        // #1248: a pitch marked lost frees the date, even if it was sent. #3669: and so does every other
+        // ending short of a shoot, "I turned them down" included, which `isLost` alone left holding it.
+        if i.performanceStatus.endedWithoutAShoot || i.isLost { return nil }
         if i.status == .dismissed { return nil }               // any other dismissed show is dead; ignore it
         if i.sentAt != nil { return .emailed }                 // a live pitch is already out
         // An in-progress draft. Prepping is not committing to pitching (Dan, 2026-09-07), so this tier
