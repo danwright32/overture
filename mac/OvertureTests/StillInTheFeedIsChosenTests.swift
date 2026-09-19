@@ -2,34 +2,33 @@ import Testing
 import Foundation
 import SwiftData
 
-// #3780: `NaturalKeyVenueMigration.stillInTheFeed` was `members.first { $0.missedScoutCount == 0 }`,
-// so where several members are live, WHICH row counts as "the one the feed is publishing" depended on
-// the order its caller happened to hand them in.
+// #3780: which live row a merge keeps, and why the answer must not depend on the order its caller
+// happened to hand the members over in. That pick decides what `carryTheFeedIdentity` copies onto the
+// survivor before the losers are DELETED, so an arbitrary one is an arbitrary `sourceListingURL`,
+// `runSourceURLs` and `sourceIds` on the row that lives.
 //
-// That decides what `carryTheFeedIdentity` copies onto the survivor before the losers are deleted, so
-// an arbitrary pick is an arbitrary `sourceListingURL`, `runSourceURLs` and `sourceIds` on the row
-// that survives, and for the callers that adopt it, an arbitrary natural key.
+// THE FIX IS IN THE CALLER, NOT THE PICKER, and the first attempt at it got that backwards.
 //
-// The ladder immediately beside it was given a deterministic tie-break for exactly this reason:
-// `ScoutService.matchByConcertIdentity` says in its own comment "Deterministic, never `first` on an
-// unordered fetch", because an arbitrary pick landed Dan's dismissal on a different row each sweep.
+// `NaturalKeyVenueMigration.stillInTheFeed` is `members.first { $0.missedScoutCount == 0 }`, and its
+// comment said "`members` is ordered oldest first by every caller". Half true, which is the worst
+// kind:
 //
-// THE PREMISE, RE-CHECKED, because the function's own comment said this could not happen. It claimed
-// "`members` is ordered oldest first by every caller" (landed with #3582 on 2026-09-06). Measured
-// 2026-09-19 against the two callers:
+//   `SameNightTitleVariantMerge` DOES sort, oldest `ingestedAt` first, and says at the sort that it
+//   is so "the cluster representative and the fallback survivor are both stable and do not depend on
+//   fetch order". #1886 then depends on the RESULT: the oldest live row is the one whose key the
+//   scout will send next, so a survivor chosen any other way turns a rename into a re-key at the
+//   following launch and the row stops being matchable.
 //
-//   `SameNightTitleVariantMerge` DOES sort, by `ingestedAt` ascending, so its order is fixed except
-//   where two rows share an `ingestedAt`: Swift's sort is not stable, so a tie there is arbitrary.
-//
-//   `NaturalKeyVenueMigration`'s own caller does NOT. It builds `members` with
+//   `NaturalKeyVenueMigration.groupsOfOneShow` did NOT. It built `members` with
 //   `anchors.flatMap { byAnchor[$0] ?? [] }` inside `for (_, anchors) in byDisplay`, and `byDisplay`
-//   is a Dictionary, whose iteration order Swift randomises per process. So that caller hands over a
-//   genuinely unordered list and the comment is false for it.
+//   is a Dictionary, whose iteration order Swift randomises per process.
 //
-// The shuffle test below is the one that can see this. A fixture that builds its rows in one order
-// and asserts one answer passes whatever the rule does with the others (L159).
+// So replacing the picker with a freshest-wins rule of its own, which is what #3780's write-up
+// suggests, fixes the unordered caller by overriding the ordered one. It made
+// `MergedRoomNameKeepsTheScoutsKeyTests` go red, which is #1886's guard doing its job (L252).
+// `groupsOfOneShow` now sorts instead, so the invariant the comment asserted is true rather than assumed.
 @MainActor
-@Suite("Which live row counts as the one the feed is publishing (#3780)")
+@Suite("Which live row a merge keeps, and the order it is chosen from (#3780)")
 struct StillInTheFeedIsChosenTests {
 
     private func memoryContext() throws -> ModelContext {
@@ -40,21 +39,23 @@ struct StillInTheFeedIsChosenTests {
     }
 
     @discardableResult
-    private func row(_ ctx: ModelContext, key: String, ingested: Double, missed: Int = 0) -> Prospect {
+    private func row(_ ctx: ModelContext, key: String, ingested: Double, missed: Int = 0,
+                     venue: String = "A Room", scoutVenue: String? = nil,
+                     date: String = "2026-10-02") -> Prospect {
         let p = Prospect(naturalKey: key, groupName: "A Show", discipline: "theater",
-                         venue: "A Room", performanceDate: "2026-10-02", sourceListingURL: nil,
+                         venue: venue, performanceDate: date, sourceListingURL: nil,
                          priorRelationship: "none", production: "unknown", profile: "unknown",
                          coverage: "unknown", fitScore: 3, tier: "medium", fitReason: "",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil)
         p.ingestedAt = Date(timeIntervalSince1970: ingested)
         p.missedScoutCount = missed
+        p.scoutVenue = scoutVenue
         ctx.insert(p)
         return p
     }
 
-    // A row the feed has stopped listing is never the one the feed is publishing, however fresh its
-    // stamp. This is the arm that must keep working, and it is what the function was already right
-    // about.
+    // MARK: the picker's contract
+
     @Test func aRowWithMissesIsNeverChosen() throws {
         let ctx = try memoryContext()
         let stale = row(ctx, key: "stale", ingested: 9_000, missed: 4)
@@ -69,45 +70,96 @@ struct StillInTheFeedIsChosenTests {
         #expect(NaturalKeyVenueMigration.stillInTheFeed([a, b]) == nil)
     }
 
-    // Among rows the feed still lists, the one it touched most recently. `ingestedAt` is rewritten on
-    // every re-scout, so it means LAST SEEN, which is the question being asked. The sibling rule at
-    // `NaturalKeyVenueMigration`'s `freshest` picks the same way for the same reason.
-    @Test func theFreshestLiveRowIsChosen() throws {
+    // It takes the FIRST live row, deliberately, so the caller's own ordering decides. Asserted rather
+    // than left implicit, because the whole of #3780 is that one caller was not exercising that
+    // choice, and a later reader must be able to tell the contract from an oversight.
+    @Test func itHonoursTheOrderTheCallerGivesIt() throws {
         let ctx = try memoryContext()
-        let older = row(ctx, key: "older", ingested: 1_000)
-        let fresher = row(ctx, key: "fresher", ingested: 5_000)
-        #expect(NaturalKeyVenueMigration.stillInTheFeed([older, fresher])?.naturalKey == "fresher")
-        #expect(NaturalKeyVenueMigration.stillInTheFeed([fresher, older])?.naturalKey == "fresher")
+        let first = row(ctx, key: "first", ingested: 1_000)
+        let second = row(ctx, key: "second", ingested: 9_000)
+        #expect(NaturalKeyVenueMigration.stillInTheFeed([first, second])?.naturalKey == "first")
+        #expect(NaturalKeyVenueMigration.stillInTheFeed([second, first])?.naturalKey == "second")
     }
 
-    // THE ONE THAT CATCHES #3780. Every order of the same members must give the same answer, or the
-    // row whose feed identity is carried onto the survivor is decided by a Dictionary's iteration
-    // order, which Swift randomises per process.
-    @Test func theAnswerDoesNotDependOnTheOrderTheMembersArriveIn() throws {
+    // MARK: the caller that was not ordering, which is the defect
+
+    // THE ONE THAT CATCHES #3780. `groupsOfOneShow` is handed rows in whatever order the fetch and a
+    // Dictionary's iteration produced, and every order of the same rows must come back grouped the
+    // same way, or which row survives a merge differs between two launches on identical data.
+    @Test func groupsOfOneShowHandsItsMembersOverInAFixedOrder() throws {
         let ctx = try memoryContext()
-        let members = [
-            row(ctx, key: "alpha", ingested: 4_000),
-            row(ctx, key: "bravo", ingested: 4_000),
-            row(ctx, key: "charlie", ingested: 4_000),
-            row(ctx, key: "delta", ingested: 1_000),
+        // Rows sharing ONE anchor, which is the second of the function's two branches: the one that
+        // walks `byAnchor` for anchors no display group claimed. Named, because the two branches build
+        // their member list separately and a fixture covering one says nothing about the other. The
+        // test below covers the first.
+        let rows = [
+            row(ctx, key: "c", ingested: 4_000, venue: "The Cutting Room"),
+            row(ctx, key: "a", ingested: 4_000, venue: "The Cutting Room, 44 East 32nd Street"),
+            row(ctx, key: "b", ingested: 4_000, venue: "the cutting room"),
         ]
-        let answers = Set((0..<40).compactMap { _ in
-            NaturalKeyVenueMigration.stillInTheFeed(members.shuffled())?.naturalKey
-        })
-        #expect(answers.count == 1,
-                Comment(rawValue: "the pick changes with the order the members arrive in: \(answers)"))
+
+        let orders = (0..<30).map { _ in
+            NaturalKeyVenueMigration.groupsOfOneShow(rows.shuffled())
+                .map { (g: (key: String, members: [Prospect])) in g.members.map(\Prospect.naturalKey) }
+                .sorted { ($0.first ?? "") < ($1.first ?? "") }
+        }
+        #expect(Set(orders.map { "\($0)" }).count == 1,
+                Comment(rawValue: "the grouping depends on the order it is handed: "
+                        + "\(Set(orders.map { "\($0)" }))"))
     }
 
-    // And the tie is broken by something TOTAL, so the answer is not merely stable within one run but
-    // the same on every machine and every launch. The natural key is unique by construction, which is
-    // what makes it a total order rather than another coin toss.
-    @Test func aTieOnFreshnessIsBrokenByTheNaturalKey() throws {
+    // And the order it fixes is OLDEST FIRST, which is the one `stillInTheFeed`'s comment always
+    // claimed and the one `SameNightTitleVariantMerge` chose for itself, so the two callers now agree
+    // rather than each meaning something different by the same call.
+    @Test func groupsOfOneShowOrdersItsMembersOldestFirst() throws {
         let ctx = try memoryContext()
-        let members = [
-            row(ctx, key: "charlie", ingested: 4_000),
-            row(ctx, key: "alpha", ingested: 4_000),
-            row(ctx, key: "bravo", ingested: 4_000),
+        let rows = [
+            row(ctx, key: "newest", ingested: 9_000, venue: "The Cutting Room"),
+            row(ctx, key: "oldest", ingested: 1_000, venue: "The Cutting Room, 44 East 32nd Street"),
+            row(ctx, key: "middle", ingested: 5_000, venue: "the cutting room"),
         ]
-        #expect(NaturalKeyVenueMigration.stillInTheFeed(members)?.naturalKey == "alpha")
+        let group = try #require(NaturalKeyVenueMigration.groupsOfOneShow(rows)
+            .first { $0.members.count > 1 })
+        #expect(group.members.map(\Prospect.naturalKey) == ["oldest", "middle", "newest"])
+    }
+
+    // THE OTHER BRANCH, and it needed its own fixture. Removing the sort from the branch that collects
+    // SEVERAL anchors under one display key left the suite green (measured with `scripts/mutate.sh`:
+    // SURVIVED), because every row above shares one anchor and so never reaches it. A fixture that
+    // cannot reach the code it is named for guards nothing (L159).
+    //
+    // Reaching it needs rows whose SCOUT-ANCHORED keys differ while their DISPLAY keys agree, which is
+    // the real shape this function exists for: the scout spells the room one way per listing and the
+    // card carries Dan's spelling, so several anchors describe one show in one room.
+    @Test func itAlsoOrdersAGroupCollectedFromSeveralAnchors() throws {
+        let ctx = try memoryContext()
+        let rows = [
+            row(ctx, key: "newest", ingested: 9_000, venue: "The Cutting Room",
+                scoutVenue: "The Cutting Room, 44 East 32nd Street"),
+            row(ctx, key: "oldest", ingested: 1_000, venue: "The Cutting Room",
+                scoutVenue: "the cutting room nyc"),
+            row(ctx, key: "middle", ingested: 5_000, venue: "The Cutting Room",
+                scoutVenue: "Cutting Room Manhattan"),
+        ]
+        let group = try #require(NaturalKeyVenueMigration.groupsOfOneShow(rows)
+            .first { $0.members.count > 1 },
+            "the fixture must reach the several-anchors branch, or it tests the other one again")
+        #expect(group.members.count == 3, "all three anchors belong to one display group")
+        #expect(group.members.map(\Prospect.naturalKey) == ["oldest", "middle", "newest"])
+    }
+
+    // A tie on the stamp falls to the natural key, which is unique by construction, so the order is
+    // total rather than merely usually settled. Without this the shuffle above passes on distinct
+    // stamps and says nothing about the case that actually varies.
+    @Test func aTieOnTheStampFallsToTheNaturalKey() throws {
+        let ctx = try memoryContext()
+        let rows = [
+            row(ctx, key: "charlie", ingested: 4_000, venue: "The Cutting Room"),
+            row(ctx, key: "alpha", ingested: 4_000, venue: "The Cutting Room, 44 East 32nd Street"),
+            row(ctx, key: "bravo", ingested: 4_000, venue: "the cutting room"),
+        ]
+        let group = try #require(NaturalKeyVenueMigration.groupsOfOneShow(rows)
+            .first { $0.members.count > 1 })
+        #expect(group.members.map(\Prospect.naturalKey) == ["alpha", "bravo", "charlie"])
     }
 }

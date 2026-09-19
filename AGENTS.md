@@ -157,9 +157,18 @@ rides along in `scripts/test-all.sh` and reports how close it is, advisory, neve
   beside it, so the whole command now costs about what the Swift suite costs alone: measured 2026-08-13,
   the cheap lane took 54s on its own and a full two-lane run took 200s against a Swift suite of 177s.
   Three consequences. The Swift output does not appear until the cheap lane finishes, then replays from
-  its first line, so a quiet minute at the start is the cheap lane working rather than a hang (its own
-  stall guard cannot be starved by this: the limits are 600s and 300s, an order of magnitude past the
-  cheap lane). A failing cheap check no longer ends the run, because the expensive lane is already going
+  its first line, so a quiet minute at the start is the cheap lane working rather than a hang. NOTHING
+  ENDS A RUN THAT STOPS MOVING, and this said the opposite until 2026-09-19: it claimed "its own stall
+  guard cannot be starved by this: the limits are 600s and 300s". Those limits are real and belong to
+  `stall_tick` in `mac/scripts/lib/run-stall-guard.sh`, whose only three callers are the detached run
+  scripts (`prep-run.sh:242`, `scout-extract-run.sh:165`, `reply-classify-run.sh:150`).
+  `grep -c "stall_tick" mac/scripts/run-tests-locked.sh` returns 0. The test runner has
+  `start_progress_watch`, which REPORTS progress and stops nothing. So a hung `xcodebuild` holds
+  `/tmp/overture-mac-tests.lock` until a person notices, and the lock is shared by every worktree and
+  every concurrent session on the Mac: measured twice in three days, once for 2h50m (#3976) and once
+  for 38 minutes, both ended by hand. Killing the driver is not enough either, because `xcodebuild` and
+  its `flock` wrapper survive as orphans still holding the lock. #3976 is the fix; until it lands, read
+  a run that has printed nothing for several minutes as possibly hung and check its CPU time. A failing cheap check no longer ends the run, because the expensive lane is already going
   and its verdict is worth having, so the run says `FAILED - <check>` as it happens and both lanes are
   reported separately at the end; the exit code is red if either lane is red (L53). And two checks
   deliberately stay ahead of the build, `check-pure-suite-imports.sh` (its whole value is saving a doomed
