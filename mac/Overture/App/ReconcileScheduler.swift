@@ -310,7 +310,10 @@ final class ReconcileScheduler {
         // carrying. Recorded on the same read as the stall clock above, but into its own keys with its own
         // verdict: "nothing new for four weeks" and "everything gone at once" are different questions and
         // must not share an answer (L53).
-        DownbeatBookingFeedStore.record(clientCount: loaded.clients.count, bookings: loaded.bookings,
+        // #2495: and whether the export was READ at all, so an empty client list in a good file can be told
+        // from a file nobody could open.
+        DownbeatBookingFeedStore.record(clientCount: loaded.clients.count, health: loaded.health,
+                                        bookings: loaded.bookings,
                                         today: QueueModel.easternToday(), now: now, into: defaults)
     }
 

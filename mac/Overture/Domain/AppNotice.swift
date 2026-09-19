@@ -194,6 +194,26 @@ enum AppNotices {
         }
     }
 
+    // #2495: Downbeat's export is readable and lists no clients, after one that listed a real roster. A
+    // warning and a standing one, for #2478's reason: while it is true, past-client recognition and booking
+    // matching have nothing to work from and say nothing about it. It stands until an export lists clients
+    // again, since a client list has no dates to retire it (see `DownbeatBookingFeed.rosterEmptied`).
+    //
+    // The line states the evidence (how many there were, and how recently), which is what tells Dan in one
+    // read whether he is looking at his own Downbeat or at a broken export. The re-read is the same control
+    // the vanished shoots line offers, because the remedy is the same export.
+    static func downbeatClientsEmptied(_ emptied: DownbeatBookingFeed.RosterEmptied) -> AppNotice {
+        let seen = EasternDate.dayLabelWithYear(Date(timeIntervalSince1970: emptied.lastSeenAt))
+        return AppNotice(
+            text: "Downbeat's export lists no clients, though it had \(emptied.clientCount) as recently as "
+                + "\(seen), so Overture can't recognise the organisations you already work with.",
+            tone: .warning,
+            help: "A client list doesn't shrink as dates pass the way the shoots in it do, so an empty one "
+                + "reads as a broken export rather than a change in Downbeat. Re-export it from Downbeat, "
+                + "then re-read it here.",
+            action: .recheckDownbeatExport)
+    }
+
     // #1900: the shoot history file is missing, unreadable, or months past its window.
     //
     // The verdict has existed since #1895 and reached nobody: `VenueShootHistory.current()` took the
@@ -363,6 +383,8 @@ enum AppNotices {
     // #2884: the FAILURE, not a Bool. A Bool could only ever produce one sentence, which is the defect.
     static func current(omniFocusFailure: (kind: OmniFocusFailureKind, reason: String)? = nil,
                         bookingsVanished: DownbeatBookingFeed.Vanished? = nil,
+                        // #2495: the export's client list emptied from a remembered roster.
+                        clientsEmptied: DownbeatBookingFeed.RosterEmptied? = nil,
                         shootHistory: ShootHistory.Health? = nil,
                         unreadableFiles: [HandoffReadFailures.Failure] = [],
                         // #2888: endpoints whose bodies Overture cannot read. Only the FAILING ones,
@@ -387,6 +409,7 @@ enum AppNotices {
             notices.append(notice)
         }
         if let bookingsVanished { notices.append(downbeatShootsVanished(bookingsVanished)) }
+        if let clientsEmptied { notices.append(downbeatClientsEmptied(clientsEmptied)) }
         if let omniFocusFailure {
             notices.append(omniFocusFailing(omniFocusFailure.kind, reason: omniFocusFailure.reason))
         }
