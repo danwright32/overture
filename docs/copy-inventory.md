@@ -117,6 +117,7 @@ What is not, and why:
 - `Integration/PrepQueueService.swift`: a diagnostic log line, not a sentence Overture says on screen
 - `Integration/ReplyProposalSweep.swift`: developer diagnostic log, not the app's own voice (#915)
 - `Integration/ScoutService.swift`: developer diagnostic log, not the app's own voice
+- `Integration/ScoutService.swift`: developer diagnostic log, not the app's own voice (#915)
 - `Integration/TicketTailor.swift`: an outbound API request's headers, not the app's voice (#915)
 - `Integration/TicketTailorCalendar.swift`: an outbound fetch's headers for the venue page hop, not the app's voice (#915)
 - `Integration/TicketTailorCalendar.swift`: a search marker for the widget's JS assignment, not the app's voice (#915)
