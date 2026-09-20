@@ -168,20 +168,35 @@ enum ShowLink {
         // judgement: measured on the live store 2026-09-19 it discards nothing (209 distinct tokens
         // over 211 venuetix rows), which is the point. It costs nothing now and refuses the failure on
         // the day a venue starts, rather than leaving it to be noticed.
-        var titlesPerToken: [String: Set<String>] = [:]
-        for one in folded {
-            for token in raw[one.row.id] ?? [] {
-                titlesPerToken[token + "|" + one.venue, default: []].insert(one.title)
-            }
-        }
-        let poisoned = Set(titlesPerToken.filter { $0.value.count > 1 }.keys.map {
-            String($0.prefix(upTo: $0.range(of: "|", options: .backwards)?.lowerBound ?? $0.endIndex))
+        let poisoned = poisonedTokens(folded.flatMap { one in
+            (raw[one.row.id] ?? []).map { (token: $0, title: one.title, venue: one.venue) }
         })
         guard !poisoned.isEmpty else { return raw }
         for one in folded {
             raw[one.row.id]?.subtract(poisoned)
         }
         return raw
+    }
+
+    // The discard itself, as its own function because #4029 gave it a SECOND caller: the ingest match
+    // chain, which now joins two rows on a shared token and must refuse the same tokens this refuses.
+    // Extracted rather than restated there, because sharing the data while copying the code that applies
+    // it is not consolidation (L370), and because the two would then be free to disagree about which
+    // tokens are safe while each read correctly on its own (L263).
+    //
+    // A token appearing under more than one folded title at ONE venue joins nothing, for every row
+    // holding it. Deliberately a cheap deterministic rule rather than a judgement: measured on the live
+    // store 2026-09-20 it discards nothing (228 distinct tokens over 230 venuetix rows), which is the
+    // point. It costs nothing now and refuses the failure on the day a venue starts stamping one token
+    // across its season, rather than leaving that to be noticed.
+    static func poisonedTokens(_ seen: [(token: String, title: String, venue: String)]) -> Set<String> {
+        var titlesPerToken: [String: Set<String>] = [:]
+        for one in seen {
+            titlesPerToken[one.token + "|" + one.venue, default: []].insert(one.title)
+        }
+        return Set(titlesPerToken.filter { $0.value.count > 1 }.keys.map {
+            String($0.prefix(upTo: $0.range(of: "|", options: .backwards)?.lowerBound ?? $0.endIndex))
+        })
     }
 
     // Every group, including the rows that stand alone, so one walk answers both callers.
@@ -303,7 +318,14 @@ extension ShowLink.Row {
 
 // The opaque stable production token, read at query time from a URL already stored. No new field, no
 // writer, no backfill and no recurring cost.
-private enum ProductionToken {
+//
+// #4029 made it INTERNAL rather than file private, because the ingest match chain now reads the same
+// token to decide two rows are one show. There is one reader of the rule and one allowlist, rather than
+// a second copy of the same judgement in `ScoutService`: sharing the data while copying the code that
+// applies it is not consolidation (L370). The measurement below is the licence for BOTH uses, and at
+// ingest a wrong join costs a row rather than a re-render, so `ShowLink.poisonedTokens` guards the
+// ingest arm too.
+enum ProductionToken {
     // The hosts where the token was MEASURED to be stable across every night of a run and opaque. An
     // allowlist rather than a pattern, because the measurement is the licence: on tixr the same-looking
     // segment is the title slugified plus a per-performance integer (10 of 10 multi-night tixr rows
