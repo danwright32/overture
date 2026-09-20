@@ -93,6 +93,11 @@ enum DriftedRunMerge {
             let candidates = NaturalKeyVenueMigration.preferringASecondLook(members)
             let freshestFirst = candidates.sorted { $1.ingestedAt < $0.ingestedAt }
             let survivor =
+                // #4024: `first` is safe here ONLY because `mustDefer` above has already refused the
+                // case where two rows could match: the strict record test implies `hasOutreachHistory`,
+                // so two matches force a deferral before this line runs. That is behaviour correct as a
+                // side effect of a rule written elsewhere, so it is owned by
+                // `DeferralProtectsTheFirstRungTests` rather than by this comment (L281).
                 members.first(where: {
                     NaturalKeyVenueMigration.hasRecordBeyondADismissal($0, countingFoundAddresses: false)
                 })

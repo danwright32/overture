@@ -1711,6 +1711,14 @@ enum ScoutService {
         // carrying any history wins (it is the one holding a decision or an email); otherwise the freshest,
         // because these rows are a time series and the oldest is the most stale, typically already past
         // FeedReconcile's gone threshold and hidden from the queue.
+        // #4024: and unlike the two MERGE ladders that open the same way, nothing here has already
+        // refused the two-match case: `ScoutService` never calls `mustDefer` (measured 2026-09-20,
+        // zero occurrences in this file). So where two stored rows sharing one id both carry
+        // history this is still an arbitrary pick, and the comment above claims more than it
+        // delivers. The live store holds one such group, pk 139 and pk 655, both
+        // `The Passion of Mr. Cardboard` at SoHo Playhouse; both runs are past, so it is latent
+        // rather than live. It re-keys rather than deletes, which is why this is recorded instead
+        // of being fixed in the same change as #4040's ordering defect.
         return corroborated.first(where: NaturalKeyVenueMigration.hasOutreachHistory)
             ?? corroborated.max(by: { $0.ingestedAt < $1.ingestedAt })
     }
