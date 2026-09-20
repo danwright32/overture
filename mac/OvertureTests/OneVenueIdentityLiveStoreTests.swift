@@ -157,6 +157,25 @@ final class OneVenueIdentityLiveStoreTests {
                   + "\(seen.filter { $0.value.count > 1 }.count) after")
             print("  of those, \(sharedRoomNights) room-and-night(s) held more than one row and were "
                   + "separated on their titles, so the rule had subjects to discriminate among")
+
+            // #3769 widened, reporting only. See `widenedTitlePairs` for why the bands exist and why
+            // the two strong ones are the refusal pile rather than a backlog nobody has looked at.
+            let widened = Self.widenedTitlePairs(repaired)
+            let strong = widened.filter { $0.band != "apart" }
+            print("  widening the title would add \(strong.count) pair(s) worth looking at, and "
+                  + "\(widened.count - strong.count) more whose titles agree on nothing (not listed)")
+            for pair in strong.sorted(by: { ($0.a.performanceDate ?? "") < ($1.a.performanceDate ?? "") }) {
+                print("    widened[\(pair.band)] \(pair.a.performanceDate ?? "no date") "
+                      + "@ \(pair.a.venue ?? "no venue"): \(pair.a.groupName) :: \(pair.b.groupName)")
+            }
+            // THREE of the discarded band, named. The strong bands being empty is the finding, and an
+            // empty finding is only worth anything if the band it was separated FROM can be seen to be
+            // what it claims. Three lines is enough to recognise a busy room and not enough to become
+            // the wall of text the banding exists to avoid.
+            for pair in widened.filter({ $0.band == "apart" }).prefix(3) {
+                print("    sample[apart] \(pair.a.performanceDate ?? "no date") "
+                      + "@ \(pair.a.venue ?? "no venue"): \(pair.a.groupName) :: \(pair.b.groupName)")
+            }
             #expect(duplicates.isEmpty,
                     "#1761/#1764: \(duplicates.count) show(s) are stored more than once under one identity: \(duplicates.keys.sorted().prefix(3))")
             await RealStoreTestLock.shared.release()
@@ -178,6 +197,61 @@ final class OneVenueIdentityLiveStoreTests {
             seen["\(titleKey)|\(date)|\(venueKey)", default: []].append(p)
         }
         return seen
+    }
+
+    // #3769, Dan's call 2026-09-19 (this session, in chat): widen the rule and SHOW what it finds,
+    // rather than settle the question on my reading of it. This is that report.
+    //
+    // It RELAXES the title and asserts nothing, deliberately. The assertion beside it stays exactly as
+    // it is, because a rule that withholds nothing and reports everything cannot turn the suite red on
+    // Dan's real data while he is still deciding what he wants done about it (L2 is about live data, and
+    // this is the same instinct one step along: a report is reversible, a gate is not).
+    //
+    // THE BANDS ARE THE POINT. 124 room-and-nights hold more than one row, and a list of 124 fills faster
+    // than it drains (#4019 records the same problem for the same reason). So the pairs are sorted by how
+    // strongly their TITLES already agree under rules the app itself ships, and only the two strong bands
+    // are named:
+    //
+    //   subtitle  one title is the other plus a subtitle, under `GroupNameMatch.isSameShowTitle`
+    //             (#3917). These are the likeliest real duplicates.
+    //   variant   the looser rule `SameNightTitleVariantMerge` itself uses,
+    //             `GroupNameMatch.isSameNightVariant`, which tolerates one typo and 0.40 containment.
+    //   apart     everything else, counted and never listed. Expected to be a busy room playing two
+    //             different shows in an evening, which is the case that must NOT be fused (#3278
+    //             measured roughly nine of them, and #1847 is the same trap).
+    //
+    // WHAT MAKES THE TWO STRONG BANDS WORTH READING, and it is not that nobody noticed them.
+    // `SameNightTitleVariantMerge` runs in the launch replay ABOVE, over these same rows, using the
+    // `variant` rule. So a pair still standing here after the replay is one that pass was offered and
+    // DECLINED, and the reason is in the same run's log: "2 rows of one night carry outreach history;
+    // leaving them for Dan". This is that refusal pile, made visible.
+    private static func widenedTitlePairs(_ rows: [Prospect]) -> [(band: String, a: Prospect, b: Prospect)] {
+        var byRoomAndNight: [String: [Prospect]] = [:]
+        for p in rows {
+            guard let date = p.performanceDate, !date.isEmpty else { continue }
+            byRoomAndNight["\(date)|\(VenuePlaces.canonicalKey(for: p.venue) ?? "unplaced")",
+                           default: []].append(p)
+        }
+        var found: [(band: String, a: Prospect, b: Prospect)] = []
+        for members in byRoomAndNight.values where members.count > 1 {
+            for (index, left) in members.enumerated() {
+                for right in members[(index + 1)...] {
+                    // The identity rule's own answer first: a pair it ALREADY joins is not something a
+                    // widening would find, and counting it here would inflate the report with rows the
+                    // assertion above is already responsible for.
+                    guard TitleNormalization.normalizeForKey(left.groupName)
+                            != TitleNormalization.normalizeForKey(right.groupName) else { continue }
+                    if GroupNameMatch.isSameShowTitle(left.groupName, right.groupName) {
+                        found.append(("subtitle", left, right))
+                    } else if GroupNameMatch.isSameNightVariant(left.groupName, right.groupName) {
+                        found.append(("variant", left, right))
+                    } else {
+                        found.append(("apart", left, right))
+                    }
+                }
+            }
+        }
+        return found
     }
 
     // #3769: the NEGATIVE CONTROL, and the direct answer to "this check passes by having nothing to
@@ -257,6 +331,53 @@ final class OneVenueIdentityLiveStoreTests {
 
         #expect(Self.identityBuckets([a, b]).count == 2,
                 "one act in two rooms on one night is two rows on purpose")
+    }
+
+    // #3769 widened: the POSITIVE CONTROL for the report above, and it is not optional.
+    //
+    // That report answered ZERO strong pairs on the live store, which is the answer Dan asked for and is
+    // also indistinguishable from a report that cannot see anything. This repository has now been bitten
+    // by that shape twice in one evening (#3769 itself, and #3917's own fixture), so the report gets the
+    // same treatment as the rule it is reporting on (L98, L1): a pair that MUST land in each strong band
+    // is built by hand and asserted to land there.
+    @Test func theWidenedReportFindsASubtitlePairInOneRoomOnOneNight() throws {
+        let ctx = try memoryContext()
+        let a = row(ctx, key: "a", title: "Marlise", venue: "The Players Theatre", date: "2026-09-04")
+        let b = row(ctx, key: "b", title: "Marlise (A New Golden Age Musical)",
+                    venue: "The Players Theatre", date: "2026-09-04")
+
+        let found = Self.widenedTitlePairs([a, b])
+        #expect(found.count == 1)
+        #expect(found.first?.band == "subtitle",
+                "one title plus a subtitle, in one room on one night, is the strongest band")
+    }
+
+    // The looser band, through the rule `SameNightTitleVariantMerge` itself uses. Dan's own Jalopy pair
+    // from #1590, which is a seven word parenthetical aside rather than a clean subtitle.
+    @Test func theWidenedReportFindsATitleVariantPair() throws {
+        let ctx = try memoryContext()
+        let a = row(ctx, key: "a", title: "Jalopy Open Mic (Every Wednesday)", venue: "Jalopy Theatre",
+                    date: "2026-10-07")
+        let b = row(ctx, key: "b",
+                    title: "Jalopy Open Mic Every Wednesday! ( either in the theatre or the tavern)",
+                    venue: "Jalopy Theatre", date: "2026-10-07")
+
+        let bands = Self.widenedTitlePairs([a, b]).map(\.band)
+        #expect(bands == ["subtitle"] || bands == ["variant"],
+                "a real same-night variant must land in a strong band, got \(bands)")
+    }
+
+    // And the case the whole report must NOT promote: a busy room playing two different shows in one
+    // evening. It is counted and never listed, which is the difference between a list Dan can drain and
+    // one he stops reading (#4019).
+    @Test func theWidenedReportLeavesTwoDifferentShowsInTheApartBand() throws {
+        let ctx = try memoryContext()
+        let a = row(ctx, key: "a", title: "Tuudr Piano Competition Gala", venue: "Weill Recital Hall",
+                    date: "2026-10-10")
+        let b = row(ctx, key: "b", title: "Special Venue Music Awards Winners Recital",
+                    venue: "Weill Recital Hall", date: "2026-10-10")
+
+        #expect(Self.widenedTitlePairs([a, b]).map(\.band) == ["apart"])
     }
 
     // The other half of #1802, and the one a count cannot show: that there is ONE fold. A second spelling
