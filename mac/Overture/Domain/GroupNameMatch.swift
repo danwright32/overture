@@ -164,6 +164,59 @@ enum GroupNameMatch {
         return containsTokenRun(long, short)
     }
 
+    // #3917: one title is the other with a subtitle appended. A SEPARATE predicate, never a loosening
+    // of `isConfident`, and it is deliberately not reachable from it.
+    //
+    // WHY IT CANNOT BE A PARAMETER ON `isConfident`. That function has 25 call sites and the question it
+    // answers is "are these the same act" with nothing else established. Its two refusals here are both
+    // correct for that question: the `short.count < 2` guard stops a one word title matching anything it
+    // is a word of, and the 0.6 containment guard stops a short name matching a larger unrelated one.
+    // The loudest caller is repeat client detection, where a wrong match warms a lead off the wrong
+    // organisation (#1351). So nothing about `isConfident` moves, and a caller opts in to this instead.
+    //
+    // WHAT LICENSES IT. Only a caller that has ALREADY established the same folded venue and an
+    // overlapping run may ask this, and the reason is measured rather than argued: #3278 found roughly
+    // nine pairs at one venue on one night that a title blind rule would have wrongly joined, so the
+    // title test is load bearing. With the venue and the run already corroborated, the remaining
+    // question is not whether two acts are the same but whether a source has added or dropped a
+    // subtitle, which is exactly what `theplayerstheatre-com` did to ten shows in one sweep on
+    // 2026-08-09 and what Carnegie's slug rename does one show at a time.
+    //
+    // A LEADING RUN, never any contiguous one, which is the one place this is STRICTER than
+    // `isConfident`. `containsTokenRun` accepts the short name anywhere inside the long one, which is
+    // right for a presenter buried in a program line. Here the short side may be a single token, and a
+    // title that merely CONTAINS another title is ordinary in a busy room ("Carol" inside "A Christmas
+    // Carol the Musical"), so only an appended subtitle counts.
+    //
+    // Equal titles answer FALSE. They are `isConfident`'s own first branch, and every caller reaches
+    // this only after that has said no, so answering true would hide which predicate did the work.
+    static func isSubtitleExtension(_ a: String, _ b: String) -> Bool {
+        let ta = tokens(a)
+        let tb = tokens(b)
+        guard !ta.isEmpty, !tb.isEmpty else { return false }
+        let (short, long) = ta.count <= tb.count ? (ta, tb) : (tb, ta)
+        guard short.count < long.count else { return false }
+        return Array(long[0..<short.count]) == short
+    }
+
+    // #3917: the title question asked by a caller that has ALREADY corroborated the pair, and the only
+    // way any caller reaches `isSubtitleExtension`. One function rather than an `||` repeated at each
+    // site, because the three sites have to answer identically and a drift between them would be silent
+    // in the direction that withholds a warning or mints a row (L342: shared only where the callers ask
+    // the SAME question, and these do).
+    //
+    // WHO MAY CALL IT. Only a caller holding at least one corroborating fact beyond the title: a shared
+    // listing or run URL, a shared production id, or the same folded venue with overlapping nights. That
+    // is a rule about call sites and cannot be enforced by a signature, so it is stated here and every
+    // site names its own corroboration where it calls.
+    //
+    // WHO MAY NOT, and this is the part that matters: every caller asking "are these the same act" with
+    // nothing else established. Repeat client detection, org do-not-contact, booking match and the rest
+    // all keep `isConfident` exactly as it is.
+    static func isSameShowTitle(_ a: String, _ b: String) -> Bool {
+        isConfident(a, b) || isSubtitleExtension(a, b)
+    }
+
     // #1764: the same-night dedupe's own entry point, and the ONLY caller allowed to tolerate a
     // misspelling. Since #1761 dropped the room from the merge, the title is the sole guard against a
     // wrong merge, so this is written to be as narrow as the live evidence demands and no wider.
