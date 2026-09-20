@@ -1678,7 +1678,28 @@ enum ScoutService {
         // A synthetic same-date id already encodes date and venue and is minted only for a
         // mergeSameDateVenue source, so it needs no corroboration: recognizing a concert whose NAME
         // changed is that path's entire purpose (#1260) and a title check would defeat it.
-        if SameDateVenueMerge.isMerged(seriesId) { return sharing.first }
+        if SameDateVenueMerge.isMerged(seriesId) {
+            // #4040: DETERMINISTIC, by the same rule and for the same reason as the branch below, which
+            // this one contradicted two lines above it. It returned `sharing.first` over an unordered
+            // fetch while its sibling's comment said in as many words: "never `first` on an unordered
+            // fetch... an arbitrary pick would land Dan's dismissal on a different row each sweep."
+            //
+            // Reproduced through the real `apply` before this changed (`MergedIdArbitraryPickTests`):
+            // two stored rows sharing one synthetic id, one of them dismissed, and the incoming show
+            // came out DISMISSED with that row inserted first and LIVE with it inserted second. That is
+            // Dan's refusal of one act landing on a show he never saw, which is the #797 failure, and
+            // the suite was intermittently red across repeated runs because the pick really is
+            // arbitrary rather than merely unspecified.
+            //
+            // The corroboration question this branch deliberately skips is NOT settled by this and is
+            // still #4040's: the id is date plus venue, so a source flagged `mergeSameDateVenue` that
+            // genuinely runs two different shows a night fuses them with no title test. Measured
+            // 2026-09-20: 1 of 74 watched sources carries that flag, 9 rows carry a synthetic id and no
+            // id is held by more than one row, so that half is inert today and rests on a human
+            // decision on the watchlist rather than on a property of the code.
+            return sharing.first(where: NaturalKeyVenueMigration.hasOutreachHistory)
+                ?? sharing.max(by: { $0.ingestedAt < $1.ingestedAt })
+        }
 
         let corroborated = sharing.filter {
             GroupNameMatch.isConfident($0.groupName, groupName)
