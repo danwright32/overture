@@ -495,6 +495,7 @@ enum PrepImporter {
                     recipient.looksLikePressContact = PressContactGuard.looksLikePressContact(email: email, role: c.role)
                     recipient.looksLikeDuplicateContact = DuplicateContactGuard.looksLikeDuplicate(
                         email: email, venue: p.venue, performanceDate: p.performanceDate,
+                        groupName: p.groupName,
                         excludingProspectKey: p.naturalKey, in: context)
                     // #2622: who the run says this contact is to the show. The judgement is the run's,
                     // made with the page in front of it, so it is written through UNLESS the page it was
@@ -701,6 +702,7 @@ enum PrepImporter {
             r.looksLikePressContact = PressContactGuard.looksLikePressContact(email: r.email, role: r.role)
             r.looksLikeDuplicateContact = DuplicateContactGuard.looksLikeDuplicate(
                 email: r.email, venue: venue, performanceDate: performanceDate,
+                groupName: groupName,
                 excludingProspectKey: excludingProspectKey, in: context)
         }
     }

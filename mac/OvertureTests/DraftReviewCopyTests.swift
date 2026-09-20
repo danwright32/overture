@@ -135,7 +135,7 @@ struct DraftReviewCopyTests {
         #expect(DraftReviewNotes.pressSuspect(name: "Press Office")
                     == "Press Office may be a press/media contact, not the act; blocked from sending.")
         #expect(DraftReviewNotes.duplicateSuspect(name: "Ana Ruiz")
-                    == "Ana Ruiz may already be pitched for a nearby show; blocked from sending.")
+                    == "Ana Ruiz may already be pitched for a show at this venue; blocked from sending.")
     }
 
     // MARK: - Re-prep

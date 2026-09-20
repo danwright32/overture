@@ -2171,6 +2171,7 @@
 		F3E0647429FB544FFB8FB83B /* VenuePlacesFoldFailuresTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 684EA42548BEE2CE1BEE1930 /* VenuePlacesFoldFailuresTests.swift */; };
 		F4010A9A282A2B51F85CE8F0 /* GmailCredentials.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1CF189903BC52B8964DFD8B /* GmailCredentials.swift */; };
 		F4087EC28B4DDFA3BBC4F9EA /* SendDelightTiming.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2172CE8354CB41DD0815A77C /* SendDelightTiming.swift */; };
+		F4173CC4BE0CB62A55FBBB33 /* SameShowSecondPitchTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 170B5FF2501F941B503F1EF9 /* SameShowSecondPitchTests.swift */; };
 		F417B1875CC3FB80B4FB7106 /* GmailSignatureStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7B6482BB9FE1CEA69A3391F /* GmailSignatureStore.swift */; };
 		F4420A866639A5F3E0196D90 /* HandMarkedReplyControl.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1691B5044506A903C7F4C0EA /* HandMarkedReplyControl.swift */; };
 		F46E3E70794EE622A902FE2E /* AlreadyFoundAddressesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F786207B6C7134B124D3911F /* AlreadyFoundAddressesTests.swift */; };
@@ -2451,6 +2452,7 @@
 		16EE360DB327B84791A4BF49 /* AddLeadSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddLeadSheet.swift; sourceTree = "<group>"; };
 		16FBA3C502F064F71CB15201 /* RecurringEventDateGuardTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecurringEventDateGuardTests.swift; sourceTree = "<group>"; };
 		1706C06FAEC94A780797CB95 /* MergedCardRoomNameTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MergedCardRoomNameTests.swift; sourceTree = "<group>"; };
+		170B5FF2501F941B503F1EF9 /* SameShowSecondPitchTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SameShowSecondPitchTests.swift; sourceTree = "<group>"; };
 		1778EAFD0ED1D95DDEA4918E /* GenreCorrectionsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GenreCorrectionsView.swift; sourceTree = "<group>"; };
 		178A580B99A434A3D0A30B04 /* ActionFeedback.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActionFeedback.swift; sourceTree = "<group>"; };
 		17F71B09E351579C5D19331F /* ReplyInvariantsLiveStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReplyInvariantsLiveStoreTests.swift; sourceTree = "<group>"; };
@@ -5034,6 +5036,7 @@
 				BB35323DE90FB1008B5A1011 /* SameNightRoomVariantMergeTests.swift */,
 				AF544D0F32B88F787B3710A0 /* SameNightTitleTypoMergeTests.swift */,
 				0EC7AE43AAE47F4BFD263841 /* SameNightTitleVariantMergeTests.swift */,
+				170B5FF2501F941B503F1EF9 /* SameShowSecondPitchTests.swift */,
 				BB52983C9FEECAE0EE397720 /* SampleDraftsFollowCurrentRulesTests.swift */,
 				446CED6B3B61366AC83A38A2 /* SaveOrWarnConsolidationGuardTests.swift */,
 				72CC3AB9398D99449BA92532 /* ScopeAndItemsAgreeTests.swift */,
@@ -7865,6 +7868,7 @@
 				707F8A5BEAF82866984ECF2F /* SameNightTitleTypoMergeTests.swift in Sources */,
 				51C11841A1693124153385AA /* SameNightTitleVariantMerge.swift in Sources */,
 				10CC28FF8C8DAF44C0DF1A0E /* SameNightTitleVariantMergeTests.swift in Sources */,
+				F4173CC4BE0CB62A55FBBB33 /* SameShowSecondPitchTests.swift in Sources */,
 				AC1382E6757236E0310CD8D3 /* SampleDraftsFollowCurrentRulesTests.swift in Sources */,
 				F13FA6380F87B044A01A861B /* SaveOrWarnConsolidationGuardTests.swift in Sources */,
 				7F44C4342C44D077C5ACF23E /* ScopeAndItemsAgreeTests.swift in Sources */,

@@ -3114,7 +3114,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/OrganisationListing.swift`
 "\(name) is holding that night again"
     `Domain/CancelledShootCopy.swift`
-"\(name) may already be pitched for a nearby show; blocked from sending."
+"\(name) may already be pitched for a show at this venue; blocked from sending."
     `Domain/DraftReviewNotes.swift`
 "\(name) may be a press/media contact, not the act; blocked from sending."
     `Domain/DraftReviewNotes.swift`

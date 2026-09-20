@@ -2,6 +2,11 @@ import Testing
 import Foundation
 import SwiftData
 
+// #3636: every case in this suite passes `groupName: nil`, deliberately and not as a placeholder.
+// These are the THREE DAY arm's own tests, the #726 question of one address at one venue on nights
+// close together, and that arm does not consult the title. nil says the same-show question was not
+// asked, which is exactly what each of these means. The same-show arm has its own suite,
+// `SameShowSecondPitchTests`, where the answer is never nil.
 @MainActor
 @Suite("Duplicate contact guard")
 struct DuplicateContactGuardTests {
@@ -35,6 +40,7 @@ struct DuplicateContactGuardTests {
         makeProspect(ctx, group: "A", date: "2026-07-08", venue: "Weill Recital Hall", email: "info@act.example")
         let result = DuplicateContactGuard.looksLikeDuplicate(
             email: "info@act.example", venue: "Weill Recital Hall", performanceDate: "2026-07-09",
+            groupName: nil,
             excludingProspectKey: "some-other-key", in: ctx)
         #expect(result == true)
     }
@@ -44,6 +50,7 @@ struct DuplicateContactGuardTests {
         makeProspect(ctx, group: "A", date: "2026-07-08", venue: "Weill Recital Hall", email: "Info@Act.example")
         let result = DuplicateContactGuard.looksLikeDuplicate(
             email: "info@act.example", venue: "Weill Recital Hall", performanceDate: "2026-07-09",
+            groupName: nil,
             excludingProspectKey: "some-other-key", in: ctx)
         #expect(result == true)
     }
@@ -53,6 +60,7 @@ struct DuplicateContactGuardTests {
         makeProspect(ctx, group: "A", date: "2026-07-08", venue: "Weill Recital Hall", email: "info@act.example")
         let result = DuplicateContactGuard.looksLikeDuplicate(
             email: "info@act.example", venue: "Carnegie Hall", performanceDate: "2026-07-09",
+            groupName: nil,
             excludingProspectKey: "some-other-key", in: ctx)
         #expect(result == false)
     }
@@ -62,6 +70,7 @@ struct DuplicateContactGuardTests {
         makeProspect(ctx, group: "A", date: "2026-07-05", venue: "Weill Recital Hall", email: "info@act.example")
         let result = DuplicateContactGuard.looksLikeDuplicate(
             email: "info@act.example", venue: "Weill Recital Hall", performanceDate: "2026-07-08",
+            groupName: nil,
             excludingProspectKey: "some-other-key", in: ctx)
         #expect(result == true)
     }
@@ -71,6 +80,7 @@ struct DuplicateContactGuardTests {
         makeProspect(ctx, group: "A", date: "2026-07-05", venue: "Weill Recital Hall", email: "info@act.example")
         let result = DuplicateContactGuard.looksLikeDuplicate(
             email: "info@act.example", venue: "Weill Recital Hall", performanceDate: "2026-07-09",
+            groupName: nil,
             excludingProspectKey: "some-other-key", in: ctx)
         #expect(result == false)
     }
@@ -80,6 +90,7 @@ struct DuplicateContactGuardTests {
         makeProspect(ctx, group: "A", date: "2026-07-09", venue: "Weill Recital Hall", email: "info@act.example")
         let result = DuplicateContactGuard.looksLikeDuplicate(
             email: "info@act.example", venue: "Weill Recital Hall", performanceDate: "2026-07-08",
+            groupName: nil,
             excludingProspectKey: "some-other-key", in: ctx)
         #expect(result == true)
     }
@@ -90,6 +101,7 @@ struct DuplicateContactGuardTests {
                     email: "info@act.example", closed: true)
         let result = DuplicateContactGuard.looksLikeDuplicate(
             email: "info@act.example", venue: "Weill Recital Hall", performanceDate: "2026-07-09",
+            groupName: nil,
             excludingProspectKey: "some-other-key", in: ctx)
         #expect(result == false)
     }
@@ -100,6 +112,7 @@ struct DuplicateContactGuardTests {
                                email: "info@act.example")
         let result = DuplicateContactGuard.looksLikeDuplicate(
             email: "info@act.example", venue: "Weill Recital Hall", performanceDate: "2026-07-08",
+            groupName: nil,
             excludingProspectKey: key, in: ctx)
         #expect(result == false)
     }
@@ -109,6 +122,7 @@ struct DuplicateContactGuardTests {
         makeProspect(ctx, group: "A", date: "2026-07-08", venue: "Weill Recital Hall", email: "info@act.example")
         let result = DuplicateContactGuard.looksLikeDuplicate(
             email: "info@act.example", venue: "Weill Recital Hall", performanceDate: nil,
+            groupName: nil,
             excludingProspectKey: "some-other-key", in: ctx)
         #expect(result == false)
     }
@@ -118,6 +132,7 @@ struct DuplicateContactGuardTests {
         makeProspect(ctx, group: "A", date: "2026-07-08", venue: "Weill Recital Hall", email: "info@act.example")
         let result = DuplicateContactGuard.looksLikeDuplicate(
             email: nil, venue: "Weill Recital Hall", performanceDate: "2026-07-09",
+            groupName: nil,
             excludingProspectKey: "some-other-key", in: ctx)
         #expect(result == false)
     }

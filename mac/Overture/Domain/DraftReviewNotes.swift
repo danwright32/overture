@@ -145,8 +145,18 @@ enum DraftReviewNotes {
         "\(name) may be a press/media contact, not the act; blocked from sending."
     }
 
+    // #3636: "a nearby show" was true while `DuplicateContactGuard` only had its three day arm, and
+    // stopped being true the moment that guard gained a SAME SHOW arm reaching out to
+    // `RunGrouping.sameShowGapDays`. The commonest case the new arm catches is a multi-weekend run
+    // whose second card sits four weeks out, which is not nearby by any reading, and a message may
+    // claim only what its check measured (L11).
+    //
+    // So the word is dropped rather than replaced with a second adjective. What both arms genuinely
+    // share, and all this sentence now claims, is that the address is already pitched for a show at
+    // this venue. Naming WHICH show and WHICH night would be better still and is its own work, since
+    // it needs the other row carried from prep through to review rather than a stored boolean (L80).
     static func duplicateSuspect(name: String) -> String {
-        "\(name) may already be pitched for a nearby show; blocked from sending."
+        "\(name) may already be pitched for a show at this venue; blocked from sending."
     }
 
     // #1866: the fourth guard's warning line, in the same list as the three above. It deliberately does NOT
