@@ -166,7 +166,31 @@ struct MergedIdArbitraryPickTests {
 
         #expect(!body.contains("return sharing.first }"),
                 "the merged branch returns a bare first on an unordered fetch again (#4040)")
-        #expect(body.contains("hasOutreachHistory"),
-                "the merged branch no longer prefers the row carrying Dan's history, so its pick is arbitrary")
+
+        // #4074 MOVED the pick out of this branch and into one named function both branches call, so the
+        // rule is no longer spelled here and a check for `hasOutreachHistory` in this body went red. That
+        // red was CORRECT and is the reason this is repointed rather than relaxed: a guard whose subject
+        // moves out from under it stops covering anything, and the cheap way out is to delete the
+        // assertion, which turns the complaint green while removing the coverage (L708).
+        //
+        // So the branch must DELEGATE, and the thing it delegates to must carry the rule.
+        #expect(body.contains("theOnlyRowThisMayReKey"),
+                """
+                the merged branch no longer delegates to the one function that owns this pick, so \
+                whatever it does now is unguarded by the two assertions below
+                """)
+
+        guard let picker = source.range(of: "private static func theOnlyRowThisMayReKey") else {
+            Issue.record("the function the merged branch delegates its pick to is gone (#4074)")
+            return
+        }
+        let pickerBody = String(source[picker.lowerBound...].prefix(1_400))
+        #expect(pickerBody.contains("hasOutreachHistory"),
+                "the pick no longer prefers the row carrying Dan's history, so it is arbitrary again")
+        #expect(pickerBody.contains("guard withHistory.count <= 1"),
+                """
+                the refusal is gone, so two stored rows both carrying history are picked between \
+                arbitrarily and one of them is re-keyed onto the incoming show (#4074, #797)
+                """)
     }
 }
