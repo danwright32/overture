@@ -28,9 +28,13 @@ struct ProductionTokenMergeLiveStoreTests {
     // LIVE-SHAPE: the pairs this pass will meet, measured 2026-09-20 over a WAL inclusive clone.
     @Test(.enabled(if: liveStoreExists, "no live store on this machine"))
     func theTokenMergeIsRehearsedAgainstDansRealRows() async throws {
+        // Released INLINE on both paths, never from a `defer { Task { ... } }`. That shape hands the
+        // release to an unstructured task that runs after the test has returned, so the critical section
+        // is not exclusive and two suites can build a disk-backed container at once, which kills the whole
+        // process and reports an innocent test (#2190/#2195). `RealStoreLockPairingTests` is the guard,
+        // and it caught this file written that way.
         await RealStoreTestLock.shared.acquire()
-        defer { Task { await RealStoreTestLock.shared.release() } }
-
+        do {
         let fm = FileManager.default
         let dir = fm.temporaryDirectory
             .appendingPathComponent("token-merge-4055-\(UUID().uuidString)", isDirectory: true)
@@ -41,6 +45,7 @@ struct ProductionTokenMergeLiveStoreTests {
         // so reaching this line means the COPY failed, and returning quietly would report green having
         // rehearsed nothing at all (L10, L98).
         guard let clone = try LiveStoreClone.makeClone(in: dir) else {
+            await RealStoreTestLock.shared.release()
             Issue.record("the live store exists but could not be cloned, so nothing was rehearsed")
             return
         }
@@ -93,5 +98,11 @@ struct ProductionTokenMergeLiveStoreTests {
         out.append("=== END REHEARSAL ===")
         out.append("")
         print(out.joined(separator: "\n"))
+
+        await RealStoreTestLock.shared.release()
+        } catch {
+            await RealStoreTestLock.shared.release()
+            throw error
+        }
     }
 }
