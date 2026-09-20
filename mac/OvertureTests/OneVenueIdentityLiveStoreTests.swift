@@ -17,6 +17,22 @@ import SwiftData
 // while every issue behind them reads closed. Each expectation below is the invariant, not the count that
 // happened to be true on the day: the counts move with every scout, the rules do not.
 //
+// #3769 asked whether the identity check should be WIDENED or RETIRED, because it reports zero candidate
+// buckets on every run and its neighbours do not. The answer taken on 2026-09-19 is NEITHER, and it is
+// recorded here rather than in the issue because this is the file somebody reads next.
+//
+// The zero is the invariant HOLDING. That was not provable before: nothing here had ever been seen to
+// fail, so a rule that found nothing and a rule that could see nothing read identically (L1, L182). Three
+// negative controls below now build the fault by hand, and both arms were confirmed red by breaking the
+// fold on purpose with `scripts/mutate.sh` (CAUGHT on the venue fold and on the title fold).
+//
+// Not widened, because the reason it is thin is not the one the issue guessed. It named the exact-date
+// component and the non-dismissed filter. Measured: 124 room-and-nights hold more than one row, and the
+// TITLE is what separates them. Most of those are correct, since a busy room plays two different shows in
+// an evening, and relaxing the title here would silence warnings that are right. The two mechanisms that
+// legitimately relax it already exist and are not this one, so widening would be a third copy of that
+// judgement (#4022 records which mechanism covers which).
+//
 // Reads a copy of the live store and writes nothing anywhere.
 @Suite("One venue identity, measured on the real store (#1802)")
 // #3065: `final class` so the sandbox goes with each test. These held a whole clone of the live store,
@@ -111,9 +127,36 @@ final class OneVenueIdentityLiveStoreTests {
             let repaired = (try ctx.fetch(FetchDescriptor<Prospect>())).filter { $0.status != .dismissed }
             let seen = Self.identityBuckets(repaired)
             let duplicates = seen.filter { $0.value.count > 1 }
+            // #3769: the POPULATION THE RULE SEPARATED, printed beside the population it examined,
+            // because `0 of 628` on its own cannot tell a rule that found nothing from a rule that can
+            // see nothing, and that ambiguity is what #3769 was filed about (L182, L98).
+            //
+            // The same rows, bucketed by room and night with the TITLE left out. Anything in a doubled
+            // bucket here is two rows in one room on one night that the identity rule separated on their
+            // titles. Most of them are correct: a busy room plays two different shows in an evening, and
+            // #3278 measured roughly nine such pairs it must keep apart. It is a readout and never an
+            // assertion, for exactly that reason.
+            //
+            // It also answers the question #3769 asked and guessed wrong about. That issue named the
+            // exact-date component and the non-dismissed filter as the two candidate reasons the rule
+            // has no subjects. Measured 2026-09-19 by folding the title to a constant: 124 buckets hold
+            // more than one row. So the rows exist, share a room and share a night, and it is the TITLE
+            // that separates them. Relaxing the title is not this rule's job: `SameNightTitleVariantMerge`
+            // (same night, title plus or minus a subtitle) and `ShowLink` (folded title, intersecting
+            // night) are the two mechanisms that already own it, and #4022 records which covers which.
+            var byRoomAndNight: [String: Int] = [:]
+            for p in repaired {
+                guard let date = p.performanceDate, !date.isEmpty else { continue }
+                byRoomAndNight["\(date)|\(VenuePlaces.canonicalKey(for: p.venue) ?? "unplaced")",
+                               default: 0] += 1
+            }
+            let sharedRoomNights = byRoomAndNight.filter { $0.value > 1 }.count
+
             print("One venue identity corpus: \(doubledBefore) identity bucket(s) held more than one live "
                   + "row before the launch replay, out of \(bucketsBefore.count); "
                   + "\(seen.filter { $0.value.count > 1 }.count) after")
+            print("  of those, \(sharedRoomNights) room-and-night(s) held more than one row and were "
+                  + "separated on their titles, so the rule had subjects to discriminate among")
             #expect(duplicates.isEmpty,
                     "#1761/#1764: \(duplicates.count) show(s) are stored more than once under one identity: \(duplicates.keys.sorted().prefix(3))")
             await RealStoreTestLock.shared.release()
@@ -135,6 +178,85 @@ final class OneVenueIdentityLiveStoreTests {
             seen["\(titleKey)|\(date)|\(venueKey)", default: []].append(p)
         }
         return seen
+    }
+
+    // #3769: the NEGATIVE CONTROL, and the direct answer to "this check passes by having nothing to
+    // test".
+    //
+    // The live assertion above has reported ZERO candidate buckets on every run since #3496 taught it to
+    // say how many it had: 0 of 593 on 2026-09-10, 0 of 628 on 2026-09-19. That zero is the invariant
+    // HOLDING rather than a rule that cannot see anything, and the distinction is exactly what nothing
+    // proved. A ratchet driven to zero stops being read as a measurement and starts being read as proof
+    // the fault cannot occur, so nobody re-examines it (L182), and a guard is only real once it has been
+    // seen to fail (L1).
+    //
+    // So this builds the fault by hand and asserts the SAME `identityBuckets` function catches it. It
+    // uses no live store, writes nothing, and runs in milliseconds, which is why it can be an ordinary
+    // test rather than a second clone.
+    private func memoryContext() throws -> ModelContext {
+        let schema = Schema([Prospect.self, Recipient.self])
+        return ModelContext(try ModelContainer(for: schema,
+                            configurations: [ModelConfiguration(schema: schema,
+                                                                isStoredInMemoryOnly: true)]))
+    }
+
+    @discardableResult
+    private func row(_ ctx: ModelContext, key: String, title: String, venue: String,
+                     date: String) -> Prospect {
+        let p = Prospect(naturalKey: key, groupName: title, discipline: "music", venue: venue,
+                         performanceDate: date, sourceListingURL: nil, priorRelationship: "none",
+                         production: "unknown", profile: "unknown", coverage: "unknown", fitScore: 3,
+                         tier: "medium", fitReason: "", matchedClientName: nil,
+                         possibleMatchSource: nil, possibleMatchName: nil,
+                         runEndDate: nil, partOfRelatedRun: false, runSourceURLs: [],
+                         runNights: [date])
+        ctx.insert(p)
+        return p
+    }
+
+    // The #1761/#1764 fault itself: one show, one night, one room spelled two ways. The two spellings
+    // are the ones `oneIdentityAnswersForEverySpellingOfARoom` below already pins as one place, so this
+    // cannot pass by accident of a fold that stopped agreeing.
+    @Test func theRuleStillCatchesOneShowStoredTwiceUnderTwoSpellingsOfOneRoom() throws {
+        let ctx = try memoryContext()
+        let a = row(ctx, key: "a", title: "Berliner Philharmoniker", venue: "Carnegie Hall",
+                    date: "2026-11-14")
+        let b = row(ctx, key: "b", title: "Berliner Philharmoniker",
+                    venue: "Carnegie Hall, 881 Seventh Avenue", date: "2026-11-14")
+
+        let buckets = Self.identityBuckets([a, b])
+        let doubled = buckets.filter { $0.value.count > 1 }
+        #expect(doubled.count == 1,
+                "one show at one room on one night, the room spelled two ways, must land in ONE bucket")
+        #expect(buckets.count == 1, "and must not also leave a second bucket behind")
+    }
+
+    // The other direction, so the control above cannot be satisfied by a rule that buckets everything
+    // together. Two genuinely different shows in one room on one night stay apart.
+    @Test func theRuleKeepsTwoDifferentShowsInOneRoomApart() throws {
+        let ctx = try memoryContext()
+        let a = row(ctx, key: "a", title: "Tuudr Piano Competition Gala", venue: "Weill Recital Hall",
+                    date: "2026-10-10")
+        let b = row(ctx, key: "b", title: "Special Venue Music Awards Winners Recital",
+                    venue: "Weill Recital Hall", date: "2026-10-10")
+
+        let buckets = Self.identityBuckets([a, b])
+        #expect(buckets.filter { $0.value.count > 1 }.isEmpty,
+                "two different shows sharing a room on one night are not one identity")
+        #expect(buckets.count == 2)
+    }
+
+    // And the same night in two DIFFERENT rooms, which is the arm a fold collapsing every venue to one
+    // key would break while both tests above still passed.
+    @Test func theRuleKeepsOneShowInTwoDifferentRoomsApart() throws {
+        let ctx = try memoryContext()
+        let a = row(ctx, key: "a", title: "Berliner Philharmoniker", venue: "Carnegie Hall",
+                    date: "2026-11-14")
+        let b = row(ctx, key: "b", title: "Berliner Philharmoniker", venue: "The Green Room 42",
+                    date: "2026-11-14")
+
+        #expect(Self.identityBuckets([a, b]).count == 2,
+                "one act in two rooms on one night is two rows on purpose")
     }
 
     // The other half of #1802, and the one a count cannot show: that there is ONE fold. A second spelling
