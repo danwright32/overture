@@ -1697,8 +1697,7 @@ enum ScoutService {
             // 2026-09-20: 1 of 74 watched sources carries that flag, 9 rows carry a synthetic id and no
             // id is held by more than one row, so that half is inert today and rests on a human
             // decision on the watchlist rather than on a property of the code.
-            return sharing.first(where: NaturalKeyVenueMigration.hasOutreachHistory)
-                ?? sharing.max(by: { $0.ingestedAt < $1.ingestedAt })
+            return theOnlyRowThisMayReKey(sharing)
         }
 
         let corroborated = sharing.filter {
@@ -1711,16 +1710,42 @@ enum ScoutService {
         // carrying any history wins (it is the one holding a decision or an email); otherwise the freshest,
         // because these rows are a time series and the oldest is the most stale, typically already past
         // FeedReconcile's gone threshold and hidden from the queue.
-        // #4024: and unlike the two MERGE ladders that open the same way, nothing here has already
-        // refused the two-match case: `ScoutService` never calls `mustDefer` (measured 2026-09-20,
-        // zero occurrences in this file). So where two stored rows sharing one id both carry
-        // history this is still an arbitrary pick, and the comment above claims more than it
-        // delivers. The live store holds one such group, pk 139 and pk 655, both
-        // `The Passion of Mr. Cardboard` at SoHo Playhouse; both runs are past, so it is latent
-        // rather than live. It re-keys rather than deletes, which is why this is recorded instead
-        // of being fixed in the same change as #4040's ordering defect.
-        return corroborated.first(where: NaturalKeyVenueMigration.hasOutreachHistory)
-            ?? corroborated.max(by: { $0.ingestedAt < $1.ingestedAt })
+        // #4024 recorded that this was still an arbitrary pick where TWO candidates carry history, because
+        // nothing here had the refusal the merge ladders get from `mustDefer`. #4074 gives it one.
+        return theOnlyRowThisMayReKey(corroborated)
+    }
+
+    // #4074: the single row this arm may re-key, or NOTHING where more than one candidate carries a
+    // record of Dan's.
+    //
+    // Dan's call, 2026-09-20 (this session, in chat): refuse, the way the two merge ladders already do
+    // through `mustDefer`. A re-key carries a stored row's dismissal, its recipients, its sent record and
+    // its thread id onto whatever the incoming listing is, so picking the wrong one of two rows that both
+    // hold history moves his refusal of one show onto another (#797). Declining costs a duplicate card
+    // staying up until the next sweep, which he can see and merge; the re-key is silent and cannot be
+    // undone from the card.
+    //
+    // Latent rather than live, stated so nobody reads the guard as a fix for something happening now: over
+    // the live store on 2026-09-20 exactly one `seriesId` is held by more than one row (pk 139 and pk 655,
+    // both `The Passion of Mr. Cardboard` at SoHo Playhouse, both dismissed under DIFFERENT reasons), and
+    // both runs ended in July, so no incoming listing carries that id and this branch cannot be reached
+    // for them. What the guard buys is that the day a live pair appears, the answer is already decided.
+    //
+    // Returning nil does not end the chain: `upsertTarget` goes on to its remaining arms and inserts if
+    // none of them match, which is the duplicate-card outcome above rather than a lost show.
+    private static func theOnlyRowThisMayReKey(_ candidates: [Prospect]) -> Prospect? {
+        let withHistory = candidates.filter(NaturalKeyVenueMigration.hasOutreachHistory)
+        guard withHistory.count <= 1 else {
+            // copy-inventory:ignore-start  developer diagnostic log, not the app's own voice (#915)
+            AgentLog.note("#4074 ScoutService: \(withHistory.count) stored rows sharing this id carry "
+                          + "outreach history; leaving them for Dan rather than re-keying one.")
+            // copy-inventory:ignore-end
+            return nil
+        }
+        // Deterministic below the refusal, for the reason the sibling branch already records: these rows
+        // are a time series and the oldest is the most stale, typically already past FeedReconcile's gone
+        // threshold and hidden from the queue (L343, L419).
+        return withHistory.first ?? candidates.max(by: { $0.ingestedAt < $1.ingestedAt })
     }
 
     // Do these two runs cover any of the same days? Dates are ISO `yyyy-MM-dd`, so string ordering IS date

@@ -663,6 +663,7 @@
 		47FA186561E1912A18BA28BD /* StageNavigationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1EF653614208C0E600D652C5 /* StageNavigationTests.swift */; };
 		482A93BB3026DB627A55C4C8 /* AppleScriptOmniFocusClientTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4AFC6DE42DEE10EA355CAEB4 /* AppleScriptOmniFocusClientTests.swift */; };
 		4849B0AB5ED447FAAD26EF00 /* OrgKey.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAAB8BD16E192C26BCB8635C /* OrgKey.swift */; };
+		484B91E2D1C768DCC7302C03 /* WhatACollapseMayCarryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4966D664D5B5568185D75C3A /* WhatACollapseMayCarryTests.swift */; };
 		487EE7CCC816F36C2792346A /* NewNightReopensTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 96F8B45FDB8FACE464F6226B /* NewNightReopensTests.swift */; };
 		48B098CAC4B814F245E3ADB4 /* MenuBarStatus.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F17AF936CAA06AD29DC22AB /* MenuBarStatus.swift */; };
 		48E39171DC98887452D147BF /* ScoutWarningsPresentationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5FD5984842E2C8A9DF81BB97 /* ScoutWarningsPresentationTests.swift */; };
@@ -2789,6 +2790,7 @@
 		48E84D80C3401B201DAD2E7D /* ClientRoster.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClientRoster.swift; sourceTree = "<group>"; };
 		48F0E816E7C256AE68641FB8 /* SweepCoverageTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SweepCoverageTests.swift; sourceTree = "<group>"; };
 		491CE4FB833F19A93EAD1353 /* ReachabilityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReachabilityTests.swift; sourceTree = "<group>"; };
+		4966D664D5B5568185D75C3A /* WhatACollapseMayCarryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WhatACollapseMayCarryTests.swift; sourceTree = "<group>"; };
 		49696485F1B28C28A13D53E0 /* SendProgressStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SendProgressStateTests.swift; sourceTree = "<group>"; };
 		498787414818CFFC9BB530FF /* RowsFromStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RowsFromStore.swift; sourceTree = "<group>"; };
 		49F5F8AA3F96586760B26AC8 /* OvertureDeepLink.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OvertureDeepLink.swift; sourceTree = "<group>"; };
@@ -5347,6 +5349,7 @@
 				B0192C4587CB4CA708384F96 /* WeeklyDayOffTests.swift */,
 				28C76ED9834F9FFDCA3ABA3E /* WentByRetirementOnTheTickTests.swift */,
 				B9E886654D5B23418A170F61 /* WentByRetirementTests.swift */,
+				4966D664D5B5568185D75C3A /* WhatACollapseMayCarryTests.swift */,
 				E5CAD8BD5605426E8472B8C6 /* WhatTheHourlyMaintenanceCostsTests.swift */,
 				95B903B80F2A7D80BB649D38 /* WhoRepliedTests.swift */,
 				2FC3128DEC45B405AA4528A4 /* WorkableSameNightNoteWiringGuardTests.swift */,
@@ -8330,6 +8333,7 @@
 				0294FF02B2AA1FF5ACC5FD36 /* WentByRetirement.swift in Sources */,
 				DBE24E4F290B2A8FECB5E7CA /* WentByRetirementOnTheTickTests.swift in Sources */,
 				818A07AEE708FC65CC971A37 /* WentByRetirementTests.swift in Sources */,
+				484B91E2D1C768DCC7302C03 /* WhatACollapseMayCarryTests.swift in Sources */,
 				920152820CB36E1EBBC238AC /* WhatTheHourlyMaintenanceCostsTests.swift in Sources */,
 				93397020E39357F0DF149BCB /* WhoRepliedTests.swift in Sources */,
 				B039C8C58B58A27341683C10 /* WindowCensus.swift in Sources */,

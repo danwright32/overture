@@ -348,6 +348,26 @@ enum NaturalKeyVenueMigration {
             survivor.groupName = renamed.groupName
             survivor.groupNameOverriddenByDan = true
         }
+
+        // #3135: and the SHOW OUTCOME is deliberately not here, nor is `outreachStoodDownAt` or
+        // `rejectedBookingIdsRaw`. Dan's call, 2026-09-20 (this session, in chat): the outcome is never
+        // carried across the merge; the survivor keeps its own or stays blank.
+        //
+        // The reason is the rule directly above this function's own callers. `preferringASecondLook`
+        // hands the group to the UNDECIDED rows on purpose (#2001, his words on 2026-08-03: "I may have
+        // made a decision based on insufficient information. so give me another chance to look at it"),
+        // so the survivor of a group where members disagree is precisely the row he has not judged.
+        // Carrying a dismissal reason onto it would close the show again in the same write that granted
+        // the second look. Every other carry in this function only ever ADDS to what the survivor knows;
+        // this one would change its STAGE, which is the difference #3135 was split out of #3124 over.
+        //
+        // Measured before deciding, over a WAL inclusive clone on 2026-09-20: the at-risk shape #3135
+        // describes (exactly one member carrying one of the three fields, no member carrying a record)
+        // exists in ZERO groups, in every population. `outreachStoodDownAt` is set on 1 row store wide and
+        // `rejectedBookingIdsRaw` on 0. What is live is disagreement, in four groups.
+        //
+        // `WhatACollapseMayCarryTests` is the guard, and it reads this file's own source so a carry added
+        // here later arrives as a red test rather than as a silent reversal (L96, L407).
     }
 
     static func mustDefer(_ members: [Prospect]) -> Bool {
