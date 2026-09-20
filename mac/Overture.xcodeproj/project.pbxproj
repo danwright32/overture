@@ -1640,6 +1640,7 @@
 		BBDE174530755ECC1951C6B1 /* SharedReplyConfirmationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C038B0DB271163B1E936354F /* SharedReplyConfirmationTests.swift */; };
 		BBE40B50E385ED20185E571B /* StageContextTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 32CBC23D7C14042619B13479 /* StageContextTests.swift */; };
 		BBF7253EB6370E313F8051A5 /* ResettleKeepsAFoundContactTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22375C28423DCDCAB69F0F4C /* ResettleKeepsAFoundContactTests.swift */; };
+		BC0BE072A2C132BBC0F57E55 /* MergedIdArbitraryPickTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0F54201570AA7555FDDE10A /* MergedIdArbitraryPickTests.swift */; };
 		BC16AB8A41E63C48BEB8F86C /* StreetClause.swift in Sources */ = {isa = PBXBuildFile; fileRef = 006146947C2361334D9BAE13 /* StreetClause.swift */; };
 		BC1BCC389F4B8D6E537D214B /* SearchScopedToQueueTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D5184D3EF67C66148C511E2A /* SearchScopedToQueueTests.swift */; };
 		BC1DFB41CFDBAE4BF64E3BA0 /* ReportingThreeGroupsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 04D21E45466AF0203A587AE5 /* ReportingThreeGroupsTests.swift */; };
@@ -3844,6 +3845,7 @@
 		E08F330E34C9DD3C665766AB /* DownbeatRosterEmptiedTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DownbeatRosterEmptiedTests.swift; sourceTree = "<group>"; };
 		E0C1F7540ABFD5AAAFC09B9D /* InquiryReportingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InquiryReportingTests.swift; sourceTree = "<group>"; };
 		E0C26B7A01BAEC7CB94C1A96 /* CardConstructionCensusTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardConstructionCensusTests.swift; sourceTree = "<group>"; };
+		E0F54201570AA7555FDDE10A /* MergedIdArbitraryPickTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MergedIdArbitraryPickTests.swift; sourceTree = "<group>"; };
 		E12578D9D92A2070A1079B76 /* AnsweredReply.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnsweredReply.swift; sourceTree = "<group>"; };
 		E135F9F368E79F72FAE4B6ED /* PrepStatus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrepStatus.swift; sourceTree = "<group>"; };
 		E18DB720889580E2246ADDB5 /* MastheadGuardTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MastheadGuardTests.swift; sourceTree = "<group>"; };
@@ -4666,6 +4668,7 @@
 				D3BA73E38C88C3BA40CA80F1 /* MenuBarStatusTests.swift */,
 				1706C06FAEC94A780797CB95 /* MergedCardRoomNameTests.swift */,
 				683834ED43F78CCAAF163EA1 /* MergedConcertIdentityTests.swift */,
+				E0F54201570AA7555FDDE10A /* MergedIdArbitraryPickTests.swift */,
 				0FD4AA7179951980125B3EBC /* MergedNameOutboundSanitizerTests.swift */,
 				EA5E649786BA7B0C931268D4 /* MergedRoomNameKeepsTheScoutsKeyTests.swift */,
 				A879DF17A83597780AA0F988 /* MigrationRehearsal.swift */,
@@ -7329,6 +7332,7 @@
 				459F4A631FEF0E679AC5B65B /* MenuBarStatusTests.swift in Sources */,
 				1EA82D6847D273709D9BBDCE /* MergedCardRoomNameTests.swift in Sources */,
 				F652DCC11F90928AEFE37C37 /* MergedConcertIdentityTests.swift in Sources */,
+				BC0BE072A2C132BBC0F57E55 /* MergedIdArbitraryPickTests.swift in Sources */,
 				A08F46AAEC4B9FA521C4DA08 /* MergedNameOutboundSanitizerTests.swift in Sources */,
 				80AD2C6D8BEA410C5DDC3F53 /* MergedRoomNameKeepsTheScoutsKeyTests.swift in Sources */,
 				5670C3891E39568979A61799 /* MigrationRehearsal.swift in Sources */,
