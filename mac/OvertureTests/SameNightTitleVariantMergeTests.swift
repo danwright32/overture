@@ -299,10 +299,17 @@ struct SameNightTitleVariantMergeTests {
     }
 
     // #1845, Dan's call (2026-08-03): when the merge may now collapse two copies that each hold found
-    // addresses, the one Dan keeps must be the copy with the better contact list, because the other
-    // copy's addresses go with it and only a fresh paid check would bring them back.
+    // addresses, the one Dan keeps must be the copy with the better contact list.
     // The richer row is deliberately the LATER-ingested one, so the oldest-wins fallback would pick the
     // thinner list and this test can actually fail.
+    //
+    // #4060 changed what this may ASSERT, and not what it is about. The rule above is a decision about
+    // which ROW survives and it stands; the reason originally written beside it ("the other copy's
+    // addresses go with it and only a fresh paid check would bring them back") was a statement about a
+    // defect, and the addresses are now carried onto the survivor instead of dying with the loser. So a
+    // recipient COUNT is no longer a proxy for which row was kept, and this asserts the row's own
+    // identity plus the whole contact list it should now hold (L63: a guard asserts the quantity it
+    // exists to protect, never a proxy for it).
     @Test func thesurvivorKeepsTheBetterContactList() throws {
         let ctx = try context()
         let thin = insert(ctx, "The Golden Hour Series: Vaden Landers", date: "2026-09-17",
@@ -322,8 +329,12 @@ struct SameNightTitleVariantMergeTests {
 
         let remaining = all(ctx)
         #expect(remaining.count == 1)
-        #expect(remaining.first?.recipients.count == 2,
-                "the copy holding two found contacts must be the one that survives")
+        let survivor = try #require(remaining.first)
+        #expect(survivor.venue == "Greeley Square",
+                "the copy holding two found contacts must be the one that survives, got \(survivor.venue)")
+        #expect(Set(survivor.recipients.map(\.id))
+                    == ["act@band.example", "manager@band.example", "info@venue.example"],
+                "every found address must be on the survivor after the merge (#4060), got \(survivor.recipients.map(\.id).sorted())")
     }
 
     // The wiring the pure rule cannot see (L3), and it is the case from the live store: the OLDEST row
