@@ -309,6 +309,9 @@ struct QueueView: View {
         // multi-contact show can appear more than once, each with its own contact and timing.
         let reachedOut: [(prospect: Prospect, recipient: Recipient, next: Date)]
         let reachedOutKeys: Set<String>
+        // #4027 / #3383: one line per source whose rows all stopped matching in the same sweep. Derived in
+        // the pass beside the stage membership the control depends on, never in the body.
+        let feedBreaks: [AppNotice]
         let pendingBookings: Int
         // #1774: everything below used to be derived INSIDE the scroll content, so a scroll frame paid for
         // it. The fan-out line is the one that hid: it sweeps every prospect and was written as an
@@ -684,7 +687,7 @@ struct QueueView: View {
             QueueScrollHolder(jumpTarget: jumpTarget) {
                 VStack(alignment: .leading, spacing: OVSpacing.xl) {
                     masthead(visible: data.visibleRows, items: data.rows, fanOutLine: data.fanOutLine,
-                             notices: notices, pendingBookings: data.pendingBookings,
+                             notices: notices + data.feedBreaks, pendingBookings: data.pendingBookings,
                              agentInputs: data.agentInputs)
                     // #1134: stage-only navigation is the only mode. The stage pills in the masthead choose
                     // what shows; this always renders the focused view for the current stage (Scout by
@@ -997,6 +1000,18 @@ struct QueueView: View {
         return focusedHeading ?? QueueModel.newLeadsHeading(count: rows.count)
     }
 
+    // #4027 / #3383: the sources whose rows all stopped matching in one sweep. Derived here rather than
+    // in RootView because the rule needs the whole store AND the answer to "would the queue render this
+    // row", and this view is where both already are.
+    // #4027: the focused flat list, on exactly the rows the notice named. No scroll proxy here (the
+    // masthead has none), so it enters the list and leaves the position alone rather than pretending to
+    // land on a row.
+    private func showBrokenShows(_ keys: [String]) {
+        focusedKeys = keys
+        focusedStage = nil
+        focusedHeading = "Shows that dropped out together"
+    }
+
     // #308: enter the focused new-leads view and scroll its first (still-visible) lead into view.
     // #1927: it no longer clears the request afterwards, and must not start again. The request carries its
     // own identity (LeadsDeepLink), so a second tap naming the same leads is a second event on its own
@@ -1187,6 +1202,9 @@ struct QueueView: View {
                                              canFinishMissedShows: !missedByACheckKeys(in: items).isEmpty),
                 perform: { action in
                     if action == .finishShowsACheckMissed { finishShowsACheckMissed() }
+                    // #4027: performed here for the same reason the shortfall's offer is: this view owns
+                    // the focused list the control enters, and RootView does not.
+                    else if case .showShowsOneSweepBroke(let keys) = action { showBrokenShows(keys) }
                     else { onNoticeAction(action) }
                 })
             // #1923: its own view, so an idle queue runs no timer for it and a run starting repaints one
