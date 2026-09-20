@@ -1330,7 +1330,9 @@ enum ScoutService {
                                                     venue: enriched.venue, in: context) },
                 byStableSource: { try matchByStableSource(url: enriched.sourceListingURL,
                                                           date: enriched.performanceDate,
-                                                          venue: enriched.venue, in: context) }
+                                                          venue: enriched.venue,
+                                                          groupName: enriched.groupName,
+                                                          in: context) }
             ) {
             case .updateInPlace(let existing):
                 // Exact natural-key match: update in place.
@@ -1611,11 +1613,35 @@ enum ScoutService {
     // entire purpose, so the act name is the one thing it cannot rely on.
     // #2758: throws, for the reason above.
     private static func matchByStableSource(url: String?, date: String?, venue: String?,
+                                            groupName: String,
                                             in context: ModelContext) throws -> Prospect? {
         guard let url, !url.isEmpty else { return nil }
         let all = try context.fetch(FetchDescriptor<Prospect>())
         return all.first {
-            $0.sourceListingURL == url && $0.performanceDate == date && sameVenue($0.venue, venue)
+            guard $0.sourceListingURL == url, $0.performanceDate == date,
+                  sameVenue($0.venue, venue) else { return false }
+            // #4032: and the two titles must be the same SHOW. The comment above says the venue is what
+            // makes URL plus date safe, and on a single venue's season page that is no protection at
+            // all: every show shares one URL and one room, so the predicate is satisfied by two
+            // different acts playing the same night. Measured on the live store 2026-09-19, three such
+            // sets exist right now and two are genuinely different shows (`Back to Shakespeare` against
+            // `Marlise (A New Golden Age Musical)` at The Players Theatre, and `Hamill, TX` against
+            // `SheDFW Theater Festival` at Stage West). Reproduced through the real `apply` in
+            // `SeasonPageStableSourceTests`: the stored row was RENAMED onto the incoming show and its
+            // dismissal went with it.
+            //
+            // `isSameShowTitle` rather than `isConfident`, because this arm exists to recognise a title
+            // that DRIFTED (#29) and a strict test would defeat its purpose. That predicate accepts one
+            // title plus a subtitle, which is what a venue tweak looks like, and refuses an unrelated
+            // name (#3917, where it was measured against exactly these pairs).
+            //
+            // WHAT THIS GIVES UP, stated rather than left to be discovered (L93). A drift that is not a
+            // subtitle, a genuine rename to an unrelated string, is no longer recognised here and mints
+            // a second row. That is the right direction to fail: a duplicate row is visible on the queue
+            // and can be merged, while a silent re-key carries Dan's dismissal, his sent record and his
+            // thread id onto a show he never saw. Measured today the trade costs nothing: of the three
+            // live sets, the only same-show pair is a subtitle pair and is still joined.
+            return GroupNameMatch.isSameShowTitle($0.groupName, groupName)
         }
     }
 
