@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1617 sentences**.
+Every sentence Overture can say to Dan: **1623 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -14,7 +14,7 @@ What is not, and why:
   sentences under tokens nobody reads.
 - **Nothing, if it is written as two literals joined with `+`.** Those ARE joined here, into the
   one sentence the running app says (#3155). What is still only part of what Dan reads is a
-  sentence carrying a VALUE: 591 of the 1617 below hold a
+  sentence carrying a VALUE: 594 of the 1623 below hold a
   `\(...)` where a number or a name goes, so what is printed is the template. They are counted
   here rather than listed again, because the hole is visible in the line itself; what was missing
   was any statement of how much of this document is templates.
@@ -346,6 +346,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/HistoryMatch.swift`
 " This Mac was busy with something else at the time, so it may say more about the machine than about Overture."
     `Domain/FreezeReport.swift`
+" \(coveredByAnotherCard) of them \(coveredByAnotherCard == 1 ? "is" : "are") already on another card."
+    `Domain/FeedBreakEvent.swift`
 " \(others) other matches are flagged the same way."
     `Domain/PossibleMatchFanOut.swift`
 " a one-off hunt."
@@ -2117,6 +2119,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/MenuBarContent.swift`
 "Settings was on screen."
     `Domain/FreezeReport.swift`
+"Several shows at one venue stopped matching on the same sweep, which is what a venue changing ticketing provider looks like rather than a set of cancellations. Overture has not changed any of them."
+    `Domain/AppNotice.swift`
 "Shoots leave the export one at a time, as their dates pass, and the furthest of these was not until \(furthest), so all of them going together reads as a broken export rather than an empty diary. Re-export it from Downbeat, then re-read it here."
     `Domain/AppNotice.swift`
 "Show date to be confirmed"
@@ -2131,6 +2135,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/RootView.swift`
 "Show the whole \(what), then send it"
     `UI/SendConfirmSheet.swift`
+"Show these shows"
+    `Domain/AppNotice.swift`
 "Show this email the way a recipient reading in light or dark mode sees it."
     `Domain/DraftReviewNotes.swift`
 "Show which bookings were auto-detected"
@@ -2139,6 +2145,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/ActionFeedback.swift`
 "Shows land here once Overture has tracked at least one."
     `Domain/EmptyState.swift`
+"Shows one sweep stopped matching"
+    `UI/QueueView.swift`
 "Shows written off that could be reached"
     `UI/WrittenOffBacklogSection.swift`
 "Shows you've pitched and are waiting to hear back on."
@@ -3085,6 +3093,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ProbeSelection.swift`
 "\(lookups), \(wait): shows by the same producer share one."
     `Domain/ProbeSelection.swift`
+"\(memberKeys.count) show\(memberKeys.count == 1 ? "" : "s")"
+    `Domain/FeedBreakEvent.swift`
 "\(min(completed, total)) of \(total) done"
     `UI/RunProgressView.swift`
 "\(min(progress.completed, progress.total)) of \(progress.total)"
@@ -3286,6 +3296,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/SourcesView.swift`
 "\(showName), closed out"
     `Domain/DepartureCopy.swift`
+"\(shows) at \(venue) stopped matching in one sweep, so they read as cancelled."
+    `Domain/FeedBreakEvent.swift`
 "\(shows) waiting on this"
     `UI/SourcesView.swift`
 "\(source.droppedRowCount) shows"

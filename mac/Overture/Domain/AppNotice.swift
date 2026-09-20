@@ -57,11 +57,19 @@ enum AppNoticeAction: Equatable, Sendable {
     // done both. See `title` for why it is phrased as his report rather than as a re-read.
     case recheckShootHistory
 
+    // #4027 / #3383: show the shows one sweep broke. The keys travel WITH the action because the notice
+    // is a value the masthead diffs, and re-deriving the set in the view when Dan presses would let the
+    // sentence he read and the rows he gets come from two different passes (L16).
+    case showShowsOneSweepBroke(keys: [String])
+
     // What the control says. Short, because it sits at the end of a sentence that has just said what is
     // wrong, and repeating that would be the same thing twice (#843).
     var title: String {
         switch self {
         case .retryOmniFocusSync: return "Sync now"
+        // Not "Show them", which says nothing about where they go. Not "Fix", which is the one thing
+        // this cannot do: nothing here clears a miss count or merges a row, deliberately (#4027).
+        case .showShowsOneSweepBroke: return "Show them"
         // Deliberately not "Re-export": Overture cannot make Downbeat export anything, it can only read
         // the file again. The remedy that IS Dan's is in the sentence's tooltip, where it belongs.
         // And deliberately not "Check again", which is already a control in this app: the one on an
@@ -143,6 +151,32 @@ enum AppNotices {
             var stripped = notice
             stripped.action = nil
             return stripped
+        }
+    }
+
+    // #4027 / #3383: a source that re-keyed its calendar broke every row it was publishing in one sweep,
+    // and each of those rows now reads as "may be cancelled" for ever. `FeedBreakEvent` finds them; this
+    // is the only place that says so to Dan.
+    //
+    // WHY IT IS A WARNING AND NOT A RECEIPT. The rows are being counted as gone by a flag that is the only
+    // thing telling him a show may be off, so every week it stands makes that flag worth less (L36). The
+    // shows themselves are pitchable and are sitting in his queue struck through.
+    //
+    // WHY THE CONTROL CAN BE ABSENT. It offers to SHOW the rows, and a dismissed row opens in the Archive
+    // rather than the queue (`StageNavigation.opensInQueue` says so in its own words). Where no member of
+    // an event is one the queue would render, the sentence stays and the button goes, which is the rule
+    // `servable` above already applies to the shortfall report: a control that cannot do its job is worse
+    // than none at all (L44, L109).
+    static func feedBreaks(_ events: [FeedBreakEvent.Event], shownInQueue: (String) -> Bool) -> [AppNotice] {
+        events.map { event in
+            let reachable = event.memberKeys.filter(shownInQueue)
+            return AppNotice(
+                text: event.sentence,
+                tone: .warning,
+                help: "A venue that changes ticketing provider republishes its whole calendar under new"
+                    + " links, so Overture loses sight of every old one at once. Nothing here has been"
+                    + " changed or removed; the shows are still stored exactly as they were.",
+                action: reachable.isEmpty ? nil : .showShowsOneSweepBroke(keys: reachable))
         }
     }
 
