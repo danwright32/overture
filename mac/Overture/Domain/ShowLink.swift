@@ -94,6 +94,54 @@ enum ShowLink {
         return out
     }
 
+    // #4030 PHASE 1: which row FRONTS each group's single card, and which rows that card replaces.
+    //
+    // NO READER YET, deliberately, and the issue number above is what AGENTS.md requires of a value
+    // nothing consumes: #4030 phase 2 wires the Archive and phase 3 the Queue. The display and the
+    // ACTION have to land together per surface, because collapsing the display alone would leave the
+    // hidden copies untriaged when Dan dismisses the card, which is worse than the duplicate it hides
+    // (#3636 is that exact complaint). So this ships as the tested rule and nothing calls it until the
+    // surface that calls it can also act on what it hid.
+    //
+    // Built ON `clusters` rather than beside it, so it can never join anything the grouping refuses;
+    // `theCollapseJoinsExactlyWhatTheGroupingJoins` asserts that against `group` rather than a literal.
+    //
+    // THE ORDER IS DAN'S, 2026-09-20 (this session, in chat), and none of it follows from the rule:
+    //
+    //   1. A row the FEED still lists, over one it has stopped listing. He meets the show through the
+    //      copy the source still publishes, and that is also the copy `SameNightTitleVariantMerge`
+    //      keeps (`stillInTheFeed`, #3582), so the card he reads and the row that eventually survives
+    //      are the same one and nothing changes under him at the next launch.
+    //   2. Among those, the EARLIEST opening night, because a run is met at its opening.
+    //   3. Then the id, which is a tie-break and not a judgement. It is here because the hidden set
+    //      decides what Dan can SEE, so a rule breaking ties by arrival order would front a different
+    //      card on different launches over the same store (L343, L419).
+    //
+    // A group where NOTHING is still listed still collapses, fronted by its earliest night. The
+    // alternative is a group that vanishes when every copy goes quiet, and the archive's twelve-row
+    // Infinite Wrench group is exactly that case.
+    //
+    // PRESENTATION ONLY, like everything else here: it hides a row from a list, writes nothing and
+    // deletes nothing. What an action does to the hidden rows is the CALLER's decision and is not
+    // encoded here, which is why this returns the members rather than acting on them.
+    static func collapse(_ rows: [Row]) -> (fronts: [String: [String]], hidden: Set<String>) {
+        var fronts: [String: [String]] = [:]
+        var hidden: Set<String> = []
+        for cluster in clusters(rows) where cluster.count > 1 {
+            let ordered = cluster.sorted { left, right in
+                if left.isStillInFeed != right.isStillInFeed { return left.isStillInFeed }
+                let leftNight = left.performanceDate ?? ""
+                let rightNight = right.performanceDate ?? ""
+                if leftNight != rightNight { return leftNight < rightNight }
+                return left.id < right.id
+            }
+            guard let front = ordered.first else { continue }
+            fronts[front.id] = cluster.map(\.id)
+            hidden.formUnion(ordered.dropFirst().map(\.id))
+        }
+        return (fronts, hidden)
+    }
+
     // MARK: the rule itself
 
     // The night set this row occupies: the nights the feed lists, UNITED with the ones Dan dropped.
