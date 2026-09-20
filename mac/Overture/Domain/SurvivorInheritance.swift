@@ -22,6 +22,8 @@ import SwiftData
 //                    opposite of what happened (L163)
 //   feed identity    the survivor keeps a key the feed stopped matching, so a live show goes on reading
 //                    as "may be cancelled" (#3278's class, #3582)
+//   found addresses  the only one that costs MONEY to replace: a contact found by a paid check is deleted
+//                    with the row that holds it and comes back only by paying again (#4060, #1845)
 enum SurvivorInheritance {
 
     // Returns the natural key the survivor should ADOPT, or nil when there is nothing to adopt. The key is
@@ -45,6 +47,51 @@ enum SurvivorInheritance {
             survivor.firstSeenAt = earliest
         }
         NaturalKeyVenueMigration.carryDansDecisions(onto: survivor, from: members)
+        carryTheFoundAddresses(onto: survivor, from: members)
         return NaturalKeyVenueMigration.carryTheFeedIdentity(onto: survivor, from: members)
+    }
+
+    // #4060: the losers' contacts MOVE to the survivor before the caller deletes them.
+    //
+    // `recipients` is a cascade relationship, so deleting a Prospect destroys every Recipient hanging off
+    // it. Nothing anywhere carried them, and the ladder that looks as though it protects against this does
+    // not: `richestContactList` picks the LONGER list, which means the shorter one is deleted rather than
+    // kept, and it is only consulted at all once the rung above it has found nobody.
+    //
+    // Measured on Dan's live store at the 2026-09-20 14:00 launch, which is a merge that had already
+    // happened by the time this was written. `Operation Mincemeat: Mission Recast` pk 491 collapsed onto
+    // pk 1371 and its four recipients went with it, one of them carrying a real email; the store's
+    // recipient count fell 385 to 381 between that launch's backup and the one before it, and the survivor
+    // holds no contacts at all today.
+    //
+    // Deduped on the recipient's own `id`, which IS the canonicalised address or the `form:` handle
+    // (`Recipient.makeId`), never on the name: two rows holding one address are one contact, and two
+    // people who share a name are not (the rule `DuplicateContactMerge` already refuses to cross, L370).
+    // An id that is EMPTY is carried rather than deduped, because an empty key is not evidence of a match
+    // and folding two of them together would delete an address on the strength of both being unreadable
+    // (0 of the store's 381 recipients carry one today, so this is the unreachable branch and is written
+    // to fail towards keeping a row).
+    //
+    // Nothing is deleted here and no field of a carried row is rewritten. A recipient the survivor already
+    // holds stays exactly as it is, and the loser's copy of it is destroyed with its row, which is the
+    // same address either way.
+    private static func carryTheFoundAddresses(onto survivor: Prospect, from members: [Prospect]) {
+        var held = Set(survivor.recipients.map(\.id).filter { !$0.isEmpty })
+        var moving: [(loser: Prospect, recipient: Recipient)] = []
+        for loser in members where loser.persistentModelID != survivor.persistentModelID {
+            for recipient in loser.recipients {
+                if !recipient.id.isEmpty {
+                    guard !held.contains(recipient.id) else { continue }
+                    held.insert(recipient.id)
+                }
+                moving.append((loser, recipient))
+            }
+        }
+        // Collected first, then applied: both sides of the relationship are mutated, and rewriting a
+        // loser's `recipients` while iterating it is how a carry silently skips every other row.
+        for move in moving {
+            move.loser.recipients.removeAll { $0.persistentModelID == move.recipient.persistentModelID }
+            survivor.addRecipient(move.recipient)
+        }
     }
 }

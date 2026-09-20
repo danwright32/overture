@@ -117,6 +117,89 @@ struct SurvivorInheritanceTests {
         #expect(survivor.groupNameOverriddenByDan, "the survivor lost Dan's rename flag (#3124)")
     }
 
+    // #4060: the fourth carry, and the only one that costs MONEY to replace.
+    //
+    // Measured on Dan's live store at the 2026-09-20 14:00 launch, hours after the issue was filed. Two
+    // rows merged that day. `Operation Mincemeat: Mission Recast` pk 491 was collapsed onto pk 1371 and
+    // its FOUR recipients went with it (John Bautista carrying a real email, plus Robert Ariza, Lexi
+    // Rabadi and Amanda Jill Robinson): the store's recipient count fell 385 to 381 across those two
+    // launch backups, and the survivor holds ZERO contacts today. Every one of those addresses was found
+    // by a paid contact check.
+    //
+    // The shape the test builds is the REACHABLE one, which is not the shape #4060 describes. That body
+    // says the first rung (`hasRecordBeyondADismissal`) picks a row with a thin list over a richer one.
+    // It cannot: a row carrying found addresses satisfies `hasOutreachHistory`, so a pair where one row
+    // has a strict record and the other has addresses gives `mustDefer` two rows with history and a
+    // contacted one, and the merge is refused before the ladder runs. That is why the Nihao Broadway pair
+    // the issue quotes is deferred rather than merged. What IS reachable is the rung BELOW it:
+    // `richestContactList` picks the longer list and the shorter one is deleted with its row.
+    @Test func theMergeSurvivorKeepsTheAddressesTheDeletedRowsHadFound() throws {
+        let ctx = ModelContext(try container())
+        let stale = row(ctx, key: "old key|2026-11-04|weill recital hall", title: "Autumn Series",
+                        seriesId: "prod-1", opens: "2026-11-04", runEnd: "2026-11-06",
+                        urls: ["https://example.test/old"], ingested: older, firstSeen: older)
+        // Two found addresses, neither written to, so this row wins on `richestContactList` and the merge
+        // is not deferred: nothing here reached the outside world and no two rows disagree about a reason.
+        stale.addRecipient(Recipient(id: "artistic@example.test", email: "artistic@example.test",
+                                     name: "A Director", role: "Artistic Director", provenance: .act))
+        stale.addRecipient(Recipient(id: "booking@example.test", email: "booking@example.test",
+                                     name: "A Booker", role: "Booking", provenance: .act))
+
+        let live = row(ctx, key: "new key|2026-11-05|weill recital hall", title: "Autumn Series",
+                       seriesId: "prod-1", opens: "2026-11-05", runEnd: "2026-11-06",
+                       urls: ["https://example.test/live"], ingested: newer, firstSeen: newer)
+        // The address only the LOSER holds. A paid check found it and nothing else in the store has it.
+        live.addRecipient(Recipient(id: "manager@example.test", email: "manager@example.test",
+                                    name: "A Manager", role: "Manager", provenance: .act))
+        try ctx.save()
+
+        DriftedRunMerge.run(in: ctx)
+        try ctx.save()
+
+        let rows = try ctx.fetch(FetchDescriptor<Prospect>())
+        #expect(rows.count == 1, "the pass must collapse the pair, got \(rows.count) rows")
+        let survivor = try #require(rows.first)
+        let addresses = Set(survivor.recipients.compactMap(\.email))
+        #expect(addresses.contains("manager@example.test"),
+                "the survivor lost an address only the deleted row held, and only a fresh paid check brings it back (#4060, #1845)")
+        #expect(addresses == ["artistic@example.test", "booking@example.test", "manager@example.test"],
+                "expected every found address on the survivor, got \(addresses.sorted())")
+        // The rows themselves must be gone, not merely detached: a Recipient whose prospect is nil is
+        // invisible to every surface and to `hasOutreachHistory`, which would read as the same loss.
+        let orphans = try ctx.fetch(FetchDescriptor<Recipient>()).filter { $0.prospect == nil }
+        #expect(orphans.isEmpty, "\(orphans.count) recipient(s) survived with no prospect, which no surface can show")
+    }
+
+    // The other half of the same rule, and the one that decides whether this is safe to run on every
+    // merge: the same address found twice must not become two rows on the survivor. Deduped on the
+    // recipient's own id, which IS the canonicalised address (`Recipient.makeId`), never on the name.
+    @Test func anAddressBothRowsFoundArrivesOnceRatherThanTwice() throws {
+        let ctx = ModelContext(try container())
+        let stale = row(ctx, key: "old key|2026-11-04|weill recital hall", title: "Autumn Series",
+                        seriesId: "prod-2", opens: "2026-11-04", runEnd: "2026-11-06",
+                        urls: ["https://example.test/old"], ingested: older, firstSeen: older)
+        stale.addRecipient(Recipient(id: "shared@example.test", email: "shared@example.test",
+                                     name: "Shared Contact", role: "Artistic Director", provenance: .act))
+        stale.addRecipient(Recipient(id: "only-here@example.test", email: "only-here@example.test",
+                                     name: "Another", role: "Booking", provenance: .act))
+        let live = row(ctx, key: "new key|2026-11-05|weill recital hall", title: "Autumn Series",
+                       seriesId: "prod-2", opens: "2026-11-05", runEnd: "2026-11-06",
+                       urls: ["https://example.test/live"], ingested: newer, firstSeen: newer)
+        live.addRecipient(Recipient(id: "shared@example.test", email: "shared@example.test",
+                                    name: "Shared Contact", role: "Artistic Director", provenance: .act))
+        try ctx.save()
+
+        DriftedRunMerge.run(in: ctx)
+        try ctx.save()
+
+        let rows = try ctx.fetch(FetchDescriptor<Prospect>())
+        #expect(rows.count == 1, "the pass must collapse the pair, got \(rows.count) rows")
+        let survivor = try #require(rows.first)
+        let ids = survivor.recipients.map(\.id).sorted()
+        #expect(ids == ["only-here@example.test", "shared@example.test"],
+                "the shared address must arrive once, got \(ids)")
+    }
+
     // The guard. Its SUBJECT is derived from the code, never listed: any file that fetches Prospects and
     // deletes rows is a candidate, because a hand written list checks only what somebody remembered to add
     // and the whole defect here is a pass nobody added (L96).
