@@ -75,10 +75,15 @@ struct ProspectProvenanceTests {
         let carnegie = event("Vienna Philharmonic",
                              url: "https://www.carnegiehall.org/Calendar/2026/09/19/Vienna-0800PM",
                              venue: "Stern Auditorium / Perelman Stage")
+        // #771: the clock is PINNED, and that is the whole fix. This read `Date()` while its fixtures
+        // are dated 2026-09-19, so it passed every day until 2026-09-20 and then went red on a change
+        // that touched nothing near it, blocking every push in the repository. A fixture whose meaning
+        // is a relationship between a stored date and the clock has to pin BOTH ends (L130).
         _ = try await ScoutService.runScout(
             into: ctx,
             extractor: StubSourceExtractor(listing: ExtractedListing(events: [carnegie],
                                                                      verdict: .upcomingListings)),
+            now: EasternDate.date(from: ScoutTestClock.provenanceAnchor)!,
             defaults: ScratchDefaults.make("ProvenanceTests"))
 
         #expect(try stored(ctx).first?.sourceIds == [WatchedSource.carnegieId])
