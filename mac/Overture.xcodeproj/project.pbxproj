@@ -663,6 +663,7 @@
 		47FA186561E1912A18BA28BD /* StageNavigationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1EF653614208C0E600D652C5 /* StageNavigationTests.swift */; };
 		482A93BB3026DB627A55C4C8 /* AppleScriptOmniFocusClientTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4AFC6DE42DEE10EA355CAEB4 /* AppleScriptOmniFocusClientTests.swift */; };
 		4849B0AB5ED447FAAD26EF00 /* OrgKey.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAAB8BD16E192C26BCB8635C /* OrgKey.swift */; };
+		487EE7CCC816F36C2792346A /* NewNightReopensTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 96F8B45FDB8FACE464F6226B /* NewNightReopensTests.swift */; };
 		48B098CAC4B814F245E3ADB4 /* MenuBarStatus.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F17AF936CAA06AD29DC22AB /* MenuBarStatus.swift */; };
 		48E39171DC98887452D147BF /* ScoutWarningsPresentationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5FD5984842E2C8A9DF81BB97 /* ScoutWarningsPresentationTests.swift */; };
 		48F8D7BA6CFA058E1CA7C8DD /* HeldShowsDoNotInheritTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C13BF72A4D86733E6D9FD47D /* HeldShowsDoNotInheritTests.swift */; };
@@ -3329,6 +3330,7 @@
 		96D8A19849AF3D48B99FCC60 /* PerformerCorroborationAdoptionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PerformerCorroborationAdoptionTests.swift; sourceTree = "<group>"; };
 		96E938F145F41F43BD32C274 /* ScoutReadBelongsToThisRunGuardTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScoutReadBelongsToThisRunGuardTests.swift; sourceTree = "<group>"; };
 		96F2023776607C6C57394D07 /* SubVenueDisplayTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubVenueDisplayTests.swift; sourceTree = "<group>"; };
+		96F8B45FDB8FACE464F6226B /* NewNightReopensTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewNightReopensTests.swift; sourceTree = "<group>"; };
 		972CC8AF91DFF02416C791D7 /* AnsweredShowsOnTheCardTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnsweredShowsOnTheCardTests.swift; sourceTree = "<group>"; };
 		973A2EC8D67BB0AF24543FC4 /* OvationTixCalendarTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OvationTixCalendarTests.swift; sourceTree = "<group>"; };
 		974057A370C1D10DB865BCB7 /* ReplyReachLabelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReplyReachLabelTests.swift; sourceTree = "<group>"; };
@@ -4678,6 +4680,7 @@
 				AFBA9C35C2544443B9131995 /* NearestOwedMomentTests.swift */,
 				AB07D82C222E7F97D9C929C5 /* NearMissNamesTests.swift */,
 				2036F525F19E0746DA4F082B /* NeverReadSourceNeedsALookTests.swift */,
+				96F8B45FDB8FACE464F6226B /* NewNightReopensTests.swift */,
 				0495E456E24128B3FE9220DA /* NightDecisionTests.swift */,
 				8FE3768DF406299B6BCBE9F2 /* NightDismissDayOffTests.swift */,
 				28A145330FE5F360D88E2019 /* NightTimesParsedOncePerShowTests.swift */,
@@ -7341,6 +7344,7 @@
 				D5414348270F470D00B92674 /* NearMissNamesTests.swift in Sources */,
 				1DA572A90BDA6C11C037FCD4 /* NearestOwedMomentTests.swift in Sources */,
 				C768215181274D8E963BEE0C /* NeverReadSourceNeedsALookTests.swift in Sources */,
+				487EE7CCC816F36C2792346A /* NewNightReopensTests.swift in Sources */,
 				DC31A5FCC6DCCE22BBDE9A82 /* NextReachOut.swift in Sources */,
 				4C77C3D817B8D22E552CA594 /* NightDecision.swift in Sources */,
 				CB38BA2F6644E263765649F2 /* NightDecisionTests.swift in Sources */,

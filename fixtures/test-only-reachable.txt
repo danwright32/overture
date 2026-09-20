@@ -50,6 +50,7 @@ ScrollOverflow.swift:erasedHeight
 SearchScope.swift:isHolding
 SendGroup.swift:isRepresentative
 ShowOutcome.swift:asDismissReason
+ShowOutcome.swift:newNightReopens  # #4052 shipped the rule ahead of its reader, so it could be proved on its own before anything re-keys a real row. #4029's token join is what reads it, to decide whether a night arriving later reopens the ending on the row it lands on; remove this line in that change.
 SourceGrade.swift:isStopped
 SourceSchedule.swift:maySpendTokens
 StageOverlap.swift:violations

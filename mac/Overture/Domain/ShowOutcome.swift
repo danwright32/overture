@@ -206,6 +206,62 @@ enum ShowOutcome: String, CaseIterable, Equatable, Hashable, Sendable {
     }
 }
 
+// MARK: - Whether a later night reopens this ending (#4052)
+
+extension ShowOutcome {
+    // Does a NEW NIGHT of this same show reopen the decision?
+    //
+    // #4029 joins a night arriving later onto the row that already holds the show, so that night
+    // inherits whatever ending sits there. Without this, a show dismissed because Dan was busy THAT
+    // NIGHT would stay in the Archive and never be offered again. Measured on the live store
+    // 2026-09-20, that is the live case rather than a hypothetical: pk 397 `Nihao Broadway` was
+    // dismissed `pitchingOtherShows` for 2026-09-11, the 2026-09-29 night became a row of its own, and
+    // Dan pitched it. The join without this gate silences the card that produced the outreach.
+    //
+    // Dan's call, 2026-09-20 (this session, in chat): "if I dismiss for a date conflict, it comes back
+    // on a later night of it's run. but if I dismiss for 'dont want to shoot this' it never comes back."
+    //
+    // It lives HERE, beside the vocabulary it reads, rather than as a list at the call site, for the
+    // same reason `ShowOutcomeGroup` does: a second copy of this judgement is how one caller comes to
+    // disagree with another about what a value means (L370, L611).
+    //
+    // A switch rather than a stored set, so a value added to the vocabulary cannot compile until it has
+    // been classified. `NewNightReopensTests` asserts the whole partition as well, so the answer cannot
+    // be quietly changed for one case either (L113).
+    var newNightReopens: Bool {
+        switch self {
+        // About the NIGHT. Each of these says Dan wanted the show and that this particular night was
+        // spent, so a night he has not spent is a question he has not answered.
+        case .dateConflict, .hadPaidWork, .pitchingOtherShows, .tooSoon:
+            return true
+        // Not a decision at all: the show's last night passed while it sat untriaged. There is no
+        // judgement to respect, so a night that has not gone by is live. Folding this in with the
+        // judgements below would read Overture's own bookkeeping as though Dan had said no.
+        case .wentBy:
+            return true
+        // Judgements about the show itself. A different night does not make a show he does not want to
+        // shoot into one he does.
+        case .notAFit, .dontWantToShoot:
+            return false
+        // About the ORG rather than the night. A new night invents no contact route, and `duplicate` is
+        // housekeeping about the row, which another night does not change.
+        case .noWayToReachThem, .duplicate:
+            return false
+        // The town is still blocked on the new night, so reopening would put a show back in front of him
+        // in a place he asked never to see (#1238).
+        case .tooFar:
+            return false
+        // Every ending where a pitch ALREADY WENT OUT stays closed. Reviving one would put a show he has
+        // already emailed about back in the queue to be emailed about again, which is #3636's hazard and
+        // a decision nobody has made. Deliberately the conservative direction: the row stays in the
+        // Archive and is found, rather than silently resurfacing.
+        case .booked, .neverHeardBack, .emailBounced, .theySaidNotNow, .theySaidNo,
+             .theySaidPriceTooHigh, .turnedThemDown:
+            return false
+        }
+    }
+}
+
 // The three groups a season report counts, kept apart from the vocabulary itself so a reader can ask
 // which group a value belongs to without knowing every value.
 enum ShowOutcomeGroup: String, CaseIterable, Equatable, Sendable {
