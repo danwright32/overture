@@ -41,10 +41,12 @@ struct ScoutUpsertTargetTests {
     private func target(storedByKey: @escaping () throws -> Prospect? = { nil },
                         byConcert: @escaping () throws -> Prospect? = { nil },
                         byAnyRunURL: @escaping () throws -> Prospect? = { nil },
+                        byProductionToken: @escaping () throws -> Prospect? = { nil },
                         byStableSource: @escaping () throws -> Prospect? = { nil })
     -> ScoutService.UpsertTarget {
         ScoutService.upsertTarget(storedByKey: storedByKey, byConcert: byConcert,
-                                  byAnyRunURL: byAnyRunURL, byStableSource: byStableSource)
+                                  byAnyRunURL: byAnyRunURL, byProductionToken: byProductionToken,
+                                  byStableSource: byStableSource)
     }
 
     // The ordinary case, and the one that makes every arm below it safe.
@@ -74,6 +76,22 @@ struct ScoutUpsertTargetTests {
         #expect(target(byStableSource: { stable }) == .reKey(stable))
     }
 
+    // #4029: the token arm sits BELOW the whole-URL arm and ABOVE the stable-source one, and it answers
+    // with its own case, because its join adds nights rather than replacing them. Both halves are the
+    // rule rather than an accident of where the line was pasted: a shared whole URL is stronger evidence
+    // than a shared token, so where both could answer the stronger one does and the nights follow the
+    // feed as they always have.
+    @Test func aProductionTokenMatchJoinsNightsAndYieldsToASharedURL() throws {
+        let ctx = ModelContext(try container())
+        let byURL = prospect("by-url", in: ctx)
+        let byToken = prospect("by-token", in: ctx)
+        let stable = prospect("by-source", in: ctx)
+
+        #expect(target(byProductionToken: { byToken }, byStableSource: { stable })
+                == .reKeyJoiningNights(byToken))
+        #expect(target(byAnyRunURL: { byURL }, byProductionToken: { byToken }) == .reKey(byURL))
+    }
+
     // THE refusal. A store that cannot answer must never read as a key nobody holds, because the arms
     // below the first would then write that key onto a row and merge two shows.
     @Test func aStoreThatCannotAnswerRefusesTheRow() throws {
@@ -88,7 +106,16 @@ struct ScoutUpsertTargetTests {
         let source = SourceGuardHelper.source("Overture/Integration/ScoutService.swift")
         #expect(!source.isEmpty, "the guard read no source, so every check below passes on nothing")
 
-        for helper in ["matchByConcertIdentity", "matchByAnyRunURL", "matchByStableSource"] {
+        // #4029: DERIVED from the source rather than listed here. The list was hand written and a fourth
+        // arm was added beside it, which is L96 exactly: a guard driven by a registry checks only what
+        // the registry lists, so the new arm was exempt from the check written to catch it. Enumerating
+        // from the declarations means the next arm is covered on the day it is written.
+        let arms = source.components(separatedBy: "private static func matchBy").dropFirst()
+            .map { "matchBy" + $0.prefix(while: { $0.isLetter || $0.isNumber }) }
+        #expect(arms.count >= 4,
+                Comment(rawValue: "only \(arms.count) match arms were found, so this guard reads almost "
+                        + "nothing: \(arms)"))
+        for helper in arms {
             guard let declaration = source.range(of: "private static func \(helper)") else {
                 Issue.record(Comment(rawValue: "\(helper) is not declared where this guard looks"))
                 continue
@@ -116,7 +143,7 @@ struct ScoutUpsertTargetTests {
         // (the repeat-client history, the reconcile's stored set, the venue-brand corpus), and each of
         // those DEGRADES on an unreadable store rather than destroying anything, so a file-wide rule
         // would condemn three correct lines and be switched off (L93).
-        guard let call = source.range(of: "switch upsertTarget(") else {
+        guard let call = source.range(of: "let target = upsertTarget(") else {
             Issue.record("the upsert no longer calls upsertTarget, so this guard reads nothing")
             return
         }
