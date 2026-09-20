@@ -28,6 +28,11 @@ enum ScoutTestClock {
     // fixture story.
     static let stageNavigationAnchor = "2026-07-12"
     static let manualProvenanceAnchor = "2026-07-13"
+    // #771's suite. Its fixtures are dated 2026-09-19, which was the day they were written, and the
+    // suite read the REAL clock, so `theCarnegieScoutStampsCarnegiesId` passed every day until
+    // 2026-09-20 and then failed for nobody's change: the show it scouts had become a past date and
+    // the scout correctly stored nothing. Anchored here so the pair is pinned at both ends (L130).
+    static let provenanceAnchor = "2026-09-18"
     static let feedReconcileAnchor = "2026-06-25"
 
     // The day N days after an anchor, so a fixture whose meaning is its DISTANCE from the clock can be
