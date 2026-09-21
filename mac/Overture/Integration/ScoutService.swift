@@ -1664,8 +1664,19 @@ enum ScoutService {
     // a correct read of an empty one, and here the two have opposite consequences).
     private static func poisonedTokensForBatch(_ incoming: [AssembledProspect],
                                                in context: ModelContext) throws -> Set<String> {
+        try poisonedTokensForBatch(incoming,
+                                   storedRows: { try context.fetch(FetchDescriptor<Prospect>()) })
+    }
+
+    // The store is the reader on every shipping path. The seam exists so the FAILED read can be
+    // exercised at all: a healthy in-memory store never throws, so a test that only ever hands it a
+    // working one proves nothing about the branch that matters most, which is the one that decides
+    // whether an unreadable store refuses every token or none (L140). Same reasoning, and the same
+    // shape, as `Prospect.keyAvailability(_:lookup:)`.
+    static func poisonedTokensForBatch(_ incoming: [AssembledProspect],
+                                       storedRows: () throws -> [Prospect]) throws -> Set<String> {
         var seen: [(token: String, title: String, venue: String)] = []
-        let stored = try context.fetch(FetchDescriptor<Prospect>())
+        let stored = try storedRows()
         for p in stored {
             let urls = (p.sourceListingURL.map { [$0] } ?? []) + p.runSourceURLs
             let theirTitle = ShowLink.foldedTitle(p.groupName)
