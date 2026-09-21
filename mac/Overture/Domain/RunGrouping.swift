@@ -84,6 +84,19 @@ enum RunGrouping {
         run.min(by: { GroupNameMatch.tokens($0.groupName).count < GroupNameMatch.tokens($1.groupName).count }) ?? run[0]
     }
 
+    // #4051: every production token a row carries, from its listing URL. `ProductionToken` allows only
+    // hosts where the token was MEASURED to be stable across a run and to carry none of the title, so a
+    // tixr slug (the title slugified plus a per performance integer) is correctly not one.
+    private static func tokens(_ r: RunRow) -> [String] {
+        (r.sourceListingURL.map { [$0] } ?? []).compactMap(ProductionToken.inURL)
+    }
+
+    // The one token this row may be clustered by, or nil. Nil where the row carries none, and nil where
+    // every one it carries is poisoned, which is the season stamp case.
+    private static func usableToken(_ r: RunRow, poisoned: Set<String>) -> String? {
+        tokens(r).first { !poisoned.contains($0) }
+    }
+
     static func group(_ rows: [RunRow]) -> [GroupedRun] {
         let undated = rows.filter { $0.performanceDate == nil }
         let dated = rows.filter { $0.performanceDate != nil }
@@ -102,6 +115,20 @@ enum RunGrouping {
         for key in order {
             let venueRows = (byVenue[key] ?? []).sorted { ($0.performanceDate ?? "") < ($1.performanceDate ?? "") }
 
+            // #4051: the tokens this venue's rows may NOT be joined by, from `ShowLink`'s own rule rather
+            // than a second copy of the judgement (L370). A venue stamping one token across its whole
+            // season would otherwise fuse the season into a single card, and the discard costs nothing
+            // while no venue does that: measured 2026-09-21, 0 of 228 distinct tokens are poisoned over
+            // 1,273 stored rows.
+            //
+            // Asked per VENUE BUCKET, which is the scope `ShowLink.poisonedTokens` keys on and is correct
+            // here for a second reason: this loop has already bucketed by venue, so every row that could
+            // be joined by a token is in front of it.
+            let poisonedAtVenue = ShowLink.poisonedTokens(venueRows.flatMap { r in
+                tokens(r).map { (token: $0, title: GroupNameMatch.tokens(r.groupName).joined(separator: " "),
+                                 venue: canon(r.venue)) }
+            })
+
             // #1174: a shared seriesId is authoritative, so those nights are grouped FIRST, by id, before
             // the gap-and-title walk ever sees them. Keying on the id (not adjacency) is deliberate: the
             // nights can be weeks apart and can have other shows between them in the date order, and a
@@ -111,9 +138,21 @@ enum RunGrouping {
             var seriesClusters: [String: [RunRow]] = [:]
             var untaggedRows: [RunRow] = []
             for r in venueRows {
-                if let sid = r.seriesId, !sid.isEmpty {
-                    if seriesClusters[sid] == nil { seriesOrder.append(sid); seriesClusters[sid] = [] }
-                    seriesClusters[sid]?.append(r)
+                // #4051: a feed production id the source publishes as `seriesId`, OR the venuetix one it
+                // publishes inside the listing URL. They are the same kind of fact and this rule already
+                // treats the first as authoritative, with no gap window, precisely because the nights of
+                // one production can be weeks apart. The token was invisible to both paths, so two nights
+                // of one production more than `sameShowGapDays` apart arriving in ONE sweep became two
+                // rows. Live shape, measured 2026-09-20: `Operation Mincemeat: Mission Recast` at The
+                // Green Room 42, 70 days apart under token `GWKuL2pmNJBPIkIkHB0h`.
+                //
+                // `seriesId` wins where a row carries both. Neither is more authoritative than the other,
+                // and a row carrying both has them agreeing about one production, so the order only has to
+                // be STATED rather than argued (L419).
+                if let key = r.seriesId.flatMap({ $0.isEmpty ? nil : $0 })
+                    ?? usableToken(r, poisoned: poisonedAtVenue) {
+                    if seriesClusters[key] == nil { seriesOrder.append(key); seriesClusters[key] = [] }
+                    seriesClusters[key]?.append(r)
                 } else {
                     untaggedRows.append(r)
                 }
