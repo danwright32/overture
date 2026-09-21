@@ -55,9 +55,25 @@ enum RunNightDrop {
     // owner, so the first change to that rule removes it).
     //
     // `ReleasedNightIsRecheckedTests.theAutomaticReleaseReasonIsNotOneDanCanWriteOnOneNight` is the guard.
-    // It is borrowed from `ShowOutcome` rather than being its own case, which is the defect #3002 fixes;
-    // this constant is the one seam that change has to move.
-    static let automaticRelease: ShowOutcome = .duplicate
+    //
+    // #3002 MOVED this off `.duplicate`, which Dan can also pick himself, onto an outcome that is
+    // Overture's own and is offered on no menu. That was the one seam the change had to move, which is
+    // what #4085 existed to arrange. The value itself now lives on `ShowOutcome`, beside the vocabulary
+    // it belongs to, because the SHOW level caller reads the same fact and must not reach through a type
+    // about nights to ask it.
+    static var automaticRelease: ShowOutcome { ShowOutcome.automaticRelease }
+
+    // What `keeping` re-checks. BOTH spellings, and the legacy one is not optional: every release already
+    // in Dan's store is recorded as `.duplicate`, and reading those as his own judgement would stop
+    // Overture re-checking them for ever, which is the #3001 defect reintroduced for exactly the rows
+    // that have been there longest (L389: a writer that only fills records going forward never reaches
+    // what already exists, so the READER is what has to cover them).
+    //
+    // Safe to keep re-checking the legacy value on a NIGHT because Dan cannot write it on one: it sits in
+    // `aboutTheShow` and both `dropNight` call sites gate on `isAboutOneNight`, which is the property
+    // `theAutomaticReleaseReasonIsNotOneDanCanWriteOnOneNight` asserts. The same is NOT true at the show
+    // level, and #4082 records why that half is unrecoverable for rows written before this.
+    static let recheckedReleases: Set<ShowOutcome> = [.coveredElsewhere, .duplicate]
 
     static func isAboutOneNight(_ reason: ShowOutcome) -> Bool { aboutOneNight.contains(reason) }
 
@@ -151,7 +167,7 @@ struct DroppedNight: Equatable, Sendable {
         let drops = all(on: p)
         guard !drops.isEmpty else { return nights }
         let stillDropped = Set(drops.filter { drop in
-            guard drop.reason == RunNightDrop.automaticRelease else { return true }   // Dan's own: never re-checked
+            guard RunNightDrop.recheckedReleases.contains(drop.reason) else { return true }   // Dan's own: never re-checked
             let key = Prospect.makeNaturalKey(groupName: p.groupName, performanceDate: drop.night,
                                               venue: p.venue)
             // `keyAvailability` is the same three-answer read the release itself used, so the two cannot

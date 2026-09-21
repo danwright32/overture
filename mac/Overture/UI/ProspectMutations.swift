@@ -850,7 +850,7 @@ enum ProspectMutations {
             // #2997: the same rule as the card's own menu, reached the same way, so a bulk press and a
             // per-card press cannot close a run for two different reasons.
             if let night, case .fullyCovered(let releasing) = drop {
-                model.markDismissed(reason: .duplicate)
+                model.markDismissed(reason: ShowOutcome.automaticRelease)
                 ConflictSweep.reapply(model, export: export, in: context)
                 closedRuns += 1
                 return QueueUndoEntry.Row(recording: model, priorStatus: priorStatus,
@@ -984,7 +984,7 @@ enum ProspectMutations {
             // night he named and it is recorded there; this row is closed for what the row IS, which is a
             // second copy of nights other cards hold. Writing his reason across the run is #2691's defect.
             if let night, case .fullyCovered(let releasing) = drop {
-                model.markDismissed(reason: .duplicate)
+                model.markDismissed(reason: ShowOutcome.automaticRelease)
                 ConflictSweep.reapply(model, export: export, in: context)
                 if let undo {
                     undo.record(QueueUndoEntry(recording: "Dismiss", on: model,
