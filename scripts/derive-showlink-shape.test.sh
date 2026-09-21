@@ -27,6 +27,7 @@ WORK="$(fixture_scratch_dir derive-showlink-shape)"
 # Builds a throwaway store from rows given as TSV on stdin, one row per line:
 #   pk <TAB> foldedTitle <TAB> openingNight <TAB> foldedVenue <TAB> status <TAB> performanceDate
 #      <TAB> runEndDate <TAB> nights(comma separated, may be empty) <TAB> sourceListingURL
+#      <TAB> firstSeenAt (an ISO date, or empty for a row that carries none)
 # The natural key is assembled here the way ScoutService writes it, "title|date|venue", because the
 # derivation reads the fold back OUT of that key rather than re-folding anything itself.
 make_store() {
@@ -39,12 +40,13 @@ make_store() {
   rm -f "${path}"
   python3 - "${path}" "${rows}" <<'PY'
 import sqlite3, sys, plistlib
+from datetime import datetime, timezone
 path = sys.argv[1]
 db = sqlite3.connect(path)
 db.execute("""create table ZPROSPECT (
   Z_PK integer primary key, ZNATURALKEY text, ZSTATUSRAW text, ZPERFORMANCEDATE text,
   ZRUNENDDATE text, ZRUNNIGHTS blob, ZRUNSOURCEURLS blob, ZSOURCELISTINGURL text,
-  ZGROUPNAME text, ZVENUE text)""")
+  ZGROUPNAME text, ZVENUE text, ZFIRSTSEENAT real)""")
 
 
 def archive(values):
@@ -67,12 +69,18 @@ for line in open(sys.argv[2]):
     # Padded rather than unpacked strictly: a trailing empty field is a trailing TAB, which editors and
     # tooling strip without trace, and a fixture that dies on invisible whitespace is a fixture that
     # reports a store-building failure as a grouping answer of zero.
-    parts = (line.split("\t") + [""] * 9)[:9]
-    pk, title, opening, venue, status, perf, end, nights, url = parts
-    db.execute("insert into ZPROSPECT values (?,?,?,?,?,?,?,?,?,?)",
+    parts = (line.split("\t") + [""] * 10)[:10]
+    pk, title, opening, venue, status, perf, end, nights, url, first_seen = parts
+    # Core Data stores a TIMESTAMP as seconds since 2001-01-01 UTC, so the fixture writes what the real
+    # store holds rather than an ISO string the command would never meet.
+    seen = None
+    if first_seen.strip():
+        seen = (datetime.fromisoformat(first_seen.strip()).replace(tzinfo=timezone.utc)
+                - datetime(2001, 1, 1, tzinfo=timezone.utc)).total_seconds()
+    db.execute("insert into ZPROSPECT values (?,?,?,?,?,?,?,?,?,?,?)",
                (int(pk), f"{title}|{opening}|{venue}", status, perf or None, end or None,
                 archive([n for n in nights.split(",") if n]), archive([url] if url else []),
-                url or None, title, venue))
+                url or None, title, venue, seen))
 db.commit()
 PY
 }
@@ -229,6 +237,50 @@ ROWS
 out="$("${DERIVE}" --store "${WORK}/liverun.store" --asof 2026-09-19)"
 assert_eq "a run opening yesterday and closing in December is in queue scope" "1" \
   "$(field_for "${out}" queue rows=)"
+
+# --- --dates: WHEN each member of a group arrived (#4033) --------------------------------------------
+#
+# The question this answers decides whether a duplicate is worth fixing at ingest, and on 2026-09-19 it
+# reversed a conclusion: #3766's premise re-check said the store's duplicates were pre-fix residue minted
+# before #1558 shipped, which was true of the group it measured and false of the store. Answering it meant
+# patching a private copy of this script, which is exactly the figure-nobody-can-re-take this command
+# exists to end.
+
+make_store "${WORK}/dates.store" <<'ROWS'
+1	the infinite wrench	2026-10-02	asylum nyc	dismissed	2026-10-02	2026-10-05			2026-07-23
+2	the infinite wrench	2026-10-04	asylum nyc	dismissed	2026-10-04	2026-10-08			2026-09-03
+3	we are happy to serve you	2026-10-02	the players theatre	new	2026-10-02	2026-10-05			2026-07-23
+4	we are happy to serve you	2026-10-04	the players theatre	new	2026-10-04	2026-10-08			
+5	a show stored once	2026-11-01	the cutting room	new	2026-11-01				2026-08-01
+ROWS
+
+out="$("${DERIVE}" --store "${WORK}/dates.store" --asof 2026-09-19 --dates)"
+assert_contains "--dates prints a member's first sighting beside its pk" "${out}" "pk 1"
+assert_contains "and the date it was first seen" "${out}" "2026-07-23"
+assert_contains "and the later member's own date, which is the whole point" "${out}" "2026-09-03"
+assert_contains "a row that carries no first sighting says so in words" "${out}" "not recorded"
+assert_not_contains "a row stored once is in no group, so it is never listed" "${out}" "a show stored once"
+
+# EVERY group, not the largest three: the default output caps the list and that cap is what hid the
+# store-wide answer in the first place.
+assert_contains "--dates lists the first group" "${out}" "the infinite wrench"
+assert_contains "--dates lists the second group too" "${out}" "we are happy to serve you"
+# #4021: the member line carries the row's own natural key, which is what ShowLink.Row.id is, so the
+# shipped rule can be compared against this membership rather than against this count.
+assert_contains "a member line carries the natural key" "${out}" \
+  "key the infinite wrench|2026-10-02|asylum nyc"
+
+# The two misreadings that produced #3766's wrong mechanism, said beside the dates rather than left for
+# a reader to know (L11): firstSeenAt is not unconditionally a mint date, and ingestedAt is the LAST touch.
+assert_contains "the output warns that a first sighting can have been rewritten" "${out}" "NaturalKeyVenueMigration"
+assert_contains "and that ingestedAt is the last touch, not the first" "${out}" "ingestedAt"
+
+# The default output is UNCHANGED, because its four populations are quoted in issue bodies.
+plain="$("${DERIVE}" --store "${WORK}/dates.store" --asof 2026-09-19)"
+assert_not_contains "without --dates nothing prints a member's date" "${plain}" "first seen"
+assert_eq "without --dates the store figure is what it always was" "2" \
+  "$(field_for "${plain}" store groups=)"
+assert_eq "and --dates does not change it either" "2" "$(field_for "${out}" store groups=)"
 
 rm -rf "${WORK}"
 

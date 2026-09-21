@@ -115,24 +115,31 @@ struct TwoShowsOneTitleOneNightTests {
             // as a room inside it. The store holds no pair of genuinely different shows under one
             // title, which is the answer #1847 asked for, and it is a fact about today rather than a
             // property of the rule: nothing stops one arriving with the next watchlist addition.
-            let judged: Set<Set<String>> = [
-                ["urban youth theater summer presentation the show will be named by making it|2026-08-01|abrons arts center",
-                 "urban youth theater summer presentation the show will be named by making it|2026-08-01|main gallery at abrons arts center"],
-                ["orbit|2026-08-09|experimental theater at abrons arts center",
-                 "orbit|2026-08-09|abrons arts center"],
-                ["silsila resonance the living journey of south asian classical music|2026-08-30|playhouse theater at abrons arts center",
-                 "silsila resonance the living journey of south asian classical music|2026-08-30|abrons arts center"],
+            // #4067: keyed on WHAT WAS JUDGED (the folded title, the shared night, the two rooms) rather
+            // than on the rows' natural keys, which every re-key arm in this milestone rewrites. See
+            // `JudgedPair` for what moved these entries out from under their own verdicts.
+            let judged: Set<JudgedPair> = [
+                JudgedPair(foldedTitles: ["urban youth theater summer presentation the show will be named by making it",
+                                          "urban youth theater summer presentation the show will be named by making it"],
+                           night: "2026-08-01",
+                           venues: ["Abrons Arts Center", "Main Gallery at Abrons Arts Center"]),
+                JudgedPair(foldedTitles: ["orbit", "orbit"], night: "2026-08-09",
+                           venues: ["Experimental Theater at Abrons Arts Center", "Abrons Arts Center"]),
+                JudgedPair(foldedTitles: ["silsila resonance the living journey of south asian classical music",
+                                          "silsila resonance the living journey of south asian classical music"],
+                           night: "2026-08-30",
+                           venues: ["Playhouse Theater at Abrons Arts Center", "Abrons Arts Center"]),
             ]
 
             let unjudged = candidates.filter { candidate in
-                !judged.contains([candidate.a.naturalKey, candidate.b.naturalKey])
+                !judged.contains(JudgedPair.of(candidate.a, candidate.b, night: candidate.night))
             }
 
             #expect(unjudged.isEmpty, Comment(rawValue: """
                 \(unjudged.count) same-night pair(s) at DIFFERENT venues would be collapsed by a merge \
                 that no longer consults the room, and the losing row is deleted. Judge each and record \
                 it, or give the merge a guard:
-                \(unjudged.map { "  " + $0.line }.joined(separator: "\n"))
+                \(unjudged.map { "  " + $0.line + "\n    verdict key: " + JudgedPair.of($0.a, $0.b, night: $0.night).description }.joined(separator: "\n"))
                 """))
 
             try? FileManager.default.removeItem(at: clone)

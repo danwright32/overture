@@ -121,6 +121,134 @@ struct ShowLinkCorpusShapeTests {
         }
     }
 
+    // #4021: the two derivations of this shape, checked against each other on ONE clone.
+    //
+    // `scripts/derive-showlink-shape.sh` is the answer anybody can take without a build, and this suite is
+    // the shipped rule. They disagree, the reasons are known, and until now those reasons lived in the
+    // script's header as prose, which is enforced by nothing (L407). Measured 2026-09-19: the queue agreed
+    // exactly while the store did not, 16 against 19, and both differences are the script's own blind
+    // spots. The figures get quoted into issue and PR bodies, so the failure this prevents is a number
+    // carried forward from the wrong one of the two long after the reason they differ has changed.
+    //
+    // WHAT IT ASSERTS, and why it is not a count. Comparing two totals says only that they differ and
+    // never where, so this compares MEMBERSHIP: every group the shipped rule finds that the script does
+    // not must contain at least one row from one of the two populations the script cannot see. That is the
+    // header's claim, turned into a check that fails when the gap stops being explainable.
+    //
+    //   1. `ShowLink` recomputes the fold from each row's CURRENT scout-anchored fields, while the script
+    //      reads the fold as it was STORED in `ZNATURALKEY` when the row was last written.
+    //   2. `ShowLink` unions Dan's DROPPED nights into the night set, and no SQL expression can decode an
+    //      NSKeyedArchiver blob.
+    //
+    // The script is run with `--dates`, which is the only mode that prints per-member natural keys, and
+    // those keys ARE `ShowLink.Row.id`. A run that could not measure is its own outcome and fails loudly
+    // rather than reading as agreement (L98).
+    @Test(.enabled(if: liveStoreExists, "no live store on this machine"))
+    func theScriptAndTheShippedRuleAgreeOrTheDifferenceIsExplainedByAKnownBlindSpot() async throws {
+        await RealStoreTestLock.shared.acquire()
+        do {
+            let dir = try sandboxes.make(named: "showlink-two-derivations")
+            guard let clone = try LiveStoreClone.makeClone(in: dir) else {
+                await RealStoreTestLock.shared.release()
+                return
+            }
+            let ctx = ModelContext(try container(at: clone))
+            let all = try ctx.fetch(FetchDescriptor<Prospect>())
+            let rows = all.map(ShowLink.Row.init)
+            let shipped = ShowLink.group(rows)
+
+            let script = try Self.runShapeScript(store: clone, asOf: QueueModel.easternToday())
+            #expect(!script.isEmpty,
+                    "the script produced no group membership at all, so nothing below compared anything")
+
+            // The rows the script cannot see correctly, DERIVED from the difference itself rather than
+            // from a list of fields somebody thought of. The first draft of this check listed
+            // `scoutVenue != venue` and dropped nights, and it missed a real pair on the first run
+            // (`macmccarty + kiddtwist` against `macmccarty +kiddtwist` at Jalopy Theatre) because that
+            // row's drift is in the TITLE. The header's claim is about the FOLD, not about two named
+            // fields, so this asks the fold: any row whose recomputed title or venue differs from the
+            // one stored in its own key is a row the script reads differently, whichever field moved.
+            let blindSpots = Set(all.filter { row in
+                let stored = row.naturalKey.split(separator: "|", omittingEmptySubsequences: false)
+                guard stored.count >= 3 else { return true }   // unreadable key: the script drops it too
+                let storedTitle = String(stored[0])
+                let storedVenue = stored[2...].joined(separator: "|")
+                let live = ShowLink.Row(row)
+                return ShowLink.foldedTitle(live.groupName) != storedTitle
+                    || ShowLink.foldedVenue(live.venue) != storedVenue
+                    || !DroppedNight.all(on: row).isEmpty
+            }.map(\.naturalKey))
+
+            let shippedGroups = Set(shipped.map { Set([$0.key] + $0.value) })
+            let unexplained = shippedGroups.filter { group in
+                !script.contains(group) && group.isDisjoint(with: blindSpots)
+            }
+
+            print("Two derivations of the grouping shape, same clone: shipped rule "
+                  + "\(shippedGroups.count) group(s), script \(script.count) group(s), "
+                  + "\(blindSpots.count) row(s) in a known blind spot, "
+                  + "\(unexplained.count) difference(s) the blind spots do not explain")
+
+            #expect(unexplained.isEmpty,
+                    """
+                    the shipped rule finds \(unexplained.count) group(s) the script misses for no reason \
+                    the script's header accounts for, so the reconciliation written there is stale: \
+                    \(unexplained.map { $0.sorted() }.prefix(3))
+                    """)
+
+            try? FileManager.default.removeItem(at: clone)
+            await RealStoreTestLock.shared.release()
+        } catch {
+            await RealStoreTestLock.shared.release()
+            throw error
+        }
+    }
+
+    /// Every group the script reports, as sets of natural keys. Throws rather than returning empty when
+    /// the command could not run: an empty answer and a failed run are different facts (L215).
+    nonisolated private static func runShapeScript(store: URL, asOf: String) throws -> Set<Set<String>> {
+        let script = RepoRoot.url.appendingPathComponent("scripts/derive-showlink-shape.sh")
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/bash")
+        process.arguments = [script.path, "--store", store.path, "--asof", asOf, "--dates"]
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = Pipe()
+        try process.run()
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+        guard process.terminationStatus == 0 else {
+            throw ShapeScriptRefusal.exited(Int(process.terminationStatus))
+        }
+        let text = String(decoding: data, as: UTF8.self)
+        var groups: Set<Set<String>> = []
+        var current: Set<String> = []
+        var inDates = false
+        for line in text.split(separator: "\n", omittingEmptySubsequences: false) {
+            if line.hasPrefix("dates=") { inDates = true; continue }
+            guard inDates else { continue }
+            if let range = line.range(of: "  key ") {
+                current.insert(String(line[range.upperBound...]))
+            } else if line.hasPrefix("  [") {
+                if current.count > 1 { groups.insert(current) }
+                current = []
+            }
+        }
+        if current.count > 1 { groups.insert(current) }
+        return groups
+    }
+
+    enum ShapeScriptRefusal: Error, CustomStringConvertible {
+        case exited(Int)
+        var description: String {
+            switch self {
+            case .exited(let code):
+                return "derive-showlink-shape.sh exited \(code), so the two derivations were never "
+                    + "compared. 2 is UNMEASURED and 3 is no store; neither is agreement (#4021)."
+            }
+        }
+    }
+
     // MARK: what the pass costs, against the one already sitting beside it
 
     /// The MEDIAN of five runs with its spread. One reading is not a yardstick: measured on this Mac
