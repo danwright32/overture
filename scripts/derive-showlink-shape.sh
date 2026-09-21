@@ -230,6 +230,10 @@ for (pk, natural_key, status, performance_date, run_end, nights_blob, urls_blob,
         "runEndDate": run_end,
         "nights": set(decoded_nights) or span(performance_date, run_end),
         "tokens": tokens_for(listing, decoded_urls),
+        # #4078: the URLs themselves, not only the token inside them. Both URL matching arms
+        # (`matchByAnyRunURL`, `matchByStableSource`) join on these, so how ambiguous each one is is
+        # the reachable population for both, and nothing measured it before.
+        "urls": {u for u in ([listing] if listing else []) + list(decoded_urls) if u},
         # A plain column, so it needs none of the decoding above. Kept as the raw Core Data instant and
         # rendered only where it is printed, so nothing here depends on a timezone (L39).
         "firstSeenAt": first_seen,
@@ -248,6 +252,17 @@ for row in rows:
     for token in row["tokens"]:
         seen_titles.setdefault((token, row["venue"]), set()).add(row["title"])
 poisoned = {token for (token, _venue), titles in seen_titles.items() if len(titles) > 1}
+
+# #4078: the same question asked of a URL rather than a token, and NOT scoped to the venue.
+#
+# The venue scoping the token rule uses is deliberate there and wrong here: `matchByAnyRunURL` joins on a
+# shared run URL with no venue test at all, so a URL carrying two titles is ambiguous to that arm wherever
+# those rows sit. Scoping by venue would under-report exactly the organisation level pages this is for.
+titles_per_url = {}
+for row in rows:
+    for url in row["urls"]:
+        titles_per_url.setdefault(url, set()).add(row["title"])
+ambiguous_urls = {url: titles for url, titles in titles_per_url.items() if len(titles) > 1}
 for row in rows:
     row["tokens"] = row["tokens"] - poisoned
 
@@ -355,6 +370,18 @@ report("queue", [r for r in future if r["status"] != "dismissed"])
 report("future", future)
 report("archive", [r for r in rows if r["status"] == "dismissed"])
 report("store", rows)
+print()
+print("LISTING LINKS THAT CARRY MORE THAN ONE SHOW (#4078), over the WHOLE store, because a URL matching"
+      " arm is not scoped to a population")
+print(f"ambiguousListingURLs= {len(ambiguous_urls)} of {len(titles_per_url)} distinct URL(s)")
+print("WHAT THIS CANNOT SEE: a URL that published one title in August and another in September looks"
+      " IDENTICAL here to one that never moved, because this reads a single moment. #4039 ruled an arm"
+      " out of a rename using a count taken this way and the ruling did not hold (#4068, L487). So a URL"
+      " ABSENT from this list is not evidence that it never carried two shows across TIME.")
+for url, titles in sorted(ambiguous_urls.items(), key=lambda kv: (-len(kv[1]), kv[0])):
+    print(f"  [{len(titles)} titles] {url}")
+    for title in sorted(titles):
+        print(f"      {title[:72]}")
 if DATES:
     print()
     print("WHAT A FIRST SIGHTING IS AND IS NOT, because two readings of these columns have already")
