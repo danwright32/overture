@@ -122,13 +122,13 @@ struct TwoShowsOneTitleOneNightTests {
                 JudgedPair(foldedTitles: ["urban youth theater summer presentation the show will be named by making it",
                                           "urban youth theater summer presentation the show will be named by making it"],
                            night: "2026-08-01",
-                           venues: ["abrons arts center", "main gallery at abrons arts center"]),
+                           venues: ["Abrons Arts Center", "Main Gallery at Abrons Arts Center"]),
                 JudgedPair(foldedTitles: ["orbit", "orbit"], night: "2026-08-09",
-                           venues: ["experimental theater at abrons arts center", "abrons arts center"]),
+                           venues: ["Experimental Theater at Abrons Arts Center", "Abrons Arts Center"]),
                 JudgedPair(foldedTitles: ["silsila resonance the living journey of south asian classical music",
                                           "silsila resonance the living journey of south asian classical music"],
                            night: "2026-08-30",
-                           venues: ["playhouse theater at abrons arts center", "abrons arts center"]),
+                           venues: ["Playhouse Theater at Abrons Arts Center", "Abrons Arts Center"]),
             ]
 
             let unjudged = candidates.filter { candidate in
@@ -139,7 +139,7 @@ struct TwoShowsOneTitleOneNightTests {
                 \(unjudged.count) same-night pair(s) at DIFFERENT venues would be collapsed by a merge \
                 that no longer consults the room, and the losing row is deleted. Judge each and record \
                 it, or give the merge a guard:
-                \(unjudged.map { "  " + $0.line }.joined(separator: "\n"))
+                \(unjudged.map { "  " + $0.line + "\n    verdict key: " + JudgedPair.of($0.a, $0.b, night: $0.night).description }.joined(separator: "\n"))
                 """))
 
             try? FileManager.default.removeItem(at: clone)

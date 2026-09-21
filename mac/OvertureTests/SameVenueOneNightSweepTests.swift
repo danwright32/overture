@@ -114,14 +114,19 @@ struct SameVenueOneNightSweepTests {
                 // The venue strings differ only by the address the second listing appends, which
                 // VenueNormalization folds away, so this pair is also a small proof that the fold is
                 // doing its job.
-                JudgedPair(foldedTitles: ["macmccarty +kiddtwist", "macmccarty + kiddtwist"],
-                           night: "2026-07-23", venues: ["jalopy theatre", "jalopy theatre"]),
+                // WRITE THESE FROM THE VERDICT KEY THE FAILURE PRINTS, never from the stored natural
+                // key. The first attempt here copied the fragments out of `ZNATURALKEY` and every entry
+                // missed: the key's title is folded by TODAY'S fold rather than the one that wrote the
+                // row, and its venue keeps its case while the stored key does not. Both pairs below came
+                // out of the `verdict key:` line this test prints when a pair is unjudged.
+                JudgedPair(foldedTitles: ["macmccarty kiddtwist", "macmccarty kiddtwist"],
+                           night: "2026-07-23", venues: ["Jalopy Theatre", "Jalopy Theatre"]),
                 // One show, billed once with the artists in a parenthetical. This is the exact shape
                 // `GroupNameMatch.isSameShowTitle` was given in #3917: a title against that title plus
                 // a subtitle, corroborated by a shared listing URL.
                 JudgedPair(foldedTitles: ["kinstillatory mappings in light and dark matter",
                                           "kinstillatory mappings in light and dark matter emily johnson and kai recollet"],
-                           night: "2026-09-17", venues: ["abrons arts center", "abrons arts center"]),
+                           night: "2026-09-17", venues: ["Abrons Arts Center", "Abrons Arts Center"]),
             ]
 
             let unjudged = candidates.filter {
@@ -132,7 +137,7 @@ struct SameVenueOneNightSweepTests {
                 \(unjudged.count) same-venue same-night pair(s) would be joined by an ingest rule built \
                 on isSameNightVariant, and none has been judged. Read each and record it with a reason, \
                 or #3330 cannot be built on this predicate:
-                \(unjudged.map { "  " + $0.line }.joined(separator: "\n"))
+                \(unjudged.map { "  " + $0.line + "\n    verdict key: " + JudgedPair.of($0.a, $0.b, night: $0.night).description }.joined(separator: "\n"))
                 """))
 
             // The clone is NOT removed here: #4061 is three suites doing exactly that while the context
