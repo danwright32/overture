@@ -72,6 +72,10 @@ enum ScoutService {
         case sourceWatchlist
         case reconcileStoredShows
         case venueBrandCorpus
+        // #4056: the rows the production token discard is judged over. Its own case rather than folding
+        // into `reconcileStoredShows`, because the two send Dan to different places and a sentence naming
+        // the wrong one is worse than none (L11).
+        case productionTokenCorpus
 
         // What Dan reads. Named for the thing rather than the symbol, because the sentence has to send
         // him somewhere and "venueBrands" sends him nowhere.
@@ -81,6 +85,7 @@ enum ScoutService {
             case .sourceWatchlist: return "the list of calendars it watches"
             case .reconcileStoredShows: return "the shows it already had"
             case .venueBrandCorpus: return "the venue names it matches against"
+            case .productionTokenCorpus: return "the production ids it joins a run by"
             }
         }
     }
@@ -1245,9 +1250,24 @@ enum ScoutService {
         // Over the whole batch it does not depend on ordering at all, and it sees strictly more than the
         // per listing map could: a token two INCOMING listings disagree about is caught on the sweep that
         // brings them, rather than on whichever later sweep happens to store one of them first.
-        let batchPoisonedTokens = poisonedTokensForBatch(grouped.compactMap {
+        let batchRows = grouped.compactMap {
             prospects.indices.contains($0.row.id) ? prospects[$0.row.id] : nil
-        }, in: context)
+        }
+        // A read that could not answer refuses EVERY token this sweep carries, rather than refusing none.
+        // The two directions are not symmetric: a refusal costs a duplicate card Dan can see and merge,
+        // and a wrong join carries a stored row's dismissal, its recipients and its thread id onto another
+        // show, silently (#797). So the unreadable case takes the side that can be undone, and says so
+        // rather than looking like a clean sweep (L42, L11).
+        let batchPoisonedTokens: Set<String>
+        do {
+            batchPoisonedTokens = try poisonedTokensForBatch(batchRows, in: context)
+        } catch {
+            degradedReads.append(.productionTokenCorpus)
+            batchPoisonedTokens = Set(batchRows.flatMap {
+                (($0.sourceListingURL.map { [$0] } ?? []) + $0.runSourceURLs)
+                    .compactMap(ProductionToken.inURL)
+            })
+        }
 
         for gr in grouped {
             guard prospects.indices.contains(gr.row.id) else { continue }
@@ -1637,10 +1657,15 @@ enum ScoutService {
     // to candidates cannot see it. The incoming rows join that population for the same reason, and
     // because a sweep that brings two disagreeing listings should not have to wait for a later one to
     // notice (L487 is the same shape: a single moment cannot see what moved across time).
+    // THROWS rather than answering with an empty store, which #3071 and `ScoutStoreReadTests` both
+    // forbid and which this got wrong first time round. An empty poison set means NOTHING IS REFUSED, so
+    // a read that failed would license every join this rule exists to prevent, in the one situation where
+    // the code knows least (L215, L105: an empty collection returned on a throw is indistinguishable from
+    // a correct read of an empty one, and here the two have opposite consequences).
     private static func poisonedTokensForBatch(_ incoming: [AssembledProspect],
-                                               in context: ModelContext) -> Set<String> {
+                                               in context: ModelContext) throws -> Set<String> {
         var seen: [(token: String, title: String, venue: String)] = []
-        let stored = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
+        let stored = try context.fetch(FetchDescriptor<Prospect>())
         for p in stored {
             let urls = (p.sourceListingURL.map { [$0] } ?? []) + p.runSourceURLs
             let theirTitle = ShowLink.foldedTitle(p.groupName)
