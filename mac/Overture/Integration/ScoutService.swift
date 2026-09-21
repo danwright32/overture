@@ -1395,9 +1395,26 @@ enum ScoutService {
                 //   #1260 Phase 2, a merged prospect carrying the SAME synthetic concert id
                 //   (samedatevenue:DATE|VENUE), whose name and representative URL both shifted because the
                 //   scout re-listed the per-conductor rows in a new order or with refreshed links. The two
-                //   URL arms would miss and INSERT A DUPLICATE, stranding Dan's keep/dismiss. Gated on
-                //   isMerged, and the synthetic id is minted only for a mergeSameDateVenue source, so it can
-                //   NEVER fuse two genuinely different shows (a normal matinee/evening gets no id to match).
+                //   URL arms would miss and INSERT A DUPLICATE, stranding Dan's keep/dismiss.
+                //
+                //   #4040 REWROTE what makes this safe, because what stood here was false. It read: "the
+                //   synthetic id is minted only for a mergeSameDateVenue source, so it can NEVER fuse two
+                //   genuinely different shows". That is a claim about every WRITER, and the gate was a bare
+                //   prefix test that asks nothing about who wrote the string. The extract runbook (3b) tells
+                //   the run to copy a page's series marker VERBATIM into `seriesId`, so a page could hand
+                //   Overture a value carrying the prefix and switch off both corroborations below.
+                //
+                //   What makes it safe NOW is that the gate is ANCHORED: the id must name this row's own
+                //   date and folded venue (`SameDateVenueMerge.isMerged(_:naming:venue:)`), so it can only
+                //   ever join rows that genuinely share what it names, whoever wrote it. A normal
+                //   matinee/evening still gets no id to match.
+                //
+                //   What is NOT settled, so nobody reads the above as more than it is: a source flagged
+                //   `mergeSameDateVenue` that genuinely runs two different shows in one room on one night
+                //   still fuses them, because date plus venue is the whole of the id and no title is
+                //   checked. That rests on a human decision on the watchlist. Measured 2026-09-20: 1 of 74
+                //   sources carries the flag, 9 rows carry a synthetic id, and every one of them agrees with
+                //   the date and venue its own id encodes.
                 //
                 //   #132, a stored record sharing one of this run's member URLs, so the keep/dismiss
                 //   decision survives a run-window shift.
@@ -1678,7 +1695,13 @@ enum ScoutService {
         // A synthetic same-date id already encodes date and venue and is minted only for a
         // mergeSameDateVenue source, so it needs no corroboration: recognizing a concert whose NAME
         // changed is that path's entire purpose (#1260) and a title check would defeat it.
-        if SameDateVenueMerge.isMerged(seriesId) {
+        // #4040: ANCHORED to the row asking. The bare prefix test this used to read asks only whether a
+        // string starts with a namespace this app reserves, never who wrote it, and the extract run copies
+        // a page's series marker verbatim into this field. So the corroboration skipped below rested on a
+        // claim about MINTING that an arriving value could defeat. A synthetic id is its own date and
+        // folded venue, so requiring it to NAME them takes nothing from the #1260 path and removes every
+        // case where the id says something the row does not.
+        if SameDateVenueMerge.isMerged(seriesId, naming: openingNight, venue: venue) {
             // #4040: DETERMINISTIC, by the same rule and for the same reason as the branch below, which
             // this one contradicted two lines above it. It returned `sharing.first` over an unordered
             // fetch while its sibling's comment said in as many words: "never `first` on an unordered
