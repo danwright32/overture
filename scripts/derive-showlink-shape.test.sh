@@ -22,6 +22,7 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/shell-assertions.sh"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DERIVE="${SCRIPT_DIR}/derive-showlink-shape.sh"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 WORK="$(fixture_scratch_dir derive-showlink-shape)"
 
 # Builds a throwaway store from rows given as TSV on stdin, one row per line:
@@ -321,6 +322,38 @@ assert_not_contains "without --dates nothing prints a member's date" "${plain}" 
 assert_eq "without --dates the store figure is what it always was" "2" \
   "$(field_for "${plain}" store groups=)"
 assert_eq "and --dates does not change it either" "2" "$(field_for "${out}" store groups=)"
+
+# #4116: the script folds a listing address before counting how many titles it carries, because the two
+# arms that JOIN on those addresses fold them the same way. The Swift fold and this one are twin
+# implementations, so both are held to ONE committed fixture rather than to each other (L26). The Swift
+# half is `ListingURLFoldContractTests`; this is the other half, and it reads the same file.
+#
+# It drives the script's own `fold_listing_url` by importing the script as text into python, rather than
+# restating the rule here, which would make this a third implementation agreeing with itself.
+fold_out="$(REPO_ROOT="${REPO_ROOT}" DERIVE="${DERIVE}" python3 - <<'PYEOF'
+import json, os, re, sys
+
+derive = open(os.environ["DERIVE"]).read()
+start = derive.index("def fold_listing_url(raw):")
+end = derive.index("def tokens_for(", start)
+namespace = {}
+exec(derive[start:end], namespace)
+fold = namespace["fold_listing_url"]
+
+cases = json.load(open(os.path.join(os.environ["REPO_ROOT"], "fixtures/listing-url-fold/v1.json")))["fold"]
+if len(cases) < 10:
+    print(f"FIXTURE TOO SMALL: {len(cases)} case(s)")
+    sys.exit(0)
+bad = [c for c in cases if fold(c["input"]) != c["expected"]]
+for c in bad:
+    print(f"DISAGREES: {c['input']!r} folded to {fold(c['input'])!r}, fixture says {c['expected']!r} because {c['why']}")
+print(f"checked {len(cases)} case(s), {len(bad)} disagreement(s)")
+PYEOF
+)"
+assert_contains "the script's fold agrees with the committed fixture on every case" "${fold_out}" \
+  "0 disagreement(s)"
+assert_not_contains "and the fixture is not too small to be a spec" "${fold_out}" "FIXTURE TOO SMALL"
+assert_not_contains "no case disagrees" "${fold_out}" "DISAGREES:"
 
 rm -rf "${WORK}"
 
