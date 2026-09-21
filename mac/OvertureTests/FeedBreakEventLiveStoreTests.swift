@@ -42,7 +42,13 @@ struct FeedBreakEventLiveStoreTests {
         }
     }
 
-    @Test func everyEventTheRuleFindsOnTheLiveStoreHoldsItsOwnContract() async throws {
+    // SKIPPED, never red, on a machine with no live store. The GitHub-hosted runner is exactly that
+    // machine, and without this trait the suite threw there, so `swift-tests` failed on every branch cut
+    // after it landed. A red on a machine that cannot be asked is indistinguishable from a red about the
+    // code (L411), and blocking every merge is the one outcome this suite's own header says it exists to
+    // avoid.
+    @Test(.enabled(if: LiveStorePresence.exists, LiveStorePresence.absenceReason))
+    func everyEventTheRuleFindsOnTheLiveStoreHoldsItsOwnContract() async throws {
         try await withLiveShows { shows in
             let asOf = EasternDate.today()
             let events = FeedBreakEvent.events(among: shows, asOf: asOf)

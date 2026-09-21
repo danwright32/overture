@@ -15,12 +15,10 @@ import SwiftData
 struct ContradictedCancellationTests {
     private let sandboxes = TemporarySandboxes()
 
-    nonisolated private static var liveStoreURL: URL {
-        StoreLocation.storeURL(appSupport: StoreLocation.appSupport, isDebugBuild: false)
-    }
-    nonisolated private static var liveStoreExists: Bool {
-        FileManager.default.fileExists(atPath: liveStoreURL.path)
-    }
+    // #4076's CI failure consolidated these onto one shared answer (`LiveStorePresence`), so two suites
+    // cannot come to disagree about what "there is a live store" means (L263, L370).
+    nonisolated private static var liveStoreURL: URL { LiveStorePresence.url }
+    nonisolated private static var liveStoreExists: Bool { LiveStorePresence.exists }
 
     private func container(at url: URL) throws -> ModelContainer {
         let schema = Schema([Prospect.self, Recipient.self])
