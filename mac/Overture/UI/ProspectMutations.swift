@@ -980,9 +980,11 @@ enum ProspectMutations {
             // #2997: the run has nothing left that is not already on another card, so the card closes.
             // The status write lives HERE rather than in `dropNight`, beside every other status write.
             //
-            // `.duplicate`, never Dan's reason (his call, 2026-08-19). His reason is a statement about the
-            // night he named and it is recorded there; this row is closed for what the row IS, which is a
-            // second copy of nights other cards hold. Writing his reason across the run is #2691's defect.
+            // `automaticRelease`, never Dan's reason (his call, 2026-08-19). His reason is a statement
+            // about the night he named and it is recorded there; this row is closed for what the row IS,
+            // which is a second copy of nights other cards hold. Writing his reason across the run is
+            // #2691's defect. #3002/#4082 moved this off `.duplicate`, which Dan also picks himself, so
+            // a row Overture closed can be told from one he judged; rows closed BEFORE that cannot.
             if let night, case .fullyCovered(let releasing) = drop {
                 model.markDismissed(reason: ShowOutcome.automaticRelease)
                 ConflictSweep.reapply(model, export: export, in: context)

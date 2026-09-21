@@ -150,7 +150,8 @@ struct DroppedNight: Equatable, Sendable {
     // #3001: a night RELEASED to another card is re-checked here, every fold.
     //
     // #2997 lets a run give up a night on the grounds that a stored card already holds it, recorded with
-    // reason `.duplicate`. Subtracting that forever leaves the exclusion standing over a card that may
+    // `automaticRelease` (#3002 moved that off `.duplicate`, which Dan also picks himself; `keeping` still
+    // re-checks the old spelling, see `recheckedReleases`). Subtracting that forever leaves the exclusion standing over a card that may
     // since have been dismissed or dropped out of the venue's listings, and then the night is on NO card
     // and nothing says it went. Dan never chose to give it up, which is what separates it from a night he
     // dropped himself (L200: an exclusion granted because another record covers it has to re-check that
@@ -298,9 +299,11 @@ extension Prospect {
 
         // The first write. Everything above is lookups.
         //
-        // Dan's reason goes on HIS night and on no other. A released night is recorded as `.duplicate`,
-        // which is what it is: this row's claim on it duplicates a card that already holds it. Writing
-        // Dan's reason across all of them is the #2691 defect, and #16 reads these records (L163).
+        // Dan's reason goes on HIS night and on no other. A released night is recorded as
+        // `automaticRelease`, which is what it is: Overture giving the night up because another card
+        // already holds it. #3002 moved that off `.duplicate`, which Dan picks himself, so the two are no
+        // longer one value in the store. Writing his reason across all of them is the #2691 defect, and
+        // #16 reads these records (L163).
         droppedRunNights.append(DroppedNight(night: night, reason: reason, at: now).stored)
         droppedRunNights.append(contentsOf: released.map {
             DroppedNight(night: $0, reason: RunNightDrop.automaticRelease, at: now).stored
