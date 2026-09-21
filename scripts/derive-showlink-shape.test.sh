@@ -181,6 +181,46 @@ ROWS
 out="$("${DERIVE}" --store "${WORK}/tixr.store" --asof 2026-09-19)"
 assert_eq "a tixr slug is never a production token" "0" "$(field_for "${out}" queue groups=)"
 
+# --- the listing links that carry more than one show (#4078) ------------------------------------------
+#
+# Two ingest arms join a stored row to an incoming listing because they SHARE A URL, `matchByAnyRunURL`
+# on any shared run URL and `matchByStableSource` on the listing URL plus date plus venue. Both are
+# guarded by a title predicate and nothing else, and neither can see how ambiguous the URL it matched on
+# actually is. This section is the reachable population for both, which until now existed only inside an
+# ad hoc script somebody wrote to answer #4068.
+
+make_store "${WORK}/ambiguous-url.store" <<'ROWS'
+1	max davidson strangers	2026-10-11	soho playhouse	dismissed	2026-10-11			https://ci.ovationtix.com/35583
+2	max davidson does new material	2026-10-29	soho playhouse	new	2026-10-29			https://ci.ovationtix.com/35583
+3	a third billing entirely	2026-11-02	soho playhouse	new	2026-11-02			https://ci.ovationtix.com/35583
+ROWS
+out="$("${DERIVE}" --store "${WORK}/ambiguous-url.store" --asof 2026-09-19)"
+assert_contains "a URL held under several folded titles is named" "${out}" "ci.ovationtix.com/35583"
+assert_contains "beside how many titles hold it" "${out}" "[3 titles]"
+assert_contains "and the titles themselves, since the count alone cannot be acted on" \
+  "${out}" "max davidson strangers"
+assert_contains "the section says what it cannot see, which is a URL that moved across TIME" \
+  "${out}" "across TIME"
+
+# The control, and it is the half that matters: an over match here would report every ordinary
+# per performance link as ambiguous, and the section would be ignored within a week (L104, L36).
+make_store "${WORK}/unambiguous-url.store" <<'ROWS'
+1	one show	2026-10-11	soho playhouse	new	2026-10-11			https://ci.ovationtix.com/11111
+2	one show	2026-10-29	soho playhouse	new	2026-10-29			https://ci.ovationtix.com/22222
+ROWS
+out="$("${DERIVE}" --store "${WORK}/unambiguous-url.store" --asof 2026-09-19)"
+assert_contains "a store with no ambiguous link says so positively" "${out}" "ambiguousListingURLs= 0"
+assert_not_contains "and names no URL" "${out}" "ci.ovationtix.com/11111"
+
+# One URL, one title, several rows is the ORDINARY shape of a run and must never be flagged: the two
+# arms joining on it is exactly what they are for.
+make_store "${WORK}/one-title-url.store" <<'ROWS'
+1	a weekly series	2026-10-11	the players theatre	new	2026-10-11			https://theplayerstheatre.com/show-schedule.html
+2	a weekly series	2026-10-18	the players theatre	new	2026-10-18			https://theplayerstheatre.com/show-schedule.html
+ROWS
+out="$("${DERIVE}" --store "${WORK}/one-title-url.store" --asof 2026-09-19)"
+assert_contains "one title on a shared URL is not ambiguous" "${out}" "ambiguousListingURLs= 0"
+
 # --- an input this command could not read is never counted as an ordinary empty one -------------------
 #
 # Both of these fall back to something plausible: a runNights blob that will not decode falls back to the
