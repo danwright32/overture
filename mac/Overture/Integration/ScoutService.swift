@@ -1610,12 +1610,15 @@ enum ScoutService {
     // #2758: throws, for the reason above.
     private static func matchByAnyRunURL(_ urls: [String], groupName: String, venue: String?,
                                          in context: ModelContext) throws -> Prospect? {
-        let candidates = Set(urls)
+        // #4116: folded on BOTH sides, so one member addressed with and without its trailing slash is
+        // one member. The fold is `ListingURL`'s, shared with `matchByStableSource` below rather than
+        // spelled again here (L370).
+        let candidates = ListingURL.foldedSet(urls)
         guard !candidates.isEmpty else { return nil }
         let all = try context.fetch(FetchDescriptor<Prospect>())
         return all.first { p in
-            let sharesURL = (p.sourceListingURL.map { candidates.contains($0) } ?? false)
-                || !Set(p.runSourceURLs).isDisjoint(with: candidates)
+            let sharesURL = (p.sourceListingURL.map { candidates.contains(ListingURL.fold($0)) } ?? false)
+                || !ListingURL.foldedSet(p.runSourceURLs).isDisjoint(with: candidates)
             guard sharesURL else { return false }
             // #3917: `isSameShowTitle`, not `isConfident`, and the shared URL above is what licenses it.
             // A source that drops or adds a parenthetical keeps publishing the same link, and
@@ -1877,7 +1880,12 @@ enum ScoutService {
         guard let url, !url.isEmpty else { return nil }
         let all = try context.fetch(FetchDescriptor<Prospect>())
         return all.first {
-            guard $0.sourceListingURL == url, $0.performanceDate == date,
+            // #4116: `ListingURL.sameListing` rather than `==`, so one page addressed with and without
+            // its trailing slash is one page. Measured on the live store 2026-09-21: four stored pairs
+            // share a night and a page and differ only by that slash, and every one is a second billing
+            // of one concert. The fold touches the trailing slash and nothing else; the reasoning for
+            // each rule NOT adopted is recorded on `ListingURL` rather than here.
+            guard ListingURL.sameListing($0.sourceListingURL, url), $0.performanceDate == date,
                   sameVenue($0.venue, venue) else { return false }
             // #4032: and the two titles must be the same SHOW. The comment above says the venue is what
             // makes URL plus date safe, and on a single venue's season page that is no protection at

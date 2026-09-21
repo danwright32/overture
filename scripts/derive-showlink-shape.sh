@@ -180,6 +180,29 @@ def span(performance_date, run_end_date):
     return {(opening + timedelta(days=n)).isoformat() for n in range((closing - opening).days + 1)}
 
 
+# #4116: the Swift fold, in Python, because this report has to count the same addresses the arms
+# compare. `ScoutService`'s two URL arms read `ListingURL.fold`, so a report that counted raw strings
+# would state the reachable population for #4098 against a rule the app does not use. The two are kept
+# from drifting by ONE committed fixture, `fixtures/listing-url-fold/v1.json`, asserted from both sides
+# (L26): `ListingURLFoldContractTests` in Swift and `derive-showlink-shape.test.sh` here.
+#
+# Removes exactly one trailing slash from the path, leaving the query and the fragment alone, and
+# refuses a slash that is structural rather than trailing (`https://` is not `https:/`).
+def fold_listing_url(raw):
+    cut = len(raw)
+    for i, ch in enumerate(raw):
+        if ch in "?#":
+            cut = i
+            break
+    path, rest = raw[:cut], raw[cut:]
+    if not path.endswith("/"):
+        return raw
+    trimmed = path[:-1]
+    if not trimmed or trimmed[-1] in "/:":
+        return raw
+    return trimmed + rest
+
+
 def tokens_for(listing_url, run_urls):
     found = set()
     for url in ([listing_url] if listing_url else []) + list(run_urls):
@@ -233,7 +256,7 @@ for (pk, natural_key, status, performance_date, run_end, nights_blob, urls_blob,
         # #4078: the URLs themselves, not only the token inside them. Both URL matching arms
         # (`matchByAnyRunURL`, `matchByStableSource`) join on these, so how ambiguous each one is is
         # the reachable population for both, and nothing measured it before.
-        "urls": {u for u in ([listing] if listing else []) + list(decoded_urls) if u},
+        "urls": {fold_listing_url(u) for u in ([listing] if listing else []) + list(decoded_urls) if u},
         # A plain column, so it needs none of the decoding above. Kept as the raw Core Data instant and
         # rendered only where it is printed, so nothing here depends on a timezone (L39).
         "firstSeenAt": first_seen,

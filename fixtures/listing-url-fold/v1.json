@@ -1,0 +1,69 @@
+{
+  "fold": [
+    {
+      "input": "https://www.kaufmanmusiccenter.org/mch/event/orli-shaham-in-claras-hands/",
+      "expected": "https://www.kaufmanmusiccenter.org/mch/event/orli-shaham-in-claras-hands",
+      "why": "the live pair this fold was written for: pk 598 and pk 1589, one concert, one night"
+    },
+    {
+      "input": "https://www.kaufmanmusiccenter.org/mch/event/orli-shaham-in-claras-hands",
+      "expected": "https://www.kaufmanmusiccenter.org/mch/event/orli-shaham-in-claras-hands",
+      "why": "an address with no trailing slash is unchanged"
+    },
+    {
+      "input": "https://ci.ovationtix.com/277/production/1/?performanceId=9",
+      "expected": "https://ci.ovationtix.com/277/production/1?performanceId=9",
+      "why": "the slash before a query is a trailing slash, and the query survives untouched"
+    },
+    {
+      "input": "https://ci.ovationtix.com/277/production/1?performanceId=9/",
+      "expected": "https://ci.ovationtix.com/277/production/1?performanceId=9/",
+      "why": "a slash inside the query belongs to the query; performanceId is the identity of a night"
+    },
+    {
+      "input": "https://example.org/a/#tickets",
+      "expected": "https://example.org/a#tickets",
+      "why": "the slash before a fragment is a trailing slash"
+    },
+    {
+      "input": "https://",
+      "expected": "https://",
+      "why": "structural, not trailing: folding it would name a different thing"
+    },
+    {
+      "input": "//",
+      "expected": "//",
+      "why": "structural"
+    },
+    {
+      "input": "/",
+      "expected": "/",
+      "why": "structural"
+    },
+    {
+      "input": "https://example.org/a//",
+      "expected": "https://example.org/a//",
+      "why": "a doubled trailing slash is refused outright rather than reduced by one, the conservative direction"
+    },
+    {
+      "input": "",
+      "expected": "",
+      "why": "an empty value is not an address and comes back unchanged"
+    },
+    {
+      "input": "not a url",
+      "expected": "not a url",
+      "why": "a value that is not an address at all comes back unchanged, so the fold is safe to apply to anything"
+    },
+    {
+      "input": "https://WWW.Example.ORG/A/",
+      "expected": "https://WWW.Example.ORG/A",
+      "why": "case is NOT folded, in host or path: measured 2026-09-21 to join zero further pairs, and a path is case sensitive on some servers"
+    },
+    {
+      "input": "http://www.metopera.org/",
+      "expected": "http://www.metopera.org",
+      "why": "the scheme is NOT folded to https: measured to join zero further pairs"
+    }
+  ]
+}
