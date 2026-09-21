@@ -41,6 +41,24 @@ enum RunNightDrop {
     // enforced, or a missing entry silently takes the default branch).
     static var classified: Set<ShowOutcome> { aboutOneNight.union(aboutTheShow) }
 
+    // #2997: the reason Overture records against a night it released ON DAN'S BEHALF, because a stored
+    // card already holds it. Named here rather than written as `.duplicate` at each of the two sites,
+    // because those two sites are what make `DroppedNight.keeping` correct and nothing pointed at the
+    // dependency from either side (#4085).
+    //
+    // `keeping` re-checks a release on every fold and never re-checks a night Dan dropped himself, and it
+    // tells them apart by the REASON alone. That is safe only while this value is one Dan cannot write on
+    // a single night, which today is true because it sits in `aboutTheShow` while both `dropNight` call
+    // sites in `ProspectMutations` gate on `isAboutOneNight`. Move it into `aboutOneNight` for any reason
+    // at all and Overture silently begins undoing nights Dan gave up himself, which is the #3001 defect
+    // reintroduced (L281: behaviour correct only as a side effect of an unrelated rule has no test and no
+    // owner, so the first change to that rule removes it).
+    //
+    // `ReleasedNightIsRecheckedTests.theAutomaticReleaseReasonIsNotOneDanCanWriteOnOneNight` is the guard.
+    // It is borrowed from `ShowOutcome` rather than being its own case, which is the defect #3002 fixes;
+    // this constant is the one seam that change has to move.
+    static let automaticRelease: ShowOutcome = .duplicate
+
     static func isAboutOneNight(_ reason: ShowOutcome) -> Bool { aboutOneNight.contains(reason) }
 
     enum Outcome: Equatable {
@@ -133,7 +151,7 @@ struct DroppedNight: Equatable, Sendable {
         let drops = all(on: p)
         guard !drops.isEmpty else { return nights }
         let stillDropped = Set(drops.filter { drop in
-            guard drop.reason == .duplicate else { return true }   // Dan's own: never re-checked
+            guard drop.reason == RunNightDrop.automaticRelease else { return true }   // Dan's own: never re-checked
             let key = Prospect.makeNaturalKey(groupName: p.groupName, performanceDate: drop.night,
                                               venue: p.venue)
             // `keyAvailability` is the same three-answer read the release itself used, so the two cannot
@@ -269,7 +287,7 @@ extension Prospect {
         // Dan's reason across all of them is the #2691 defect, and #16 reads these records (L163).
         droppedRunNights.append(DroppedNight(night: night, reason: reason, at: now).stored)
         droppedRunNights.append(contentsOf: released.map {
-            DroppedNight(night: $0, reason: .duplicate, at: now).stored
+            DroppedNight(night: $0, reason: RunNightDrop.automaticRelease, at: now).stored
         })
         // #3324 (plan 2.4): a dropped night is in no other list, decided in the same write, so no reader
         // can ever meet a night that is pitched and dropped at once.

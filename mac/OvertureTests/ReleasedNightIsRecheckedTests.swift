@@ -72,6 +72,37 @@ struct ReleasedNightIsRecheckedTests {
         }
     }
 
+    // #4085: what makes every test above correct, asserted rather than left to a coincidence.
+    //
+    // `keeping` separates a release from Dan's own drop by the REASON and by nothing else. Dan cannot
+    // write the release reason on a single night today, because it sits in `aboutTheShow` while both
+    // `dropNight` call sites in `ProspectMutations` gate on `isAboutOneNight`. Those are two
+    // declarations in a different type from the code that relies on them, and until this test nothing
+    // pointed at the dependency from either side.
+    //
+    // Move it and the `anightDanDroppedHimselfIsNeverGivenBack` case below goes on passing, because it
+    // iterates reasons that are not the release reason whatever the release reason is. This is the case
+    // that goes red (L281, L70).
+    @Test func theAutomaticReleaseReasonIsNotOneDanCanWriteOnOneNight() {
+        #expect(RunNightDrop.isAboutOneNight(RunNightDrop.automaticRelease) == false,
+                "keeping re-checks this reason, so Dan writing it on one night would undo his own drop")
+    }
+
+    // The same dependency from the OTHER side: the release reason has to be one `keeping` re-checks at
+    // all. A constant nothing reads would leave `keeping` comparing against a value the release path
+    // never writes, and then EVERY release is treated as Dan's own and re-checked by nothing, which is
+    // the #3001 defect arriving by the opposite route (L46).
+    @Test func areleaseIsRecordedWithTheReasonKeepingRechecks() throws {
+        let ctx = ModelContext(try container())
+        let p = run(ctx, nights: ["2026-11-14", "2026-11-21"])
+        p.droppedRunNights = [DroppedNight(night: "2026-11-21",
+                                           reason: RunNightDrop.automaticRelease, at: Date()).stored]
+
+        let kept = DroppedNight.keeping(["2026-11-14", "2026-11-21"], on: p, lookup: { _ in nil })
+        #expect(kept == ["2026-11-14", "2026-11-21"],
+                "a night recorded with the release reason was treated as Dan's own and never re-checked")
+    }
+
     // A read that FAILED is not evidence the twin is gone. Keeping the release is the steady direction:
     // resurrecting a night on a hiccup would make the run's nights flip back and forth between scouts,
     // and a message may only claim what its check measured (L11).
