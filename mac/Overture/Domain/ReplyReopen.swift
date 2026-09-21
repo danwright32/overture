@@ -28,9 +28,14 @@ enum ReplyReopen {
         // It is the one place this parts company with the general rule above. The bounce did happen;
         // what it was recorded to MEAN did not, which is the same thing that is true of a silence.
         case .emailBounced: return true
+        // #3002's `coveredElsewhere` sits with the rest, and it is worth saying why rather than letting
+        // it join a long list silently. A reply cannot refute it, because it is not a claim about
+        // anybody answering: it says another stored row holds every night this one had, which is a fact
+        // about the store that somebody writing back does not touch. What DOES refute it is a new night
+        // nothing else covers, and that is `newNightReopens`, a different question asked elsewhere.
         case .booked, .theySaidNo, .theySaidNotNow, .theySaidPriceTooHigh, .turnedThemDown,
              .dateConflict, .hadPaidWork, .pitchingOtherShows, .tooSoon, .notAFit,
-             .dontWantToShoot, .noWayToReachThem, .duplicate, .wentBy, .tooFar:
+             .dontWantToShoot, .noWayToReachThem, .duplicate, .wentBy, .tooFar, .coveredElsewhere:
             return false
         }
     }

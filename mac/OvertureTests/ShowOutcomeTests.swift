@@ -53,14 +53,22 @@ struct ShowOutcomeTests {
         #expect(Set(ShowOutcome.neverPitched + ShowOutcome.pitched) == Set(ShowOutcome.danCanChoose))
     }
 
-    @Test func overtureWritesWentByAndTooFarItselfAndNeverOffersThem() {
-        #expect(ShowOutcome.wentBy.isOverturesOwn)
-        #expect(ShowOutcome.tooFar.isOverturesOwn)
-        #expect(!ShowOutcome.danCanChoose.contains(.wentBy))
-        #expect(!ShowOutcome.danCanChoose.contains(.tooFar))
-        // And the automatic pair is the ONLY thing held back, so a value cannot go missing from the
-        // menus by being quietly marked as Overture's own.
-        #expect(ShowOutcome.allCases.filter(\.isOverturesOwn) == [.wentBy, .tooFar])
+    // THREE since #3002, not the pair this was written for. `coveredElsewhere` joined them when the
+    // automatic release stopped borrowing `.duplicate`, which Dan also picks himself.
+    //
+    // UPDATED rather than deleted, because the decision it defends was not reversed: the rule is still
+    // that a value marked as Overture's own is deliberate and never reachable from a menu, and this
+    // caught the new case exactly as it was meant to (L430: find the decision a failing test defended
+    // and confirm it was reversed before touching it; here it was not, so the list grows).
+    @Test func overtureWritesThreeEndingsItselfAndNeverOffersThem() {
+        for own in [ShowOutcome.wentBy, .tooFar, .coveredElsewhere] {
+            #expect(own.isOverturesOwn, Comment(rawValue: "\(own.label) is not marked as Overture's own"))
+            #expect(!ShowOutcome.danCanChoose.contains(own),
+                    Comment(rawValue: "\(own.label) is offered to Dan as a choice he cannot actually make"))
+        }
+        // And those three are the ONLY things held back, so a value cannot go missing from the menus by
+        // being quietly marked as Overture's own.
+        #expect(ShowOutcome.allCases.filter(\.isOverturesOwn) == [.wentBy, .tooFar, .coveredElsewhere])
     }
 
     // MARK: the words

@@ -117,7 +117,7 @@ struct RunNightDropCoveredNightTests {
         let dropped = DroppedNight.all(on: run).sorted { $0.night < $1.night }
         #expect(dropped.map(\.night) == ["2026-08-28", "2026-10-02"])
         #expect(dropped.first?.reason == .dateConflict)
-        #expect(dropped.last?.reason == .duplicate)
+        #expect(dropped.last?.reason == ShowOutcome.automaticRelease)
     }
 
     // MARK: nights of its own left
@@ -223,7 +223,7 @@ struct RunNightDropCoveredNightTests {
 
         #expect(run.status == .dismissed)
         // Dan's words for HIS night are on the night. The CARD is closed for what the card is.
-        #expect(run.showOutcome == .duplicate)
+        #expect(run.showOutcome == ShowOutcome.automaticRelease)
         #expect(separate.status != .dismissed, "the card the show still lives on is untouched")
     }
 
@@ -309,7 +309,7 @@ struct RunNightDropCoveredNightTests {
 
         #expect(other.status == .dismissed)
         #expect(run.status == .dismissed)
-        #expect(run.showOutcome == .duplicate)
+        #expect(run.showOutcome == ShowOutcome.automaticRelease)
         #expect(separate.status != .dismissed)
         #expect(feedback.message?.contains("left alone") != true,
                 "nothing was left alone: \(feedback.message ?? "no message at all")")

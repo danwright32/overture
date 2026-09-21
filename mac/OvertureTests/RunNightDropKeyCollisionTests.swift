@@ -265,7 +265,8 @@ struct RunNightDropKeyCollisionTests {
 
         #expect(single.status == .dismissed)
         #expect(run.status == .dismissed)
-        #expect(run.showOutcome == .duplicate, "closed for what it is, not for the reason Dan picked")
+        #expect(run.showOutcome == ShowOutcome.automaticRelease,
+                "closed for what it is, not for the reason Dan picked")
         let said = feedback.message ?? "no message at all"
         #expect(said.contains("2 shows on Oct 2 are dismissed"), "counted both: \(said)")
         #expect(said.contains("closed as a duplicate"), "named the odd one out: \(said)")

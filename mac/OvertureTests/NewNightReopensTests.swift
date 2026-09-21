@@ -66,6 +66,11 @@ struct NewNightReopensTests {
         let reopened = ShowOutcome.allCases.filter { $0.newNightReopens }
         let closed = ShowOutcome.allCases.filter { !$0.newNightReopens }
         #expect(reopened.count + closed.count == ShowOutcome.allCases.count)
-        #expect(Set(reopened) == Set([.dateConflict, .hadPaidWork, .pitchingOtherShows, .tooSoon, .wentBy]))
+        // #3002 added `coveredElsewhere`, and Dan's call this session (2026-09-21) is that a genuinely
+        // new night DOES reopen it: the row was closed for carrying nothing of its own, so a night
+        // nothing else covers is something of its own. Listed here rather than derived, because the
+        // whole point of this test is that the partition is stated in full and changing it is noticed.
+        #expect(Set(reopened) == Set([.dateConflict, .hadPaidWork, .pitchingOtherShows, .tooSoon,
+                                      .wentBy, .coveredElsewhere]))
     }
 }

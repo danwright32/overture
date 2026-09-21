@@ -56,7 +56,7 @@ enum InquiryMutations {
             // named rather than defaulted so that adding a case to EITHER half breaks the build here and
             // this decision gets made again, which is the whole of what a comparison could not do.
             case .dateConflict, .hadPaidWork, .pitchingOtherShows, .tooSoon, .notAFit, .dontWantToShoot,
-                 .noWayToReachThem, .duplicate, .wentBy, .tooFar:
+                 .noWayToReachThem, .duplicate, .wentBy, .tooFar, .coveredElsewhere:
                 return .lostSoft
             }
         }
