@@ -127,6 +127,18 @@ struct SameVenueOneNightSweepTests {
                 JudgedPair(foldedTitles: ["kinstillatory mappings in light and dark matter",
                                           "kinstillatory mappings in light and dark matter emily johnson and kai recollet"],
                            night: "2026-09-17", venues: ["Abrons Arts Center", "Abrons Arts Center"]),
+                // #4102, judged 2026-09-21. One concert billed two ways, the programme title against the
+                // performer billing. Evidence is not the titles, which could be two recitals: BOTH ROWS
+                // CARRY THE SAME KAUFMAN MUSIC CENTER PAGE, differing only by a TRAILING SLASH
+                // (`.../orli-shaham-in-claras-hands` against `.../orli-shaham-in-claras-hands/`), so the
+                // source itself says they are one event.
+                //
+                // That slash is also why the pair exists at all. `matchByStableSource` compares the
+                // listing URL EXACTLY, so a trailing slash defeats it and the second billing was inserted
+                // as its own row eight weeks after the first. Filed as its own defect; this entry only
+                // records the verdict.
+                JudgedPair(foldedTitles: ["orli shaham in clara s hands", "orli shaham piano"],
+                           night: "2026-10-06", venues: ["Merkin Hall", "Merkin Hall"]),
             ]
 
             let unjudged = candidates.filter {
