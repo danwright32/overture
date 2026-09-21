@@ -72,6 +72,10 @@ enum ScoutService {
         case sourceWatchlist
         case reconcileStoredShows
         case venueBrandCorpus
+        // #4056: the rows the production token discard is judged over. Its own case rather than folding
+        // into `reconcileStoredShows`, because the two send Dan to different places and a sentence naming
+        // the wrong one is worse than none (L11).
+        case productionTokenCorpus
 
         // What Dan reads. Named for the thing rather than the symbol, because the sentence has to send
         // him somewhere and "venueBrands" sends him nowhere.
@@ -81,6 +85,7 @@ enum ScoutService {
             case .sourceWatchlist: return "the list of calendars it watches"
             case .reconcileStoredShows: return "the shows it already had"
             case .venueBrandCorpus: return "the venue names it matches against"
+            case .productionTokenCorpus: return "the production ids it joins a run by"
             }
         }
     }
@@ -1227,6 +1232,43 @@ enum ScoutService {
         // counted. And a run whose representative row had no URL (representativeRow picks the
         // SHORTEST title, which can be the unlinked night) failed the URL guard and the whole run was
         // dropped, member nights included.
+        // #4056: the production token poison set, computed ONCE for the whole sweep.
+        //
+        // It used to be rebuilt inside `matchByProductionToken`, per incoming listing, over the stored
+        // rows plus THAT ONE listing. Two things were wrong with that, and only the first was filed.
+        //
+        // The cost: `ShowLink.foldedTitle` and `foldedVenue` walk and rewrite a string on every call and
+        // are not memoised, so a venue publishing dozens of listings re-folded all 1,275 stored rows once
+        // per listing.
+        //
+        // The ANSWER, which the issue said was fine: a listing that would poison the token is invisible
+        // while an earlier one is being judged, so the verdict depended on the order the venue happened
+        // to list its nights in. Measured 2026-09-21 (`BatchWidePoisonMapTests`): with the poisoning
+        // listing arriving second, a season token joined two rows it must not; with the same three shows
+        // presented the other way round, it correctly refused. Same store, same rule, different answer.
+        //
+        // Over the whole batch it does not depend on ordering at all, and it sees strictly more than the
+        // per listing map could: a token two INCOMING listings disagree about is caught on the sweep that
+        // brings them, rather than on whichever later sweep happens to store one of them first.
+        let batchRows = grouped.compactMap {
+            prospects.indices.contains($0.row.id) ? prospects[$0.row.id] : nil
+        }
+        // A read that could not answer refuses EVERY token this sweep carries, rather than refusing none.
+        // The two directions are not symmetric: a refusal costs a duplicate card Dan can see and merge,
+        // and a wrong join carries a stored row's dismissal, its recipients and its thread id onto another
+        // show, silently (#797). So the unreadable case takes the side that can be undone, and says so
+        // rather than looking like a clean sweep (L42, L11).
+        let batchPoisonedTokens: Set<String>
+        do {
+            batchPoisonedTokens = try poisonedTokensForBatch(batchRows, in: context)
+        } catch {
+            degradedReads.append(.productionTokenCorpus)
+            batchPoisonedTokens = Set(batchRows.flatMap {
+                (($0.sourceListingURL.map { [$0] } ?? []) + $0.runSourceURLs)
+                    .compactMap(ProductionToken.inURL)
+            })
+        }
+
         for gr in grouped {
             guard prospects.indices.contains(gr.row.id) else { continue }
             let p = prospects[gr.row.id]
@@ -1346,7 +1388,8 @@ enum ScoutService {
                     try matchByProductionToken((enriched.sourceListingURL.map { [$0] } ?? [])
                                                  + enriched.runSourceURLs,
                                                groupName: enriched.groupName,
-                                               venue: enriched.venue, in: context)
+                                               venue: enriched.venue,
+                                               poisoned: batchPoisonedTokens, in: context)
                 },
                 byStableSource: { try matchByStableSource(url: enriched.sourceListingURL,
                                                           date: enriched.performanceDate,
@@ -1606,20 +1649,35 @@ enum ScoutService {
     // poisoned-token discard. What protects Dan's decision is `ShowOutcome.newNightReopens` at the join,
     // not a refusal to join at all.
     // #2758: throws, for the reason the arms above give.
-    private static func matchByProductionToken(_ urls: [String], groupName: String, venue: String?,
-                                               in context: ModelContext) throws -> Prospect? {
-        let incoming = Set(urls.compactMap(ProductionToken.inURL))
-        guard !incoming.isEmpty else { return nil }
-        let all = try context.fetch(FetchDescriptor<Prospect>())
+    // #4056: every token this sweep must refuse, over the stored rows AND every row the sweep carries.
+    //
+    // ONE walk for the whole batch. The discard is asked over every stored row rather than over the
+    // candidates, for the reason `ShowLink`'s own comment gives: a venue stamping one token across its
+    // season reveals itself through rows that sit alone under their own titles, so narrowing the question
+    // to candidates cannot see it. The incoming rows join that population for the same reason, and
+    // because a sweep that brings two disagreeing listings should not have to wait for a later one to
+    // notice (L487 is the same shape: a single moment cannot see what moved across time).
+    // THROWS rather than answering with an empty store, which #3071 and `ScoutStoreReadTests` both
+    // forbid and which this got wrong first time round. An empty poison set means NOTHING IS REFUSED, so
+    // a read that failed would license every join this rule exists to prevent, in the one situation where
+    // the code knows least (L215, L105: an empty collection returned on a throw is indistinguishable from
+    // a correct read of an empty one, and here the two have opposite consequences).
+    private static func poisonedTokensForBatch(_ incoming: [AssembledProspect],
+                                               in context: ModelContext) throws -> Set<String> {
+        try poisonedTokensForBatch(incoming,
+                                   storedRows: { try context.fetch(FetchDescriptor<Prospect>()) })
+    }
 
-        let title = ShowLink.foldedTitle(groupName)
-        let room = ShowLink.foldedVenue(venue)
-        // The discard is asked over every stored row PLUS the incoming one, for the reason ShowLink's own
-        // comment gives: a venue stamping one token across its season reveals itself through rows that
-        // sit alone under their own titles, so narrowing the question to candidates cannot see it.
-        var seen: [(token: String, title: String, venue: String)] =
-            incoming.map { (token: $0, title: title, venue: room) }
-        for p in all {
+    // The store is the reader on every shipping path. The seam exists so the FAILED read can be
+    // exercised at all: a healthy in-memory store never throws, so a test that only ever hands it a
+    // working one proves nothing about the branch that matters most, which is the one that decides
+    // whether an unreadable store refuses every token or none (L140). Same reasoning, and the same
+    // shape, as `Prospect.keyAvailability(_:lookup:)`.
+    static func poisonedTokensForBatch(_ incoming: [AssembledProspect],
+                                       storedRows: () throws -> [Prospect]) throws -> Set<String> {
+        var seen: [(token: String, title: String, venue: String)] = []
+        let stored = try storedRows()
+        for p in stored {
             let urls = (p.sourceListingURL.map { [$0] } ?? []) + p.runSourceURLs
             let theirTitle = ShowLink.foldedTitle(p.groupName)
             let theirRoom = ShowLink.foldedVenue(p.venue)
@@ -1627,8 +1685,26 @@ enum ScoutService {
                 seen.append((token: token, title: theirTitle, venue: theirRoom))
             }
         }
-        let usable = incoming.subtracting(ShowLink.poisonedTokens(seen))
+        for p in incoming {
+            let urls = (p.sourceListingURL.map { [$0] } ?? []) + p.runSourceURLs
+            let theirTitle = ShowLink.foldedTitle(p.groupName)
+            let theirRoom = ShowLink.foldedVenue(p.venue)
+            for token in urls.compactMap(ProductionToken.inURL) {
+                seen.append((token: token, title: theirTitle, venue: theirRoom))
+            }
+        }
+        return ShowLink.poisonedTokens(seen)
+    }
+
+    private static func matchByProductionToken(_ urls: [String], groupName: String, venue: String?,
+                                               poisoned: Set<String>,
+                                               in context: ModelContext) throws -> Prospect? {
+        let incoming = Set(urls.compactMap(ProductionToken.inURL))
+        guard !incoming.isEmpty else { return nil }
+        let usable = incoming.subtracting(poisoned)
         guard !usable.isEmpty else { return nil }
+        let all = try context.fetch(FetchDescriptor<Prospect>())
+        let title = ShowLink.foldedTitle(groupName)
 
         return all.first { p in
             let urls = (p.sourceListingURL.map { [$0] } ?? []) + p.runSourceURLs
