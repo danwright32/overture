@@ -82,6 +82,52 @@ struct FullyCoveredRunTests {
         #expect(r.coverageOfItsOtherNights(lookup: { _ in nil }) == .notARun)
     }
 
+    // MARK: which covered runs may be RETIRED (Dan's call on #2998, 2026-09-21)
+    //
+    // A pair of runs that cover each other is a DUPLICATE, and gets no retire control. The live store's
+    // only two fully covered runs on 2026-09-21 were exactly such a pair (one show stored twice), and a
+    // retire offered on every fully covered run would have offered it on both, losing the show entirely.
+    // So a run is retirable only where every other night is on a separate SINGLE NIGHT card.
+
+    // THE CASE the issue was written about: a run made redundant by single night cards.
+    @Test func arunCoveredBySingleNightCardsIsRetirable() {
+        let r = run(nights: ["2026-11-14", "2026-11-21", "2026-11-28"])
+        let single21 = run(nights: ["2026-11-21"])
+        let single28 = run(nights: ["2026-11-28"])
+
+        let answer = r.isRetirable(lookup: { k in
+            k == self.key("2026-11-21") ? single21 : (k == self.key("2026-11-28") ? single28 : nil)
+        })
+        #expect(answer == true)
+    }
+
+    // THE HAZARD the report turned up. Two runs, each holding the other's nights. Both are fully covered,
+    // and NEITHER may be offered a retire, because retiring either leans on a card that is itself a run.
+    @Test func arunCoveredByAnotherRunIsNeverRetirable() {
+        let a = run(nights: ["2026-11-14", "2026-11-21"])
+        let b = run(nights: ["2026-11-21", "2026-11-14"])
+
+        #expect(a.coverageOfItsOtherNights(lookup: { $0 == self.key("2026-11-21") ? b : nil })
+                    == .fullyCovered,
+                "the fixture must be the fully covered case, or the refusal below proves nothing (L159)")
+        #expect(a.isRetirable(lookup: { $0 == self.key("2026-11-21") ? b : nil }) == false,
+                "a run whose cover is itself a run was offered a retire, which can lose the show")
+    }
+
+    // A partial run carries nights of its own, so it is never retirable whatever covers the rest.
+    @Test func apartiallyCoveredRunIsNeverRetirable() {
+        let r = run(nights: ["2026-11-14", "2026-11-21", "2026-11-28"])
+        let single21 = run(nights: ["2026-11-21"])
+        #expect(r.isRetirable(lookup: { $0 == self.key("2026-11-21") ? single21 : nil }) == false)
+    }
+
+    // Unreadable is not "yes": offering a retire on a store that could not answer would act on a cover
+    // nobody saw (L42).
+    @Test func anunreadableStoreIsNeverRetirable() {
+        let r = run(nights: ["2026-11-14", "2026-11-21"])
+        #expect(r.isRetirable(lookup: { _ in throw StoreIsDown() }) == false)
+    }
+
     // A read that FAILED says so rather than answering. Reporting a run as covered on a hiccup would
     // name cards that were never seen, and reporting it uncovered would hide one (L11, L42).
     @Test func anunreadableStoreCannotCheck() {

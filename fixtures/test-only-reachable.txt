@@ -43,7 +43,7 @@ ReplyPanel.swift:linkedByHandLine
 ReplyPanel.swift:openingBody
 ReprepRequest.swift:gerund
 RunNightDrop.swift:classified
-RunNightDrop.swift:coverageOfItsOtherNights  # Shipped as the READING ahead of the control that acts on it, per the direction #2998 adjusted on 2026-09-20: hold the one-press retire until the count is not zero. Its only caller is FullyCoveredRunLiveStoreTests, which prints the count every suite run. The count reached 2 on 2026-09-21, but the pair is one show stored twice covering each other, so a retire offered on both would lose the show; the control is held until #2998 decides how it guards a mutually covering pair, and #2998 is what wires it.
+RunNightDrop.swift:isRetirable  # The predicate the #2998 retire control reads, built to Dan's call of 2026-09-21 that a run covered by another run is a duplicate and never retired. The control itself is not built yet, so its only callers are FullyCoveredRunTests and the live store report, which prints the retirable count every suite run (0 on 2026-09-21). #2998 is what wires it.
 RunProgress.swift:stoppedRunIsOver
 RunSlot.swift:allDefaultsKeys
 RunSlot.swift:allPaths

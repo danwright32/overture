@@ -47,12 +47,20 @@ struct FullyCoveredRunLiveStoreTests {
     @Test(.enabled(if: LiveStorePresence.exists, LiveStorePresence.absenceReason))
     func everyRunGetsExactlyOneCoverageAnswer() async throws {
         try await withLiveShows { shows, context in
-            var fully = 0, partial = 0, none = 0, unreadable = 0, notARun = 0
+            var fully = 0, partial = 0, none = 0, unreadable = 0, notARun = 0, retirable = 0
             var fullyCoveredNames: [String] = []
             for p in shows {
-                switch p.coverageOfItsOtherNights(lookup: { try Prospect.stored(key: $0, in: context) }) {
+                let lookup: (String) throws -> Prospect? = { try Prospect.stored(key: $0, in: context) }
+                switch p.coverageOfItsOtherNights(lookup: lookup) {
                 case .fullyCovered:
                     fully += 1
+                    // Dan's call on #2998, 2026-09-21: only a run covered by SINGLE NIGHT cards may be
+                    // retired. A run covered by another run is a duplicate for the merge passes.
+                    let canRetire = p.isRetirable(lookup: lookup)
+                    if canRetire { retirable += 1 }
+                    print("    [\(canRetire ? "RETIRABLE" : "duplicate")] \(p.groupName) @ "
+                          + "\(p.venue ?? "?") opening \(p.performanceDate ?? "?"), "
+                          + "nights \(p.playingNights.recordedNights ?? [])")
                     fullyCoveredNames.append("\(p.groupName) @ \(p.venue ?? "?") \(p.performanceDate ?? "?")")
                 case .partiallyCovered: partial += 1
                 case .notCovered: none += 1
@@ -65,9 +73,16 @@ struct FullyCoveredRunLiveStoreTests {
                   + "\(fully) fully covered, \(partial) partially, \(none) not covered, "
                   + "\(unreadable) could not be checked")
             for name in fullyCoveredNames.sorted() { print("  fully covered: \(name)") }
-            print(fully == 0
-                  ? "The card control stays held: no run is wholly redundant today (#2998, L543)."
-                  : "The card control's moment has come: \(fully) run(s) are wholly redundant (#2998).")
+            // The two figures are printed apart because they answer different questions. `fully` is what
+            // the store holds; `retirable` is what the control may act on. They differed on the first
+            // reading (2 against 0) because the only covered runs were one show stored twice, covering
+            // each other, which is a duplicate rather than a redundant run.
+            print("Retirable in one press: \(retirable) of \(fully) fully covered "
+                  + "(a run covered by another run is a duplicate, never retired)")
+            if fully > retirable {
+                print("  \(fully - retirable) fully covered run(s) are covered by another RUN: duplicates "
+                      + "the merge passes have not collapsed")
+            }
 
             // THE INVARIANT, which holds whatever the data is. Every row lands in exactly one bucket,
             // so a new answer added to `RunCoverage` without a bucket here fails rather than vanishing.

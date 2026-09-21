@@ -254,6 +254,35 @@ extension Prospect {
         return covered == 0 ? .notCovered : .partiallyCovered(covered: covered, of: others.count)
     }
 
+    // #2998: may this run be RETIRED in one press, leaving the cards that cover it to stand alone?
+    //
+    // NARROWER than `coverageOfItsOtherNights`, and the difference is Dan's call of 2026-09-21. The first
+    // live reading found two fully covered runs, and they were ONE SHOW STORED TWICE, each holding the
+    // other's nights. Both satisfy "every other night is on another card", so a retire offered on every
+    // fully covered run offers it on both, and pressing both loses the show entirely.
+    //
+    // So a pair of runs covering each other is a DUPLICATE, left to the merge passes that are this
+    // milestone's own job, and gets no retire control. A run is retirable only where every other night is
+    // held by a SINGLE NIGHT card. This can never lose the show, because it never retires a run in favour
+    // of a card that could itself be retired.
+    //
+    // `coverageOfItsOtherNights` stays as the REPORT's measure, deliberately broader: the report has to be
+    // able to say a mutually covering pair exists, which this answer is built to refuse.
+    func isRetirable(lookup: (String) throws -> Prospect?) -> Bool {
+        guard coverageOfItsOtherNights(lookup: lookup) == .fullyCovered,
+              let opening = performanceDate,
+              let playing = playingNights.recordedNights else { return false }
+        for night in playing where night != opening {
+            let candidate = Prospect.makeNaturalKey(groupName: groupName, performanceDate: night,
+                                                    venue: venue)
+            // A cover that could not be read, or that is ITSELF a run, refuses the whole answer. Both are
+            // cases where retiring this row would lean on something nobody has confirmed will stand.
+            guard let cover = try? lookup(candidate), cover !== self else { return false }
+            if (cover.playingNights.recordedNights?.count ?? 0) > 1 { return false }
+        }
+        return true
+    }
+
     // The store is the lookup on every shipping path. The seam exists so the unreadable branch above can
     // be exercised at all: a healthy in-memory store never throws, so a test that only ever asks one
     // proves nothing about the branch that matters most (L140).
