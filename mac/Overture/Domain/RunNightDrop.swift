@@ -94,6 +94,21 @@ enum RunNightDrop {
         case cannotCheck
     }
 
+    // #2998: is a run card wholly redundant with separate cards that already exist?
+    //
+    // FIVE answers, and the two that look alike are kept apart on purpose. `notARun` is not
+    // `fullyCovered` with nothing to cover: a single night has no other nights, and "all of none are
+    // covered" is vacuously true, so conflating them would report every single night card as redundant.
+    // `partiallyCovered` carries its counts because it is the state 14 live runs are in today and it is
+    // NOT this issue: the run still holds nights of its own, and retiring it would lose them.
+    enum RunCoverage: Equatable {
+        case notARun
+        case fullyCovered
+        case partiallyCovered(covered: Int, of: Int)
+        case notCovered
+        case cannotCheck
+    }
+
     // What the store said about a candidate key. Three answers rather than a Bool, so the caller can tell
     // a refusal it can explain from one it cannot.
     enum KeyAvailability: Equatable {
@@ -204,6 +219,68 @@ extension Prospect {
         } catch {
             return .unreadable
         }
+    }
+
+    // #2998: does another card already hold every night of this run OTHER THAN ITS OPENING?
+    //
+    // The opening is excluded because it cannot be anyone else's. This row holds it under its own natural
+    // key, which is unique, and `keyAvailability` answers `.free` for a row's own key by design. So the
+    // tempting question, "is every night of this run taken", can never be true, and a detector written
+    // that way ships inert even on the day a genuinely covered run exists. The right question is the one
+    // `dropNight` asks, and it is asked through the same `keyAvailability`, so the detector and the drop
+    // cannot come to disagree about what "another card holds this night" means (L16).
+    //
+    // Unlike `dropNight`'s walk this reads EVERY night rather than stopping at the first free one,
+    // because a report has to be able to say how covered a run is, not only whether the drop would land.
+    func coverageOfItsOtherNights(lookup: (String) throws -> Prospect?) -> RunNightDrop.RunCoverage {
+        guard let playing = playingNights.recordedNights, playing.count > 1,
+              let opening = performanceDate else { return .notARun }
+        let others = playing.filter { $0 != opening }
+        guard !others.isEmpty else { return .notARun }
+
+        var covered = 0
+        for night in others {
+            let candidate = Prospect.makeNaturalKey(groupName: groupName, performanceDate: night,
+                                                    venue: venue)
+            switch keyAvailability(candidate, lookup: lookup) {
+            // One unanswerable night makes the whole answer unanswerable: a report naming a run covered or
+            // uncovered on a partial read would claim something its check never measured (L11).
+            case .unreadable: return .cannotCheck
+            case .taken: covered += 1
+            case .free: break
+            }
+        }
+        if covered == others.count { return .fullyCovered }
+        return covered == 0 ? .notCovered : .partiallyCovered(covered: covered, of: others.count)
+    }
+
+    // #2998: may this run be RETIRED in one press, leaving the cards that cover it to stand alone?
+    //
+    // NARROWER than `coverageOfItsOtherNights`, and the difference is Dan's call of 2026-09-21. The first
+    // live reading found two fully covered runs, and they were ONE SHOW STORED TWICE, each holding the
+    // other's nights. Both satisfy "every other night is on another card", so a retire offered on every
+    // fully covered run offers it on both, and pressing both loses the show entirely.
+    //
+    // So a pair of runs covering each other is a DUPLICATE, left to the merge passes that are this
+    // milestone's own job, and gets no retire control. A run is retirable only where every other night is
+    // held by a SINGLE NIGHT card. This can never lose the show, because it never retires a run in favour
+    // of a card that could itself be retired.
+    //
+    // `coverageOfItsOtherNights` stays as the REPORT's measure, deliberately broader: the report has to be
+    // able to say a mutually covering pair exists, which this answer is built to refuse.
+    func isRetirable(lookup: (String) throws -> Prospect?) -> Bool {
+        guard coverageOfItsOtherNights(lookup: lookup) == .fullyCovered,
+              let opening = performanceDate,
+              let playing = playingNights.recordedNights else { return false }
+        for night in playing where night != opening {
+            let candidate = Prospect.makeNaturalKey(groupName: groupName, performanceDate: night,
+                                                    venue: venue)
+            // A cover that could not be read, or that is ITSELF a run, refuses the whole answer. Both are
+            // cases where retiring this row would lean on something nobody has confirmed will stand.
+            guard let cover = try? lookup(candidate), cover !== self else { return false }
+            if (cover.playingNights.recordedNights?.count ?? 0) > 1 { return false }
+        }
+        return true
     }
 
     // The store is the lookup on every shipping path. The seam exists so the unreadable branch above can
