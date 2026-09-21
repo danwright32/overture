@@ -1678,7 +1678,13 @@ enum ScoutService {
         // A synthetic same-date id already encodes date and venue and is minted only for a
         // mergeSameDateVenue source, so it needs no corroboration: recognizing a concert whose NAME
         // changed is that path's entire purpose (#1260) and a title check would defeat it.
-        if SameDateVenueMerge.isMerged(seriesId) {
+        // #4040: ANCHORED to the row asking. The bare prefix test this used to read asks only whether a
+        // string starts with a namespace this app reserves, never who wrote it, and the extract run copies
+        // a page's series marker verbatim into this field. So the corroboration skipped below rested on a
+        // claim about MINTING that an arriving value could defeat. A synthetic id is its own date and
+        // folded venue, so requiring it to NAME them takes nothing from the #1260 path and removes every
+        // case where the id says something the row does not.
+        if SameDateVenueMerge.isMerged(seriesId, naming: openingNight, venue: venue) {
             // #4040: DETERMINISTIC, by the same rule and for the same reason as the branch below, which
             // this one contradicted two lines above it. It returned `sharing.first` over an unordered
             // fetch while its sibling's comment said in as many words: "never `first` on an unordered

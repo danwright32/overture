@@ -153,7 +153,12 @@ struct MergedIdArbitraryPickTests {
         let source = SourceGuardHelper.source("Overture/Integration/ScoutService.swift")
         #expect(!source.isEmpty, "the guard read no source, so the check below passes on nothing")
 
-        guard let branch = source.range(of: "if SameDateVenueMerge.isMerged(seriesId)") else {
+        // #4040 (the namespace half): the branch is now ANCHORED to the row, so the locator names the
+        // anchored call. REPOINTED rather than loosened to a prefix, for the reason the #4074 note below
+        // gives: a locator that stops naming one exact declaration starts matching whatever else grows
+        // near it, and an aim is a locator rather than a pattern.
+        guard let branch = source.range(
+            of: "if SameDateVenueMerge.isMerged(seriesId, naming: openingNight, venue: venue)") else {
             Issue.record("the merged branch is no longer declared where this guard looks")
             return
         }
