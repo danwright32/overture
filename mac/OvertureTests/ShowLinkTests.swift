@@ -271,4 +271,53 @@ struct ShowLinkTests {
                 runNights: ["2026-10-09"]),
         ]).isEmpty)
     }
+
+    // #4022: the table in `ShowLink`'s header naming which mechanism covers which kind of duplicate is
+    // prose, and prose is enforced by nothing (L407). This is the half that fails when it goes stale.
+    //
+    // It checks the two things a table like that gets wrong: a mechanism it names that no longer exists
+    // (renamed, deleted, folded into another), and a mechanism that exists and is missing from it. The
+    // second half is derived from the app's own source rather than from a second hand written list,
+    // because a list checked against a list only ever confirms somebody copied one into the other (L96).
+    @Test func theTableOfDuplicateMechanismsNamesOnlyThingsThatExist() {
+        let header = AppSourceWalk.appFiles()
+            .first { $0.name.hasSuffix("ShowLink.swift") }
+        let text = try! #require(header?.text)
+        #expect(text.contains("WHICH MECHANISM COVERS WHICH KIND OF DUPLICATE"),
+                "the record #4022 asked for is gone from ShowLink's header")
+
+        // Every type the table names, and the file each must still be defined in.
+        let named = ["SameNightTitleVariantMerge", "DriftedRunMerge", "ContradictedCancellation",
+                     "FeedBreakEvent", "ScoutService"]
+        for mechanism in named {
+            #expect(text.contains(mechanism), "the table stopped naming \(mechanism)")
+            let defined = AppSourceWalk.appFiles().contains {
+                $0.text.contains("enum \(mechanism)") || $0.text.contains("struct \(mechanism)")
+            }
+            #expect(defined,
+                    """
+                    ShowLink's header names \(mechanism) as a duplicate mechanism and no type by that \
+                    name is defined in the app any more, so the record is stale (#4022)
+                    """)
+        }
+
+        // The other direction: a pass that DELETES a Prospect is by definition one of these mechanisms,
+        // so the table must name it. The candidate set is the one `SurvivorInheritanceTests` already
+        // derives for the same class of question, minus the debug-only teardowns that declare an
+        // exemption there.
+        let deleters = AppSourceWalk.appFiles().filter {
+            $0.text.contains("FetchDescriptor<Prospect>") && $0.text.contains("context.delete(")
+                && $0.text.contains("SurvivorInheritance.carry")
+        }
+        #expect(deleters.count >= 2, "found \(deleters.count) deleting passes, too few to be scanning")
+        for file in deleters {
+            let type = file.name.replacingOccurrences(of: ".swift", with: "")
+                .split(separator: "/").last.map(String.init) ?? file.name
+            #expect(text.contains(type),
+                    """
+                    \(type) deletes a Prospect and is missing from ShowLink's table of which mechanism \
+                    covers which duplicate (#4022)
+                    """)
+        }
+    }
 }

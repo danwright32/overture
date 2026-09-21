@@ -38,6 +38,39 @@ import Foundation
 // onto one string. The natural key's own fold keeps the subtitle, so it can only ever fuse two titles
 // that reduce to the same string. That is a canonical FUNCTION rather than a similarity judgement, and
 // it is why this grouping can be applied with no human in the loop.
+// WHICH MECHANISM COVERS WHICH KIND OF DUPLICATE (#4022). Several things in this app answer some
+// version of "these two rows are the same show", no two of them overlap, and nothing said which was
+// which, so the same question was re-derived three separate times in one session while #3282 was built.
+// The natural next move on reading THIS file is to assume it also covers the launch merge's case. It
+// does not, and it fails in the direction that reads as coverage.
+//
+//   shape of duplicate                        | what covers it        | when       | what it does
+//   ----------------------------------------- | --------------------- | ---------- | -------------
+//   same folded title and venue, a shared     | ShowLink (here)       | read time  | groups for
+//   night or a shared production token        |                       |            | display only
+//   same night, title plus or minus a         | SameNightTitleVariant | launch     | DELETES the
+//   subtitle, venue NOT consulted (#1761)     | Merge                 |            | loser
+//   one production whose opening night moved  | DriftedRunMerge       | launch     | DELETES the
+//                                             |                       |            | loser
+//   two rows that fold onto one venue key,    | NaturalKeyVenueMigration | launch  | RE-KEYS, and
+//   and the collisions that re-keying makes   |                       |            | DELETES a
+//                                             |                       |            | colliding loser
+//   a stored row an incoming listing IS       | ScoutService's match  | ingest     | RE-KEYS the
+//                                             | arms (upsertTarget)   |            | stored row
+//   same show, the room spelled differently   | nothing yet (#4020)   |            |
+//
+// The one that is routinely mistaken for a duplicate mechanism and is not: `ContradictedCancellation`
+// (#3921) decides whether a CANCELLATION WARNING is drawn, on a third and deliberately looser rule
+// (folded venue, `runsOverlap`, `GroupNameMatch.isConfident`). It can afford to be loose because a wrong
+// answer only withholds a warning. `FeedBreakEvent` (#4027) sits on top of it and is looser still: it
+// names a whole SOURCE that stopped matching in one sweep, which is a statement about a venue's website
+// rather than about any pair of rows.
+//
+// WHY #2 CANNOT BE SEEN FROM HERE, which is the specific trap. `SameNightTitleVariantMerge`'s worked
+// example is `New York Percussion Series` against `New York Percussion Series (Featuring Percussion
+// People)`. The natural key's fold KEEPS a subtitle, so those two fold DIFFERENTLY and land in different
+// buckets, and this rule can never join them however many nights they share.
+
 enum ShowLink {
 
     // What a row contributes to the grouping. Deliberately plain values rather than a Prospect, so the

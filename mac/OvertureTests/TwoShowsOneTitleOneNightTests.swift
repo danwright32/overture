@@ -115,17 +115,24 @@ struct TwoShowsOneTitleOneNightTests {
             // as a room inside it. The store holds no pair of genuinely different shows under one
             // title, which is the answer #1847 asked for, and it is a fact about today rather than a
             // property of the rule: nothing stops one arriving with the next watchlist addition.
-            let judged: Set<Set<String>> = [
-                ["urban youth theater summer presentation the show will be named by making it|2026-08-01|abrons arts center",
-                 "urban youth theater summer presentation the show will be named by making it|2026-08-01|main gallery at abrons arts center"],
-                ["orbit|2026-08-09|experimental theater at abrons arts center",
-                 "orbit|2026-08-09|abrons arts center"],
-                ["silsila resonance the living journey of south asian classical music|2026-08-30|playhouse theater at abrons arts center",
-                 "silsila resonance the living journey of south asian classical music|2026-08-30|abrons arts center"],
+            // #4067: keyed on WHAT WAS JUDGED (the folded title, the shared night, the two rooms) rather
+            // than on the rows' natural keys, which every re-key arm in this milestone rewrites. See
+            // `JudgedPair` for what moved these entries out from under their own verdicts.
+            let judged: Set<JudgedPair> = [
+                JudgedPair(foldedTitles: ["urban youth theater summer presentation the show will be named by making it",
+                                          "urban youth theater summer presentation the show will be named by making it"],
+                           night: "2026-08-01",
+                           venues: ["abrons arts center", "main gallery at abrons arts center"]),
+                JudgedPair(foldedTitles: ["orbit", "orbit"], night: "2026-08-09",
+                           venues: ["experimental theater at abrons arts center", "abrons arts center"]),
+                JudgedPair(foldedTitles: ["silsila resonance the living journey of south asian classical music",
+                                          "silsila resonance the living journey of south asian classical music"],
+                           night: "2026-08-30",
+                           venues: ["playhouse theater at abrons arts center", "abrons arts center"]),
             ]
 
             let unjudged = candidates.filter { candidate in
-                !judged.contains([candidate.a.naturalKey, candidate.b.naturalKey])
+                !judged.contains(JudgedPair.of(candidate.a, candidate.b, night: candidate.night))
             }
 
             #expect(unjudged.isEmpty, Comment(rawValue: """
