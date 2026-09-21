@@ -127,7 +127,7 @@ struct SameVenueOneNightSweepTests {
                 JudgedPair(foldedTitles: ["kinstillatory mappings in light and dark matter",
                                           "kinstillatory mappings in light and dark matter emily johnson and kai recollet"],
                            night: "2026-09-17", venues: ["Abrons Arts Center", "Abrons Arts Center"]),
-                // #4102, judged 2026-09-21. One concert billed two ways, the programme title against the
+                // Judged 2026-09-21 in PR #4118. One concert billed two ways, the programme title against the
                 // performer billing. Evidence is not the titles, which could be two recitals: BOTH ROWS
                 // CARRY THE SAME KAUFMAN MUSIC CENTER PAGE, differing only by a TRAILING SLASH
                 // (`.../orli-shaham-in-claras-hands` against `.../orli-shaham-in-claras-hands/`), so the

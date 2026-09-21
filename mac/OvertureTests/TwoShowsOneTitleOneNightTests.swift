@@ -136,7 +136,7 @@ struct TwoShowsOneTitleOneNightTests {
                            night: "2026-08-30",
                            venues: ["Playhouse Theater at Abrons Arts Center", "Abrons Arts Center"]),
 
-                // Judged 2026-09-21 (#4102). Fourteen arrived in one scout run, and every one is a room
+                // Judged 2026-09-21 in PR #4118. Fourteen arrived in one scout run, and every one is a room
                 // named two ways rather than two shows. Four shapes, and none needs eyes on the show
                 // itself, only on the rooms: the venue's full name against its short one (Roulette
                 // Intermedium), a room against the building that contains it (Zankel Hall in Carnegie
