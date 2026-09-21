@@ -89,6 +89,34 @@ struct RunGroupingProductionTokenTests {
         #expect(out.count == 2, "a tixr slug is not a production id and must not join across the gap")
     }
 
+    // THE GUARD FOR THE MISTAKE THIS CHANGE FIRST MADE, and the first version of this test did not
+    // catch it, which is why the case is the one it is.
+    //
+    // The discard asks whether one token appears under more than one folded TITLE. The first version
+    // folded with `GroupNameMatch.tokens(...).joined(" ")` while the ingest arm asks the identical
+    // question through `ShowLink.foldedTitle`. The two are not interchangeable: `GroupNameMatch.normalize`
+    // STRIPS THE SUBTITLE by default (that is what its `strippingSubtitle: false` variant exists to opt
+    // out of), and `TitleNormalization.normalizeForKey` does not.
+    //
+    // So two DIFFERENT productions of one company, distinguished only by their subtitles, read as one
+    // title under the wrong fold. A season token they share is then not poisoned, and the grouper fuses
+    // them into a single run across any gap. That is the failure the discard exists to prevent, arriving
+    // through the discard itself.
+    //
+    // A first attempt used "Nihao Broadway" against "Nihao Broadway!" and SURVIVED the mutation, because
+    // both folds agree about a trailing mark. A guard that cannot go red reads exactly like one that
+    // works (L1).
+    @Test func thediscardUsesTheSameFoldTheIngestArmUses() {
+        let out = RunGrouping.group([
+            row("Operation Mincemeat: Mission Recast", "2026-08-17", token: "seasonToken"),
+            row("Operation Mincemeat: Second Coming", "2026-10-26", token: "seasonToken"),
+        ])
+
+        #expect(out.count == 2,
+                Comment(rawValue: "two productions sharing a season token were fused into \(out.count) "
+                        + "run: the discard folded their titles a way that drops what distinguishes them"))
+    }
+
     // A real `seriesId` still wins, so this does not disturb the path that already worked. Both rows
     // carry a token AND an id; the answer must be the same either way, which it is because both are
     // authoritative about the same thing.

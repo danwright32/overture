@@ -125,8 +125,13 @@ enum RunGrouping {
             // here for a second reason: this loop has already bucketed by venue, so every row that could
             // be joined by a token is in front of it.
             let poisonedAtVenue = ShowLink.poisonedTokens(venueRows.flatMap { r in
-                tokens(r).map { (token: $0, title: GroupNameMatch.tokens(r.groupName).joined(separator: " "),
-                                 venue: canon(r.venue)) }
+                // `ShowLink`'s OWN folds on both halves, not this file's `canon` and not a token join.
+                // The ingest arm asks the identical question through `ShowLink.foldedTitle` and
+                // `foldedVenue`, and two spellings of "the same title" would let the grouper and the
+                // matcher disagree for ever about whether one token is trustworthy, each looking correct
+                // alone (L263). Sharing the rule's DATA while re-spelling its inputs is not sharing it.
+                tokens(r).map { (token: $0, title: ShowLink.foldedTitle(r.groupName),
+                                 venue: ShowLink.foldedVenue(r.venue)) }
             })
 
             // #1174: a shared seriesId is authoritative, so those nights are grouped FIRST, by id, before
