@@ -279,6 +279,10 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     // than a key because that is what the sentence says, and resolved in the pass rather than on the card
     // because a key naming a row that has since been merged away must draw nothing (L200).
     var arrivedLookingLikeTitle: String? = nil
+    // #4130: the TITLE of the row that had already been pitched for this night when this one arrived,
+    // already resolved, for the same reason the tag above is resolved in the pass: a key naming a row
+    // that is no longer stored must draw nothing (L200).
+    var arrivedOnAPitchedNightTitle: String? = nil
     // #3013: this show was left out of the last run Dan started, because another run was already on it.
     // The slot named is the run he PRESSED, not the one holding it, because that is what makes the
     // sentence actionable. nil for every show that was not left out, which is almost all of them.
@@ -3379,6 +3383,8 @@ enum QueueModel {
         // #3330: resolved HERE, against the corpus table, so a tag pointing at a row the launch merge has
         // since collapsed resolves to nothing and the card says nothing.
         item.arrivedLookingLikeTitle = p.arrivedLookingLike.flatMap { pre.titlesByKey[$0] }
+        // #4130: the same read-time resolution, against the same table.
+        item.arrivedOnAPitchedNightTitle = p.arrivedOnAPitchedNight.flatMap { pre.titlesByKey[$0] }
         // #1731: only meaningful where the verdict IS the building; nil otherwise.
         item.readAsTheBuildingReason = pre.venueBrands.contains(p.presenter)
             ? OrganisationListing.buildingReason(
@@ -3633,6 +3639,27 @@ enum QueueModel {
     static func arrivedLookingLikeNote(_ item: QueueItem) -> String? {
         guard let other = item.arrivedLookingLikeTitle, !other.isEmpty else { return nil }
         return "Looks like the same show as \(other), already stored for this night."
+    }
+
+    // #4130: a pitch has ALREADY gone out for this night, at this room, for this presenter, and until
+    // now neither card said so. `DuplicateContactGuard` cannot reach it (it compares addresses, and a
+    // freshly inserted row has no recipients until a paid check has been made) and no title rule can
+    // either (the pair this exists for is refused by every one of them).
+    //
+    // IT NAMES BOTH the presenter and the other show. Dan's call, 2026-09-22, with the three wordings
+    // and their worst case in front of him, and it is the same choice he made for #3330: naming the
+    // other show is what lets him act on the sentence rather than go looking for the collision himself,
+    // which is exactly the complaint #4042 makes about the duplicate contact warning (L80).
+    //
+    // The presenter comes from the card's OWN row rather than from the row it points at, and the two are
+    // the same value by construction: the rule that wrote the tag demands the folded presenters agree.
+    //
+    // It says PITCHED, and the rule behind it only fires on a row carrying a `sentAt`, so a drafted
+    // row draws nothing: a message may claim only what its check measured (L11).
+    static func alreadyPitchedNightNote(_ item: QueueItem) -> String? {
+        guard let other = item.arrivedOnAPitchedNightTitle, !other.isEmpty else { return nil }
+        guard let presenter = item.presenter, !presenter.isEmpty else { return nil }
+        return "\(presenter) was already pitched for this night, as \"\(other)\"."
     }
 
     static func linkedEngagementNote(_ item: QueueItem) -> String? {

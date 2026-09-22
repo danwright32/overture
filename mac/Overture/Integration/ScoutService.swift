@@ -30,10 +30,28 @@ enum ScoutService {
         // the decision rather than being asked afterwards, because the read it needs is a scout read like
         // any other: a store that cannot answer must refuse the row, not silently omit the tag
         // (#3071, and `ScoutStoreReadTests` refuses a `try?` on any fetch in this file).
-        case insert(lookingLike: String?)
+        case insert(ArrivalNotes)
         // The store could not answer, so nobody knows whether the key is free. Refusing costs this row
         // one run and it comes back on the next; guessing costs a card that does not come back (L105).
         case storeUnreadable
+    }
+
+    // #3330 and #4130: what an INSERTED row is told about the store it is landing in.
+    //
+    // ONE STRUCT rather than a second closure beside `lookingLike`, and one read rather than two. Both
+    // answers are drawn from the same walk of the stored rows, which an inserting row already pays for
+    // once; asking twice would double the fetch on the arm that runs for every genuinely new show.
+    //
+    // Both are POINTERS to another row's natural key, resolved at read time, and neither is ever
+    // cleared: the note each draws is silent once the row it names is gone (L200).
+    struct ArrivalNotes: Equatable, Sendable {
+        // The stored row this arrival resembles by the launch merge's own predicate (#3330).
+        var lookingLike: String? = nil
+        // The stored row that was already PITCHED for this night, at this room, for this presenter
+        // (#4130). Independent of the above: this pair's titles deliberately need not match at all.
+        var alreadyPitched: String? = nil
+
+        static let none = ArrivalNotes()
     }
 
     // The four reads the upsert makes, in the order it makes them, as closures.
@@ -47,10 +65,10 @@ enum ScoutService {
                              byAnyRunURL: () throws -> Prospect?,
                              byProductionToken: () throws -> Prospect? = { nil },
                              byStableSource: () throws -> Prospect?,
-                             // #3330: asked ONLY when every arm above has missed, so an ordinary
-                             // re-ingest never pays for it. Inside the same do/catch as the arms, so a
-                             // failed read refuses this row exactly as a failed arm does.
-                             lookingLike: () throws -> String? = { nil }) -> UpsertTarget {
+                             // #3330, #4130: asked ONLY when every arm above has missed, so an
+                             // ordinary re-ingest never pays for it. Inside the same do/catch as the
+                             // arms, so a failed read refuses this row exactly as a failed arm does.
+                             arrivalNotes: () throws -> ArrivalNotes = { .none }) -> UpsertTarget {
         do {
             if let existing = try storedByKey() { return .updateInPlace(existing) }
             if let match = try byConcert() { return .reKey(match) }
@@ -60,7 +78,7 @@ enum ScoutService {
             // feed as they always have.
             if let match = try byProductionToken() { return .reKeyJoiningNights(match) }
             if let match = try byStableSource() { return .reKey(match) }
-            return .insert(lookingLike: try lookingLike())
+            return .insert(try arrivalNotes())
         } catch {
             return .storeUnreadable
         }
@@ -1404,14 +1422,27 @@ enum ScoutService {
                                                           venue: enriched.venue,
                                                           groupName: enriched.groupName,
                                                           in: context) },
-                lookingLike: {
-                    LookalikeOnArrival.amongStored(
-                        try context.fetch(FetchDescriptor<Prospect>()).map {
-                            (key: $0.naturalKey, groupName: $0.groupName,
-                             performanceDate: $0.performanceDate, venue: $0.venue)
-                        },
-                        groupName: enriched.groupName, performanceDate: enriched.performanceDate,
-                        venue: enriched.venue, excludingKey: key)
+                arrivalNotes: {
+                    // ONE fetch, both answers. Two separate closures would walk the store twice for
+                    // every genuinely new show, and this arm already runs only when every match arm
+                    // above has missed.
+                    let stored = try context.fetch(FetchDescriptor<Prospect>())
+                    return ArrivalNotes(
+                        lookingLike: LookalikeOnArrival.amongStored(
+                            stored.map {
+                                (key: $0.naturalKey, groupName: $0.groupName,
+                                 performanceDate: $0.performanceDate, venue: $0.venue)
+                            },
+                            groupName: enriched.groupName, performanceDate: enriched.performanceDate,
+                            venue: enriched.venue, excludingKey: key),
+                        alreadyPitched: AlreadyPitchedNight.amongStored(
+                            stored.map {
+                                AlreadyPitchedNight.Stored(key: $0.naturalKey, presenter: $0.presenter,
+                                                           performanceDate: $0.performanceDate,
+                                                           venue: $0.venue, sentAt: $0.sentAt)
+                            },
+                            presenter: enriched.presenter, performanceDate: enriched.performanceDate,
+                            venue: enriched.venue, excludingKey: key))
                 }
             )
             switch target {
@@ -1523,7 +1554,7 @@ enum ScoutService {
                 apply(enriched, to: match, now: scoutNow,
                       storedByKey: { try Prospect.stored(key: $0, in: context) })
                 updated += 1
-            case .insert(let lookingLike):
+            case .insert(let notes):
                 let fresh = make(enriched, key: key)
                 // #3330: before it goes in, ask whether a stored row on this night at this room is the
                 // same show by the merge's own predicate. The upsert has already decided to INSERT, so
@@ -1536,7 +1567,12 @@ enum ScoutService {
                 // first draft read the store here with `try?`, which `ScoutStoreReadTests` refused and
                 // was right to: folding "could not read" into "nothing like it" invents an emptiness that
                 // is itself a claim about Dan's data (#3071, L98, L215).
-                fresh.arrivedLookingLike = lookingLike
+                fresh.arrivedLookingLike = notes.lookingLike
+                // #4130: and whether a pitch has already gone out for this presenter, on this night, in
+                // this room. Nothing about the titles is asked, deliberately: the pair this exists for
+                // is one every title rule in the app refuses, and what makes it a duplicate pitch is the
+                // presenter rather than the billing.
+                fresh.arrivedOnAPitchedNight = notes.alreadyPitched
                 context.insert(fresh)
                 inserted += 1
             case .storeUnreadable:
