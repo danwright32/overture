@@ -45,6 +45,8 @@ enum NaturalKeyVenueMigration {
         var rekeyed = 0            // rows given a new folded key (no merge)
         var duplicatesDeleted = 0  // provably-empty duplicate rows removed by a safe merge
         var conflictsDeferred = 0  // colliding groups left untouched because more than one carried history
+        // #4147: the titles this pass rewrote, carried out as well as written to the ledger.
+        var titleRenames: [TitleRenameLedger.Entry] = []
     }
 
     @discardableResult
@@ -56,6 +58,9 @@ enum NaturalKeyVenueMigration {
         // the settle's intersection matched nothing: the answer was lost, the show read as unchecked, and
         // Dan paid again. Silent by construction, since nothing reports a settle that matched zero rows.
         var renames: [(from: String, to: String)] = []
+        // #4147: and every TITLE this pass rewrites, which is a different fact about a row from the key
+        // beside it: this pass routinely moves one without the other.
+        var titleRenames: [TitleRenameLedger.Entry] = []
 
         // Group every row by the key it WOULD have under the new normalization. Two rows share a group
         // exactly when they now fold to the same natural key.
@@ -139,6 +144,9 @@ enum NaturalKeyVenueMigration {
             // below, not to the one the feed publishes, which is what it exists to do. The feed identity
             // FIELDS are still carried, which this pass was not doing at all, so a survivor kept for what
             // it holds no longer keeps a listing URL the source has stopped publishing.
+            // #4147: the title as it stood before the carry, which can move a loser's name onto the
+            // survivor (`carryDansDecisions`, directly below in this file).
+            let titleBefore = survivor.groupName
             _ = SurvivorInheritance.carry(onto: survivor, from: members)
             for loser in members where loser !== survivor {
                 context.delete(loser)
@@ -149,12 +157,21 @@ enum NaturalKeyVenueMigration {
                 survivor.naturalKey = newKey
                 summary.rekeyed += 1
             }
+            // #4147: after the re-key, so the entry names the key the row ends up holding.
+            if survivor.groupName != titleBefore {
+                titleRenames.append(TitleRenameLedger.Entry(key: survivor.naturalKey, from: titleBefore,
+                                                            to: survivor.groupName,
+                                                            arm: "venueMigration", at: Date()))
+            }
         }
 
         // Recorded after the pass, so a run that threw partway leaves no claim that a rename happened.
         // A failure to record is not a reason to fail the migration: the rows are already correct, and the
         // cost is the one this protects against (a paid answer that cannot be matched), not corruption.
         try? NaturalKeyRemap.record(renames, at: Date())
+        // #4147: beside it, for the same reason it is recorded after the pass rather than during.
+        TitleRenameLedger.recordOrLog(titleRenames, now: Date())
+        summary.titleRenames = titleRenames
         return summary
     }
 

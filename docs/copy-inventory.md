@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1630 sentences**.
+Every sentence Overture can say to Dan: **1629 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -14,7 +14,7 @@ What is not, and why:
   sentences under tokens nobody reads.
 - **Nothing, if it is written as two literals joined with `+`.** Those ARE joined here, into the
   one sentence the running app says (#3155). What is still only part of what Dan reads is a
-  sentence carrying a VALUE: 597 of the 1630 below hold a
+  sentence carrying a VALUE: 596 of the 1629 below hold a
   `\(...)` where a number or a name goes, so what is printed is the template. They are counted
   here rather than listed again, because the hole is visible in the line itself; what was missing
   was any statement of how much of this document is templates.
@@ -67,6 +67,7 @@ What is not, and why:
 - `Domain/SendIdentity.swift`: an RFC822 sender identity (name + address), not the app's own voice
 - `Domain/ShowOutcomeBackfill.swift`: agent log, not a sentence Overture says to Dan (#915)
 - `Domain/StageOverlap.swift`: test failure text, read by whoever broke a rule, never said to Dan (#915)
+- `Domain/TitleRenameLedger.swift`: developer diagnostic log, not the app's own voice
 - `Domain/VenuePlaces.swift`: Venue and place names this table MATCHES and stores, not the app's voice: 79 city strings would bury the inventory a person reads cold (#1744)
 - `Domain/VenueShootHistory.swift`: A venue name looked UP in the table, never shown to Dan (#1887)
 - `Domain/VenueShootHistory.swift`: Words MATCHED in Dan's own calendar titles, never shown to him (#1887)
@@ -3251,8 +3252,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/ActionFeedback.swift`
 "\(placed) shows"
     `UI/SourcesView.swift`
-"\(presenter) was already pitched for this night, as \"\(other)\"."
-    `UI/QueueView+Model.swift`
 "\(progress.completed) of \(progress.total)"
     `Domain/PrepProgress.swift`
 "\(range) is no longer blocked"
