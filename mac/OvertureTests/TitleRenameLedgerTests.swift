@@ -218,8 +218,11 @@ struct TitleRenameLedgerTests {
     // Asserted against the file rather than the outcome: the outcome on that path carries no entries by
     // construction, so only the file can show the write was skipped.
     @Test func theLedgerIsNeverWrittenBeforeTheSaveSucceeds() throws {
+        // Written relative to `mac/`, which is how `SourceGuardCoverageGuardTests` resolves a referenced
+        // path: a literal starting `mac/` reads to that guard as a file that does not exist.
         let source = try String(
-            contentsOf: RepoRoot.url.appendingPathComponent("mac/Overture/Integration/ScoutService.swift"),
+            contentsOf: RepoRoot.url.appendingPathComponent("mac")
+                .appendingPathComponent("Overture/Integration/ScoutService.swift"),
             encoding: .utf8)
         let recordCall = try #require(source.range(of: "TitleRenameLedger.recordOrLog(titleRenames"))
         let save = try #require(source.range(of: "try context.save()", options: .backwards,

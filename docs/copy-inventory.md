@@ -67,6 +67,7 @@ What is not, and why:
 - `Domain/SendIdentity.swift`: an RFC822 sender identity (name + address), not the app's own voice
 - `Domain/ShowOutcomeBackfill.swift`: agent log, not a sentence Overture says to Dan (#915)
 - `Domain/StageOverlap.swift`: test failure text, read by whoever broke a rule, never said to Dan (#915)
+- `Domain/TitleRenameLedger.swift`: developer diagnostic log, not the app's own voice
 - `Domain/VenuePlaces.swift`: Venue and place names this table MATCHES and stores, not the app's voice: 79 city strings would bury the inventory a person reads cold (#1744)
 - `Domain/VenueShootHistory.swift`: A venue name looked UP in the table, never shown to Dan (#1887)
 - `Domain/VenueShootHistory.swift`: Words MATCHED in Dan's own calendar titles, never shown to him (#1887)
