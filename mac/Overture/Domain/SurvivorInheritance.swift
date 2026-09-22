@@ -22,6 +22,8 @@ import SwiftData
 //                    opposite of what happened (L163)
 //   feed identity    the survivor keeps a key the feed stopped matching, so a live show goes on reading
 //                    as "may be cancelled" (#3278's class, #3582)
+//   found addresses  the only one that costs MONEY to replace: a contact found by a paid check is deleted
+//                    with the row that holds it and comes back only by paying again (#4060, #1845)
 enum SurvivorInheritance {
 
     // Returns the natural key the survivor should ADOPT, or nil when there is nothing to adopt. The key is
@@ -36,7 +38,8 @@ enum SurvivorInheritance {
     // rather than a gap. That question is left open deliberately and is named in this change's PR body;
     // what is NOT left open is the other two carries, which that pass was missing outright.
     @discardableResult
-    static func carry(onto survivor: Prospect, from members: [Prospect]) -> String? {
+    static func carry(onto survivor: Prospect, from members: [Prospect],
+                      now: Date = Date()) -> String? {
         // The show was first seen when the EARLIEST of these rows first saw it. Moved here from
         // NaturalKeyVenueMigration, which was the only pass doing it.
         let firstSightings = members.compactMap(\.firstSeenAt)
@@ -45,6 +48,72 @@ enum SurvivorInheritance {
             survivor.firstSeenAt = earliest
         }
         NaturalKeyVenueMigration.carryDansDecisions(onto: survivor, from: members)
+        carryTheFoundAddresses(onto: survivor, from: members)
+        markAwaitingTheFeed(survivor, members: members, now: now)
         return NaturalKeyVenueMigration.carryTheFeedIdentity(onto: survivor, from: members)
+    }
+
+    // #4060: the losers' contacts MOVE to the survivor before the caller deletes them.
+    //
+    // `recipients` is a cascade relationship, so deleting a Prospect destroys every Recipient hanging off
+    // it. Nothing anywhere carried them, and the ladder that looks as though it protects against this does
+    // not: `richestContactList` picks the LONGER list, which means the shorter one is deleted rather than
+    // kept, and it is only consulted at all once the rung above it has found nobody.
+    //
+    // Measured on Dan's live store at the 2026-09-20 14:00 launch, which is a merge that had already
+    // happened by the time this was written. `Operation Mincemeat: Mission Recast` pk 491 collapsed onto
+    // pk 1371 and its four recipients went with it, one of them carrying a real email; the store's
+    // recipient count fell 385 to 381 between that launch's backup and the one before it, and the survivor
+    // holds no contacts at all today.
+    //
+    // Deduped on the recipient's own `id`, which IS the canonicalised address or the `form:` handle
+    // (`Recipient.makeId`), never on the name: two rows holding one address are one contact, and two
+    // people who share a name are not (the rule `DuplicateContactMerge` already refuses to cross, L370).
+    // An id that is EMPTY is carried rather than deduped, because an empty key is not evidence of a match
+    // and folding two of them together would delete an address on the strength of both being unreadable
+    // (0 of the store's 381 recipients carry one today, so this is the unreachable branch and is written
+    // to fail towards keeping a row).
+    //
+    // Nothing is deleted here and no field of a carried row is rewritten. A recipient the survivor already
+    // holds stays exactly as it is, and the loser's copy of it is destroyed with its row, which is the
+    // same address either way.
+    private static func carryTheFoundAddresses(onto survivor: Prospect, from members: [Prospect]) {
+        var held = Set(survivor.recipients.map(\.id).filter { !$0.isEmpty })
+        var moving: [(loser: Prospect, recipient: Recipient)] = []
+        for loser in members where loser.persistentModelID != survivor.persistentModelID {
+            for recipient in loser.recipients {
+                if !recipient.id.isEmpty {
+                    guard !held.contains(recipient.id) else { continue }
+                    held.insert(recipient.id)
+                }
+                moving.append((loser, recipient))
+            }
+        }
+        // Collected first, then applied: both sides of the relationship are mutated, and rewriting a
+        // loser's `recipients` while iterating it is how a carry silently skips every other row.
+        for move in moving {
+            move.loser.recipients.removeAll { $0.persistentModelID == move.recipient.persistentModelID }
+            survivor.addRecipient(move.recipient)
+        }
+    }
+
+    // #3596: the question this merge leaves behind, stamped on the survivor so the next sweep can answer
+    // it. HERE rather than in each pass, because all three deleting passes already call `carry`, and a
+    // shared component that converts the one site in front of whoever built it and leaves the rest is the
+    // exact failure this file's own header records (L613, L621).
+    //
+    // ONLY where something was actually merged. `members` includes the survivor, so a single member is a
+    // cluster that merged nothing, and marking those would put the question on rows no pass touched and
+    // make the next sweep report the whole store (L104).
+    //
+    // It OVERWRITES an outstanding mark rather than keeping the older one. Two merges before a sweep is
+    // one question, not two, and it is about the identity the survivor holds now.
+    //
+    // It does NOT clear `mergeSurvivorUnseenAt`. A finding from a previous cycle is a fact about what
+    // happened then, and a fresh merge is not evidence that it was wrong; the sweep clears it, by
+    // listing the row.
+    private static func markAwaitingTheFeed(_ survivor: Prospect, members: [Prospect], now: Date) {
+        guard members.count > 1 else { return }
+        survivor.survivedMergeAt = now
     }
 }

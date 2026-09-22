@@ -41,6 +41,40 @@ enum RunNightDrop {
     // enforced, or a missing entry silently takes the default branch).
     static var classified: Set<ShowOutcome> { aboutOneNight.union(aboutTheShow) }
 
+    // #2997: the reason Overture records against a night it released ON DAN'S BEHALF, because a stored
+    // card already holds it. Named here rather than written as `.duplicate` at each of the two sites,
+    // because those two sites are what make `DroppedNight.keeping` correct and nothing pointed at the
+    // dependency from either side (#4085).
+    //
+    // `keeping` re-checks a release on every fold and never re-checks a night Dan dropped himself, and it
+    // tells them apart by the REASON alone. That is safe only while this value is one Dan cannot write on
+    // a single night, which today is true because it sits in `aboutTheShow` while both `dropNight` call
+    // sites in `ProspectMutations` gate on `isAboutOneNight`. Move it into `aboutOneNight` for any reason
+    // at all and Overture silently begins undoing nights Dan gave up himself, which is the #3001 defect
+    // reintroduced (L281: behaviour correct only as a side effect of an unrelated rule has no test and no
+    // owner, so the first change to that rule removes it).
+    //
+    // `ReleasedNightIsRecheckedTests.theAutomaticReleaseReasonIsNotOneDanCanWriteOnOneNight` is the guard.
+    //
+    // #3002 MOVED this off `.duplicate`, which Dan can also pick himself, onto an outcome that is
+    // Overture's own and is offered on no menu. That was the one seam the change had to move, which is
+    // what #4085 existed to arrange. The value itself now lives on `ShowOutcome`, beside the vocabulary
+    // it belongs to, because the SHOW level caller reads the same fact and must not reach through a type
+    // about nights to ask it.
+    static var automaticRelease: ShowOutcome { ShowOutcome.automaticRelease }
+
+    // What `keeping` re-checks. BOTH spellings, and the legacy one is not optional: every release already
+    // in Dan's store is recorded as `.duplicate`, and reading those as his own judgement would stop
+    // Overture re-checking them for ever, which is the #3001 defect reintroduced for exactly the rows
+    // that have been there longest (L389: a writer that only fills records going forward never reaches
+    // what already exists, so the READER is what has to cover them).
+    //
+    // Safe to keep re-checking the legacy value on a NIGHT because Dan cannot write it on one: it sits in
+    // `aboutTheShow` and both `dropNight` call sites gate on `isAboutOneNight`, which is the property
+    // `theAutomaticReleaseReasonIsNotOneDanCanWriteOnOneNight` asserts. The same is NOT true at the show
+    // level, and #4082 records why that half is unrecoverable for rows written before this.
+    static let recheckedReleases: Set<ShowOutcome> = [.coveredElsewhere, .duplicate]
+
     static func isAboutOneNight(_ reason: ShowOutcome) -> Bool { aboutOneNight.contains(reason) }
 
     enum Outcome: Equatable {
@@ -57,6 +91,21 @@ enum RunNightDrop {
         // #2754: the store could not answer whether that night is free. Nothing is written at all, and
         // it stays its own answer rather than folding into the release above: a release is a card this
         // code has SEEN, and a message may claim only what its check measured (L11).
+        case cannotCheck
+    }
+
+    // #2998: is a run card wholly redundant with separate cards that already exist?
+    //
+    // FIVE answers, and the two that look alike are kept apart on purpose. `notARun` is not
+    // `fullyCovered` with nothing to cover: a single night has no other nights, and "all of none are
+    // covered" is vacuously true, so conflating them would report every single night card as redundant.
+    // `partiallyCovered` carries its counts because it is the state 14 live runs are in today and it is
+    // NOT this issue: the run still holds nights of its own, and retiring it would lose them.
+    enum RunCoverage: Equatable {
+        case notARun
+        case fullyCovered
+        case partiallyCovered(covered: Int, of: Int)
+        case notCovered
         case cannotCheck
     }
 
@@ -116,7 +165,8 @@ struct DroppedNight: Equatable, Sendable {
     // #3001: a night RELEASED to another card is re-checked here, every fold.
     //
     // #2997 lets a run give up a night on the grounds that a stored card already holds it, recorded with
-    // reason `.duplicate`. Subtracting that forever leaves the exclusion standing over a card that may
+    // `automaticRelease` (#3002 moved that off `.duplicate`, which Dan also picks himself; `keeping` still
+    // re-checks the old spelling, see `recheckedReleases`). Subtracting that forever leaves the exclusion standing over a card that may
     // since have been dismissed or dropped out of the venue's listings, and then the night is on NO card
     // and nothing says it went. Dan never chose to give it up, which is what separates it from a night he
     // dropped himself (L200: an exclusion granted because another record covers it has to re-check that
@@ -133,7 +183,7 @@ struct DroppedNight: Equatable, Sendable {
         let drops = all(on: p)
         guard !drops.isEmpty else { return nights }
         let stillDropped = Set(drops.filter { drop in
-            guard drop.reason == .duplicate else { return true }   // Dan's own: never re-checked
+            guard RunNightDrop.recheckedReleases.contains(drop.reason) else { return true }   // Dan's own: never re-checked
             let key = Prospect.makeNaturalKey(groupName: p.groupName, performanceDate: drop.night,
                                               venue: p.venue)
             // `keyAvailability` is the same three-answer read the release itself used, so the two cannot
@@ -169,6 +219,68 @@ extension Prospect {
         } catch {
             return .unreadable
         }
+    }
+
+    // #2998: does another card already hold every night of this run OTHER THAN ITS OPENING?
+    //
+    // The opening is excluded because it cannot be anyone else's. This row holds it under its own natural
+    // key, which is unique, and `keyAvailability` answers `.free` for a row's own key by design. So the
+    // tempting question, "is every night of this run taken", can never be true, and a detector written
+    // that way ships inert even on the day a genuinely covered run exists. The right question is the one
+    // `dropNight` asks, and it is asked through the same `keyAvailability`, so the detector and the drop
+    // cannot come to disagree about what "another card holds this night" means (L16).
+    //
+    // Unlike `dropNight`'s walk this reads EVERY night rather than stopping at the first free one,
+    // because a report has to be able to say how covered a run is, not only whether the drop would land.
+    func coverageOfItsOtherNights(lookup: (String) throws -> Prospect?) -> RunNightDrop.RunCoverage {
+        guard let playing = playingNights.recordedNights, playing.count > 1,
+              let opening = performanceDate else { return .notARun }
+        let others = playing.filter { $0 != opening }
+        guard !others.isEmpty else { return .notARun }
+
+        var covered = 0
+        for night in others {
+            let candidate = Prospect.makeNaturalKey(groupName: groupName, performanceDate: night,
+                                                    venue: venue)
+            switch keyAvailability(candidate, lookup: lookup) {
+            // One unanswerable night makes the whole answer unanswerable: a report naming a run covered or
+            // uncovered on a partial read would claim something its check never measured (L11).
+            case .unreadable: return .cannotCheck
+            case .taken: covered += 1
+            case .free: break
+            }
+        }
+        if covered == others.count { return .fullyCovered }
+        return covered == 0 ? .notCovered : .partiallyCovered(covered: covered, of: others.count)
+    }
+
+    // #2998: may this run be RETIRED in one press, leaving the cards that cover it to stand alone?
+    //
+    // NARROWER than `coverageOfItsOtherNights`, and the difference is Dan's call of 2026-09-21. The first
+    // live reading found two fully covered runs, and they were ONE SHOW STORED TWICE, each holding the
+    // other's nights. Both satisfy "every other night is on another card", so a retire offered on every
+    // fully covered run offers it on both, and pressing both loses the show entirely.
+    //
+    // So a pair of runs covering each other is a DUPLICATE, left to the merge passes that are this
+    // milestone's own job, and gets no retire control. A run is retirable only where every other night is
+    // held by a SINGLE NIGHT card. This can never lose the show, because it never retires a run in favour
+    // of a card that could itself be retired.
+    //
+    // `coverageOfItsOtherNights` stays as the REPORT's measure, deliberately broader: the report has to be
+    // able to say a mutually covering pair exists, which this answer is built to refuse.
+    func isRetirable(lookup: (String) throws -> Prospect?) -> Bool {
+        guard coverageOfItsOtherNights(lookup: lookup) == .fullyCovered,
+              let opening = performanceDate,
+              let playing = playingNights.recordedNights else { return false }
+        for night in playing where night != opening {
+            let candidate = Prospect.makeNaturalKey(groupName: groupName, performanceDate: night,
+                                                    venue: venue)
+            // A cover that could not be read, or that is ITSELF a run, refuses the whole answer. Both are
+            // cases where retiring this row would lean on something nobody has confirmed will stand.
+            guard let cover = try? lookup(candidate), cover !== self else { return false }
+            if (cover.playingNights.recordedNights?.count ?? 0) > 1 { return false }
+        }
+        return true
     }
 
     // The store is the lookup on every shipping path. The seam exists so the unreadable branch above can
@@ -264,12 +376,14 @@ extension Prospect {
 
         // The first write. Everything above is lookups.
         //
-        // Dan's reason goes on HIS night and on no other. A released night is recorded as `.duplicate`,
-        // which is what it is: this row's claim on it duplicates a card that already holds it. Writing
-        // Dan's reason across all of them is the #2691 defect, and #16 reads these records (L163).
+        // Dan's reason goes on HIS night and on no other. A released night is recorded as
+        // `automaticRelease`, which is what it is: Overture giving the night up because another card
+        // already holds it. #3002 moved that off `.duplicate`, which Dan picks himself, so the two are no
+        // longer one value in the store. Writing his reason across all of them is the #2691 defect, and
+        // #16 reads these records (L163).
         droppedRunNights.append(DroppedNight(night: night, reason: reason, at: now).stored)
         droppedRunNights.append(contentsOf: released.map {
-            DroppedNight(night: $0, reason: .duplicate, at: now).stored
+            DroppedNight(night: $0, reason: RunNightDrop.automaticRelease, at: now).stored
         })
         // #3324 (plan 2.4): a dropped night is in no other list, decided in the same write, so no reader
         // can ever meet a night that is pitched and dropped at once.

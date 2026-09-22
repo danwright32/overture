@@ -32,7 +32,7 @@ struct ArchiveViewSendStateTests {
                                 linked: [:], inherited: [:],
                                 venueBrands: ProducerGate.VenueBrands(shows: [], overrides: .none),
                                 rowCounts: [:], calendarBySourceId: [:], overrides: .none,
-                                clients: .none, contradictedCancellations: [], sameShowGroups: [:],
+                                clients: .none, contradictedCancellations: [], sameShowGroups: [:], titlesByKey: [:],
                                 now: Date(), day: "2026-08-01"),
                              requestedKeys: [item.id])
     }

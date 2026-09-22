@@ -26,6 +26,38 @@ enum DriftedRunMerge {
             groups[id + "|" + canonVenue(p.venue), default: []].append(p)
         }
 
+        // #4055: and the venue's OWN opaque production token, for rows carrying no seriesId at all.
+        //
+        // #4029 stopped NEW token duplicates being minted, exactly as #1528 did for a drifted run, and it
+        // cannot reach the rows already stored because an ingest arm only runs when a night ARRIVES
+        // (L389). That is the same gap this pass was created to close, so it is grouped here rather than
+        // in a fourth pass with its own survivor rule and its own deferral (L613, L655).
+        //
+        // Measured on the live store 2026-09-20 over a WAL inclusive clone of 1,275 rows: two pairs, both
+        // at The Green Room 42, and `seriesId` is nil on all four rows, which is exactly why the loop
+        // above has never seen them.
+        //
+        // The token and the discard rule come from `ShowLink`, never a copy (L370). The discard matters
+        // MORE here than on the display side it was written for: there a wrong join costs a re-render,
+        // here it DELETES a row.
+        var tokensByRow: [ObjectIdentifier: Set<String>] = [:]
+        var seen: [(token: String, title: String, venue: String)] = []
+        for p in stored where (p.seriesId ?? "").isEmpty {
+            let urls = (p.sourceListingURL.map { [$0] } ?? []) + p.runSourceURLs
+            let tokens = Set(urls.compactMap(ProductionToken.inURL))
+            guard !tokens.isEmpty else { continue }
+            tokensByRow[ObjectIdentifier(p)] = tokens
+            let title = ShowLink.foldedTitle(p.groupName)
+            let room = ShowLink.foldedVenue(p.venue)
+            for token in tokens { seen.append((token: token, title: title, venue: room)) }
+        }
+        let poisoned = ShowLink.poisonedTokens(seen)
+        for p in stored {
+            for token in (tokensByRow[ObjectIdentifier(p)] ?? []).subtracting(poisoned) {
+                groups["token:" + token + "|" + canonVenue(p.venue), default: []].append(p)
+            }
+        }
+
         for (_, members) in groups where members.count > 1 {
             // A shared id can be a SEASON marker rather than a production id: the extract runbook tells
             // the AI to copy any "Series:" line verbatim, and "Series: Broadway Sessions" spans different
@@ -61,6 +93,11 @@ enum DriftedRunMerge {
             let candidates = NaturalKeyVenueMigration.preferringASecondLook(members)
             let freshestFirst = candidates.sorted { $1.ingestedAt < $0.ingestedAt }
             let survivor =
+                // #4024: `first` is safe here ONLY because `mustDefer` above has already refused the
+                // case where two rows could match: the strict record test implies `hasOutreachHistory`,
+                // so two matches force a deferral before this line runs. That is behaviour correct as a
+                // side effect of a rule written elsewhere, so it is owned by
+                // `DeferralProtectsTheFirstRungTests` rather than by this comment (L281).
                 members.first(where: {
                     NaturalKeyVenueMigration.hasRecordBeyondADismissal($0, countingFoundAddresses: false)
                 })

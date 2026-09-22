@@ -120,6 +120,75 @@ struct SameNightRoomVariantMergeTests {
         #expect(all(ctx).count == 1)
     }
 
+    // #4117, and this is the case that issue was filed to STOP. It is here as a guard on the decision
+    // rather than as a description of an accident, because the decision has now been made three times
+    // and keeps being re-litigated by whoever meets the pair next.
+    //
+    // THE PAIR, from the live store 2026-09-21: `GLOW - Healing and Connection` on 2026-12-06, at
+    // St. Peter's Episcopal Church and at Trinity Episcopal Church. Two genuinely different churches,
+    // one title, one night, one presenter (Ember Choral Arts), both rows from one source page
+    // (`emberarts.org/20262027-season`). A scout run brought it in and turned main red until it was
+    // judged, which is `TwoShowsOneTitleOneNightTests` working.
+    //
+    // WHY IT IS ONE CARD. It is the SAME SHAPE as the Brooklyn Folk Festival directly above: one title,
+    // one night, rooms that genuinely differ, one presenter. Dan's rule, given on 2026-07-30 after four
+    // candidate rules were scored against the whole store (room name containment among them, and it lost
+    // on that measurement), reaffirmed on the GLOW pair itself on 2026-09-21 with a venue guard offered
+    // as the alternative, and reaffirmed again on 2026-09-21 when #4117 asked for the guard as a CLASS
+    // rather than for that pair: if the title is the same on the same night, one pitch covers it, so it
+    // is one card, whatever the rooms say.
+    //
+    // WHAT IT COSTS, stated rather than left to be rediscovered as a defect (L93). The merge DELETES the
+    // losing row, so one of the two churches leaves the queue. That is accepted: Dan pitches the choir
+    // once, and a second card would be a second pitch for a performance he is already asking about.
+    //
+    // WHAT STILL CATCHES A PAIR WORTH A SECOND LOOK. `TwoShowsOneTitleOneNightTests` sweeps the live
+    // store for every cross venue pair this merge would collapse and fails until each carries a recorded
+    // verdict. That is a person in the loop by design, not an oversight, and it is the reason a rule
+    // this blunt is safe to keep: the blunt rule runs, and anything new it would reach is put in front of
+    // somebody first.
+    //
+    // A GUARD, NOT A CHARACTERISATION. If anybody adds a venue test to `SameNightTitleVariantMerge`,
+    // this goes red and the message says which decision it is standing on, rather than leaving a red
+    // test that reads like an accident.
+    @Test func aChoirAtTwoGenuinelyDifferentChurchesOnOneNightIsOneCard() throws {
+        let ctx = try context()
+        insert(ctx, "GLOW - Healing and Connection", date: "2026-12-06",
+               venue: "St. Peter's Episcopal Church", ingestedAt: 1_000) { $0.sourceIds = ["emberarts-org"] }
+        insert(ctx, "GLOW - Healing and Connection", date: "2026-12-06",
+               venue: "Trinity Episcopal Church", ingestedAt: 2_000) { $0.sourceIds = ["emberarts-org"] }
+
+        let summary = SameNightTitleVariantMerge.run(in: ctx)
+        try? ctx.save()
+
+        #expect(summary.duplicatesDeleted == 1,
+                "two rooms that share only the words Episcopal and Church are still one pitch on one night (Dan, 2026-07-30 and twice on 2026-09-21, #4117): a venue guard here would undo that decision")
+        #expect(all(ctx).count == 1,
+                "the choir is stored \(all(ctx).count) times")
+    }
+
+    // The two halves of the rule, side by side, so the thing being asserted is the RULE and not two
+    // fixtures that happen to agree. Same night plus a confident title is one card; a different night or
+    // a different act is not, and the room never enters either answer.
+    @Test func theRoomDecidesNothingInEitherDirection() throws {
+        let ctx = try context()
+        // Same act, one night, two unrelated rooms: one card.
+        insert(ctx, "GLOW - Healing and Connection", date: "2026-12-06",
+               venue: "St. Peter's Episcopal Church", ingestedAt: 1_000)
+        insert(ctx, "GLOW - Healing and Connection", date: "2026-12-06",
+               venue: "Trinity Episcopal Church", ingestedAt: 2_000)
+        // Two different acts, one night, the SAME room: two cards. The room agreeing buys nothing.
+        insert(ctx, "An Entirely Different Concert", date: "2026-12-06",
+               venue: "St. Peter's Episcopal Church", ingestedAt: 3_000)
+
+        SameNightTitleVariantMerge.run(in: ctx)
+        try? ctx.save()
+
+        let titles = all(ctx).map(\.groupName).sorted()
+        #expect(titles == ["An Entirely Different Concert", "GLOW - Healing and Connection"],
+                "the title decides and the room decides nothing: \(titles)")
+    }
+
     // The survivor is chosen for what it HOLDS (Dan's decision, a paid answer, its age), which is not the
     // same as which row names the room best. Left alone, the festival above keeps the oldest row and the
     // card reads "specific venue not named on page" while a copy naming a real church is deleted. The

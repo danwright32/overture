@@ -394,6 +394,33 @@ enum QueueRenderPass {
         let wanted = Set(StageNavigation.focusedKeys(stage: i.focusedStage, leadKeys: i.focusedKeys ?? [],
                                                      in: placement))
         let focusedRows = rows.filter { wanted.contains($0.id) }
+        // #4027 / #3383: the sources whose rows all stopped matching in one sweep. Here rather than in the
+        // view because it is a whole-store derivation and a render body runs on events that change no data
+        // (L471), and because both halves it needs are already in this pass: every prospect, and the set of
+        // keys the queue will actually render, which is what decides whether the notice may offer to show
+        // them (L109, `StageNavigation.opensInQueue` is the same question asked one key at a time).
+        let feedBreaks = AppNotices.feedBreaks(
+            FeedBreakEvent.events(among: everyProspect, asOf: EasternDate.today(i.context.now)),
+            shownInQueue: { inAStage.contains($0) })
+        // #3596: the rows a merge kept that the next sweep did not list. Derived here for the same two
+        // reasons as the line above: it is a whole-store question, and this pass already holds both
+        // halves it needs. FUTURE and OPEN only, which is what stops the finding standing for ever on a
+        // show that has since played or that Dan has closed (the notice's own comment says so).
+        let today = EasternDate.today(i.context.now)
+        let unseenSurvivors = everyProspect
+            .filter { p in
+                guard p.mergeSurvivorUnseenAt != nil, !p.isClosed else { return false }
+                // The same live-run rule `FeedReconcile.isFuture` applies, through the same helper, so
+                // the pass that RECORDS the finding and the pass that SHOWS it cannot come to disagree
+                // about which shows are still ahead (L16).
+                return EasternDate.runIsLive(
+                    lastNight: EasternDate.runLastNight(runEndDate: p.runEndDate,
+                                                        performanceDate: p.performanceDate),
+                    today: today)
+            }
+            .map(\.naturalKey)
+        let mergeSurvivorsDropped = AppNotices.mergeSurvivorsTheFeedDropped(
+            unseenSurvivors, shownInQueue: { inAStage.contains($0) })
         return QueueView.RenderData(
             cards: scope.cards,
             // #3507: the scope itself, so the render path reads the list this pass already derived rather
@@ -425,6 +452,8 @@ enum QueueRenderPass {
             checkLookups: i.checkLookups,
             reachedOut: reachedOut,
             reachedOutKeys: reachedOutKeys,
+            feedBreaks: feedBreaks,
+            mergeSurvivorsDropped: mergeSurvivorsDropped,
             pendingBookings: QueueModel.pendingBookingCount(rows),
             fanOutLine: fanOutWarning(inQueue.all),
             rows: rows, visibleRows: visibleRows,

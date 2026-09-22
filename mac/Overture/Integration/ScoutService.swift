@@ -17,10 +17,41 @@ enum ScoutService {
     enum UpsertTarget: Equatable {
         case updateInPlace(Prospect)
         case reKey(Prospect)
-        case insert
+        // #4029: a re-key that is ALSO news about a night the stored row does not have, so the nights
+        // are unioned rather than replaced. Its own case rather than a flag on `.reKey`, because the
+        // two differ in what they do to stored data and a caller must not be able to take one for the
+        // other. Every other arm answers "this is the same run, read again", where the feed is
+        // authoritative and a night it stopped listing must drop off; the token arm answers "this is
+        // another night of the same production", where replacing DESTROYS a night that is still in the
+        // future. Measured: joining the live Nihao Broadway pair by replacement would have discarded
+        // 2026-09-11 on 2026-08-19, three weeks before it played.
+        case reKeyJoiningNights(Prospect)
+        // #3330: carries the key of the stored row this arrival LOOKED LIKE, or nil. The answer rides
+        // the decision rather than being asked afterwards, because the read it needs is a scout read like
+        // any other: a store that cannot answer must refuse the row, not silently omit the tag
+        // (#3071, and `ScoutStoreReadTests` refuses a `try?` on any fetch in this file).
+        case insert(ArrivalNotes)
         // The store could not answer, so nobody knows whether the key is free. Refusing costs this row
         // one run and it comes back on the next; guessing costs a card that does not come back (L105).
         case storeUnreadable
+    }
+
+    // #3330 and #4130: what an INSERTED row is told about the store it is landing in.
+    //
+    // ONE STRUCT rather than a second closure beside `lookingLike`, and one read rather than two. Both
+    // answers are drawn from the same walk of the stored rows, which an inserting row already pays for
+    // once; asking twice would double the fetch on the arm that runs for every genuinely new show.
+    //
+    // Both are POINTERS to another row's natural key, resolved at read time, and neither is ever
+    // cleared: the note each draws is silent once the row it names is gone (L200).
+    struct ArrivalNotes: Equatable, Sendable {
+        // The stored row this arrival resembles by the launch merge's own predicate (#3330).
+        var lookingLike: String? = nil
+        // The stored row that was already PITCHED for this night, at this room, for this presenter
+        // (#4130). Independent of the above: this pair's titles deliberately need not match at all.
+        var alreadyPitched: String? = nil
+
+        static let none = ArrivalNotes()
     }
 
     // The four reads the upsert makes, in the order it makes them, as closures.
@@ -32,13 +63,22 @@ enum ScoutService {
     static func upsertTarget(storedByKey: () throws -> Prospect?,
                              byConcert: () throws -> Prospect?,
                              byAnyRunURL: () throws -> Prospect?,
-                             byStableSource: () throws -> Prospect?) -> UpsertTarget {
+                             byProductionToken: () throws -> Prospect? = { nil },
+                             byStableSource: () throws -> Prospect?,
+                             // #3330, #4130: asked ONLY when every arm above has missed, so an
+                             // ordinary re-ingest never pays for it. Inside the same do/catch as the
+                             // arms, so a failed read refuses this row exactly as a failed arm does.
+                             arrivalNotes: () throws -> ArrivalNotes = { .none }) -> UpsertTarget {
         do {
             if let existing = try storedByKey() { return .updateInPlace(existing) }
             if let match = try byConcert() { return .reKey(match) }
             if let match = try byAnyRunURL() { return .reKey(match) }
+            // #4029: below the whole-URL arm on purpose. A shared WHOLE url is stronger evidence than a
+            // shared token, so where both could answer, the stronger one does and the nights follow the
+            // feed as they always have.
+            if let match = try byProductionToken() { return .reKeyJoiningNights(match) }
             if let match = try byStableSource() { return .reKey(match) }
-            return .insert
+            return .insert(try arrivalNotes())
         } catch {
             return .storeUnreadable
         }
@@ -58,6 +98,10 @@ enum ScoutService {
         case sourceWatchlist
         case reconcileStoredShows
         case venueBrandCorpus
+        // #4056: the rows the production token discard is judged over. Its own case rather than folding
+        // into `reconcileStoredShows`, because the two send Dan to different places and a sentence naming
+        // the wrong one is worse than none (L11).
+        case productionTokenCorpus
 
         // What Dan reads. Named for the thing rather than the symbol, because the sentence has to send
         // him somewhere and "venueBrands" sends him nowhere.
@@ -67,6 +111,7 @@ enum ScoutService {
             case .sourceWatchlist: return "the list of calendars it watches"
             case .reconcileStoredShows: return "the shows it already had"
             case .venueBrandCorpus: return "the venue names it matches against"
+            case .productionTokenCorpus: return "the production ids it joins a run by"
             }
         }
     }
@@ -1213,6 +1258,43 @@ enum ScoutService {
         // counted. And a run whose representative row had no URL (representativeRow picks the
         // SHORTEST title, which can be the unlinked night) failed the URL guard and the whole run was
         // dropped, member nights included.
+        // #4056: the production token poison set, computed ONCE for the whole sweep.
+        //
+        // It used to be rebuilt inside `matchByProductionToken`, per incoming listing, over the stored
+        // rows plus THAT ONE listing. Two things were wrong with that, and only the first was filed.
+        //
+        // The cost: `ShowLink.foldedTitle` and `foldedVenue` walk and rewrite a string on every call and
+        // are not memoised, so a venue publishing dozens of listings re-folded all 1,275 stored rows once
+        // per listing.
+        //
+        // The ANSWER, which the issue said was fine: a listing that would poison the token is invisible
+        // while an earlier one is being judged, so the verdict depended on the order the venue happened
+        // to list its nights in. Measured 2026-09-21 (`BatchWidePoisonMapTests`): with the poisoning
+        // listing arriving second, a season token joined two rows it must not; with the same three shows
+        // presented the other way round, it correctly refused. Same store, same rule, different answer.
+        //
+        // Over the whole batch it does not depend on ordering at all, and it sees strictly more than the
+        // per listing map could: a token two INCOMING listings disagree about is caught on the sweep that
+        // brings them, rather than on whichever later sweep happens to store one of them first.
+        let batchRows = grouped.compactMap {
+            prospects.indices.contains($0.row.id) ? prospects[$0.row.id] : nil
+        }
+        // A read that could not answer refuses EVERY token this sweep carries, rather than refusing none.
+        // The two directions are not symmetric: a refusal costs a duplicate card Dan can see and merge,
+        // and a wrong join carries a stored row's dismissal, its recipients and its thread id onto another
+        // show, silently (#797). So the unreadable case takes the side that can be undone, and says so
+        // rather than looking like a clean sweep (L42, L11).
+        let batchPoisonedTokens: Set<String>
+        do {
+            batchPoisonedTokens = try poisonedTokensForBatch(batchRows, in: context)
+        } catch {
+            degradedReads.append(.productionTokenCorpus)
+            batchPoisonedTokens = Set(batchRows.flatMap {
+                (($0.sourceListingURL.map { [$0] } ?? []) + $0.runSourceURLs)
+                    .compactMap(ProductionToken.inURL)
+            })
+        }
+
         for gr in grouped {
             guard prospects.indices.contains(gr.row.id) else { continue }
             let p = prospects[gr.row.id]
@@ -1320,7 +1402,7 @@ enum ScoutService {
             // #2758 / #2999: ONE decision, taken before anything is written, so a store that cannot answer
             // refuses this row instead of falling through to an arm that would re-key or insert onto a key
             // somebody else may hold. The comments on each arm are below, at the point it is acted on.
-            switch upsertTarget(
+            let target = upsertTarget(
                 storedByKey: { try Prospect.stored(key: key, in: context) },
                 byConcert: { try matchByConcertIdentity(enriched.seriesId, groupName: enriched.groupName,
                                                         openingNight: enriched.performanceDate,
@@ -1328,27 +1410,102 @@ enum ScoutService {
                                                         venue: enriched.venue, in: context) },
                 byAnyRunURL: { try matchByAnyRunURL(enriched.runSourceURLs, groupName: enriched.groupName,
                                                     venue: enriched.venue, in: context) },
+                byProductionToken: {
+                    try matchByProductionToken((enriched.sourceListingURL.map { [$0] } ?? [])
+                                                 + enriched.runSourceURLs,
+                                               groupName: enriched.groupName,
+                                               venue: enriched.venue,
+                                               poisoned: batchPoisonedTokens, in: context)
+                },
                 byStableSource: { try matchByStableSource(url: enriched.sourceListingURL,
                                                           date: enriched.performanceDate,
                                                           venue: enriched.venue,
                                                           groupName: enriched.groupName,
-                                                          in: context) }
-            ) {
+                                                          in: context) },
+                arrivalNotes: {
+                    // ONE fetch, both answers. Two separate closures would walk the store twice for
+                    // every genuinely new show, and this arm already runs only when every match arm
+                    // above has missed.
+                    let stored = try context.fetch(FetchDescriptor<Prospect>())
+                    return ArrivalNotes(
+                        lookingLike: LookalikeOnArrival.amongStored(
+                            stored.map {
+                                (key: $0.naturalKey, groupName: $0.groupName,
+                                 performanceDate: $0.performanceDate, venue: $0.venue)
+                            },
+                            groupName: enriched.groupName, performanceDate: enriched.performanceDate,
+                            venue: enriched.venue, excludingKey: key),
+                        alreadyPitched: AlreadyPitchedNight.amongStored(
+                            stored.map {
+                                AlreadyPitchedNight.Stored(key: $0.naturalKey, presenter: $0.presenter,
+                                                           performanceDate: $0.performanceDate,
+                                                           venue: $0.venue, sentAt: $0.sentAt)
+                            },
+                            presenter: enriched.presenter, performanceDate: enriched.performanceDate,
+                            venue: enriched.venue, excludingKey: key))
+                }
+            )
+            switch target {
             case .updateInPlace(let existing):
                 // Exact natural-key match: update in place.
                 apply(enriched, to: existing, now: scoutNow,
                       storedByKey: { try Prospect.stored(key: $0, in: context) })
                 updated += 1
-            case .reKey(let match):
+            case .reKey(let match), .reKeyJoiningNights(let match):
+                // #4029: the token arm alone answers "this is ANOTHER NIGHT of the production this row
+                // holds", so its nights are added to the row's rather than replacing them, and a decision
+                // Dan made about a night he has already spent is reconsidered. Every other arm below says
+                // "this is the same run, read again", where the feed is authoritative and neither applies.
+                if case .reKeyJoiningNights = target {
+                    let newNights = Set(enriched.runNights).subtracting(match.runNights)
+                    let union = Set(enriched.runNights).union(match.runNights).sorted()
+                    enriched.runNights = union
+                    enriched.performanceDate = union.first ?? enriched.performanceDate
+                    enriched.runEndDate = union.count > 1 ? union.last : nil
+
+                    // #4052, and it is the reason this arm is allowed to join at all. The row carries
+                    // whatever ending Dan recorded, so without this a dismissal he made about ONE night
+                    // silently decides every later one. Measured on the live store 2026-09-20: pk 397
+                    // Nihao Broadway was dismissed `pitchingOtherShows` for 2026-09-11, the 2026-09-29
+                    // night became a row of its own, and he PITCHED it. Joining without reopening would
+                    // have silenced the card that produced the outreach.
+                    //
+                    // Only on a night the row does not already hold, so a re-read of the same nights can
+                    // never undo a decision (L92: a removal recorded against nothing recurs, and this is
+                    // its mirror, a decision undone by an event that did not happen).
+                    if !newNights.isEmpty, let ending = match.showOutcome, ending.newNightReopens {
+                        // The same reverse the Archive's restore and the blocked-town undo take, rather
+                        // than clearing the fields here, so a show reopened by a new night is in exactly
+                        // the state a show reopened by hand is (#28, #1238).
+                        match.clearDismissal()
+                    }
+                }
                 // No exact key match, but a stored row is this same show under a key that has moved. Three
                 // reads can say so, and they are asked in `upsertTarget` in this order:
                 //
                 //   #1260 Phase 2, a merged prospect carrying the SAME synthetic concert id
                 //   (samedatevenue:DATE|VENUE), whose name and representative URL both shifted because the
                 //   scout re-listed the per-conductor rows in a new order or with refreshed links. The two
-                //   URL arms would miss and INSERT A DUPLICATE, stranding Dan's keep/dismiss. Gated on
-                //   isMerged, and the synthetic id is minted only for a mergeSameDateVenue source, so it can
-                //   NEVER fuse two genuinely different shows (a normal matinee/evening gets no id to match).
+                //   URL arms would miss and INSERT A DUPLICATE, stranding Dan's keep/dismiss.
+                //
+                //   #4040 REWROTE what makes this safe, because what stood here was false. It read: "the
+                //   synthetic id is minted only for a mergeSameDateVenue source, so it can NEVER fuse two
+                //   genuinely different shows". That is a claim about every WRITER, and the gate was a bare
+                //   prefix test that asks nothing about who wrote the string. The extract runbook (3b) tells
+                //   the run to copy a page's series marker VERBATIM into `seriesId`, so a page could hand
+                //   Overture a value carrying the prefix and switch off both corroborations below.
+                //
+                //   What makes it safe NOW is that the gate is ANCHORED: the id must name this row's own
+                //   date and folded venue (`SameDateVenueMerge.isMerged(_:naming:venue:)`), so it can only
+                //   ever join rows that genuinely share what it names, whoever wrote it. A normal
+                //   matinee/evening still gets no id to match.
+                //
+                //   What is NOT settled, so nobody reads the above as more than it is: a source flagged
+                //   `mergeSameDateVenue` that genuinely runs two different shows in one room on one night
+                //   still fuses them, because date plus venue is the whole of the id and no title is
+                //   checked. That rests on a human decision on the watchlist. Measured 2026-09-20: 1 of 74
+                //   sources carries the flag, 9 rows carry a synthetic id, and every one of them agrees with
+                //   the date and venue its own id encodes.
                 //
                 //   #132, a stored record sharing one of this run's member URLs, so the keep/dismiss
                 //   decision survives a run-window shift.
@@ -1397,8 +1554,26 @@ enum ScoutService {
                 apply(enriched, to: match, now: scoutNow,
                       storedByKey: { try Prospect.stored(key: $0, in: context) })
                 updated += 1
-            case .insert:
-                context.insert(make(enriched, key: key))
+            case .insert(let notes):
+                let fresh = make(enriched, key: key)
+                // #3330: before it goes in, ask whether a stored row on this night at this room is the
+                // same show by the merge's own predicate. The upsert has already decided to INSERT, so
+                // this changes nothing about whether the row is written; it records which row the
+                // arrival looked like, so the pairing is on the card now rather than after the next
+                // launch. Dan's call, 2026-09-21: tag, never refuse.
+                //
+                // The answer came WITH the decision, computed inside `upsertTarget`'s own do/catch, so a
+                // store that could not answer refused this row rather than inserting it untagged. The
+                // first draft read the store here with `try?`, which `ScoutStoreReadTests` refused and
+                // was right to: folding "could not read" into "nothing like it" invents an emptiness that
+                // is itself a claim about Dan's data (#3071, L98, L215).
+                fresh.arrivedLookingLike = notes.lookingLike
+                // #4130: and whether a pitch has already gone out for this presenter, on this night, in
+                // this room. Nothing about the titles is asked, deliberately: the pair this exists for
+                // is one every title rule in the app refuses, and what makes it a duplicate pitch is the
+                // presenter rather than the billing.
+                fresh.arrivedOnAPitchedNight = notes.alreadyPitched
+                context.insert(fresh)
                 inserted += 1
             case .storeUnreadable:
                 // The store could not answer whether this key is free, so this row is left alone entirely.
@@ -1501,12 +1676,15 @@ enum ScoutService {
     // #2758: throws, for the reason above.
     private static func matchByAnyRunURL(_ urls: [String], groupName: String, venue: String?,
                                          in context: ModelContext) throws -> Prospect? {
-        let candidates = Set(urls)
+        // #4116: folded on BOTH sides, so one member addressed with and without its trailing slash is
+        // one member. The fold is `ListingURL`'s, shared with `matchByStableSource` below rather than
+        // spelled again here (L370).
+        let candidates = ListingURL.foldedSet(urls)
         guard !candidates.isEmpty else { return nil }
         let all = try context.fetch(FetchDescriptor<Prospect>())
         return all.first { p in
-            let sharesURL = (p.sourceListingURL.map { candidates.contains($0) } ?? false)
-                || !Set(p.runSourceURLs).isDisjoint(with: candidates)
+            let sharesURL = (p.sourceListingURL.map { candidates.contains(ListingURL.fold($0)) } ?? false)
+                || !ListingURL.foldedSet(p.runSourceURLs).isDisjoint(with: candidates)
             guard sharesURL else { return false }
             // #3917: `isSameShowTitle`, not `isConfident`, and the shared URL above is what licenses it.
             // A source that drops or adds a parenthetical keeps publishing the same link, and
@@ -1515,6 +1693,96 @@ enum ScoutService {
             // before it was changed (`SubtitleVariantMatchTests`): 3 pairs are newly joined here and all
             // three are one show, including Dan's own Jalopy open mic pair from #1590.
             return sameVenue(p.venue, venue) && GroupNameMatch.isSameShowTitle(p.groupName, groupName)
+        }
+    }
+
+    // #4029: the venue's OWN opaque production token, read out of a URL both rows already carry.
+    //
+    // `ShowLink` reads this token and groups on it for DISPLAY, because it was measured to be stable
+    // across every night of a run and to carry none of the title. No arm read it, so the app told Dan
+    // two rows were one show while still minting the second. Both the reader and the discard rule come
+    // from `ShowLink`, never a second copy here (L370).
+    //
+    // WHY IT MAY RE-KEY, measured on the live store 2026-09-20 over a WAL inclusive clone of 1,275 rows.
+    // 230 rows carry a venuetix token and 228 tokens are distinct, so exactly TWO pairs share one while
+    // holding disjoint URL sets, and both pairs are one production under an identical folded title at an
+    // identical folded venue. `ShowLink.poisonedTokens` discards NOTHING over that whole store. At ingest
+    // a wrong join costs a row rather than a re-render, which is why the would-have-matched report was
+    // taken before this was allowed to write anything.
+    //
+    // NOT corroborated by a run overlap, unlike `matchByConcertIdentity`. That arm demands one so a
+    // production remounted next season becomes a new card rather than inheriting an old dismissal, and
+    // that is right for a SPAN. It is wrong here: both live pairs are single nights 18 and 70 days apart,
+    // so an overlap test refuses both and the arm would fire on nothing. What stands in for it is that
+    // the token is the VENUE'S own identifier for one production, plus the folded title, plus the
+    // poisoned-token discard. What protects Dan's decision is `ShowOutcome.newNightReopens` at the join,
+    // not a refusal to join at all.
+    // #2758: throws, for the reason the arms above give.
+    // #4056: every token this sweep must refuse, over the stored rows AND every row the sweep carries.
+    //
+    // ONE walk for the whole batch. The discard is asked over every stored row rather than over the
+    // candidates, for the reason `ShowLink`'s own comment gives: a venue stamping one token across its
+    // season reveals itself through rows that sit alone under their own titles, so narrowing the question
+    // to candidates cannot see it. The incoming rows join that population for the same reason, and
+    // because a sweep that brings two disagreeing listings should not have to wait for a later one to
+    // notice (L487 is the same shape: a single moment cannot see what moved across time).
+    // THROWS rather than answering with an empty store, which #3071 and `ScoutStoreReadTests` both
+    // forbid and which this got wrong first time round. An empty poison set means NOTHING IS REFUSED, so
+    // a read that failed would license every join this rule exists to prevent, in the one situation where
+    // the code knows least (L215, L105: an empty collection returned on a throw is indistinguishable from
+    // a correct read of an empty one, and here the two have opposite consequences).
+    private static func poisonedTokensForBatch(_ incoming: [AssembledProspect],
+                                               in context: ModelContext) throws -> Set<String> {
+        try poisonedTokensForBatch(incoming,
+                                   storedRows: { try context.fetch(FetchDescriptor<Prospect>()) })
+    }
+
+    // The store is the reader on every shipping path. The seam exists so the FAILED read can be
+    // exercised at all: a healthy in-memory store never throws, so a test that only ever hands it a
+    // working one proves nothing about the branch that matters most, which is the one that decides
+    // whether an unreadable store refuses every token or none (L140). Same reasoning, and the same
+    // shape, as `Prospect.keyAvailability(_:lookup:)`.
+    static func poisonedTokensForBatch(_ incoming: [AssembledProspect],
+                                       storedRows: () throws -> [Prospect]) throws -> Set<String> {
+        var seen: [(token: String, title: String, venue: String)] = []
+        let stored = try storedRows()
+        for p in stored {
+            let urls = (p.sourceListingURL.map { [$0] } ?? []) + p.runSourceURLs
+            let theirTitle = ShowLink.foldedTitle(p.groupName)
+            let theirRoom = ShowLink.foldedVenue(p.venue)
+            for token in urls.compactMap(ProductionToken.inURL) {
+                seen.append((token: token, title: theirTitle, venue: theirRoom))
+            }
+        }
+        for p in incoming {
+            let urls = (p.sourceListingURL.map { [$0] } ?? []) + p.runSourceURLs
+            let theirTitle = ShowLink.foldedTitle(p.groupName)
+            let theirRoom = ShowLink.foldedVenue(p.venue)
+            for token in urls.compactMap(ProductionToken.inURL) {
+                seen.append((token: token, title: theirTitle, venue: theirRoom))
+            }
+        }
+        return ShowLink.poisonedTokens(seen)
+    }
+
+    private static func matchByProductionToken(_ urls: [String], groupName: String, venue: String?,
+                                               poisoned: Set<String>,
+                                               in context: ModelContext) throws -> Prospect? {
+        let incoming = Set(urls.compactMap(ProductionToken.inURL))
+        guard !incoming.isEmpty else { return nil }
+        let usable = incoming.subtracting(poisoned)
+        guard !usable.isEmpty else { return nil }
+        let all = try context.fetch(FetchDescriptor<Prospect>())
+        let title = ShowLink.foldedTitle(groupName)
+
+        return all.first { p in
+            let urls = (p.sourceListingURL.map { [$0] } ?? []) + p.runSourceURLs
+            guard !Set(urls.compactMap(ProductionToken.inURL)).isDisjoint(with: usable) else { return false }
+            // The natural key's OWN fold on both sides, which is what makes this a canonical function
+            // rather than a similarity judgement and is why it can join with no human in the loop. It is
+            // also what lets "Nihao Broadway" and "Nihao Broadway!" through, since the fold removes the
+            // trailing mark, while refusing two different shows that merely share a room.
+            return ShowLink.foldedTitle(p.groupName) == title && sameVenue(p.venue, venue)
         }
     }
 
@@ -1572,7 +1840,33 @@ enum ScoutService {
         // A synthetic same-date id already encodes date and venue and is minted only for a
         // mergeSameDateVenue source, so it needs no corroboration: recognizing a concert whose NAME
         // changed is that path's entire purpose (#1260) and a title check would defeat it.
-        if SameDateVenueMerge.isMerged(seriesId) { return sharing.first }
+        // #4040: ANCHORED to the row asking. The bare prefix test this used to read asks only whether a
+        // string starts with a namespace this app reserves, never who wrote it, and the extract run copies
+        // a page's series marker verbatim into this field. So the corroboration skipped below rested on a
+        // claim about MINTING that an arriving value could defeat. A synthetic id is its own date and
+        // folded venue, so requiring it to NAME them takes nothing from the #1260 path and removes every
+        // case where the id says something the row does not.
+        if SameDateVenueMerge.isMerged(seriesId, naming: openingNight, venue: venue) {
+            // #4040: DETERMINISTIC, by the same rule and for the same reason as the branch below, which
+            // this one contradicted two lines above it. It returned `sharing.first` over an unordered
+            // fetch while its sibling's comment said in as many words: "never `first` on an unordered
+            // fetch... an arbitrary pick would land Dan's dismissal on a different row each sweep."
+            //
+            // Reproduced through the real `apply` before this changed (`MergedIdArbitraryPickTests`):
+            // two stored rows sharing one synthetic id, one of them dismissed, and the incoming show
+            // came out DISMISSED with that row inserted first and LIVE with it inserted second. That is
+            // Dan's refusal of one act landing on a show he never saw, which is the #797 failure, and
+            // the suite was intermittently red across repeated runs because the pick really is
+            // arbitrary rather than merely unspecified.
+            //
+            // The corroboration question this branch deliberately skips is NOT settled by this and is
+            // still #4040's: the id is date plus venue, so a source flagged `mergeSameDateVenue` that
+            // genuinely runs two different shows a night fuses them with no title test. Measured
+            // 2026-09-20: 1 of 74 watched sources carries that flag, 9 rows carry a synthetic id and no
+            // id is held by more than one row, so that half is inert today and rests on a human
+            // decision on the watchlist rather than on a property of the code.
+            return theOnlyRowThisMayReKey(sharing)
+        }
 
         let corroborated = sharing.filter {
             GroupNameMatch.isConfident($0.groupName, groupName)
@@ -1584,8 +1878,42 @@ enum ScoutService {
         // carrying any history wins (it is the one holding a decision or an email); otherwise the freshest,
         // because these rows are a time series and the oldest is the most stale, typically already past
         // FeedReconcile's gone threshold and hidden from the queue.
-        return corroborated.first(where: NaturalKeyVenueMigration.hasOutreachHistory)
-            ?? corroborated.max(by: { $0.ingestedAt < $1.ingestedAt })
+        // #4024 recorded that this was still an arbitrary pick where TWO candidates carry history, because
+        // nothing here had the refusal the merge ladders get from `mustDefer`. #4074 gives it one.
+        return theOnlyRowThisMayReKey(corroborated)
+    }
+
+    // #4074: the single row this arm may re-key, or NOTHING where more than one candidate carries a
+    // record of Dan's.
+    //
+    // Dan's call, 2026-09-20 (this session, in chat): refuse, the way the two merge ladders already do
+    // through `mustDefer`. A re-key carries a stored row's dismissal, its recipients, its sent record and
+    // its thread id onto whatever the incoming listing is, so picking the wrong one of two rows that both
+    // hold history moves his refusal of one show onto another (#797). Declining costs a duplicate card
+    // staying up until the next sweep, which he can see and merge; the re-key is silent and cannot be
+    // undone from the card.
+    //
+    // Latent rather than live, stated so nobody reads the guard as a fix for something happening now: over
+    // the live store on 2026-09-20 exactly one `seriesId` is held by more than one row (pk 139 and pk 655,
+    // both `The Passion of Mr. Cardboard` at SoHo Playhouse, both dismissed under DIFFERENT reasons), and
+    // both runs ended in July, so no incoming listing carries that id and this branch cannot be reached
+    // for them. What the guard buys is that the day a live pair appears, the answer is already decided.
+    //
+    // Returning nil does not end the chain: `upsertTarget` goes on to its remaining arms and inserts if
+    // none of them match, which is the duplicate-card outcome above rather than a lost show.
+    private static func theOnlyRowThisMayReKey(_ candidates: [Prospect]) -> Prospect? {
+        let withHistory = candidates.filter(NaturalKeyVenueMigration.hasOutreachHistory)
+        guard withHistory.count <= 1 else {
+            // copy-inventory:ignore-start  developer diagnostic log, not the app's own voice (#915)
+            AgentLog.note("#4074 ScoutService: \(withHistory.count) stored rows sharing this id carry "
+                          + "outreach history; leaving them for Dan rather than re-keying one.")
+            // copy-inventory:ignore-end
+            return nil
+        }
+        // Deterministic below the refusal, for the reason the sibling branch already records: these rows
+        // are a time series and the oldest is the most stale, typically already past FeedReconcile's gone
+        // threshold and hidden from the queue (L343, L419).
+        return withHistory.first ?? candidates.max(by: { $0.ingestedAt < $1.ingestedAt })
     }
 
     // Do these two runs cover any of the same days? Dates are ISO `yyyy-MM-dd`, so string ordering IS date
@@ -1618,7 +1946,12 @@ enum ScoutService {
         guard let url, !url.isEmpty else { return nil }
         let all = try context.fetch(FetchDescriptor<Prospect>())
         return all.first {
-            guard $0.sourceListingURL == url, $0.performanceDate == date,
+            // #4116: `ListingURL.sameListing` rather than `==`, so one page addressed with and without
+            // its trailing slash is one page. Measured on the live store 2026-09-21: four stored pairs
+            // share a night and a page and differ only by that slash, and every one is a second billing
+            // of one concert. The fold touches the trailing slash and nothing else; the reasoning for
+            // each rule NOT adopted is recorded on `ListingURL` rather than here.
+            guard ListingURL.sameListing($0.sourceListingURL, url), $0.performanceDate == date,
                   sameVenue($0.venue, venue) else { return false }
             // #4032: and the two titles must be the same SHOW. The comment above says the venue is what
             // makes URL plus date safe, and on a single venue's season page that is no protection at

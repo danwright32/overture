@@ -313,4 +313,105 @@ struct DriftedRunMergeTests {
 
         #expect(try all(context).count == 2)
     }
+
+    // MARK: rows grouped by the venue's own production token (#4055)
+
+    // #4029 stopped NEW token duplicates being minted, exactly as #1528 did for a drifted run. The rows
+    // already stored cannot be fixed by it, because an ingest arm only runs when a night ARRIVES, so they
+    // are this pass's job for the same reason the drifted rows were (L389).
+    //
+    // Measured on the live store 2026-09-20 over a WAL inclusive clone of 1,275 rows: exactly two pairs,
+    // both at The Green Room 42, both carrying no seriesId at all, which is why nothing has reached them.
+    private static let token = "GWKuL2pmNJBPIkIkHB0h"
+    private static let tokenHost = "https://thegreenroom42.venuetix.com/showdetails/"
+
+    @discardableResult
+    private func tokenRow(_ context: ModelContext, night: String, title: String,
+                          token: String = DriftedRunMergeTests.token, segment: String,
+                          venue: String = "The Green Room 42",
+                          ingestedDaysAgo: Int, dismissed: Bool = false) -> Prospect {
+        let url = Self.tokenHost + token + "/" + segment
+        let p = row(context, night: night, title: title, venue: venue, series: "",
+                    ingestedDaysAgo: ingestedDaysAgo, dismissed: dismissed)
+        // The live rows carry NO seriesId, which is the whole reason the existing grouping misses them.
+        p.seriesId = nil
+        p.sourceListingURL = url
+        p.runSourceURLs = [url]
+        p.runNights = [night]
+        return p
+    }
+
+    // Operation Mincemeat: Mission Recast, pk 491 (2026-08-17, dismissed) and pk 1371 (2026-10-26, new).
+    // Only ONE row carries history, so this does not defer, and #2001's second-look rung keeps the night
+    // Dan has not decided about rather than the refusal he made about a night that has already played.
+    @Test func twoRowsSharingAProductionTokenAreCollapsedOntoTheUndecidedNight() throws {
+        let context = try ctx()
+        tokenRow(context, night: "2026-08-17", title: "Operation Mincemeat: Mission Recast",
+                 segment: "ISTG9ZoOowMds8sA2lam", ingestedDaysAgo: 17, dismissed: true)
+        tokenRow(context, night: "2026-10-26", title: "Operation Mincemeat: Mission Recast",
+                 segment: "Ykew4gF6sWThGJsIGIzd", ingestedDaysAgo: 0)
+
+        let summary = DriftedRunMerge.run(in: context)
+
+        let survivors = try all(context)
+        #expect(survivors.count == 1, "the pair was not joined by its shared production token")
+        #expect(survivors.first?.performanceDate == "2026-10-26")
+        #expect(survivors.first?.status == .new, "the show must come back for another look")
+        #expect(summary.duplicatesDeleted == 1)
+    }
+
+    // Nihao Broadway, pk 397 (dismissed) and pk 1114 (CONTACTED). Both rows count as carrying history, and
+    // one of them reached the outside world, so this must DEFER rather than merge: which of two real
+    // outreach records survives is Dan's call and not a migration's, the same rule the drifted rows follow.
+    // Asserted rather than assumed, because the difference between these two pairs is the whole reason the
+    // backfill cannot simply be run and forgotten.
+    @Test func aPairWhereOneRowWasActuallyPitchedIsLeftForDan() throws {
+        let context = try ctx()
+        tokenRow(context, night: "2026-09-11", title: "Nihao Broadway",
+                 token: "zGbL9oImamvWwHF3ti5i", segment: "5oHZXAxwUToPOZdBXMNY",
+                 ingestedDaysAgo: 20, dismissed: true)
+        let pitched = tokenRow(context, night: "2026-09-29", title: "Nihao Broadway!",
+                               token: "zGbL9oImamvWwHF3ti5i", segment: "zJ35Qa2LPGbqLyShab5f",
+                               ingestedDaysAgo: 0)
+        pitched.statusRaw = ReviewStatus.contacted.rawValue
+        pitched.sentAt = Date(timeIntervalSince1970: 1_800_000_000)
+
+        let summary = DriftedRunMerge.run(in: context)
+
+        #expect(try all(context).count == 2, "a row that reached the outside world was merged blind")
+        #expect(summary.duplicatesDeleted == 0)
+        #expect(summary.conflictsDeferred == 1, "the pair was dropped silently instead of being deferred")
+    }
+
+    // The discard rule travels with the token, and this fixture sits in the ONLY gap where it can matter,
+    // which is worth stating because the first version of this test proved nothing. A token under two
+    // WILDLY different titles is already refused by the corroboration below the grouping
+    // (`members.allSatisfy(GroupNameMatch.isConfident)`), so deleting the discard left the suite green
+    // (measured with `scripts/mutate.sh`: SURVIVED).
+    //
+    // The two rules are close and not the same. The discard asks whether the FOLDED titles differ;
+    // `isConfident` accepts a contained token run at `minContainmentFraction` 0.6. So a token stamped
+    // across a show and its own spin-off is confidently "the same act" to the corroboration while folding
+    // to two different strings, and that is the case only the discard refuses. Four tokens against five is
+    // 0.8, and the shorter is a prefix run of the longer, so `isConfident` returns true here.
+    @Test func aTokenSpanningAShowAndItsSpinOffJoinsNothingEvenThoughTheTitlesReadAsOneAct() throws {
+        let context = try ctx()
+        tokenRow(context, night: "2026-08-17", title: "Operation Mincemeat Mission Recast",
+                 segment: "ISTG9ZoOowMds8sA2lam", ingestedDaysAgo: 17)
+        tokenRow(context, night: "2026-10-26", title: "Operation Mincemeat Mission Recast Special",
+                 segment: "Ykew4gF6sWThGJsIGIzd", ingestedDaysAgo: 0)
+
+        // The precondition the discard is the only defence for: the corroboration would wave this through
+        // (L159, and the reason this test replaced one that could not fail).
+        #expect(GroupNameMatch.isConfident("Operation Mincemeat Mission Recast",
+                                           "Operation Mincemeat Mission Recast Special"),
+                "the fixture no longer sits in the gap this guard covers, so it proves nothing again")
+        #expect(ShowLink.foldedTitle("Operation Mincemeat Mission Recast")
+                != ShowLink.foldedTitle("Operation Mincemeat Mission Recast Special"))
+
+        let summary = DriftedRunMerge.run(in: context)
+
+        #expect(try all(context).count == 2, "one token spanning two shows fused them")
+        #expect(summary.duplicatesDeleted == 0)
+    }
 }

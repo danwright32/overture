@@ -42,7 +42,16 @@ set -euo pipefail
 # kept apart from each other and from 0 because a run that measured nothing must never print a figure
 # that reads like a measurement (L98, L11); on those paths this prints no figures at all.
 #
-# Usage: scripts/derive-showlink-shape.sh [--store PATH] [--asof YYYY-MM-DD]
+# --dates (#4033) prints EVERY group rather than the largest three, with each member's first sighting
+# beside its pk and status. That question, WHEN did each member arrive, is the one that decides whether a
+# duplicate is worth fixing at ingest, and on 2026-09-19 it reversed a conclusion: #3766's premise
+# re-check said the store's duplicates were pre-fix residue minted before #1558 shipped on 2026-07-26,
+# which is true of the group it measured and false of the store, where 8 of the 16 groups held a row first
+# seen AFTER that date. Answering it meant patching a private copy of this script, which is the
+# figure-nobody-can-re-take this command exists to end. The default output is deliberately unchanged,
+# because its four populations are quoted in issue bodies.
+#
+# Usage: scripts/derive-showlink-shape.sh [--store PATH] [--asof YYYY-MM-DD] [--dates]
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -52,11 +61,13 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LIVE_STORE="${HOME}/Library/Application Support/Overture/Overture.store"
 STORE=""
 ASOF=""
+DATES=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --store) STORE="${2:-}"; shift 2 ;;
     --asof) ASOF="${2:-}"; shift 2 ;;
+    --dates) DATES=1; shift ;;
     -h|--help) sed -n '3,33p' "${BASH_SOURCE[0]}"; exit 0 ;;
     *) echo "unknown argument: $1" >&2; exit 64 ;;
   esac
@@ -83,7 +94,7 @@ for ext in "" "-wal" "-shm"; do
   [[ -f "${STORE}${ext}" ]] && cp "${STORE}${ext}" "${COPY_DIR}/live.store${ext}"
 done
 
-python3 - "${COPY_DIR}/live.store" "${ASOF}" <<'PY'
+python3 - "${COPY_DIR}/live.store" "${ASOF}" "${DATES}" <<'PY'
 import plistlib
 import re
 import sqlite3
@@ -91,6 +102,7 @@ import sys
 from datetime import date, timedelta
 
 DB, ASOF = sys.argv[1], sys.argv[2]
+DATES = sys.argv[3] == "1"
 
 # The hosts where the first path segment after /showdetails/ was MEASURED to be stable across every
 # night of a run and opaque (not derived from the title). It is an allowlist rather than a pattern
@@ -168,6 +180,29 @@ def span(performance_date, run_end_date):
     return {(opening + timedelta(days=n)).isoformat() for n in range((closing - opening).days + 1)}
 
 
+# #4116: the Swift fold, in Python, because this report has to count the same addresses the arms
+# compare. `ScoutService`'s two URL arms read `ListingURL.fold`, so a report that counted raw strings
+# would state the reachable population for #4098 against a rule the app does not use. The two are kept
+# from drifting by ONE committed fixture, `fixtures/listing-url-fold/v1.json`, asserted from both sides
+# (L26): `ListingURLFoldContractTests` in Swift and `derive-showlink-shape.test.sh` here.
+#
+# Removes exactly one trailing slash from the path, leaving the query and the fragment alone, and
+# refuses a slash that is structural rather than trailing (`https://` is not `https:/`).
+def fold_listing_url(raw):
+    cut = len(raw)
+    for i, ch in enumerate(raw):
+        if ch in "?#":
+            cut = i
+            break
+    path, rest = raw[:cut], raw[cut:]
+    if not path.endswith("/"):
+        return raw
+    trimmed = path[:-1]
+    if not trimmed or trimmed[-1] in "/:":
+        return raw
+    return trimmed + rest
+
+
 def tokens_for(listing_url, run_urls):
     found = set()
     for url in ([listing_url] if listing_url else []) + list(run_urls):
@@ -181,7 +216,7 @@ try:
     db = sqlite3.connect(f"file:{DB}?mode=ro", uri=True)
     raw = db.execute(
         "select Z_PK, ZNATURALKEY, ZSTATUSRAW, ZPERFORMANCEDATE, ZRUNENDDATE, ZRUNNIGHTS,"
-        " ZRUNSOURCEURLS, ZSOURCELISTINGURL from ZPROSPECT"
+        " ZRUNSOURCEURLS, ZSOURCELISTINGURL, ZFIRSTSEENAT from ZPROSPECT"
     ).fetchall()
 except Exception as error:
     print(f"UNMEASURED: the store is there and could not be read ({error})")
@@ -192,7 +227,8 @@ rows = []
 unreadable_keys = 0
 unreadable_night_lists = 0
 unreadable_url_lists = 0
-for pk, natural_key, status, performance_date, run_end, nights_blob, urls_blob, listing in raw:
+for (pk, natural_key, status, performance_date, run_end, nights_blob, urls_blob, listing,
+     first_seen) in raw:
     fields = key_fields(natural_key)
     if fields is None:
         unreadable_keys += 1
@@ -217,6 +253,17 @@ for pk, natural_key, status, performance_date, run_end, nights_blob, urls_blob, 
         "runEndDate": run_end,
         "nights": set(decoded_nights) or span(performance_date, run_end),
         "tokens": tokens_for(listing, decoded_urls),
+        # #4078: the URLs themselves, not only the token inside them. Both URL matching arms
+        # (`matchByAnyRunURL`, `matchByStableSource`) join on these, so how ambiguous each one is is
+        # the reachable population for both, and nothing measured it before.
+        "urls": {fold_listing_url(u) for u in ([listing] if listing else []) + list(decoded_urls) if u},
+        # A plain column, so it needs none of the decoding above. Kept as the raw Core Data instant and
+        # rendered only where it is printed, so nothing here depends on a timezone (L39).
+        "firstSeenAt": first_seen,
+        # The row's own natural key, verbatim. It is what `ShowLink.Row.id` is, so a Swift caller can
+        # compare this command's GROUP MEMBERSHIP against the shipped rule's row by row rather than
+        # comparing two counts and guessing where they differ (#4021).
+        "key": natural_key,
     })
 
 # A venue that stamps ONE token across its whole season would otherwise fuse the season into one card.
@@ -228,6 +275,17 @@ for row in rows:
     for token in row["tokens"]:
         seen_titles.setdefault((token, row["venue"]), set()).add(row["title"])
 poisoned = {token for (token, _venue), titles in seen_titles.items() if len(titles) > 1}
+
+# #4078: the same question asked of a URL rather than a token, and NOT scoped to the venue.
+#
+# The venue scoping the token rule uses is deliberate there and wrong here: `matchByAnyRunURL` joins on a
+# shared run URL with no venue test at all, so a URL carrying two titles is ambiguous to that arm wherever
+# those rows sit. Scoping by venue would under-report exactly the organisation level pages this is for.
+titles_per_url = {}
+for row in rows:
+    for url in row["urls"]:
+        titles_per_url.setdefault(url, set()).add(row["title"])
+ambiguous_urls = {url: titles for url, titles in titles_per_url.items() if len(titles) > 1}
 for row in rows:
     row["tokens"] = row["tokens"] - poisoned
 
@@ -290,6 +348,35 @@ def report(name, population):
         print(f"  largestGroupMembers= [{len(group)}] {group[0]['title'][:44]} :: pk {pks}")
 
 
+def first_seen_label(value):
+    """A member's first sighting as a date, or words saying it has none.
+
+    An absent stamp is printed as words rather than as a blank or a zero, because a column nobody wrote
+    and a date nobody can read are not the same answer and a blank in a dated list reads as neither
+    (L11, L215). `FirstSeenBackfill` stamps unstamped rows from `ingestedAt`, so an absence here is a row
+    that has not been through it.
+    """
+    if value is None:
+        return "not recorded"
+    try:
+        return (date(2001, 1, 1) + timedelta(seconds=float(value))).isoformat()
+    except (TypeError, ValueError, OverflowError):
+        return "unreadable"
+
+
+def report_dates(name, population):
+    """Every group in `population`, with each member's pk, status and first sighting."""
+    groups, _refused = shape(population, use_tokens=True)
+    print(f"dates={name} groups={len(groups)}")
+    for group in sorted(groups, key=lambda g: (-len(g), g[0]["title"])):
+        print(f"  [{len(group)}] {group[0]['title'][:60]} :: {group[0]['venue'][:40]}")
+        for member in sorted(group, key=lambda m: (first_seen_label(m["firstSeenAt"]), m["pk"])):
+            print(f"      pk {member['pk']:<6} {member['status'] or 'none':<10}"
+                  f" first seen {first_seen_label(member['firstSeenAt'])}"
+                  f"  opens {member['performanceDate'] or 'none'}"
+                  f"  key {member['key']}")
+
+
 def is_future(row):
     return max(row["performanceDate"] or "", row["runEndDate"] or "") >= ASOF
 
@@ -306,4 +393,26 @@ report("queue", [r for r in future if r["status"] != "dismissed"])
 report("future", future)
 report("archive", [r for r in rows if r["status"] == "dismissed"])
 report("store", rows)
+print()
+print("LISTING LINKS THAT CARRY MORE THAN ONE SHOW (#4078), over the WHOLE store, because a URL matching"
+      " arm is not scoped to a population")
+print(f"ambiguousListingURLs= {len(ambiguous_urls)} of {len(titles_per_url)} distinct URL(s)")
+print("WHAT THIS CANNOT SEE: a URL that published one title in August and another in September looks"
+      " IDENTICAL here to one that never moved, because this reads a single moment. #4039 ruled an arm"
+      " out of a rename using a count taken this way and the ruling did not hold (#4068, L487). So a URL"
+      " ABSENT from this list is not evidence that it never carried two shows across TIME.")
+for url, titles in sorted(ambiguous_urls.items(), key=lambda kv: (-len(kv[1]), kv[0])):
+    print(f"  [{len(titles)} titles] {url}")
+    for title in sorted(titles):
+        print(f"      {title[:72]}")
+if DATES:
+    print()
+    print("WHAT A FIRST SIGHTING IS AND IS NOT, because two readings of these columns have already")
+    print("produced a wrong mechanism (#3766): firstSeenAt is not unconditionally a MINT date, since")
+    print("NaturalKeyVenueMigration pushes the earliest member's value onto a merge survivor and")
+    print("FirstSeenBackfill stamps unstamped rows from ingestedAt. And ingestedAt, which is not printed")
+    print("here, is the LAST touch rather than the first, which is the misreading that produced #3766's")
+    print("wrong mechanism in the first place.")
+    print()
+    report_dates("store", rows)
 PY

@@ -192,6 +192,27 @@ struct ProspectFieldClassificationTests {
         "conflictKey": "the night that clashes, recomputed from the calendar",
         "conflictOpen": "whether the clash is still open, recomputed from the calendar",
 
+        // MARK: #3596's merge survivor question and its answer. Overture's own bookkeeping about a
+        // merge it performed, written by SurvivorInheritance and answered by FeedReconcile, and neither
+        // is evidence this row reached the outside world nor a decision of Dan's. Classified rather than
+        // counted deliberately: a row holding ONLY a pending question is a row a later merge may still
+        // delete, and it should, because the survivor of that merge gets its own question and nothing is
+        // lost. Counting them would make two freshly merged rows defer against each other for ever,
+        // which is the #1780 deadlock this list exists to keep out of the rule.
+        "survivedMergeAt": "that a merge left this row a question for the next sweep, Overture's own bookkeeping",
+        // #3330: which stored row this one looked like when it arrived. A pointer at another row, not a
+        // record of anything this row reached or anything Dan decided, and it is resolved at read time
+        // rather than carried: the card names the other row only while that row is still stored. A merge
+        // deleting this row loses nothing, because the pairing it records is re-derivable from the two
+        // rows themselves.
+        "arrivedLookingLike": "which stored row this one resembled on arrival, a pointer resolved at read time",
+        // #4130: which stored row had already been pitched for this row's night, in this room, for this
+        // presenter. The same shape as the pointer above and classified for the same reasons: it names
+        // another row rather than recording anything this row reached, and it is re-derivable from the
+        // two rows, so a merge deleting this row loses nothing.
+        "arrivedOnAPitchedNight": "which stored row was already pitched for this night, a pointer resolved at read time",
+        "mergeSurvivorUnseenAt": "that a sweep answered it and the feed did not list this row, a finding rather than a record",
+
         // MARK: three that LOOK like decisions of Dan's and were each checked against their writer
         // before being classified, because "a decision" and "a fact derived from his history" are
         // indistinguishable from the field name alone.

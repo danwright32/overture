@@ -38,6 +38,39 @@ import Foundation
 // onto one string. The natural key's own fold keeps the subtitle, so it can only ever fuse two titles
 // that reduce to the same string. That is a canonical FUNCTION rather than a similarity judgement, and
 // it is why this grouping can be applied with no human in the loop.
+// WHICH MECHANISM COVERS WHICH KIND OF DUPLICATE (#4022). Several things in this app answer some
+// version of "these two rows are the same show", no two of them overlap, and nothing said which was
+// which, so the same question was re-derived three separate times in one session while #3282 was built.
+// The natural next move on reading THIS file is to assume it also covers the launch merge's case. It
+// does not, and it fails in the direction that reads as coverage.
+//
+//   shape of duplicate                        | what covers it        | when       | what it does
+//   ----------------------------------------- | --------------------- | ---------- | -------------
+//   same folded title and venue, a shared     | ShowLink (here)       | read time  | groups for
+//   night or a shared production token        |                       |            | display only
+//   same night, title plus or minus a         | SameNightTitleVariant | launch     | DELETES the
+//   subtitle, venue NOT consulted (#1761)     | Merge                 |            | loser
+//   one production whose opening night moved  | DriftedRunMerge       | launch     | DELETES the
+//                                             |                       |            | loser
+//   two rows that fold onto one venue key,    | NaturalKeyVenueMigration | launch  | RE-KEYS, and
+//   and the collisions that re-keying makes   |                       |            | DELETES a
+//                                             |                       |            | colliding loser
+//   a stored row an incoming listing IS       | ScoutService's match  | ingest     | RE-KEYS the
+//                                             | arms (upsertTarget)   |            | stored row
+//   same show, the room spelled differently   | nothing yet (#4020)   |            |
+//
+// The one that is routinely mistaken for a duplicate mechanism and is not: `ContradictedCancellation`
+// (#3921) decides whether a CANCELLATION WARNING is drawn, on a third and deliberately looser rule
+// (folded venue, `runsOverlap`, `GroupNameMatch.isConfident`). It can afford to be loose because a wrong
+// answer only withholds a warning. `FeedBreakEvent` (#4027) sits on top of it and is looser still: it
+// names a whole SOURCE that stopped matching in one sweep, which is a statement about a venue's website
+// rather than about any pair of rows.
+//
+// WHY #2 CANNOT BE SEEN FROM HERE, which is the specific trap. `SameNightTitleVariantMerge`'s worked
+// example is `New York Percussion Series` against `New York Percussion Series (Featuring Percussion
+// People)`. The natural key's fold KEEPS a subtitle, so those two fold DIFFERENTLY and land in different
+// buckets, and this rule can never join them however many nights they share.
+
 enum ShowLink {
 
     // What a row contributes to the grouping. Deliberately plain values rather than a Prospect, so the
@@ -216,20 +249,35 @@ enum ShowLink {
         // judgement: measured on the live store 2026-09-19 it discards nothing (209 distinct tokens
         // over 211 venuetix rows), which is the point. It costs nothing now and refuses the failure on
         // the day a venue starts, rather than leaving it to be noticed.
-        var titlesPerToken: [String: Set<String>] = [:]
-        for one in folded {
-            for token in raw[one.row.id] ?? [] {
-                titlesPerToken[token + "|" + one.venue, default: []].insert(one.title)
-            }
-        }
-        let poisoned = Set(titlesPerToken.filter { $0.value.count > 1 }.keys.map {
-            String($0.prefix(upTo: $0.range(of: "|", options: .backwards)?.lowerBound ?? $0.endIndex))
+        let poisoned = poisonedTokens(folded.flatMap { one in
+            (raw[one.row.id] ?? []).map { (token: $0, title: one.title, venue: one.venue) }
         })
         guard !poisoned.isEmpty else { return raw }
         for one in folded {
             raw[one.row.id]?.subtract(poisoned)
         }
         return raw
+    }
+
+    // The discard itself, as its own function because #4029 gave it a SECOND caller: the ingest match
+    // chain, which now joins two rows on a shared token and must refuse the same tokens this refuses.
+    // Extracted rather than restated there, because sharing the data while copying the code that applies
+    // it is not consolidation (L370), and because the two would then be free to disagree about which
+    // tokens are safe while each read correctly on its own (L263).
+    //
+    // A token appearing under more than one folded title at ONE venue joins nothing, for every row
+    // holding it. Deliberately a cheap deterministic rule rather than a judgement: measured on the live
+    // store 2026-09-20 it discards nothing (228 distinct tokens over 230 venuetix rows), which is the
+    // point. It costs nothing now and refuses the failure on the day a venue starts stamping one token
+    // across its season, rather than leaving that to be noticed.
+    static func poisonedTokens(_ seen: [(token: String, title: String, venue: String)]) -> Set<String> {
+        var titlesPerToken: [String: Set<String>] = [:]
+        for one in seen {
+            titlesPerToken[one.token + "|" + one.venue, default: []].insert(one.title)
+        }
+        return Set(titlesPerToken.filter { $0.value.count > 1 }.keys.map {
+            String($0.prefix(upTo: $0.range(of: "|", options: .backwards)?.lowerBound ?? $0.endIndex))
+        })
     }
 
     // Every group, including the rows that stand alone, so one walk answers both callers.
@@ -351,7 +399,14 @@ extension ShowLink.Row {
 
 // The opaque stable production token, read at query time from a URL already stored. No new field, no
 // writer, no backfill and no recurring cost.
-private enum ProductionToken {
+//
+// #4029 made it INTERNAL rather than file private, because the ingest match chain now reads the same
+// token to decide two rows are one show. There is one reader of the rule and one allowlist, rather than
+// a second copy of the same judgement in `ScoutService`: sharing the data while copying the code that
+// applies it is not consolidation (L370). The measurement below is the licence for BOTH uses, and at
+// ingest a wrong join costs a row rather than a re-render, so `ShowLink.poisonedTokens` guards the
+// ingest arm too.
+enum ProductionToken {
     // The hosts where the token was MEASURED to be stable across every night of a run and opaque. An
     // allowlist rather than a pattern, because the measurement is the licence: on tixr the same-looking
     // segment is the title slugified plus a per-performance integer (10 of 10 multi-night tixr rows

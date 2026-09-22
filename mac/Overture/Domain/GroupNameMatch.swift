@@ -199,11 +199,68 @@ enum GroupNameMatch {
         return Array(long[0..<short.count]) == short
     }
 
+    // #4129: the filler conjunctions a billing carries, which say nothing about WHICH act is playing.
+    //
+    // `&` is not here and needs nothing: `normalize` replaces every non-alphanumeric character with a
+    // space, so an ampersand is already gone before any token exists. The HTML entity `&amp;` WOULD
+    // arrive as the word "amp", and it is deliberately not listed either: measured on a clone of the
+    // live store on 2026-09-22, 86 of 1,333 titles carry `&` and none carries `&amp;`, so listing it
+    // would be a rule with no population, and a token nothing writes is indistinguishable from a
+    // measurement of zero (L90).
+    private static let fillerConjunctions: Set<String> = ["and", "with"]
+
+    private static func droppingFillerConjunctions(_ t: [String]) -> [String] {
+        t.filter { !fillerConjunctions.contains($0) }
+    }
+
+    // #4129: one title is the other with more names added to its billing, where a conjunction MOVED.
+    //
+    // THE CASE, measured on the live store 2026-09-21. Carnegie added two guests to one listing and the
+    // scout minted a second row beside the one it already held, on the same page, the same night and in
+    // the same room:
+    //
+    //     ... dave eggar AND gregg august
+    //     ... dave eggar gregg august makeda hampton AND mak grgic
+    //
+    // Every arm refused. `isSubtitleExtension` needs the shorter title to be a contiguous LEADING run of
+    // the longer one, and the `and` sits inside the stored title where the incoming one carries a name,
+    // so the run breaks at the conjunction. Dropping the fillers from BOTH sides first leaves the stored
+    // title an exact opening run of the incoming one.
+    //
+    // A THIRD PREDICATE, not a loosening of `isConfident`, for the reason `isSubtitleExtension` records
+    // in full above: that function answers "are these the same act" with nothing else established, it
+    // has 25 call sites, and the loudest of them warms a lead off a past client. This is reachable only
+    // from `isSameShowTitle`, whose callers each hold a corroborating fact beyond the title (a shared
+    // listing or run URL, or that plus the night and the folded room).
+    //
+    // IT ANSWERS ONLY WHERE A FILLER WAS ACTUALLY DROPPED. Two titles that carry none are
+    // `isConfident`'s and `isSubtitleExtension`'s, and both are asked first, so answering them here
+    // would hide which predicate did the work, exactly as `isSubtitleExtension` refuses two equal
+    // titles for the same reason.
+    //
+    // AN EQUAL LENGTH RESULT COUNTS, unlike `isSubtitleExtension`, which demands a strictly shorter
+    // side. Once the fillers are gone, "Bach and Handel" against "Bach Handel" is the same billing
+    // written two ways rather than one plus a subtitle, and refusing it would leave the commonest
+    // spelling difference unjoined while accepting the rarer one.
+    static func isBillingExtension(_ a: String, _ b: String) -> Bool {
+        let rawA = tokens(a)
+        let rawB = tokens(b)
+        let ta = droppingFillerConjunctions(rawA)
+        let tb = droppingFillerConjunctions(rawB)
+        // Nothing was dropped, so this pair belongs to the predicates asked before it.
+        guard ta != rawA || tb != rawB else { return false }
+        // An empty side is a title of nothing but fillers. Every title is trivially a leading run of
+        // everything, so it would join whatever shared its listing.
+        guard !ta.isEmpty, !tb.isEmpty else { return false }
+        let (short, long) = ta.count <= tb.count ? (ta, tb) : (tb, ta)
+        return Array(long[0..<short.count]) == short
+    }
+
     // #3917: the title question asked by a caller that has ALREADY corroborated the pair, and the only
-    // way any caller reaches `isSubtitleExtension`. One function rather than an `||` repeated at each
-    // site, because the three sites have to answer identically and a drift between them would be silent
-    // in the direction that withholds a warning or mints a row (L342: shared only where the callers ask
-    // the SAME question, and these do).
+    // way any caller reaches `isSubtitleExtension` or `isBillingExtension` (#4129). One function rather
+    // than an `||` repeated at each site, because the four sites have to answer identically and a drift
+    // between them would be silent in the direction that withholds a warning or mints a row (L342:
+    // shared only where the callers ask the SAME question, and these do).
     //
     // WHO MAY CALL IT. Only a caller holding at least one corroborating fact beyond the title: a shared
     // listing or run URL, a shared production id, or the same folded venue with overlapping nights. That
@@ -213,8 +270,12 @@ enum GroupNameMatch {
     // WHO MAY NOT, and this is the part that matters: every caller asking "are these the same act" with
     // nothing else established. Repeat client detection, org do-not-contact, booking match and the rest
     // all keep `isConfident` exactly as it is.
+    //
+    // THE ORDER IS THE RULE. `isConfident` first, then the subtitle test, then the billing test, and
+    // each answers only what the ones before it refused, so a failure names which predicate joined the
+    // pair rather than leaving three candidates.
     static func isSameShowTitle(_ a: String, _ b: String) -> Bool {
-        isConfident(a, b) || isSubtitleExtension(a, b)
+        isConfident(a, b) || isSubtitleExtension(a, b) || isBillingExtension(a, b)
     }
 
     // #1764: the same-night dedupe's own entry point, and the ONLY caller allowed to tolerate a

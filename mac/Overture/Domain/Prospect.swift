@@ -450,6 +450,58 @@ final class Prospect {
     // for (L46). If the marking rule ever widens, the field comes back with it.
     var contradictionMarkedAt: Date? = nil
 
+    // #3596: this row survived a merge that deleted at least one other row, and the next sweep that can
+    // answer has not answered yet. Nil means there is no question outstanding, which is the state of
+    // almost every row almost all the time.
+    //
+    // WHY IT IS STORED AT ALL. The signature #3379 named is a survivor holding a natural key the feed
+    // does not publish, and #3596's own direction says that is "knowable at the moment the merge
+    // finishes". It is not: `seenKeys` is a local inside `ScoutService.apply`, discarded when the sweep
+    // ends, and all three deleting passes run at LAUNCH where no sweep exists. So the question has to
+    // outlive the merge and be answered by the next sweep, which is Dan's call of 2026-09-21 and the
+    // only one of the three options where both halves of the comparison come from the same moment.
+    //
+    // WHAT CLEARS IT. The first sweep that ASKED this row's sources, whatever the answer. A mark nothing
+    // clears makes every later sweep re-report the same survivor for ever, which is the failure mode
+    // #3596 named before it was built.
+    var survivedMergeAt: Date? = nil
+
+    // #3330: the natural key of the stored row this one LOOKED LIKE when it arrived, by the same
+    // same-night predicate the launch merge deletes rows with. Nil on almost every row.
+    //
+    // A TAG, NEVER A REFUSAL. Dan's call of 2026-09-21: the arriving row is still written. A wrong merge
+    // at launch deletes a row he can see and the pass logs it; a wrong refusal at ingest loses a show
+    // that never reached a screen, so the failure would be invisible by construction.
+    //
+    // NOTHING CLEARS IT, on purpose. It is resolved at READ time: the note only draws while the row it
+    // names is still stored, so the launch merge collapsing the pair ends the note by itself. A record
+    // that points at another record has to re-check that record when it is read, or deleting it leaves a
+    // claim nobody can see is stale (L200).
+    var arrivedLookingLike: String? = nil
+
+    // #4130: the natural key of a stored row that had ALREADY been pitched for this row's night, at the
+    // same room, for the same presenter, at the moment this row was inserted. Nil on almost every row:
+    // measured over a clone of the live store on 2026-09-22, exactly one of 1,333 rows satisfies it.
+    //
+    // A STATEMENT, NEVER A MERGE. The two rows are not claimed to be one show and their titles usually
+    // are not: what this records is that a pitch has already gone out for that night, so the card can
+    // say so before Dan spends a second contact check on it.
+    //
+    // NOTHING CLEARS IT, exactly as nothing clears `arrivedLookingLike` above: it is resolved at read
+    // time and the note falls silent when the row it names is gone (L200).
+    var arrivedOnAPitchedNight: String? = nil
+
+    // #3596: the answer, when it was NO. The sweep asked this row's sources and none of them listed the
+    // key the merge left it holding, which is #3582's signature: the merge kept a copy the feed has
+    // stopped recognising, and this row will now accrue misses and read as "may be cancelled" while the
+    // show plays.
+    //
+    // A FINDING, NEVER A REFUSAL. A survivor whose source has genuinely stopped listing it is a real
+    // state, so this is surfaced and nothing is blocked, reverted or deleted on the strength of it.
+    // Cleared by any later sweep that DOES list the row, because a feed that republishes the key has
+    // answered the question in the other direction.
+    var mergeSurvivorUnseenAt: Date? = nil
+
     var reachabilityEmptyReason: Reachability.EmptyReason? {
         get { reachabilityEmptyReasonRaw.flatMap(Reachability.EmptyReason.init(rawValue:)) }
         set { reachabilityEmptyReasonRaw = newValue?.rawValue }

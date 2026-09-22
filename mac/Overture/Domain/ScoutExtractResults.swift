@@ -127,9 +127,16 @@ struct ScoutExtractEvent: Codable, Equatable, Sendable {
     var venueNotPublished: Bool?
 
     var asExtractedEvent: ExtractedEvent {
+        // #4040: the runbook tells the run to copy a page's series marker VERBATIM (3b), so this field is
+        // whatever a stranger's page printed. `samedatevenue:` is a namespace this app reserves for ids it
+        // mints itself, and `matchByConcertIdentity` re-keys on one with no title check and no run overlap
+        // check, so a page able to claim it is a page able to move a dismissal onto another show (#797).
+        // Disowned here, at the door the runbook opens, and again at the reader, which no call site can
+        // forget (L452, L506).
         ExtractedEvent(title: title, presenter: presenter, venue: venue,
                        performanceDate: performanceDate, sourceUrl: sourceUrl, location: location,
-                       seriesId: seriesId, venueNotPublished: venueNotPublished)
+                       seriesId: SameDateVenueMerge.disowningForgedId(seriesId),
+                       venueNotPublished: venueNotPublished)
     }
 }
 

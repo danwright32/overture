@@ -99,6 +99,20 @@ enum ShowOutcome: String, CaseIterable, Equatable, Hashable, Sendable {
     // action rather than a per-show ending.
     case wentBy = "went_by"
     case tooFar = "too_far"
+    // #3002/#4082: the nights this row carried are all held by another stored row, so Overture closed it
+    // on Dan's behalf. THREE now, not two, and it is the same fact at two levels: `dropNight` records a
+    // released NIGHT with it, and `ProspectMutations` closes a fully covered SHOW with it.
+    //
+    // It used to borrow `.duplicate`, which Dan also picks himself off the Dismiss menu, so his judgement
+    // ("I looked at this and it is a repeat") and Overture's bookkeeping ("another card holds these
+    // nights") were one value in the store with no way to separate them afterwards (L163). Nothing read
+    // them apart yet, which is why it cost nothing and why it was worth fixing before #16's outcome
+    // reporting became the thing that discovered it.
+    //
+    // A case of its own rather than a marker on the stored `DroppedNight`, which was built first and
+    // reverted: widening that record fights #3324, which decided it keeps its exact arity. Dan's call on
+    // #3002, 2026-09-20.
+    case coveredElsewhere = "covered_elsewhere"
 
     // MARK: the words Dan reads
 
@@ -125,6 +139,11 @@ enum ShowOutcome: String, CaseIterable, Equatable, Hashable, Sendable {
         case .turnedThemDown: return "I turned them down"
         case .wentBy: return "Went by"
         case .tooFar: return "Too far"
+        // Dan's wording, chosen this session (2026-09-21) over "Already in the queue" and "Duplicate of
+        // another entry". It states a fact about the NIGHTS rather than a judgement about the show, which
+        // is what separates it from the `Duplicate` he picks himself, and the rejected third option was
+        // rejected precisely for reading as easy to confuse with that at a glance.
+        case .coveredElsewhere: return "Covered elsewhere"
         }
     }
 
@@ -159,7 +178,7 @@ enum ShowOutcome: String, CaseIterable, Equatable, Hashable, Sendable {
         // the label is not merely unread for them, it is wrong: "3 Date conflict" and "3 Duplicate" are
         // not sentences, which is what the old default produced.
         case .dateConflict, .hadPaidWork, .pitchingOtherShows, .tooSoon, .notAFit, .dontWantToShoot,
-             .noWayToReachThem, .duplicate, .wentBy, .tooFar:
+             .noWayToReachThem, .duplicate, .wentBy, .tooFar, .coveredElsewhere:
             return nil
         }
     }
@@ -186,6 +205,15 @@ enum ShowOutcome: String, CaseIterable, Equatable, Hashable, Sendable {
     // a value added to either half cannot also be silently treated as automatic.
     var isOverturesOwn: Bool { !ShowOutcome.danCanChoose.contains(self) }
 
+    // #3002/#4082: the ONE value Overture writes when it closes something itself because another row
+    // already holds the nights. Both levels read it, the released NIGHT (`RunNightDrop`) and the closed
+    // SHOW (`ProspectMutations`), so the two can never come to disagree about what that fact is called.
+    //
+    // It lives HERE rather than on `RunNightDrop`, where #4085 first named it, because it is a fact about
+    // this vocabulary rather than about run nights, and the show level caller should not have to reach
+    // through a type about nights to ask it.
+    static let automaticRelease: ShowOutcome = .coveredElsewhere
+
     // The ONE place the choice of menu is made. Takes the send record's answer as a parameter and is
     // not defaulted, so a caller that has not worked out whether the show was pitched cannot compile.
     static func menu(wasPitched: Bool) -> [ShowOutcome] { wasPitched ? pitched : neverPitched }
@@ -203,6 +231,75 @@ enum ShowOutcome: String, CaseIterable, Equatable, Hashable, Sendable {
         if isOverturesOwn { return nil }
         if self == .booked { return .booked }
         return ShowOutcome.neverPitched.contains(self) ? .neverPitched : .pitchedAndLost
+    }
+}
+
+// MARK: - Whether a later night reopens this ending (#4052)
+
+extension ShowOutcome {
+    // Does a NEW NIGHT of this same show reopen the decision?
+    //
+    // #4029 joins a night arriving later onto the row that already holds the show, so that night
+    // inherits whatever ending sits there. Without this, a show dismissed because Dan was busy THAT
+    // NIGHT would stay in the Archive and never be offered again. Measured on the live store
+    // 2026-09-20, that is the live case rather than a hypothetical: pk 397 `Nihao Broadway` was
+    // dismissed `pitchingOtherShows` for 2026-09-11, the 2026-09-29 night became a row of its own, and
+    // Dan pitched it. The join without this gate silences the card that produced the outreach.
+    //
+    // Dan's call, 2026-09-20 (this session, in chat): "if I dismiss for a date conflict, it comes back
+    // on a later night of it's run. but if I dismiss for 'dont want to shoot this' it never comes back."
+    //
+    // It lives HERE, beside the vocabulary it reads, rather than as a list at the call site, for the
+    // same reason `ShowOutcomeGroup` does: a second copy of this judgement is how one caller comes to
+    // disagree with another about what a value means (L370, L611).
+    //
+    // A switch rather than a stored set, so a value added to the vocabulary cannot compile until it has
+    // been classified. `NewNightReopensTests` asserts the whole partition as well, so the answer cannot
+    // be quietly changed for one case either (L113).
+    var newNightReopens: Bool {
+        switch self {
+        // About the NIGHT. Each of these says Dan wanted the show and that this particular night was
+        // spent, so a night he has not spent is a question he has not answered.
+        case .dateConflict, .hadPaidWork, .pitchingOtherShows, .tooSoon:
+            return true
+        // Not a decision at all: the show's last night passed while it sat untriaged. There is no
+        // judgement to respect, so a night that has not gone by is live. Folding this in with the
+        // judgements below would read Overture's own bookkeeping as though Dan had said no.
+        case .wentBy:
+            return true
+        // Judgements about the show itself. A different night does not make a show he does not want to
+        // shoot into one he does.
+        case .notAFit, .dontWantToShoot:
+            return false
+        // About the ORG rather than the night. A new night invents no contact route, and `duplicate` is
+        // housekeeping about the row, which another night does not change.
+        case .noWayToReachThem, .duplicate:
+            return false
+        // #3002: a night no other row holds is exactly what this ending says did not exist, so a
+        // genuinely new one reopens it. The row was closed for carrying nothing of its OWN, and a night
+        // nothing else covers is something of its own. Same reasoning as `wentBy` above: Overture's own
+        // bookkeeping is not a judgement of Dan's to respect, and #4029 is the path that brings such a
+        // night in.
+        //
+        // Dan's call, 2026-09-21 (this session, in chat), asked because it CHANGES today's behaviour:
+        // the borrowed `.duplicate` never reopened, so a show Overture closed itself stayed closed. He
+        // was given both sides, that a show can now reappear in his queue with no action from him,
+        // against a night nothing else covers being silently lost with nothing saying it existed, and
+        // chose to bring it back.
+        case .coveredElsewhere:
+            return true
+        // The town is still blocked on the new night, so reopening would put a show back in front of him
+        // in a place he asked never to see (#1238).
+        case .tooFar:
+            return false
+        // Every ending where a pitch ALREADY WENT OUT stays closed. Reviving one would put a show he has
+        // already emailed about back in the queue to be emailed about again, which is #3636's hazard and
+        // a decision nobody has made. Deliberately the conservative direction: the row stays in the
+        // Archive and is found, rather than silently resurfacing.
+        case .booked, .neverHeardBack, .emailBounced, .theySaidNotNow, .theySaidNo,
+             .theySaidPriceTooHigh, .turnedThemDown:
+            return false
+        }
     }
 }
 
@@ -246,6 +343,11 @@ extension ShowOutcome {
         // need words rather than a crash, because a switch that cannot answer for every value is a trap
         // waiting for the first caller who does not know the rule.
         case .wentBy: return "\(org) went by before it was triaged."
+        // #3002: the third of Overture's own, and the same rule applies. Never acknowledged to Dan in
+        // practice, because nothing records it by hand, and still written out rather than defaulted.
+        // Says what happened to the NIGHTS, which is the fact, rather than naming it a duplicate, which
+        // is the judgement this ending exists to stop borrowing.
+        case .coveredElsewhere: return "\(org) closed: its nights are covered elsewhere."
         case .tooFar: return "\(org) is in a town you asked not to see."
         }
     }
@@ -341,7 +443,7 @@ extension ShowOutcome {
         case .theySaidPriceTooHigh: return .lostDoorOpen
         case .turnedThemDown: return .stoodDown
         case .dateConflict, .hadPaidWork, .pitchingOtherShows, .tooSoon, .notAFit, .dontWantToShoot,
-             .noWayToReachThem, .duplicate, .wentBy, .tooFar:
+             .noWayToReachThem, .duplicate, .wentBy, .tooFar, .coveredElsewhere:
             return nil
         }
     }
@@ -367,7 +469,10 @@ extension ShowOutcome {
         // Nil is the stated answer, not a gap: the bridge exists ONLY to read stores written before
         // #2394 forward, and no store can hold this value under the old vocabulary. Adding a raw value
         // to a list #2395/#2685 are retiring would mint storage nothing will ever write.
-        case .noWayToReachThem: return nil
+        //
+        // #3002 joins it for exactly the same reason, and the argument is stronger here: this value was
+        // minted today, so no store written under the old vocabulary can possibly hold it.
+        case .noWayToReachThem, .coveredElsewhere: return nil
         }
     }
 }

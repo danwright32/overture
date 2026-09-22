@@ -111,28 +111,111 @@ struct TwoShowsOneTitleOneNightTests {
             // reason or, if it really is two different shows, to give the merge back a guard that can
             // tell them apart. Which of those it is cannot be decided in code, which is the whole of
             // why #1847 asked for eyes.
-            // All three are ONE VENUE COMPLEX, Abrons Arts Center, listed once as the building and once
-            // as a room inside it. The store holds no pair of genuinely different shows under one
-            // title, which is the answer #1847 asked for, and it is a fact about today rather than a
-            // property of the rule: nothing stops one arriving with the next watchlist addition.
-            let judged: Set<Set<String>> = [
-                ["urban youth theater summer presentation the show will be named by making it|2026-08-01|abrons arts center",
-                 "urban youth theater summer presentation the show will be named by making it|2026-08-01|main gallery at abrons arts center"],
-                ["orbit|2026-08-09|experimental theater at abrons arts center",
-                 "orbit|2026-08-09|abrons arts center"],
-                ["silsila resonance the living journey of south asian classical music|2026-08-30|playhouse theater at abrons arts center",
-                 "silsila resonance the living journey of south asian classical music|2026-08-30|abrons arts center"],
+            // The first three are ONE VENUE COMPLEX, Abrons Arts Center, listed once as the building and
+            // once as a room inside it.
+            //
+            // THAT IS NO LONGER TRUE OF THE WHOLE LIST, and the sentence that used to stand here said it
+            // was: "the store holds no pair of genuinely different shows under one title... it is a fact
+            // about today rather than a property of the rule: nothing stops one arriving with the next
+            // watchlist addition." One arrived on 2026-09-21, in a single scout run that brought fifteen
+            // new pairs. Fourteen were rooms named two ways; the GLOW pair at the end is two different
+            // churches and is here on Dan's decision rather than on a reading of the rooms. So a reader
+            // must NOT take this list as evidence that a venue-blind merge is safe.
+            // #4067: keyed on WHAT WAS JUDGED (the folded title, the shared night, the two rooms) rather
+            // than on the rows' natural keys, which every re-key arm in this milestone rewrites. See
+            // `JudgedPair` for what moved these entries out from under their own verdicts.
+            let judged: Set<JudgedPair> = [
+                JudgedPair(foldedTitles: ["urban youth theater summer presentation the show will be named by making it",
+                                          "urban youth theater summer presentation the show will be named by making it"],
+                           night: "2026-08-01",
+                           venues: ["Abrons Arts Center", "Main Gallery at Abrons Arts Center"]),
+                JudgedPair(foldedTitles: ["orbit", "orbit"], night: "2026-08-09",
+                           venues: ["Experimental Theater at Abrons Arts Center", "Abrons Arts Center"]),
+                JudgedPair(foldedTitles: ["silsila resonance the living journey of south asian classical music",
+                                          "silsila resonance the living journey of south asian classical music"],
+                           night: "2026-08-30",
+                           venues: ["Playhouse Theater at Abrons Arts Center", "Abrons Arts Center"]),
+
+                // Judged 2026-09-21 in PR #4118. Fourteen arrived in one scout run, and every one is a room
+                // named two ways rather than two shows. Four shapes, and none needs eyes on the show
+                // itself, only on the rooms: the venue's full name against its short one (Roulette
+                // Intermedium), a room against the building that contains it (Zankel Hall in Carnegie
+                // Hall, Leonard Nimoy Thalia and the Peter Jay Sharp Theatre in Symphony Space, the
+                // Playhouse Theater in Abrons Arts Center), a room with and without its building
+                // appended (Adler Hall, Stern Auditorium), and one institution under two of its own
+                // names (Trinity Church NYC, Brick Presbyterian Church).
+                JudgedPair(foldedTitles: ["the monkathon miles okazaki plays thelonious monk world premiere screening",
+                                          "the monkathon miles okazaki plays thelonious monk world premiere screening"],
+                           night: "2026-09-22", venues: ["Roulette", "Roulette Intermedium"]),
+                JudgedPair(foldedTitles: ["selected shorts the five boroughs", "selected shorts the five boroughs"],
+                           night: "2026-09-23", venues: ["Peter Jay Sharp Theatre", "Symphony Space"]),
+                JudgedPair(foldedTitles: ["the scores project a book release show w the rise of the novel",
+                                          "the scores project a book release show w the rise of the novel"],
+                           night: "2026-09-24", venues: ["Roulette", "Roulette Intermedium"]),
+                JudgedPair(foldedTitles: ["john zorn s alea iacta est world premiere",
+                                          "john zorn s alea iacta est world premiere"],
+                           night: "2026-09-27", venues: ["Roulette", "Roulette Intermedium"]),
+                JudgedPair(foldedTitles: ["bathed in sound james brandon lewis trio trap music orchestra angelica sanchez clinton patterson sheela bringi elden kelly",
+                                          "bathed in sound james brandon lewis trio trap music orchestra angelica sanchez clinton patterson sheela bringi elden kelly"],
+                           night: "2026-09-29", venues: ["Roulette", "Roulette Intermedium"]),
+                JudgedPair(foldedTitles: ["the fixx colin blunstone the voice of the zombies and peter asher",
+                                          "the fixx colin blunstone the voice of the zombies and peter asher"],
+                           night: "2026-10-01",
+                           venues: ["Adler Hall", "Adler Hall at New York Society for Ethical Culture"]),
+                JudgedPair(foldedTitles: ["broadway does punk", "broadway does punk"],
+                           night: "2026-10-02",
+                           venues: ["Abrons Arts Center", "Playhouse Theater at Abrons Arts Center"]),
+                JudgedPair(foldedTitles: ["uptown showdown hot vs cold", "uptown showdown hot vs cold"],
+                           night: "2026-10-06",
+                           venues: ["Leonard Nimoy Thalia", "Leonard Nimoy Thalia at Symphony Space"]),
+                JudgedPair(foldedTitles: ["revelry the lovestruck balladeers", "revelry the lovestruck balladeers"],
+                           night: "2026-10-07", venues: ["Leonard Nimoy Thalia", "Symphony Space"]),
+                JudgedPair(foldedTitles: ["trio azura", "trio azura new york debut"],
+                           night: "2026-10-14", venues: ["Zankel Hall", "Zankel Hall at Carnegie Hall"]),
+                JudgedPair(foldedTitles: ["voces8 at trinity church", "voces8 at trinity church"],
+                           night: "2026-10-30", venues: ["Trinity Church", "Trinity Church NYC"]),
+                JudgedPair(foldedTitles: ["daily diversions world premiere", "daily diversions world premiere"],
+                           night: "2026-11-12",
+                           venues: ["Abrons Arts Center", "Playhouse Theater at Abrons Arts Center"]),
+                JudgedPair(foldedTitles: ["cantata 140 at brick church sunday service",
+                                          "cantata 140 at brick church sunday service"],
+                           night: "2026-11-22", venues: ["Brick Church", "Brick Presbyterian Church"]),
+                JudgedPair(foldedTitles: ["handel judas maccabaeus", "handel judas maccabeus"],
+                           night: "2026-12-04",
+                           venues: ["Stern Auditorium / Perelman Stage",
+                                    "Stern Auditorium / Perelman Stage at Carnegie Hall"]),
+
+                // THE FIRST ENTRY HERE THAT IS NOT ONE VENUE COMPLEX, and it is recorded as Dan's
+                // explicit decision rather than as a reading of the rooms, because the rooms say the
+                // opposite. St. Peter's Episcopal Church and Trinity Episcopal Church are two different
+                // churches. Both rows come from ONE source page (`emberarts.org/20262027-season`) under
+                // one presenter (Ember Choral Arts) with one title and one date, so the pair is either a
+                // choir performing twice in a day or a misread of a season page listing two dates.
+                //
+                // Dan's call, 2026-09-21 (this session, in chat), asked with the alternative in front of
+                // him. He was offered a venue guard on the merge, or reading the source page first, and
+                // chose to record it as collapsible. The consequence, stated here because the entry
+                // cannot show it: `SameNightTitleVariantMerge` will collapse these two at the next
+                // launch and DELETE the losing row, so one of the two churches leaves the queue.
+                // Neither row carries outreach history, so nothing in the merge refuses it.
+                //
+                // This entry is therefore NOT evidence that a venue-blind merge is safe. It is one
+                // decision about one pair, and the next genuinely different pair gets the same treatment
+                // only if somebody decides that again.
+                JudgedPair(foldedTitles: ["glow healing and connection", "glow healing and connection"],
+                           night: "2026-12-06",
+                           venues: ["St. Peter's Episcopal Church", "Trinity Episcopal Church"]),
             ]
 
             let unjudged = candidates.filter { candidate in
-                !judged.contains([candidate.a.naturalKey, candidate.b.naturalKey])
+                !judged.contains(JudgedPair.of(candidate.a, candidate.b, night: candidate.night))
             }
 
             #expect(unjudged.isEmpty, Comment(rawValue: """
                 \(unjudged.count) same-night pair(s) at DIFFERENT venues would be collapsed by a merge \
                 that no longer consults the room, and the losing row is deleted. Judge each and record \
                 it, or give the merge a guard:
-                \(unjudged.map { "  " + $0.line }.joined(separator: "\n"))
+                \(unjudged.map { "  " + $0.line + "\n    verdict key: " + JudgedPair.of($0.a, $0.b, night: $0.night).description }.joined(separator: "\n"))
                 """))
 
             try? FileManager.default.removeItem(at: clone)

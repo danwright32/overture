@@ -22,11 +22,13 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/shell-assertions.sh"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DERIVE="${SCRIPT_DIR}/derive-showlink-shape.sh"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 WORK="$(fixture_scratch_dir derive-showlink-shape)"
 
 # Builds a throwaway store from rows given as TSV on stdin, one row per line:
 #   pk <TAB> foldedTitle <TAB> openingNight <TAB> foldedVenue <TAB> status <TAB> performanceDate
 #      <TAB> runEndDate <TAB> nights(comma separated, may be empty) <TAB> sourceListingURL
+#      <TAB> firstSeenAt (an ISO date, or empty for a row that carries none)
 # The natural key is assembled here the way ScoutService writes it, "title|date|venue", because the
 # derivation reads the fold back OUT of that key rather than re-folding anything itself.
 make_store() {
@@ -39,12 +41,13 @@ make_store() {
   rm -f "${path}"
   python3 - "${path}" "${rows}" <<'PY'
 import sqlite3, sys, plistlib
+from datetime import datetime, timezone
 path = sys.argv[1]
 db = sqlite3.connect(path)
 db.execute("""create table ZPROSPECT (
   Z_PK integer primary key, ZNATURALKEY text, ZSTATUSRAW text, ZPERFORMANCEDATE text,
   ZRUNENDDATE text, ZRUNNIGHTS blob, ZRUNSOURCEURLS blob, ZSOURCELISTINGURL text,
-  ZGROUPNAME text, ZVENUE text)""")
+  ZGROUPNAME text, ZVENUE text, ZFIRSTSEENAT real)""")
 
 
 def archive(values):
@@ -67,12 +70,18 @@ for line in open(sys.argv[2]):
     # Padded rather than unpacked strictly: a trailing empty field is a trailing TAB, which editors and
     # tooling strip without trace, and a fixture that dies on invisible whitespace is a fixture that
     # reports a store-building failure as a grouping answer of zero.
-    parts = (line.split("\t") + [""] * 9)[:9]
-    pk, title, opening, venue, status, perf, end, nights, url = parts
-    db.execute("insert into ZPROSPECT values (?,?,?,?,?,?,?,?,?,?)",
+    parts = (line.split("\t") + [""] * 10)[:10]
+    pk, title, opening, venue, status, perf, end, nights, url, first_seen = parts
+    # Core Data stores a TIMESTAMP as seconds since 2001-01-01 UTC, so the fixture writes what the real
+    # store holds rather than an ISO string the command would never meet.
+    seen = None
+    if first_seen.strip():
+        seen = (datetime.fromisoformat(first_seen.strip()).replace(tzinfo=timezone.utc)
+                - datetime(2001, 1, 1, tzinfo=timezone.utc)).total_seconds()
+    db.execute("insert into ZPROSPECT values (?,?,?,?,?,?,?,?,?,?,?)",
                (int(pk), f"{title}|{opening}|{venue}", status, perf or None, end or None,
                 archive([n for n in nights.split(",") if n]), archive([url] if url else []),
-                url or None, title, venue))
+                url or None, title, venue, seen))
 db.commit()
 PY
 }
@@ -173,6 +182,46 @@ ROWS
 out="$("${DERIVE}" --store "${WORK}/tixr.store" --asof 2026-09-19)"
 assert_eq "a tixr slug is never a production token" "0" "$(field_for "${out}" queue groups=)"
 
+# --- the listing links that carry more than one show (#4078) ------------------------------------------
+#
+# Two ingest arms join a stored row to an incoming listing because they SHARE A URL, `matchByAnyRunURL`
+# on any shared run URL and `matchByStableSource` on the listing URL plus date plus venue. Both are
+# guarded by a title predicate and nothing else, and neither can see how ambiguous the URL it matched on
+# actually is. This section is the reachable population for both, which until now existed only inside an
+# ad hoc script somebody wrote to answer #4068.
+
+make_store "${WORK}/ambiguous-url.store" <<'ROWS'
+1	max davidson strangers	2026-10-11	soho playhouse	dismissed	2026-10-11			https://ci.ovationtix.com/35583
+2	max davidson does new material	2026-10-29	soho playhouse	new	2026-10-29			https://ci.ovationtix.com/35583
+3	a third billing entirely	2026-11-02	soho playhouse	new	2026-11-02			https://ci.ovationtix.com/35583
+ROWS
+out="$("${DERIVE}" --store "${WORK}/ambiguous-url.store" --asof 2026-09-19)"
+assert_contains "a URL held under several folded titles is named" "${out}" "ci.ovationtix.com/35583"
+assert_contains "beside how many titles hold it" "${out}" "[3 titles]"
+assert_contains "and the titles themselves, since the count alone cannot be acted on" \
+  "${out}" "max davidson strangers"
+assert_contains "the section says what it cannot see, which is a URL that moved across TIME" \
+  "${out}" "across TIME"
+
+# The control, and it is the half that matters: an over match here would report every ordinary
+# per performance link as ambiguous, and the section would be ignored within a week (L104, L36).
+make_store "${WORK}/unambiguous-url.store" <<'ROWS'
+1	one show	2026-10-11	soho playhouse	new	2026-10-11			https://ci.ovationtix.com/11111
+2	one show	2026-10-29	soho playhouse	new	2026-10-29			https://ci.ovationtix.com/22222
+ROWS
+out="$("${DERIVE}" --store "${WORK}/unambiguous-url.store" --asof 2026-09-19)"
+assert_contains "a store with no ambiguous link says so positively" "${out}" "ambiguousListingURLs= 0"
+assert_not_contains "and names no URL" "${out}" "ci.ovationtix.com/11111"
+
+# One URL, one title, several rows is the ORDINARY shape of a run and must never be flagged: the two
+# arms joining on it is exactly what they are for.
+make_store "${WORK}/one-title-url.store" <<'ROWS'
+1	a weekly series	2026-10-11	the players theatre	new	2026-10-11			https://theplayerstheatre.com/show-schedule.html
+2	a weekly series	2026-10-18	the players theatre	new	2026-10-18			https://theplayerstheatre.com/show-schedule.html
+ROWS
+out="$("${DERIVE}" --store "${WORK}/one-title-url.store" --asof 2026-09-19)"
+assert_contains "one title on a shared URL is not ambiguous" "${out}" "ambiguousListingURLs= 0"
+
 # --- an input this command could not read is never counted as an ordinary empty one -------------------
 #
 # Both of these fall back to something plausible: a runNights blob that will not decode falls back to the
@@ -229,6 +278,82 @@ ROWS
 out="$("${DERIVE}" --store "${WORK}/liverun.store" --asof 2026-09-19)"
 assert_eq "a run opening yesterday and closing in December is in queue scope" "1" \
   "$(field_for "${out}" queue rows=)"
+
+# --- --dates: WHEN each member of a group arrived (#4033) --------------------------------------------
+#
+# The question this answers decides whether a duplicate is worth fixing at ingest, and on 2026-09-19 it
+# reversed a conclusion: #3766's premise re-check said the store's duplicates were pre-fix residue minted
+# before #1558 shipped, which was true of the group it measured and false of the store. Answering it meant
+# patching a private copy of this script, which is exactly the figure-nobody-can-re-take this command
+# exists to end.
+
+make_store "${WORK}/dates.store" <<'ROWS'
+1	the infinite wrench	2026-10-02	asylum nyc	dismissed	2026-10-02	2026-10-05			2026-07-23
+2	the infinite wrench	2026-10-04	asylum nyc	dismissed	2026-10-04	2026-10-08			2026-09-03
+3	we are happy to serve you	2026-10-02	the players theatre	new	2026-10-02	2026-10-05			2026-07-23
+4	we are happy to serve you	2026-10-04	the players theatre	new	2026-10-04	2026-10-08			
+5	a show stored once	2026-11-01	the cutting room	new	2026-11-01				2026-08-01
+ROWS
+
+out="$("${DERIVE}" --store "${WORK}/dates.store" --asof 2026-09-19 --dates)"
+assert_contains "--dates prints a member's first sighting beside its pk" "${out}" "pk 1"
+assert_contains "and the date it was first seen" "${out}" "2026-07-23"
+assert_contains "and the later member's own date, which is the whole point" "${out}" "2026-09-03"
+assert_contains "a row that carries no first sighting says so in words" "${out}" "not recorded"
+assert_not_contains "a row stored once is in no group, so it is never listed" "${out}" "a show stored once"
+
+# EVERY group, not the largest three: the default output caps the list and that cap is what hid the
+# store-wide answer in the first place.
+assert_contains "--dates lists the first group" "${out}" "the infinite wrench"
+assert_contains "--dates lists the second group too" "${out}" "we are happy to serve you"
+# #4021: the member line carries the row's own natural key, which is what ShowLink.Row.id is, so the
+# shipped rule can be compared against this membership rather than against this count.
+assert_contains "a member line carries the natural key" "${out}" \
+  "key the infinite wrench|2026-10-02|asylum nyc"
+
+# The two misreadings that produced #3766's wrong mechanism, said beside the dates rather than left for
+# a reader to know (L11): firstSeenAt is not unconditionally a mint date, and ingestedAt is the LAST touch.
+assert_contains "the output warns that a first sighting can have been rewritten" "${out}" "NaturalKeyVenueMigration"
+assert_contains "and that ingestedAt is the last touch, not the first" "${out}" "ingestedAt"
+
+# The default output is UNCHANGED, because its four populations are quoted in issue bodies.
+plain="$("${DERIVE}" --store "${WORK}/dates.store" --asof 2026-09-19)"
+assert_not_contains "without --dates nothing prints a member's date" "${plain}" "first seen"
+assert_eq "without --dates the store figure is what it always was" "2" \
+  "$(field_for "${plain}" store groups=)"
+assert_eq "and --dates does not change it either" "2" "$(field_for "${out}" store groups=)"
+
+# #4116: the script folds a listing address before counting how many titles it carries, because the two
+# arms that JOIN on those addresses fold them the same way. The Swift fold and this one are twin
+# implementations, so both are held to ONE committed fixture rather than to each other (L26). The Swift
+# half is `ListingURLFoldContractTests`; this is the other half, and it reads the same file.
+#
+# It drives the script's own `fold_listing_url` by importing the script as text into python, rather than
+# restating the rule here, which would make this a third implementation agreeing with itself.
+fold_out="$(REPO_ROOT="${REPO_ROOT}" DERIVE="${DERIVE}" python3 - <<'PYEOF'
+import json, os, re, sys
+
+derive = open(os.environ["DERIVE"]).read()
+start = derive.index("def fold_listing_url(raw):")
+end = derive.index("def tokens_for(", start)
+namespace = {}
+exec(derive[start:end], namespace)
+fold = namespace["fold_listing_url"]
+
+cases = json.load(open(os.path.join(os.environ["REPO_ROOT"], "fixtures/listing-url-fold/v1.json")))["fold"]
+if len(cases) < 10:
+    print(f"FIXTURE TOO SMALL: {len(cases)} case(s)")
+    sys.exit(0)
+bad = [c for c in cases if fold(c["input"]) != c["expected"]]
+for c in bad:
+    print(f"DISAGREES: {c['input']!r} folded to {fold(c['input'])!r}, fixture says {c['expected']!r} because {c['why']}")
+print(f"checked {len(cases)} case(s), {len(bad)} disagreement(s)")
+PYEOF
+)"
+assert_contains "the script's fold agrees with the committed fixture on every case" "${fold_out}" \
+  "0 disagreement(s)"
+assert_not_contains "and the fixture is not too small to be a spec" "${fold_out}" "FIXTURE TOO SMALL"
+assert_not_contains "no case disagrees" "${fold_out}" "DISAGREES:"
 
 rm -rf "${WORK}"
 

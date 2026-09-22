@@ -116,6 +116,8 @@ enum SameNightTitleVariantMerge {
                 // check would find them again; then the row holding a paid answer; then the oldest, which
                 // `cluster` is already ordered by.
                 let candidates = NaturalKeyVenueMigration.preferringASecondLook(cluster)
+                // #4024: as in DriftedRunMerge, `first` is safe here only because `mustDefer` has
+                // already refused the two-match case. Owned by DeferralProtectsTheFirstRungTests.
                 let survivor = cluster.first(where: {
                         NaturalKeyVenueMigration.hasRecordBeyondADismissal($0, countingFoundAddresses: false)
                     })

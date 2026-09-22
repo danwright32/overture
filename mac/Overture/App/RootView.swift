@@ -754,6 +754,13 @@ struct RootView: View {
                       // mean the queue passed it up rather than serving it, so do nothing rather than
                       // start a run over a set this view cannot compute.
                       case .finishShowsACheckMissed: break
+                      // #4027: same shape as the line above. The focused list this enters belongs to
+                      // QueueView, which serves it there; reaching here means the queue passed it up, so
+                      // do nothing rather than half-perform a navigation this view cannot make.
+                      case .showShowsOneSweepBroke: break
+                      // #3596: same shape again, and for the same reason: the focused list belongs to
+                      // QueueView.
+                      case .showMergeSurvivorsTheFeedDropped: break
                       // #2478: read the export again, through the same one recorder the reconcile tick
                       // uses, so pressing this and waiting for a tick can never reach different verdicts.
                       // A fixed export clears the line on the spot; a still-broken one leaves it standing,
