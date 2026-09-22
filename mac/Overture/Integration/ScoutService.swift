@@ -1507,7 +1507,25 @@ enum ScoutService {
                       storedByKey: { try Prospect.stored(key: $0, in: context) })
                 updated += 1
             case .insert:
-                context.insert(make(enriched, key: key))
+                let fresh = make(enriched, key: key)
+                // #3330: before it goes in, ask whether a stored row on this night at this room is the
+                // same show by the merge's own predicate. The upsert has already decided to INSERT, so
+                // this changes nothing about whether the row is written; it records which row the
+                // arrival looked like, so the pairing is on the card now rather than after the next
+                // launch. Dan's call, 2026-09-21: tag, never refuse.
+                //
+                // Read through the same fetch shape the arms above use. A failed read leaves the tag
+                // nil, which is the safe direction: no tag is a card that says nothing, while a tag
+                // invented from a store that could not answer would be a claim about a row nobody saw
+                // (L105, L215).
+                if let others = try? context.fetch(FetchDescriptor<Prospect>()) {
+                    fresh.arrivedLookingLike = LookalikeOnArrival.amongStored(
+                        others.map { (key: $0.naturalKey, groupName: $0.groupName,
+                                      performanceDate: $0.performanceDate, venue: $0.venue) },
+                        groupName: enriched.groupName, performanceDate: enriched.performanceDate,
+                        venue: enriched.venue, excludingKey: key)
+                }
+                context.insert(fresh)
                 inserted += 1
             case .storeUnreadable:
                 // The store could not answer whether this key is free, so this row is left alone entirely.

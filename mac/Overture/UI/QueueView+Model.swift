@@ -275,6 +275,10 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     // one production at DIFFERENT venues, and this is the same production at the same venue stored more
     // than once, which is a fault in the store rather than a fact about the engagement.
     var sameShowKeys: [String] = []
+    // #3330: the TITLE of the row this one looked like when it arrived, already resolved. A title rather
+    // than a key because that is what the sentence says, and resolved in the pass rather than on the card
+    // because a key naming a row that has since been merged away must draw nothing (L200).
+    var arrivedLookingLikeTitle: String? = nil
     // #3013: this show was left out of the last run Dan started, because another run was already on it.
     // The slot named is the run he PRESSED, not the one holding it, because that is what makes the
     // sentence actionable. nil for every show that was not left out, which is almost all of them.
@@ -3143,11 +3147,22 @@ enum QueueModel {
         // the caller's rows would make a card stop admitting the fault as soon as Dan dealt with the
         // other half of it.
         let sameShowGroups = ShowLink.group((corpus ?? prospects).map(ShowLink.Row.init))
+        // #3330: the title of each stored row, so a card carrying an arrival tag can name the row it
+        // looked like. Over the UNFILTERED corpus for the same reason the two tables above are: the row
+        // this one resembles may be dismissed or outside the window, and a lookalike the caller's scope
+        // happens to exclude is still a lookalike.
+        //
+        // This table is ALSO what resolves the tag at READ time. A key naming a row that is no longer
+        // stored, which is what the launch merge leaves behind when it collapses the pair, is simply
+        // absent here, so the note stops drawing with nothing needing to clear the field (L200).
+        let titlesByKey = Dictionary((corpus ?? prospects).map { ($0.naturalKey, $0.groupName) },
+                                     uniquingKeysWith: { first, _ in first })
         let pre = CardPreamble(linked: linked, inherited: inherited, venueBrands: venueBrands,
                                rowCounts: rowCounts, calendarBySourceId: calendarBySourceId,
                                overrides: overrides, clients: clients,
                                contradictedCancellations: contradictedCancellations,
                                sameShowGroups: sameShowGroups,
+                               titlesByKey: titlesByKey,
                                now: now, day: day)
 
         var rows: [QueueScopeRow] = []
@@ -3222,6 +3237,8 @@ enum QueueModel {
         let contradictedCancellations: Set<String>
         // #3282: for each row's natural key, the OTHER keys holding the same show.
         let sameShowGroups: [String: [String]]
+        // #3330: every stored row's title by its key, for resolving an arrival tag to a name.
+        let titlesByKey: [String: String]
         let now: Date
         let day: String
 
@@ -3359,6 +3376,9 @@ enum QueueModel {
         }
         // #3282: the store holding this show more than once, said on the card rather than nowhere.
         item.sameShowKeys = pre.sameShowGroups[p.naturalKey] ?? []
+        // #3330: resolved HERE, against the corpus table, so a tag pointing at a row the launch merge has
+        // since collapsed resolves to nothing and the card says nothing.
+        item.arrivedLookingLikeTitle = p.arrivedLookingLike.flatMap { pre.titlesByKey[$0] }
         // #1731: only meaningful where the verdict IS the building; nil otherwise.
         item.readAsTheBuildingReason = pre.venueBrands.contains(p.presenter)
             ? OrganisationListing.buildingReason(
@@ -3589,6 +3609,30 @@ enum QueueModel {
         // (L11), and what this one measured is how many rows hold this show.
         return others == 1 ? "This show is stored twice."
                            : "This show is stored \(others + 1) times."
+    }
+
+    // #3330: this show arrived looking like one already stored for the same night in the same room, by
+    // the same predicate the launch merge deletes a row with.
+    //
+    // It NAMES the other billing, where `storedMoreThanOnceNote` above deliberately gives a count. The
+    // two are not inconsistent: that one groups rows whose FOLDED TITLE already matches, so naming the
+    // sibling would repeat this card's own title back at Dan (#3282 recorded exactly that). This one
+    // fires precisely where the titles DIFFER, which is the whole shape of the defect, so the other
+    // billing is the one thing the card can say that he does not already know.
+    //
+    // It says LOOKS LIKE and not IS, because that is what the check measured (L11): the same judgement
+    // is trusted enough to delete a row with at launch, and it is still a judgement.
+    //
+    // DAN'S WORDING, chosen 2026-09-21 with the alternatives and their worst case in front of him. He
+    // took naming the other show over a one line sentence that names nothing, knowing what it costs: the
+    // store's longest title is 154 characters (`Ilya Kaler, Violin Rasa Vitkauskaite, Piano With special
+    // guests ...`), so this runs to four or five lines at card width on the worst row. He also dropped
+    // the word BILLING, which reads naturally in this repository and appears nowhere in what the app
+    // actually says to him: measured against `docs/copy-inventory.md`, its only occurrence was a parser
+    // filename. A word the code uses constantly is not thereby a word the product speaks (L118).
+    static func arrivedLookingLikeNote(_ item: QueueItem) -> String? {
+        guard let other = item.arrivedLookingLikeTitle, !other.isEmpty else { return nil }
+        return "Looks like the same show as \(other), already stored for this night."
     }
 
     static func linkedEngagementNote(_ item: QueueItem) -> String? {
