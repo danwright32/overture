@@ -758,8 +758,14 @@ enum ProspectMutations {
     //
     // ONE lookup rather than the same filter at each action, because the two that use it have to agree
     // about what "the rest of the group" means and a drift between them would be silent in the direction
-    // that leaves a row untriaged (L370). The fronting row itself is excluded: every caller has already
-    // acted on it through `model(for:)`, and acting twice would record its undo entry twice.
+    // that leaves a row untriaged (L370).
+    //
+    // THE FRONTING ROW IS EXCLUDED, and that is load bearing rather than tidiness. Every caller has
+    // already acted on it through `model(for:)`, and `setStatus` runs this loop BEFORE it reads the row's
+    // prior status: a set including the front row would clear its dismissal first, so the undo entry
+    // would record the state the press had just produced and Cmd+Z would restore nothing (#3566 is why
+    // the prior state is read first at all). `undoingTheKeepOnACollapsedCardStillRestoresWhatItWas`
+    // asserts it; the mutation putting the front row back is CAUGHT by that test alone.
     //
     // Empty for a card that stands alone, which is almost every card, so both call sites run exactly as
     // they did before this issue on the ordinary row.

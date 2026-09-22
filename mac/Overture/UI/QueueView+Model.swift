@@ -3171,7 +3171,12 @@ enum QueueModel {
         // #4030: over the UNFILTERED corpus, exactly like `sameShowGroups` above, and through the same
         // `ShowLink` rule: what joins two rows for display is decided in one place and nothing else
         // joins them. The collapse deletes nothing and re-keys nothing; a wrong join costs a re-render.
-        let collapse = ShowLink.collapse((corpus ?? prospects).map(ShowLink.Row.init))
+        // The GROUPING is judged over the corpus and the HIDING over what this surface draws, which are
+        // two different questions: a group's highest priority row is routinely dismissed or outside the
+        // queue's window, and hiding its siblings in favour of a card that is not there would take the
+        // show off the surface entirely.
+        let collapse = ShowLink.collapse((corpus ?? prospects).map(ShowLink.Row.init),
+                                         drawn: Set(prospects.map(\.naturalKey)))
         let pre = CardPreamble(linked: linked, inherited: inherited, venueBrands: venueBrands,
                                rowCounts: rowCounts, calendarBySourceId: calendarBySourceId,
                                overrides: overrides, clients: clients,
@@ -3193,9 +3198,9 @@ enum QueueModel {
             // the one place rows and cards are built, so the queue and the archive collapse identically
             // rather than each deciding for itself (L613).
             //
-            // The scope this is judged over is the whole corpus, so a hidden row is hidden on every
-            // surface, and it can never hide the LAST card of a group: `ShowLink.collapse` always leaves
-            // exactly one front per group.
+            // It can never hide the LAST card a surface has for a group: the front is chosen from the
+            // rows this pass is drawing, so a group with one row here keeps it however many copies the
+            // corpus holds.
             if pre.collapsedHidden.contains(p.naturalKey) { continue }
             // #3653 Phase 3: the contacts, read ONCE for this show, whatever is built from them.
             //

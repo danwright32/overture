@@ -157,7 +157,15 @@ enum ShowLink {
     // PRESENTATION ONLY, like everything else here: it hides a row from a list, writes nothing and
     // deletes nothing. What an action does to the hidden rows is the CALLER's decision and is not
     // encoded here, which is why this returns the members rather than acting on them.
-    static func collapse(_ rows: [Row]) -> (fronts: [String: [String]], hidden: Set<String>) {
+    // `drawn` is the keys the SURFACE is about to draw, and passing it is what stops a collapse hiding
+    // the only copy a surface has. The grouping is judged over the whole corpus, deliberately, so a
+    // dismissed or out-of-window row still counts as a member; but a row may only be hidden in favour of
+    // a card that is actually there. The queue is handed a filtered list with the corpus beside it, so
+    // the highest priority member of a group is routinely NOT on the surface, and hiding the rest then
+    // removes the show from that surface altogether (L5, L98: a card that is drawn nowhere reads exactly
+    // like a show nobody found). Nil means every row is drawn, which is what the archive hands it.
+    static func collapse(_ rows: [Row],
+                         drawn: Set<String>? = nil) -> (fronts: [String: [String]], hidden: Set<String>) {
         var fronts: [String: [String]] = [:]
         var hidden: Set<String> = []
         for cluster in clusters(rows) where cluster.count > 1 {
@@ -167,10 +175,13 @@ enum ShowLink {
                 let rightNight = right.performanceDate ?? ""
                 if leftNight != rightNight { return leftNight < rightNight }
                 return left.id < right.id
-            }
-            guard let front = ordered.first else { continue }
-            fronts[front.id] = cluster.map(\.id)
-            hidden.formUnion(ordered.dropFirst().map(\.id))
+            }.map(\.id)
+            let present = drawn.map { keys in ordered.filter { keys.contains($0) } } ?? ordered
+            guard let front = present.first else { continue }
+            // Every member, drawn or not: the card stands for the whole group, and an action on it is
+            // about the SHOW rather than about what this surface happens to be showing.
+            fronts[front] = cluster.map(\.id)
+            hidden.formUnion(present.dropFirst())
         }
         return (fronts, hidden)
     }

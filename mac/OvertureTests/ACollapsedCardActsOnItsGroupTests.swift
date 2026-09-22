@@ -115,6 +115,55 @@ struct ACollapsedCardActsOnItsGroupTests {
                 "the hidden copy stayed undecided and comes back untriaged the day the grouping changes")
     }
 
+    // A SURFACE NEVER LOSES THE ONLY COPY IT HAS. The grouping is judged over the whole corpus, so the
+    // row a group would be fronted by is routinely dismissed or outside the queue's window. Hiding the
+    // rest in favour of a card that is not on this surface takes the show off it altogether, which is
+    // the worst outcome available and reads exactly like a show nobody found (L5, L98). Measured: the
+    // #3282 suite went red on precisely this when the hiding was judged over the corpus.
+    @Test func agroupWhoseFrontIsNotOnThisSurfaceStillDrawsTheCopyThatIs() throws {
+        let ctx = try context()
+        let earlier = row(ctx, opening: "2026-10-02")
+        let later = row(ctx, opening: "2026-10-09")
+        let all = try ctx.fetch(FetchDescriptor<Prospect>())
+        // The corpus holds both; this surface is handed only the later one, which is what the queue does
+        // to a group whose earliest copy sits outside its window.
+        var data = QueueModel.scope(from: [later], corpus: all)
+
+        let drawn = try #require(data.rows.first { $0.id == later.naturalKey },
+                                 "the only copy this surface had was hidden behind a card it never drew")
+        #expect(data.cards.card(for: drawn).collapsedMemberKeys.sorted()
+                == [earlier.naturalKey, later.naturalKey].sorted(),
+                "the card it did draw must still stand for every member, or an action reaches half a group")
+    }
+
+    // AND THE UNDO STILL WORKS, which is what makes the fronting row's EXCLUSION from the sibling walk
+    // load bearing rather than tidiness. `setStatus` runs the sibling loop BEFORE it reads the row's
+    // prior status, so a sibling set that included the front row would clear its dismissal first and the
+    // undo entry would then record the state the press had already produced: Cmd+Z would restore nothing
+    // and the row would look kept for ever (L5, and #3566's reason for reading the prior state first).
+    @Test func undoingTheKeepOnACollapsedCardStillRestoresWhatItWas() throws {
+        let ctx = try context()
+        let first = row(ctx, opening: "2026-10-02")
+        let second = row(ctx, opening: "2026-10-09")
+        first.markDismissed(reason: .notAFit)
+        second.markDismissed(reason: .notAFit)
+        try ctx.save()
+
+        let stored = try ctx.fetch(FetchDescriptor<Prospect>())
+        let card = try #require(try cards(ctx).first { $0.id == first.naturalKey })
+        let stack = QueueUndoStack()
+        ProspectMutations.setStatus(card, .queued, nil, prospects: stored, context: ctx,
+                                    feedback: ActionFeedback(), undo: stack, undoLabel: "Keep")
+        #expect(first.status == .queued)
+        #expect(second.status == .queued)
+
+        let entry = try #require(stack.takeTop())
+        #expect(QueueUndo.apply(entry, to: first, in: ctx,
+                                export: (bookings: [], blockedDates: [], health: .ok)))
+        #expect(first.status == .dismissed,
+                "the undo restored the state the press had already written, so it undid nothing")
+    }
+
     // A DISMISS ABOUT THE SHOW closes every row.
     @Test func adismissAboutTheShowClosesEveryRowBehindIt() throws {
         let ctx = try context()
