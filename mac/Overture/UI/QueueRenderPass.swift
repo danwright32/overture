@@ -402,6 +402,25 @@ enum QueueRenderPass {
         let feedBreaks = AppNotices.feedBreaks(
             FeedBreakEvent.events(among: everyProspect, asOf: EasternDate.today(i.context.now)),
             shownInQueue: { inAStage.contains($0) })
+        // #3596: the rows a merge kept that the next sweep did not list. Derived here for the same two
+        // reasons as the line above: it is a whole-store question, and this pass already holds both
+        // halves it needs. FUTURE and OPEN only, which is what stops the finding standing for ever on a
+        // show that has since played or that Dan has closed (the notice's own comment says so).
+        let today = EasternDate.today(i.context.now)
+        let unseenSurvivors = everyProspect
+            .filter { p in
+                guard p.mergeSurvivorUnseenAt != nil, !p.isClosed else { return false }
+                // The same live-run rule `FeedReconcile.isFuture` applies, through the same helper, so
+                // the pass that RECORDS the finding and the pass that SHOWS it cannot come to disagree
+                // about which shows are still ahead (L16).
+                return EasternDate.runIsLive(
+                    lastNight: EasternDate.runLastNight(runEndDate: p.runEndDate,
+                                                        performanceDate: p.performanceDate),
+                    today: today)
+            }
+            .map(\.naturalKey)
+        let mergeSurvivorsDropped = AppNotices.mergeSurvivorsTheFeedDropped(
+            unseenSurvivors, shownInQueue: { inAStage.contains($0) })
         return QueueView.RenderData(
             cards: scope.cards,
             // #3507: the scope itself, so the render path reads the list this pass already derived rather
@@ -434,6 +453,7 @@ enum QueueRenderPass {
             reachedOut: reachedOut,
             reachedOutKeys: reachedOutKeys,
             feedBreaks: feedBreaks,
+            mergeSurvivorsDropped: mergeSurvivorsDropped,
             pendingBookings: QueueModel.pendingBookingCount(rows),
             fanOutLine: fanOutWarning(inQueue.all),
             rows: rows, visibleRows: visibleRows,

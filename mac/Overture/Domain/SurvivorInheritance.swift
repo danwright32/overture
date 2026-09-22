@@ -38,7 +38,8 @@ enum SurvivorInheritance {
     // rather than a gap. That question is left open deliberately and is named in this change's PR body;
     // what is NOT left open is the other two carries, which that pass was missing outright.
     @discardableResult
-    static func carry(onto survivor: Prospect, from members: [Prospect]) -> String? {
+    static func carry(onto survivor: Prospect, from members: [Prospect],
+                      now: Date = Date()) -> String? {
         // The show was first seen when the EARLIEST of these rows first saw it. Moved here from
         // NaturalKeyVenueMigration, which was the only pass doing it.
         let firstSightings = members.compactMap(\.firstSeenAt)
@@ -48,6 +49,7 @@ enum SurvivorInheritance {
         }
         NaturalKeyVenueMigration.carryDansDecisions(onto: survivor, from: members)
         carryTheFoundAddresses(onto: survivor, from: members)
+        markAwaitingTheFeed(survivor, members: members, now: now)
         return NaturalKeyVenueMigration.carryTheFeedIdentity(onto: survivor, from: members)
     }
 
@@ -93,5 +95,25 @@ enum SurvivorInheritance {
             move.loser.recipients.removeAll { $0.persistentModelID == move.recipient.persistentModelID }
             survivor.addRecipient(move.recipient)
         }
+    }
+
+    // #3596: the question this merge leaves behind, stamped on the survivor so the next sweep can answer
+    // it. HERE rather than in each pass, because all three deleting passes already call `carry`, and a
+    // shared component that converts the one site in front of whoever built it and leaves the rest is the
+    // exact failure this file's own header records (L613, L621).
+    //
+    // ONLY where something was actually merged. `members` includes the survivor, so a single member is a
+    // cluster that merged nothing, and marking those would put the question on rows no pass touched and
+    // make the next sweep report the whole store (L104).
+    //
+    // It OVERWRITES an outstanding mark rather than keeping the older one. Two merges before a sweep is
+    // one question, not two, and it is about the identity the survivor holds now.
+    //
+    // It does NOT clear `mergeSurvivorUnseenAt`. A finding from a previous cycle is a fact about what
+    // happened then, and a fresh merge is not evidence that it was wrong; the sweep clears it, by
+    // listing the row.
+    private static func markAwaitingTheFeed(_ survivor: Prospect, members: [Prospect], now: Date) {
+        guard members.count > 1 else { return }
+        survivor.survivedMergeAt = now
     }
 }

@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1625 sentences**.
+Every sentence Overture can say to Dan: **1628 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -14,7 +14,7 @@ What is not, and why:
   sentences under tokens nobody reads.
 - **Nothing, if it is written as two literals joined with `+`.** Those ARE joined here, into the
   one sentence the running app says (#3155). What is still only part of what Dan reads is a
-  sentence carrying a VALUE: 594 of the 1625 below hold a
+  sentence carrying a VALUE: 595 of the 1628 below hold a
   `\(...)` where a number or a name goes, so what is printed is the template. They are counted
   here rather than listed again, because the hole is visible in the line itself; what was missing
   was any statement of how much of this document is templates.
@@ -490,6 +490,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/DraftCheck.swift`
 "A separate email each"
     `UI/SendConfirmSheet.swift`
+"A show Overture kept when it merged a duplicate wasn't listed by its source on the next check."
+    `Domain/AppNotice.swift`
 "A show was left out this run because the local store stopped answering. Run the scout again."
     `Domain/ScoutWarnings.swift`
 "A source \"\(sourceName)\" may be them: check its name, or tag it a returning client."
@@ -2708,6 +2710,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/GenreCorrection.swift`
 "When Overture reviewed every stored answer, no show turned out to have been recorded as unreachable while it held a way in."
     `UI/WrittenOffBacklogSection.swift`
+"When one show is stored twice, Overture keeps one copy and removes the other. The copy it keeps has to be the one its source goes on listing, or the show reads as gone while it is still playing. These were not listed the next time their sources were read."
+    `Domain/AppNotice.swift`
 "Which kept shows to prep?"
     `Domain/PrepSelectionCopy.swift`
 "Which message is their reply?"
@@ -3076,6 +3080,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/AgentRoster.swift`
 "\(kept) to prep"
     `Domain/PrepStatus.swift`
+"\(keys.count) shows Overture kept when it merged a duplicate weren't listed by their sources on the next check."
+    `Domain/AppNotice.swift`
 "\(label), \(calendar.component(.year, from: date))"
     `Domain/EasternDate.swift`
 "\(label)… \(elapsed)"
