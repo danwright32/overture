@@ -102,6 +102,51 @@ struct TwoSourcesOnePresenterTests {
                 "the stamp moved to a source whose reading was refused, so the next run would let it win")
     }
 
+    // THE STAMP MOVING IS ITS OWN CLAIM, and the test above cannot see it: the INSERT arm stamps every
+    // new row, so a fixture that only ever watches the first writer is answered by that line whatever the
+    // update arm does. Measured: a mutation removing the update stamp (`if false { existing
+    // .presenterSourceKey = incomingKey }`) SURVIVED the suite as first written (L467, L135).
+    //
+    // This is the direction where the incoming reading WINS, so the field's owner changes, and the second
+    // half is what the stamp is FOR: the source whose own reading was displaced must not take the field
+    // back on its next ordinary re-read.
+    @Test func asourceThatFilledAnEmptyPresenterOwnsItAfterwards() throws {
+        let ctx = try context()
+        ingest(ctx, presenter: nil, source: "kaufmanmusiccenter-org")
+        ingest(ctx, presenter: "Kaufman Music Center", source: "aggregator-example-org")
+        #expect(try stored(ctx).presenterSourceKey == "aggregator-example-org",
+                "the stamp stayed with the source that read nobody, so that source may erase this name")
+
+        ingest(ctx, presenter: nil, source: "kaufmanmusiccenter-org")
+        #expect(try stored(ctx).presenter == "Kaufman Music Center",
+                "a source whose reading was displaced emptied the field on its next ordinary re-read")
+    }
+
+    // A LOSING READING WRITES NOTHING, and the field that proves it is the PROVENANCE beside the value
+    // rather than the value itself. Writing the stored name back would go through `setPresenter(_:from:
+    // .scout)`, which stamps `presenterSource`, so a name Dan (or the sweep, or the AI pass) put there
+    // would be recorded as the scout's the first time any other source listed the show, and #2453's
+    // refusal reads exactly that stamp: the name would then be erasable by the next ordinary re-read
+    // that names nobody. The value and the record of who wrote it are one fact (L544).
+    @Test func areadingThatLosesDoesNotRestampTheValueItLeftAlone() throws {
+        let ctx = try context()
+        ingest(ctx, presenter: "Kaufman Music Center", source: "kaufmanmusiccenter-org")
+
+        // Dan corrects the name himself, which is what the stamp is there to protect.
+        let row = try stored(ctx)
+        row.setPresenter("Kaufman Music Center Presents", from: .dan)
+        try ctx.save()
+
+        ingest(ctx, presenter: "Some Other Presenter", source: "aggregator-example-org")
+
+        let after = try stored(ctx)
+        #expect(after.presenter == "Kaufman Music Center Presents")
+        #expect(after.presenterSource == PresenterSource.dan.rawValue,
+                "the losing source restamped the row as the scout's, so an ordinary re-read may now empty it")
+        #expect(after.presenterSurvivesAnOrdinaryReRead,
+                "which is the consequence that matters: #2453 stopped protecting the name")
+    }
+
     // THE RULE ITSELF, as a pure function, including the case no ingest fixture can reach on a fresh row:
     // a row written before this shipped carries no stamp at all, which reads as nothing recorded, so the
     // incoming value lands and stamps it. That is what makes this shippable without a backfill (L389).
@@ -116,5 +161,19 @@ struct TwoSourcesOnePresenterTests {
         #expect(GenrePrecedence.mergedPresenter(stored: "  ", storedKey: "a",
                                                 incoming: "Incoming", incomingKey: "b") == "Incoming",
                 "a stored value that is only whitespace is nobody, so it must not block a real name")
+
+        // AND THE OWNERSHIP QUESTION, which is the same rule asked for the stamp and the explanation
+        // rather than for the value. Two sources that read the SAME name is the case that cannot be
+        // answered by comparing the merged value with the incoming one: they are equal, so a comparison
+        // hands the row to whoever spoke last.
+        #expect(!GenrePrecedence.incomingPresenterStands(stored: "Same Name", storedKey: "a",
+                                                         incoming: "Same Name", incomingKey: "b"),
+                "a second source reading the same name took ownership of a value it did not put there")
+        #expect(GenrePrecedence.incomingPresenterStands(stored: "Held", storedKey: "a",
+                                                        incoming: "Other", incomingKey: "a"),
+                "a source correcting its own reading owns what it writes")
+        #expect(GenrePrecedence.incomingPresenterStands(stored: nil, storedKey: "a",
+                                                        incoming: "Other", incomingKey: "b"),
+                "filling a field nobody had read is the direction that adds information")
     }
 }

@@ -76,9 +76,23 @@ enum GenrePrecedence {
     // second source naming somebody where the row has nobody is the one that must land.
     static func mergedPresenter(stored: String?, storedKey: String?,
                                 incoming: String?, incomingKey: String) -> String? {
-        if mayOverwrite(storedKey: storedKey, incomingKey: incomingKey) { return incoming }
-        let held = (stored ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        return held.isEmpty ? incoming : stored
+        incomingPresenterStands(stored: stored, storedKey: storedKey,
+                                incoming: incoming, incomingKey: incomingKey) ? incoming : stored
+    }
+
+    // WHETHER THE VALUE THAT STANDS IS THE ONE THIS SOURCE BROUGHT, which is the same question as the
+    // merge above and is asked separately because three things hang on it, not one: the presenter, the
+    // stamp recording who owns it, and `presenterWasTheRoom`, which is this listing's explanation of why
+    // a presenter is blank and belongs only to a row whose presenter came from this listing (L55, L544).
+    //
+    // A NAMED RULE rather than comparing the merged value against the incoming one afterwards. Two
+    // sources that read the SAME name are indistinguishable that way, so the row would record whichever
+    // source spoke last as the owner of a value the first one put there, which is the defect this issue
+    // is about wearing a different hat.
+    static func incomingPresenterStands(stored: String?, storedKey: String?,
+                                        incoming: String?, incomingKey: String) -> Bool {
+        if mayOverwrite(storedKey: storedKey, incomingKey: incomingKey) { return true }
+        return (stored ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     // The producer axis, production and profile together. `unknown` means nobody could be named, so

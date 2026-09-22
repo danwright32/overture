@@ -2201,19 +2201,25 @@ enum ScoutService {
             // A source correcting its OWN reading is untouched, which is every ordinary re-read, so this
             // changes nothing for a row one source owns.
             let incomingKey = GenrePrecedence.sourceKey(p.sourceIds)
-            let merged = GenrePrecedence.mergedPresenter(stored: existing.presenter,
-                                                         storedKey: existing.presenterSourceKey,
-                                                         incoming: p.presenter,
-                                                         incomingKey: incomingKey)
-            let incomingWon = merged == p.presenter
-            existing.setPresenter(merged, from: .scout)
-            // Stamped only where the value standing is the one THIS source brought, exactly as the two
-            // axes are, so "may this source correct what is here" keeps answering yes for whoever is
-            // actually responsible for the name.
-            if incomingWon { existing.presenterSourceKey = incomingKey }
-            // The explanation travels with the value it explains: a presenter this run did NOT set must
-            // not take this listing's account of why it is blank (L55).
-            if incomingWon { existing.presenterWasTheRoom = p.presenterWasTheRoom }   // #1788
+            if GenrePrecedence.incomingPresenterStands(stored: existing.presenter,
+                                                       storedKey: existing.presenterSourceKey,
+                                                       incoming: p.presenter,
+                                                       incomingKey: incomingKey) {
+                existing.setPresenter(p.presenter, from: .scout)
+                // Stamped where the value standing is the one THIS source brought, exactly as the two
+                // axes are, so "may this source correct what is here" keeps answering yes for whoever is
+                // actually responsible for the name.
+                existing.presenterSourceKey = incomingKey
+                // And the explanation travels with the value it explains: `presenterWasTheRoom` says why
+                // THIS listing's presenter is blank, and it belongs only to a row whose presenter came
+                // from this listing (L55, the same reason the branch above it states).
+                existing.presenterWasTheRoom = p.presenterWasTheRoom   // #1788
+            }
+            // NOTHING is written on the losing path, not even the value the row already holds. Writing it
+            // back would run through `setPresenter(_:from: .scout)`, which stamps `presenterSource`, so a
+            // name a sweep, the batched AI pass or Dan put there would be recorded as the scout's on the
+            // first visit by any other source, and #2453's refusal (which reads that stamp) would stop
+            // protecting it. The value and the record of who wrote it are one fact (L544).
         }
         existing.location = p.location
         // #1886: track the listing's own spelling of the room always, the way scoutGroupName tracks the
