@@ -120,6 +120,19 @@ enum ProspectMutations {
             // what dismissing means, and its exit is dated by the model's own pair so the drop-off can be
             // placed in a year (#16).
             model.markDismissed(reason: outcome)
+            // #4030: and, on a COLLAPSED card, the same ending on every row the card stands for, when the
+            // reason is about the SHOW.
+            //
+            // The scope comes from the reason rather than from the card, through the classification that
+            // already exists for exactly this question (`RunNightDrop.aboutTheShow` against
+            // `aboutOneNight`, #2691). "Not a fit" is true of every copy of the show; "I am shooting
+            // something else that night" is true of one night and says nothing about the others, so it
+            // must not close rows it never judged (L11, and Dan's call recorded on #4030).
+            if !RunNightDrop.isAboutOneNight(outcome) {
+                for sibling in siblings(of: item, in: prospects) {
+                    sibling.markDismissed(reason: outcome)
+                }
+            }
         } else {
             // A pitch that ended is not a dismissal. It went out and it now carries an ending, which is
             // what takes it off the reached-out stage; marking it dismissed would file a real pitch among
@@ -741,10 +754,41 @@ enum ProspectMutations {
     // caller, while only KEEP and DISMISS actually record. setStatus also drives approve, unapprove and
     // skip-draft; recording unconditionally here would quietly make those undoable too, well past the
     // scope Dan settled on ("I mostly just need this for keep/dismiss").
+    // #4030: the OTHER rows a collapsed card stands for, as models.
+    //
+    // ONE lookup rather than the same filter at each action, because the two that use it have to agree
+    // about what "the rest of the group" means and a drift between them would be silent in the direction
+    // that leaves a row untriaged (L370). The fronting row itself is excluded: every caller has already
+    // acted on it through `model(for:)`, and acting twice would record its undo entry twice.
+    //
+    // Empty for a card that stands alone, which is almost every card, so both call sites run exactly as
+    // they did before this issue on the ordinary row.
+    private static func siblings(of item: QueueItem, in prospects: [Prospect]) -> [Prospect] {
+        guard !item.collapsedMemberKeys.isEmpty else { return [] }
+        let others = Set(item.collapsedMemberKeys).subtracting([item.id])
+        guard !others.isEmpty else { return [] }
+        return prospects.filter { others.contains($0.naturalKey) }
+    }
+
     static func setStatus(_ item: QueueItem, _ status: ReviewStatus, _ reason: ShowOutcome?,
                           prospects: [Prospect], context: ModelContext, feedback: ActionFeedback,
                           undo: QueueUndoStack? = nil, undoLabel: String? = nil) {
         guard let model = model(for: item, in: prospects, feedback: feedback) else { return }
+        // #4030: a KEEP on a collapsed card keeps every row the card stands for. Dan's call, 2026-09-22,
+        // with the alternative in front of him: the card is the only one drawn for the group, so keeping
+        // the front row alone would leave the hidden copies undecided, and they come back as untriaged
+        // cards the day the grouping stops joining them. Keeping a duplicate costs nothing, because the
+        // group is still ONE card on screen.
+        //
+        // Only a Keep. A DISMISS takes its scope from its REASON (`RunNightDrop.aboutTheShow` against
+        // `aboutOneNight`, #2691), which is settled below in `recordOutcome`, and a status change that is
+        // neither (approve, unapprove, skip draft) says nothing about the other rows.
+        if status == .queued {
+            for sibling in siblings(of: item, in: prospects) {
+                sibling.clearDismissal(to: status)
+                sibling.clearConflict()
+            }
+        }
         // Read BEFORE the mutation, so the entry records where the row actually came from rather than
         // an inverse guessed at undo time.
         let priorStatus = model.status

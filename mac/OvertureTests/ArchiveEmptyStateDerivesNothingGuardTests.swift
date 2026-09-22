@@ -82,9 +82,32 @@ struct ArchiveEmptyStateDerivesNothingGuardTests {
                      possibleMatchSource: nil, possibleMatchName: nil)
         }
         #expect(QueueModel.items(from: shows).count == shows.count,
-                Comment(rawValue: "QueueModel.items is no longer one-to-one with its input. "
-                        + "ArchiveView.emptyState answers 'are there any rows' from the input's count on "
-                        + "the strength of that, so it is now answering a different question."))
+                Comment(rawValue: "QueueModel.items is no longer one-to-one with its input for rows that "
+                        + "are not one show. ArchiveView.emptyState answers 'are there any rows' from the "
+                        + "input's count on the strength of that, so it is now answering a different "
+                        + "question."))
         #expect(QueueModel.items(from: [Prospect]()).isEmpty)
+
+        // #4030: one-to-one is no longer the whole rule, and the difference is deliberate. A group of
+        // rows that are ONE SHOW is drawn as one card, so `items.count` is now the number of SHOWS
+        // rather than of rows. The seven above are seven different shows (distinct titles, no night to
+        // share), which is why the count above still holds.
+        //
+        // What `ArchiveView.emptyState` actually needs is the weaker invariant, and it is the one
+        // asserted here: rows in means at least one card out, because `ShowLink.collapse` always leaves
+        // exactly one front per group. An empty answer can therefore only mean an empty input.
+        let oneShowStoredTwice = (0..<2).map {
+            Prospect(naturalKey: "dup\($0)", groupName: "The Infinite Wrench", discipline: "theater",
+                     venue: "Asylum NYC", performanceDate: "2026-10-0\(2 + $0)",
+                     sourceListingURL: nil, priorRelationship: "none", production: "self",
+                     profile: "strong", coverage: "likely_uncovered", fitScore: 5, tier: "mid",
+                     fitReason: "r", matchedClientName: nil, possibleMatchSource: nil,
+                     possibleMatchName: nil, runEndDate: "2026-10-23", partOfRelatedRun: true,
+                     runSourceURLs: [], runNights: ["2026-10-0\(2 + $0)", "2026-10-16", "2026-10-23"])
+        }
+        let collapsed = QueueModel.items(from: oneShowStoredTwice)
+        #expect(collapsed.count == 1, "two rows of one show are one card (#4030)")
+        #expect(!collapsed.isEmpty,
+                "rows in must never produce no cards, which is the only thing the empty state reads")
     }
 }

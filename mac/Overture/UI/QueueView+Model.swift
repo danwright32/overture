@@ -279,6 +279,13 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     // than a key because that is what the sentence says, and resolved in the pass rather than on the card
     // because a key naming a row that has since been merged away must draw nothing (L200).
     var arrivedLookingLikeTitle: String? = nil
+    // #4030: the keys of EVERY row this card stands for, itself included, when the group has been
+    // collapsed onto it. Empty on a row that stands alone, which is almost every row.
+    //
+    // The card is the only one drawn for the group, so an action taken on it has to be able to reach the
+    // rows it hides, or a copy Dan thought he had dealt with comes back untriaged (Dan's call, and the
+    // complaint that started this milestone).
+    var collapsedMemberKeys: [String] = []
     // #4130: the TITLE of the row that had already been pitched for this night when this one arrived,
     // already resolved, for the same reason the tag above is resolved in the pass: a key naming a row
     // that is no longer stored must draw nothing (L200).
@@ -3161,12 +3168,18 @@ enum QueueModel {
         // absent here, so the note stops drawing with nothing needing to clear the field (L200).
         let titlesByKey = Dictionary((corpus ?? prospects).map { ($0.naturalKey, $0.groupName) },
                                      uniquingKeysWith: { first, _ in first })
+        // #4030: over the UNFILTERED corpus, exactly like `sameShowGroups` above, and through the same
+        // `ShowLink` rule: what joins two rows for display is decided in one place and nothing else
+        // joins them. The collapse deletes nothing and re-keys nothing; a wrong join costs a re-render.
+        let collapse = ShowLink.collapse((corpus ?? prospects).map(ShowLink.Row.init))
         let pre = CardPreamble(linked: linked, inherited: inherited, venueBrands: venueBrands,
                                rowCounts: rowCounts, calendarBySourceId: calendarBySourceId,
                                overrides: overrides, clients: clients,
                                contradictedCancellations: contradictedCancellations,
                                sameShowGroups: sameShowGroups,
                                titlesByKey: titlesByKey,
+                               collapsedFronts: collapse.fronts,
+                               collapsedHidden: collapse.hidden,
                                now: now, day: day)
 
         var rows: [QueueScopeRow] = []
@@ -3175,6 +3188,15 @@ enum QueueModel {
         rows.reserveCapacity(prospects.count)
         contactsByKey.reserveCapacity(prospects.count)
         for p in prospects {
+            // #4030: a row the collapse HIDES is not drawn at all: its group's fronting card stands for
+            // it, and an action on that card reaches it through `collapsedMemberKeys`. Skipped here, at
+            // the one place rows and cards are built, so the queue and the archive collapse identically
+            // rather than each deciding for itself (L613).
+            //
+            // The scope this is judged over is the whole corpus, so a hidden row is hidden on every
+            // surface, and it can never hide the LAST card of a group: `ShowLink.collapse` always leaves
+            // exactly one front per group.
+            if pre.collapsedHidden.contains(p.naturalKey) { continue }
             // #3653 Phase 3: the contacts, read ONCE for this show, whatever is built from them.
             //
             // `Prospect.countedRecipients` is the accessor that records `WorkTally.recipientReaches`, so
@@ -3243,6 +3265,12 @@ enum QueueModel {
         let sameShowGroups: [String: [String]]
         // #3330: every stored row's title by its key, for resolving an arrival tag to a name.
         let titlesByKey: [String: String]
+        // #4030: the collapse. `fronts` maps the key of each group's fronting row to every member of that
+        // group (itself included); `hidden` is every member that is NOT its group's front, and those rows
+        // are not drawn at all. Computed once over the unfiltered corpus with the tables beside it, for
+        // the same reason they are: the answer is about other rows.
+        let collapsedFronts: [String: [String]]
+        let collapsedHidden: Set<String>
         let now: Date
         let day: String
 
@@ -3380,6 +3408,8 @@ enum QueueModel {
         }
         // #3282: the store holding this show more than once, said on the card rather than nowhere.
         item.sameShowKeys = pre.sameShowGroups[p.naturalKey] ?? []
+        // #4030: and, where this row FRONTS a collapsed group, every row the card stands for.
+        item.collapsedMemberKeys = pre.collapsedFronts[p.naturalKey] ?? []
         // #3330: resolved HERE, against the corpus table, so a tag pointing at a row the launch merge has
         // since collapsed resolves to nothing and the card says nothing.
         item.arrivedLookingLikeTitle = p.arrivedLookingLike.flatMap { pre.titlesByKey[$0] }
