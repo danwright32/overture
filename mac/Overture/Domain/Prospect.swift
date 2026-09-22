@@ -479,6 +479,18 @@ final class Prospect {
     // claim nobody can see is stale (L200).
     var arrivedLookingLike: String? = nil
 
+    // #4130: the natural key of a stored row that had ALREADY been pitched for this row's night, at the
+    // same room, for the same presenter, at the moment this row was inserted. Nil on almost every row:
+    // measured over a clone of the live store on 2026-09-22, exactly one of 1,333 rows satisfies it.
+    //
+    // A STATEMENT, NEVER A MERGE. The two rows are not claimed to be one show and their titles usually
+    // are not: what this records is that a pitch has already gone out for that night, so the card can
+    // say so before Dan spends a second contact check on it.
+    //
+    // NOTHING CLEARS IT, exactly as nothing clears `arrivedLookingLike` above: it is resolved at read
+    // time and the note falls silent when the row it names is gone (L200).
+    var arrivedOnAPitchedNight: String? = nil
+
     // #3596: the answer, when it was NO. The sweep asked this row's sources and none of them listed the
     // key the merge left it holding, which is #3582's signature: the merge kept a copy the feed has
     // stopped recognising, and this row will now accrue misses and read as "may be cancelled" while the

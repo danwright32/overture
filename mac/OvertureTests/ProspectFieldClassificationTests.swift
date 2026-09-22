@@ -206,6 +206,11 @@ struct ProspectFieldClassificationTests {
         // deleting this row loses nothing, because the pairing it records is re-derivable from the two
         // rows themselves.
         "arrivedLookingLike": "which stored row this one resembled on arrival, a pointer resolved at read time",
+        // #4130: which stored row had already been pitched for this row's night, in this room, for this
+        // presenter. The same shape as the pointer above and classified for the same reasons: it names
+        // another row rather than recording anything this row reached, and it is re-derivable from the
+        // two rows, so a merge deleting this row loses nothing.
+        "arrivedOnAPitchedNight": "which stored row was already pitched for this night, a pointer resolved at read time",
         "mergeSurvivorUnseenAt": "that a sweep answered it and the feed did not list this row, a finding rather than a record",
 
         // MARK: three that LOOK like decisions of Dan's and were each checked against their writer
