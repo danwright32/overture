@@ -53,6 +53,34 @@ enum GenrePrecedence {
         return stored == .other ? incoming : stored
     }
 
+    // #1954: the PRESENTER, which is the field the two axes above are DERIVED from and the only one of
+    // the three that was still last writer wins.
+    //
+    // #1663 and #1949 gave the genre and the producer axes a precedence rule, and the presenter beneath
+    // them kept none: a show found by two sources took whichever run finished last, so the field that
+    // decides the producer axes, the genre word and the target of the paid contact hunt could flip run to
+    // run while the axes above it held steady.
+    //
+    // THE SAME SHAPE AS THE TWO ABOVE, deliberately. A source may always correct its own reading
+    // (`mayOverwrite`), which is what keeps #2453's blank rule and #1766's drained room working exactly
+    // as they do: those are one source re-reading its own page. Between two DIFFERENT sources, a
+    // presenter that was read is never displaced by one that was not, and between two that were both
+    // read the incumbent stands, so a row never oscillates.
+    //
+    // WHAT THIS DOES NOT DECIDE, stated rather than left to be discovered (L93): which of two named
+    // presenters is RIGHT. Nothing in the data says, which is why the incumbent stands rather than a
+    // rule inventing a winner. #1795 owns the stale name question.
+    //
+    // NIL IN BOTH DIRECTIONS IS THE INTERESTING CASE and it is why this takes the values rather than a
+    // Bool: a second source naming NOBODY is exactly the reading that must not erase a name, and a
+    // second source naming somebody where the row has nobody is the one that must land.
+    static func mergedPresenter(stored: String?, storedKey: String?,
+                                incoming: String?, incomingKey: String) -> String? {
+        if mayOverwrite(storedKey: storedKey, incomingKey: incomingKey) { return incoming }
+        let held = (stored ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        return held.isEmpty ? incoming : stored
+    }
+
     // The producer axis, production and profile together. `unknown` means nobody could be named, so
     // anything else is more informative; a genuine disagreement between `self` and `agency` leaves the
     // incumbent standing rather than resolving to whichever scores higher.
