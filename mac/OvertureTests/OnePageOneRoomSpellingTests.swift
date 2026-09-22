@@ -90,14 +90,45 @@ struct OnePageOneRoomSpellingTests {
     // stored spellings both one slip from the incoming one. The answer may not depend on which row the
     // store happened to return first (L343).
     @Test func thelockIsDeterministicWhenTwoStoredSpellingsQualify() {
+        // "Theatrr" is one slip from BOTH stored spellings, which is what makes this a tie rather than a
+        // single qualifier answering by default. The fixture this test was first written with ("Theatte")
+        // was two slips from "Theater", so only one arm could ever qualify and the case the test is named
+        // for was never reached (L159).
+        #expect(GroupNameMatch.differsByOneSlipInOneWord("Jalopy Theater", "Jalopy Theatrr"))
+        #expect(GroupNameMatch.differsByOneSlipInOneWord("Jalopy Theatre", "Jalopy Theatrr"))
+
         let used = ["Jalopy Theater", "Jalopy Theatre", "Jalopy Theatre"]
-        #expect(VenueSpellingLock.locked("Jalopy Theatte", spellingsUsedBySource: used)
+        #expect(VenueSpellingLock.locked("Jalopy Theatrr", spellingsUsedBySource: used)
                 == "Jalopy Theatre", "the most used spelling wins")
-        #expect(VenueSpellingLock.locked("Jalopy Theatte", spellingsUsedBySource: used.reversed())
+        #expect(VenueSpellingLock.locked("Jalopy Theatrr", spellingsUsedBySource: used.reversed())
                 == "Jalopy Theatre", "and the order the rows arrived in may not change the answer")
-        #expect(VenueSpellingLock.locked("Jalopy Theatte",
+        #expect(VenueSpellingLock.locked("Jalopy Theatrr",
                                          spellingsUsedBySource: ["Jalopy Theater", "Jalopy Theatre"])
                 == "Jalopy Theater", "an exact tie is broken alphabetically rather than by arrival")
+    }
+
+    // THE BOUNDARY between the two distances, which is the thing a later sweep is most likely to
+    // "tidy" into one rule. The venue lock tolerates a transposition; the same-night TITLE rule does
+    // not, because its calibration against the live store was taken with the narrower distance and
+    // nothing has re-taken it (L220).
+    @Test func atranspositionIsASlipForARoomAndNotForATitle() {
+        #expect(GroupNameMatch.differsByOneSlipInOneWord("Jalopy Theatre", "Jalopy Theater"),
+                "the live pair this issue is about is a swap, so the venue rule has to see it")
+        #expect(!GroupNameMatch.isSameNightVariant("Jalopy Theatre", "Jalopy Theater"),
+                "the title rule was widened as a side effect, which re-aims a calibration nobody re-took")
+        #expect(GroupNameMatch.isSameNightVariant("Greely Square Series", "Greeley Square Series"),
+                "and the one character case the title rule was calibrated on still holds")
+    }
+
+    // A SWAP IS STILL ONE WORD AND STILL NOT A NUMBER: the guards the two distances share are not
+    // loosened by the arm that was added beside them.
+    @Test func aswapDoesNotReachPastTheGuardsItSharesWithTheNarrowerRule() {
+        #expect(!GroupNameMatch.differsByOneSlipInOneWord("Studio 12", "Studio 21"),
+                "a room numbered two ways is two rooms, and digits are refused before any distance")
+        #expect(!GroupNameMatch.differsByOneSlipInOneWord("Jalopy Theatre", "Jalopy Theatre Annex"),
+                "an added word is how a building names a second room, which #4020 owns")
+        #expect(!GroupNameMatch.differsByOneSlipInOneWord("Jalopy Theatre Hall", "Jalopy Theater Halls"),
+                "two words differing is two slips, whichever kind each one is")
     }
 
     // AND IT LEAVES EVERYTHING ELSE ALONE: a spelling the source has used exactly, a room it has never

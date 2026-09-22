@@ -304,27 +304,74 @@ enum GroupNameMatch {
         return differsByOneTypo(a, b)
     }
 
-    // #1848: the typo half of `isSameNightVariant`, on its own, because one caller needs exactly that
-    // and none of the rest of it. `VenueSpellingLock` asks whether two spellings of a ROOM are one slip
-    // apart ("Jalopy Theatre" against "Jalopy Theater"), where the containment arm above would answer
-    // yes for two genuinely different rooms in one building. Exposed rather than spelled again there,
-    // so the rule that decides a typo has one definition (L370).
-    static func differsByOneCharacterInOneWord(_ a: String, _ b: String) -> Bool {
-        differsByOneTypo(a, b)
+    // #1848: one word differing by ONE SLIP, where a slip includes two adjacent letters SWAPPED. This
+    // is the venue lock's predicate and it is deliberately NOT the one above.
+    //
+    // The live pair is "Jalopy Theatre" against "Jalopy Theater", which is the 'r' and the 'e' the other
+    // way round. Plain Levenshtein, which is what `isOneCharacterApart` measures, counts a transposition
+    // as TWO edits (delete one letter, insert it back on the other side), so the rule written on it
+    // answered no to the only pair the issue was filed about, and the first run of its own fixture is
+    // what showed that.
+    //
+    // WHY THE TITLE RULE IS LEFT ALONE. `isSameNightVariant` was calibrated against the whole live store
+    // on 2026-07-30 (the measurement is recorded above it), and widening the distance it allows re-aims
+    // that calibration without re-taking it (L220). A room is also a narrower thing than a show title: a
+    // season numbers its own concerts one character apart on purpose, and two rooms in one building
+    // spelled one TRANSPOSITION apart is not a shape anybody names deliberately. So the tolerance lives
+    // here, on the caller that measured the need for it, and `differsByOneTypo` keeps its own distance.
+    // `GroupNameMatchTypoBoundaryTests` asserts the two answer differently on exactly that pair.
+    //
+    // The word-level guards are shared rather than spelled twice: same word count, exactly one word
+    // differing, no digits in it, at least four letters (L370).
+    static func differsByOneSlipInOneWord(_ a: String, _ b: String) -> Bool {
+        exactlyOneWordDiffers(a, b, where: isOneSlipApart)
     }
 
     private static func differsByOneTypo(_ a: String, _ b: String) -> Bool {
+        exactlyOneWordDiffers(a, b, where: isOneCharacterApart)
+    }
+
+    // The token half of both rules: same number of words, exactly one of them different. Extracted so
+    // the two distances above differ in the DISTANCE and in nothing else.
+    private static func exactlyOneWordDiffers(
+        _ a: String, _ b: String, where wordsAreCloseEnough: (String, String) -> Bool
+    ) -> Bool {
         let ta = tokens(a), tb = tokens(b)
         guard !ta.isEmpty, ta.count == tb.count else { return false }
         let differing = zip(ta, tb).filter { $0 != $1 }
         guard differing.count == 1, let pair = differing.first else { return false }
-        return isOneCharacterApart(pair.0, pair.1)
+        return wordsAreCloseEnough(pair.0, pair.1)
     }
 
     private static func isOneCharacterApart(_ a: String, _ b: String) -> Bool {
-        guard !a.contains(where: \.isNumber), !b.contains(where: \.isNumber) else { return false }
-        guard min(a.count, b.count) >= 4, abs(a.count - b.count) <= 1 else { return false }
+        guard wordsAreComparable(a, b) else { return false }
         return editDistance(a, b) <= 1
+    }
+
+    // One character apart OR two adjacent characters swapped. See `differsByOneSlipInOneWord` for why
+    // only the venue lock asks this.
+    private static func isOneSlipApart(_ a: String, _ b: String) -> Bool {
+        guard wordsAreComparable(a, b) else { return false }
+        return editDistance(a, b) <= 1 || isOneAdjacentSwapApart(a, b)
+    }
+
+    // The guards both distances take before they are worth computing: a season's own numbering is one
+    // character apart by design, and a four letter floor is what keeps "me" from matching "ye".
+    private static func wordsAreComparable(_ a: String, _ b: String) -> Bool {
+        guard !a.contains(where: \.isNumber), !b.contains(where: \.isNumber) else { return false }
+        return min(a.count, b.count) >= 4 && abs(a.count - b.count) <= 1
+    }
+
+    // Two words of the SAME length that differ in exactly two ADJACENT positions holding each other's
+    // letters. Written directly rather than as a Damerau variant of `editDistance`, because this is the
+    // whole of what it has to answer and the matrix form of it is the part that is easy to get wrong.
+    private static func isOneAdjacentSwapApart(_ a: String, _ b: String) -> Bool {
+        let x = Array(a), y = Array(b)
+        guard x.count == y.count else { return false }
+        let differing = zip(x, y).enumerated().filter { $0.element.0 != $0.element.1 }.map(\.offset)
+        guard differing.count == 2, differing[1] == differing[0] + 1 else { return false }
+        let (i, j) = (differing[0], differing[1])
+        return x[i] == y[j] && x[j] == y[i]
     }
 
     // Levenshtein, two rows at a time. Only ever called on two short words that already passed the

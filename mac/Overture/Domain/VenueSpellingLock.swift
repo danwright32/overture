@@ -31,6 +31,11 @@ enum VenueSpellingLock {
     // The spelling to store, given what this source has already used. Returns the incoming value
     // unchanged unless a stored spelling is one slip away from it.
     //
+    // ONE SLIP means one character different or two adjacent characters swapped. The swap is not a
+    // refinement: the live pair this exists for, "Jalopy Theatre" against "Jalopy Theater", IS a swap,
+    // and a plain edit distance scores it as two edits, so a rule without it answers no to the only
+    // case measured (see `GroupNameMatch.differsByOneSlipInOneWord`).
+    //
     // DETERMINISTIC where more than one stored spelling qualifies: the most used wins, and an exact tie
     // is broken alphabetically. A rule that took whichever row the store happened to return first would
     // give a different answer on different launches for the same data (L343).
@@ -40,7 +45,7 @@ enum VenueSpellingLock {
         guard !used.contains(incoming) else { return incoming }
 
         var countsBySpelling: [String: Int] = [:]
-        for spelling in used where GroupNameMatch.differsByOneCharacterInOneWord(spelling, incoming) {
+        for spelling in used where GroupNameMatch.differsByOneSlipInOneWord(spelling, incoming) {
             countsBySpelling[spelling, default: 0] += 1
         }
         let best = countsBySpelling.sorted {
