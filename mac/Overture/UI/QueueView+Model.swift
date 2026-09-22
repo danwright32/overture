@@ -922,6 +922,16 @@ struct RecipientSnapshot: Identifiable, Equatable, Sendable {
     // looks like the same real-world performance.
     var looksLikeDuplicateContact: Bool = false
     var looksLikeDuplicateContactDismissed: Bool = false
+    // #4042: the key the guard matched, carried so the pass can resolve it, and the resolved answer
+    // beside it.
+    var looksLikeDuplicateContactKey: String? = nil
+    // #4042: the show and the night the duplicate warning is ABOUT, already resolved. Resolved in the
+    // pass rather than on the review screen for the same reason #3330's arrival tag is: the key names a
+    // row that may have been merged away since prep, and a sentence naming a row that is no longer there
+    // sends Dan looking for a card he cannot find (L200). Nil means the row is gone, or that this
+    // recipient was written before the key was recorded, and the sentence falls back to the old wording.
+    var duplicateOfTitle: String? = nil
+    var duplicateOfNight: String? = nil
     // #1866: same shape again, for the guard that held a confident find down to unverified because it
     // named no page it was read off. Carried so the card can say WHICH of the two things made its
     // addresses unverified, and so the review panel can offer Dan the same overrule the three above have.
@@ -3157,12 +3167,20 @@ enum QueueModel {
         // absent here, so the note stops drawing with nothing needing to clear the field (L200).
         let titlesByKey = Dictionary((corpus ?? prospects).map { ($0.naturalKey, $0.groupName) },
                                      uniquingKeysWith: { first, _ in first })
+        // #4042: the same walk, the same scope, and the same read-time resolution.
+        let nightsByKey = Dictionary(
+            (corpus ?? prospects).compactMap { row -> (String, String)? in
+                guard let night = row.performanceDate, !night.isEmpty else { return nil }
+                return (row.naturalKey, night)
+            },
+            uniquingKeysWith: { first, _ in first })
         let pre = CardPreamble(linked: linked, inherited: inherited, venueBrands: venueBrands,
                                rowCounts: rowCounts, calendarBySourceId: calendarBySourceId,
                                overrides: overrides, clients: clients,
                                contradictedCancellations: contradictedCancellations,
                                sameShowGroups: sameShowGroups,
                                titlesByKey: titlesByKey,
+                               nightsByKey: nightsByKey,
                                now: now, day: day)
 
         var rows: [QueueScopeRow] = []
@@ -3239,6 +3257,10 @@ enum QueueModel {
         let sameShowGroups: [String: [String]]
         // #3330: every stored row's title by its key, for resolving an arrival tag to a name.
         let titlesByKey: [String: String]
+        // #4042: and its night, for the duplicate contact warning, which has to name both. A second
+        // table over the same walk rather than a second walk: the rows are already in hand where
+        // `titlesByKey` is built.
+        let nightsByKey: [String: String]
         let now: Date
         let day: String
 
@@ -3379,6 +3401,18 @@ enum QueueModel {
         // #3330: resolved HERE, against the corpus table, so a tag pointing at a row the launch merge has
         // since collapsed resolves to nothing and the card says nothing.
         item.arrivedLookingLikeTitle = p.arrivedLookingLike.flatMap { pre.titlesByKey[$0] }
+        // #4042: the duplicate contact warning's other row, resolved HERE against the same corpus tables
+        // the arrival tags use. A key naming a row that has since been merged away resolves to nothing,
+        // and the sentence falls back to the wording it had before this change rather than naming a card
+        // Dan cannot find (L200).
+        item.contacts = item.contacts.map { snapshot in
+            guard let key = snapshot.looksLikeDuplicateContactKey,
+                  let title = pre.titlesByKey[key] else { return snapshot }
+            var resolved = snapshot
+            resolved.duplicateOfTitle = title
+            resolved.duplicateOfNight = pre.nightsByKey[key]
+            return resolved
+        }
         // #1731: only meaningful where the verdict IS the building; nil otherwise.
         item.readAsTheBuildingReason = pre.venueBrands.contains(p.presenter)
             ? OrganisationListing.buildingReason(
@@ -3970,6 +4004,7 @@ extension RecipientSnapshot {
                   looksLikePressContactDismissed: r.looksLikePressContactDismissed,
                   looksLikeDuplicateContact: r.looksLikeDuplicateContact,
                   looksLikeDuplicateContactDismissed: r.looksLikeDuplicateContactDismissed,
+                  looksLikeDuplicateContactKey: r.looksLikeDuplicateContactKey,
                   heldDownToUnverified: r.heldDownToUnverified,
                   heldDownToUnverifiedDismissed: r.heldDownToUnverifiedDismissed,
                   heldDownReason: r.heldDownReason,

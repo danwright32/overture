@@ -225,7 +225,9 @@ struct DraftReviewView: View {
     // pitched on another still-open prospect for what looks like the same real-world performance.
     @ViewBuilder private var duplicateContactWarnings: some View {
         recipientWarning(item.contacts.filter { $0.looksLikeDuplicateContact && !$0.looksLikeDuplicateContactDismissed },
-                        message: { DraftReviewNotes.duplicateSuspect(name: $0.displayName) },
+                        message: { DraftReviewNotes.duplicateSuspect(name: $0.displayName,
+                                                                     show: $0.duplicateOfTitle,
+                                                                     night: $0.duplicateOfNight) },
                         dismissLabel: "Not a duplicate", onDismiss: onDismissDuplicateContactMatch)
     }
 
