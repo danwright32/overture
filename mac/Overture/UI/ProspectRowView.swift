@@ -191,6 +191,7 @@ struct ProspectRowView: View {
                     linkedEngagementNote
                     storedMoreThanOnceNote
                     arrivedLookingLikeNote
+                    alreadyPitchedNightNote
                     orgDoNotContactFlag
                     bookingSuggestionFlag
                     alreadyCoveredFlag
@@ -615,6 +616,19 @@ struct ProspectRowView: View {
     // fourth billing outside it.
     @ViewBuilder private var arrivedLookingLikeNote: some View {
         if let note = QueueModel.arrivedLookingLikeNote(item) {
+            Text(note)
+                .font(OVType.tag)
+                .foregroundStyle(OVColor.inkSoft)
+                .padding(.top, 2)
+        }
+    }
+
+    // #4130: directly after the lookalike note, because the two are the same KIND of fact (this card is
+    // not alone on this night) at different strengths, and a card can legitimately draw both: that one
+    // fires on a title the merge would join, this one on a presenter already written to whatever the
+    // titles say.
+    @ViewBuilder private var alreadyPitchedNightNote: some View {
+        if let note = QueueModel.alreadyPitchedNightNote(item) {
             Text(note)
                 .font(OVType.tag)
                 .foregroundStyle(OVColor.inkSoft)
