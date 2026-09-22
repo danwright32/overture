@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1629 sentences**.
+Every sentence Overture can say to Dan: **1632 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -14,7 +14,7 @@ What is not, and why:
   sentences under tokens nobody reads.
 - **Nothing, if it is written as two literals joined with `+`.** Those ARE joined here, into the
   one sentence the running app says (#3155). What is still only part of what Dan reads is a
-  sentence carrying a VALUE: 596 of the 1629 below hold a
+  sentence carrying a VALUE: 599 of the 1632 below hold a
   `\(...)` where a number or a name goes, so what is printed is the template. They are counted
   here rather than listed again, because the hole is visible in the line itself; what was missing
   was any statement of how much of this document is templates.
@@ -449,6 +449,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/DraftReviewView.swift`
 "A hard bounce means the mail was rejected outright, so the show has stopped being chased and nobody has seen the pitch. Open the show to fix the address and pitch again. If the address is fine and the bounce was wrong, Not really bounced on the contact clears it."
     `Domain/AppNotice.swift`
+"A later listing looks like the same show: \"\(newest)\"."
+    `UI/QueueView+Model.swift`
 "A later night of this run is out: you blocked \(day) (\(name))."
     `Domain/BlockedCalendar.swift`
 "A later night of this run is out: you blocked \(day)."
@@ -3220,6 +3222,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/WatchlistEditing.swift`
 "\(orgName) asked not to be contacted, so Overture won't watch them again."
     `Domain/WatchlistEditing.swift`
+"\(others.count) later listings look like the same show, the newest \"\(newest)\"."
+    `UI/QueueView+Model.swift`
 "\(outcome.drafted) drafted"
     `Domain/PrepRunSummary.swift`
 "\(outcome.found) found"
@@ -3252,6 +3256,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/ActionFeedback.swift`
 "\(placed) shows"
     `UI/SourcesView.swift`
+"\(presenter) was already pitched for this night, as \"\(other)\"."
+    `UI/QueueView+Model.swift`
 "\(progress.completed) of \(progress.total)"
     `Domain/PrepProgress.swift`
 "\(range) is no longer blocked"
