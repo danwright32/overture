@@ -304,6 +304,15 @@ enum GroupNameMatch {
         return differsByOneTypo(a, b)
     }
 
+    // #1848: the typo half of `isSameNightVariant`, on its own, because one caller needs exactly that
+    // and none of the rest of it. `VenueSpellingLock` asks whether two spellings of a ROOM are one slip
+    // apart ("Jalopy Theatre" against "Jalopy Theater"), where the containment arm above would answer
+    // yes for two genuinely different rooms in one building. Exposed rather than spelled again there,
+    // so the rule that decides a typo has one definition (L370).
+    static func differsByOneCharacterInOneWord(_ a: String, _ b: String) -> Bool {
+        differsByOneTypo(a, b)
+    }
+
     private static func differsByOneTypo(_ a: String, _ b: String) -> Bool {
         let ta = tokens(a), tb = tokens(b)
         guard !ta.isEmpty, ta.count == tb.count else { return false }
