@@ -1787,7 +1787,7 @@ enum ScoutService {
             let sharedAmbiguousURL = !candidates.isDisjoint(with: ambiguous)
             guard sameVenue(p.venue, venue) else { return false }
             return sharedAmbiguousURL
-                ? GroupNameMatch.isConfident(p.groupName, groupName)
+                ? titleIsTheKeySOwn(p.groupName, groupName)
                 : GroupNameMatch.isSameShowTitle(p.groupName, groupName)
         }
     }
@@ -1840,6 +1840,25 @@ enum ScoutService {
         var anywhere: Set<String> = []
 
         static let none = AmbiguousURLs()
+    }
+
+    // #4098: the title test the two URL arms fall back to on a page carrying more than one show, in ONE
+    // place so the two arms cannot drift apart on the question (L370).
+    //
+    // IT IS THE NATURAL KEY'S OWN FOLD, and `GroupNameMatch.isConfident` is NOT, which is the correction
+    // this branch needed. That function strips a trailing subtitle after a colon (`stripProgramSubtitle`,
+    // #105, so a booking sheet's "Presenter: Program" matches a venue's "Presenter"), so on a season page
+    // "Back to Shakespeare" and "Back to Shakespeare: An Evening of Sonnets and Songs" are CONFIDENT: the
+    // strict fallback joined exactly the pair it was added to refuse, and the first ingest fixture written
+    // against it proved it did.
+    //
+    // WHAT REMAINS JOINABLE on such a page, which is the reason this is not a blanket refusal: a title
+    // that folds to the same key. #132 is a run whose OPENING NIGHT moved, where the title is unchanged
+    // and the date is not, and that is still recognised here. What is given up is a genuine subtitle
+    // drift on an ambiguous page: it mints a second row, which is visible on the queue and reversible,
+    // rather than re-keying a stored row, which carries Dan's dismissal onto a show he never saw (L93).
+    private static func titleIsTheKeySOwn(_ a: String, _ b: String) -> Bool {
+        ShowLink.foldedTitle(a) == ShowLink.foldedTitle(b)
     }
 
     static func ambiguousURLsForBatch(_ incoming: [AssembledProspect],
@@ -2119,7 +2138,7 @@ enum ScoutService {
             // subtitle drift on such a page, which mints a second row rather than re-keying a stored one:
             // visible on the queue, and the direction this milestone has chosen every time (L93).
             return pageCarriesMoreThanOneShow
-                ? GroupNameMatch.isConfident($0.groupName, groupName)
+                ? titleIsTheKeySOwn($0.groupName, groupName)
                 : GroupNameMatch.isSameShowTitle($0.groupName, groupName)
         }
     }
