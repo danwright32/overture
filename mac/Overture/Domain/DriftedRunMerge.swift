@@ -13,12 +13,16 @@ enum DriftedRunMerge {
     struct Summary: Equatable {
         var duplicatesDeleted = 0
         var conflictsDeferred = 0
+        // #4147: the titles this pass rewrote, carried out as well as written to the ledger.
+        var titleRenames: [TitleRenameLedger.Entry] = []
     }
 
     @discardableResult
     static func run(in context: ModelContext) -> Summary {
         let stored = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
         var summary = Summary()
+        // #4147: every title this pass rewrites, through the carry below.
+        var titleRenames: [TitleRenameLedger.Entry] = []
 
         var groups: [String: [Prospect]] = [:]
         for p in stored {
@@ -127,7 +131,15 @@ enum DriftedRunMerge {
             // together, so the next sweep re-keys the survivor and re-dates it in one consistent write.
             // That is what the code this replaced meant by "the next scout re-keys the survivor through
             // #1528's own match", checked against ScoutService rather than taken from the comment (L61).
+            // #4147: the title as it stood before the carry, which can move a loser's name onto the
+            // survivor (`NaturalKeyVenueMigration.carryDansDecisions`, inside it).
+            let titleBefore = survivor.groupName
             SurvivorInheritance.carry(onto: survivor, from: members)
+            if survivor.groupName != titleBefore {
+                titleRenames.append(TitleRenameLedger.Entry(key: survivor.naturalKey, from: titleBefore,
+                                                            to: survivor.groupName,
+                                                            arm: "driftedRunMerge", at: Date()))
+            }
 
             for loser in members where loser.persistentModelID != survivor.persistentModelID {
                 context.delete(loser)
@@ -135,6 +147,9 @@ enum DriftedRunMerge {
             }
         }
 
+        // #4147: recorded after the pass rather than during, exactly as the two sibling merges do.
+        TitleRenameLedger.recordOrLog(titleRenames, now: Date())
+        summary.titleRenames = titleRenames
         return summary
     }
 

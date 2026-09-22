@@ -14,9 +14,25 @@ enum ScoutService {
     // the first arm proved nobody holds it. A key collision does not throw: measured under #2754,
     // `save()` succeeds and SwiftData MERGES the two rows, taking some fields from each, so a card's keep
     // decision, its contacts and its outreach record go with no error raised anywhere (L5).
+    // #4147: WHICH read answered, carried on the decision rather than re-derived afterwards.
+    //
+    // The caller cannot work it out: three different arms all return `.reKey`, so "the arm that matched
+    // is a fact the caller holds" was true of the insert and the in place update and false of exactly
+    // the arms a rename most often comes through. Recording a rename against "reKey" would name three
+    // mechanisms at once, which is the answer #4068 already had and could not use.
+    //
+    // A raw value, because it is written into a durable file a person reads later.
+    enum MatchArm: String, Equatable, Sendable {
+        case naturalKey
+        case concertIdentity
+        case anyRunURL
+        case productionToken
+        case stableSource
+    }
+
     enum UpsertTarget: Equatable {
         case updateInPlace(Prospect)
-        case reKey(Prospect)
+        case reKey(Prospect, by: MatchArm)
         // #4029: a re-key that is ALSO news about a night the stored row does not have, so the nights
         // are unioned rather than replaced. Its own case rather than a flag on `.reKey`, because the
         // two differ in what they do to stored data and a caller must not be able to take one for the
@@ -34,6 +50,22 @@ enum ScoutService {
         // The store could not answer, so nobody knows whether the key is free. Refusing costs this row
         // one run and it comes back on the next; guessing costs a card that does not come back (L105).
         case storeUnreadable
+
+        // #4147: which read answered, for the rename ledger. Here rather than at the call site, because
+        // the two arms that rewrite a stored row's title reach `apply` through one branch and a `case`
+        // binding cannot name the arm on both halves of it.
+        //
+        // `.reKeyJoiningNights` IS the production token arm: it is the only arm that returns it
+        // (`upsertTarget` above), and the case exists precisely because that arm answers a different
+        // question from the rest.
+        var matchedArm: MatchArm? {
+            switch self {
+            case .updateInPlace: return .naturalKey
+            case .reKey(_, let arm): return arm
+            case .reKeyJoiningNights: return .productionToken
+            case .insert, .storeUnreadable: return nil
+            }
+        }
     }
 
     // The four reads the upsert makes, in the order it makes them, as closures.
@@ -53,13 +85,13 @@ enum ScoutService {
                              lookingLike: () throws -> String? = { nil }) -> UpsertTarget {
         do {
             if let existing = try storedByKey() { return .updateInPlace(existing) }
-            if let match = try byConcert() { return .reKey(match) }
-            if let match = try byAnyRunURL() { return .reKey(match) }
+            if let match = try byConcert() { return .reKey(match, by: .concertIdentity) }
+            if let match = try byAnyRunURL() { return .reKey(match, by: .anyRunURL) }
             // #4029: below the whole-URL arm on purpose. A shared WHOLE url is stronger evidence than a
             // shared token, so where both could answer, the stronger one does and the nights follow the
             // feed as they always have.
             if let match = try byProductionToken() { return .reKeyJoiningNights(match) }
-            if let match = try byStableSource() { return .reKey(match) }
+            if let match = try byStableSource() { return .reKey(match, by: .stableSource) }
             return .insert(lookingLike: try lookingLike())
         } catch {
             return .storeUnreadable
@@ -134,6 +166,10 @@ enum ScoutService {
     }
 
     struct Outcome: Equatable, Sendable {
+        // #4147: the titles this run overwrote, and which arm did each. Empty on almost every run.
+        // Carried here as well as written to `TitleRenameLedger`, so what a run recorded can be asserted
+        // without reading a file, and so a caller that wants to report it does not have to re-read one.
+        var titleRenames: [TitleRenameLedger.Entry] = []
         var found: Int
         var inserted: Int
         var updated: Int
@@ -1160,6 +1196,9 @@ enum ScoutService {
         // already have broken the upcoming-only guard above it.
         let scoutNow = EasternDate.date(from: today) ?? Date()
         var inserted = 0, updated = 0, skipped = 0, collapsedIntoRun = 0
+        // #4147: every title this run overwrote, with the arm that did it. Carried on the Outcome as
+        // well as written to the ledger, so a test can assert what a run recorded without reading a file.
+        var titleRenames: [TitleRenameLedger.Entry] = []
         // #2758: rows this run refused to touch because the store could not answer whether their key was
         // free. Kept apart from `skipped`, which means "decided not to pursue": this one was pursued and
         // could not be settled, and the two need different words on the summary.
@@ -1417,10 +1456,16 @@ enum ScoutService {
             switch target {
             case .updateInPlace(let existing):
                 // Exact natural-key match: update in place.
+                // #4147: the title as it stood BEFORE the write, because `apply` overwrites it in place
+                // and nothing afterwards can say what it was (this is the whole of why #4068 could not
+                // be answered).
+                let titleBefore = existing.groupName
                 apply(enriched, to: existing, now: scoutNow,
                       storedByKey: { try Prospect.stored(key: $0, in: context) })
+                recordRename(of: existing, from: titleBefore, by: target.matchedArm, at: scoutNow,
+                             into: &titleRenames)
                 updated += 1
-            case .reKey(let match), .reKeyJoiningNights(let match):
+            case .reKey(let match, _), .reKeyJoiningNights(let match):
                 // #4029: the token arm alone answers "this is ANOTHER NIGHT of the production this row
                 // holds", so its nights are added to the row's rather than replacing them, and a decision
                 // Dan made about a night he has already spent is reconsidered. Every other arm below says
@@ -1520,8 +1565,13 @@ enum ScoutService {
                 match.naturalKey = anchored
                 // Seen under the key it now holds, so the feed reconcile below reads it as present.
                 seenKeys.insert(anchored)
+                // #4147: as above, and this is the arm the harm class actually travels on: a re-key onto
+                // a stored row carries Dan's dismissal, his sent record and his thread id with it.
+                let titleBefore = match.groupName
                 apply(enriched, to: match, now: scoutNow,
                       storedByKey: { try Prospect.stored(key: $0, in: context) })
+                recordRename(of: match, from: titleBefore, by: target.matchedArm, at: scoutNow,
+                             into: &titleRenames)
                 updated += 1
             case .insert(let lookingLike):
                 let fresh = make(enriched, key: key)
@@ -1605,6 +1655,9 @@ enum ScoutService {
             // #888 part B: and so it carries NO report. A run whose writes did not land has not swept
             // anything, and letting it reconcile would judge a show absent from a feed that was never
             // actually recorded. Deliberately not merely "safe": there is nothing to reconcile against.
+            // #4147: NOTHING is recorded on this path, and that is the rule rather than an omission. The
+            // save failed, so the titles in memory are not the titles on disk, and a ledger saying a row
+            // was renamed when the store still holds the old name is worse than no ledger at all (L12).
             var outcome = Outcome(found: events.count, inserted: inserted, updated: updated,
                                   skipped: skipped,
                                   collapsedIntoRun: collapsedIntoRun, saveFailed: true)
@@ -1614,8 +1667,15 @@ enum ScoutService {
             outcome.degradedReads = degradedReads
             return outcome
         }
+        // #4147: AFTER the save and never before, so the ledger records what the store actually holds.
+        //
+        // A ledger write that fails must not fail the run: the scout's work has already landed, and this
+        // is a diagnostic record beside it. It is LOGGED rather than swallowed, because a ledger that
+        // silently stopped being written is exactly the state #4068 was in (L11, L98).
+        TitleRenameLedger.recordOrLog(titleRenames, now: scoutNow)
         var outcome = Outcome(found: events.count, inserted: inserted, updated: updated, skipped: skipped,
                               collapsedIntoRun: collapsedIntoRun)
+        outcome.titleRenames = titleRenames
         outcome.storeUnreadable = unreadableStore
         outcome.storeUnreadableKeys = unreadableKeys
         outcome.suppressedOrgs = suppressed
@@ -2038,6 +2098,28 @@ enum ScoutService {
                              lookup: (String) throws -> Prospect?) -> String? {
         guard let fed, DroppedNight.all(on: existing).contains(where: { $0.night == fed }) else { return fed }
         return DroppedNight.keeping(fedNights, on: existing, lookup: lookup).min() ?? existing.performanceDate
+    }
+
+    // #4147: one rename, recorded where the title was overwritten.
+    //
+    // ONE function rather than the same four lines at both `apply` call sites, because the two have to
+    // answer identically and a drift between them would be silent in the direction that records nothing
+    // (L370). It records only a title that actually CHANGED: an ordinary re-ingest rewrites the field
+    // with the same string on almost every row, and a ledger holding those would bury the handful of
+    // entries anybody is looking for.
+    //
+    // A rename Dan made himself is invisible here by construction: `apply` refuses to write `groupName`
+    // at all once `groupNameOverriddenByDan` is set, so the value cannot differ. This ledger is about
+    // what the SCOUT did (L11).
+    private static func recordRename(of prospect: Prospect, from before: String, by arm: MatchArm?,
+                                     at now: Date, into entries: inout [TitleRenameLedger.Entry]) {
+        guard prospect.groupName != before else { return }
+        entries.append(TitleRenameLedger.Entry(key: prospect.naturalKey, from: before,
+                                               to: prospect.groupName,
+                                               // A decision that reached a write always names its arm, so
+                                               // an unnamed one is a shape nobody has met. Recorded as
+                                               // such rather than dropped or guessed at (L11).
+                                               arm: arm?.rawValue ?? "unknown", at: now))
     }
 
     private static func apply(_ p: AssembledProspect, to existing: Prospect, now: Date,

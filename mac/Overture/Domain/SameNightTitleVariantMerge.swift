@@ -59,6 +59,9 @@ enum SameNightTitleVariantMerge {
     struct Summary: Equatable {
         var duplicatesDeleted = 0
         var conflictsDeferred = 0
+        // #4147: the titles this pass rewrote, carried out as well as written to the ledger, so a test can
+        // assert what a run recorded without reading a file every other test in the process shares.
+        var titleRenames: [TitleRenameLedger.Entry] = []
     }
 
     @discardableResult
@@ -70,6 +73,10 @@ enum SameNightTitleVariantMerge {
         // matched afterwards. Written through the same ledger NaturalKeyVenueMigration uses, because a
         // rename recorded in two places is two vocabularies (L263).
         var renames: [(from: String, to: String)] = []
+        // #4147: and every TITLE this pass rewrites, for the same reason and in the same shape. A key
+        // rename and a title rename are different facts about a row and neither implies the other: this
+        // pass routinely rewrites one without the other.
+        var titleRenames: [TitleRenameLedger.Entry] = []
 
         // #1761: the venue no longer takes part. It used to bucket the rows, which meant one room spelled
         // two ways ("Jalopy Theatre" against "Jalopy Theater") produced two buckets and the pass could
@@ -156,6 +163,10 @@ enum SameNightTitleVariantMerge {
                 // A name DAN typed outranks every billing. `groupNameOverriddenByDan` is what stops the
                 // scout clobbering his rename on each re-ingest, and walking over it here would undo his
                 // decision by another route, silently, on a launch he did nothing on (L5, #3124).
+                // #4147: the title as it stood before either of this block's two writes. Captured once
+                // rather than at each, because both end in the same field and what the ledger records is
+                // what the row LOST, not which line took it.
+                let titleBefore = survivor.groupName
                 if !survivor.groupNameOverriddenByDan,
                    let title = moreInformativeTitle(cluster.map(\.groupName)) {
                     survivor.groupName = title
@@ -188,6 +199,15 @@ enum SameNightTitleVariantMerge {
                     renames.append((from: survivor.naturalKey, to: key))
                     survivor.naturalKey = key
                 }
+                // #4147: after the key adoption, so the entry names the key the row ACTUALLY ends up
+                // holding, which is where anybody reading the ledger will look for it. It is also after
+                // the carry, because `NaturalKeyVenueMigration.carryDansDecisions` inside that can move a
+                // loser's title onto the survivor as well: one comparison covers both writes.
+                if survivor.groupName != titleBefore {
+                    titleRenames.append(TitleRenameLedger.Entry(key: survivor.naturalKey,
+                                                                from: titleBefore, to: survivor.groupName,
+                                                                arm: "sameNightMerge", at: Date()))
+                }
             }
         }
 
@@ -195,6 +215,9 @@ enum SameNightTitleVariantMerge {
         // A failure to record is not a reason to fail the merge: the rows are already correct, and the
         // cost this protects against is a paid answer that cannot be matched, not corruption.
         try? NaturalKeyRemap.record(renames, at: Date())
+        // #4147: beside it, and for the same reason it is recorded after the pass rather than during.
+        TitleRenameLedger.recordOrLog(titleRenames, now: Date())
+        summary.titleRenames = titleRenames
         return summary
     }
 
