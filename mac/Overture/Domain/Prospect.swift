@@ -466,6 +466,19 @@ final class Prospect {
     // #3596 named before it was built.
     var survivedMergeAt: Date? = nil
 
+    // #3330: the natural key of the stored row this one LOOKED LIKE when it arrived, by the same
+    // same-night predicate the launch merge deletes rows with. Nil on almost every row.
+    //
+    // A TAG, NEVER A REFUSAL. Dan's call of 2026-09-21: the arriving row is still written. A wrong merge
+    // at launch deletes a row he can see and the pass logs it; a wrong refusal at ingest loses a show
+    // that never reached a screen, so the failure would be invisible by construction.
+    //
+    // NOTHING CLEARS IT, on purpose. It is resolved at READ time: the note only draws while the row it
+    // names is still stored, so the launch merge collapsing the pair ends the note by itself. A record
+    // that points at another record has to re-check that record when it is read, or deleting it leaves a
+    // claim nobody can see is stale (L200).
+    var arrivedLookingLike: String? = nil
+
     // #3596: the answer, when it was NO. The sweep asked this row's sources and none of them listed the
     // key the merge left it holding, which is #3582's signature: the merge kept a copy the feed has
     // stopped recognising, and this row will now accrue misses and read as "may be cancelled" while the

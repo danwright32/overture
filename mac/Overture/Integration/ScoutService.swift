@@ -26,7 +26,11 @@ enum ScoutService {
         // future. Measured: joining the live Nihao Broadway pair by replacement would have discarded
         // 2026-09-11 on 2026-08-19, three weeks before it played.
         case reKeyJoiningNights(Prospect)
-        case insert
+        // #3330: carries the key of the stored row this arrival LOOKED LIKE, or nil. The answer rides
+        // the decision rather than being asked afterwards, because the read it needs is a scout read like
+        // any other: a store that cannot answer must refuse the row, not silently omit the tag
+        // (#3071, and `ScoutStoreReadTests` refuses a `try?` on any fetch in this file).
+        case insert(lookingLike: String?)
         // The store could not answer, so nobody knows whether the key is free. Refusing costs this row
         // one run and it comes back on the next; guessing costs a card that does not come back (L105).
         case storeUnreadable
@@ -42,7 +46,11 @@ enum ScoutService {
                              byConcert: () throws -> Prospect?,
                              byAnyRunURL: () throws -> Prospect?,
                              byProductionToken: () throws -> Prospect? = { nil },
-                             byStableSource: () throws -> Prospect?) -> UpsertTarget {
+                             byStableSource: () throws -> Prospect?,
+                             // #3330: asked ONLY when every arm above has missed, so an ordinary
+                             // re-ingest never pays for it. Inside the same do/catch as the arms, so a
+                             // failed read refuses this row exactly as a failed arm does.
+                             lookingLike: () throws -> String? = { nil }) -> UpsertTarget {
         do {
             if let existing = try storedByKey() { return .updateInPlace(existing) }
             if let match = try byConcert() { return .reKey(match) }
@@ -52,7 +60,7 @@ enum ScoutService {
             // feed as they always have.
             if let match = try byProductionToken() { return .reKeyJoiningNights(match) }
             if let match = try byStableSource() { return .reKey(match) }
-            return .insert
+            return .insert(lookingLike: try lookingLike())
         } catch {
             return .storeUnreadable
         }
@@ -1395,7 +1403,16 @@ enum ScoutService {
                                                           date: enriched.performanceDate,
                                                           venue: enriched.venue,
                                                           groupName: enriched.groupName,
-                                                          in: context) }
+                                                          in: context) },
+                lookingLike: {
+                    LookalikeOnArrival.amongStored(
+                        try context.fetch(FetchDescriptor<Prospect>()).map {
+                            (key: $0.naturalKey, groupName: $0.groupName,
+                             performanceDate: $0.performanceDate, venue: $0.venue)
+                        },
+                        groupName: enriched.groupName, performanceDate: enriched.performanceDate,
+                        venue: enriched.venue, excludingKey: key)
+                }
             )
             switch target {
             case .updateInPlace(let existing):
@@ -1506,8 +1523,21 @@ enum ScoutService {
                 apply(enriched, to: match, now: scoutNow,
                       storedByKey: { try Prospect.stored(key: $0, in: context) })
                 updated += 1
-            case .insert:
-                context.insert(make(enriched, key: key))
+            case .insert(let lookingLike):
+                let fresh = make(enriched, key: key)
+                // #3330: before it goes in, ask whether a stored row on this night at this room is the
+                // same show by the merge's own predicate. The upsert has already decided to INSERT, so
+                // this changes nothing about whether the row is written; it records which row the
+                // arrival looked like, so the pairing is on the card now rather than after the next
+                // launch. Dan's call, 2026-09-21: tag, never refuse.
+                //
+                // The answer came WITH the decision, computed inside `upsertTarget`'s own do/catch, so a
+                // store that could not answer refused this row rather than inserting it untagged. The
+                // first draft read the store here with `try?`, which `ScoutStoreReadTests` refused and
+                // was right to: folding "could not read" into "nothing like it" invents an emptiness that
+                // is itself a claim about Dan's data (#3071, L98, L215).
+                fresh.arrivedLookingLike = lookingLike
+                context.insert(fresh)
                 inserted += 1
             case .storeUnreadable:
                 // The store could not answer whether this key is free, so this row is left alone entirely.

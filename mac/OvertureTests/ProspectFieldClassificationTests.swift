@@ -200,6 +200,12 @@ struct ProspectFieldClassificationTests {
         // lost. Counting them would make two freshly merged rows defer against each other for ever,
         // which is the #1780 deadlock this list exists to keep out of the rule.
         "survivedMergeAt": "that a merge left this row a question for the next sweep, Overture's own bookkeeping",
+        // #3330: which stored row this one looked like when it arrived. A pointer at another row, not a
+        // record of anything this row reached or anything Dan decided, and it is resolved at read time
+        // rather than carried: the card names the other row only while that row is still stored. A merge
+        // deleting this row loses nothing, because the pairing it records is re-derivable from the two
+        // rows themselves.
+        "arrivedLookingLike": "which stored row this one resembled on arrival, a pointer resolved at read time",
         "mergeSurvivorUnseenAt": "that a sweep answered it and the feed did not list this row, a finding rather than a record",
 
         // MARK: three that LOOK like decisions of Dan's and were each checked against their writer

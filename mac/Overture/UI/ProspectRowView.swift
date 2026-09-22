@@ -190,6 +190,7 @@ struct ProspectRowView: View {
                     heldBackNote
                     linkedEngagementNote
                     storedMoreThanOnceNote
+                    arrivedLookingLikeNote
                     orgDoNotContactFlag
                     bookingSuggestionFlag
                     alreadyCoveredFlag
@@ -599,6 +600,21 @@ struct ProspectRowView: View {
     // action he can take here, and the controls that let him settle it are their own work.
     @ViewBuilder private var storedMoreThanOnceNote: some View {
         if let note = QueueModel.storedMoreThanOnceNote(item) {
+            Text(note)
+                .font(OVType.tag)
+                .foregroundStyle(OVColor.inkSoft)
+                .padding(.top, 2)
+        }
+    }
+
+    // #3330: the same treatment as the two notes around it, and for the same reason: it is a fact Dan
+    // needs while triaging rather than an action he can take here. It sits directly AFTER
+    // `storedMoreThanOnceNote` because the two answer the same question at different strengths, and a
+    // card can legitimately draw both: the grouping rule joins rows whose folded titles already match,
+    // while this fires where they differ, so a row can be part of a group AND have arrived looking like a
+    // fourth billing outside it.
+    @ViewBuilder private var arrivedLookingLikeNote: some View {
+        if let note = QueueModel.arrivedLookingLikeNote(item) {
             Text(note)
                 .font(OVType.tag)
                 .foregroundStyle(OVColor.inkSoft)

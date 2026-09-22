@@ -58,8 +58,24 @@ struct ScoutUpsertTargetTests {
     }
 
     // A key nobody holds, with nothing to re-key: a new row.
+    //
+    // #3330: the decision now CARRIES the key of the stored row this arrival looked like, because that
+    // read is a scout read like any other and a store that cannot answer it must refuse the row rather
+    // than insert it untagged (#3071). The default is nil, which is what an ordinary insert answers.
     @Test func aFreeKeyWithNoMatchIsAnInsert() throws {
-        #expect(target() == .insert)
+        #expect(target() == .insert(lookingLike: nil))
+    }
+
+    // #3330: and a failed read of THAT answer refuses the row, exactly as a failed arm does. Without
+    // this the tag could be dropped in silence on a store that could not answer, which is the emptiness
+    // #3071 exists to keep out of this file (L215).
+    @Test func aFailedLookalikeReadRefusesTheRowRatherThanInsertingItUntagged() {
+        struct StoreIsDown: Error {}
+        let decision = ScoutService.upsertTarget(
+            storedByKey: { nil }, byConcert: { nil }, byAnyRunURL: { nil },
+            byStableSource: { nil }, lookingLike: { throw StoreIsDown() })
+        #expect(decision == .storeUnreadable,
+                "a store that could not answer the lookalike read inserted the row anyway")
     }
 
     // Each of the three re-key arms, in the order the upsert asks them, since the order is the rule:
