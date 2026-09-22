@@ -146,7 +146,7 @@ struct CardsOnlyForWhatRendersTests {
                                             venueBrands: ProducerGate.VenueBrands(shows: [],
                                                                                   overrides: .none),
                                             rowCounts: [:], calendarBySourceId: [:], overrides: .none,
-                                            clients: .none, contradictedCancellations: [], sameShowGroups: [:], titlesByKey: [:],
+                                            clients: .none, contradictedCancellations: [], sameShowGroups: [:], titlesByKey: [:], retirableRunKeys: [],
                                             now: Date(), day: "2099-01-01"),
                                           requestedKeys: ["k1"])
 
