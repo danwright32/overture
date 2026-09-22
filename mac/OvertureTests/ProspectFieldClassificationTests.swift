@@ -192,6 +192,16 @@ struct ProspectFieldClassificationTests {
         "conflictKey": "the night that clashes, recomputed from the calendar",
         "conflictOpen": "whether the clash is still open, recomputed from the calendar",
 
+        // MARK: #3596's merge survivor question and its answer. Overture's own bookkeeping about a
+        // merge it performed, written by SurvivorInheritance and answered by FeedReconcile, and neither
+        // is evidence this row reached the outside world nor a decision of Dan's. Classified rather than
+        // counted deliberately: a row holding ONLY a pending question is a row a later merge may still
+        // delete, and it should, because the survivor of that merge gets its own question and nothing is
+        // lost. Counting them would make two freshly merged rows defer against each other for ever,
+        // which is the #1780 deadlock this list exists to keep out of the rule.
+        "survivedMergeAt": "that a merge left this row a question for the next sweep, Overture's own bookkeeping",
+        "mergeSurvivorUnseenAt": "that a sweep answered it and the feed did not list this row, a finding rather than a record",
+
         // MARK: three that LOOK like decisions of Dan's and were each checked against their writer
         // before being classified, because "a decision" and "a fact derived from his history" are
         // indistinguishable from the field name alone.

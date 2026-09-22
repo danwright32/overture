@@ -62,6 +62,12 @@ enum AppNoticeAction: Equatable, Sendable {
     // sentence he read and the rows he gets come from two different passes (L16).
     case showShowsOneSweepBroke(keys: [String])
 
+    // #3596: show the shows a merge kept and the next sweep did not list. A separate case from the one
+    // above even though both end in the same place, because the two findings are different claims and a
+    // case named for one of them standing in for the other is how two rules come to share a vocabulary
+    // they do not share a meaning with (L263).
+    case showMergeSurvivorsTheFeedDropped(keys: [String])
+
     // What the control says. Short, because it sits at the end of a sentence that has just said what is
     // wrong, and repeating that would be the same thing twice (#843).
     var title: String {
@@ -69,7 +75,10 @@ enum AppNoticeAction: Equatable, Sendable {
         case .retryOmniFocusSync: return "Sync now"
         // Not "Show them", which says nothing about where they go. Not "Fix", which is the one thing
         // this cannot do: nothing here clears a miss count or merges a row, deliberately (#4027).
-        case .showShowsOneSweepBroke: return "Show them"
+        // Two findings, one label, written once. Both controls do the same thing to the same kind of
+        // thing (focus these rows), so a second literal here would be two copies of one sentence and the
+        // copy inventory's own duplicate section would name it (#843).
+        case .showShowsOneSweepBroke, .showMergeSurvivorsTheFeedDropped: return "Show them"
         // Deliberately not "Re-export": Overture cannot make Downbeat export anything, it can only read
         // the file again. The remedy that IS Dan's is in the sentence's tooltip, where it belongs.
         // And deliberately not "Check again", which is already a control in this app: the one on an
@@ -178,6 +187,42 @@ enum AppNotices {
                     + " changed or removed; the shows are still stored exactly as they were.",
                 action: reachable.isEmpty ? nil : .showShowsOneSweepBroke(keys: reachable))
         }
+    }
+
+    // #3596: a merge kept one of two copies of a show, and the first sweep that could answer did not
+    // list the copy it kept.
+    //
+    // WHY IT IS WORTH A LINE. This is #3582's signature, and #3582 ran for at least two weeks and was
+    // found by hand, by comparing launch backups, after a live Carnegie show had been marked "may be
+    // cancelled" 28 times and a Zankel show 59 times. Every other check on this reads the symptom, so it
+    // fires weeks late; this one fires on the first sweep after the merge.
+    //
+    // WHY IT IS A WARNING AND NOT A REFUSAL. A survivor whose source has genuinely stopped listing it is
+    // a real state, not a defect, so the finding may only say what it measured (L11): the copy that was
+    // kept was not listed. It never says the merge was wrong, because the check cannot know that.
+    //
+    // WHAT MAKES IT GO AWAY, so it cannot become a line that stands for ever and teaches Dan to skim
+    // (L36, L523). Three things, and every one of them is something that really happened rather than an
+    // acknowledgement: a later sweep lists the row, the show plays, or Dan closes it. The caller passes
+    // only future, open rows for exactly that reason.
+    //
+    // WHY THE CONTROL CAN BE ABSENT, the same rule `feedBreaks` already applies: it offers to SHOW the
+    // rows, and where none of them is one the queue would render, the sentence stays and the button goes
+    // (L44, L109).
+    static func mergeSurvivorsTheFeedDropped(_ keys: [String],
+                                             shownInQueue: (String) -> Bool) -> [AppNotice] {
+        guard !keys.isEmpty else { return [] }
+        let reachable = keys.filter(shownInQueue)
+        let sentence = keys.count == 1
+            ? "A show Overture kept when it merged a duplicate wasn't listed by its source on the next check."
+            : "\(keys.count) shows Overture kept when it merged a duplicate weren't listed by their sources on the next check."
+        return [AppNotice(
+            text: sentence,
+            tone: .warning,
+            help: "When one show is stored twice, Overture keeps one copy and removes the other. The copy"
+                + " it keeps has to be the one its source goes on listing, or the show reads as gone while"
+                + " it is still playing. These were not listed the next time their sources were read.",
+            action: reachable.isEmpty ? nil : .showMergeSurvivorsTheFeedDropped(keys: reachable))]
     }
 
     // Everything the app has to say, in the order it should be read: the standing fault first, then

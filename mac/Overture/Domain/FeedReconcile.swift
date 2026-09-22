@@ -254,7 +254,11 @@ enum FeedReconcile {
     // Presence and blame are deliberately different questions, judged against different sets. ANY
     // source that reported can prove a show is alive, even one too degraded to be trusted about what is
     // missing. Only a source whose silence is evidence can take one away.
-    static func reconcile(stored: [Prospect], reports: [SourceReport], today: String) {
+    // #3596: `now` is injected rather than read inside, so a test can pin the instant the finding is
+    // stamped with. Defaulted because every shipping caller means "now" and a required argument here
+    // would be answered `Date()` at each of them, which is the same value with more places to get wrong.
+    static func reconcile(stored: [Prospect], reports: [SourceReport], today: String,
+                          now: Date = Date()) {
         let seenKeys = reports.reduce(into: Set<String>()) { $0.formUnion($1.seenKeys) }
         let seenSourceURLs = reports.reduce(into: Set<String>()) { $0.formUnion($1.seenSourceURLs) }
         // #1469: kept PER SOURCE rather than pooled, unlike the two sets above. See SourceReport.
@@ -265,13 +269,17 @@ enum FeedReconcile {
         let believable = Set(reports.filter(\.absenceIsEvidence).map(\.sourceId))
 
         for p in stored {
-            if isStillListed(p, seenKeys: seenKeys, seenSourceURLs: seenSourceURLs, gapDates: gapDates) {
+            let listed = isStillListed(p, seenKeys: seenKeys, seenSourceURLs: seenSourceURLs,
+                                       gapDates: gapDates)
+            if listed {
                 p.missedScoutCount = 0                                  // listed somewhere: definitely live
             } else if isFuture(p, today: today), everyOwnerWasAskedAndNoneHasIt(p, believable: believable) {
                 p.missedScoutCount += 1
             }
             // Everything else is left untouched. A past performance, a show whose sources were not all
             // checked, and a show nobody claims are all cases where absence proves nothing.
+            answerAnyMergeSurvivorQuestion(p, listed: listed, believable: believable, today: today,
+                                           now: now)
         }
     }
 
@@ -286,6 +294,44 @@ enum FeedReconcile {
         // placeholder, held by its night, and only against a source that owns this show.
         guard let date = p.performanceDate, !gapDates.isEmpty else { return false }
         return p.sourceIds.contains { gapDates[$0]?.contains(date) == true }
+    }
+
+    // #3596: the answer half of the merge survivor question, and the reason it is here rather than in a
+    // pass of its own is that this is the ONE place holding both a sweep's `seenKeys` and the rule for
+    // whose silence counts as evidence. A second reader of those would be a second vocabulary for the
+    // same question (L263).
+    //
+    // THREE OUTCOMES, and keeping them apart is the whole point (L11):
+    //   listed              the merge kept an identity the feed publishes. Question closed, mark cleared,
+    //                       and any earlier finding cleared with it, because the feed has now answered in
+    //                       the other direction.
+    //   asked and absent    #3582's signature. Recorded and the mark cleared, so this is reported once
+    //                       rather than on every sweep for ever.
+    //   not asked           this sweep could not answer. The mark STAYS, untouched, and nothing is
+    //                       recorded: a sweep that never asked this row's sources proves nothing about
+    //                       it, and treating its silence as an answer is exactly the fault the missed
+    //                       count beside it already guards against (L98).
+    //
+    // The absent case reads the SAME predicate the missed count reads, `everyOwnerWasAskedAndNoneHasIt`,
+    // rather than a second copy of it (L370), and it carries `isFuture` for the same reason that branch
+    // does: a feed drops a show once it has played, so a past survivor is absent by design and reporting
+    // it would fill the finding with every merge Overture has ever made.
+    private static func answerAnyMergeSurvivorQuestion(_ p: Prospect, listed: Bool,
+                                                       believable: Set<String>, today: String,
+                                                       now: Date) {
+        if listed {
+            // Written only where there is something to clear. Almost every row in the store is listed
+            // and carries neither field, and assigning nil over nil on all of them would dirty the whole
+            // store on every sweep, which is a write the save has to carry and every observer has to
+            // wake for.
+            if p.survivedMergeAt != nil { p.survivedMergeAt = nil }
+            if p.mergeSurvivorUnseenAt != nil { p.mergeSurvivorUnseenAt = nil }
+            return
+        }
+        guard p.survivedMergeAt != nil, isFuture(p, today: today),
+              everyOwnerWasAskedAndNoneHasIt(p, believable: believable) else { return }
+        p.mergeSurvivorUnseenAt = now
+        p.survivedMergeAt = nil
     }
 
     // The conservative half of the rule, and the reason a show co-listed by a venue and a presenter

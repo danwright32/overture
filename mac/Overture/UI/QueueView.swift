@@ -312,6 +312,11 @@ struct QueueView: View {
         // #4027 / #3383: one line per source whose rows all stopped matching in the same sweep. Derived in
         // the pass beside the stage membership the control depends on, never in the body.
         let feedBreaks: [AppNotice]
+        // #3596: kept apart from `feedBreaks` above rather than folded into it. Both end up in the same
+        // masthead list, and that is the only thing they share: one says a source re-keyed its whole
+        // calendar, the other says a merge kept a copy the source has stopped listing. A field named for
+        // one finding and carrying the other is a shared name standing in for shared behaviour (L263).
+        let mergeSurvivorsDropped: [AppNotice]
         let pendingBookings: Int
         // #1774: everything below used to be derived INSIDE the scroll content, so a scroll frame paid for
         // it. The fan-out line is the one that hid: it sweeps every prospect and was written as an
@@ -687,7 +692,8 @@ struct QueueView: View {
             QueueScrollHolder(jumpTarget: jumpTarget) {
                 VStack(alignment: .leading, spacing: OVSpacing.xl) {
                     masthead(visible: data.visibleRows, items: data.rows, fanOutLine: data.fanOutLine,
-                             notices: notices + data.feedBreaks, pendingBookings: data.pendingBookings,
+                             notices: notices + data.feedBreaks + data.mergeSurvivorsDropped,
+                             pendingBookings: data.pendingBookings,
                              agentInputs: data.agentInputs)
                     // #1134: stage-only navigation is the only mode. The stage pills in the masthead choose
                     // what shows; this always renders the focused view for the current stage (Scout by
@@ -1205,6 +1211,10 @@ struct QueueView: View {
                     // #4027: performed here for the same reason the shortfall's offer is: this view owns
                     // the focused list the control enters, and RootView does not.
                     else if case .showShowsOneSweepBroke(let keys) = action { showBrokenShows(keys) }
+                    // #3596: a different finding reaching the same control, which is what
+                    // `showBrokenShows` already is: it focuses the keys it is handed and knows nothing
+                    // about why they were chosen.
+                    else if case .showMergeSurvivorsTheFeedDropped(let keys) = action { showBrokenShows(keys) }
                     else { onNoticeAction(action) }
                 })
             // #1923: its own view, so an idle queue runs no timer for it and a run starting repaints one
