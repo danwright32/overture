@@ -319,7 +319,8 @@ enum GroupNameMatch {
     // season numbers its own concerts one character apart on purpose, and two rooms in one building
     // spelled one TRANSPOSITION apart is not a shape anybody names deliberately. So the tolerance lives
     // here, on the caller that measured the need for it, and `differsByOneTypo` keeps its own distance.
-    // `GroupNameMatchTypoBoundaryTests` asserts the two answer differently on exactly that pair.
+    // `OnePageOneRoomSpellingTests.atranspositionIsASlipForARoomAndNotForATitle` asserts the two answer
+    // differently on exactly that pair, so a later tidy-up that merges them goes red.
     //
     // The word-level guards are shared rather than spelled twice: same word count, exactly one word
     // differing, no digits in it, at least four letters (L370).
