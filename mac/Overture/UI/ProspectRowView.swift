@@ -191,6 +191,7 @@ struct ProspectRowView: View {
                     linkedEngagementNote
                     storedMoreThanOnceNote
                     arrivedLookingLikeNote
+                    laterLookalikeNote
                     alreadyPitchedNightNote
                     orgDoNotContactFlag
                     bookingSuggestionFlag
@@ -616,6 +617,18 @@ struct ProspectRowView: View {
     // fourth billing outside it.
     @ViewBuilder private var arrivedLookingLikeNote: some View {
         if let note = QueueModel.arrivedLookingLikeNote(item) {
+            Text(note)
+                .font(OVType.tag)
+                .foregroundStyle(OVColor.inkSoft)
+                .padding(.top, 2)
+        }
+    }
+
+    // #4146: directly after the lookalike note it mirrors, because the two are the same pairing read
+    // from its two ends. A card can never draw both: a row either arrived looking like something or was
+    // the thing something else arrived looking like.
+    @ViewBuilder private var laterLookalikeNote: some View {
+        if let note = QueueModel.laterLookalikeNote(item) {
             Text(note)
                 .font(OVType.tag)
                 .foregroundStyle(OVColor.inkSoft)

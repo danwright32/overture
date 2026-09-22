@@ -279,6 +279,9 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     // than a key because that is what the sentence says, and resolved in the pass rather than on the card
     // because a key naming a row that has since been merged away must draw nothing (L200).
     var arrivedLookingLikeTitle: String? = nil
+    // #4146: the titles of the rows that arrived looking like THIS one, newest first, already resolved.
+    // A card can be the target of several pointers: a third billing tags the same older row again.
+    var laterLookalikeTitles: [String] = []
     // #4130: the TITLE of the row that had already been pitched for this night when this one arrived,
     // already resolved, for the same reason the tag above is resolved in the pass: a key naming a row
     // that is no longer stored must draw nothing (L200).
@@ -3161,12 +3164,27 @@ enum QueueModel {
         // absent here, so the note stops drawing with nothing needing to clear the field (L200).
         let titlesByKey = Dictionary((corpus ?? prospects).map { ($0.naturalKey, $0.groupName) },
                                      uniquingKeysWith: { first, _ in first })
+        // #4146: the same walk read backwards. NEWEST FIRST, by the row's own first sighting, because a
+        // card that is the target of several pointers names one and counts the rest, and the newest is
+        // the one Dan has not seen yet. A row with no `firstSeenAt` (every row written before #1886)
+        // sorts last rather than being dropped: it is still half of a pair.
+        var laterLookalikesByKey: [String: [Prospect]] = [:]
+        for row in (corpus ?? prospects) {
+            guard let target = row.arrivedLookingLike else { continue }
+            laterLookalikesByKey[target, default: []].append(row)
+        }
+        let laterLookalikes = laterLookalikesByKey.mapValues { rows in
+            rows.sorted {
+                ($0.firstSeenAt ?? .distantPast) > ($1.firstSeenAt ?? .distantPast)
+            }.map(\.naturalKey)
+        }
         let pre = CardPreamble(linked: linked, inherited: inherited, venueBrands: venueBrands,
                                rowCounts: rowCounts, calendarBySourceId: calendarBySourceId,
                                overrides: overrides, clients: clients,
                                contradictedCancellations: contradictedCancellations,
                                sameShowGroups: sameShowGroups,
                                titlesByKey: titlesByKey,
+                               laterLookalikesByKey: laterLookalikes,
                                now: now, day: day)
 
         var rows: [QueueScopeRow] = []
@@ -3243,6 +3261,12 @@ enum QueueModel {
         let sameShowGroups: [String: [String]]
         // #3330: every stored row's title by its key, for resolving an arrival tag to a name.
         let titlesByKey: [String: String]
+        // #4146: the OTHER direction of that tag. For each stored row's key, the keys of the rows that
+        // arrived LOOKING LIKE it, newest first. #3330's tag is written in the `.insert` arm, which only
+        // ever runs for the row being written, so on a pair only the second row carried a sentence and
+        // the first said nothing at all. The pointer already names both halves; nothing but this reverse
+        // walk was needed to read it from the other end.
+        let laterLookalikesByKey: [String: [String]]
         let now: Date
         let day: String
 
@@ -3385,6 +3409,10 @@ enum QueueModel {
         item.arrivedLookingLikeTitle = p.arrivedLookingLike.flatMap { pre.titlesByKey[$0] }
         // #4130: the same read-time resolution, against the same table.
         item.arrivedOnAPitchedNightTitle = p.arrivedOnAPitchedNight.flatMap { pre.titlesByKey[$0] }
+        // #4146: the same tag read from the other end, resolved against the same table, so a pointer
+        // from a row that has since been merged away draws nothing.
+        item.laterLookalikeTitles = (pre.laterLookalikesByKey[p.naturalKey] ?? [])
+            .compactMap { pre.titlesByKey[$0] }
         // #1731: only meaningful where the verdict IS the building; nil otherwise.
         item.readAsTheBuildingReason = pre.venueBrands.contains(p.presenter)
             ? OrganisationListing.buildingReason(
@@ -3639,6 +3667,32 @@ enum QueueModel {
     static func arrivedLookingLikeNote(_ item: QueueItem) -> String? {
         guard let other = item.arrivedLookingLikeTitle, !other.isEmpty else { return nil }
         return "Looks like the same show as \(other), already stored for this night."
+    }
+
+    // #4146: the OTHER half of that pairing, said on the card that was already there.
+    //
+    // #3330's tag is written in the `.insert` arm, which only ever runs for the row being written, so on
+    // a pair only the SECOND row said anything. Dan meets the older card as often as the newer one, and
+    // usually higher up his order, so a pairing one card admits and the other denies by silence is worse
+    // than neither saying it: he cannot tell whether the quiet card is a different show or the other
+    // half of a pair.
+    //
+    // IT NAMES THE LATER LISTING AND SAYS WHICH DIRECTION IT WENT. Dan's call, 2026-09-22, with the
+    // three wordings in front of him. The two halves are not symmetric and the sentence may not pretend
+    // they are (L11): the newer row arrived looking like this one, and this one arrived looking like
+    // nothing.
+    //
+    // SEVERAL POINTERS ARE COUNTED, NOT LISTED, which is the rule #3282 recorded for the same reason: a
+    // third billing tags the same older row again, and naming each would rebuild the wall of identical
+    // text this milestone keeps removing (L579). The one named is the NEWEST, because that is the one
+    // Dan has not seen yet.
+    static func laterLookalikeNote(_ item: QueueItem) -> String? {
+        let others = item.laterLookalikeTitles.filter { !$0.isEmpty }
+        guard let newest = others.first else { return nil }
+        guard others.count > 1 else {
+            return "A later listing looks like the same show: \"\(newest)\"."
+        }
+        return "\(others.count) later listings look like the same show, the newest \"\(newest)\"."
     }
 
     // #4130: a pitch has ALREADY gone out for this night, at this room, for this presenter, and until
