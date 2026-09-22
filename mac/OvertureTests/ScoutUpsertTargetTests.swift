@@ -88,9 +88,9 @@ struct ScoutUpsertTargetTests {
         let stable = prospect("by-source", in: ctx)
 
         #expect(target(byConcert: { concert }, byAnyRunURL: { byURL }, byStableSource: { stable })
-                == .reKey(concert))
-        #expect(target(byAnyRunURL: { byURL }, byStableSource: { stable }) == .reKey(byURL))
-        #expect(target(byStableSource: { stable }) == .reKey(stable))
+                == .reKey(concert, by: .concertIdentity))
+        #expect(target(byAnyRunURL: { byURL }, byStableSource: { stable }) == .reKey(byURL, by: .anyRunURL))
+        #expect(target(byStableSource: { stable }) == .reKey(stable, by: .stableSource))
     }
 
     // #4029: the token arm sits BELOW the whole-URL arm and ABOVE the stable-source one, and it answers
@@ -106,7 +106,7 @@ struct ScoutUpsertTargetTests {
 
         #expect(target(byProductionToken: { byToken }, byStableSource: { stable })
                 == .reKeyJoiningNights(byToken))
-        #expect(target(byAnyRunURL: { byURL }, byProductionToken: { byToken }) == .reKey(byURL))
+        #expect(target(byAnyRunURL: { byURL }, byProductionToken: { byToken }) == .reKey(byURL, by: .anyRunURL))
     }
 
     // THE refusal. A store that cannot answer must never read as a key nobody holds, because the arms
@@ -181,6 +181,6 @@ struct ScoutUpsertTargetTests {
         #expect(target(byStableSource: { throw StoreIsDown() }) == .storeUnreadable)
         // The refusal is not "anything threw anywhere": a later read that would not have been reached
         // cannot refuse a row the earlier arms already settled.
-        #expect(target(byConcert: { stable }, byAnyRunURL: { throw StoreIsDown() }) == .reKey(stable))
+        #expect(target(byConcert: { stable }, byAnyRunURL: { throw StoreIsDown() }) == .reKey(stable, by: .concertIdentity))
     }
 }
