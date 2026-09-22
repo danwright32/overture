@@ -116,6 +116,46 @@ struct ADuplicateWarningNamesTheShowTests {
         #expect(contact.duplicateOfNight == "2026-10-03")
     }
 
+    // THE FIRST LINK, which neither of the two above can reach: the IMPORTER has to record the key when
+    // it writes the flag. A mutation making it write nil SURVIVED the suite as first written, because
+    // every test here set the key by hand (L718: a value a test supplies proves the reader, never the
+    // writer).
+    @Test func theimporterRecordsWhichRowTheDuplicateIs() throws {
+        let ctx = try context()
+        let pitched = row(ctx, "The ATF Cabaret", night: "2026-10-03", email: "ana@example.org")
+        // The pitched row's contact must be SENT for the guard to count it as already pitched.
+        try #require(pitched.recipients.first).sendState = .sent
+        let arriving = row(ctx, "Legends: A New Musical", night: "2026-10-03", email: nil)
+        try ctx.save()
+
+        let results = PrepResults(version: 2, generatedAt: "now", results: [
+            PrepResult(naturalKey: arriving.naturalKey,
+                       contacts: [PrepContact(name: "Ana Ruiz", role: "producer",
+                                              email: "ana@example.org",
+                                              method: "named_decision_maker", confidence: "high",
+                                              formUrl: nil, provenance: "presenter",
+                                              sourceUrl: "https://example.org/about")],
+                       draft: PrepDraft(subject: "S", body: "B", variant: "A")),
+        ])
+        _ = PrepImporter.ingest(results, into: ctx)
+
+        let written = try #require(try ctx.fetch(FetchDescriptor<Prospect>())
+            .first { $0.naturalKey == arriving.naturalKey }?.recipients.first)
+        #expect(written.looksLikeDuplicateContact,
+                "the guard did not fire at all, so this says nothing about the key beside it")
+        #expect(written.looksLikeDuplicateContactKey == pitched.naturalKey,
+                "the importer recorded the flag without the row it matched, so the sentence can never name it")
+
+        // AND AGAIN, because the importer has TWO writers: the one above, for a contact it is meeting
+        // for the first time, and a second one on the path that updates a recipient already stored. A
+        // re-prep runs the second, and a mutation of it survived a suite that only ever ingested once.
+        _ = PrepImporter.ingest(results, into: ctx)
+        let reingested = try #require(try ctx.fetch(FetchDescriptor<Prospect>())
+            .first { $0.naturalKey == arriving.naturalKey }?.recipients.first)
+        #expect(reingested.looksLikeDuplicateContactKey == pitched.naturalKey,
+                "a second prep cleared the key on a recipient it already held")
+    }
+
     // And a key naming a row that is no longer stored resolves to NOTHING, so the sentence falls back
     // rather than naming a card Dan cannot open (L200).
     @Test func aKeyWhoseRowIsGoneResolvesToNothing() throws {
