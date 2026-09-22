@@ -84,20 +84,38 @@ struct ARedundantRunCanBeRetiredTests {
     }
 
     // A RUN COVERED BY ANOTHER RUN is a DUPLICATE, not a redundant run, and gets no control. Dan's rule
-    // of 2026-09-21, already in `isRetirable`: retiring one of a mutually covering pair, then the other,
-    // loses the show entirely. Asserted through the CARD, because that is the surface this issue adds.
-    @Test func aRunCoveredByAnotherRunOffersNothing() throws {
+    // of 2026-09-21: retiring one of a mutually covering pair and then the other loses the show entirely.
+    //
+    // THE FIXTURE IS THE LIVE SHAPE, the Steven Maglio pair measured on 2026-09-21, and it has to be:
+    // the pair this test was first written with was not fully covered at all (the shorter run holds its
+    // own nights under ONE key, so the longer run's remaining nights were never all held), so the rule
+    // under test never decided anything and a mutation removing it SURVIVED (L159). Here the five night
+    // run's other nights are held by the four night run AND by single night cards, which is what makes
+    // the answer turn on whether a cover is itself a run.
+    @Test func aRunCoveredByAnotherRunOffersNothingWhileItsSubsetRunDoes() throws {
         let ctx = try context()
-        let first = row(ctx, nights: ["2026-10-04", "2026-11-15", "2026-12-20"])
-        let second = row(ctx, nights: ["2026-11-15", "2026-12-20"])
+        let big = row(ctx, nights: ["2026-08-16", "2026-09-13", "2026-10-04", "2026-11-15", "2026-12-20"])
+        let small = row(ctx, nights: ["2026-09-13", "2026-10-04", "2026-11-15", "2026-12-20"])
+        row(ctx, nights: ["2026-10-04"])
+        row(ctx, nights: ["2026-11-15"])
+        row(ctx, nights: ["2026-12-20"])
+
+        let stored = try ctx.fetch(FetchDescriptor<Prospect>())
+        let byKey = Dictionary(stored.map { ($0.naturalKey, $0) }, uniquingKeysWith: { a, _ in a })
+        // The precondition the claim rests on: BOTH runs are fully covered, so what separates them is
+        // the kind of card doing the covering and nothing else.
+        #expect(big.coverageOfItsOtherNights(lookup: { byKey[$0] }) == .fullyCovered)
+        #expect(small.coverageOfItsOtherNights(lookup: { byKey[$0] }) == .fullyCovered)
 
         let built = try cards(ctx)
-        for key in [first.naturalKey, second.naturalKey] {
-            let card = try #require(built.first { $0.id == key })
-            #expect(!card.everyOtherNightIsOnItsOwnCard,
-                    "a mutually covering pair offered a retire, and pressing both loses the show")
-            #expect(QueueModel.everyNightCoveredNote(card) == nil)
-        }
+        let bigCard = try #require(built.first { $0.id == big.naturalKey })
+        #expect(!bigCard.everyOtherNightIsOnItsOwnCard,
+                "a run covered by another RUN offered a retire, and pressing both loses the show")
+        #expect(QueueModel.everyNightCoveredNote(bigCard) == nil)
+
+        let smallCard = try #require(built.first { $0.id == small.naturalKey })
+        #expect(smallCard.everyOtherNightIsOnItsOwnCard,
+                "the run whose nights are each on a single night card is the one this issue is about")
     }
 
     // A PARTLY covered run says nothing. 14 runs were in this state on 2026-09-20 and they are not this

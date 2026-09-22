@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1629 sentences**.
+Every sentence Overture can say to Dan: **1633 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -14,7 +14,7 @@ What is not, and why:
   sentences under tokens nobody reads.
 - **Nothing, if it is written as two literals joined with `+`.** Those ARE joined here, into the
   one sentence the running app says (#3155). What is still only part of what Dan reads is a
-  sentence carrying a VALUE: 596 of the 1629 below hold a
+  sentence carrying a VALUE: 597 of the 1633 below hold a
   `\(...)` where a number or a name goes, so what is printed is the template. They are counted
   here rather than listed again, because the hole is visible in the line itself; what was missing
   was any statement of how much of this document is templates.
@@ -848,6 +848,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/BulkDismiss.swift`
 "Dismiss them"
     `Domain/BulkDismiss.swift`
+"Dismiss this run as a duplicate. It leaves the queue and can be restored from the Archive."
+    `UI/QueueView+Model.swift`
 "Do not contact"
     `UI/ProspectRowView.swift`
 "Don't learn from this email"
@@ -923,6 +925,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/WeeklyDayOff.swift`
 "Every client tagged in your Shoots calendar is in Downbeat, covered by a watched source, or set aside below."
     `Domain/ClientCoverage.swift`
+"Every night of this run is already on its own card."
+    `UI/QueueView+Model.swift`
 "Every one is a one-off hunt, so none of them share an answer."
     `Domain/ProbeSelection.swift`
 "Every one of the \(Plural.count(vanished.bookingCount, "shoot")) Downbeat was exporting has gone at once, "
@@ -1985,6 +1989,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/ActionFeedback.swift`
 "Resumed pursuing \(who) on \(org)."
     `App/ActionFeedback.swift`
+"Retire this run"
+    `UI/QueueView+Model.swift`
 "Retry sync"
     `Integration/NotificationService.swift`
 "Returning client"
@@ -3252,6 +3258,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/ActionFeedback.swift`
 "\(placed) shows"
     `UI/SourcesView.swift`
+"\(presenter) was already pitched for this night, as \"\(other)\"."
+    `UI/QueueView+Model.swift`
 "\(progress.completed) of \(progress.total)"
     `Domain/PrepProgress.swift`
 "\(range) is no longer blocked"
