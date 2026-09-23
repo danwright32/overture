@@ -1062,7 +1062,7 @@ describe("evaluatePrepResult - the draft has to ask for something (#1889)", () =
 // language is the drift L26 warns about. This covers what nothing else does: the wording.
 describe("evaluatePrepResult - venue history wording (#1905)", () => {
   const KNOWS_THE_ROOM =
-    "I've photographed at Harborlight Hall a few times, so I'm familiar with the room. " +
+    "I've photographed at Harborlight Hall a few times. " +
     "I've photographed at Carnegie Hall for nearly ten years, and you can see my portfolio at " +
     "danwrightphotography.com.";
 
@@ -1113,7 +1113,7 @@ describe("evaluatePrepResult - venue history wording (#1905)", () => {
     expect(r.failures.join(" ")).toMatch(/risk avoided/i);
   });
 
-  it("passes familiarity written as knowing the space", () => {
+  it("passes a venue history sentence that stops at the band", () => {
     const r = evaluatePrepResult(results([NAMED_ACT], {}, bodyWith(KNOWS_THE_ROOM)), {
       description: "a band was supplied for Harborlight Hall",
       forbidVenueRiskFraming: true,
@@ -1124,7 +1124,7 @@ describe("evaluatePrepResult - venue history wording (#1905)", () => {
   // The absent case, which is the one that can invent a fact: no band means the app has no history to
   // report, so any claim of having worked THAT room came from its name, a past client, or nothing.
   it("flags a claim of having worked the venue when no band was supplied", () => {
-    const invented = "I've photographed at Harborlight Hall a few times, so I know the space. " +
+    const invented = "I've photographed at Harborlight Hall a few times. " +
       "You can see my portfolio at danwrightphotography.com.";
     const r = evaluatePrepResult(results([NAMED_ACT], {}, bodyWith(invented)), {
       description: "no band was supplied for Harborlight Hall",
