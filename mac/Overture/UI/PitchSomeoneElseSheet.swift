@@ -38,6 +38,11 @@ struct PitchSomeoneElseSheet: View {
                 .onSubmit(add)
             TextField(ContactFieldCopy.namePlaceholder, text: $name)
                 .textFieldStyle(.roundedBorder)
+                // Return adds, from EITHER field, rather than falling through to whatever default button
+                // the sheet happens to carry, which is the defect #2308 shipped once already. It is the
+                // same act the button below performs and is gated on the same parse, so a Return with no
+                // usable route does nothing at all.
+                .onSubmit(add)
 
             HStack {
                 Spacer()

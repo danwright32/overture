@@ -14,9 +14,9 @@ import ViewInspector
 @Suite("The panel for pitching somebody else (#4170)")
 struct PitchSomeoneElseSheetTests {
     private func show() throws -> Prospect {
-        let ctx = ModelContext(try ModelContainer(
-            for: Schema([Prospect.self, Recipient.self]),
-            configurations: [ModelConfiguration(isStoredInMemoryOnly: true)]))
+        // Through the helper, never a container built here: a hosted suite's own container autosaves on
+        // its main context and arms the timer that kills the test host between tests (#3874).
+        let ctx = ModelContext(try TestModelContainer.inMemory([Prospect.self, Recipient.self]))
         let p = Prospect(naturalKey: "k", groupName: "Symphony in Motion", discipline: "choral",
                          venue: "Church of the Ascension", performanceDate: "2026-11-01",
                          sourceListingURL: nil, priorRelationship: "none", production: "self",
