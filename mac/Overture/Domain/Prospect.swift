@@ -30,6 +30,19 @@ final class Prospect {
     // scout, because the scout was the only writer the presenter had ever had. `PresenterProvenance`
     // states the rule and is the reader; `ScoutService.apply` is where it decides something.
     var presenterSource: String? = nil
+    // #1954: WHICH SOURCES set the presenter, as `GenrePrecedence.sourceKey`'s joined ids, so a second
+    // source cannot silently take a field the first one filled. The exact shape `disciplineGenreSourceKey`
+    // and `producerAxisSourceKey` already carry, and read by the same `mayOverwrite` rule.
+    //
+    // Distinct from `presenterSource` directly above, which is a different question: that says WHAT KIND
+    // of writer set it (the scout, a sweep, the AI pass, Dan) and decides whether an ordinary re-read may
+    // empty it; this says WHICH scout sources, and decides whether a DIFFERENT source may overwrite it.
+    // Folding them into one field would make "the scout" a single writer when it is seventy four.
+    //
+    // Nil on every row written before this, which `mayOverwrite` reads as nothing recorded, so the rule
+    // is inert on a row until its next re-read stamps it. That is the same forward-only shape #1663 had
+    // and it is why this can ship without a backfill (L389).
+    var presenterSourceKey: String? = nil
     // #1788: this row's blank presenter is a name Overture DISCARDED (the run reported the room), not a
     // page that named nobody. Stored rather than derived: once the name is drained the two are identical
     // in the data, and only the boundary that dropped it knows which happened. Optional so every row

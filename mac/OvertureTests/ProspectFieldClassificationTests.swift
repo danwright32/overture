@@ -45,6 +45,10 @@ struct ProspectFieldClassificationTests {
         "groupName": "the show's name as the scout last read it",
         "presenter": "who the listing bills, rewritten on every re-read",
         "presenterSource": "which writer that presenter came from, a fact about the read",
+        // #1954: WHICH SOURCES read it, in the same family as the two axis keys below and for the same
+        // reason: it records whose reading is sitting in the field, never anything Dan decided or
+        // anything this row reached.
+        "presenterSourceKey": "which sources set that presenter, a fact about the read",
         "presenterWasTheRoom": "that the run reported the room rather than a name, a fact about the read",
         "location": "where the page said the show is, verbatim and re-readable",
         "discipline": "what the classifier made of it",
