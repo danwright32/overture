@@ -170,6 +170,32 @@ def epoch(iso):
     return datetime.fromisoformat(iso.replace("Z", "+00:00")).timestamp()
 
 
+# #4103: is this line the MAIN THREAD's own block header?
+#
+# TWO SPELLINGS, because macOS writes two and both are live on this Mac. `sample` labels the block
+# `com.apple.main-thread` only while the thread sat on the main dispatch queue for the WHOLE sample.
+# A freeze is exactly the case where it did not, so on 2026-09-21 every sample this tool kept (four of
+# them, covering 0.93s and 3.31s stalls) was reported `UNREADABLE, no main thread block in this
+# sample` while the block was there all along, labelled:
+#
+#     4008 Thread_50084685: Main Thread   DispatchQueue_<multiple>
+#
+# Counted across the samples still on disk: that shape appears 484 times and `com.apple.main-thread`
+# not once. The old spelling is KEPT rather than replaced, because the samples an older macOS wrote
+# are still here and are the only record of the freezes they cover; swapping one for the other would
+# move the blindness to the archive instead (L26, L255).
+#
+# ANCHORED TO THE HEADER SHAPE, and that is the half a looser match gets wrong. Frame lines carry the
+# same `<count> <label>` shape as a header, and real samples hold frames named `renderOnMainThread`,
+# `withMainThreadRender` and `__NSOPERATION_IS_INVOKING_MAIN__`. A matcher that took one of those
+# would report a frame's own sample count as the whole main thread's, which reads as a measurement
+# rather than as a tool that could not find the thread (L11). Only a header begins `Thread_`.
+def is_main_thread_header(label):
+    if not label.startswith("Thread_"):
+        return False
+    return "com.apple.main-thread" in label or "Main Thread" in label
+
+
 def read_one_line(path):
     """What this sample says about the main thread, in one line, or why it cannot say (L98)."""
     try:
@@ -189,7 +215,7 @@ def read_one_line(path):
             continue
         count, label = int(parts[0]), parts[1]
         if header_indent is None:
-            if "com.apple.main-thread" in label:
+            if is_main_thread_header(label):
                 header_indent, total = indent, count
             continue
         if indent <= header_indent:
