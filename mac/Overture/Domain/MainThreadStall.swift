@@ -194,6 +194,31 @@ struct StallRecord: Codable, Equatable, Sendable {
     // milestone 80's own "before" half (L133).
     let passSeconds: Double?
 
+    // #4153: how many seconds of this stall the MAC WAS ASLEEP, or nothing where the reading could not be
+    // taken.
+    //
+    // The longest record in Dan's log on 2026-09-22 was 1057.90s and was not a freeze: `pmset -g log` puts
+    // a 1074 second sleep ending at that instant exactly. The main thread was not blocked, it was not
+    // scheduled. At 49 times the next longest record it sets every maximum and percentile taken from that
+    // file, and this milestone's bar is judged against that file.
+    //
+    // RECORDED, NEVER EXCLUDED. A rule that dropped these would also drop a real freeze that happened to
+    // overlap a sleep, so `seconds` stays exactly as measured and this says how much of it the machine was
+    // not running (L116). #4114 makes the same argument about menu tracking, which is the sibling way in.
+    //
+    // THREE VALUES, the same as `passes` and `passSeconds`: `nil` is UNMEASURED, `0` means the Mac stayed
+    // awake through this stall, `N` is the span. Optional also because Dan's log holds a thousand records
+    // written before this shipped, and those are milestone 80's own "before" half (L133).
+    //
+    // WHERE THE NUMBER COMES FROM, because the obvious source does not work on this hardware.
+    // `mach_continuous_time` minus `mach_absolute_time` is the documented way to measure sleep and it was
+    // measured here and found false: `fixtures/watch-gap-clock-measurement.json` reads every clock macOS
+    // offers against `kern.boottime` over a 54.19 hour window holding 71,341 seconds of real sleep, and
+    // that difference comes to 464.6s, 0.65% of it. #2220 wrote the conclusion into the fixture: there is
+    // no awake clock to read on this hardware. So this is the sleep `SystemSleep` OBSERVED, through the
+    // `NSWorkspace` notifications `SleepObserver` already listens to.
+    let asleepSeconds: Double?
+
     // #3788: decoded as `.unknown` when absent, which is every record in Dan's log written before this
     // shipped. A custom decode rather than an optional, because the ABSENT case already has a name here and
     // two ways of spelling it (nil and .unknown) would be two spellings of one fact (L544).
@@ -205,7 +230,8 @@ struct StallRecord: Codable, Equatable, Sendable {
 
     init(session: String, sequence: Int, at: Date, seconds: Double, surface: StallSurface,
          load: MachineLoad, loadAverage: Double?, passes: Int?, rootDraws: Int? = nil,
-         passSeconds: Double? = nil, windows: WindowPresence = .unknown) {
+         passSeconds: Double? = nil, windows: WindowPresence = .unknown,
+         asleepSeconds: Double? = nil) {
         self.session = session
         self.sequence = sequence
         self.at = at
@@ -222,6 +248,7 @@ struct StallRecord: Codable, Equatable, Sendable {
         self.rootDraws = rootDraws
         self.passSeconds = passSeconds
         self.windows = windows
+        self.asleepSeconds = asleepSeconds
     }
 
     // The absent field becomes `.unknown` rather than failing the whole record. Dan's log holds 500 records
@@ -252,6 +279,9 @@ struct StallRecord: Codable, Equatable, Sendable {
         passes = try c.decodeIfPresent(Int.self, forKey: .passes)
         rootDraws = try c.decodeIfPresent(Int.self, forKey: .rootDraws)
         passSeconds = try c.decodeIfPresent(Double.self, forKey: .passSeconds)
+        // #4153: absent on every record written before it shipped, which is the whole of the "before" half
+        // this milestone compares against, so absence is `nil` and never `0`.
+        asleepSeconds = try c.decodeIfPresent(Double.self, forKey: .asleepSeconds)
         // Decoded as a STRING and mapped, never as the enum directly. `decodeIfPresent` on an enum THROWS on
         // a value it does not know, which fails the WHOLE record rather than one field, so a later build
         // adding a fourth state would make every record it writes unreadable to this one. This file's own
@@ -297,6 +327,23 @@ enum StallLog {
     // the two answer different questions and their absent cases mean different things, so folding them
     // would make one message answer for both (L11).
     static func passSecondsSpanned(from before: Double?, to after: Double?) -> Double? {
+        guard let after else { return nil }
+        let start = before ?? 0
+        guard after >= start else { return nil }
+        return after - start
+    }
+
+    // #4153: how many seconds of OBSERVED SLEEP fell between two readings of `SystemSleep`'s total.
+    //
+    // ITS OWN FUNCTION rather than a reuse of `passSecondsSpanned` above, which has the identical body
+    // today. The two answer different questions over different quantities, and the sentence a reader
+    // needs when either returns `nil` is different: one says no pass has ever been timed in this process,
+    // the other says the sleep total could not be read. Folding them would make one message answer for
+    // both (L11), which is the reason `passSecondsSpanned` itself is not `passesSpanned`.
+    //
+    // A total that went BACKWARDS is unmeasured rather than negative sleep: it accumulates and never
+    // shrinks, so a smaller second reading is a fault in the instrument and not a machine that un-slept.
+    static func sleepSpanned(from before: Double?, to after: Double?) -> Double? {
         guard let after else { return nil }
         let start = before ?? 0
         guard after >= start else { return nil }
