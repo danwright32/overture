@@ -256,9 +256,14 @@ struct QueueShowableSurfacesAreOnePredicateTests {
               marker: "private func navigateToLead(_ key: String, proxy: ScrollViewProxy) {",
               answers: "which stage a deep-linked lead lands in",
               mustCall: ["stage"]),
+        // #4121 re-anchored this entry and corrected what it says the surface answers. The declaration
+        // moved from a method on `QueueView` to one on `QueueView.RenderData`, because as a view method
+        // it re-decided every show's stages on every render pass and a SwiftUI body is where a cost
+        // cannot be measured. The RULE it is held to is unchanged: it still has to reach the question
+        // through `focusedKeys` rather than deciding scout membership itself.
         .init(path: "Overture/UI/QueueView.swift",
-              marker: "private func scoutRows(_ data: RenderData) -> [QueueScopeRow] {",
-              answers: "the Scout rows a night-dismiss acts on",
+              marker: "func scoutRows() -> [QueueScopeRow] {",
+              answers: "the Scout rows the reachability check's selection bar prices",
               mustCall: ["focusedKeys"]),
         .init(path: "Overture/UI/QueueView.swift",
               marker: "private func focusOnStage(_ status: AgentStatus) {",

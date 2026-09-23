@@ -345,6 +345,34 @@ struct QueueView: View {
         // #1962: the pass's own resolved geography, so a surface built from this snapshot answers
         // from the same table instead of sweeping the store again through the unresolved value.
         let geo: GeoRefusals
+        // #3738's table, carried out of the pass. #4121: because a surface OUTSIDE the pass was deciding
+        // every show's stages a second time to answer a question this already holds. `stageCounts`,
+        // `focusedRows` and the masthead's membership are all projections of it inside `make`; the probe
+        // selection bar's rows are the fourth, and it was the one asking from a body.
+        let placement: StageNavigation.Placement
+
+        // #4121: the rows a reachability check could be run over, projected from the placement above.
+        //
+        // WAS a method on `QueueView` that called `StageNavigation.focusedKeys(stage:leadKeys:in:context:)`,
+        // the overload that DECIDES every show's stages from scratch, against a context it built itself.
+        // `ProbeSelectionBar.summaryAndKeys` is a computed property read from a body, so from the first
+        // ticked night onwards that ran on every render pass: 5.6% then 6.2% of the main thread in the two
+        // samples on #4121, with `StageNavigation.placements`, `matches` and `GeoRefusals.hidesFromQueue`
+        // beneath it.
+        //
+        // HERE rather than in the view for the reason `QueueRenderPass`'s own header gives: a derivation
+        // inside a SwiftUI body is unmeasurable by construction, and this one's cost was invisible until a
+        // stack sample of a frozen window named it.
+        //
+        // IT ALSO ANSWERS FROM THE PASS'S CONTEXT, which is a second change and a deliberate one. The old
+        // route used a fresh `Date()` and Dan's refusals UNRESOLVED; the pass's placement carries the
+        // pass's own instant and `geo.resolving(...)`. Resolving is a memo of a pure function of exactly
+        // the two town sets (`GeoRefusals.==` ignores the table for that reason), so the verdicts are the
+        // same and the clock is now one instant per pass rather than two.
+        func scoutRows() -> [QueueScopeRow] {
+            let wanted = Set(StageNavigation.focusedKeys(stage: .scout, leadKeys: [], in: placement))
+            return rows.filter { wanted.contains($0.id) }
+        }
     }
 
     // #1913: the derivation itself lives in QueueRenderPass, over plain values, so what one pass costs
@@ -526,12 +554,6 @@ struct QueueView: View {
     // Both read this, so the total Dan watches while choosing is the total he approves.
     // The rows the Scout stage is currently showing, derived the same way focusedSection derives them,
     // so a ticked date means exactly the shows under that heading and nothing else.
-    private func scoutRows(_ data: RenderData) -> [QueueScopeRow] {
-        let wanted = Set(StageNavigation.focusedKeys(stage: .scout, leadKeys: [],
-                                                     in: data.queueScope,
-                                                     context: StageContext(geo: geo, clients: clientWindow)))
-        return data.rows.filter { wanted.contains($0.id) }
-    }
 
     // #1805: the shows the last check was given and never reached. Read from the same rule the report's
     // offer is gated on, so the control and the run can never disagree about the set.
@@ -600,8 +622,10 @@ struct QueueView: View {
     private func probeSelectionBar(_ data: RenderData) -> some View {
         ProbeSelectionBar(
             selection: probeSelection,
-            // #1916: a closure, so the scoutRows sweep is never paid on a queue with nothing ticked.
-            rows: { scoutRows(data) },
+            // #1916: a closure, so the projection is never paid on a queue with nothing ticked.
+            // #4121: and the projection reads the pass's own placement, so from the first tick onwards it
+            // is a filter over rows already in hand rather than a second placement of the whole queue.
+            rows: { data.scoutRows() },
             // #1771: `data.items`, not `self.items`. Reading the computed property here rebuilt the entire
             // queue a second time on every render, one word away from the snapshot the caller already holds.
             allItems: data.rows,
