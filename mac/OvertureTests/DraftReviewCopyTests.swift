@@ -134,7 +134,9 @@ struct DraftReviewCopyTests {
                     == "Alice Tully Hall may be the venue itself, not the act; blocked from sending.")
         #expect(DraftReviewNotes.pressSuspect(name: "Press Office")
                     == "Press Office may be a press/media contact, not the act; blocked from sending.")
-        #expect(DraftReviewNotes.duplicateSuspect(name: "Ana Ruiz")
+        // #4042: the FALLBACK, which is what the sentence still says when the row the guard matched is
+        // no longer stored. The naming form is asserted in `ADuplicateWarningNamesTheShowTests`.
+        #expect(DraftReviewNotes.duplicateSuspect(name: "Ana Ruiz", show: nil, night: nil)
                     == "Ana Ruiz may already be pitched for a show at this venue; blocked from sending.")
     }
 

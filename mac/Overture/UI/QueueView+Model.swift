@@ -286,6 +286,9 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     // rows it hides, or a copy Dan thought he had dealt with comes back untriaged (Dan's call, and the
     // complaint that started this milestone).
     var collapsedMemberKeys: [String] = []
+    // #4146: the titles of the rows that arrived looking like THIS one, newest first, already resolved.
+    // A card can be the target of several pointers: a third billing tags the same older row again.
+    var laterLookalikeTitles: [String] = []
     // #4130: the TITLE of the row that had already been pitched for this night when this one arrived,
     // already resolved, for the same reason the tag above is resolved in the pass: a key naming a row
     // that is no longer stored must draw nothing (L200).
@@ -933,6 +936,16 @@ struct RecipientSnapshot: Identifiable, Equatable, Sendable {
     // looks like the same real-world performance.
     var looksLikeDuplicateContact: Bool = false
     var looksLikeDuplicateContactDismissed: Bool = false
+    // #4042: the key the guard matched, carried so the pass can resolve it, and the resolved answer
+    // beside it.
+    var looksLikeDuplicateContactKey: String? = nil
+    // #4042: the show and the night the duplicate warning is ABOUT, already resolved. Resolved in the
+    // pass rather than on the review screen for the same reason #3330's arrival tag is: the key names a
+    // row that may have been merged away since prep, and a sentence naming a row that is no longer there
+    // sends Dan looking for a card he cannot find (L200). Nil means the row is gone, or that this
+    // recipient was written before the key was recorded, and the sentence falls back to the old wording.
+    var duplicateOfTitle: String? = nil
+    var duplicateOfNight: String? = nil
     // #1866: same shape again, for the guard that held a confident find down to unverified because it
     // named no page it was read off. Carried so the card can say WHICH of the two things made its
     // addresses unverified, and so the review panel can offer Dan the same overrule the three above have.
@@ -3177,6 +3190,27 @@ enum QueueModel {
         // show off the surface entirely.
         let collapse = ShowLink.collapse((corpus ?? prospects).map(ShowLink.Row.init),
                                          drawn: Set(prospects.map(\.naturalKey)))
+        // #4146: the same walk read backwards. NEWEST FIRST, by the row's own first sighting, because a
+        // card that is the target of several pointers names one and counts the rest, and the newest is
+        // the one Dan has not seen yet. A row with no `firstSeenAt` (every row written before #1886)
+        // sorts last rather than being dropped: it is still half of a pair.
+        var laterLookalikesByKey: [String: [Prospect]] = [:]
+        for row in (corpus ?? prospects) {
+            guard let target = row.arrivedLookingLike else { continue }
+            laterLookalikesByKey[target, default: []].append(row)
+        }
+        let laterLookalikes = laterLookalikesByKey.mapValues { rows in
+            rows.sorted {
+                ($0.firstSeenAt ?? .distantPast) > ($1.firstSeenAt ?? .distantPast)
+            }.map(\.naturalKey)
+        }
+        // #4042: the same walk, the same scope, and the same read-time resolution.
+        let nightsByKey = Dictionary(
+            (corpus ?? prospects).compactMap { row -> (String, String)? in
+                guard let night = row.performanceDate, !night.isEmpty else { return nil }
+                return (row.naturalKey, night)
+            },
+            uniquingKeysWith: { first, _ in first })
         let pre = CardPreamble(linked: linked, inherited: inherited, venueBrands: venueBrands,
                                rowCounts: rowCounts, calendarBySourceId: calendarBySourceId,
                                overrides: overrides, clients: clients,
@@ -3185,6 +3219,8 @@ enum QueueModel {
                                titlesByKey: titlesByKey,
                                collapsedFronts: collapse.fronts,
                                collapsedHidden: collapse.hidden,
+                               laterLookalikesByKey: laterLookalikes,
+                               nightsByKey: nightsByKey,
                                now: now, day: day)
 
         var rows: [QueueScopeRow] = []
@@ -3276,6 +3312,16 @@ enum QueueModel {
         // the same reason they are: the answer is about other rows.
         let collapsedFronts: [String: [String]]
         let collapsedHidden: Set<String>
+        // #4146: the OTHER direction of that tag. For each stored row's key, the keys of the rows that
+        // arrived LOOKING LIKE it, newest first. #3330's tag is written in the `.insert` arm, which only
+        // ever runs for the row being written, so on a pair only the second row carried a sentence and
+        // the first said nothing at all. The pointer already names both halves; nothing but this reverse
+        // walk was needed to read it from the other end.
+        let laterLookalikesByKey: [String: [String]]
+        // #4042: and its night, for the duplicate contact warning, which has to name both. A second
+        // table over the same walk rather than a second walk: the rows are already in hand where
+        // `titlesByKey` is built.
+        let nightsByKey: [String: String]
         let now: Date
         let day: String
 
@@ -3420,6 +3466,22 @@ enum QueueModel {
         item.arrivedLookingLikeTitle = p.arrivedLookingLike.flatMap { pre.titlesByKey[$0] }
         // #4130: the same read-time resolution, against the same table.
         item.arrivedOnAPitchedNightTitle = p.arrivedOnAPitchedNight.flatMap { pre.titlesByKey[$0] }
+        // #4146: the same tag read from the other end, resolved against the same table, so a pointer
+        // from a row that has since been merged away draws nothing.
+        item.laterLookalikeTitles = (pre.laterLookalikesByKey[p.naturalKey] ?? [])
+            .compactMap { pre.titlesByKey[$0] }
+        // #4042: the duplicate contact warning's other row, resolved HERE against the same corpus tables
+        // the arrival tags use. A key naming a row that has since been merged away resolves to nothing,
+        // and the sentence falls back to the wording it had before this change rather than naming a card
+        // Dan cannot find (L200).
+        item.contacts = item.contacts.map { snapshot in
+            guard let key = snapshot.looksLikeDuplicateContactKey,
+                  let title = pre.titlesByKey[key] else { return snapshot }
+            var resolved = snapshot
+            resolved.duplicateOfTitle = title
+            resolved.duplicateOfNight = pre.nightsByKey[key]
+            return resolved
+        }
         // #1731: only meaningful where the verdict IS the building; nil otherwise.
         item.readAsTheBuildingReason = pre.venueBrands.contains(p.presenter)
             ? OrganisationListing.buildingReason(
@@ -3674,6 +3736,32 @@ enum QueueModel {
     static func arrivedLookingLikeNote(_ item: QueueItem) -> String? {
         guard let other = item.arrivedLookingLikeTitle, !other.isEmpty else { return nil }
         return "Looks like the same show as \(other), already stored for this night."
+    }
+
+    // #4146: the OTHER half of that pairing, said on the card that was already there.
+    //
+    // #3330's tag is written in the `.insert` arm, which only ever runs for the row being written, so on
+    // a pair only the SECOND row said anything. Dan meets the older card as often as the newer one, and
+    // usually higher up his order, so a pairing one card admits and the other denies by silence is worse
+    // than neither saying it: he cannot tell whether the quiet card is a different show or the other
+    // half of a pair.
+    //
+    // IT NAMES THE LATER LISTING AND SAYS WHICH DIRECTION IT WENT. Dan's call, 2026-09-22, with the
+    // three wordings in front of him. The two halves are not symmetric and the sentence may not pretend
+    // they are (L11): the newer row arrived looking like this one, and this one arrived looking like
+    // nothing.
+    //
+    // SEVERAL POINTERS ARE COUNTED, NOT LISTED, which is the rule #3282 recorded for the same reason: a
+    // third billing tags the same older row again, and naming each would rebuild the wall of identical
+    // text this milestone keeps removing (L579). The one named is the NEWEST, because that is the one
+    // Dan has not seen yet.
+    static func laterLookalikeNote(_ item: QueueItem) -> String? {
+        let others = item.laterLookalikeTitles.filter { !$0.isEmpty }
+        guard let newest = others.first else { return nil }
+        guard others.count > 1 else {
+            return "A later listing looks like the same show: \"\(newest)\"."
+        }
+        return "\(others.count) later listings look like the same show, the newest \"\(newest)\"."
     }
 
     // #4130: a pitch has ALREADY gone out for this night, at this room, for this presenter, and until
@@ -4032,6 +4120,7 @@ extension RecipientSnapshot {
                   looksLikePressContactDismissed: r.looksLikePressContactDismissed,
                   looksLikeDuplicateContact: r.looksLikeDuplicateContact,
                   looksLikeDuplicateContactDismissed: r.looksLikeDuplicateContactDismissed,
+                  looksLikeDuplicateContactKey: r.looksLikeDuplicateContactKey,
                   heldDownToUnverified: r.heldDownToUnverified,
                   heldDownToUnverifiedDismissed: r.heldDownToUnverifiedDismissed,
                   heldDownReason: r.heldDownReason,

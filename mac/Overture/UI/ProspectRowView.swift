@@ -191,6 +191,7 @@ struct ProspectRowView: View {
                     linkedEngagementNote
                     storedMoreThanOnceNote
                     arrivedLookingLikeNote
+                    laterLookalikeNote
                     alreadyPitchedNightNote
                     orgDoNotContactFlag
                     bookingSuggestionFlag
@@ -616,6 +617,23 @@ struct ProspectRowView: View {
     // fourth billing outside it.
     @ViewBuilder private var arrivedLookingLikeNote: some View {
         if let note = QueueModel.arrivedLookingLikeNote(item) {
+            Text(note)
+                .font(OVType.tag)
+                .foregroundStyle(OVColor.inkSoft)
+                .padding(.top, 2)
+        }
+    }
+
+    // #4146: directly after the lookalike note it mirrors, because the two are the same pairing read
+    // from its two ends.
+    //
+    // A CARD CAN DRAW BOTH, and the order above is why they read correctly when it does. A third
+    // listing tags whichever stored row `LookalikeOnArrival` reaches first, which can be a row that
+    // itself arrived looking like an earlier one, so the middle row of a chain both points at something
+    // and is pointed at. The two sentences are then about two DIFFERENT rows and are both true: what it
+    // arrived looking like, then what has arrived looking like it.
+    @ViewBuilder private var laterLookalikeNote: some View {
+        if let note = QueueModel.laterLookalikeNote(item) {
             Text(note)
                 .font(OVType.tag)
                 .foregroundStyle(OVColor.inkSoft)
