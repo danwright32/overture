@@ -2096,6 +2096,9 @@ enum ScoutService {
         // its first collision unprotected, which is the whole defect, just once per row instead of forever.
         prospect.disciplineGenreSourceKey = GenrePrecedence.sourceKey(p.sourceIds)
         prospect.producerAxisSourceKey = GenrePrecedence.sourceKey(p.sourceIds)   // #1949
+        // #1954: and the presenter the two axes above are DERIVED from, stamped on the way in for the
+        // same reason they are: without it every new row spends its first collision unprotected.
+        prospect.presenterSourceKey = GenrePrecedence.sourceKey(p.sourceIds)
         prospect.seriesId = p.seriesId          // #1260 Phase 2: persist the merged-concert identity
         prospect.setScoutConflict(p.conflictKey)    // #901
         return prospect
@@ -2210,8 +2213,34 @@ enum ScoutService {
             // an organisation (L55).
             existing.presenterWasTheRoom = false
         } else {
-            existing.setPresenter(p.presenter, from: .scout)
-            existing.presenterWasTheRoom = p.presenterWasTheRoom   // #1788
+            // #1954: and WHICH SOURCE may write it, which is a different question from #2453's above.
+            // That one asks whether an ordinary scout re-read may empty a name a sweep, the AI pass or
+            // Dan put there. This one asks whether a DIFFERENT scout source may take a field the first
+            // one filled, and until now nothing did: the presenter was last writer wins while the genre
+            // and producer axes derived FROM it were not (#1663, #1949).
+            //
+            // A source correcting its OWN reading is untouched, which is every ordinary re-read, so this
+            // changes nothing for a row one source owns.
+            let incomingKey = GenrePrecedence.sourceKey(p.sourceIds)
+            if GenrePrecedence.incomingPresenterStands(stored: existing.presenter,
+                                                       storedKey: existing.presenterSourceKey,
+                                                       incoming: p.presenter,
+                                                       incomingKey: incomingKey) {
+                existing.setPresenter(p.presenter, from: .scout)
+                // Stamped where the value standing is the one THIS source brought, exactly as the two
+                // axes are, so "may this source correct what is here" keeps answering yes for whoever is
+                // actually responsible for the name.
+                existing.presenterSourceKey = incomingKey
+                // And the explanation travels with the value it explains: `presenterWasTheRoom` says why
+                // THIS listing's presenter is blank, and it belongs only to a row whose presenter came
+                // from this listing (L55, the same reason the branch above it states).
+                existing.presenterWasTheRoom = p.presenterWasTheRoom   // #1788
+            }
+            // NOTHING is written on the losing path, not even the value the row already holds. Writing it
+            // back would run through `setPresenter(_:from: .scout)`, which stamps `presenterSource`, so a
+            // name a sweep, the batched AI pass or Dan put there would be recorded as the scout's on the
+            // first visit by any other source, and #2453's refusal (which reads that stamp) would stop
+            // protecting it. The value and the record of who wrote it are one fact (L544).
         }
         existing.location = p.location
         // #1886: track the listing's own spelling of the room always, the way scoutGroupName tracks the
