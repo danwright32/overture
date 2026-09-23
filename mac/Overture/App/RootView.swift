@@ -205,7 +205,7 @@ struct RootView: View {
     // and a memo keyed on only the first would keep showing the old number while a classify run started
     // or died (L40). The marker read is cheap and is paid to BUILD the key, which is the trade: the
     // sweep is what this removes, not the read.
-    @State private var followUpsMemo = ScopeMemo<Int>()
+    @State private var followUpsMemo = ScopeMemo<DueWork.CountAndNextChange>()
 
     private var followUpsDue: Int {
         let now = Date()
@@ -217,10 +217,34 @@ struct RootView: View {
         fingerprint.add(allProspects)
         fingerprint.add(allInquiries)
         fingerprint.add(value: replyRunAlive)
-        return followUpsMemo.value(fingerprint: fingerprint.finalized(), cardKeys: [], now: now) {
-            DueWork.counts(prospects: allProspects, inquiries: allInquiries, now: now,
-                           replyRunAlive: replyRunAlive).total
-        }
+        // #4110: the memo expires when the count COULD next change, not every two seconds.
+        //
+        // WHAT WAS MEASURED, because the issue's own write-up infers a different cause and the code says
+        // otherwise. Driving this exact shape (`DueCountHoldsUntilItCouldChangeTests`): a genre edit,
+        // which is what Dan did before the 6.81s and 6.45s freezes of 2026-09-21, does NOT invalidate
+        // this memo. Observation tracking is per property and `DueWork` never reads `discipline`. What
+        // did invalidate it was the two second TTL, on its own, on a store nothing had touched.
+        //
+        // So the window was the cost. The build is a whole-store sweep over every prospect and every
+        // recipient's conversation state, and it ran again on the first render pass more than two
+        // seconds after the last one, which during a burst of activity is most of them.
+        //
+        // `DueWork.nextChange` already answers the question a window was standing in for, and #3474 built
+        // it for this very number: "the earliest future moment at which a rule ALREADY IN PLAY comes
+        // due". It is worked out INSIDE the build, beside the count, because it is another whole-store
+        // sweep and asking it on the cheap path would cost exactly what the memo saves (L431).
+        //
+        // WHAT IT CLAIMS is what `nextChange` claims and no more: a lower bound on the next change,
+        // judged on the eligibility that holds now. Eligibility can itself move with the clock, which is
+        // why the periodic reconcile stays the backstop. A store change is caught by the fingerprint and
+        // by observation tracking, both unchanged, so this only ever governs the CLOCK's half.
+        let staleAfter: ScopeMemo<DueWork.CountAndNextChange>.Staleness =
+            followUpsMemo.held.flatMap(\.couldChangeAt).map { .at($0) } ?? .never
+        return followUpsMemo.value(fingerprint: fingerprint.finalized(), cardKeys: [], now: now,
+                                   staleAfter: staleAfter) {
+            DueWork.countAndNextChange(prospects: allProspects, inquiries: allInquiries, now: now,
+                                       replyRunAlive: replyRunAlive)
+        }.total
     }
 
     // #805: how many watched sources need Dan's eyes. Counted by SourceAttention and never summed here, for

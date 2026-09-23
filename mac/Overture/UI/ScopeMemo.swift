@@ -60,11 +60,27 @@ final class ScopeMemo<Value> {
     enum Staleness {
         case seconds(Double)
         case never
+        // #4110: expired once a NAMED INSTANT has arrived, rather than after a fixed window.
+        //
+        // For a derivation that can say when its own answer could next change, a window is the wrong
+        // shape twice over: too long and the answer goes stale, too short and the derivation is re-run
+        // for nothing. `RootView.followUpsDue` measured the second half of that. Its window was two
+        // seconds and its build is a whole-store sweep over every prospect and every recipient's
+        // conversation state, so any use of the app longer than two seconds paid the sweep again, and a
+        // 6.81s freeze on 2026-09-21 contained two of them. `DueWork.nextChange` already answers "the
+        // earliest future moment at which a rule already in play comes due", so the answer carries its
+        // own expiry and this is how the memo is told it.
+        //
+        // A `Date` rather than an optional: a derivation with NO next moment passes `.never`, which
+        // already says exactly that, and an optional here would make "nothing can change it" and
+        // "nobody set one" the same value (L544).
+        case at(Date)
 
         func hasExpired(builtAt: Date, now: Date) -> Bool {
             switch self {
             case .seconds(let window): return now.timeIntervalSince(builtAt) >= window
             case .never: return false
+            case .at(let moment): return now >= moment
             }
         }
     }
@@ -81,6 +97,18 @@ final class ScopeMemo<Value> {
     // mutation. `@MainActor` on the class is not enough on its own, so this one field is isolated by a
     // lock rather than by the actor.
     private let staleFlag = StaleFlag()
+
+    /// The answer this memo is currently holding, without building one.
+    ///
+    /// #4110: read by a caller whose staleness window is a property of the VALUE rather than a constant,
+    /// which is the only way `.at` above can be given the instant the LAST build worked out. The
+    /// alternative is holding that instant in a second piece of state beside the memo, and a value and
+    /// the fact describing it are one fact, not two (L544).
+    ///
+    /// It deliberately does NOT consult the key, the stale flag or the clock: it answers "what is in
+    /// here", never "is that still good". A caller that used it as an answer would be reading around the
+    /// memo, so the one caller uses it only to build the key it then passes back in.
+    var held: Value? { value }
 
     /// How many times the builder actually ran. The quantity the guard asserts, because "it was fast"
     /// is a statement about the machine and "it did not build" is a statement about this code (L63).

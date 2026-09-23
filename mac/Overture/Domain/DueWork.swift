@@ -122,6 +122,34 @@ enum DueWork {
         rows(prospects: prospects, inquiries: inquiries, now: now, replyRunAlive: replyRunAlive,
              followUp: followUp).counts
     }
+
+    // #4110: the toolbar badge's number AND the instant it could next change, worked out together.
+    //
+    // ONE VALUE rather than two calls, and that is the whole point. Both halves are whole-store sweeps
+    // over every prospect and every recipient, so a caller that memoised the count and then asked
+    // `nextChange` separately to decide whether the memo was still good would pay on the cheap path
+    // exactly what the memo exists to save (L431: a guard that skips expensive work saves nothing unless
+    // computing its key is cheaper than the work).
+    //
+    // They are also ONE FACT: a count, and the moment after which that count is no longer the answer.
+    // Held apart they could be taken at different instants and describe different stores (L544).
+    struct CountAndNextChange: Equatable, Sendable {
+        let total: Int
+        // Nothing where no rule already in play has a future moment, which is a real answer and not an
+        // absence: it means the clock alone cannot change this number, so a memo of it never needs to
+        // expire on time.
+        let couldChangeAt: Date?
+    }
+
+    static func countAndNextChange(prospects: [Prospect], inquiries: [Inquiry], now: Date,
+                                   replyRunAlive: Bool,
+                                   followUp: FollowUpConfig = .init()) -> CountAndNextChange {
+        CountAndNextChange(
+            total: counts(prospects: prospects, inquiries: inquiries, now: now,
+                          replyRunAlive: replyRunAlive, followUp: followUp).total,
+            couldChangeAt: nextChange(prospects: prospects, now: now, replyRunAlive: replyRunAlive,
+                                      followUp: followUp))
+    }
 }
 
 // #885: the toolbar pill's own title. It hides its count when there is nothing due, so a zero never sits
