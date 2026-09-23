@@ -145,6 +145,16 @@ final class Recipient {
     // safety net for #369's grouping. Dismissible for the same reason as the two flags above.
     var looksLikeDuplicateContact: Bool = false
     var looksLikeDuplicateContactDismissed: Bool = false
+    // #4042: WHICH stored row the guard matched, so the warning that BLOCKS a send can name the show and
+    // the night rather than leaving Dan to find the collision on a screen that does not show the other
+    // card (L80). A key rather than a snapshot of that row's title: a key resolved at render draws the
+    // row's CURRENT title, or nothing when it has been merged away, where a snapshot would go on
+    // describing a row that no longer reads that way (L200).
+    //
+    // Written by the same call that sets the flag beside it, so the two can never describe different
+    // readings. Nil on every row written before this shipped, and the sentence falls back to the one
+    // those rows already carried.
+    var looksLikeDuplicateContactKey: String? = nil
 
     // #2624: the fifth guard, recorded the way the three above are. UnaccountedAddressGuard catches a
     // contact naming one person and holding an address in a different person's name with no page cited:

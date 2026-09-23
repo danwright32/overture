@@ -165,7 +165,8 @@ struct SearchCoversEveryContactFieldTests {
             "not text": [
                 "looksLikeVenue", "looksLikeVenueDismissed", "looksLikePressContact",
                 "looksLikePressContactDismissed", "looksLikeDuplicateContact",
-                "looksLikeDuplicateContactDismissed", "looksLikeAnotherPersons",
+                "looksLikeDuplicateContactDismissed", "looksLikeDuplicateContactKey",
+                "looksLikeAnotherPersons",
                 "looksLikeAnotherPersonsDismissed", "heldDownToUnverified",
                 "heldDownToUnverifiedDismissed", "nameMatchOnly", "nameMatchOnlyDismissed",
                 "roleIsACharacterisation", "formOutreachRecordedAt", "formOutreachStartedAt",

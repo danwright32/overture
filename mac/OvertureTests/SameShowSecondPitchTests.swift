@@ -60,10 +60,10 @@ struct SameShowSecondPitchTests {
         let ctx = ModelContext(try container())
         pitched(ctx, group: "The Infinite Wrench", date: "2026-09-04")
 
-        let flagged = DuplicateContactGuard.looksLikeDuplicate(
+        let flagged = DuplicateContactGuard.duplicate(
             email: Self.email, venue: Self.venue, performanceDate: "2026-10-02",
             groupName: "The Infinite Wrench",
-            excludingProspectKey: "a-second-card-for-one-show", in: ctx)
+            excludingProspectKey: "a-second-card-for-one-show", in: ctx) != nil
         #expect(flagged, "the same show at the same venue, pitched to the same address, is a second pitch")
     }
 
@@ -73,10 +73,10 @@ struct SameShowSecondPitchTests {
         let ctx = ModelContext(try container())
         pitched(ctx, group: "The Infinite Wrench", date: "2026-09-04")
 
-        let flagged = DuplicateContactGuard.looksLikeDuplicate(
+        let flagged = DuplicateContactGuard.duplicate(
             email: Self.email, venue: Self.venue, performanceDate: "2026-10-02",
             groupName: "The Infinite Wrench (A Neo-Futurist Show)",
-            excludingProspectKey: "a-second-card-for-one-show", in: ctx)
+            excludingProspectKey: "a-second-card-for-one-show", in: ctx) != nil
         #expect(flagged)
     }
 
@@ -88,10 +88,10 @@ struct SameShowSecondPitchTests {
         let ctx = ModelContext(try container())
         pitched(ctx, group: "The Infinite Wrench", date: "2026-09-04")
 
-        let flagged = DuplicateContactGuard.looksLikeDuplicate(
+        let flagged = DuplicateContactGuard.duplicate(
             email: Self.email, venue: Self.venue, performanceDate: "2026-10-02",
             groupName: "Gross Prophets: A Comedy Musical",
-            excludingProspectKey: "another-show-entirely", in: ctx)
+            excludingProspectKey: "another-show-entirely", in: ctx) != nil
         #expect(!flagged, "a different production at one venue weeks later is ordinary outreach")
     }
 
@@ -102,10 +102,10 @@ struct SameShowSecondPitchTests {
         let ctx = ModelContext(try container())
         pitched(ctx, group: "The Infinite Wrench", date: "2026-09-04")
 
-        let flagged = DuplicateContactGuard.looksLikeDuplicate(
+        let flagged = DuplicateContactGuard.duplicate(
             email: Self.email, venue: Self.venue, performanceDate: "2026-09-06",
             groupName: "Gross Prophets: A Comedy Musical",
-            excludingProspectKey: "another-show-entirely", in: ctx)
+            excludingProspectKey: "another-show-entirely", in: ctx) != nil
         #expect(flagged, "the 3 day org pacing arm must survive this change")
     }
 
@@ -125,10 +125,10 @@ struct SameShowSecondPitchTests {
         #expect((gap ?? 0) > RunGrouping.sameShowGapDays,
                 "this fixture must sit BEYOND the engagement window to test anything")
 
-        let flagged = DuplicateContactGuard.looksLikeDuplicate(
+        let flagged = DuplicateContactGuard.duplicate(
             email: Self.email, venue: Self.venue, performanceDate: wellBeyond,
             groupName: "The Infinite Wrench",
-            excludingProspectKey: "a-much-later-run", in: ctx)
+            excludingProspectKey: "a-much-later-run", in: ctx) != nil
         #expect(!flagged, "a return after a long silence is its own engagement and its own pitch")
     }
 
@@ -139,10 +139,10 @@ struct SameShowSecondPitchTests {
         let ctx = ModelContext(try container())
         pitched(ctx, group: "The Infinite Wrench", date: "2026-09-04", venue: "Asylum NYC")
 
-        let flagged = DuplicateContactGuard.looksLikeDuplicate(
+        let flagged = DuplicateContactGuard.duplicate(
             email: Self.email, venue: "The Players Theatre", performanceDate: "2026-10-02",
             groupName: "The Infinite Wrench",
-            excludingProspectKey: "a-tour-stop", in: ctx)
+            excludingProspectKey: "a-tour-stop", in: ctx) != nil
         #expect(!flagged)
     }
 }

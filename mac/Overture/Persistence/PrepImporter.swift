@@ -493,10 +493,16 @@ enum PrepImporter {
                 if provenance != .manual {
                     recipient.looksLikeVenue = VenueContactGuard.looksLikeVenue(email: email, venue: p.venue)
                     recipient.looksLikePressContact = PressContactGuard.looksLikePressContact(email: email, role: c.role)
-                    recipient.looksLikeDuplicateContact = DuplicateContactGuard.looksLikeDuplicate(
+                    // #4042: the flag AND the row it matched, from ONE call, so the two can never
+                    // describe different readings (L16). The key is resolved to a title and a night at
+                    // render, so a row merged away between prep and review draws the old sentence rather
+                    // than naming something that is no longer there (L200).
+                    let duplicate = DuplicateContactGuard.duplicate(
                         email: email, venue: p.venue, performanceDate: p.performanceDate,
                         groupName: p.groupName,
                         excludingProspectKey: p.naturalKey, in: context)
+                    recipient.looksLikeDuplicateContact = duplicate != nil
+                    recipient.looksLikeDuplicateContactKey = duplicate?.prospectKey
                     // #2622: who the run says this contact is to the show. The judgement is the run's,
                     // made with the page in front of it, so it is written through UNLESS the page it was
                     // made from contradicts it (#3347).
@@ -700,10 +706,13 @@ enum PrepImporter {
             // so either the address or the role text changing should prompt fresh scrutiny.
             if r.email != priorEmail || r.role != priorRole { r.looksLikePressContactDismissed = false }
             r.looksLikePressContact = PressContactGuard.looksLikePressContact(email: r.email, role: r.role)
-            r.looksLikeDuplicateContact = DuplicateContactGuard.looksLikeDuplicate(
+            // #4042: as above, and from one call for the same reason.
+            let duplicate = DuplicateContactGuard.duplicate(
                 email: r.email, venue: venue, performanceDate: performanceDate,
                 groupName: groupName,
                 excludingProspectKey: excludingProspectKey, in: context)
+            r.looksLikeDuplicateContact = duplicate != nil
+            r.looksLikeDuplicateContactKey = duplicate?.prospectKey
         }
     }
 

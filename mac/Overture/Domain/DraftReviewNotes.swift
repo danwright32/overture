@@ -155,8 +155,22 @@ enum DraftReviewNotes {
     // share, and all this sentence now claims, is that the address is already pitched for a show at
     // this venue. Naming WHICH show and WHICH night would be better still and is its own work, since
     // it needs the other row carried from prep through to review rather than a stored boolean (L80).
-    static func duplicateSuspect(name: String) -> String {
-        "\(name) may already be pitched for a show at this venue; blocked from sending."
+    // #4042: and now it NAMES the show and the night, which is what a warning about a specific record
+    // owes the person it blocks (L80). The sentence it replaced was honest and unusable: it said a
+    // collision existed and left Dan to find it on a screen that does not show the other card.
+    //
+    // TWO SENTENCES, not one with a hole in it. The row the guard matched can be merged away between
+    // prep and review, and the key then resolves to nothing; that case keeps the wording it has always
+    // had rather than naming a card Dan cannot open (L200, L11). Both are here, beside each other, so
+    // the fallback cannot drift into claiming something the check did not measure.
+    static func duplicateSuspect(name: String, show: String?, night: String?) -> String {
+        guard let show, !show.isEmpty else {
+            return "\(name) may already be pitched for a show at this venue; blocked from sending."
+        }
+        guard let night, let label = EasternDate.dayLabel(night) else {
+            return "\(name) may already be pitched for \(show); blocked from sending."
+        }
+        return "\(name) may already be pitched for \(show) on \(label); blocked from sending."
     }
 
     // #1866: the fourth guard's warning line, in the same list as the three above. It deliberately does NOT
