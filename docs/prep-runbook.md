@@ -1073,7 +1073,7 @@ Anatomy:
   2026-07-31). The credential says the level he works at; this says he knows THIS room, and it is
   the one thing in a cold pitch a stranger cannot fake. Use the band's meaning and nothing more
   precise:
-  - `shot_before`: he has photographed at this venue before, so he knows the room.
+  - `shot_before`: he has photographed at this venue before.
   - `a_few`: he has photographed a few shows there.
   - `regularly`: he shoots there regularly.
 
@@ -1082,13 +1082,18 @@ Anatomy:
   the email never claims an exact number. The field carries a band and no number precisely so
   there is nothing to state, and inventing one is a fabricated fact about his own history.
 
-  **The follow-on clause is about FAMILIARITY, never about what could otherwise go wrong**
-  (Dan, 2026-07-31). A short phrase after the band is welcome, and it says he knows the space:
-  "so I'm familiar with the room", "so I know the space", "so the room isn't new to me". It must
-  NEVER be framed as a risk avoided: "so I'm not learning it on the night", "so there's no
-  guesswork", "so I won't be finding my angles during the first number". Dan flagged that shape
-  himself. Naming the bad outcome plants it in the reader's head and invites them to picture a
-  photographer fumbling in an unfamiliar room, which is the opposite of what the sentence is for.
+  **Stop at the band: NO follow-on clause** (Dan, 2026-08-16, #2949, reversing the 2026-07-31 rule
+  that welcomed one). Write "I've photographed a few shows at The Green Room 42." and end the
+  sentence there. Having shot the room already says he knows it, so a clause adding that he knows
+  the space, is familiar with it, or that it isn't new to him says the same thing twice, and the app
+  flags the draft for it. Dan, on the sentence that prompted this: the second half restates the
+  first, costing a beat and adding nothing.
+
+  And it is still NEVER framed as a risk avoided: "so I'm not learning it on the night", "so there's
+  no guesswork", "so I won't be finding my angles during the first number" (Dan, 2026-07-31). He
+  flagged that shape himself. Naming the bad outcome plants it in the reader's head and invites
+  them to picture a photographer fumbling in an unfamiliar room, which is the opposite of what the
+  sentence is for.
 
   An ABSENT `venueHistory` means SAY NOTHING about having worked the venue. Never infer it from
   the venue's name, from a past client, or from anything else in the payload. The app omits the

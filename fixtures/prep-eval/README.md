@@ -76,8 +76,9 @@ person, org, venue, or email address. `.example` domains and made-up names throu
 - `solo-artist-cabaret-not-an-organisation`: the run says back what the listing says the show IS, and describes Dan without categorizing the recipient (#1824).
 - `venue-history-band-says-he-knows-the-room`: the item carries a `venueHistory` band, so the draft says
   Dan already knows THAT room, keeps the standing credential beside it rather than instead of it, and
-  writes the follow-on clause as familiarity ("so I'm familiar with the room") rather than as a risk
-  avoided ("so I'm not learning it on the night"), which Dan flagged himself (#1887/#1905).
+  never frames it as a risk avoided ("so I'm not learning it on the night"), which Dan flagged himself
+  (#1887/#1905). Since #2949 the sentence stops at the band with no familiarity clause after it:
+  having shot the room already says he knows it.
 - `season-calendar-describes-no-show`: the same listing text, read, that describes no show at all. The honest answer is `no_description_published`, never a description assembled from the neighbouring listings (#1824).
 - `agency-inbox-is-not-the-performers-contact`: a performer whose only apparent route is a talent agency's
   shared inbox falls to her own DM at low confidence instead, because a representative's address is not the
