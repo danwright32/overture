@@ -104,8 +104,9 @@ describe("prep-runbook judgment rules are present (#591)", () => {
       "use-the-listing-handed-over",
       "venue-address-disqualified",
       "venue-history-absent-means-silent",
-      "venue-history-clause-is-familiarity",
-      "venue-history-never-a-count"
+      "venue-history-never-a-count",
+      "venue-history-never-a-risk-avoided",
+      "venue-history-stops-at-the-band"
     ]);
   });
 

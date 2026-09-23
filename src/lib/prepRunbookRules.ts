@@ -86,8 +86,14 @@ export const RUNBOOK_RULES: RunbookRule[] = [
   // in that room already, so I'm not learning it on the night". The band was right; the clause the
   // model hung off it names the bad outcome and plants it in the reader's head. Drop this and the
   // sentence meant to prove he knows the room starts describing a photographer who might not.
-  { name: "venue-history-clause-is-familiarity",
-    pattern: /follow-on\s+clause\s+is\s+about\s+FAMILIARITY/i },
+  { name: "venue-history-never-a-risk-avoided",
+    pattern: /still\s+NEVER\s+framed\s+as\s+a\s+risk\s+avoided/i },
+  // Dan, 2026-08-16 (#2949), reversing the 2026-07-31 rule that welcomed a familiarity clause after
+  // the band: "I've photographed a few shows in that room, so I'm familiar with the space" says one
+  // thing twice. DraftCheck flags that clause, so restoring the old sentence here would have every
+  // draft that followed the runbook warned about for following it, which is what happened until now.
+  { name: "venue-history-stops-at-the-band",
+    pattern: /Stop\s+at\s+the\s+band:\s+NO\s+follow-on\s+clause/i },
   // Dan, 2026-07-31: "the portfolio" reads as a shared company asset in an email written entirely in
   // his own first person.
   // #1906: the rule this REVERSED was stated as mandatory ("ALWAYS state the rate plainly"), so a
