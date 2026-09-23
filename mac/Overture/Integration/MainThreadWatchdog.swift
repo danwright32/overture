@@ -141,6 +141,29 @@ final class MainThreadWatchdog: @unchecked Sendable {
 
     let passCost = PassCostBox()
 
+    // #4114: what the main run loop was doing while the outstanding ping waited, folded across every
+    // sample taken during it.
+    //
+    // WRITTEN AND READ BY THE WATCHDOG'S OWN QUEUE, unlike every box above it. Those four are stamped by
+    // the main thread because only the main thread holds what they record. This one records a fact about
+    // the main thread that is readable WITHOUT it, which is the whole reason it can be sampled during a
+    // freeze at all (L345). A lock all the same, because the sampling and the reset happen on the
+    // watchdog queue while the reader runs there too and a future change should not have to rediscover
+    // why that was safe.
+    final class ActivityBox: @unchecked Sendable {
+        private let lock = NSLock()
+        private var value: RunLoopActivity = .notRecorded
+        // Cleared when a ping is POSTED, so what a record carries is the samples taken during ITS stall
+        // and never the ones before it.
+        func reset() { lock.withLock { value = .notRecorded } }
+        func observe(_ activity: RunLoopActivity) {
+            lock.withLock { value = RunLoopActivity.moreTelling(value, activity) }
+        }
+        var current: RunLoopActivity { lock.withLock { value } }
+    }
+
+    let runLoopActivity = ActivityBox()
+
     private let queue = DispatchQueue(label: "com.danwright.overture.main-thread-watchdog", qos: .utility)
     private let interval: TimeInterval
     private let now: @Sendable () -> Date
@@ -150,6 +173,8 @@ final class MainThreadWatchdog: @unchecked Sendable {
     private let cap: Int
     // #4153: read at both ends of a ping, so a stall says how much of itself the machine was not running.
     private let observedSleep: @Sendable (Date) -> Double
+    // #4114: the MAIN run loop's current mode, readable from this queue while the main thread is wedged.
+    private let mainRunLoopMode: @Sendable () -> String?
 
     private var timer: DispatchSourceTimer?
     private var sequence = 0
@@ -171,6 +196,7 @@ final class MainThreadWatchdog: @unchecked Sendable {
          now: @escaping @Sendable () -> Date = { Date() },
          loadReading: @escaping @Sendable () -> (MachineLoad, Double?) = MachineLoadReading.take,
          observedSleep: @escaping @Sendable (Date) -> Double = MainThreadWatchdog.observedSleep,
+         mainRunLoopMode: @escaping @Sendable () -> String? = MainThreadWatchdog.mainRunLoopMode,
          cap: Int = StallLog.cap,
          record: @escaping @Sendable (StallRecord) -> Void) {
         self.session = session
@@ -178,6 +204,7 @@ final class MainThreadWatchdog: @unchecked Sendable {
         self.now = now
         self.loadReading = loadReading
         self.observedSleep = observedSleep
+        self.mainRunLoopMode = mainRunLoopMode
         self.cap = cap
         self.record = record
     }
@@ -201,6 +228,24 @@ final class MainThreadWatchdog: @unchecked Sendable {
     // instant it wakes, racing the wake notification, and this makes the reading independent of which of
     // the two lands first.
     static let observedSleep: @Sendable (Date) -> Double = { SystemSleep.totalSeconds(now: $0) }
+
+    // #4114: what mode the MAIN run loop is running, right now, asked from whatever thread is asking.
+    //
+    // Named and shipped as a value rather than written inline as the default, on `observedSleep`'s
+    // precedent, so the wiring is one symbol a test can point at and a guard can name.
+    //
+    // CFRunLoop is one of the few thread-safe CoreFoundation types, so this is a legal question to ask
+    // about another thread's run loop, and it is the only reading in this file that does not need the
+    // main thread's cooperation. Verified before it was built on rather than taken from the
+    // documentation: a background thread polling the main run loop sees a nested mode while the main
+    // thread is inside it, and sees NOTHING at all when the main thread has left the run loop entirely
+    // (L82, L177).
+    //
+    // `nil` is a reading, not a failure: it means the run loop is running no mode. `RunLoopActivity`
+    // gives that its own case rather than folding it into the absent one.
+    static let mainRunLoopMode: @Sendable () -> String? = {
+        CFRunLoopCopyCurrentMode(CFRunLoopGetMain())?.rawValue as String?
+    }
 
     var snapshot: StallLog.Kept { keptLock.withLock { kept } }
 
@@ -247,7 +292,22 @@ final class MainThreadWatchdog: @unchecked Sendable {
             pingOutstanding = true
             return true
         }
-        guard claimed else { return }
+        // #4114: THE SKIPPED PING IS THE SAMPLING POINT, and that is the whole of why this costs nothing.
+        // A skip happens precisely while a ping is still waiting on the main thread, so this timer tick
+        // is the one moment in this design that is awake during a freeze with nothing else to do. Reading
+        // the mode only at the ping's two ends would miss a menu that went up and came down inside the
+        // stall, which is exactly the 2026-09-21 case: the dropdown was open in the MIDDLE of a 1.62s
+        // record. At the shipped 0.1s interval a 1.6s stall gives about sixteen samples.
+        guard claimed else {
+            runLoopActivity.observe(RunLoopActivity(modeName: mainRunLoopMode()))
+            return
+        }
+
+        // Cleared FIRST, so what this record carries is the samples taken during its own stall and never
+        // the ones left by the stall before it. Then sampled at once, so a stall short enough to hold no
+        // skipped ping still carries a reading rather than nothing.
+        runLoopActivity.reset()
+        runLoopActivity.observe(RunLoopActivity(modeName: mainRunLoopMode()))
 
         let posted = now()
         // #3760: read BEFORE the ping is posted, and again below when it finally runs, which is the
@@ -287,13 +347,18 @@ final class MainThreadWatchdog: @unchecked Sendable {
                                      rootDraws: StallLog.passesSpanned(from: rootAtPost, to: rootAtRun),
                                      passSeconds: StallLog.passSecondsSpanned(from: costAtPost,
                                                                              to: costAtRun),
-                                     asleep: StallLog.sleepSpanned(from: sleptAtPost, to: sleptAtRun))
+                                     asleep: StallLog.sleepSpanned(from: sleptAtPost, to: sleptAtRun),
+                                     // #4114: read AFTER the ping has run, so every sample taken while
+                                     // it was outstanding is folded in. Read on this queue, which is
+                                     // where they were written.
+                                     runLoop: self.runLoopActivity.current)
             }
         }
     }
 
     private func recordIfStalled(_ delay: TimeInterval, sequence: Int, at: Date, passes: Int?,
-                                 rootDraws: Int?, passSeconds: Double?, asleep: Double?) {
+                                 rootDraws: Int?, passSeconds: Double?, asleep: Double?,
+                                 runLoop: RunLoopActivity) {
         // A ping that ran EARLY or on time is not a stall. Clamped rather than recorded as a negative,
         // which would be a measurement of the timer's own jitter dressed as a freeze.
         guard delay > 0 else { return }
@@ -311,7 +376,12 @@ final class MainThreadWatchdog: @unchecked Sendable {
                                 // #4153: how much of `delay` above the machine was asleep for. Recorded
                                 // beside the duration and never subtracted from it, so a real freeze that
                                 // overlapped a sleep is still a record of a freeze (L116).
-                                asleepSeconds: asleep)
+                                asleepSeconds: asleep,
+                                // #4114: what the main run loop was doing while this stall lasted,
+                                // folded from every sample taken across it. Recorded beside the duration
+                                // and never subtracted from it, for the reason above: a freeze that
+                                // happened to overlap a menu is still a freeze (L116).
+                                runLoopActivity: runLoop)
         // #3812: the decision is the PURE rule's, taken whole. This used to compare the kept set's count
         // before and after, which tied "what is held in memory" to "what is written to the file" and made
         // the session stop recording at its 200th stall.

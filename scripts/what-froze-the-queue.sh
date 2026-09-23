@@ -271,6 +271,65 @@ else:
         print("    every record carrying a reading spanned a sleep, so this file states no measured")
         print("    maximum for a real freeze at all.")
 
+# #4114: which of these records were taken while the main run loop was in a NESTED event loop.
+#
+# While a menu tracks or a panel is modal the main thread sits in a nested loop, and the watchdog's ping
+# can wait there while the app is doing nothing wrong. Measured 2026-09-21: Dan opened a card's genre
+# dropdown and clicked away without choosing anything, and the log recorded 1.62s and 1.17s stalls whose
+# stack sample has the main thread idle 95.5% with no Overture code running at all.
+#
+# MARKED, NEVER DROPPED, here as in the app, because an exclusion would also hide a real freeze that
+# happened to occur while a menu was open (L116). So this names them and says what the reading looks like
+# without them, and it does not decide for the reader: a nested-loop record carrying real render time is
+# a genuine freeze that overlapped a menu, and one carrying none is the contaminated shape. The two are
+# separated here by `passes` and `passSeconds`, which is the judgement #4114 asked to be made explicit.
+_NESTED = ("tracking", "modal", "otherMode")
+_activity_measured = [r for r in rows if isinstance(r.get("runLoopActivity"), str)
+                      and r["runLoopActivity"] != "notRecorded"]
+_nested = [r for r in _activity_measured if r["runLoopActivity"] in _NESTED]
+print()
+if not _activity_measured:
+    print(f"  run loop: UNMEASURED. None of the {len(rows)} record(s) says what the main run loop was")
+    print("  doing, so every one of them predates #4114 and any of them may be menu-open time rather")
+    print("  than a freeze. Install a build carrying it and read again.")
+elif not _nested:
+    print(f"  run loop: {len(_activity_measured)} record(s) carry a reading and none was taken while a")
+    print("  menu or a modal panel was up, so none of them is nested-event-loop time.")
+else:
+    # The contaminated shape is a nested record that ran NO render pass and spent NO time in one. A
+    # record that spanned real render time is a freeze whatever mode it was in, so it is counted apart
+    # rather than swept in with the others (L11).
+    def _ran_nothing(r):
+        return r.get("passes") == 0 and r.get("passSeconds") in (0, 0.0)
+    _idle = [r for r in _nested if _ran_nothing(r)]
+    _busy = [r for r in _nested if not _ran_nothing(r)]
+    _idle_seconds = sum(r.get("seconds", 0) for r in _idle)
+    _all_seconds = sum(r.get("seconds", 0) for r in rows)
+    print(f"  run loop: {len(_nested)} of {len(_activity_measured)} record(s) carrying a reading were")
+    print("  taken while a menu or a modal panel was up.")
+    if _idle:
+        _worst = max(_idle, key=lambda r: r.get("seconds", 0))
+        _when = str(_worst.get("at", ""))[:19].replace("T", " ")
+        _share = (100 * _idle_seconds / _all_seconds) if _all_seconds else 0
+        print("    {} of them ran no render pass and spent no time in one, together {:.1f}s of a claimed"
+              .format(len(_idle), _idle_seconds))
+        print("    {:.1f}s ({:.1f}%). Those are nested-loop time rather than freezes, and a maximum or a"
+              .format(_all_seconds, _share))
+        print("    percentile answering #3660's bar must be taken without them.")
+        print("      worst: {}  {:.2f}s in {}".format(
+            _when, _worst.get("seconds", 0), _worst.get("runLoopActivity")))
+    if _busy:
+        _worst_busy = max(_busy, key=lambda r: r.get("seconds", 0))
+        print("    {} of them DID run render passes, so they are real freezes that happened to overlap a"
+              .format(len(_busy)))
+        print("    menu and they stay in every population. Worst {:.2f}s.".format(
+            _worst_busy.get("seconds", 0)))
+    _off = [r for r in _activity_measured if r["runLoopActivity"] == "offTheRunLoop"]
+    if _off:
+        print("    {} further record(s) were taken with the main thread OFF the run loop entirely, which"
+              .format(len(_off)))
+        print("    is the main thread in code and is the opposite reading: those are freezes.")
+
 # The finding. A stall over the floor that counted no pass is UNATTRIBUTED: this tool cannot say what the
 # main thread was doing, and #3783 is why it must not guess.
 FLOOR = 1.0

@@ -121,6 +121,88 @@ enum WindowPresence: String, Codable, Equatable, Sendable {
     }
 }
 
+// #4114: what the MAIN RUN LOOP was doing while a stall lasted.
+//
+// WHY THE FIELD EXISTS. While an NSMenu tracks or a panel is modal, the main thread sits in a NESTED
+// event loop, and the watchdog's `DispatchQueue.main.async` ping can wait there while the app is doing
+// nothing wrong. Measured 2026-09-21: Dan opened a card's genre dropdown and clicked away without
+// choosing anything, and the log recorded 1.62s and 1.17s stalls whose stack sample has the main thread
+// idle 95.5% of the window with no Overture code running at all. #3660's bar is "no baseline-load
+// main-thread stall over 100 ms, measured by the in-app watchdog", and a bar judged by an instrument
+// that counts menu-open time can never be met, with nothing saying why (L400, L11).
+//
+// RECORDED, NEVER EXCLUDED. A rule that dropped these would also drop a real freeze that happened to
+// occur while a menu was open, so `seconds` stays exactly as measured and this says what the run loop
+// was doing (L116). #4153 makes the identical argument about sleep and names this issue as its sibling.
+//
+// THE READING NEEDS NO HELP FROM THE MAIN THREAD, which is the whole reason it can be taken at all.
+// `CFRunLoopCopyCurrentMode(CFRunLoopGetMain())` is readable from any thread, so the watchdog takes it
+// on its own queue. A reading that had to ask the main actor would be unavailable at exactly the moment
+// a record is being written (L345), which is the trap `SurfaceBox` was built to avoid.
+enum RunLoopActivity: String, Codable, CaseIterable, Equatable, Sendable {
+    // No reading was taken: a record written before this field shipped, which is every one of the
+    // thousand in Dan's log that are milestone 80's own "before" half, or a build that never sampled.
+    case notRecorded
+    // The main run loop was in its default mode. An ordinary freeze.
+    case ordinary
+    // The main run loop was running NO mode at all, which is the main thread being off the run loop and
+    // in code. This is a READING and not a failed one, so it is not folded into `notRecorded`: "nobody
+    // took a reading" and "the reading says the main thread is wedged" call for opposite next steps
+    // (L98, L11). Expected to be rare in this app, whose main run loop is essentially always running.
+    case offTheRunLoop
+    // A mode this build cannot name. It is not the default mode, so it is a nested loop of some kind,
+    // and saying which one would claim more than the reading supports (L11, L440).
+    case otherMode
+    // An event tracking loop: a menu, a scroll, a drag. The case this issue was opened for.
+    case tracking
+    // A modal panel loop.
+    case modal
+
+    // What `CFRunLoopCopyCurrentMode` returned, classified.
+    //
+    // PURE and here rather than inside the watchdog, so every case can be PRODUCED by a test rather than
+    // reasoned about (L151). Every one is reachable in the running app.
+    init(modeName: String?) {
+        guard let modeName else { self = .offTheRunLoop; return }
+        switch modeName {
+        case "kCFRunLoopDefaultMode": self = .ordinary
+        // Both spellings, because the constant AppKit exports and the string CoreFoundation returns are
+        // not guaranteed to be one token, and a classifier that knew only one would silently call a
+        // tracked menu `otherMode` on the platform that spells it the other way.
+        case "NSEventTrackingRunLoopMode", "UITrackingRunLoopMode": self = .tracking
+        case "NSModalPanelRunLoopMode": self = .modal
+        default: self = .otherMode
+        }
+    }
+
+    // How telling this reading is about the question the field answers, which is whether the stall could
+    // be an artifact of a nested event loop. Higher wins a fold.
+    //
+    // A NESTED mode outranks everything, because one sample of it is enough to make the record suspect
+    // and the samples either side of a menu are ordinary. `offTheRunLoop` sits above `ordinary` (the main
+    // thread was in code, which is the more informative of the two) and below the nested modes (they
+    // answer the question this field is for). `notRecorded` is last, so any reading that was TAKEN
+    // survives a fold with one that was not.
+    private var weight: Int {
+        switch self {
+        case .notRecorded: return 0
+        case .ordinary: return 1
+        case .offTheRunLoop: return 2
+        case .otherMode: return 3
+        case .tracking: return 4
+        case .modal: return 5
+        }
+    }
+
+    // Fold two readings taken during one stall into the one the record carries.
+    //
+    // ORDER INDEPENDENT by construction, which is what lets the watchdog accumulate samples as they
+    // arrive without holding them, and what a test asserts across every pair rather than a chosen few.
+    static func moreTelling(_ a: RunLoopActivity, _ b: RunLoopActivity) -> RunLoopActivity {
+        a.weight >= b.weight ? a : b
+    }
+}
+
 struct StallRecord: Codable, Equatable, Sendable {
     // The process this was recorded in, so a retry or a crash mid-write cannot double count: a record is
     // identified by its session and its sequence, and both are assigned by the watchdog.
@@ -248,6 +330,20 @@ struct StallRecord: Codable, Equatable, Sendable {
     // two ways of spelling it (nil and .unknown) would be two spellings of one fact (L544).
     let windows: WindowPresence
 
+    // #4114: what the main run loop was doing while this stall lasted, folded from the samples taken
+    // across it, or `.notRecorded` where none was.
+    //
+    // Decoded as `.notRecorded` when absent, which is every record in Dan's log written before this
+    // shipped, on `windows`'s precedent exactly and for its reason: the ABSENT case already has a name
+    // here, and two ways of spelling it (nil and .notRecorded) would be two spellings of one fact (L544).
+    //
+    // WHAT IT MAY BE READ AS, stated narrowly. `.tracking` says a tracking loop was seen at some point
+    // during the stall, not that the stall was CAUSED by it, and the other fields are what settle that:
+    // a record with `.tracking`, `passes: 0` and `passSeconds: 0` is the contaminated shape #4114
+    // measured, while one with `.tracking` and real render time is a genuine freeze that happened to
+    // overlap a menu. Nothing here excludes either (L116, L11).
+    let runLoopActivity: RunLoopActivity
+
     // The whole identity, as one string, because a reader that remembers what it has said has to remember
     // BOTH halves: the sequence restarts at 1 in every process, so it is not an identity on its own.
     var identity: String { "\(session)#\(sequence)" }
@@ -255,7 +351,8 @@ struct StallRecord: Codable, Equatable, Sendable {
     init(session: String, sequence: Int, at: Date, seconds: Double, surface: StallSurface,
          load: MachineLoad, loadAverage: Double?, passes: Int?, rootDraws: Int? = nil,
          passSeconds: Double? = nil, windows: WindowPresence = .unknown,
-         asleepSeconds: Double? = nil, promotedFromOlderWindow: Bool? = nil) {
+         asleepSeconds: Double? = nil, runLoopActivity: RunLoopActivity = .notRecorded,
+         promotedFromOlderWindow: Bool? = nil) {
         self.session = session
         self.sequence = sequence
         self.at = at
@@ -273,6 +370,7 @@ struct StallRecord: Codable, Equatable, Sendable {
         self.passSeconds = passSeconds
         self.windows = windows
         self.asleepSeconds = asleepSeconds
+        self.runLoopActivity = runLoopActivity
         self.promotedFromOlderWindow = promotedFromOlderWindow
     }
 
@@ -321,6 +419,12 @@ struct StallRecord: Codable, Equatable, Sendable {
         // nothing downstream would act differently on them.
         let spelling = try c.decodeIfPresent(String.self, forKey: .windows)
         windows = spelling.flatMap(WindowPresence.init(rawValue:)) ?? .unknown
+        // #4114: decoded as a STRING and mapped, for the reason spelled out directly above. An
+        // unrecognised spelling folds into `.notRecorded`, which means "this reader cannot say", and both
+        // "written before the field existed" and "written by a build that knows a mode I do not" are
+        // exactly that.
+        let activitySpelling = try c.decodeIfPresent(String.self, forKey: .runLoopActivity)
+        runLoopActivity = activitySpelling.flatMap(RunLoopActivity.init(rawValue:)) ?? .notRecorded
     }
 }
 
