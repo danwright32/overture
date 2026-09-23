@@ -2346,6 +2346,7 @@
 		FE9A79347032722B1261B3D1 /* PrepStatus.swift in Sources */ = {isa = PBXBuildFile; fileRef = E135F9F368E79F72FAE4B6ED /* PrepStatus.swift */; };
 		FEB51866278C885610064F34 /* LocalHistory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E8CE9327EAB13D8526847F9 /* LocalHistory.swift */; };
 		FED3EAE2185EC3BE9C6B0ED1 /* SearchScopeIsLazyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B16122C159294095386CF06 /* SearchScopeIsLazyTests.swift */; };
+		FEEF5608CD4BA4FB08224A02 /* DueCountHoldsUntilItCouldChangeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC082A157A87DD564C8B4373 /* DueCountHoldsUntilItCouldChangeTests.swift */; };
 		FEF53000C87AD821E2A8FFDD /* ReplyTargets.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDB0FA63E31923ED5C2148F1 /* ReplyTargets.swift */; };
 		FEF84482FECC3BB5305357B5 /* IdentifierIndex.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77B92EA5F6F504BFE01FF4FD /* IdentifierIndex.swift */; };
 		FEFFD6413CE4D108576FDCB9 /* DayOffOfferRequest.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0D91A129735ED9D5235A8CD5 /* DayOffOfferRequest.swift */; };
@@ -4012,6 +4013,7 @@
 		EAFD4BD1E7F5C8C96D2F84B3 /* ListingCreditCorpusTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ListingCreditCorpusTests.swift; sourceTree = "<group>"; };
 		EB3A67BA0DD14CC45DB4C707 /* RunProgressViewStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunProgressViewStateTests.swift; sourceTree = "<group>"; };
 		EB5A2F5574E4996590E04C43 /* SourceFetcherPaginationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourceFetcherPaginationTests.swift; sourceTree = "<group>"; };
+		EC082A157A87DD564C8B4373 /* DueCountHoldsUntilItCouldChangeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DueCountHoldsUntilItCouldChangeTests.swift; sourceTree = "<group>"; };
 		EC1C7928E9B04D533991658B /* PrepRunArchive.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrepRunArchive.swift; sourceTree = "<group>"; };
 		EC22AFE414CAD7417B252C42 /* AlreadyPitchedNightTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AlreadyPitchedNightTests.swift; sourceTree = "<group>"; };
 		EC3858D70F3CEA1F6555D5C3 /* WatchlistEditing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchlistEditing.swift; sourceTree = "<group>"; };
@@ -4583,6 +4585,7 @@
 				722CF72E0924A037E8C30644 /* DriftedRunMergeTests.swift */,
 				0F5E6C353B680B153D3C01B7 /* DueBadgeRepublishTests.swift */,
 				E8AA8F6949356B7411F42B22 /* DueBadgeTests.swift */,
+				EC082A157A87DD564C8B4373 /* DueCountHoldsUntilItCouldChangeTests.swift */,
 				0E0BB399AA977D624EDE1D1E /* DueWorkTests.swift */,
 				CA4252A77CC0AE59A4B88D49 /* DuplicateContactGuardTests.swift */,
 				8597134308B060B30B09E0CF /* DuplicateContactMergeTests.swift */,
@@ -7192,6 +7195,7 @@
 				E4434319BD48ECF59A2D0FF2 /* DueBadge.swift in Sources */,
 				D1F2EA789A0D83DE1533D437 /* DueBadgeRepublishTests.swift in Sources */,
 				182A9C1D9DB8185DB645A324 /* DueBadgeTests.swift in Sources */,
+				FEEF5608CD4BA4FB08224A02 /* DueCountHoldsUntilItCouldChangeTests.swift in Sources */,
 				60B182E4E2F5B0B8C8F59A03 /* DueWork.swift in Sources */,
 				1CC3492C794916A3AABE7FB0 /* DueWorkTests.swift in Sources */,
 				70879D067F04F463BD9ECFC5 /* DuplicateContactGuard.swift in Sources */,
