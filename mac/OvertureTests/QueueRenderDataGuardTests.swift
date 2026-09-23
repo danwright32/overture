@@ -86,8 +86,17 @@ struct QueueRenderDataGuardTests {
         #expect(body.contains("allItems: data.rows"))
         // `allItems: items` there is `self.items`, the computed property that rebuilds the whole queue.
         #expect(!body.contains("allItems: items"))
-        // #1916: the rows stay a closure, so an unticked queue never pays for the scoutRows sweep.
-        #expect(body.contains("rows: { scoutRows(data) }"))
+        // #1916: the rows stay a closure, so an unticked queue never pays for the projection at all.
+        // #4121 re-anchored the spelling rather than the rule. The closure used to call
+        // `scoutRows(data)`, a method on this view that DECIDED every show's stages from scratch; it now
+        // calls `data.scoutRows()`, which filters `data.rows` through the placement the pass already
+        // built. Both halves still have to hold, and they guard different things: the closure is what
+        // keeps an unticked queue free, and `data.` is what keeps a ticked one from re-placing the store
+        // on every pass (`ScoutRowsReadThePassesPlacementTests` is the measurement behind it).
+        #expect(body.contains("rows: { data.scoutRows() }"))
+        // The shape that must not come back: a projection the VIEW performs, which is where the cost was
+        // invisible because a SwiftUI body cannot be measured in a test.
+        #expect(!body.contains("rows: { scoutRows(data) }"))
     }
 
     // #1772: the same defect one level lower, where it scales with the number of cards rather than
