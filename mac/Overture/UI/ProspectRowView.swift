@@ -735,7 +735,7 @@ struct ProspectRowView: View {
 
     @ViewBuilder private var handAddedContactField: some View {
         HStack(spacing: OVSpacing.xs) {
-            TextField("Email or link", text: $handAddedRoute)
+            TextField(ContactFieldCopy.routePlaceholder, text: $handAddedRoute)
                 .textFieldStyle(.roundedBorder)
                 .font(OVType.meta)
                 // Return adds the route, rather than falling through to whatever default button the

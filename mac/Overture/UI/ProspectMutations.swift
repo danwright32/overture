@@ -330,6 +330,51 @@ enum ProspectMutations {
                                        historyUnreadable: history.unreadable)
     }
 
+    // #4170: pitch somebody ELSE on a show that has already been sent.
+    //
+    // THE CASE. Dan pitched Dessoff Choirs and the reply was an autoresponse: the person is on
+    // maternity leave and it named somebody else to write to. The show sits on Reached out, where every
+    // way to add a contact is closed (the hand-added field lives on the review card he no longer has,
+    // and the row's own field is drawn only where the reachability badge asks for one), so the named
+    // person was unreachable through Overture and the thread would have been tracked nowhere.
+    //
+    // ONE PRESS, TWO WRITES, and they belong together: the contact, and the request for the draft that
+    // contact needs. Split across two controls this is a contact added to a sent show with no way to
+    // write to them, which is where the defect started.
+    //
+    // THE DRAFT HALF ONLY. Dan has just typed the route in, so a contact hunt would be paying for the
+    // answer he supplied (`PrepQueue.prepMode` reads the pair and sends a draft-only request).
+    //
+    // NOTHING IS DONE TO THE ORIGINAL CONTACT, deliberately. She is away rather than declining: her
+    // thread stays recorded and stays on Reached out, which is per recipient and reads `sentAt` rather
+    // than the show's status (`ReachedOutQueue.isInPlay`), so a show going back to `.drafted` for the
+    // new draft cannot take her conversation off the stage. Stopping her nudges is a separate decision
+    // he already has a control for (`standDown`), and taking it for him would record a judgement he has
+    // not made (L11).
+    static func pitchSomeoneElse(_ model: Prospect, route: String, name: String?,
+                                 context: ModelContext, feedback: ActionFeedback) {
+        // The SAME parse the Add button is gated on and the same refusals the hand-added field gives, so
+        // a route this refuses reads identically wherever it was typed (L109, #2629).
+        guard let parsed = ManualContactRoute.parse(route) else {
+            feedback.acknowledge(ActionAck.contactNeedsRoute, tone: .warning)
+            return
+        }
+        let trimmedName = name?.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Typing an address back in is the reversal of striking it, exactly as it is on the other path.
+        ContactRefusal.allow(email: parsed.email, formURL: parsed.link, showKey: model.naturalKey,
+                             orgKey: model.presenter.flatMap { OrgKey.stored(for: $0) }, in: context)
+        let result = applyManualRecipient(route: parsed, name: trimmedName, to: model)
+        if case .blocked = result.action {
+            feedback.acknowledge(ActionAck.recipientAlreadyExists(name: trimmedName, org: model.groupName))
+            return
+        }
+        // The request rides with the contact rather than after it, so a save that fails leaves neither.
+        model.reprepDraftRequested = true
+        guard context.saveOrWarn(org: model.groupName, feedback: feedback) else { return }
+        feedback.acknowledge(RePitchCopy.queued(name: trimmedName, route: parsed.email ?? parsed.link,
+                                                org: model.groupName))
+    }
+
     // #2007: prep this show BY HAND. No Prep run, no model call, no spend: Dan names the address and
     // writes the email himself, and the show lands in `.drafted` exactly where a prepped one does.
     //

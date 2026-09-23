@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1634 sentences**.
+Every sentence Overture can say to Dan: **1639 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -14,7 +14,7 @@ What is not, and why:
   sentences under tokens nobody reads.
 - **Nothing, if it is written as two literals joined with `+`.** Those ARE joined here, into the
   one sentence the running app says (#3155). What is still only part of what Dan reads is a
-  sentence carrying a VALUE: 601 of the 1634 below hold a
+  sentence carrying a VALUE: 602 of the 1639 below hold a
   `\(...)` where a number or a name goes, so what is printed is the template. They are counted
   here rather than listed again, because the hole is visible in the line itself; what was missing
   was any statement of how much of this document is templates.
@@ -128,7 +128,7 @@ What is not, and why:
 - `UI/DraftSignaturePreview.swift`: browser-side measuring script, not a sentence Overture says to Dan (#915)
 - `UI/QueueScopeRow.swift`: a redaction marker for a run log, never a sentence Dan reads (#3655)
 
-## The same sentence, said in more than one place (57)
+## The same sentence, said in more than one place (56)
 
 Two copies of a sentence will drift. #843 owns fixing these.
 
@@ -174,9 +174,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
 - "Delivery delayed"
   - `UI/DraftReviewView.swift`
   - `UI/QueueView.swift`
-- "Email or link"
-  - `UI/DraftReviewView.swift`
-  - `UI/ProspectRowView.swift`
 - "Find contacts only"
   - `App/RootView.swift`
   - `UI/DraftReviewView.swift`
@@ -515,6 +512,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/OvertureApp.swift`
 "Add a contact"
     `UI/DraftReviewView.swift`
+"Add a contact on a show you have already pitched. The next Prep run writes them a fresh first-contact draft, and the original conversation carries on untouched."
+    `Domain/RePitchCopy.swift`
 "Add a lead"
     `UI/AddLeadSheet.swift`
 "Add a lead..."
@@ -527,6 +526,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/SourcesView.swift`
 "Add an email address, or a link to a contact form or profile. No contact was added"
     `App/ActionFeedback.swift`
+"Add and draft"
+    `Domain/RePitchCopy.swift`
 "Add another"
     `UI/AddLeadSheet.swift`
 "Add contact"
@@ -903,8 +904,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "Email goes to \(address) from now on."
     `Domain/ProposedConversation.swift`
 "Email or link"
-    `UI/DraftReviewView.swift`
-    `UI/ProspectRowView.swift`
+    `Domain/ContactFieldCopy.swift`
 "Emails are held at send unless the body opens with a greeting"
     `App/ActionFeedback.swift`
 "End this experiment"
@@ -1274,7 +1274,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "Music only travels to the five boroughs. As performing arts this would stay."
     `UI/QueueView+Model.swift`
 "Name (optional)"
-    `UI/DraftReviewView.swift`
+    `Domain/ContactFieldCopy.swift`
 "Name matches, nothing ties it to this show"
     `Domain/Reachability.swift`
 "Name the venue"
@@ -1777,6 +1777,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/DraftReviewNotes.swift`
 "Pitch copied for \(org)"
     `App/ActionFeedback.swift`
+"Pitch someone else"
+    `Domain/RePitchCopy.swift`
 "Pitching other shows that night"
     `Domain/ShowOutcome.swift`
 "Point this source at a different page, then read it to check"
@@ -3392,6 +3394,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/RunProgressView.swift`
 "\(where_) could not be read"
     `Domain/HandoffDecodeFailure.swift`
+"\(who) added to \(org). Run Prep to write their draft."
+    `Domain/RePitchCopy.swift`
 "\(who) is already a recipient on \(org)."
     `App/ActionFeedback.swift`
 "\(worst.name) is flagged as a possible match on \(worst.count) shows, which usually means the match is wrong."
@@ -3553,6 +3557,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/QueueView+Model.swift`
 "still couldn't save what this check found, so it has stopped trying and those shows will be checked again"
     `Domain/ReachabilityRunSummary.swift`
+"that contact"
+    `Domain/RePitchCopy.swift`
 "the Downbeat client export couldn't be read"
     `Persistence/PrepImporter.swift`
 "the Downbeat client export is \(days) days old"
