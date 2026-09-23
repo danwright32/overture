@@ -68,13 +68,24 @@ struct SendConfirmation: Equatable {
     // promise underneath it all describe THAT selection rather than the default one. Nil means he has not
     // touched the ticks, which is the default the sheet opens on.
     @MainActor
+    // #4168: `together` is taken as a VALUE rather than read off the show, so previewing a choice Dan has
+    // ticked but not committed does not WRITE to the show to ask the question.
+    //
+    // The Send sheet used to set `sendsTogetherOverride` on the live model and restore it in a `defer`.
+    // Those are two writes to an observed SwiftData model during a body evaluation, and `current` is read
+    // seven times a pass, so each pass invalidated the views watching the show and scheduled another.
+    // Measured 2026-09-22 as one core pinned with the sheet open, ended by a force quit.
+    //
+    // Absent, it is `prospect.sendsTogether`, so every call site that does not care is unchanged.
     init?(prospect: Prospect, approving: Bool = false, selecting: [String]? = nil,
+          together: Bool? = nil,
           signature: OutboundSignature = GmailSignatureStore.currentSignature()) {
         // #2033: the whole group the next press of Send reaches, from the one definition the send itself
         // reads, so what he approves names everybody it is going to (L64).
+        let sendsTogether = together ?? prospect.sendsTogether
         let defaultGroup = approving && prospect.status == .drafted && prospect.draftBody != nil
-            ? SendGroup.previewGroup(of: prospect)
-            : SendGroup.pendingGroup(of: prospect)
+            ? SendGroup.previewGroup(of: prospect, together: sendsTogether)
+            : SendGroup.pendingGroup(of: prospect, together: sendsTogether)
         // A ticked contact must still clear every guard: `sendableFor` filters to the ones that could
         // actually go, so a held contact cannot be talked past by being named here (#2052).
         let group = selecting.map { SendGroup.sendableFor(prospect, ids: $0) } ?? defaultGroup
@@ -108,10 +119,13 @@ struct SendConfirmation: Equatable {
         // The reassurance is a promise about what this press does. "To this recipient only" is a false
         // promise on an email reaching two people, so a group gets its own, naming how many.
         // #2017: follows the ticks AND the together-or-separately choice, both changeable on this sheet.
-        reassurance = SendConfirmCopy.reassurance(chosen: group.count, together: prospect.sendsTogether)
+        reassurance = SendConfirmCopy.reassurance(chosen: group.count, together: sendsTogether)
         candidates = SendGroup.candidates(of: prospect)
         selected = group.map(\.id)
-        togetherAtOpen = prospect.sendsTogether
+        // #4168: the CHOICE this confirmation was composed for, which is what the write route used to
+        // leave on the model for this line to read back. The sheet seeds its picker from the confirmation
+        // it OPENED with, never from a rebuilt one, so this keeps exactly the value it had before.
+        togetherAtOpen = sendsTogether
     }
 
     // #2144: a REPLY, which until now was the one consequential send with no confirmation at all. The

@@ -1813,13 +1813,20 @@ struct QueueView: View {
             id: item.id, confirmation: confirmation,
             rebuild: { selected, together in
                 guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return nil }
-                // Asked of a COPY's worth of state: the real choice is only written at the commit, so a
-                // preview of "one email each" cannot leave the show changed if he cancels.
-                let was = model.sendsTogetherOverride
-                model.sendsTogetherOverride = together
-                defer { model.sendsTogetherOverride = was }
+                // #4168: the choice is PASSED, never written. This used to set `sendsTogetherOverride` on
+                // the live model and restore it in a `defer`, which is two writes to an observed SwiftData
+                // model inside a SwiftUI body evaluation. `SendConfirmSheet.current` was read seven times
+                // a pass, so each pass invalidated the views watching the show and scheduled the next one.
+                // Measured 2026-09-22 as one core pinned at 100% with the sheet open, ended by a force
+                // quit.
+                //
+                // The comment this replaces said the write was safe because it was restored: "the real
+                // choice is only written at the commit, so a preview of one email each cannot leave the
+                // show changed if he cancels". That was true of the show's stored VALUE and said nothing
+                // about the observers the write notified on the way past.
                 guard var rebuilt = SendConfirmation(prospect: model, approving: true,
-                                                     selecting: selected) else { return nil }
+                                                     selecting: selected,
+                                                     together: together) else { return nil }
                 rebuilt.selfBookingWarning = warning
                 return rebuilt
             },
