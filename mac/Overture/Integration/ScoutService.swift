@@ -1334,18 +1334,36 @@ enum ScoutService {
             })
         }
 
+        // #1848 and #4098 both need every stored row, so the store is read ONCE here and both tables
+        // below are built from it. Each used to fetch the whole store for itself, which is two full
+        // reads per sweep for one question about the same rows.
+        //
+        // The two want OPPOSITE things from a read that fails, and that is deliberate rather than an
+        // inconsistency: the spelling lock can only ever REPLACE a spelling with one the source itself
+        // published, so having none simply leaves today's reading alone, while the ambiguity discard
+        // exists to REFUSE joins, so an empty set would license every join it is there to prevent (L42,
+        // L215). Fail open for the first, fail closed for the second.
+        let storedRowsForBatch = readOrRecord(.reconcileStoredShows, into: &degradedReads,
+                                              { try context.fetch(FetchDescriptor<Prospect>()) })
+
+        // #4098: how ambiguous each URL this sweep carries is, for the two URL matching arms.
+        let batchAmbiguousURLs: AmbiguousURLs
+        if let storedRows = storedRowsForBatch,
+           let measured = try? ambiguousURLsForBatch(batchRows, storedRows: { storedRows }) {
+            batchAmbiguousURLs = measured
+        } else {
+            let everyURL = Set(batchRows.flatMap {
+                ListingURL.foldedSet(($0.sourceListingURL.map { [$0] } ?? []) + $0.runSourceURLs)
+            })
+            batchAmbiguousURLs = AmbiguousURLs(atAVenue: everyURL, anywhere: everyURL)
+        }
+
         // #1848: how THIS run's sources have already spelled their own rooms, read once per batch rather
-        // than once per row. An unreadable store leaves it empty, which locks nothing and stores exactly
-        // what the page sent: the fail-open direction is correct here and nowhere else in this function,
-        // because the lock only ever REPLACES a spelling with one the source itself has used, so having
-        // none simply leaves today's reading alone (it cannot merge or re-key anything).
+        // than once per row.
         var spellingsBySource: [String: [String]] = [:]
-        if let storedRows = readOrRecord(.reconcileStoredShows, into: &degradedReads,
-                                         { try context.fetch(FetchDescriptor<Prospect>()) }) {
-            for row in storedRows {
-                guard let venue = row.venue, !venue.isEmpty else { continue }
-                for id in row.sourceIds { spellingsBySource[id, default: []].append(venue) }
-            }
+        for row in storedRowsForBatch ?? [] {
+            guard let venue = row.venue, !venue.isEmpty else { continue }
+            for id in row.sourceIds { spellingsBySource[id, default: []].append(venue) }
         }
 
         for gr in grouped {
@@ -1469,7 +1487,9 @@ enum ScoutService {
                                                         runEndDate: enriched.runEndDate,
                                                         venue: enriched.venue, in: context) },
                 byAnyRunURL: { try matchByAnyRunURL(enriched.runSourceURLs, groupName: enriched.groupName,
-                                                    venue: enriched.venue, in: context) },
+                                                    venue: enriched.venue,
+                                                    ambiguous: batchAmbiguousURLs.anywhere,
+                                                    in: context) },
                 byProductionToken: {
                     try matchByProductionToken((enriched.sourceListingURL.map { [$0] } ?? [])
                                                  + enriched.runSourceURLs,
@@ -1481,6 +1501,7 @@ enum ScoutService {
                                                           date: enriched.performanceDate,
                                                           venue: enriched.venue,
                                                           groupName: enriched.groupName,
+                                                          ambiguous: batchAmbiguousURLs.atAVenue,
                                                           in: context) },
                 arrivalNotes: {
                     // ONE fetch, both answers. Two separate closures would walk the store twice for
@@ -1756,6 +1777,7 @@ enum ScoutService {
     // matches, while a season page full of strangers no longer does.
     // #2758: throws, for the reason above.
     private static func matchByAnyRunURL(_ urls: [String], groupName: String, venue: String?,
+                                         ambiguous: Set<String> = [],
                                          in context: ModelContext) throws -> Prospect? {
         // #4116: folded on BOTH sides, so one member addressed with and without its trailing slash is
         // one member. The fold is `ListingURL`'s, shared with `matchByStableSource` below rather than
@@ -1773,7 +1795,25 @@ enum ScoutService {
             // that, so the arm missed exactly the drift it exists to catch. Measured over the live store
             // before it was changed (`SubtitleVariantMatchTests`): 3 pairs are newly joined here and all
             // three are one show, including Dan's own Jalopy open mic pair from #1590.
-            return sameVenue(p.venue, venue) && GroupNameMatch.isSameShowTitle(p.groupName, groupName)
+            // #4098: on a URL that carries MORE THAN ONE SHOW, the title test is the strict one.
+            //
+            // The shared URL is what licenses the loose predicate, and on an organisation level page
+            // ("metopera.org", a season page, a ticketing host's event index) it licenses nothing: every
+            // show in the building shares it. Measured on the live store 2026-09-22, 27 of 1,208 distinct
+            // listing URLs carry more than one title, and this arm has no venue test at all, so those are
+            // exactly the pages where a subtitle or a billing difference could join two strangers.
+            //
+            // IT DOES NOT REFUSE OUTRIGHT, which was the other option the issue named. This arm exists
+            // for #132, a run whose opening night MOVED, and on a season page a blanket discard would
+            // cost that case for every show the venue lists there. Demanding a shared night would cost it
+            // too, since a moved opening is the whole shape. So the arm keeps working and asks the
+            // question repeat client detection asks, which refuses a one word title and anything under
+            // 0.6 containment (L93: name what the fallback gives up rather than leaving it to be found).
+            let sharedAmbiguousURL = !candidates.isDisjoint(with: ambiguous)
+            guard sameVenue(p.venue, venue) else { return false }
+            return sharedAmbiguousURL
+                ? titleIsTheKeySOwn(p.groupName, groupName)
+                : GroupNameMatch.isSameShowTitle(p.groupName, groupName)
         }
     }
 
@@ -1812,6 +1852,62 @@ enum ScoutService {
     // a read that failed would license every join this rule exists to prevent, in the one situation where
     // the code knows least (L215, L105: an empty collection returned on a throw is indistinguishable from
     // a correct read of an empty one, and here the two have opposite consequences).
+    // #4098: the two URL arms' own discard, computed over the SAME walk as the token one above: every
+    // stored row plus every incoming row, once per batch rather than once per row.
+    //
+    // TWO SETS because the two arms ask different questions, and each is named where it is used rather
+    // than one set being reused for tidiness (L370).
+    struct AmbiguousURLs: Equatable, Sendable {
+        // For `matchByStableSource`, which tests the venue: a URL carrying more than one show AT ONE
+        // VENUE.
+        var atAVenue: Set<String> = []
+        // For `matchByAnyRunURL`, which does not: a URL carrying more than one show anywhere.
+        var anywhere: Set<String> = []
+
+        static let none = AmbiguousURLs()
+    }
+
+    // #4098: the title test the two URL arms fall back to on a page carrying more than one show, in ONE
+    // place so the two arms cannot drift apart on the question (L370).
+    //
+    // IT IS THE NATURAL KEY'S OWN FOLD, and `GroupNameMatch.isConfident` is NOT, which is the correction
+    // this branch needed. That function strips a trailing subtitle after a colon (`stripProgramSubtitle`,
+    // #105, so a booking sheet's "Presenter: Program" matches a venue's "Presenter"), so on a season page
+    // "Back to Shakespeare" and "Back to Shakespeare: An Evening of Sonnets and Songs" are CONFIDENT: the
+    // strict fallback joined exactly the pair it was added to refuse, and the first ingest fixture written
+    // against it proved it did.
+    //
+    // WHAT REMAINS JOINABLE on such a page, which is the reason this is not a blanket refusal: a title
+    // that folds to the same key. #132 is a run whose OPENING NIGHT moved, where the title is unchanged
+    // and the date is not, and that is still recognised here. What is given up is a genuine subtitle
+    // drift on an ambiguous page: it mints a second row, which is visible on the queue and reversible,
+    // rather than re-keying a stored row, which carries Dan's dismissal onto a show he never saw (L93).
+    private static func titleIsTheKeySOwn(_ a: String, _ b: String) -> Bool {
+        ShowLink.foldedTitle(a) == ShowLink.foldedTitle(b)
+    }
+
+    static func ambiguousURLsForBatch(_ incoming: [AssembledProspect],
+                                      storedRows: () throws -> [Prospect]) throws -> AmbiguousURLs {
+        var seen: [(url: String, title: String, venue: String)] = []
+        func add(urls: [String], title: String, venue: String?) {
+            let theirTitle = title
+            let theirRoom = ShowLink.foldedVenue(venue)
+            for url in ListingURL.foldedSet(urls) {
+                seen.append((url: url, title: theirTitle, venue: theirRoom))
+            }
+        }
+        for p in try storedRows() {
+            add(urls: (p.sourceListingURL.map { [$0] } ?? []) + p.runSourceURLs,
+                title: p.groupName, venue: p.venue)
+        }
+        for p in incoming {
+            add(urls: (p.sourceListingURL.map { [$0] } ?? []) + p.runSourceURLs,
+                title: p.groupName, venue: p.venue)
+        }
+        return AmbiguousURLs(atAVenue: ShowLink.ambiguousURLs(seen, scopedByVenue: true),
+                             anywhere: ShowLink.ambiguousURLs(seen, scopedByVenue: false))
+    }
+
     private static func poisonedTokensForBatch(_ incoming: [AssembledProspect],
                                                in context: ModelContext) throws -> Set<String> {
         try poisonedTokensForBatch(incoming,
@@ -2023,8 +2119,13 @@ enum ScoutService {
     // #2758: throws, for the reason above.
     private static func matchByStableSource(url: String?, date: String?, venue: String?,
                                             groupName: String,
+                                            ambiguous: Set<String> = [],
                                             in context: ModelContext) throws -> Prospect? {
         guard let url, !url.isEmpty else { return nil }
+        // #4098: how ambiguous the page is, asked once rather than per candidate row. Scoped BY VENUE,
+        // because this arm demands the venue agrees: what matters here is whether this page carries more
+        // than one show IN THIS ROOM, which is exactly the season page shape #4032 was reproduced on.
+        let pageCarriesMoreThanOneShow = ambiguous.contains(ListingURL.fold(url))
         let all = try context.fetch(FetchDescriptor<Prospect>())
         return all.first {
             // #4116: `ListingURL.sameListing` rather than `==`, so one page addressed with and without
@@ -2055,7 +2156,15 @@ enum ScoutService {
             // and can be merged, while a silent re-key carries Dan's dismissal, his sent record and his
             // thread id onto a show he never saw. Measured today the trade costs nothing: of the three
             // live sets, the only same-show pair is a subtitle pair and is still joined.
-            return GroupNameMatch.isSameShowTitle($0.groupName, groupName)
+            // #4098: and on a page carrying more than one show in this room, the title test is the
+            // strict one. #4032's fix made this arm ask `isSameShowTitle`, which accepts one title plus
+            // a subtitle; on a season page two different shows can differ in exactly that way, and the
+            // venue removes nothing because every candidate shares it. What is given up is a real
+            // subtitle drift on such a page, which mints a second row rather than re-keying a stored one:
+            // visible on the queue, and the direction this milestone has chosen every time (L93).
+            return pageCarriesMoreThanOneShow
+                ? titleIsTheKeySOwn($0.groupName, groupName)
+                : GroupNameMatch.isSameShowTitle($0.groupName, groupName)
         }
     }
 

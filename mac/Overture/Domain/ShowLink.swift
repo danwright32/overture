@@ -291,6 +291,47 @@ enum ShowLink {
         })
     }
 
+    // #4098: the same question asked of a URL, for the two arms that join on one.
+    //
+    // WHY THE URL ARMS NEED IT. `matchByProductionToken` refuses a token that appears under more than
+    // one show at a venue, because a venue stamping one id across its season would otherwise fuse the
+    // season into a single card. The two URL arms had no equivalent: `matchByAnyRunURL` joins on ANY
+    // shared run URL with no venue test at all, and `matchByStableSource` joins on the listing URL plus
+    // date plus venue. Neither could see how ambiguous the URL it matched on actually was, and #4032
+    // happened for exactly that reason: on a single venue's season page the venue is constant across
+    // every candidate and therefore removes nothing.
+    //
+    // WHY IT IS NOT A COUNT OF TITLE SPELLINGS, which is the obvious rule and is wrong here. Two rows
+    // that are a DUPLICATE of one show carry the same URL under two spellings, so counting spellings
+    // would mark a URL ambiguous precisely because of the pair the arm exists to join, and the rule
+    // would refuse the case it was built for (#4129's Carnegie pair is the live example: one listing
+    // page, two billings of one concert). So the titles at a URL are first folded into SHOWS by the same
+    // predicate the arms themselves use, and a URL is ambiguous only when two of those shows remain.
+    //
+    // TWO SCOPES, deliberately not one constant shared for tidiness (L370). `matchByStableSource` tests
+    // the venue, so its question is "more than one show under this URL AT THIS VENUE"; `matchByAnyRunURL`
+    // does not, and the pages it is about are organisation level ones spanning several rooms, so scoping
+    // by venue would under report exactly the case (#4078 says so and deliberately reports unscoped).
+    static func ambiguousURLs(_ seen: [(url: String, title: String, venue: String)],
+                              scopedByVenue: Bool) -> Set<String> {
+        var showsPerKey: [String: [String]] = [:]
+        for one in seen where !one.url.isEmpty {
+            let key = scopedByVenue ? one.url + "|" + one.venue : one.url
+            var shows = showsPerKey[key] ?? []
+            // A title that is the same SHOW as one already seen here adds nothing: it is the duplicate
+            // the arms are for. Only a title that is a different show makes the URL ambiguous.
+            if !shows.contains(where: { GroupNameMatch.isSameShowTitle($0, one.title) }) {
+                shows.append(one.title)
+            }
+            showsPerKey[key] = shows
+        }
+        return Set(showsPerKey.filter { $0.value.count > 1 }.keys.map { key in
+            guard scopedByVenue,
+                  let cut = key.range(of: "|", options: .backwards) else { return key }
+            return String(key[key.startIndex..<cut.lowerBound])
+        })
+    }
+
     // Every group, including the rows that stand alone, so one walk answers both callers.
     private static func clusters(_ rows: [Row]) -> [[Row]] {
         let folded = rows.map(Folded.init)
