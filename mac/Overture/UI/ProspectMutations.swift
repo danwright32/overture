@@ -120,6 +120,19 @@ enum ProspectMutations {
             // what dismissing means, and its exit is dated by the model's own pair so the drop-off can be
             // placed in a year (#16).
             model.markDismissed(reason: outcome)
+            // #4030: and, on a COLLAPSED card, the same ending on every row the card stands for, when the
+            // reason is about the SHOW.
+            //
+            // The scope comes from the reason rather than from the card, through the classification that
+            // already exists for exactly this question (`RunNightDrop.aboutTheShow` against
+            // `aboutOneNight`, #2691). "Not a fit" is true of every copy of the show; "I am shooting
+            // something else that night" is true of one night and says nothing about the others, so it
+            // must not close rows it never judged (L11, and Dan's call recorded on #4030).
+            if !RunNightDrop.isAboutOneNight(outcome) {
+                for sibling in siblings(of: item, in: prospects) {
+                    sibling.markDismissed(reason: outcome)
+                }
+            }
         } else {
             // A pitch that ended is not a dismissal. It went out and it now carries an ending, which is
             // what takes it off the reached-out stage; marking it dismissed would file a real pitch among
@@ -315,6 +328,51 @@ enum ProspectMutations {
         let history = LocalHistory.importedWithHealth()
         return ManualPrepPrefill.build(for: model, amongst: prospects, history: history.records,
                                        historyUnreadable: history.unreadable)
+    }
+
+    // #4170: pitch somebody ELSE on a show that has already been sent.
+    //
+    // THE CASE. Dan pitched Dessoff Choirs and the reply was an autoresponse: the person is on
+    // maternity leave and it named somebody else to write to. The show sits on Reached out, where every
+    // way to add a contact is closed (the hand-added field lives on the review card he no longer has,
+    // and the row's own field is drawn only where the reachability badge asks for one), so the named
+    // person was unreachable through Overture and the thread would have been tracked nowhere.
+    //
+    // ONE PRESS, TWO WRITES, and they belong together: the contact, and the request for the draft that
+    // contact needs. Split across two controls this is a contact added to a sent show with no way to
+    // write to them, which is where the defect started.
+    //
+    // THE DRAFT HALF ONLY. Dan has just typed the route in, so a contact hunt would be paying for the
+    // answer he supplied (`PrepQueue.prepMode` reads the pair and sends a draft-only request).
+    //
+    // NOTHING IS DONE TO THE ORIGINAL CONTACT, deliberately. She is away rather than declining: her
+    // thread stays recorded and stays on Reached out, which is per recipient and reads `sentAt` rather
+    // than the show's status (`ReachedOutQueue.isInPlay`), so a show going back to `.drafted` for the
+    // new draft cannot take her conversation off the stage. Stopping her nudges is a separate decision
+    // he already has a control for (`standDown`), and taking it for him would record a judgement he has
+    // not made (L11).
+    static func pitchSomeoneElse(_ model: Prospect, route: String, name: String?,
+                                 context: ModelContext, feedback: ActionFeedback) {
+        // The SAME parse the Add button is gated on and the same refusals the hand-added field gives, so
+        // a route this refuses reads identically wherever it was typed (L109, #2629).
+        guard let parsed = ManualContactRoute.parse(route) else {
+            feedback.acknowledge(ActionAck.contactNeedsRoute, tone: .warning)
+            return
+        }
+        let trimmedName = name?.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Typing an address back in is the reversal of striking it, exactly as it is on the other path.
+        ContactRefusal.allow(email: parsed.email, formURL: parsed.link, showKey: model.naturalKey,
+                             orgKey: model.presenter.flatMap { OrgKey.stored(for: $0) }, in: context)
+        let result = applyManualRecipient(route: parsed, name: trimmedName, to: model)
+        if case .blocked = result.action {
+            feedback.acknowledge(ActionAck.recipientAlreadyExists(name: trimmedName, org: model.groupName))
+            return
+        }
+        // The request rides with the contact rather than after it, so a save that fails leaves neither.
+        model.reprepDraftRequested = true
+        guard context.saveOrWarn(org: model.groupName, feedback: feedback) else { return }
+        feedback.acknowledge(RePitchCopy.queued(name: trimmedName, route: parsed.email ?? parsed.link,
+                                                org: model.groupName))
     }
 
     // #2007: prep this show BY HAND. No Prep run, no model call, no spend: Dan names the address and
@@ -741,10 +799,47 @@ enum ProspectMutations {
     // caller, while only KEEP and DISMISS actually record. setStatus also drives approve, unapprove and
     // skip-draft; recording unconditionally here would quietly make those undoable too, well past the
     // scope Dan settled on ("I mostly just need this for keep/dismiss").
+    // #4030: the OTHER rows a collapsed card stands for, as models.
+    //
+    // ONE lookup rather than the same filter at each action, because the two that use it have to agree
+    // about what "the rest of the group" means and a drift between them would be silent in the direction
+    // that leaves a row untriaged (L370).
+    //
+    // THE FRONTING ROW IS EXCLUDED, and that is load bearing rather than tidiness. Every caller has
+    // already acted on it through `model(for:)`, and `setStatus` runs this loop BEFORE it reads the row's
+    // prior status: a set including the front row would clear its dismissal first, so the undo entry
+    // would record the state the press had just produced and Cmd+Z would restore nothing (#3566 is why
+    // the prior state is read first at all). `undoingTheKeepOnACollapsedCardStillRestoresWhatItWas`
+    // asserts it; the mutation putting the front row back is CAUGHT by that test alone.
+    //
+    // Empty for a card that stands alone, which is almost every card, so both call sites run exactly as
+    // they did before this issue on the ordinary row.
+    private static func siblings(of item: QueueItem, in prospects: [Prospect]) -> [Prospect] {
+        guard !item.collapsedMemberKeys.isEmpty else { return [] }
+        let others = Set(item.collapsedMemberKeys).subtracting([item.id])
+        guard !others.isEmpty else { return [] }
+        return prospects.filter { others.contains($0.naturalKey) }
+    }
+
     static func setStatus(_ item: QueueItem, _ status: ReviewStatus, _ reason: ShowOutcome?,
                           prospects: [Prospect], context: ModelContext, feedback: ActionFeedback,
                           undo: QueueUndoStack? = nil, undoLabel: String? = nil) {
         guard let model = model(for: item, in: prospects, feedback: feedback) else { return }
+        // #4030: a KEEP on a collapsed card keeps every row the card stands for. Dan's call, 2026-09-22,
+        // with the alternative in front of him: the card is the only one drawn for the group, so keeping
+        // the front row alone would leave the hidden copies undecided, and they come back as untriaged
+        // cards the day the grouping stops joining them. Keeping a duplicate costs nothing, because the
+        // group is still ONE card on screen.
+        //
+        // Only a Keep. A DISMISS takes its scope from its REASON (`RunNightDrop.aboutTheShow` against
+        // `aboutOneNight`, #2691), which is settled below in `recordOutcome`, and a status change that is
+        // neither (approve, unapprove, skip draft) says nothing about the other rows.
+        if status == .queued {
+            for sibling in siblings(of: item, in: prospects) {
+                sibling.clearDismissal(to: status)
+                sibling.clearConflict()
+            }
+        }
         // Read BEFORE the mutation, so the entry records where the row actually came from rather than
         // an inverse guessed at undo time.
         let priorStatus = model.status

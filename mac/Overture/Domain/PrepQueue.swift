@@ -331,7 +331,24 @@ enum PrepQueueBuilder {
                           reprepDraftRequested: Bool = false,
                           reprepContactsRequested: Bool = false) -> Bool {
         if status == .queued && !hasDraft { return true }
+        // #4170: `.contacted` is here now, and it is the one status whose inclusion needs an argument.
+        //
+        // A sent show used to be refused outright, for a good reason: nobody should pay for a run on a
+        // pitch that has gone. What that refusal also blocked was the only way to reach a DIFFERENT
+        // person on that show. Dan pitched Dessoff Choirs and the reply was an autoresponse naming
+        // somebody else to write to, and Overture had no path to that person at all (#4170).
+        //
+        // Three things make this safe, and none of them is that a sent show is harmless to prep:
+        //   - the flags are set by a deliberate press and by nothing else, so an ordinary sent show is
+        //     as unprepped as it was before this line;
+        //   - `pitchSomeoneElse` asks for the DRAFT half only, so the contact research Dan has just
+        //     done by hand is not paid for again;
+        //   - the draft the run rewrites has already gone, and what went is frozen in `sentSubject`,
+        //     `sentBody` and each contact's own `pitchSubject`, so the record of the sent pitch is not
+        //     in the box being overwritten (L5).
+        // `.dismissed` is still refused, which is the other half of the original rule and is untouched.
         let reprepEligible = status == .queued || status == .drafted || status == .approved
+            || status == .contacted
         return reprepEligible && (reprepDraftRequested || reprepContactsRequested)
     }
 
@@ -443,9 +460,14 @@ enum PrepQueueBuilder {
             // parity test between this predicate and `needsPrep` is what makes that mandatory: leaving
             // it here would have the @Query behind the "Prep kept" button disagree with the function
             // every other caller obeys, which is the drift that test exists to catch.
+            // #4170: `contacted` here as well as in the function above, and the parity test is what makes
+            // that mandatory rather than optional: this predicate is the @Query behind the "Prep kept"
+            // button, and a status allowed in one half and refused in the other is a count that disagrees
+            // with the run it promises.
             ((p.statusRaw == "queued" && p.draftBody == nil)
                 || ((p.reprepDraftRequested || p.reprepContactsRequested)
-                    && (p.statusRaw == "queued" || p.statusRaw == "drafted" || p.statusRaw == "approved")))
+                    && (p.statusRaw == "queued" || p.statusRaw == "drafted" || p.statusRaw == "approved"
+                        || p.statusRaw == "contacted")))
         }
     }
 

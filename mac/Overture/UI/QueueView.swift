@@ -1557,9 +1557,13 @@ struct QueueView: View {
                 // #3707: and, under a separator inside the same menu, the way to tell Overture that a
                 // reply arrived on a thread it never watched. nil where that cannot have happened, so
                 // the item is absent rather than present and refusing.
+                // #4170: and, in the same menu, the way to pitch somebody ELSE on this show. Dan's call,
+                // 2026-09-23: on every sent row, always, rather than appearing only where Overture
+                // recognises a redirect, which is detection it does not have.
                 CloseOutMenu(outcomes: ShowOutcome.menu(wasPitched: p.wasPitched),
                              onLinkReply: LinkReplyFromAnotherThread.isOffered(r)
-                                 ? { linkReplyFromAnotherThread(identity) } : nil) { outcome in
+                                 ? { linkReplyFromAnotherThread(identity) } : nil,
+                             onPitchSomeoneElse: { sheets.pitchingSomeoneElseOn = PitchTarget(prospect: p) }) { outcome in
                     closeOut(identity, as: outcome)
                 }
                 // #2711: the only thing Dan could record about a DM pitch was that it ENDED. A reply that

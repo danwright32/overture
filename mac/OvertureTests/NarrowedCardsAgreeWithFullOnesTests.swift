@@ -25,6 +25,11 @@ import SwiftData
 @Suite("A card built for a narrowed set says exactly what the full build says (#3654)")
 struct NarrowedCardsAgreeWithFullOnesTests {
     private static let corpusSize = 40
+    // #4030: rows 0 and 36 of the seed below are one show (`Production 0` in `Room 0`, on the same two
+    // run nights), so the collapse draws ONE card for the pair and 39 rows reach the comparison. Named
+    // rather than folded into the number above, so the day the seed changes shape this says which
+    // assumption moved.
+    private static let collapsedCopies = 1
 
     private func container() throws -> ModelContainer {
         try ModelContainer(for: Schema([Prospect.self, Recipient.self, OrgReachabilityAnswer.self]),
@@ -121,7 +126,7 @@ struct NarrowedCardsAgreeWithFullOnesTests {
     // THE case the store exists for: a row that scrolls into view after the pass has already run.
     @Test func aCardBuiltOnTheSpotMatchesTheFullBuild() throws {
         let compared = try compare(narrowedTo: ["k3"], resolvingOnTheSpot: true)
-        #expect(compared == Self.corpusSize,
+        #expect(compared == Self.corpusSize - Self.collapsedCopies,
                 "every row should have been resolvable, either prebuilt or built on the spot")
     }
 

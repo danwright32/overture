@@ -17,6 +17,13 @@ struct ManualLinkTarget: Identifiable {
     var id: String { prospect.naturalKey + "|" + recipient.id }
 }
 
+// #4170: the show Dan is pitching somebody else on. Keyed on the show rather than on a contact,
+// because the act is about the SHOW: the contact it is for does not exist yet.
+struct PitchTarget: Identifiable {
+    let prospect: Prospect
+    var id: String { prospect.naturalKey }
+}
+
 // #2144: the composed reply held while Dan reads it. A wrapper only because SendConfirmation carries no
 // identity of its own and `.sheet(item:)` needs one, the same reason PendingRowNudge below has an id.
 struct PendingReply: Identifiable {

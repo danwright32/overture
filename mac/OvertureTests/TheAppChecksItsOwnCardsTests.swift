@@ -113,7 +113,7 @@ struct TheAppChecksItsOwnCardsTests {
         let pre = QueueModel.CardPreamble(linked: [:], inherited: [:],
                                           venueBrands: ProducerGate.VenueBrands(shows: [], overrides: .none),
                                           rowCounts: [:], calendarBySourceId: [:], overrides: .none,
-                                          clients: .none, contradictedCancellations: [], sameShowGroups: [:], titlesByKey: [:],
+                                          clients: .none, contradictedCancellations: [], sameShowGroups: [:], titlesByKey: [:], collapsedFronts: [:], collapsedHidden: [], laterLookalikesByKey: [:], nightsByKey: [:],
                                           now: Date(), day: "2099-03-01")
         let show = try #require(shows.first { $0.naturalKey == "k8" })
         var stale = QueueModel.card(show, contacts: nil, preamble: pre)

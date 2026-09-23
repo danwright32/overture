@@ -31,6 +31,13 @@ struct QueueRenderPassCostTests {
     // is protecting a smaller world rather than failing (L354).
     // LIVE-SHAPE: prospects
     private static let corpusSize = 1224
+    // #4030: how many of those rows this fixture makes a second copy of an earlier one, which is a
+    // property of its own arithmetic and not a shape anybody chose. A row repeats its title every 90 and
+    // its venue every 8, so a pair shares both every 360; it repeats its date every 108. The first
+    // offset satisfying all three is 1,080, so rows 1,080 to 1,223 are each a duplicate of the row 1,080
+    // before them: the same show, the same room, the same night. The collapse draws one card for each
+    // such pair, which is 144 fewer rows.
+    private static let collapsedCopies = 144
     // LIVE-SHAPE: untriaged
     private static let untriaged = 545
 
@@ -126,7 +133,9 @@ struct QueueRenderPassCostTests {
         // And it really did derive the whole store, so the count above is not the cost of doing nothing.
         // #3654: over the ROWS, because a card is now built only for a show something is about to draw
         // and this pass drew nothing. The claim is unchanged: the pass derived the whole store.
-        #expect(data.rows.count == Self.corpusSize)
+        // #4030: minus the copies the collapse folds. This fixture contains them by arithmetic rather
+        // than by design (see `collapsedCopies`), and a same show group is now ONE card.
+        #expect(data.rows.count == Self.corpusSize - Self.collapsedCopies)
         #expect(!data.visibleRows.isEmpty)
     }
 
@@ -153,7 +162,11 @@ struct QueueRenderPassCostTests {
         let tally = QueueRenderPass.CostTally()
         var i = inputs(rows, tally: tally)
         i.focusedStage = nil
-        i.focusedKeys = rows.prefix(20).map(\.naturalKey)
+        // Taken from the middle of the corpus on purpose: the first 144 rows and the last 144 are the
+        // duplicate pairs this fixture creates by arithmetic (see `collapsedCopies`), and half of each
+        // pair is not drawn, so a slice from either end would be asking how many of 20 keys survive the
+        // collapse rather than what this test is about.
+        i.focusedKeys = rows[200..<220].map(\.naturalKey)
 
         let data = QueueRenderPass.make(i)
 
