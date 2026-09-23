@@ -1334,6 +1334,20 @@ enum ScoutService {
             })
         }
 
+        // #1848: how THIS run's sources have already spelled their own rooms, read once per batch rather
+        // than once per row. An unreadable store leaves it empty, which locks nothing and stores exactly
+        // what the page sent: the fail-open direction is correct here and nowhere else in this function,
+        // because the lock only ever REPLACES a spelling with one the source itself has used, so having
+        // none simply leaves today's reading alone (it cannot merge or re-key anything).
+        var spellingsBySource: [String: [String]] = [:]
+        if let storedRows = readOrRecord(.reconcileStoredShows, into: &degradedReads,
+                                         { try context.fetch(FetchDescriptor<Prospect>()) }) {
+            for row in storedRows {
+                guard let venue = row.venue, !venue.isEmpty else { continue }
+                for id in row.sourceIds { spellingsBySource[id, default: []].append(venue) }
+            }
+        }
+
         for gr in grouped {
             guard prospects.indices.contains(gr.row.id) else { continue }
             let p = prospects[gr.row.id]
@@ -1436,6 +1450,13 @@ enum ScoutService {
                                                     runEndDate: enriched.runEndDate,
                                                     nights: enriched.runNights)?.key
 
+            // #1848: the room, spelled the way this source has already spelled it. BEFORE the key, which
+            // is the whole point: the venue is one of the key's three fields, so a second spelling is a
+            // second key, a second card and a second paid contact check. Nothing is invented here; the
+            // only value this can produce is one the same source has already published.
+            enriched.venue = VenueSpellingLock.locked(
+                enriched.venue,
+                spellingsUsedBySource: enriched.sourceIds.flatMap { spellingsBySource[$0] ?? [] })
             let key = Prospect.makeNaturalKey(groupName: enriched.groupName, performanceDate: enriched.performanceDate, venue: enriched.venue)
             seenKeys.insert(key)
             // #2758 / #2999: ONE decision, taken before anything is written, so a store that cannot answer
