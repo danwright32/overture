@@ -62,6 +62,10 @@ import json, os, sys
 
 path, archive_path = sys.argv[1], sys.argv[2]
 rows, unreadable = [], 0
+# #4122: the compaction notes the live file carries, kept apart from the stalls. A note is not a stall,
+# and letting one into `rows` would add a record with no `seconds` and no `passes` to every population
+# counted below, which is the defect this tool exists to report arriving through the tool itself (L387).
+notes = []
 sources = []
 
 
@@ -78,10 +82,17 @@ def load(p):
             if not line:
                 continue
             try:
-                rows.append(json.loads(line))
-                added += 1
+                parsed = json.loads(line)
             except ValueError:
                 unreadable += 1
+                continue
+            # The `note` key is the one no stall record carries, which is how the app's own reader tells
+            # them apart. Counted separately rather than skipped, because what it says is the whole point.
+            if isinstance(parsed, dict) and "note" in parsed:
+                notes.append(parsed)
+                continue
+            rows.append(parsed)
+            added += 1
     return added
 
 
@@ -114,6 +125,28 @@ print(f"what-froze-the-queue: {len(counted)} stall(s) with a pass count, of {len
 # Named rather than assumed: a reading built from the live file alone and one built from the whole history
 # are different populations, and without this line they print identically (L11).
 print(f"  read from: {', '.join(sources)}")
+# #4122: WHAT WINDOW this is, said before any figure derived from it. The live file keeps the newest 500
+# records and promotes the single longest older stall back into them, so a reading over it is a truncated
+# window with one out of band member in it. Dan's file on 2026-09-21 opened with a 1,047 second stall from
+# three days earlier followed by that evening's records, and nothing said so.
+if notes:
+    for n in notes:
+        _kept, _archived = n.get("kept", "?"), n.get("archived", "?")
+        print(f"  window: a compaction on {str(n.get('at', ''))[:19].replace('T', ' ')} kept {_kept} "
+              f"record(s) here and moved {_archived} to the archive.")
+        if n.get("promotedAt"):
+            print("    One of the {} is PROMOTED from the older half: the {:.2f}s stall of {}. It is not"
+                  .format(_kept, n.get("promotedSeconds", 0),
+                          str(n.get("promotedAt", ""))[:19].replace("T", " ")))
+            print("    part of this window, and it is marked `promotedFromOlderWindow` on its own line.")
+        else:
+            print("    Nothing was promoted, so every record in the live file is inside that window.")
+elif any(r.get("promotedFromOlderWindow") for r in rows):
+    print("  window: a record marks itself as promoted from an older window, but no compaction note")
+    print("    accompanies it. Treat the live file's oldest record as out of band.")
+else:
+    print("  window: no compaction note in this reading. Either nothing has ever been compacted, or the")
+    print("    file predates #4122, and those are different facts this file cannot separate.")
 # #3783: said on EVERY reading rather than only when there is a finding, because the clean reading is the
 # one most likely to be quoted as "the render pass accounts for it" and the one where the terms outside
 # the count are easiest to forget (L440, L629).
