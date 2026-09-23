@@ -71,24 +71,14 @@ enum GenrePrecedence {
     // presenters is RIGHT. Nothing in the data says, which is why the incumbent stands rather than a
     // rule inventing a winner. #1795 owns the stale name question.
     //
-    // NIL IN BOTH DIRECTIONS IS THE INTERESTING CASE and it is why this takes the values rather than a
-    // Bool: a second source naming NOBODY is exactly the reading that must not erase a name, and a
-    // second source naming somebody where the row has nobody is the one that must land.
-    static func mergedPresenter(stored: String?, storedKey: String?,
-                                incoming: String?, incomingKey: String) -> String? {
-        incomingPresenterStands(stored: stored, storedKey: storedKey,
-                                incoming: incoming, incomingKey: incomingKey) ? incoming : stored
-    }
-
-    // WHETHER THE VALUE THAT STANDS IS THE ONE THIS SOURCE BROUGHT, which is the same question as the
-    // merge above and is asked separately because three things hang on it, not one: the presenter, the
-    // stamp recording who owns it, and `presenterWasTheRoom`, which is this listing's explanation of why
-    // a presenter is blank and belongs only to a row whose presenter came from this listing (L55, L544).
-    //
-    // A NAMED RULE rather than comparing the merged value against the incoming one afterwards. Two
-    // sources that read the SAME name are indistinguishable that way, so the row would record whichever
-    // source spoke last as the owner of a value the first one put there, which is the defect this issue
-    // is about wearing a different hat.
+    // WHY IT IS A BOOL AND NOT A MERGED VALUE. It was written as `mergedPresenter(...) -> String?` and
+    // that shape cannot answer the question the caller actually has. Three things hang on it, not one:
+    // the presenter, the stamp recording who owns it, and `presenterWasTheRoom`, which is this listing's
+    // explanation of why a presenter is blank and belongs only to a row whose presenter came from this
+    // listing (L55, L544). Deriving those from the returned value means comparing it with the incoming
+    // one, and two sources that read the SAME name are indistinguishable that way, so the row would
+    // record whichever source spoke last as the owner of a value the first one put there, which is this
+    // issue's defect wearing a different hat.
     static func incomingPresenterStands(stored: String?, storedKey: String?,
                                         incoming: String?, incomingKey: String) -> Bool {
         if mayOverwrite(storedKey: storedKey, incomingKey: incomingKey) { return true }

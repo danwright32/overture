@@ -151,29 +151,27 @@ struct TwoSourcesOnePresenterTests {
     // a row written before this shipped carries no stamp at all, which reads as nothing recorded, so the
     // incoming value lands and stamps it. That is what makes this shippable without a backfill (L389).
     @Test func arowWithNoStampTakesTheIncomingValueAndRecordsIt() {
-        #expect(GenrePrecedence.mergedPresenter(stored: "Held", storedKey: nil,
-                                                incoming: "Incoming", incomingKey: "b") == "Incoming")
-        #expect(GenrePrecedence.mergedPresenter(stored: "Held", storedKey: "   ",
-                                                incoming: nil, incomingKey: "b") == nil,
+        #expect(GenrePrecedence.incomingPresenterStands(stored: "Held", storedKey: nil,
+                                                        incoming: "Incoming", incomingKey: "b"))
+        #expect(GenrePrecedence.incomingPresenterStands(stored: "Held", storedKey: "   ",
+                                                        incoming: nil, incomingKey: "b"),
                 "an empty stamp is nothing recorded, so the incoming reading owns the field")
-        #expect(GenrePrecedence.mergedPresenter(stored: nil, storedKey: "a",
-                                                incoming: "Incoming", incomingKey: "b") == "Incoming")
-        #expect(GenrePrecedence.mergedPresenter(stored: "  ", storedKey: "a",
-                                                incoming: "Incoming", incomingKey: "b") == "Incoming",
+        #expect(GenrePrecedence.incomingPresenterStands(stored: nil, storedKey: "a",
+                                                        incoming: "Incoming", incomingKey: "b"))
+        #expect(GenrePrecedence.incomingPresenterStands(stored: "  ", storedKey: "a",
+                                                        incoming: "Incoming", incomingKey: "b"),
                 "a stored value that is only whitespace is nobody, so it must not block a real name")
 
-        // AND THE OWNERSHIP QUESTION, which is the same rule asked for the stamp and the explanation
-        // rather than for the value. Two sources that read the SAME name is the case that cannot be
-        // answered by comparing the merged value with the incoming one: they are equal, so a comparison
-        // hands the row to whoever spoke last.
+        // AND THE CASE THAT DECIDES THE SHAPE of this rule: two sources reading the SAME name. A merge
+        // returning the winning VALUE cannot separate them, so ownership would go to whoever spoke last.
         #expect(!GenrePrecedence.incomingPresenterStands(stored: "Same Name", storedKey: "a",
                                                          incoming: "Same Name", incomingKey: "b"),
                 "a second source reading the same name took ownership of a value it did not put there")
         #expect(GenrePrecedence.incomingPresenterStands(stored: "Held", storedKey: "a",
                                                         incoming: "Other", incomingKey: "a"),
                 "a source correcting its own reading owns what it writes")
-        #expect(GenrePrecedence.incomingPresenterStands(stored: nil, storedKey: "a",
-                                                        incoming: "Other", incomingKey: "b"),
-                "filling a field nobody had read is the direction that adds information")
+        #expect(!GenrePrecedence.incomingPresenterStands(stored: "Held", storedKey: "a",
+                                                         incoming: "Other", incomingKey: "b"),
+                "between two sources that both read a name, the incumbent stands")
     }
 }
