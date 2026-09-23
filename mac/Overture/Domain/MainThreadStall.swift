@@ -150,13 +150,32 @@ enum RunLoopActivity: String, Codable, CaseIterable, Equatable, Sendable {
     // took a reading" and "the reading says the main thread is wedged" call for opposite next steps
     // (L98, L11). Expected to be rare in this app, whose main run loop is essentially always running.
     case offTheRunLoop
-    // A mode this build cannot name. It is not the default mode, so it is a nested loop of some kind,
-    // and saying which one would claim more than the reading supports (L11, L440).
+    // A mode this build does not name. It is NOT read as a nested event loop, and that is a measurement
+    // rather than caution: a probe of a sheet-presented `NSAlert` on this OS, which is what SwiftUI's
+    // `.alert` puts up, saw the main run loop pass through `_NSMoveTimerRunLoopMode` on the way in and
+    // out while nothing was wrong. Counting every unnamed mode as menu time would therefore accuse
+    // ordinary window work (L93, L11). What this case says is exactly "the run loop was in some mode
+    // this build cannot name", and whoever reads one goes and looks.
     case otherMode
-    // An event tracking loop: a menu, a scroll, a drag. The case this issue was opened for.
+    // An event tracking loop: a menu, a scroll, a drag. The case this issue was opened for, and the only
+    // one this build claims is nested-loop time.
+    //
+    // MEASURED to occur rather than taken from the documentation, because a case the OS never produces
+    // reads zero for ever and reads exactly like a measurement (L90, L82). A real `NSMenu` tracking
+    // session was watched from a background thread on 2026-09-23 and the main run loop reported
+    // `NSEventTrackingRunLoopMode` while it was up.
+    //
+    // AND IT ALTERNATES, which is why the samples are FOLDED rather than one being taken. That same
+    // probe saw the mode swap back and forth with `kCFRunLoopDefaultMode` for as long as the menu stood:
+    //
+    //   kCFRunLoopDefaultMode, IMKClient_com.apple.inputmethodkit.launcher, kCFRunLoopDefaultMode,
+    //   NSEventTrackingRunLoopMode, kCFRunLoopDefaultMode, NSEventTrackingRunLoopMode, ...
+    //
+    // So a single reading taken at one instant during a tracked menu is close to a coin flip, and
+    // `moreTelling` folding every sample across the stall is what makes the answer stable rather than a
+    // nicety. The same probe is where `IMKClient_...` above comes from, which is another real mode
+    // arriving in ordinary use and another reason `otherMode` is not read as menu time.
     case tracking
-    // A modal panel loop.
-    case modal
 
     // What `CFRunLoopCopyCurrentMode` returned, classified.
     //
@@ -170,7 +189,12 @@ enum RunLoopActivity: String, Codable, CaseIterable, Equatable, Sendable {
         // not guaranteed to be one token, and a classifier that knew only one would silently call a
         // tracked menu `otherMode` on the platform that spells it the other way.
         case "NSEventTrackingRunLoopMode", "UITrackingRunLoopMode": self = .tracking
-        case "NSModalPanelRunLoopMode": self = .modal
+        // Everything else, `NSModalPanelRunLoopMode` and `_NSMoveTimerRunLoopMode` included. There is
+        // deliberately NO case for a modal panel, because nothing in this app can put one up: it holds
+        // no `runModal`, no `NSSavePanel` and no `NSOpenPanel`, and a sheet-presented `NSAlert`, which
+        // is what every `.alert` here becomes, was measured on 2026-09-23 never to enter that mode. A
+        // case whose only input is a value nothing in the system ever produces reports zero for ever,
+        // and zero is indistinguishable from a real measurement (L90).
         default: self = .otherMode
         }
     }
@@ -178,19 +202,18 @@ enum RunLoopActivity: String, Codable, CaseIterable, Equatable, Sendable {
     // How telling this reading is about the question the field answers, which is whether the stall could
     // be an artifact of a nested event loop. Higher wins a fold.
     //
-    // A NESTED mode outranks everything, because one sample of it is enough to make the record suspect
-    // and the samples either side of a menu are ordinary. `offTheRunLoop` sits above `ordinary` (the main
-    // thread was in code, which is the more informative of the two) and below the nested modes (they
-    // answer the question this field is for). `notRecorded` is last, so any reading that was TAKEN
-    // survives a fold with one that was not.
+    // `tracking` outranks everything, because one sample of it is enough to make the record suspect and
+    // the samples either side of a menu are ordinary. `offTheRunLoop` is next, being the most telling
+    // thing that can be said about a main thread nobody caught in a menu: it was in code. `otherMode`
+    // sits above `ordinary` only because it is the more informative of the two. `notRecorded` is last,
+    // so any reading that was TAKEN survives a fold with one that was not.
     private var weight: Int {
         switch self {
         case .notRecorded: return 0
         case .ordinary: return 1
-        case .offTheRunLoop: return 2
-        case .otherMode: return 3
+        case .otherMode: return 2
+        case .offTheRunLoop: return 3
         case .tracking: return 4
-        case .modal: return 5
         }
     }
 

@@ -274,18 +274,18 @@ assert_contains "and names what that leaves unanswerable" "${out}" "may be menu-
 activity_record 2.80 1 2.27 ordinary > "${WORK}/activity-clean.ndjson"
 activity_record 0.31 1 0.20 ordinary >> "${WORK}/activity-clean.ndjson"
 out="$("${READER}" --log "${WORK}/activity-clean.ndjson" 2>&1)"
-assert_contains "a log with no nested loop in it says so positively" "${out}" "none was taken while a"
-assert_not_contains "and does not accuse anything of being menu time" "${out}" "nested-loop time rather than freezes"
+assert_contains "a log with no tracking in it says so positively" "${out}" "none was taken while a"
+assert_not_contains "and does not accuse anything of being menu time" "${out}" "menu-open time rather than freezes"
 
 # THE CASE THE ISSUE WAS OPENED FOR. A stall taken while a menu tracked, that ran no render pass and
 # spent no time in one, is nested-loop time and must be named as such and kept out of the bar's maximum.
 activity_record 1.62 0 0 tracking > "${WORK}/activity-menu.ndjson"
 activity_record 2.80 1 2.27 ordinary >> "${WORK}/activity-menu.ndjson"
 out="$("${READER}" --log "${WORK}/activity-menu.ndjson" 2>&1)"
-assert_contains "a stall taken during menu tracking is named" "${out}" "while a menu or a modal panel was up"
-assert_contains "and one that ran nothing is called nested-loop time" "${out}" "nested-loop time rather than freezes"
+assert_contains "a stall taken during menu tracking is named" "${out}" "while a menu was tracking"
+assert_contains "and one that ran nothing is called menu-open time" "${out}" "menu-open time rather than freezes"
 assert_contains "and the bar is told to be taken without it" "${out}" "must be taken without them"
-assert_contains "and the worst one is named so it can be looked at" "${out}" "1.62s in tracking"
+assert_contains "and the worst one is named so it can be looked at" "${out}" "1.62s"
 
 # THE OTHER HALF, and the one an exclusion would have destroyed. A stall taken while a menu was up that
 # DID run render passes is a real freeze that happened to overlap a menu, and it stays in every
@@ -294,7 +294,19 @@ activity_record 2.80 1 2.27 tracking > "${WORK}/activity-realfreeze.ndjson"
 out="$("${READER}" --log "${WORK}/activity-realfreeze.ndjson" 2>&1)"
 assert_contains "a nested stall that ran render passes is still a freeze" "${out}" "they are real freezes"
 assert_contains "and it says they stay in every population" "${out}" "stay in every population"
-assert_not_contains "and it is not counted as nested-loop time" "${out}" "nested-loop time rather than freezes"
+assert_not_contains "and it is not counted as menu-open time" "${out}" "menu-open time rather than freezes"
+
+# THE OVER-ACCUSATION THIS MUST NOT MAKE, and the reason it is a test rather than a comment. A probe on
+# 2026-09-23 watched a sheet-presented NSAlert, which is what every `.alert` in this app becomes, and saw
+# the main run loop pass through `_NSMoveTimerRunLoopMode` with nothing wrong. A tool that counted every
+# mode it cannot name as menu time would accuse ordinary window work (L93), so an unnamed mode is
+# reported as UNKNOWN and is kept out of the figure the bar is taken without.
+activity_record 1.40 0 0 otherMode > "${WORK}/activity-other.ndjson"
+out="$("${READER}" --log "${WORK}/activity-other.ndjson" 2>&1)"
+assert_contains "an unnamed mode is reported" "${out}" "a run loop mode this build does not name"
+assert_contains "and called unknown rather than menu time" "${out}" "is UNKNOWN"
+assert_not_contains "and is not counted as menu-open time" "${out}" "menu-open time rather than freezes"
+assert_not_contains "and the bar is not told to drop it" "${out}" "must be taken without them"
 
 # The opposite reading: the main thread OFF the run loop entirely is the main thread in code, so those
 # are freezes rather than contamination, and the tool must not lump them in with the nested modes.

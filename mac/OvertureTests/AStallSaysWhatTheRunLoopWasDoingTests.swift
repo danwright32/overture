@@ -58,16 +58,38 @@ struct AStallSaysWhatTheRunLoopWasDoingTests {
         #expect(RunLoopActivity(modeName: "NSEventTrackingRunLoopMode") == .tracking)
     }
 
-    @Test func theModalPanelModeIsModal() {
-        #expect(RunLoopActivity(modeName: "NSModalPanelRunLoopMode") == .modal)
-    }
-
-    // A mode this build cannot name is still a mode the run loop really was in, and it is not the default
-    // one, so it is a nested loop of some kind. It gets its own answer rather than being called ordinary,
-    // which would claim more than the reading supports (L11, L440).
+    // A mode this build does not name is still a mode the run loop really was in. It gets its own answer
+    // rather than being called ordinary, which would claim more than the reading supports (L11, L440).
     @Test func aModeThisBuildCannotNameSaysSoRatherThanClaimingOrdinary() {
         #expect(RunLoopActivity(modeName: "NSConnectionReplyMode") == .otherMode)
         #expect(RunLoopActivity(modeName: "SomeModeNobodyHasWrittenYet") == .otherMode)
+    }
+
+    // THERE IS NO CASE FOR A MODAL PANEL, and that is a measurement rather than an omission.
+    //
+    // A case whose only input is a value nothing in the system ever produces reports zero for ever, and
+    // zero is indistinguishable from a real measurement (L90). Overture holds no `runModal`, no
+    // `NSSavePanel` and no `NSOpenPanel`, and the surface that looked most likely to raise one was
+    // probed rather than reasoned about: a sheet-presented `NSAlert`, which is what every `.alert` in
+    // this app becomes on macOS, was watched from a background thread on 2026-09-23 and the main run
+    // loop went `kCFRunLoopDefaultMode`, `_NSMoveTimerRunLoopMode`, `kCFRunLoopDefaultMode`. It never
+    // entered `NSModalPanelRunLoopMode` at all.
+    //
+    // So the mode classifies as `otherMode`, which is the honest answer for a mode that cannot arise
+    // here, and the day this app grows a save panel the record says "a mode this build does not name"
+    // rather than nothing.
+    @Test func theModalPanelModeIsNotAClaimThisBuildMakes() {
+        #expect(RunLoopActivity(modeName: "NSModalPanelRunLoopMode") == .otherMode)
+        #expect(!RunLoopActivity.allCases.map(\.rawValue).contains("modal"), Comment(rawValue:
+            "a case for a modal panel is back. Nothing in this app can put one up, so it would read "
+            + "zero for ever and read exactly like a measurement (L90). If a panel really has been "
+            + "added, re-take the probe before adding the case back."))
+    }
+
+    // AND THE MODE ORDINARY WINDOW WORK PASSES THROUGH IS NOT COUNTED AS A MENU, which is the half that
+    // stops this over-accusing. `_NSMoveTimerRunLoopMode` was seen in the same probe with nothing wrong.
+    @Test func theModeOrdinaryWindowWorkPassesThroughIsNotReadAsTracking() {
+        #expect(RunLoopActivity(modeName: "_NSMoveTimerRunLoopMode") == .otherMode)
     }
 
     // MARK: - Folding several readings taken across one stall into the one the record carries
@@ -78,10 +100,10 @@ struct AStallSaysWhatTheRunLoopWasDoingTests {
     @Test func aNestedModeSeenAtAnyPointOutranksTheOrdinaryModeAroundIt() {
         #expect(RunLoopActivity.moreTelling(.ordinary, .tracking) == .tracking)
         #expect(RunLoopActivity.moreTelling(.tracking, .ordinary) == .tracking)
-        #expect(RunLoopActivity.moreTelling(.ordinary, .modal) == .modal)
-        #expect(RunLoopActivity.moreTelling(.tracking, .modal) == .modal)
         #expect(RunLoopActivity.moreTelling(.offTheRunLoop, .tracking) == .tracking)
+        #expect(RunLoopActivity.moreTelling(.otherMode, .tracking) == .tracking)
         #expect(RunLoopActivity.moreTelling(.ordinary, .otherMode) == .otherMode)
+        #expect(RunLoopActivity.moreTelling(.ordinary, .offTheRunLoop) == .offTheRunLoop)
     }
 
     // And a reading that was TAKEN always outranks one that was not, so a single sample landing inside a
