@@ -43,7 +43,6 @@ ReplyPanel.swift:linkedByHandLine
 ReplyPanel.swift:openingBody
 ReprepRequest.swift:gerund
 RunNightDrop.swift:classified
-RunNightDrop.swift:isRetirable  # The predicate the #2998 retire control reads, built to Dan's call of 2026-09-21 that a run covered by another run is a duplicate and never retired. The control itself is not built yet, so its only callers are FullyCoveredRunTests and the live store report, which prints the retirable count every suite run (0 on 2026-09-21). #2998 is what wires it.
 RunProgress.swift:stoppedRunIsOver
 RunSlot.swift:allDefaultsKeys
 RunSlot.swift:allPaths

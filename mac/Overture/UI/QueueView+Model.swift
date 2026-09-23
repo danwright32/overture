@@ -282,6 +282,9 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     // #4146: the titles of the rows that arrived looking like THIS one, newest first, already resolved.
     // A card can be the target of several pointers: a third billing tags the same older row again.
     var laterLookalikeTitles: [String] = []
+    // #2998: every other night of this run is already held by a single night card of its own, so the run
+    // card is redundant with cards that already exist. False on almost every row.
+    var everyOtherNightIsOnItsOwnCard: Bool = false
     // #4130: the TITLE of the row that had already been pitched for this night when this one arrived,
     // already resolved, for the same reason the tag above is resolved in the pass: a key naming a row
     // that is no longer stored must draw nothing (L200).
@@ -3195,6 +3198,19 @@ enum QueueModel {
                 return (row.naturalKey, night)
             },
             uniquingKeysWith: { first, _ in first })
+        // #2998: over the UNFILTERED corpus for the same reason every table above is. A run's covering
+        // cards are routinely dismissed or outside the queue's window, and a cover the caller's scope
+        // happens to exclude still covers the night.
+        //
+        // The lookup is the corpus itself rather than the store, which is what makes this one walk rather
+        // than one fetch per night: `isRetirable` asks `keyAvailability`, whose unreadable branch exists
+        // for a throwing STORE read, and a dictionary cannot throw. The answer is identical because the
+        // corpus IS every stored row.
+        let rowsByKey = Dictionary((corpus ?? prospects).map { ($0.naturalKey, $0) },
+                                   uniquingKeysWith: { first, _ in first })
+        let retirableRunKeys = Set((corpus ?? prospects)
+            .filter { $0.isRetirable(lookup: { rowsByKey[$0] }) }
+            .map(\.naturalKey))
         let pre = CardPreamble(linked: linked, inherited: inherited, venueBrands: venueBrands,
                                rowCounts: rowCounts, calendarBySourceId: calendarBySourceId,
                                overrides: overrides, clients: clients,
@@ -3203,6 +3219,7 @@ enum QueueModel {
                                titlesByKey: titlesByKey,
                                laterLookalikesByKey: laterLookalikes,
                                nightsByKey: nightsByKey,
+                               retirableRunKeys: retirableRunKeys,
                                now: now, day: day)
 
         var rows: [QueueScopeRow] = []
@@ -3289,6 +3306,11 @@ enum QueueModel {
         // table over the same walk rather than a second walk: the rows are already in hand where
         // `titlesByKey` is built.
         let nightsByKey: [String: String]
+        // #2998: the runs whose every other night is already held by a SINGLE NIGHT card of its own, so
+        // the run card is wholly redundant with cards that already exist. Computed once over the corpus
+        // with the other whole-corpus answers, because the question is about other rows and asking it per
+        // card would walk the store once per card drawn (L91).
+        let retirableRunKeys: Set<String>
         let now: Date
         let day: String
 
@@ -3447,6 +3469,8 @@ enum QueueModel {
             resolved.duplicateOfNight = pre.nightsByKey[key]
             return resolved
         }
+        // #2998: read from the set computed once above, never asked per card.
+        item.everyOtherNightIsOnItsOwnCard = pre.retirableRunKeys.contains(p.naturalKey)
         // #1731: only meaningful where the verdict IS the building; nil otherwise.
         item.readAsTheBuildingReason = pre.venueBrands.contains(p.presenter)
             ? OrganisationListing.buildingReason(
@@ -3748,6 +3772,22 @@ enum QueueModel {
         guard let other = item.arrivedOnAPitchedNightTitle, !other.isEmpty else { return nil }
         guard let presenter = item.presenter, !presenter.isEmpty else { return nil }
         return "\(presenter) was already pitched for this night, as \"\(other)\"."
+    }
+
+    // #2998: this run card is wholly redundant with the single night cards that already exist.
+    //
+    // A weekly or recurring series is routinely stored BOTH as a run carrying every night AND as
+    // separate cards for the individual nights, and Dan meets that as two cards for one show plus a
+    // dismiss that refuses. Overture has had the information to see it since #3010 (`dropNight`'s own
+    // collision check) and said nothing.
+    //
+    // THE SENTENCE AND THE CONTROL SHIPPED TOGETHER, and only now: the live count was ZERO on 2026-09-20
+    // and the card was deliberately held until it was not, because a control built for a state nobody is
+    // in ships inert and nothing says so (L543). Measured 2026-09-22 on the live store: 3 runs are fully
+    // covered and 1 of them is retirable, which is the Steven Maglio run at The Cutting Room.
+    static func everyNightCoveredNote(_ item: QueueItem) -> String? {
+        guard item.everyOtherNightIsOnItsOwnCard else { return nil }
+        return "Every night of this run is already on its own card."
     }
 
     static func linkedEngagementNote(_ item: QueueItem) -> String? {
@@ -4145,6 +4185,18 @@ extension BulkDismiss.Show {
 // #1742: the genre control's own words and glyph, named here rather than inline so the sentence a
 // person HEARS appears in the copy inventory beside the ones they read, and so the label cannot quietly
 // become a raw stored value ("other" is a database word, "Performance" is Dan's).
+// #2998: the run card that is redundant with the single night cards already stored, and what its one
+// control says. Its own enum beside the others rather than a literal in the view, so the sentence is in
+// the copy inventory and can be read cold.
+enum CoveredRunCopy {
+    // Says what the press does to THIS card rather than what it does to the store: the covering cards are
+    // untouched, and a label promising to tidy the store would claim more than the press measures (L11).
+    static let retire = "Retire this run"
+    // The consequence, in the words the Archive uses for it, because that is where the row goes and where
+    // it comes back from.
+    static let retireHelp = "Dismiss this run as a duplicate. It leaves the queue and can be restored from the Archive."
+}
+
 enum GenreControlCopy {
     // Sits after the genre at rest, never on hover alone: Dan met this row in a screenshot, and a cue
     // that needs a mouse does not exist in one. A chevron rather than the title's pencil because what

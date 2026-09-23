@@ -189,6 +189,7 @@ struct ProspectRowView: View {
                     relatedRunNote
                     heldBackNote
                     linkedEngagementNote
+                    everyNightCoveredNote
                     storedMoreThanOnceNote
                     arrivedLookingLikeNote
                     laterLookalikeNote
@@ -600,6 +601,33 @@ struct ProspectRowView: View {
     // question about the same show: that one says the production also plays elsewhere, this says the
     // app is holding it twice. Faint rather than gold: it is a fact Dan needs while triaging, not an
     // action he can take here, and the controls that let him settle it are their own work.
+    // #2998: the run card that is wholly redundant with the single night cards already in the store,
+    // and the one press that retires it.
+    //
+    // THE SENTENCE AND THE CONTROL TOGETHER, unlike the notes below it, because this is the one case in
+    // the group where Dan can settle it here: the other cards already hold every night, so retiring this
+    // row loses nothing. A sentence with no control would leave him dismissing it by hand from a menu
+    // whose reasons are all about the SHOW, when the fact is about the store.
+    //
+    // IT GOES THROUGH `onDismiss`, the same path the dismiss menu uses, with the reason the store
+    // already has for it (`ShowOutcome.duplicate`). A second mutation for this would be a second way to
+    // take a row off the queue, and Dan's call of 2026-09-22 was explicitly the reversible one: it leaves
+    // the queue and comes back from the Archive like any dismissal, and nothing is deleted (L5).
+    @ViewBuilder private var everyNightCoveredNote: some View {
+        if let note = QueueModel.everyNightCoveredNote(item) {
+            HStack(spacing: 8) {
+                Text(note)
+                    .font(OVType.tag)
+                    .foregroundStyle(OVColor.inkSoft)
+                Button(CoveredRunCopy.retire) { onDismiss(.duplicate) }
+                    .buttonStyle(.link)
+                    .font(OVType.tag)
+                    .help(CoveredRunCopy.retireHelp)
+            }
+            .padding(.top, 2)
+        }
+    }
+
     @ViewBuilder private var storedMoreThanOnceNote: some View {
         if let note = QueueModel.storedMoreThanOnceNote(item) {
             Text(note)
