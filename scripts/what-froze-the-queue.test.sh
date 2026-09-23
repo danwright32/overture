@@ -215,6 +215,40 @@ out="$("${READER}" --log "${WORK}/awake/log.ndjson" 2>&1)"
 assert_contains "a log where nothing slept says every duration is real" "${out}" "none of them spanned any"
 assert_not_contains "and does not report a sleep that did not happen" "${out}" "are NOT freezes"
 
+# 15. #4122: the live file is a truncated window with one promoted record in it, and a reader that counts
+#     the compaction note as a stall inflates every figure it prints. Three states again, and the middle
+#     one is the file Dan has today.
+mkdir -p "${WORK}/window"
+printf '{"note":"compaction","at":"2026-09-21T21:05:00Z","kept":2,"archived":443,"promotedAt":"2026-09-18T11:02:00Z","promotedSeconds":1047.9}\n' \
+  > "${WORK}/window/log.ndjson"
+printf '{"session":"s","sequence":1,"at":"2026-09-18T11:02:00Z","seconds":1047.9,"surface":"queue","load":"elevated","loadAverage":95.8,"passes":1,"passSeconds":0.2,"promotedFromOlderWindow":true}\n' \
+  >> "${WORK}/window/log.ndjson"
+printf '{"session":"s","sequence":2,"at":"2026-09-21T20:07:00Z","seconds":2.8,"surface":"queue","load":"baseline","loadAverage":3.7,"passes":1,"passSeconds":2.27}\n' \
+  >> "${WORK}/window/log.ndjson"
+out="$("${READER}" --log "${WORK}/window/log.ndjson" 2>&1)"
+assert_contains "the window the file actually holds is stated before any figure from it" "${out}" "window: a compaction on"
+assert_contains "and it names how many went to the archive" "${out}" "moved 443 to the archive"
+assert_contains "and names the promoted record as not part of this window" "${out}" "PROMOTED from the older half"
+assert_contains "the note is not counted as a stall" "${out}" "2 stall(s) with a pass count, of 2 record(s)"
+assert_not_contains "and is not read as a line that could not be read" "${out}" "line(s) could not be read"
+
+# The file with no note at all, which is every log written before #4122. It must say it cannot tell a
+# never-compacted file from an older one, rather than implying the window is whole (L98).
+mkdir -p "${WORK}/nonote"
+record 2.8 1 2.27 > "${WORK}/nonote/log.ndjson"
+out="$("${READER}" --log "${WORK}/nonote/log.ndjson" 2>&1)"
+assert_contains "a file with no note says so" "${out}" "no compaction note in this reading"
+assert_contains "and names the two facts it cannot separate" "${out}" "those are different facts"
+
+# A compaction that promoted nothing is a positive statement, not silence.
+mkdir -p "${WORK}/nopromote"
+printf '{"note":"compaction","at":"2026-09-21T21:05:00Z","kept":1,"archived":12,"promotedAt":null,"promotedSeconds":null}\n' \
+  > "${WORK}/nopromote/log.ndjson"
+record 2.8 1 2.27 >> "${WORK}/nopromote/log.ndjson"
+out="$("${READER}" --log "${WORK}/nopromote/log.ndjson" 2>&1)"
+assert_contains "a compaction that promoted nothing says every record is inside the window" "${out}" "Nothing was promoted"
+assert_not_contains "and does not claim one is out of band" "${out}" "PROMOTED from the older half"
+
 if [ "${FAILURES}" -eq 0 ]; then
   echo "what-froze-the-queue.test.sh: all passed"
 else

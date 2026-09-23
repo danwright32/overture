@@ -11,6 +11,42 @@ import Foundation
 // with a blank reader column", it would be the second one missing entirely. It has a reader, named below
 // and built in the same change, because a field only ever written looks alive to every is-this-used check
 // while the purpose it was added for silently never happens (L46).
+// #4122: what a compaction did, written into the live file so a reader can see the window's edge without
+// knowing the algorithm.
+//
+// WHY THE FILE NEEDS ONE AT ALL. `FreezeLog.compacted` keeps the newest `fileCap` records, archives the
+// rest, and promotes the single longest older stall back in. On 2026-09-21 Dan's live file went from 1,026
+// records to 583 between 15:30 and 17:05 with nothing in it recording that, and it opened with a 1,047
+// second stall from three days earlier followed by records from that evening. Every ad hoc reading over
+// that file, "how many stalls today", "what was the worst", "what is the p90", answered about a truncated
+// window with one out of band member in it, and #3660's bar is defined as a count over this very file.
+//
+// IT DESCRIBES THE FILE, not the event. A compaction rewrites the live file from the records it kept, so
+// the previous note is not carried over and each file holds exactly one, describing its own composition.
+// An older note would describe a window that no longer exists, which is the stale-evidence shape this
+// whole issue is about.
+//
+// SEPARATE FROM `StallRecord.promotedFromOlderWindow` rather than a replacement for it, because the two
+// serve readers that cannot use each other's answer: a `jq` over the lines sees the flag, and a reader of
+// the whole file sees the counts and the boundary. Neither is derivable from the other, and the test pins
+// them to agree so they cannot drift into two answers (L70).
+struct FreezeLogNote: Codable, Equatable, Sendable {
+    // The discriminator, and the ONLY key no `StallRecord` carries, which is what lets `FreezeLog.read`
+    // tell a note from a stall without depending on the order it tries them in.
+    static let compaction = "compaction"
+
+    var note: String = FreezeLogNote.compaction
+    let at: Date
+    // How many records the file holds after this compaction, the promoted one included.
+    let kept: Int
+    // How many went to the archive.
+    let archived: Int
+    // The promoted record's own instant and length, or nothing where the rule did not fire. `nil` here is
+    // a real answer: this compaction promoted nothing, so every record in the file is inside the window.
+    let promotedAt: Date?
+    let promotedSeconds: Double?
+}
+
 enum FreezeLog {
     // copy-inventory:ignore-start  a filename, not a sentence Overture says
     static let fileName = "freeze-log.ndjson"
@@ -65,6 +101,13 @@ enum FreezeLog {
         return text
     }
 
+    // #4122: the same, for the note a compaction writes about the window it just made.
+    static func line(for note: FreezeLogNote) -> String? {
+        guard let data = try? encoder().encode(note),
+              let text = String(data: data, encoding: .utf8) else { return nil }
+        return text
+    }
+
     // Every record the file holds, and the lines it could NOT read, kept apart.
     //
     // A line this cannot decode is COUNTED rather than dropped silently: a file half-written by a process
@@ -73,6 +116,14 @@ enum FreezeLog {
     // cleanest possible result (L98).
     struct Read: Equatable, Sendable {
         var records: [StallRecord] = []
+        // #4122: what a compaction said about the window this file holds. Its own field rather than a
+        // record, because it is not a stall and counting it as one would inflate every figure taken from
+        // the file, which is the defect it exists to prevent arriving through the fix (L387).
+        //
+        // At most one in a live file, because a compaction rewrites the file from the records it kept and
+        // therefore does not carry the previous note over. An ARRAY anyway, so a file holding two says so
+        // rather than having one silently chosen for it (L521).
+        var notes: [FreezeLogNote] = []
         var unreadableLines: Int = 0
         // The file was not there at all, which is what a session with no freeze looks like AND what a
         // watchdog that never ran looks like. Kept as its own fact so the reader can say which (L11).
@@ -83,8 +134,19 @@ enum FreezeLog {
         var out = Read()
         let decoder = decoder()
         for line in text.split(separator: "\n", omittingEmptySubsequences: true) {
-            guard let data = line.data(using: .utf8),
-                  let record = try? decoder.decode(StallRecord.self, from: data) else {
+            guard let data = line.data(using: .utf8) else {
+                out.unreadableLines += 1
+                continue
+            }
+            // #4122: the NOTE first, and the order is decided rather than incidental. A note carries a
+            // `note` key that no `StallRecord` has, and a `StallRecord` requires `session`, `sequence`,
+            // `at` and `seconds`, none of which a note carries, so neither can decode as the other and the
+            // order cannot change any verdict. Trying the note first is simply the cheaper miss.
+            if let note = try? decoder.decode(FreezeLogNote.self, from: data) {
+                out.notes.append(note)
+                continue
+            }
+            guard let record = try? decoder.decode(StallRecord.self, from: data) else {
                 out.unreadableLines += 1
                 continue
             }
@@ -158,7 +220,13 @@ enum FreezeLog {
         // being added to the end: it IS the oldest thing worth keeping. The record it displaces is dropped
         // and therefore archived, and it is appended last because it is chronologically last.
         var kept = Array(newest.dropFirst())
-        kept.insert(prefix[worstIndex], at: 0)
+        // #4122: MARKED as it is promoted, so a reader going line by line can drop it from a window it is
+        // not part of without knowing this rule exists. Marked by copying and setting the one field, never
+        // by rebuilding through `init`, which would re-derive `surfaceVocabulary` from the running build
+        // and quietly restamp a record an older build wrote (L443).
+        var promoted = prefix[worstIndex]
+        promoted.promotedFromOlderWindow = true
+        kept.insert(promoted, at: 0)
         var dropped = prefix
         dropped.remove(at: worstIndex)
         if let displaced = newest.first { dropped.append(displaced) }
@@ -309,7 +377,7 @@ enum FreezeLog {
     // just wrote unbounded until the next launch.
     static func housekeeping(at url: URL, now: Date, cap: Int = fileCap,
                             retentionDays: Int = archiveRetentionDays) -> Housekeeping {
-        let compaction = compact(at: url, cap: cap)
+        let compaction = compact(at: url, cap: cap, now: now)
         let prune = pruneArchive(besideLogAt: url, now: now, retentionDays: retentionDays)
         return Housekeeping(compaction: compaction, prune: prune)
     }
@@ -321,7 +389,7 @@ enum FreezeLog {
     // cap" from "the archive write failed so nothing was trimmed", and those are a healthy launch and one
     // needing attention (L11).
     @discardableResult
-    static func compact(at url: URL, cap: Int = fileCap) -> CompactionOutcome {
+    static func compact(at url: URL, cap: Int = fileCap, now: Date = Date()) -> CompactionOutcome {
         let read = read(at: url)
         guard !read.fileWasAbsent else { return .nothingToArchive }
         let result = compacted(read.records, cap: cap)
@@ -335,7 +403,18 @@ enum FreezeLog {
         // milestone is trying to get off, and the real case is the 186 records measured on 2026-09-10, so a
         // file opened and closed per record would be 186 opens added to exactly the path under repair.
         guard archive(result.droppedRecords, besideLogAt: url) else { return .archiveFailed }
-        let text = result.records.compactMap(line(for:)).joined(separator: "\n") + "\n"
+        // #4122: the note FIRST, so it sits beside the promoted record the rewrite inserts at index 0,
+        // which is exactly where a reader of the file's head meets the thing that needs explaining.
+        //
+        // A note that will not ENCODE is left out rather than failing the compaction, and that is the
+        // right way round: the records are already safely in the archive, and refusing to truncate over a
+        // missing annotation would leave the file over its cap for ever. What is lost is the explanation,
+        // and the per record mark still carries it.
+        let promoted = result.records.first { $0.promotedFromOlderWindow == true }
+        let note = FreezeLogNote(at: now, kept: result.records.count, archived: result.dropped,
+                                 promotedAt: promoted?.at, promotedSeconds: promoted?.seconds)
+        let lines = [line(for: note)].compactMap { $0 } + result.records.compactMap(line(for:))
+        let text = lines.joined(separator: "\n") + "\n"
         // The archive already holds these records, so a failed rewrite here leaves them in BOTH files rather
         // than in neither: nothing is lost, and the live file is simply still over its cap until the next
         // launch tries again. So the write's result is deliberately not branched on. Written as a guard

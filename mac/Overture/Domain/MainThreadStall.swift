@@ -219,6 +219,30 @@ struct StallRecord: Codable, Equatable, Sendable {
     // `NSWorkspace` notifications `SleepObserver` already listens to.
     let asleepSeconds: Double?
 
+    // #4122: this record was PROMOTED back into the live log by a compaction, so it is not part of the
+    // window the rest of the file describes.
+    //
+    // `FreezeLog.compacted` keeps the newest `fileCap` records and promotes the single longest older stall
+    // back in, both deliberately (a cap by count over a file where a 250 ms blip and a 58 second freeze are
+    // one line each lets cheap writers evict expensive observations). The consequence was invisible: Dan's
+    // file on 2026-09-21 opened with a 1,047 second stall from 2026-09-18 followed by records from
+    // 2026-09-21T20:07Z onwards, so any count, maximum or percentile taken over it silently answered about
+    // a truncated window with one out of band member in it. #3660's bar is defined as a count over this
+    // file, so a fix could be judged against a window whose oldest half was archived mid measurement.
+    //
+    // A `var`, uniquely among these fields, and that is the design rather than an oversight.
+    // `FreezeLog.compacted` marks the promoted record by copying it and setting this, because rebuilding it
+    // through `init` would re-derive `surfaceVocabulary` from the RUNNING build while the record claims to
+    // be the one an older build wrote. That is the single field here that would read as correct and be
+    // wrong (L443, L510), so the mark is a mutation of a copy and nothing else about the record can move.
+    //
+    // TWO VALUES ONLY, not three, and `nil` is the absent one: a record nobody promoted carries nothing
+    // rather than `false`. Encoding `false` on every line would grow every record in the file to say
+    // something about a rule that applies to one of them, and `nil` already means exactly what is wanted
+    // here, which is "this reader has no reason to think it was promoted". What separates "no compaction
+    // has happened" from "one happened and promoted nothing" is the FILE's note, not this field.
+    var promotedFromOlderWindow: Bool?
+
     // #3788: decoded as `.unknown` when absent, which is every record in Dan's log written before this
     // shipped. A custom decode rather than an optional, because the ABSENT case already has a name here and
     // two ways of spelling it (nil and .unknown) would be two spellings of one fact (L544).
@@ -231,7 +255,7 @@ struct StallRecord: Codable, Equatable, Sendable {
     init(session: String, sequence: Int, at: Date, seconds: Double, surface: StallSurface,
          load: MachineLoad, loadAverage: Double?, passes: Int?, rootDraws: Int? = nil,
          passSeconds: Double? = nil, windows: WindowPresence = .unknown,
-         asleepSeconds: Double? = nil) {
+         asleepSeconds: Double? = nil, promotedFromOlderWindow: Bool? = nil) {
         self.session = session
         self.sequence = sequence
         self.at = at
@@ -249,6 +273,7 @@ struct StallRecord: Codable, Equatable, Sendable {
         self.passSeconds = passSeconds
         self.windows = windows
         self.asleepSeconds = asleepSeconds
+        self.promotedFromOlderWindow = promotedFromOlderWindow
     }
 
     // The absent field becomes `.unknown` rather than failing the whole record. Dan's log holds 500 records
@@ -282,6 +307,8 @@ struct StallRecord: Codable, Equatable, Sendable {
         // #4153: absent on every record written before it shipped, which is the whole of the "before" half
         // this milestone compares against, so absence is `nil` and never `0`.
         asleepSeconds = try c.decodeIfPresent(Double.self, forKey: .asleepSeconds)
+        // #4122: absent on a record nobody promoted, which is almost all of them.
+        promotedFromOlderWindow = try c.decodeIfPresent(Bool.self, forKey: .promotedFromOlderWindow)
         // Decoded as a STRING and mapped, never as the enum directly. `decodeIfPresent` on an enum THROWS on
         // a value it does not know, which fails the WHOLE record rather than one field, so a later build
         // adding a fourth state would make every record it writes unreadable to this one. This file's own
