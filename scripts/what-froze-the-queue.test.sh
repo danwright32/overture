@@ -185,6 +185,36 @@ out="$("${READER}" --log "${WORK}/noroot/log.ndjson" 2>&1)"
 assert_contains "a silent stall from before #3813 says it cannot tell" "${out}" "cannot tell a rebuilding window"
 assert_not_contains "and does not claim the window drew" "${out}" "drew the window anyway"
 
+# 14. #4153: a record that spanned a SLEEP is not a freeze, and the reader has to say so rather than let
+#     it set the maximum. Three states, and the difference between the first two is the whole point: a
+#     log with no reading at all cannot tell a sleeping Mac from a frozen one, and must not imply it can.
+mkdir -p "${WORK}/sleep"
+printf '{"session":"s","sequence":1,"at":"2026-09-22T03:07:14Z","seconds":1057.9,"surface":"queue","load":"elevated","loadAverage":95.8,"passes":0,"passSeconds":0.0,"rootDraws":0,"asleepSeconds":1074.0}\n' \
+  > "${WORK}/sleep/log.ndjson"
+printf '{"session":"s","sequence":2,"at":"2026-09-22T15:24:00Z","seconds":18.64,"surface":"queue","load":"elevated","loadAverage":34.7,"passes":1,"passSeconds":9.53,"rootDraws":1,"asleepSeconds":0.0}\n' \
+  >> "${WORK}/sleep/log.ndjson"
+out="$("${READER}" --log "${WORK}/sleep/log.ndjson" 2>&1)"
+assert_contains "a record that spanned a sleep is named as not a freeze" "${out}" "are NOT freezes"
+assert_contains "and the sleep it spanned is quoted beside the duration it claims" "${out}" "1057.90s recorded, 1074.00s of it asleep"
+assert_contains "and the maximum a reader should quote is the longest that slept through nothing" "${out}" "18.64s"
+
+# The same file with every sleep reading removed, which is every record Dan has today. It must say it
+# cannot tell rather than reporting a clean 1057.90s maximum (L98).
+mkdir -p "${WORK}/nosleep"
+printf '{"session":"s","sequence":1,"at":"2026-09-22T03:07:14Z","seconds":1057.9,"surface":"queue","load":"elevated","loadAverage":95.8,"passes":0,"passSeconds":0.0,"rootDraws":0}\n' \
+  > "${WORK}/nosleep/log.ndjson"
+out="$("${READER}" --log "${WORK}/nosleep/log.ndjson" 2>&1)"
+assert_contains "a log with no sleep reading says so in those words" "${out}" "sleep: UNMEASURED"
+assert_not_contains "and never claims a record stayed awake" "${out}" "spanned no sleep"
+
+# And an awake machine is a positive statement rather than silence, so the clean day is sayable.
+mkdir -p "${WORK}/awake"
+printf '{"session":"s","sequence":1,"at":"2026-09-22T15:24:00Z","seconds":18.64,"surface":"queue","load":"elevated","loadAverage":34.7,"passes":1,"passSeconds":9.53,"rootDraws":1,"asleepSeconds":0.0}\n' \
+  > "${WORK}/awake/log.ndjson"
+out="$("${READER}" --log "${WORK}/awake/log.ndjson" 2>&1)"
+assert_contains "a log where nothing slept says every duration is real" "${out}" "none of them spanned any"
+assert_not_contains "and does not report a sleep that did not happen" "${out}" "are NOT freezes"
+
 if [ "${FAILURES}" -eq 0 ]; then
   echo "what-froze-the-queue.test.sh: all passed"
 else

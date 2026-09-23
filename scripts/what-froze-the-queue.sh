@@ -140,7 +140,7 @@ elif _old_vocabulary:
     print("  Every record here predates #3859, so every `queue` is the queue OR any of seven sheets over")
     print("  it. Nothing in this file can say which.")
 print()
-print("  when                  seconds  passes  root  in passes  surface        load")
+print("  when                  seconds  passes  root  in passes   asleep  surface        load")
 for r in counted[:25]:
     when = str(r.get("at", ""))[:19].replace("T", " ")
     cost = r.get("passSeconds")
@@ -149,8 +149,13 @@ for r in counted[:25]:
     # answers and a 0 there would read as "the window did not rebuild" (L98, L11).
     root = r.get("rootDraws")
     root_shown = "{:>4}".format(root) if isinstance(root, int) else "   ?"
-    print("  {:<20}  {:>7.2f}  {:>6}  {}  {}  {:<13}  {}".format(
-        when, r.get("seconds", 0), r["passes"], root_shown, shown,
+    # #4153: how much of `seconds` the Mac was ASLEEP for. "?" rather than 0 on a record written before
+    # the field shipped, for the same reason `rootDraws` prints "?": absent and none are different
+    # answers, and a 0 here would read as "the machine stayed awake" (L98, L11).
+    asleep = r.get("asleepSeconds")
+    asleep_shown = "{:>7.2f}".format(asleep) if isinstance(asleep, (int, float)) else "      ?"
+    print("  {:<20}  {:>7.2f}  {:>6}  {}  {}  {}  {:<13}  {}".format(
+        when, r.get("seconds", 0), r["passes"], root_shown, shown, asleep_shown,
         str(r.get("surface", "?")), str(r.get("load", "?"))))
 if len(counted) > 25:
     print(f"  ... and {len(counted) - 25} more, shown longest first.")
@@ -192,6 +197,46 @@ if untimed_count:
     print(f"  {untimed_count} carry no pass duration, so whether their passes account for them is")
     print("  unknown. A pass that never RETURNED is one of these, and so is every record written")
     print("  before the duration shipped.")
+
+# #4153: which of these records are not freezes at all, because the Mac was asleep through them.
+#
+# The longest record in Dan's log on 2026-09-22 was 1057.90s and `pmset -g log` puts a 1074 second sleep
+# ending at that instant exactly. At 49 times the next longest it sets every maximum and percentile taken
+# from this file, and this milestone's bar is judged against this file. The record is MARKED rather than
+# dropped, here as in the app, because an exclusion would also hide a real freeze that overlapped a sleep
+# (L116), so this names them and says what the reading looks like without them.
+#
+# Reported only where the field is PRESENT. Every record written before #4153 shipped has none, and
+# absent is not zero: a reader told "0 slept" about a record nobody measured would draw exactly the wrong
+# conclusion from it (L98).
+_sleep_measured = [r for r in rows if isinstance(r.get("asleepSeconds"), (int, float))]
+_slept_through = [r for r in _sleep_measured if r["asleepSeconds"] > 0]
+print()
+if not _sleep_measured:
+    print(f"  sleep: UNMEASURED. None of the {len(rows)} record(s) says whether the Mac was asleep, so")
+    print("  every one of them predates #4153 and the longest figure below may be a sleep rather than a")
+    print("  freeze. Install a build carrying it and read again.")
+elif not _slept_through:
+    print(f"  sleep: {len(_sleep_measured)} record(s) carry a sleep reading and none of them spanned any")
+    print("  sleep, so every duration here is time the main thread was running and late.")
+else:
+    _worst = max(_slept_through, key=lambda r: r["asleepSeconds"])
+    print(f"  sleep: {len(_slept_through)} of {len(_sleep_measured)} record(s) carrying a reading spanned")
+    print("  a sleep, so their duration is mostly the Mac not being scheduled rather than the main")
+    print("  thread being blocked. They are NOT freezes and must be left out of any maximum or")
+    print("  percentile taken from this file.")
+    _when = str(_worst.get("at", ""))[:19].replace("T", " ")
+    print("    worst: {}  {:.2f}s recorded, {:.2f}s of it asleep".format(
+        _when, _worst.get("seconds", 0), _worst["asleepSeconds"]))
+    _awake = [r for r in _sleep_measured if r["asleepSeconds"] == 0]
+    if _awake:
+        _longest_awake = max(_awake, key=lambda r: r.get("seconds", 0))
+        print("    the longest record that spanned no sleep at all is {:.2f}s, and that is the figure a"
+              .format(_longest_awake.get("seconds", 0)))
+        print("    maximum should quote.")
+    else:
+        print("    every record carrying a reading spanned a sleep, so this file states no measured")
+        print("    maximum for a real freeze at all.")
 
 # The finding. A stall over the floor that counted no pass is UNATTRIBUTED: this tool cannot say what the
 # main thread was doing, and #3783 is why it must not guess.

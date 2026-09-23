@@ -134,7 +134,14 @@ struct SystemSleepTests {
         for path in ["Overture/Domain/WatchGap.swift",
                      "Overture/App/ReconcileScheduler.swift",
                      "Overture/UI/WatchGapLine.swift",
-                     "Overture/App/SleepObserver.swift"] {
+                     "Overture/App/SleepObserver.swift",
+                     // #4153: the stall watchdog joined this path. Its delay is a wall clock difference,
+                     // so a sleeping Mac was recorded as a 1057.90s freeze, and #4153's own write-up
+                     // proposed measuring the sleep with `mach_continuous_time` minus `mach_absolute_time`
+                     // (the fixture above is why that is not what shipped). Listed here so the next
+                     // attempt meets the measurement rather than the documentation (L30: the same rule
+                     // fixed for one file and left off its siblings is the defect).
+                     "Overture/Integration/MainThreadWatchdog.swift"] {
             let source = SourceGuardHelper.source(path)
             #expect(!source.isEmpty, "\(path) must exist for this guard to mean anything")
             for clock in banned {

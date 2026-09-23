@@ -148,6 +148,8 @@ final class MainThreadWatchdog: @unchecked Sendable {
     private let loadReading: @Sendable () -> (MachineLoad, Double?)
     private let session: String
     private let cap: Int
+    // #4153: read at both ends of a ping, so a stall says how much of itself the machine was not running.
+    private let observedSleep: @Sendable (Date) -> Double
 
     private var timer: DispatchSourceTimer?
     private var sequence = 0
@@ -168,15 +170,37 @@ final class MainThreadWatchdog: @unchecked Sendable {
          interval: TimeInterval = MainThreadWatchdog.pingInterval,
          now: @escaping @Sendable () -> Date = { Date() },
          loadReading: @escaping @Sendable () -> (MachineLoad, Double?) = MachineLoadReading.take,
+         observedSleep: @escaping @Sendable (Date) -> Double = MainThreadWatchdog.observedSleep,
          cap: Int = StallLog.cap,
          record: @escaping @Sendable (StallRecord) -> Void) {
         self.session = session
         self.interval = interval
         self.now = now
         self.loadReading = loadReading
+        self.observedSleep = observedSleep
         self.cap = cap
         self.record = record
     }
+
+    // #4153: how much sleep this Mac has been SEEN to have, in total, as of an instant.
+    //
+    // Named and shipped as a value rather than written inline as the default, so the wiring is one symbol
+    // a test can point at and a guard can name, and so the two ends of a ping cannot end up reading two
+    // different things.
+    //
+    // `SystemSleep` rather than a clock, and that is a measurement rather than a preference. #2220 read
+    // every clock macOS offers against `kern.boottime` in one process on Dan's Mac, over a 54.19 hour
+    // window holding 71,341 seconds of real sleep, and recorded the result in
+    // `fixtures/watch-gap-clock-measurement.json`: `mach_continuous_time` and `mach_absolute_time` differ
+    // by 464.6s over that window, which is 0.65% of the sleep that happened. There is no awake clock to
+    // read on this hardware, so the sleep is OBSERVED, through the `NSWorkspace` notifications
+    // `SleepObserver` turns into this total.
+    //
+    // It takes the instant so that a span still open at the moment of reading is closed into the answer.
+    // That is the ordinary case rather than an edge one: the ping posted before the Mac slept runs the
+    // instant it wakes, racing the wake notification, and this makes the reading independent of which of
+    // the two lands first.
+    static let observedSleep: @Sendable (Date) -> Double = { SystemSleep.totalSeconds(now: $0) }
 
     var snapshot: StallLog.Kept { keptLock.withLock { kept } }
 
@@ -233,6 +257,10 @@ final class MainThreadWatchdog: @unchecked Sendable {
         let passesAtPost = passes.current
         let rootAtPost = rootDraws.current
         let costAtPost = passCost.current
+        // #4153: the sleep total at each end, for the same reason the three counters above are read at
+        // each end. Taken here on the watchdog's own queue, which is the half that has to keep working
+        // while the main thread is wedged.
+        let sleptAtPost = observedSleep(posted)
         let sequence = nextSequence()
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
@@ -240,6 +268,11 @@ final class MainThreadWatchdog: @unchecked Sendable {
             let passesAtRun = self.passes.current
             let rootAtRun = self.rootDraws.current
             let costAtRun = self.passCost.current
+            // Read at the instant the main thread became free again, which for a stall that spanned a
+            // sleep is the instant of the wake. `SystemSleep.totalSeconds` closes a span whose wake
+            // notification has not been handled yet, so this does not depend on that notification having
+            // landed first.
+            let sleptAtRun = self.observedSleep(ran)
             let delay = ran.timeIntervalSince(posted) - self.interval
             // Back on the watchdog's queue to judge and write, because everything after this point must
             // be able to happen while the main thread is wedged.
@@ -253,13 +286,14 @@ final class MainThreadWatchdog: @unchecked Sendable {
                                      passes: StallLog.passesSpanned(from: passesAtPost, to: passesAtRun),
                                      rootDraws: StallLog.passesSpanned(from: rootAtPost, to: rootAtRun),
                                      passSeconds: StallLog.passSecondsSpanned(from: costAtPost,
-                                                                             to: costAtRun))
+                                                                             to: costAtRun),
+                                     asleep: StallLog.sleepSpanned(from: sleptAtPost, to: sleptAtRun))
             }
         }
     }
 
     private func recordIfStalled(_ delay: TimeInterval, sequence: Int, at: Date, passes: Int?,
-                                 rootDraws: Int?, passSeconds: Double?) {
+                                 rootDraws: Int?, passSeconds: Double?, asleep: Double?) {
         // A ping that ran EARLY or on time is not a stall. Clamped rather than recorded as a negative,
         // which would be a measurement of the timer's own jitter dressed as a freeze.
         guard delay > 0 else { return }
@@ -273,7 +307,11 @@ final class MainThreadWatchdog: @unchecked Sendable {
                                 // here. This runs on the watchdog's own queue during a freeze, and a value
                                 // the main actor has to supply is unavailable at exactly the moment a record
                                 // is being written (L345).
-                                windows: windows.current)
+                                windows: windows.current,
+                                // #4153: how much of `delay` above the machine was asleep for. Recorded
+                                // beside the duration and never subtracted from it, so a real freeze that
+                                // overlapped a sleep is still a record of a freeze (L116).
+                                asleepSeconds: asleep)
         // #3812: the decision is the PURE rule's, taken whole. This used to compare the kept set's count
         // before and after, which tied "what is held in memory" to "what is written to the file" and made
         // the session stop recording at its 200th stall.
