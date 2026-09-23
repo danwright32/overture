@@ -110,8 +110,10 @@ enum SendGroup {
         }
     }
 
-    static func pendingGroup(of prospect: Prospect) -> [Recipient] {
-        pending(from: previewGroup(of: prospect), of: prospect)
+    // #4168: carries `together` through for the same reason `previewGroup` takes it. The approval gate
+    // below is unaffected by the choice, so only the grouping half moves.
+    static func pendingGroup(of prospect: Prospect, together: Bool? = nil) -> [Recipient] {
+        pending(from: previewGroup(of: prospect, together: together), of: prospect)
     }
 
     // The approval gate on its own, so a caller that already holds the preview group pays for the filter
@@ -159,9 +161,18 @@ enum SendGroup {
     //
     // Same body as before, so the two cannot bucket contacts differently: `pendingGroup` is now this plus
     // its gate.
-    static func previewGroup(of prospect: Prospect) -> [Recipient] {
+    // #4168: `together` is taken as a VALUE, defaulting to the show's own stored answer.
+    //
+    // The Send sheet previews a choice Dan has ticked but not committed, and it used to do that by
+    // writing the choice onto the live `Prospect` and restoring it in a `defer`. Those are two writes to
+    // an observed SwiftData model inside a SwiftUI body evaluation, seven times a pass, and a write to an
+    // observed property invalidates the views that read it, so the pass scheduled the next one. Measured
+    // 2026-09-22 as one core pinned at 100% with the sheet open, ended by a force quit.
+    //
+    // Absent, this is `prospect.sendsTogether` exactly, so every existing call site is unchanged.
+    static func previewGroup(of prospect: Prospect, together: Bool? = nil) -> [Recipient] {
         let sendable = Recipient.inSendOrder(prospect.recipients.filter(\.isSendablePending))
-        guard prospect.sendsTogether else { return Array(sendable.prefix(1)) }
+        guard together ?? prospect.sendsTogether else { return Array(sendable.prefix(1)) }
         return sendable
     }
 }

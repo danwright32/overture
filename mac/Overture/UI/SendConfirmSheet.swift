@@ -80,7 +80,6 @@ struct SendConfirmSheet: View {
 
     @State private var selected: [String] = []
     @State private var together = true
-    @State private var touched = false
     // Seeded from the confirmation on appear. Held here rather than derived, because the whole point is
     // that it stops tracking the composition the moment Dan types.
     @State private var editedBody = ""
@@ -88,9 +87,30 @@ struct SendConfirmSheet: View {
     // What the sheet is currently describing. Falls back to the confirmation it opened with, so a rebuild
     // that cannot produce one (nothing ticked) leaves the screen showing the last good state rather than
     // emptying out under him.
-    private var current: SendConfirmation {
-        guard touched, let rebuild else { return confirmation }
-        return rebuild(selected, together) ?? confirmation
+    // #4168: the LAST rebuild's answer, held rather than recomputed.
+    //
+    // `current` is read seven times by one body pass (the From, To and Subject fields, the preview, the
+    // warning, the reassurance, and `outgoingBody`), and as a computed property calling `rebuild` it ran
+    // the whole composition on every one of those reads: resolving the show out of the queue's scope,
+    // building its send group, and running the draft lint over every contact. Measured 2026-09-22 with
+    // 1762 of 4176 main thread samples under `SendConfirmSheet.body`.
+    //
+    // Recomputed when the CHOICE moves, which is the only thing that can change the answer, and held
+    // between times. `nil` means Dan has not touched the choice, which is what a separate `touched` flag
+    // used to say: a value and the flag describing whether it exists are one fact, not two (L544).
+    @State private var rebuilt: SendConfirmation?
+
+    private var current: SendConfirmation { rebuilt ?? confirmation }
+
+    // Recomputes the held preview from the ticks and the mode. Called from `.onChange`, never from a
+    // body, so the composition happens once per change rather than once per read.
+    //
+    // A rebuild that cannot produce one (nothing ticked) leaves the screen showing the last good state
+    // rather than emptying out under him, which is what the fallback in `current` did before.
+    @MainActor
+    private func refreshPreview() {
+        guard let rebuild else { return }
+        rebuilt = rebuild(selected, together) ?? confirmation
     }
 
     private var isEditable: Bool { onSendEdited != nil }
@@ -197,7 +217,8 @@ struct SendConfirmSheet: View {
                     Spacer()
                     Button {
                         if let onSendEdited { onSendEdited(editedBody) }
-                        else if let onSendSelection, touched { onSendSelection(selected, together) }
+                        // #4168: `rebuilt != nil` is what `touched` said. One fact, one place.
+                        else if let onSendSelection, rebuilt != nil { onSendSelection(selected, together) }
                         else { onSend() }
                     } label: {
                         Label(SendConfirmCopy.send, systemImage: "paperplane")
@@ -222,6 +243,13 @@ struct SendConfirmSheet: View {
             together = confirmation.togetherAtOpen
             editedBody = confirmation.bodyBeforeSignOff
         }
+        // #4168: the preview is composed when the CHOICE moves, never while a body is being evaluated.
+        //
+        // NOT `initial: true`. The sheet opens on the confirmation it was handed, and composing a second,
+        // identical one at that moment would pay the whole composition for nothing and set `rebuilt`,
+        // which is what tells the Send button Dan has chosen something.
+        .onChange(of: selected) { refreshPreview() }
+        .onChange(of: together) { refreshPreview() }
     }
 
     // #2017: the contacts, ticked. A held contact is listed with its reason and cannot be ticked, so the
@@ -234,7 +262,6 @@ struct SendConfirmSheet: View {
                 Toggle(isOn: Binding(
                     get: { selected.contains(c.id) },
                     set: { on in
-                        touched = true
                         if on { if !selected.contains(c.id) { selected.append(c.id) } }
                         else { selected.removeAll { $0 == c.id } }
                     }
@@ -253,8 +280,7 @@ struct SendConfirmSheet: View {
             // The event's own together-or-separately choice, reachable at the sending moment. Dan,
             // 2026-08-04: "It should send all three now but also give me the option to put them all on the
             // same email." Same stored choice as the draft card's, not a second one.
-            Picker(SendModeCopy.label, selection: Binding(get: { together },
-                                                          set: { together = $0; touched = true })) {
+            Picker(SendModeCopy.label, selection: $together) {
                 Text(SendModeCopy.together).tag(true)
                 Text(SendModeCopy.separately).tag(false)
             }
