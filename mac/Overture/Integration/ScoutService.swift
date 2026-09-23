@@ -1334,6 +1334,20 @@ enum ScoutService {
             })
         }
 
+        // #1848: how THIS run's sources have already spelled their own rooms, read once per batch rather
+        // than once per row. An unreadable store leaves it empty, which locks nothing and stores exactly
+        // what the page sent: the fail-open direction is correct here and nowhere else in this function,
+        // because the lock only ever REPLACES a spelling with one the source itself has used, so having
+        // none simply leaves today's reading alone (it cannot merge or re-key anything).
+        var spellingsBySource: [String: [String]] = [:]
+        if let storedRows = readOrRecord(.reconcileStoredShows, into: &degradedReads,
+                                         { try context.fetch(FetchDescriptor<Prospect>()) }) {
+            for row in storedRows {
+                guard let venue = row.venue, !venue.isEmpty else { continue }
+                for id in row.sourceIds { spellingsBySource[id, default: []].append(venue) }
+            }
+        }
+
         for gr in grouped {
             guard prospects.indices.contains(gr.row.id) else { continue }
             let p = prospects[gr.row.id]
@@ -1436,6 +1450,13 @@ enum ScoutService {
                                                     runEndDate: enriched.runEndDate,
                                                     nights: enriched.runNights)?.key
 
+            // #1848: the room, spelled the way this source has already spelled it. BEFORE the key, which
+            // is the whole point: the venue is one of the key's three fields, so a second spelling is a
+            // second key, a second card and a second paid contact check. Nothing is invented here; the
+            // only value this can produce is one the same source has already published.
+            enriched.venue = VenueSpellingLock.locked(
+                enriched.venue,
+                spellingsUsedBySource: enriched.sourceIds.flatMap { spellingsBySource[$0] ?? [] })
             let key = Prospect.makeNaturalKey(groupName: enriched.groupName, performanceDate: enriched.performanceDate, venue: enriched.venue)
             seenKeys.insert(key)
             // #2758 / #2999: ONE decision, taken before anything is written, so a store that cannot answer
@@ -2075,6 +2096,9 @@ enum ScoutService {
         // its first collision unprotected, which is the whole defect, just once per row instead of forever.
         prospect.disciplineGenreSourceKey = GenrePrecedence.sourceKey(p.sourceIds)
         prospect.producerAxisSourceKey = GenrePrecedence.sourceKey(p.sourceIds)   // #1949
+        // #1954: and the presenter the two axes above are DERIVED from, stamped on the way in for the
+        // same reason they are: without it every new row spends its first collision unprotected.
+        prospect.presenterSourceKey = GenrePrecedence.sourceKey(p.sourceIds)
         prospect.seriesId = p.seriesId          // #1260 Phase 2: persist the merged-concert identity
         prospect.setScoutConflict(p.conflictKey)    // #901
         return prospect
@@ -2189,8 +2213,34 @@ enum ScoutService {
             // an organisation (L55).
             existing.presenterWasTheRoom = false
         } else {
-            existing.setPresenter(p.presenter, from: .scout)
-            existing.presenterWasTheRoom = p.presenterWasTheRoom   // #1788
+            // #1954: and WHICH SOURCE may write it, which is a different question from #2453's above.
+            // That one asks whether an ordinary scout re-read may empty a name a sweep, the AI pass or
+            // Dan put there. This one asks whether a DIFFERENT scout source may take a field the first
+            // one filled, and until now nothing did: the presenter was last writer wins while the genre
+            // and producer axes derived FROM it were not (#1663, #1949).
+            //
+            // A source correcting its OWN reading is untouched, which is every ordinary re-read, so this
+            // changes nothing for a row one source owns.
+            let incomingKey = GenrePrecedence.sourceKey(p.sourceIds)
+            if GenrePrecedence.incomingPresenterStands(stored: existing.presenter,
+                                                       storedKey: existing.presenterSourceKey,
+                                                       incoming: p.presenter,
+                                                       incomingKey: incomingKey) {
+                existing.setPresenter(p.presenter, from: .scout)
+                // Stamped where the value standing is the one THIS source brought, exactly as the two
+                // axes are, so "may this source correct what is here" keeps answering yes for whoever is
+                // actually responsible for the name.
+                existing.presenterSourceKey = incomingKey
+                // And the explanation travels with the value it explains: `presenterWasTheRoom` says why
+                // THIS listing's presenter is blank, and it belongs only to a row whose presenter came
+                // from this listing (L55, the same reason the branch above it states).
+                existing.presenterWasTheRoom = p.presenterWasTheRoom   // #1788
+            }
+            // NOTHING is written on the losing path, not even the value the row already holds. Writing it
+            // back would run through `setPresenter(_:from: .scout)`, which stamps `presenterSource`, so a
+            // name a sweep, the batched AI pass or Dan put there would be recorded as the scout's on the
+            // first visit by any other source, and #2453's refusal (which reads that stamp) would stop
+            // protecting it. The value and the record of who wrote it are one fact (L544).
         }
         existing.location = p.location
         // #1886: track the listing's own spelling of the room always, the way scoutGroupName tracks the
