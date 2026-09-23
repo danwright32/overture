@@ -191,6 +191,7 @@ struct ProspectRowView: View {
                     linkedEngagementNote
                     storedMoreThanOnceNote
                     arrivedLookingLikeNote
+                    laterLookalikeNote
                     alreadyPitchedNightNote
                     orgDoNotContactFlag
                     bookingSuggestionFlag
@@ -623,6 +624,23 @@ struct ProspectRowView: View {
         }
     }
 
+    // #4146: directly after the lookalike note it mirrors, because the two are the same pairing read
+    // from its two ends.
+    //
+    // A CARD CAN DRAW BOTH, and the order above is why they read correctly when it does. A third
+    // listing tags whichever stored row `LookalikeOnArrival` reaches first, which can be a row that
+    // itself arrived looking like an earlier one, so the middle row of a chain both points at something
+    // and is pointed at. The two sentences are then about two DIFFERENT rows and are both true: what it
+    // arrived looking like, then what has arrived looking like it.
+    @ViewBuilder private var laterLookalikeNote: some View {
+        if let note = QueueModel.laterLookalikeNote(item) {
+            Text(note)
+                .font(OVType.tag)
+                .foregroundStyle(OVColor.inkSoft)
+                .padding(.top, 2)
+        }
+    }
+
     // #4130: directly after the lookalike note, because the two are the same KIND of fact (this card is
     // not alone on this night) at different strengths, and a card can legitimately draw both: that one
     // fires on a title the merge would join, this one on a presenter already written to whatever the
@@ -717,7 +735,7 @@ struct ProspectRowView: View {
 
     @ViewBuilder private var handAddedContactField: some View {
         HStack(spacing: OVSpacing.xs) {
-            TextField("Email or link", text: $handAddedRoute)
+            TextField(ContactFieldCopy.routePlaceholder, text: $handAddedRoute)
                 .textFieldStyle(.roundedBorder)
                 .font(OVType.meta)
                 // Return adds the route, rather than falling through to whatever default button the

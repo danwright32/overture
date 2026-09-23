@@ -67,6 +67,10 @@ struct StoredMoreThanOnceNoteTests {
         return p
     }
 
+    // #4030: asserted on the row the group is FRONTED by, because since that issue a group of two is
+    // drawn as ONE card and the other row is not on the surface at all. The claim is unchanged: the card
+    // knows the other rows holding this show. Which row fronts it is `ShowLink.collapse`'s decision (a
+    // row the feed still lists, earliest opening night among those), and here that is the run.
     @Test func theCardCarriesTheOtherRowsHoldingThisShow() throws {
         let ctx = try memoryContext()
         row(ctx, key: "single", title: "We Are Happy To Serve You", venue: "The Players Theatre",
@@ -77,8 +81,10 @@ struct StoredMoreThanOnceNoteTests {
         let all = try ctx.fetch(FetchDescriptor<Prospect>())
 
         var data = QueueModel.scope(from: all)
-        let row = try #require(data.rows.first { $0.id == "single" })
-        #expect(data.cards.card(for: row).sameShowKeys == ["run"])
+        #expect(data.rows.count == 1,
+                "two rows of one show are one card since #4030: \(data.rows.map(\.id))")
+        let row = try #require(data.rows.first { $0.id == "run" })
+        #expect(data.cards.card(for: row).sameShowKeys == ["single"])
     }
 
     // The negative half. Two rows at one venue under one title on nights that do not overlap are the

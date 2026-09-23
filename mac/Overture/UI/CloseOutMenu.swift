@@ -25,6 +25,11 @@ import SwiftUI
 struct CloseOutMenu: View {
     var outcomes: [ShowOutcome]
     var onLinkReply: (() -> Void)?
+    // #4170: and the way to pitch somebody ELSE on this show, which is Dan's call of 2026-09-23 on where
+    // it lives: under this menu, on every sent row, never gated on Overture recognising an autoresponse.
+    // A parameter like the one above rather than a predicate read here, so this view still decides
+    // nothing about who may be offered what.
+    var onPitchSomeoneElse: (() -> Void)?
     var onChoose: (ShowOutcome) -> Void
 
     var body: some View {
@@ -32,11 +37,20 @@ struct CloseOutMenu: View {
             ForEach(outcomes, id: \.self) { outcome in
                 Button(outcome.label) { onChoose(outcome) }
             }
-            // Under a separator, because it is not an ending: everything above closes the pitch and this
-            // one says it is still alive. Without the rule the eye reads it as a fifth outcome.
-            if let onLinkReply {
+            // Under a separator, because these are not endings: everything above closes the pitch and
+            // these say it is still alive. Without the rule the eye reads them as further outcomes.
+            if onLinkReply != nil || onPitchSomeoneElse != nil {
+                // ONE separator for both, because they are the same kind of thing: everything above
+                // closes the pitch and each of these keeps it alive, one by recording a reply that
+                // arrived elsewhere and one by writing to somebody new. Two separators would read as
+                // three groups where a person sees two.
                 Divider()
+            }
+            if let onLinkReply {
                 Button(LinkReplyFromAnotherThread.menuLabel) { onLinkReply() }
+            }
+            if let onPitchSomeoneElse {
+                Button(RePitchCopy.menuLabel) { onPitchSomeoneElse() }
             }
         } label: {
             Label(ReachedOutClose.menuLabel, systemImage: ContactRowControls.Kind.outcome.icon)

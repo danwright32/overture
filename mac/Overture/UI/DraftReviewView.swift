@@ -225,7 +225,9 @@ struct DraftReviewView: View {
     // pitched on another still-open prospect for what looks like the same real-world performance.
     @ViewBuilder private var duplicateContactWarnings: some View {
         recipientWarning(item.contacts.filter { $0.looksLikeDuplicateContact && !$0.looksLikeDuplicateContactDismissed },
-                        message: { DraftReviewNotes.duplicateSuspect(name: $0.displayName) },
+                        message: { DraftReviewNotes.duplicateSuspect(name: $0.displayName,
+                                                                     show: $0.duplicateOfTitle,
+                                                                     night: $0.duplicateOfNight) },
                         dismissLabel: "Not a duplicate", onDismiss: onDismissDuplicateContactMatch)
     }
 
@@ -738,7 +740,7 @@ struct DraftReviewView: View {
         .popover(isPresented: $showAddContact, arrowEdge: .bottom) {
             VStack(alignment: .leading, spacing: OVSpacing.sm) {
                 Text("Add a contact").font(OVType.dateHeading).foregroundStyle(OVColor.ink)
-                TextField("Email or link", text: $addContactEmail)
+                TextField(ContactFieldCopy.routePlaceholder, text: $addContactEmail)
                     .textFieldStyle(.roundedBorder)
                 // Says what a link MEANS for him rather than restating the field's own label, which has
                 // already said that a link is allowed. The load-bearing half is that a route is not a
@@ -747,7 +749,7 @@ struct DraftReviewView: View {
                 Text("You'll open a form or profile and write there by hand.")
                     .font(OVType.meta).foregroundStyle(OVColor.inkFaint)
                     .fixedSize(horizontal: false, vertical: true)
-                TextField("Name (optional)", text: $addContactName)
+                TextField(ContactFieldCopy.namePlaceholder, text: $addContactName)
                     .textFieldStyle(.roundedBorder)
                 HStack {
                     Button("Add") {

@@ -52,7 +52,7 @@ macOS may relocate this into the overflow menu or drop it entirely at a narrow w
 
 A sentence written as a constant is read here at the file that RENDERS it, not only at the file that declares it. That is the case the rest of this document and `copy-inventory.md` cannot show: moving an existing sentence onto a new screen changes no literal anywhere, so it produces no diff and gets no cold read, which is exactly when placement most needs reading.
 
-53 files render a sentence declared as a constant.
+54 files render a sentence declared as a constant.
 
 `App/OvertureApp.swift`
     StoreLaunchOutcome.defaultUnavailableReason  "Overture's data is unavailable."
@@ -134,6 +134,7 @@ A sentence written as a constant is read here at the file that RENDERS it, not o
     BuildFreshnessCopy.updateNote  "This opens Terminal and runs the install. Overture quits partway through and comes back on its own."
 `UI/CloseOutMenu.swift`
     LinkReplyFromAnotherThread.menuLabel  "Link a reply from another thread"
+    RePitchCopy.menuLabel  "Pitch someone else"
     ReachedOutClose.menuLabel  "Close this out"
 `UI/DaysOffView.swift`
     CancelledShootCopy.restoreHelp  "Keep this night clear for this shoot again."
@@ -142,6 +143,8 @@ A sentence written as a constant is read here at the file that RENDERS it, not o
     CancelledShootCopy.unblockTitle  "Not happening"
     CancelledShootCopy.unblockedLabel  "You said it isn't happening"
 `UI/DraftReviewView.swift`
+    ContactFieldCopy.namePlaceholder  "Name (optional)"
+    ContactFieldCopy.routePlaceholder  "Email or link"
     ContactRoleCopy.characterisationNote  "Overture's words, not the page's"
     FormOutreachCopy.copyAndOpen  "Copy pitch and open form"
     FormOutreachCopy.didNotSend  "Didn't send"
@@ -197,6 +200,11 @@ A sentence written as a constant is read here at the file that RENDERS it, not o
     UnplacedRoomCopy.placeholder  "The city and state it's in"
 `UI/OmniFocusSettingsView.swift`
     OmniFocusFailureSection.heading  "Last failure"
+`UI/PitchSomeoneElseSheet.swift`
+    ContactFieldCopy.namePlaceholder  "Name (optional)"
+    ContactFieldCopy.routePlaceholder  "Email or link"
+    RePitchCopy.addAction  "Add and draft"
+    RePitchCopy.panelHelp  "Add a contact on a show you have already pitched. The next Prep run writes them a fresh first-contact draft, and the original conversation carries on untouched."
 `UI/PrepSelectionSheet.swift`
     PrepLaunchCopy.proceedLabel  "Prep anyway"
     PrepSelectionCopy.subtitle  "All of these are included. Uncheck any you would rather not prep in this run."
@@ -211,6 +219,7 @@ A sentence written as a constant is read here at the file that RENDERS it, not o
     ReplyPanelCopy.copiedAwaitingConfirm  "Copied. Paste it into Gmail, then say you sent it."
     SendIdentity.danWright  "Dan Wright"
 `UI/ProspectRowView.swift`
+    ContactFieldCopy.routePlaceholder  "Email or link"
     DraftedDeadEndCopy.line  "Drafted, and there's nobody to send it to. Add a contact and this draft is ready to go."
     GenreControlCopy.help  "Set this show's genre"
     ReachabilityCopy.checkAgain  "Check again"

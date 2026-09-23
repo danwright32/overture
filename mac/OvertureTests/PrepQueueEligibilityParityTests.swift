@@ -81,8 +81,15 @@ struct PrepQueueEligibilityParityTests {
         ).map(\.naturalKey))
 
         #expect(viaPredicate == viaFunction)
+        // #4170: `contacted-with-flags` joined this list, and it is the row that would catch the new
+        // status being allowed in one half and refused in the other. A sent show is prep eligible ONLY
+        // with a flag on it, which nothing but a deliberate press sets; `dismissed-with-flags` is the
+        // other half of that rule and is still absent.
         #expect(viaPredicate == Set(["kept-no-draft", "drafted-draft-flag", "drafted-contacts-flag",
-                                     "approved-both-flags", "kept-but-cleared", "kept-but-booked"]))
+                                     "approved-both-flags", "contacted-with-flags",
+                                     "kept-but-cleared", "kept-but-booked"]))
+        #expect(!viaPredicate.contains("dismissed-with-flags"))
+        #expect(!viaFunction.contains("dismissed-with-flags"))
         // #3369: the conflicted show is in BOTH now. It is the row that would catch the gate being
         // removed from one half and left in the other.
         #expect(viaPredicate.contains("kept-but-booked"))

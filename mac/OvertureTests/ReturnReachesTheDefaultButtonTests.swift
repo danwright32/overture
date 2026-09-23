@@ -171,11 +171,46 @@ enum ReturnPairScan {
     private static func firstStringArgument(after call: String, in line: String) -> String? {
         guard let callRange = line.range(of: call) else { return nil }
         let rest = line[callRange.upperBound...]
-        guard rest.first == "\"" else { return nil }
+        guard rest.first == "\"" else { return namedConstantArgument(rest) }
         let afterQuote = rest.dropFirst()
         guard let closing = afterQuote.firstIndex(of: "\"") else { return nil }
         return String(afterQuote[afterQuote.startIndex..<closing])
     }
+
+    // #4170: a label held in a named copy constant, resolved to its text.
+    //
+    // WHY THIS IS HERE. This scan used to read literals only, so the day three fields asking one
+    // question were consolidated into `ContactFieldCopy` (#4170), two reviewed pairs stopped being
+    // FOUND and the guard's other half reported them as notes about code that had gone. They had not:
+    // the fields are still there, still under a default button, and the scan had simply lost sight of
+    // them. Deleting the entries, which is what that message asks for, would have removed the coverage
+    // rather than the stale note (L708), and the next hand-added contact field would have been
+    // unreviewed with nothing saying so.
+    //
+    // Deliberately narrow: `Type.member` on the same line as the call, resolved against the `static
+    // let NAME = "..."` declarations in the app's own source. Anything it cannot resolve is skipped
+    // exactly as an unrecognised argument always was, so this widens what the scan SEES and changes
+    // nothing about what it judges.
+    private static func namedConstantArgument(_ rest: Substring) -> String? {
+        let reference = rest.prefix { $0.isLetter || $0.isNumber || $0 == "_" || $0 == "." }
+        guard reference.contains("."), let member = reference.split(separator: ".").last else { return nil }
+        return constantsByMember[String(member)]
+    }
+
+    // Every `static let NAME = "literal"` in the app, by NAME. Built once: the walk is the expensive
+    // part and this scan asks for it per field otherwise.
+    private static let constantsByMember: [String: String] = {
+        var out: [String: String] = [:]
+        for file in AppSourceWalk.appFiles() {
+            for raw in file.text.split(separator: "\n") {
+                let line = String(raw)
+                guard let name = line.ranges(ofPattern: #"static\s+let\s+([A-Za-z0-9_]+)\s*=\s*""#).first,
+                      let text = line.ranges(ofPattern: #"=\s*"([^"]*)""#).first else { continue }
+                out[name] = text
+            }
+        }
+        return out
+    }()
 }
 
 private extension String {

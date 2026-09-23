@@ -43,7 +43,6 @@ ReplyPanel.swift:linkedByHandLine
 ReplyPanel.swift:openingBody
 ReprepRequest.swift:gerund
 RunNightDrop.swift:classified
-RunNightDrop.swift:isRetirable  # The predicate the #2998 retire control reads, built to Dan's call of 2026-09-21 that a run covered by another run is a duplicate and never retired. The control itself is not built yet, so its only callers are FullyCoveredRunTests and the live store report, which prints the retirable count every suite run (0 on 2026-09-21). #2998 is what wires it.
 RunProgress.swift:stoppedRunIsOver
 RunSlot.swift:allDefaultsKeys
 RunSlot.swift:allPaths
@@ -54,3 +53,4 @@ ShowOutcome.swift:asDismissReason
 SourceGrade.swift:isStopped
 SourceSchedule.swift:maySpendTokens
 StageOverlap.swift:violations
+RunNightDrop.swift:isRetirable  # The narrower half of #2998's detection: a run is retirable when every other night is held by another card AND none of those covers is itself a run (Dan's rule, 2026-09-21). Its only readers are FullyCoveredRunLiveStoreTests and the live store report that prints the count on every suite run. The card control that would have read it was removed by #4030 in the same milestone, which draws a same show group as ONE card and so hides the covering cards the control's sentence names. Kept because the REPORT is the half #2998 asked for first, and it is what any later answer to this shape would be measured against.

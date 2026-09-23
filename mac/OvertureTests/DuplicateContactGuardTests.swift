@@ -38,60 +38,60 @@ struct DuplicateContactGuardTests {
     @Test func flagsWhenSameEmailSameVenueCloseDate() throws {
         let ctx = ModelContext(try container())
         makeProspect(ctx, group: "A", date: "2026-07-08", venue: "Weill Recital Hall", email: "info@act.example")
-        let result = DuplicateContactGuard.looksLikeDuplicate(
+        let result = DuplicateContactGuard.duplicate(
             email: "info@act.example", venue: "Weill Recital Hall", performanceDate: "2026-07-09",
             groupName: nil,
-            excludingProspectKey: "some-other-key", in: ctx)
+            excludingProspectKey: "some-other-key", in: ctx) != nil
         #expect(result == true)
     }
 
     @Test func caseInsensitiveEmailStillMatches() throws {
         let ctx = ModelContext(try container())
         makeProspect(ctx, group: "A", date: "2026-07-08", venue: "Weill Recital Hall", email: "Info@Act.example")
-        let result = DuplicateContactGuard.looksLikeDuplicate(
+        let result = DuplicateContactGuard.duplicate(
             email: "info@act.example", venue: "Weill Recital Hall", performanceDate: "2026-07-09",
             groupName: nil,
-            excludingProspectKey: "some-other-key", in: ctx)
+            excludingProspectKey: "some-other-key", in: ctx) != nil
         #expect(result == true)
     }
 
     @Test func doesNotFlagWhenVenueDiffers() throws {
         let ctx = ModelContext(try container())
         makeProspect(ctx, group: "A", date: "2026-07-08", venue: "Weill Recital Hall", email: "info@act.example")
-        let result = DuplicateContactGuard.looksLikeDuplicate(
+        let result = DuplicateContactGuard.duplicate(
             email: "info@act.example", venue: "Carnegie Hall", performanceDate: "2026-07-09",
             groupName: nil,
-            excludingProspectKey: "some-other-key", in: ctx)
+            excludingProspectKey: "some-other-key", in: ctx) != nil
         #expect(result == false)
     }
 
     @Test func flagsAtExactlyTheThreeDayBoundary() throws {
         let ctx = ModelContext(try container())
         makeProspect(ctx, group: "A", date: "2026-07-05", venue: "Weill Recital Hall", email: "info@act.example")
-        let result = DuplicateContactGuard.looksLikeDuplicate(
+        let result = DuplicateContactGuard.duplicate(
             email: "info@act.example", venue: "Weill Recital Hall", performanceDate: "2026-07-08",
             groupName: nil,
-            excludingProspectKey: "some-other-key", in: ctx)
+            excludingProspectKey: "some-other-key", in: ctx) != nil
         #expect(result == true)
     }
 
     @Test func doesNotFlagJustPastTheThreeDayBoundary() throws {
         let ctx = ModelContext(try container())
         makeProspect(ctx, group: "A", date: "2026-07-05", venue: "Weill Recital Hall", email: "info@act.example")
-        let result = DuplicateContactGuard.looksLikeDuplicate(
+        let result = DuplicateContactGuard.duplicate(
             email: "info@act.example", venue: "Weill Recital Hall", performanceDate: "2026-07-09",
             groupName: nil,
-            excludingProspectKey: "some-other-key", in: ctx)
+            excludingProspectKey: "some-other-key", in: ctx) != nil
         #expect(result == false)
     }
 
     @Test func flagsRegardlessOfWhichDateComesFirst() throws {
         let ctx = ModelContext(try container())
         makeProspect(ctx, group: "A", date: "2026-07-09", venue: "Weill Recital Hall", email: "info@act.example")
-        let result = DuplicateContactGuard.looksLikeDuplicate(
+        let result = DuplicateContactGuard.duplicate(
             email: "info@act.example", venue: "Weill Recital Hall", performanceDate: "2026-07-08",
             groupName: nil,
-            excludingProspectKey: "some-other-key", in: ctx)
+            excludingProspectKey: "some-other-key", in: ctx) != nil
         #expect(result == true)
     }
 
@@ -99,10 +99,10 @@ struct DuplicateContactGuardTests {
         let ctx = ModelContext(try container())
         makeProspect(ctx, group: "A", date: "2026-07-08", venue: "Weill Recital Hall",
                     email: "info@act.example", closed: true)
-        let result = DuplicateContactGuard.looksLikeDuplicate(
+        let result = DuplicateContactGuard.duplicate(
             email: "info@act.example", venue: "Weill Recital Hall", performanceDate: "2026-07-09",
             groupName: nil,
-            excludingProspectKey: "some-other-key", in: ctx)
+            excludingProspectKey: "some-other-key", in: ctx) != nil
         #expect(result == false)
     }
 
@@ -110,30 +110,30 @@ struct DuplicateContactGuardTests {
         let ctx = ModelContext(try container())
         let key = makeProspect(ctx, group: "A", date: "2026-07-08", venue: "Weill Recital Hall",
                                email: "info@act.example")
-        let result = DuplicateContactGuard.looksLikeDuplicate(
+        let result = DuplicateContactGuard.duplicate(
             email: "info@act.example", venue: "Weill Recital Hall", performanceDate: "2026-07-08",
             groupName: nil,
-            excludingProspectKey: key, in: ctx)
+            excludingProspectKey: key, in: ctx) != nil
         #expect(result == false)
     }
 
     @Test func doesNotFlagWithNoPerformanceDate() throws {
         let ctx = ModelContext(try container())
         makeProspect(ctx, group: "A", date: "2026-07-08", venue: "Weill Recital Hall", email: "info@act.example")
-        let result = DuplicateContactGuard.looksLikeDuplicate(
+        let result = DuplicateContactGuard.duplicate(
             email: "info@act.example", venue: "Weill Recital Hall", performanceDate: nil,
             groupName: nil,
-            excludingProspectKey: "some-other-key", in: ctx)
+            excludingProspectKey: "some-other-key", in: ctx) != nil
         #expect(result == false)
     }
 
     @Test func doesNotFlagWithNoEmail() throws {
         let ctx = ModelContext(try container())
         makeProspect(ctx, group: "A", date: "2026-07-08", venue: "Weill Recital Hall", email: "info@act.example")
-        let result = DuplicateContactGuard.looksLikeDuplicate(
+        let result = DuplicateContactGuard.duplicate(
             email: nil, venue: "Weill Recital Hall", performanceDate: "2026-07-09",
             groupName: nil,
-            excludingProspectKey: "some-other-key", in: ctx)
+            excludingProspectKey: "some-other-key", in: ctx) != nil
         #expect(result == false)
     }
 }

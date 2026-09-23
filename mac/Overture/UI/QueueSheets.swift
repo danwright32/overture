@@ -108,6 +108,8 @@ final class QueueSheetState {
     var editingInquiry: Inquiry?
     // #2718: Dan's manual route, for when the search found their reply and did not back it.
     var manualLinkTarget: ManualLinkTarget?
+    // #4170: the show Dan is adding a second contact to, from a row he has already pitched.
+    var pitchingSomeoneElseOn: PitchTarget?
     // #1219/#1249: an Approve or a per-row Re-prep landing on a date that already holds a pitch.
     var pendingSelfBookingGuard: SelfBookingGuard?
     // #1308 Layer 2: a reachability probe waiting to be paid for.
@@ -120,7 +122,7 @@ final class QueueSheetState {
     var isAsking: Bool {
         replyingTo != nil || answeringReply != nil || pendingRowNudge != nil || editingInquiry != nil
             || manualLinkTarget != nil || pendingSelfBookingGuard != nil || pendingProbe != nil
-            || pendingNightDismiss != nil
+            || pendingNightDismiss != nil || pitchingSomeoneElseOn != nil
     }
 }
 
@@ -244,6 +246,12 @@ struct QueueSheetHost<Content: View>: View {
             .sheet(item: $sheets.manualLinkTarget) { target in
                 LinkReplyPicker(prospect: target.prospect, recipient: target.recipient) {
                     sheets.manualLinkTarget = nil
+                }
+            }
+            // #4170: somebody else to pitch on a show already sent.
+            .sheet(item: $sheets.pitchingSomeoneElseOn) { target in
+                PitchSomeoneElseSheet(prospect: target.prospect) {
+                    sheets.pitchingSomeoneElseOn = nil
                 }
             }
     }

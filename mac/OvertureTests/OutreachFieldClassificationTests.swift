@@ -60,6 +60,10 @@ struct OutreachFieldClassificationTests {
         "looksLikePressContactDismissed": "Dan waving that guard off, an answer about the address",
         "looksLikeDuplicateContact": "a guard's opinion of the address",
         "looksLikeDuplicateContactDismissed": "Dan waving that guard off, an answer about the address",
+        // #4042: WHICH row that guard matched, in the same family as the flag it qualifies. It is a
+        // pointer at another show, resolved at read time, and says nothing about anybody being written
+        // to: the row it names may never have been pitched at all.
+        "looksLikeDuplicateContactKey": "which row that guard matched, a pointer resolved at read time",
         // #2912: what the CHECK said about the route it found, in the same family as the two below it.
         // Nobody has been written to on the strength of a name matching a handle; the write that would
         // prove this contact was reached is formOutreachRecordedAt, which the rule counts.

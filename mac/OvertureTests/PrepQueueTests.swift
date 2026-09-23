@@ -60,11 +60,18 @@ struct PrepQueueTests {
                                            reprepDraftRequested: false, reprepContactsRequested: false) == false)
     }
 
-    @Test func needsPrepNeverTrueForContactedOrDismissedEvenWithReprepFlags() {
-        #expect(PrepQueueBuilder.needsPrep(status: .contacted, hasDraft: true,
-                                           reprepDraftRequested: true, reprepContactsRequested: true) == false)
+    // #4170: the `.contacted` half of this test is GONE rather than adjusted, because the rule it
+    // defended was reversed: a sent show Dan has asked to pitch somebody else on is prepped again, for
+    // the draft half only. A test asserting a decision since reversed is the guard defending the
+    // rejected behaviour, so it is deleted with the decision (AGENTS.md, docs/agents/testing.md).
+    //
+    // `.dismissed` is untouched and is the half that still holds: no flag on a dismissed show reaches
+    // the prep queue, whoever set it.
+    @Test func needsPrepNeverTrueForDismissedEvenWithReprepFlags() {
         #expect(PrepQueueBuilder.needsPrep(status: .dismissed, hasDraft: true,
                                            reprepDraftRequested: true, reprepContactsRequested: true) == false)
+        #expect(PrepQueueBuilder.needsPrep(status: .dismissed, hasDraft: false,
+                                           reprepDraftRequested: true, reprepContactsRequested: false) == false)
     }
 
     @Test func gathersOnlyKeptUndraftedProspectsWithExactKey() throws {
