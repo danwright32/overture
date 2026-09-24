@@ -117,6 +117,23 @@ final class QueueSheetState {
     // #1500: a whole night waiting to be buried.
     var pendingNightDismiss: NightDismiss?
 
+    /// #4108: whether one of the three BRANDED CONFIRMS is up, which is what raises the opaque backdrop.
+    ///
+    /// All three present `SelfBookingConfirmSheet`, which that type's own docstring calls "the app's one
+    /// branded confirm for any deliberate, cautionary action". So this is the class rather than the one
+    /// sheet #4108 was reported on: a whole-night dismiss, a self double-booking override and a spend
+    /// approval all ask Dan to read a consequence before committing, and a consequence legible only by
+    /// luck is the defect on any of them (L30).
+    ///
+    /// Read by `QueueSheetHost` alone, which is what makes it safe where `isAsking` below warns. That
+    /// host is already `@Bindable` on this object and already presents all three through
+    /// `.sheet(item:)`, so it observes every field this reads and rebuilding it on a sheet write is
+    /// what it does anyway. A reader anywhere ELSE would put every sheet write back on whoever read it,
+    /// which is exactly what the note below means.
+    var isRaisingBrandedConfirm: Bool {
+        pendingSelfBookingGuard != nil || pendingProbe != nil || pendingNightDismiss != nil
+    }
+
     /// Whether anything at all is being asked. Used by the tests that drive two at once, and by nothing
     /// on the render path: a reader here would put every sheet write back on whoever read it.
     var isAsking: Bool {
@@ -160,6 +177,13 @@ struct QueueSheetHost<Content: View>: View {
 
     var body: some View {
         content()
+            // #4108: an opaque cover over the presenting content while a branded confirm is up, so a
+            // window that has not finished redrawing can never show through around it. It sits HERE
+            // rather than on the queue because this host already rebuilds on every sheet write, so the
+            // cover costs nothing that was not already being paid, and because the alternative is a
+            // reader of sheet state on the render path, which is the one thing `QueueSheetState` warns
+            // against. The sheet itself is a separate layer above this, so it is unaffected.
+            .overlay { if sheets.isRaisingBrandedConfirm { ConfirmBackdrop() } }
             // #1219/#1249: confirm an Approve or a per-row Re-prep that lands on a date already holding a
             // pitch. First-party branded sheet (SelfBookingConfirmSheet), not a stock system dialog.
             .sheet(item: $sheets.pendingSelfBookingGuard) { pending in
