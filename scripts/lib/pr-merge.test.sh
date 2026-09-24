@@ -37,6 +37,14 @@ FAILURES=0
 # substitution, whose subshell would discard any assignment made inside it, so a variable could only ever
 # record the merge call and would leave the state question looking as though it never happened.
 GH_CALL_LOG="$(mktemp "${TMPDIR:-/tmp}/gh-calls.XXXXXX")"
+
+# The lessons review merge_pr asks before merging (claude-config#560) is a seam, set for every case
+# here, so no case reaches the real ~/.claude checker (L284). Cases about the merge itself get one that
+# allows; the gate's own cases below set their own.
+FAKE_CHECK_DIR="$(mktemp -d "${TMPDIR:-/tmp}/pr-review-check.XXXXXX")"
+printf '#!/usr/bin/env bash\nprintf "%%s\\n" "$*" >> "%s/calls"\necho "review allows"\nexit 0\n' "${FAKE_CHECK_DIR}" > "${FAKE_CHECK_DIR}/allow.sh"
+printf '#!/usr/bin/env bash\nprintf "%%s\\n" "$*" >> "%s/calls"\necho "Refusing to merge yet: the lessons review is still running"\nexit 1\n' "${FAKE_CHECK_DIR}" > "${FAKE_CHECK_DIR}/refuse.sh"
+export PR_REVIEW_CHECK="${FAKE_CHECK_DIR}/allow.sh"
 merge_refusal_out() {
   local merge_rc="$1" reported_state="$2"
   LOCAL_BRANCH_DELETED=""
@@ -45,7 +53,9 @@ merge_refusal_out() {
     echo "$2" >> "${GH_CALL_LOG}"
     case "$2" in
       merge) return "${merge_rc}" ;;
-      view) printf '%s' "${reported_state}" ;;
+      # The head question the lessons review gate asks first is not the state question these cases
+      # are about, so it always has an answer.
+      view) case "$*" in *headRefOid*) printf 'abc1234\tmain' ;; *) printf '%s' "${reported_state}" ;; esac ;;
     esac
   }
   delete_merged_local_branch() { LOCAL_BRANCH_DELETED="$1"; }
@@ -97,6 +107,47 @@ assert_not_contains "and specifically does not record the PR it failed to merge"
 OUT="$(merge_refusal_out 0 "OPEN"; echo "RECORDED=${DECISION_RECORDED}")"
 assert_not_contains "a PR still OPEN records nothing either" "${OUT}" "RECORDED=90"
 
+# --- claude-config#560: the lessons review of the whole branch is asked BEFORE the merge ---------------
+#
+# merge_pr is the one merge in this repo, called from verify-and-merge-branch.sh and -batch.sh as well as
+# merge-when-green.sh, and the session's merge gate only sees a command typed as a merge. So the
+# review's verdict is asked here, where every route passes, by the same checker the gate uses.
+gate_out() {  # gate_out <checker path or MISSING> [SKIP]
+  : > "${GH_CALL_LOG}"; rm -f "${FAKE_CHECK_DIR}/calls"
+  gh_as_danwright32() {
+    echo "$2" >> "${GH_CALL_LOG}"
+    case "$*" in
+      *headRefOid*) printf 'abc1234\tmain' ;;
+      *merge*) return 0 ;;
+      *view*) printf 'MERGED' ;;
+    esac
+  }
+  delete_merged_local_branch() { :; }
+  local checker="$1"
+  [[ "${checker}" == "MISSING" ]] && checker="${FAKE_CHECK_DIR}/does-not-exist.sh"
+  MERGE_PR_RC=0
+  PR_REVIEW_CHECK="${checker}" SKIP_PR_REVIEW="${2:-}" merge_pr "91" "feature-gated" 2>&1 || MERGE_PR_RC=$?
+}
+OUT="$(gate_out "${FAKE_CHECK_DIR}/refuse.sh"; echo "RC=${MERGE_PR_RC}"; echo "GH=$(tr '\n' ' ' < "${GH_CALL_LOG}")")"
+assert_contains "a review that refuses stops the merge" "${OUT}" "RC=1"
+assert_contains "and its words reach the caller" "${OUT}" "still running"
+assert_not_contains "and gh was never asked to merge" "${OUT}" "GH=view merge"
+assert_contains "the checker was asked about the pull request's head, not the local one" "$(cat "${FAKE_CHECK_DIR}/calls" 2>/dev/null)" "--sha abc1234"
+assert_contains "and against its base branch" "$(cat "${FAKE_CHECK_DIR}/calls" 2>/dev/null)" "--base-ref origin/main"
+
+OUT="$(gate_out "${FAKE_CHECK_DIR}/allow.sh"; echo "RC=${MERGE_PR_RC}"; echo "GH=$(tr '\n' ' ' < "${GH_CALL_LOG}")")"
+assert_contains "a review that allows lets the merge run" "${OUT}" "RC=0"
+assert_contains "and gh merged" "${OUT}" "merge"
+
+OUT="$(gate_out MISSING; echo "RC=${MERGE_PR_RC}"; echo "GH=$(tr '\n' ' ' < "${GH_CALL_LOG}")")"
+assert_contains "a missing checker refuses rather than merging unread" "${OUT}" "RC=1"
+assert_contains "and names the override" "${OUT}" "SKIP_PR_REVIEW=1"
+
+OUT="$(gate_out MISSING 1; echo "RC=${MERGE_PR_RC}")"
+assert_contains "the override lets the merge run" "${OUT}" "RC=0"
+assert_contains "and says out loud that it did" "${OUT}" "NOT held for the lessons review"
+
+rm -rf "${FAKE_CHECK_DIR}"
 rm -f "${GH_CALL_LOG}"
 
 

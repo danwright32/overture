@@ -30,12 +30,58 @@
 # delete_merged_local_branch (scripts/lib/checkout-tidy.sh), record_pr_decision
 # (scripts/lib/pr-body-claims.sh), and REPO_ROOT.
 
+# lessons_review_allows <pr-number>
+#
+# claude-config#560: no pull request merges until the lessons review of its whole branch has finished
+# and its findings have reached the session. The session's merge gate (pr-review-gate.sh) sees only a
+# command TYPED as a merge, and verify-and-merge-branch.sh and -batch.sh reach the merge through this
+# file, so the verdict is asked here, where every route passes, from the same checker the gate uses:
+# ~/.claude/hooks/lib/pr-review.sh check (PR_REVIEW_CHECK replaces it, for the tests). It is asked about
+# the PULL REQUEST's head from GitHub, never the local HEAD, which can be a different commit.
+#
+# Refuses when the checker is missing or the head cannot be read, since merging something no review has
+# read is what this exists to stop. SKIP_PR_REVIEW=1 in the environment skips it for one run, loudly;
+# explain to Dan before using it.
+lessons_review_allows() {
+  local pr_number="$1" checker="${PR_REVIEW_CHECK:-${HOME}/.claude/hooks/lib/pr-review.sh}" head_base head base
+  if [[ "${SKIP_PR_REVIEW:-}" == "1" ]]; then
+    echo "SKIP_PR_REVIEW=1: PR #${pr_number} was NOT held for the lessons review. Tell Dan why it was skipped." >&2
+    return 0
+  fi
+  if [[ ! -f "${checker}" ]]; then
+    echo "Refusing to merge PR #${pr_number}: the lessons review checker ${checker} is missing, so nothing has read this branch" >&2
+    echo "against the recorded lessons. Install the shared config, or override for one run, explained to Dan first: SKIP_PR_REVIEW=1." >&2
+    return 1
+  fi
+  head_base="$(gh_as_danwright32 pr view "${pr_number}" -R "${REPO}" --json headRefOid,baseRefName --jq '.headRefOid + "\t" + .baseRefName' 2>/dev/null || echo "")"
+  head="${head_base%%$'\t'*}"
+  base="${head_base#*$'\t'}"
+  if [[ -z "${head}" ]]; then
+    echo "Refusing to merge PR #${pr_number}: could not read its head from GitHub, so no lessons review can answer for it." >&2
+    echo "Override for one run, explained to Dan first: SKIP_PR_REVIEW=1." >&2
+    return 1
+  fi
+  local out rc=0
+  out="$(bash "${checker}" check --dir "${REPO_ROOT}" --sha "${head}" --base-ref "origin/${base:-main}" 2>&1)" || rc=$?
+  if [[ "${rc}" -ne 0 ]]; then
+    printf '%s\n' "${out}" >&2
+    return 1
+  fi
+  printf '%s\n' "${out}"
+  return 0
+}
+
 # merge_pr <pr-number> [local-branch-name]
 #
 # Returns 0 only when GitHub confirms the PR is MERGED. Prints the reason and returns 1 otherwise,
 # having changed nothing else.
 merge_pr() {
   local pr_number="$1" merged_branch="${2:-}"
+
+  if ! lessons_review_allows "${pr_number}"; then
+    echo "PR #${pr_number} was not merged: the lessons review has not cleared it (above). Nothing else was done to it." >&2
+    return 1
+  fi
 
   if ! gh_as_danwright32 pr merge "${pr_number}" -R "${REPO}" --squash --delete-branch; then
     echo "gh refused to merge PR #${pr_number}; its message is above. Nothing else was done to it," >&2

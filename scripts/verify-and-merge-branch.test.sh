@@ -7,6 +7,13 @@ set -uo pipefail
 # shellcheck source=../scripts/lib/shell-assertions.sh
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../scripts/lib/shell-assertions.sh"
 
+# merge_pr asks the lessons review before it merges (claude-config#560). These fixtures are about the
+# merge decision, so the review allows, through the seam, and never the real ~/.claude checker (L284).
+# The review gate's own cases live in lib/pr-merge.test.sh.
+PR_REVIEW_ALLOW="$(mktemp "${TMPDIR:-/tmp}/pr-review-allow.XXXXXX")"
+printf '#!/usr/bin/env bash\nexit 0\n' > "${PR_REVIEW_ALLOW}"
+export PR_REVIEW_CHECK="${PR_REVIEW_ALLOW}"
+
 # Coverage for verify-and-merge-branch.sh's verify_and_merge orchestration (#525): merge ONLY
 # when the branch's own local suite comes back clean, and always release the verify slot on both
 # the happy and failure paths. Stubs every side-effecting step (resolve_pr, setup_worktree,
