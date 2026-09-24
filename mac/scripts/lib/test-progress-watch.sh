@@ -29,6 +29,9 @@
 #
 # What this deliberately does NOT do, named rather than left to be discovered (L93, L65):
 #
+#   #3976: the ENDING now exists, in test-stall-end.sh, beside this rather than inside it, so this loop
+#   still cannot touch the run (L71). Everything below about warning stays true of THIS file.
+#
 #   It WARNS, it does not kill. A stalled run holds the shared lock, which is real damage, so
 #   killing it has a genuine argument. Against that: this runs on a Mac where several agents contend
 #   for that lock, the limit is a guess until it has been observed on real runs, and a wrong kill
@@ -292,15 +295,29 @@ progress_watch_loop() {
 # SIGTTOU rather than told about it. Measured 2026-08-29 on this Mac, under a real pty and nested
 # exactly that way (bash 3.2, non-interactive): the inner script kept running and its watcher got its
 # own group. A non-interactive bash sets job control without taking terminal control.
+#
+# #3976: the group starting and stopping is now `start_own_group_job` and `stop_own_group_job` below,
+# because the run itself and the guard that can END it (test-stall-end.sh) need exactly the same two
+# things, and a second copy of this reasoning is the one that quietly drifts (L263).
 PROGRESS_WATCH_PID=""
 start_progress_watch() {
   local log_file="$1"
+  start_own_group_job progress_watch_loop "${log_file}" \
+    "${TEST_STALL_LIMIT_SECONDS}" "${TEST_STALL_CHECK_SECONDS}" "${TEST_LOCK_NOTICE_SECONDS}"
+  PROGRESS_WATCH_PID="${OWN_GROUP_JOB_PID}"
+  return 0
+}
+
+# start_own_group_job <command> [args...]: runs the command in the background in a process group of
+# its OWN, and records its PID in OWN_GROUP_JOB_PID. The reasoning is start_progress_watch's, above.
+# A variable rather than printed, because a command substitution would start the job from a subshell.
+OWN_GROUP_JOB_PID=""
+start_own_group_job() {
   local restore_job_control=0
   case "$-" in *m*) ;; *) restore_job_control=1 ;; esac
   set -m
-  progress_watch_loop "${log_file}" \
-    "${TEST_STALL_LIMIT_SECONDS}" "${TEST_STALL_CHECK_SECONDS}" "${TEST_LOCK_NOTICE_SECONDS}" &
-  PROGRESS_WATCH_PID=$!
+  "$@" &
+  OWN_GROUP_JOB_PID=$!
   [[ "${restore_job_control}" -eq 1 ]] && set +m
   return 0
 }
@@ -309,6 +326,14 @@ start_progress_watch() {
 # EXIT trap, so it has to be safe to call twice and safe to call on a PID that never existed: a
 # watcher outliving the run that spawned it would sit printing about a log nobody is writing.
 stop_progress_watch() {
+  stop_own_group_job "${1:-}"
+  PROGRESS_WATCH_PID=""
+  return 0
+}
+
+# stop_own_group_job <pid>: ends a job start_own_group_job started, its whole group and the pid itself,
+# and reaps it. Safe to call twice and on a pid that never existed.
+stop_own_group_job() {
   local pid="${1:-}"
   [[ -n "${pid}" ]] || return 0
   # A pid that is not a plain number above 1 is refused rather than passed through, because
@@ -335,6 +360,5 @@ stop_progress_watch() {
   # whenever `set -m` worked, and that is the point of it.
   kill "${pid}" 2>/dev/null || true
   wait "${pid}" 2>/dev/null || true
-  PROGRESS_WATCH_PID=""
   return 0
 }

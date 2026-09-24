@@ -168,7 +168,21 @@ rides along in `scripts/test-all.sh` and reports how close it is, advisory, neve
   every concurrent session on the Mac: measured twice in three days, once for 2h50m (#3976) and once
   for 38 minutes, both ended by hand. Killing the driver is not enough either, because `xcodebuild` and
   its `flock` wrapper survive as orphans still holding the lock. #3976 is the fix; until it lands, read
-  a run that has printed nothing for several minutes as possibly hung and check its CPU time. A failing cheap check no longer ends the run, because the expensive lane is already going
+  a run that has printed nothing for several minutes as possibly hung and check its CPU time.
+  **Since #3976 (2026-09-24) the test runner DOES end a run that stops moving.** The call lives in
+  `mac/scripts/lib/test-stall-end.sh`, a fourth caller of `stall_tick`, so the grep above still reads 0
+  on the runner itself. (The 600s and 300s quoted above are the progress watcher's own warning and lock
+  notice defaults in `test-progress-watch.sh`; the three detached run scripts stop at 1200s, which is
+  the limit this uses too.) The runner now starts `flock` as a job in a process group of its own, and a guard
+  in a group of ITS own ends the run once no test has started or finished AND `xcodebuild`'s own CPU has
+  moved less than 5s, for 1200s (`OVERTURE_TEST_STALL_END_SECONDS`, `OVERTURE_TEST_STALL_END_CPU_SECONDS`,
+  `OVERTURE_TEST_STALL_END_CHECK_SECONDS`; a limit of 0 switches it off). It stops `xcodebuild` and `flock`
+  by the pids the runner started, releases the lock, and reports `STALLED AND ENDED`: never retried, never
+  a pass, never `NOTHING RAN`. xcodebuild's OWN time rather than its tree's, because `xctest` is its child
+  and was the busy process in the 2h50m hang. A queued run is never judged, since `flock` forks only once
+  it holds the lock. Killing the runner with INT or TERM now takes the run with it, and a runner killed
+  outright is noticed by the guard, which ends the orphan. A lock give up names the holder PID and says
+  whether it is dead, alive and stalled, or alive and working, with its CPU over the wait. A failing cheap check no longer ends the run, because the expensive lane is already going
   and its verdict is worth having, so the run says `FAILED - <check>` as it happens and both lanes are
   reported separately at the end; the exit code is red if either lane is red (L53). And two checks
   deliberately stay ahead of the build, `check-pure-suite-imports.sh` (its whole value is saving a doomed

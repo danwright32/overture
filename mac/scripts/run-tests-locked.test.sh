@@ -335,8 +335,13 @@ assert_contains() {
     echo "ok - ${desc}"
   else
     echo "FAIL - ${desc}"
-    echo "  expected output to contain: ${needle}"
-    echo "  actual output: ${haystack}"
+    echo "  expected output to contain:"
+    sed 's/^/    /' <<< "${needle}"
+    # Indented, every line of both: the runner's own verdict lines start at column 0, and `scripts/mutate.sh`
+    # reads `^run-tests-locked.sh: NOTHING RAN` and `^run-tests-locked.sh: gave up waiting` as the
+    # verdict of the WHOLE run, so a dump of them here turned a caught mutation into NOTHING RAN (#3976).
+    echo "  actual output:"
+    sed 's/^/    /' <<< "${haystack}"
     FAILURES=$((FAILURES + 1))
   fi
 }
@@ -347,8 +352,10 @@ assert_not_contains() {
     echo "ok - ${desc}"
   else
     echo "FAIL - ${desc}"
-    echo "  expected output NOT to contain: ${needle}"
-    echo "  actual output: ${haystack}"
+    echo "  expected output NOT to contain:"
+    sed 's/^/    /' <<< "${needle}"
+    echo "  actual output:"
+    sed 's/^/    /' <<< "${haystack}"
     FAILURES=$((FAILURES + 1))
   fi
 }
@@ -1697,6 +1704,32 @@ assert_contains "a freshly made ownerless lock is WAITED for, not stolen" \
 assert_not_contains "and the run never claimed it" \
   "claiming" "${OWNERLESS_RUN}"
 rm -rf "${OWNERLESS_LOCK}"
+
+# #3976: A LIVE HOLDER STANDING STILL IS NAMED AS ONE, never as a corpse. On 2026-09-17 the give up said
+# "a run that died holding it" while xcodebuild, its flock and an xctest child were all alive, so the
+# reader went looking for a dead process and found three healthy ones. The holder here is a real process
+# this fixture starts and that uses no CPU, which is the measured signature (1.33s in 38 minutes).
+LIVE_HOLDER_LOCK="${DIR_LOCK_FIXTURE_DIR}/liveholder.lock"
+mkdir -p "${LIVE_HOLDER_LOCK}"
+/bin/sleep 30 &
+LIVE_HOLDER=$!
+echo "overture:${LIVE_HOLDER}" > "${LIVE_HOLDER_LOCK}/owner"
+LIVE_HOLDER_RUN="$(OVERTURE_DIR_LOCK="${LIVE_HOLDER_LOCK}" OVERTURE_DIR_LOCK_TIMEOUT=1 \
+  OVERTURE_DIR_LOCK_POLL=0.2 run_wrapper_with_stub_xcodebuild "${GREEN_RUN_LOG}" 0)"
+kill "${LIVE_HOLDER}" 2>/dev/null
+wait "${LIVE_HOLDER}" 2>/dev/null
+rm -rf "${LIVE_HOLDER_LOCK}"
+assert_contains "a give up still opens with the line mutate.sh reads" \
+  $'\nrun-tests-locked.sh: gave up waiting' $'\n'"${LIVE_HOLDER_RUN}"
+assert_contains "a live holder that used no CPU over the wait is called alive and stalled" \
+  "ALIVE but STALLED" "${LIVE_HOLDER_RUN}"
+assert_contains "naming its PID" "PID ${LIVE_HOLDER}" "${LIVE_HOLDER_RUN}"
+assert_contains "and the CPU it used across the wait" "of CPU over the" "${LIVE_HOLDER_RUN}"
+assert_not_contains "and never as a run that died" "a run that died holding it" "${LIVE_HOLDER_RUN}"
+assert_contains "and the runner itself says NOTHING RAN, so a starved run cannot read as a pass" \
+  $'\nrun-tests-locked.sh: NOTHING RAN.' "${LIVE_HOLDER_RUN}"
+assert_contains "and exits 3, never 0" "exit=3" "${LIVE_HOLDER_RUN}"
+assert_not_contains "and no test ran" "Test run with 4 tests" "${LIVE_HOLDER_RUN}"
 
 # THE POLL INTERVAL IS INJECTABLE, so a test of the WAITING path does not wait for real (L524). The
 # arm above proves the seam works by waiting out a 3 second timeout rather than the 1800 second one.

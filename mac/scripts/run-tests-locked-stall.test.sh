@@ -163,6 +163,135 @@ assert_contains "the wait is reported as the queue it is, rather than left silen
 assert_contains "and the run says what the queue cost it once it gets the lock" \
   "${QUEUED_RUN}" "Got the shared xcodebuild lock after"
 
+# ---------------------------------------------------------------------------
+# #3976: a run that STOPS while holding the lock is ENDED, by this runner, and the lock goes back.
+# ---------------------------------------------------------------------------
+# Measured twice: 2h50m on 2026-09-17 and 38 minutes on 2026-09-19, both ended only by a person, with
+# xcodebuild alive at 1.33s of CPU in 38 minutes. The warning above fired and nothing acted on it.
+#
+# Driven against the REAL runner with a flock stand in that behaves as the real one was measured to
+# (flock 0.4.0, 2026-09-24): it waits with NO child while queued, then FORKS the command and waits for
+# it. Perl, so the queue wait is in process rather than a child `sleep` that would look like a holder.
+# Every pid it and the xcodebuild stub have is written down, so the assertions are about the very
+# processes the run started and never about anything matched by name (L1011).
+run_wrapper_that_hangs() {
+  local bin_dir="$1"; shift
+  cat > "${bin_dir}/flock" <<'STUB'
+#!/usr/bin/perl
+shift @ARGV;
+my $child = fork();
+if ($child == 0) { exec @ARGV or exit 127; }
+my $fh;
+if (open($fh, '>', $ENV{STALL_FIXTURE_PIDS} . '.flock')) { print $fh "$$\n"; close($fh); }
+waitpid($child, 0);
+exit($? >> 8);
+STUB
+  # Reports two tests, then stands still for far longer than the limit: alive, holding the lock, and
+  # doing nothing, which is the measured signature. Counts its invocations, so a retry is visible.
+  # The runner also asks xcodebuild for its build settings before it takes any lock, to scope its stale
+  # host sweep. That question is answered at once, or it would be the thing standing still.
+  cat > "${bin_dir}/xcodebuild" <<'STUB'
+#!/usr/bin/env bash
+case "$*" in *-showBuildSettings*) exit 0 ;; esac
+echo "$$" > "${STALL_FIXTURE_PIDS}.xcodebuild"
+echo "call" >> "${STALL_FIXTURE_PIDS}.calls"
+printf 'Test run started.\nTest alpha() passed after 0.001 seconds.\nTest beta() started.\n'
+sleep 600
+echo "** TEST SUCCEEDED **"
+STUB
+  cat > "${bin_dir}/ps" <<'STUB'
+#!/usr/bin/env bash
+echo "  501 /sbin/launchd"
+STUB
+  cat > "${bin_dir}/log" <<'STUB'
+#!/usr/bin/env bash
+echo ""
+STUB
+  cat > "${bin_dir}/sleep" <<STUB
+#!/usr/bin/env bash
+exec /bin/sleep "\$(awk -v seconds="\$1" -v scale="${TICK_SCALE}" 'BEGIN { printf "%.3f", seconds * scale }')"
+STUB
+  chmod +x "${bin_dir}/flock" "${bin_dir}/xcodebuild" "${bin_dir}/ps" "${bin_dir}/log" "${bin_dir}/sleep"
+  PATH="${bin_dir}:${PATH}" \
+    STALL_FIXTURE_PIDS="${bin_dir}/pids" \
+    OVERTURE_TEST_BASELINE_FILE="${bin_dir}/baseline" \
+    OVERTURE_TEST_DIAGNOSTICS_DIR="${bin_dir}/diagnostics" \
+    OVERTURE_TEST_STALL_LIMIT_SECONDS=600 \
+    OVERTURE_TEST_STALL_CHECK_SECONDS=30 \
+    OVERTURE_TEST_LOCK_NOTICE_SECONDS=600 \
+    OVERTURE_TEST_STALL_END_SECONDS=3 \
+    OVERTURE_TEST_STALL_END_CHECK_SECONDS="${STALL_END_CHECK:-1}" \
+    OVERTURE_TEST_STALL_END_GRACE_SECONDS=4 \
+    OVERTURE_HOSTED_SUITE_RECORD="${bin_dir}/hosted-seen" \
+    OVERTURE_SUITE_RUN_SERIES="${bin_dir}/suite-run-series" \
+    OVERTURE_LIVE_CORPUS_RECORD="${bin_dir}/corpus-seen" \
+    OVERTURE_QUEUE_COST_RECORD="${bin_dir}/queue-cost" \
+    OVERTURE_LIVE_STORE_COST_RECORD="${bin_dir}/live-cost" \
+    OVERTURE_PREFERENCES_DIR="${bin_dir}" \
+    OVERTURE_DIR_LOCK="${bin_dir}/dir.lock" \
+    OVERTURE_DIR_LOCK_TIMEOUT=5 \
+    OVERTURE_DIR_LOCK_POLL=1 \
+    "$@"
+}
+
+HANG_BIN="$(fixture_scratch_dir)"
+HANG_STARTED="${SECONDS}"
+HANG_RUN="$(run_wrapper_that_hangs "${HANG_BIN}" "${SCRIPT_DIR}/run-tests-locked.sh" 2>&1)"
+HANG_CODE=$?
+HANG_TOOK=$(( SECONDS - HANG_STARTED ))
+HANG_XCODEBUILD="$(cat "${HANG_BIN}/pids.xcodebuild" 2>/dev/null)"
+HANG_FLOCK="$(cat "${HANG_BIN}/pids.flock" 2>/dev/null)"
+
+assert_contains "a run standing still while holding the lock is ENDED, and says so by name" \
+  "${HANG_RUN}" "STALLED AND ENDED"
+assert_contains "naming the xcodebuild it stopped by the pid it started" \
+  "${HANG_RUN}" "PID ${HANG_XCODEBUILD:-unrecorded}"
+assert_pids_gone "xcodebuild and its flock wrapper are both stopped" "${HANG_XCODEBUILD}" "${HANG_FLOCK}"
+assert_eq "the shared lock is released" "released" \
+  "$(if [[ -d "${HANG_BIN}/dir.lock" ]]; then echo "still held"; else echo released; fi)"
+assert_eq "it is never a pass" "nonzero" "$(if [[ "${HANG_CODE}" -ne 0 ]]; then echo nonzero; else echo "exit 0"; fi)"
+assert_not_contains "and never NOTHING RAN, which would send the reader to their scope" \
+  "${HANG_RUN}" "NOTHING RAN"
+assert_not_contains "and never the crash message, which would retry and ask the pure suite" \
+  "${HANG_RUN}" "the test run CRASHED"
+assert_eq "it was not retried: a second full wait would hold the lock twice as long" "1" \
+  "$(grep -c . "${HANG_BIN}/pids.calls" 2>/dev/null)"
+assert_eq "and it ended in seconds rather than the ten minutes the stub would stand still" "prompt" \
+  "$(if [[ "${HANG_TOOK}" -le 30 ]]; then echo prompt; else echo "took ${HANG_TOOK}s"; fi)"
+rm -rf "${HANG_BIN}"
+
+# KILLING THE RUNNER must take the run with it. On 2026-09-19 stopping the driver left xcodebuild and its
+# flock reparented to launchd, still holding the lock, which made the situation look handled while the
+# lock stayed held. The stall guard is switched OFF here entirely (a check interval of 0), because it also
+# ends an orphaned run, and with it on this would pass on the guard rather than on the runner's own
+# signal handling.
+TERM_BIN="$(fixture_scratch_dir)"
+( STALL_END_CHECK=0 run_wrapper_that_hangs "${TERM_BIN}" \
+    "${SCRIPT_DIR}/run-tests-locked.sh" > "${TERM_BIN}/out" 2>&1 ) &
+TERM_WRAPPER=$!
+term_waited=0
+while [[ ! -s "${TERM_BIN}/pids.xcodebuild" && "${term_waited}" -lt 200 ]]; do
+  /bin/sleep 0.05; term_waited=$(( term_waited + 1 ))
+done
+TERM_XCODEBUILD="$(cat "${TERM_BIN}/pids.xcodebuild" 2>/dev/null)"
+TERM_FLOCK="$(cat "${TERM_BIN}/pids.flock" 2>/dev/null)"
+TERM_RUNNER="$(pgrep -P "${TERM_WRAPPER}" 2>/dev/null | head -1)"
+assert_eq "the runner is found as the child of the subshell this fixture started" "found" \
+  "$(if [[ -n "${TERM_RUNNER}" ]]; then echo found; else echo missing; fi)"
+kill -TERM "${TERM_RUNNER}" 2>/dev/null
+term_waited=0
+while kill -0 "${TERM_WRAPPER}" 2>/dev/null && [[ "${term_waited}" -lt 200 ]]; do
+  /bin/sleep 0.05; term_waited=$(( term_waited + 1 ))
+done
+assert_eq "a runner sent TERM ends rather than carrying on (L473)" "ended" \
+  "$(if kill -0 "${TERM_WRAPPER}" 2>/dev/null; then echo "still running"; else echo ended; fi)"
+assert_pids_gone "and takes xcodebuild and its flock wrapper with it" "${TERM_XCODEBUILD}" "${TERM_FLOCK}"
+assert_eq "and the shared lock is released" "released" \
+  "$(if [[ -d "${TERM_BIN}/dir.lock" ]]; then echo "still held"; else echo released; fi)"
+kill -KILL "${TERM_WRAPPER}" "${TERM_RUNNER}" "${TERM_XCODEBUILD}" "${TERM_FLOCK}" 2>/dev/null
+wait "${TERM_WRAPPER}" 2>/dev/null
+rm -rf "${TERM_BIN}"
+
 # That the watcher does not OUTLIVE the run is asserted in the library's own fixture, where the PID
 # is in hand. It cannot be asserted from here: the watcher is a shell function in a background
 # subshell, so it carries the parent script's own command line, and the only way to count them would
