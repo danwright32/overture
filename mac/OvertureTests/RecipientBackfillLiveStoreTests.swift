@@ -69,7 +69,13 @@ struct RecipientBackfillLiveStoreTests {
             let recipientCountBefore = before.reduce(0) { $0 + $1.recipients.count }
             // Record which recipients already had a thread, so we can prove the repair only ADDS threads
             // to legacy act rows and never rewrites an existing one or touches an unrelated row.
-            let threadedIdsBefore = Set(before.flatMap { $0.recipients.filter { $0.gmailThreadId != nil }.map(\.id) })
+            // Keyed on the ROW rather than `Recipient.id`, which is the email address and is shared by the
+            // same person's rows on different shows (21 addresses in the live store, 2026-09-24). Keyed on
+            // the address, one threaded row exempted every other show's row for that person, so a repair
+            // that wrongly threaded one of them passed unseen (L15, L131).
+            let threadedIdsBefore = Set(before.flatMap {
+                $0.recipients.filter { $0.gmailThreadId != nil }.map(\.persistentModelID)
+            })
 
             let repaired = RecipientBackfill.repairThreadDown(in: ctx)
             try ctx.save()
@@ -80,13 +86,13 @@ struct RecipientBackfillLiveStoreTests {
             for p in after {
                 for r in p.recipients {
                     // Any row that NEWLY gained a thread must be a legacy act on a contacted show, now .sent.
-                    if r.gmailThreadId != nil && !threadedIdsBefore.contains(r.id) {
+                    if r.gmailThreadId != nil && !threadedIdsBefore.contains(r.persistentModelID) {
                         #expect(r.provenance == .act)
                         #expect(r.sendState == .sent)
                         #expect(p.gmailThreadId != nil && p.sentAt != nil)
                     }
                     // A recipient whose show has no lead thread can never have been given one.
-                    if p.gmailThreadId == nil { #expect(r.gmailThreadId == nil || threadedIdsBefore.contains(r.id)) }
+                    if p.gmailThreadId == nil { #expect(r.gmailThreadId == nil || threadedIdsBefore.contains(r.persistentModelID)) }
                 }
             }
 
