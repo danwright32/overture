@@ -169,6 +169,37 @@ for runner in prep-run.sh reply-classify-run.sh scout-extract-run.sh; do
   fi
 done
 
+# --- #3580: the DISPLAY mode, which the Mac test runner arms ---------------------------------------
+# The hosted scroll tests need a window the WindowServer actually lays out, and a display that has gone
+# to sleep does no layout, so four of them fail for a reason unrelated to any change. `-d` keeps the
+# display on; the default mode keeps only the machine awake, which is not enough for those tests.
+ARGS_STUB="${TMP}/recording-caffeinate"
+cat > "${ARGS_STUB}" <<EOF
+#!/bin/sh
+echo "\$*" > "${TMP}/caffeinate.args"
+EOF
+chmod +x "${ARGS_STUB}"
+SLEEP_GUARD_BIN="${ARGS_STUB}" start_sleep_guard "$$" display >/dev/null
+waited=0
+while [ ! -s "${TMP}/caffeinate.args" ] && [ "${waited}" -lt 50 ]; do sleep 0.05; waited=$((waited + 1)); done
+DISPLAY_ARGS="$(cat "${TMP}/caffeinate.args" 2>/dev/null)"
+case " ${DISPLAY_ARGS} " in
+  *" -d "*) pass "display mode keeps the display awake (-d)" ;;
+  *) fail "display mode must pass -d to caffeinate" "got: '${DISPLAY_ARGS}'" ;;
+esac
+case " ${DISPLAY_ARGS} " in
+  *" -w $$ "*) pass "and it still self-releases when the watched process exits (-w)" ;;
+  *) fail "display mode must keep -w <pid>" "got: '${DISPLAY_ARGS}'" ;;
+esac
+rm -f "${TMP}/caffeinate.args"
+SLEEP_GUARD_BIN="${ARGS_STUB}" start_sleep_guard "$$" >/dev/null
+waited=0
+while [ ! -s "${TMP}/caffeinate.args" ] && [ "${waited}" -lt 50 ]; do sleep 0.05; waited=$((waited + 1)); done
+case " $(cat "${TMP}/caffeinate.args" 2>/dev/null) " in
+  *" -d "*) fail "the default mode must not hold the display, which the detached runs never asked for" ;;
+  *) pass "the default mode leaves the display alone, as the detached runs expect" ;;
+esac
+
 if [ "${FAILURES}" -gt 0 ]; then
   echo "${FAILURES} failure(s)"
   exit 1

@@ -414,6 +414,14 @@ shift
 exec "$@"
 STUB
 
+  # #3580: the runner holds the display awake for the run. Every stubbed run gets a recording stand in, so
+  # no fixture launches a real power assertion, and the case below can read what the runner asked for.
+  cat > "${bin_dir}/caffeinate" <<STUB
+#!/usr/bin/env bash
+echo "\$*" >> "\${CAFFEINATE_ARGS_FILE:-/dev/null}"
+STUB
+  chmod +x "${bin_dir}/caffeinate"
+
   # A process table with nothing Overture-shaped in it, so the pre-flight neither kills anything nor
   # stops for a blocking Debug app. The etime branch answers the ONE other question main asks `ps`
   # (#2323: how old the machine's test service is) and is deliberately told apart by the flag rather
@@ -517,6 +525,7 @@ STUB
     OVERTURE_PREFERENCES_DIR="${OVERTURE_PREFERENCES_DIR:-${bin_dir}}" \
     OVERTURE_DIR_LOCK_TIMEOUT="${OVERTURE_DIR_LOCK_TIMEOUT:-5}" \
     OVERTURE_DIR_LOCK_POLL="${OVERTURE_DIR_LOCK_POLL:-1}" \
+    SLEEP_GUARD_BIN="${SLEEP_GUARD_BIN:-${bin_dir}/caffeinate}" \
     "${SCRIPT_DIR}/run-tests-locked.sh" 2>&1)"
   code=$?
   log_calls="$(grep -c . "${bin_dir}/log-calls" 2>/dev/null || echo 0)"
@@ -630,6 +639,23 @@ assert_contains "and it NAMES them, so a reader can see which went uncovered" \
   "RealScrollInvalidationTests.theDriverReallyScrolls" "${SCREEN_LOCKED_RUN}"
 assert_contains "and it says waking the display is not enough, which is the wrong fix somebody will try" \
   "Waking the display is NOT enough" "${SCREEN_LOCKED_RUN}"
+
+# #3580: a sleeping DISPLAY is the other way those tests go unmeasured, and unlike a lock it is preventable
+# for a run that starts awake. So the runner holds the display on for the run, released when it exits.
+CAFFEINATE_ARGS="$(fixture_scratch_file)"
+DISPLAY_RUN="$(CAFFEINATE_ARGS_FILE="${CAFFEINATE_ARGS}" run_wrapper_with_stub_xcodebuild "${SCREEN_LOCKED_OUTPUT}" 0)"
+# The stand in is started in the background, so give its one write a moment rather than racing it.
+waited=0
+while [[ ! -s "${CAFFEINATE_ARGS}" && "${waited}" -lt 50 ]]; do sleep 0.05; waited=$(( waited + 1 )); done
+DISPLAY_ARGS="$(cat "${CAFFEINATE_ARGS}" 2>/dev/null)"
+rm -f "${CAFFEINATE_ARGS}"
+assert_contains "the runner holds the display awake for the run" "-d" "${DISPLAY_ARGS}"
+assert_contains "and the hold ends with the runner, however it ends" "-w " "${DISPLAY_ARGS}"
+assert_not_contains "an ordinary run says nothing about the display" "display was NOT kept awake" "${DISPLAY_RUN}"
+NO_GUARD_RUN="$(SLEEP_GUARD_BIN=/nonexistent/caffeinate run_wrapper_with_stub_xcodebuild "${PASSING_OUTPUT}" 0)"
+assert_contains "a run that could not hold the display says so, since a sleeping display fails the scroll tests" \
+  "display was NOT kept awake" "${NO_GUARD_RUN}"
+assert_equals "and it still runs and passes" "exit=0" "$(tail -n 1 <<< "${NO_GUARD_RUN}")"
 
 # The other half, and it is what keeps the notice meaningful: an ordinary run says NOTHING about it. A
 # notice on every run is the noise that teaches a reader to skip the whole block (L36).
