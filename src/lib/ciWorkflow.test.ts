@@ -92,6 +92,22 @@ describe("the CI workflow's triggers", () => {
       .toBe(jobLines.length);
   });
 
+  it("compiles the Release configuration, which the Mac suite never builds", () => {
+    // `xcodebuild test` builds Debug, so a symbol declared inside `#if DEBUG` and used outside it
+    // passes the whole suite. On 2026-09-24 exactly that (#4204's unguarded QueueRenderCounter calls)
+    // merged green and was first built by the Update button, which failed. The step has to be in the
+    // macOS job specifically: the Ubuntu job has no Xcode and would only ever report it unmeasured.
+    const lines = source.split("\n");
+    const macAt = lines.findIndex((l) => /runs-on:\s*macos-[0-9]+\s*$/.test(l));
+    expect(macAt, "no job runs on a macOS runner").toBeGreaterThanOrEqual(0);
+    const after = lines.slice(macAt + 1);
+    const nextJob = after.findIndex((l) => /^\s{2}\S[^:]*:\s*$/.test(l) || /^\S/.test(l));
+    const macJob = (nextJob === -1 ? after : after.slice(0, nextJob)).join("\n");
+    expect(macJob, "the macOS job never compiles the Release configuration").toMatch(
+      /run:\s*mac\/scripts\/check-release-compiles\.sh/,
+    );
+  });
+
   it("keeps the job on a GitHub hosted runner, never a self hosted one", () => {
     // #1347 retired the self hosted Mac runner after it repeatedly went offline mid job and stalled
     // every merge. Guarding it here so a future edit cannot quietly bring one back.

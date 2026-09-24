@@ -114,3 +114,19 @@ the measurement it came from lives here. Read the entry before the rule decides 
   It asks that independently of "is this the checkout I am running from", so neither side answers for the
   other.
 
+
+## Checking that Release compiles before it ships
+
+Everything that runs before a merge builds the Debug configuration, because that is what
+`xcodebuild test` builds. The installer, and so the Update button, builds Release. On 2026-09-24 that
+gap let #4204 merge green with two calls to `QueueRenderCounter`, which is declared inside `#if DEBUG`,
+and the first build of Release anything ran was Dan pressing Update, which failed with "cannot find
+'QueueRenderCounter' in scope".
+
+`mac/scripts/check-release-compiles.sh` compiles Release under both of the Mac suite's locks (it takes
+them with the runner's own functions), with its own bundle identifier and URL scheme so the product can
+never stand in for the installed app, and unregisters and deletes the built app afterwards so no stale
+LaunchServices registration is left per run. It runs as a step of the `swift-tests` CI job and inside `scripts/test-all.sh`
+once the Mac suite has finished, so the merge scripts also run it on the branch combined with current
+main. Measured at 1m47s. The rule it enforces: a symbol that exists only in Debug is used only inside
+`#if DEBUG`.
