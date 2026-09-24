@@ -133,6 +133,25 @@ struct RedraftWithAITests {
         #expect(!ReplyPanel.isDrafting(r))
     }
 
+    // A run that answers this conversation WITHOUT a new draft has still finished. `draftBody` is optional
+    // on the result, so a redraft left flagged by one would read as drafting until the stall timeout, and
+    // then as a stalled draft on the Follow-ups pill and the menu bar. The draft on file stands.
+    @Test func aRedraftAnsweredWithNoNewDraftStopsReadingAsUnderWay() throws {
+        let ctx = ModelContext(try container())
+        let r = showWithAIDraft(ctx)
+        ProspectMutations.draftReply("luigi", "alan@x.org",
+                                     prospects: try ctx.fetch(FetchDescriptor<Prospect>()),
+                                     context: ctx, feedback: ActionFeedback(), start: { _, _ in })
+
+        ReplyClassifyImporter.ingest(ReplyClassifyResults(version: 3, generatedAt: "x", results: [
+            ReplyClassifyResult(naturalKey: "luigi", intent: "not_now", recipientId: "alan@x.org"),
+        ]), into: ctx)
+
+        #expect(r.replyDraftBody == Self.oldDraft)
+        #expect(!ReplyPanel.isDrafting(r), "a run that came back with no draft left the redraft reading as under way")
+        #expect(!r.isReplyDraftStalled(now: Date.distantFuture), "and it must never age into a stalled draft")
+    }
+
     // Every refusal the launcher can raise reaches Dan, in a sentence naming why, and a press that
     // started nothing leaves the request stamp where it was: that stamp is what tells a newer message
     // from them apart from the draft on file, so moving it on a refused press hides that message.
