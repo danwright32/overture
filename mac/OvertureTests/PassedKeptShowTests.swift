@@ -166,15 +166,41 @@ struct PassedShowSendGateTests {
 @Suite("The timing colour rule covers every urgency, and a passed show is not drawn faint (#4136)")
 struct TimingToneTests {
     @Test func theExceptionsAreNotTheQuietestThingOnTheRow() {
-        #expect(QueueModel.timingTone(.past) != .quiet)
-        #expect(QueueModel.timingTone(.tooSoon) != .quiet)
-        #expect(QueueModel.timingTone(.imminent) == .actNow)
-        #expect(QueueModel.timingTone(.underway) == .actNow)
-        #expect(QueueModel.timingTone(.booked) == .confirmed)
+        #expect(QueueModel.timingTone(.past, on: .queue) != .quiet)
+        #expect(QueueModel.timingTone(.tooSoon, on: .queue) != .quiet)
+        #expect(QueueModel.timingTone(.imminent, on: .queue) == .actNow)
+        #expect(QueueModel.timingTone(.underway, on: .queue) == .actNow)
+        #expect(QueueModel.timingTone(.booked, on: .queue) == .confirmed)
         // The ordinary case keeps the quiet treatment, so the exceptions stand out against it (L609).
-        #expect(QueueModel.timingTone(.soon) == .quiet)
-        #expect(QueueModel.timingTone(.ahead) == .quiet)
-        #expect(QueueModel.timingTone(.unknown) == .quiet)
+        #expect(QueueModel.timingTone(.soon, on: .queue) == .quiet)
+        #expect(QueueModel.timingTone(.ahead, on: .queue) == .quiet)
+        #expect(QueueModel.timingTone(.unknown, on: .queue) == .quiet)
+    }
+
+    // Dan's call, 2026-09-24 (in session, picker answer "Rust only in the queue"): in Archive a passed
+    // date is the ordinary state, so "Performance passed" there is quiet, while the queue draws it rust.
+    @Test func archiveDrawsAPassedShowQuietWhileTheQueueDrawsItRust() {
+        #expect(QueueModel.timingTone(.past, on: .queue) == .actNow)
+        #expect(QueueModel.timingTone(.past, on: .archive) == .quiet)
+        #expect(QueueModel.timingTone(.tooSoon, on: .archive) == .quiet)
+    }
+
+    // Archive is the queue's rule with ONE difference, derived here rather than restated: every urgency
+    // reads the same on both surfaces except the two that are only exceptional where work is still owed.
+    @Test func archiveDiffersFromTheQueueOnlyWhereAPassedDateIsNormal() {
+        let all: [QueueModel.Urgency] = [.past, .tooSoon, .imminent, .soon, .ahead, .unknown, .booked, .underway]
+        let differing = all.filter { QueueModel.timingTone($0, on: .archive) != QueueModel.timingTone($0, on: .queue) }
+        #expect(differing == [.past, .tooSoon])
+    }
+
+    // Each surface names itself where it builds the row, and the row paints from the rule.
+    @Test func eachSurfaceHandsTheRowItsOwnName() throws {
+        let ui = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent("Overture/UI")
+        let archive = try String(contentsOf: ui.appendingPathComponent("ArchiveView.swift"), encoding: .utf8)
+        let queue = try String(contentsOf: ui.appendingPathComponent("QueueView.swift"), encoding: .utf8)
+        #expect(archive.contains("timingSurface: .archive"), "Archive no longer tells the row it is Archive")
+        #expect(queue.contains("timingSurface: .queue"), "the queue no longer tells the row it is the queue")
     }
 
     // The label and the rules above agree about which shows have passed, because both read one helper.
@@ -193,7 +219,7 @@ struct TimingToneTests {
             .appendingPathComponent("Overture/UI/ProspectRowView.swift")
         let source = try String(contentsOf: url, encoding: .utf8)
         #expect(!source.isEmpty)
-        #expect(source.contains("QueueModel.timingTone(timing.urgency)"),
+        #expect(source.contains("QueueModel.timingTone(timing.urgency, on: timingSurface)"),
                 "the timing label no longer takes its colour from QueueModel.timingTone")
         #expect(!source.contains("timing.urgency =="),
                 "the row compares urgencies itself again, which is how five of them ended up faint")

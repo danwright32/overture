@@ -353,6 +353,7 @@ struct ArchiveView: View {
                               dayOffOffer: dayOffOffer,
                               // #1770: read once from the cache here rather than by each card it builds.
                               gmailConnected: GmailConnection.shared.isConnected,
+                              timingSurface: .archive,   // #4136: a passed date is ordinary here
                               undoStack: undoStack,
                               highlightedKey: highlightedKey, highlightedRecipientId: highlightedRecipientId,
                               outboundSendSince: outboundSendSince,

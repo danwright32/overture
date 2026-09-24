@@ -1700,6 +1700,7 @@ struct QueueView: View {
                     ProspectRowFactory.row(item, today: today, prospects: { prospects }, context: context, feedback: feedback,
                                           dayOffOffer: dayOffOffer,
                                           gmailConnected: data.gmailConnected,
+                                          timingSurface: .queue,
                                           // #2267: the row's own "Check again" spends money, so it goes
                                           // through the SAME confirm sheet the date selection raises,
                                           // rather than a second sentence about the same spend.

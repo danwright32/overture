@@ -1744,11 +1744,25 @@ enum QueueModel {
     // stand out against it. A switch with no default, so a ninth urgency cannot compile until it is placed.
     enum TimingTone: Equatable, Sendable { case actNow, confirmed, quiet }
 
-    static func timingTone(_ urgency: Urgency) -> TimingTone {
+    // #4136: which surface is drawing the row. Dan's call, 2026-09-24 (in session, picker answer "Rust only
+    // in the queue"): the rust for a passed or too close show belongs where work is still owed. In Archive,
+    // and on any row whose show is already closed, a passed date is the ordinary state, and drawing it rust
+    // there would turn the commonest value into the loudest one (L609).
+    enum TimingSurface: Equatable, Sendable { case queue, archive }
+
+    // ONE rule, with Archive as the queue's rule minus the two urgencies that only mean "act" while work is
+    // owed. Written as a difference from the queue's answer rather than a second table, so a change to the
+    // queue's colours reaches Archive by construction.
+    static func timingTone(_ urgency: Urgency, on surface: TimingSurface) -> TimingTone {
+        let queueTone: TimingTone
         switch urgency {
-        case .imminent, .underway, .tooSoon, .past: return .actNow
-        case .booked: return .confirmed
-        case .soon, .ahead, .unknown: return .quiet
+        case .imminent, .underway, .tooSoon, .past: queueTone = .actNow
+        case .booked: queueTone = .confirmed
+        case .soon, .ahead, .unknown: queueTone = .quiet
+        }
+        switch surface {
+        case .queue: return queueTone
+        case .archive: return (urgency == .past || urgency == .tooSoon) ? .quiet : queueTone
         }
     }
 

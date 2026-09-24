@@ -27,6 +27,8 @@ enum ProspectRowFactory {
                     // and passes it down. Deliberately no default: a default would let a call site ship a
                     // silently wrong answer, and being wrong here disables Send on a connected account.
                     gmailConnected: Bool,
+                    // #4136: no default, for the reason `gmailConnected` has none.
+                    timingSurface: QueueModel.TimingSurface,
                     // #2267: pressing "Check again" spends money, so the caller raises the same
                     // confirmation the date selection uses and starts the run. Optional: a surface with
                     // no run machinery (Archive) simply passes nothing and the control marks the show
@@ -218,6 +220,7 @@ enum ProspectRowFactory {
             onDismissPerformerMatch: { ProspectMutations.dismissPerformerMatch(item, prospects: prospects(), context: context, feedback: feedback) },
             onRestore: onRestore,
             gmailConnected: gmailConnected,
+            timingSurface: timingSurface,
             outboundSendSince: outboundSendSince,
             replySendSince: replySendSince,
             highlightedRecipientId: highlightedRecipientId,
