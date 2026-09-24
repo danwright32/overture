@@ -25,6 +25,20 @@ set +e
 
 FAILURES=0
 
+# #3919: the other direction, for a check whose whole claim is that two values DIFFER. Written as its
+# own helper rather than as a negated assert_eq so the failure message can say what it found, which
+# "expected: not abc" cannot.
+assert_ne() {
+  local desc="$1" actual="$2" unwanted="$3"
+  if [[ "${actual}" != "${unwanted}" ]]; then
+    echo "ok - ${desc}"
+  else
+    echo "FAIL - ${desc}"
+    echo "  both sides were: ${actual}"
+    FAILURES=$((FAILURES + 1))
+  fi
+}
+
 assert_eq() {
   local desc="$1" actual="$2" expected="$3"
   if [[ "${actual}" == "${expected}" ]]; then
@@ -1298,9 +1312,12 @@ assert_eq "never measured on this clone says so" \
   "$(live_store_cost_report "${TODAY}" "")" \
   "Live store pass cost: NEVER measured on this clone. Run TEST_RUNNER_MEASURE_QUEUE_LIVE_STORE=1 to take it."
 
+# #3919: the line now carries what it says about the model shape too. Updated rather than kept beside a
+# second assertion, because there is one line and it has one wording; the figure and the age it asserts
+# are unchanged, and the shape clause's own three cases are asserted below.
 assert_eq "an existing live store figure is reported with its age" \
   "$(live_store_cost_report "2026-09-05" "${LIVECOST_SEEN}")" \
-  "Live store pass cost: 883.4 ms over 1153 rows, last measured 2026-08-30 (6 days ago)."
+  "Live store pass cost: 883.4 ms over 1153 rows, last measured 2026-08-30 (6 days ago), and whether the models have changed shape since is UNKNOWN: this record predates that being written down."
 
 assert_eq "an unreadable live store record is not reported as never measured" \
   "$(live_store_cost_report "${TODAY}" "date=2026-08-30")" \
@@ -1321,6 +1338,126 @@ assert_eq "a run with no live store line at all leaves the record untouched" \
 assert_eq "a skipped run leaves the record untouched" \
   "$(live_store_cost_seen_update "◇ Test measureOnePassAgainstTheLiveStore() skipped: no live store on this machine" "${TODAY}" "${LIVECOST_SEEN}")" \
   "${LIVECOST_SEEN}"
+
+# #3919: HOW STALE the live store reading is, said in the unit that makes it stale.
+#
+# The reading only fires when somebody runs the opt-in measurement, so the ratchet can sit unmeasured
+# for weeks while every run reports green (L400, L557). The issue asks for a staleness window that the
+# runner REFUSES past. Both halves of that were measured on 2026-09-23 and the refusal was dropped on
+# what they said, which is recorded here because the code no longer shows it:
+#
+#   Prospect and Recipient change SHAPE every 0.7 to 1.5 days (110 shape-changing commits in 60 days)
+#   the measurement that would clear a refusal costs 417 seconds
+#
+# So a refusal on shape change would block a push about once a day and demand seven minutes each time,
+# which is MORE often than the two day timer it was meant to improve on. A gate at that cadence is one
+# people route around (L36). Dan's call, this session in chat: keep it advisory, and say how stale it is
+# in the unit that matters, because "4 days ago" and "4 days and 6 shape changes ago" are different
+# facts and only the second says whether the reading still describes the code.
+#
+# THE SHAPE IS THE STORED FIELDS of the two types the reading is a rate over, derived from the sources
+# rather than listed here (L41), so adding a field moves it and editing a comment does not.
+SHAPE_DIR="$(fixture_scratch_dir)"
+cat > "${SHAPE_DIR}/Prospect.swift" <<'MODEL'
+@Model
+final class Prospect {
+    // a comment mentioning var, which must not count
+    var naturalKey: String = ""
+    var groupName: String = ""
+    func helper() { var local = 1; _ = local }
+}
+MODEL
+cat > "${SHAPE_DIR}/Recipient.swift" <<'MODEL'
+@Model
+final class Recipient {
+    var address: String = ""
+}
+MODEL
+SHAPE_BEFORE="$(model_shape_fingerprint "${SHAPE_DIR}/Prospect.swift" "${SHAPE_DIR}/Recipient.swift")"
+assert_ne "a fingerprint of the model shape is not empty" "${SHAPE_BEFORE}" ""
+
+# A COMMENT change must not move it, or every push reports a shape change and the signal is noise.
+printf '// another comment\n' >> "${SHAPE_DIR}/Prospect.swift"
+assert_eq "a comment added to a model does not move the fingerprint" \
+  "$(model_shape_fingerprint "${SHAPE_DIR}/Prospect.swift" "${SHAPE_DIR}/Recipient.swift")" \
+  "${SHAPE_BEFORE}"
+
+# A STORED FIELD must move it, which is the whole point.
+printf '    var addedLater: String = ""\n' >> "${SHAPE_DIR}/Prospect.swift"
+assert_ne "a stored field added to a model moves the fingerprint" \
+  "$(model_shape_fingerprint "${SHAPE_DIR}/Prospect.swift" "${SHAPE_DIR}/Recipient.swift")" \
+  "${SHAPE_BEFORE}"
+
+# A file it cannot read is UNMEASURED, never a fingerprint of nothing: an empty answer that compared
+# equal to another empty answer would report "models unchanged" about two files nobody read (L98).
+assert_eq "a missing model file yields no fingerprint at all" \
+  "" "$(model_shape_fingerprint "${SHAPE_DIR}/NotThere.swift")"
+
+# And the report says which of the three it is.
+LIVECOST_SEEN_SHAPED="date=2026-08-30
+ms=883.4
+rows=1153
+shape=abc123"
+
+assert_eq "a reading taken under the SAME model shape says so" \
+  "$(live_store_cost_report "2026-09-05" "${LIVECOST_SEEN_SHAPED}" "" "abc123")" \
+  "Live store pass cost: 883.4 ms over 1153 rows, last measured 2026-08-30 (6 days ago), and Prospect and Recipient have not changed shape since."
+
+assert_eq "a reading taken under a DIFFERENT model shape says the reading may no longer describe the code" \
+  "$(live_store_cost_report "2026-09-05" "${LIVECOST_SEEN_SHAPED}" "" "def456")" \
+  "Live store pass cost: 883.4 ms over 1153 rows, last measured 2026-08-30 (6 days ago), and Prospect or Recipient HAS changed shape since, so it may no longer describe the code. Re-take it with TEST_RUNNER_MEASURE_QUEUE_LIVE_STORE=1."
+
+# A record written before this shipped carries no shape, and a run that cannot read the models has no
+# shape to compare. Both must say they cannot tell rather than implying either answer (L98, L11).
+assert_eq "a record predating the shape field says it cannot tell" \
+  "$(live_store_cost_report "2026-09-05" "${LIVECOST_SEEN}" "" "abc123")" \
+  "Live store pass cost: 883.4 ms over 1153 rows, last measured 2026-08-30 (6 days ago), and whether the models have changed shape since is UNKNOWN: this record predates that being written down."
+
+assert_eq "a run that could not read the models says so rather than guessing" \
+  "$(live_store_cost_report "2026-09-05" "${LIVECOST_SEEN_SHAPED}" "" "")" \
+  "Live store pass cost: 883.4 ms over 1153 rows, last measured 2026-08-30 (6 days ago), and whether the models have changed shape since is UNKNOWN: their shape could not be read on this run."
+
+# The shape is RECORDED by a run that measured, so the next run has something to compare against.
+assert_eq "a run that measured records the shape it measured under" \
+  "$(live_store_cost_seen_update "${LIVECOST_OUTPUT}" "${TODAY}" "" "abc123")" \
+  "date=${TODAY}
+ms=883.4
+rows=1153
+shape=abc123"
+
+# And a run that measured while unable to read the models records the figure WITHOUT a shape, rather
+# than recording an empty one that would later compare equal to another empty one.
+assert_eq "a measured run that could not read the models records no shape" \
+  "$(live_store_cost_seen_update "${LIVECOST_OUTPUT}" "${TODAY}" "" "")" \
+  "date=${TODAY}
+ms=883.4
+rows=1153"
+
+# AND IT STILL FINDS THE REAL FIELDS, which is the half the fixtures above cannot say.
+#
+# Every case above builds its own tiny model, so all of them would pass while the rule matched NOTHING
+# in the real `Prospect.swift` and `Recipient.swift`. The fingerprint would then be a constant, and the
+# line would report "Prospect and Recipient have not changed shape since" for ever, which is a detector
+# that has stopped detecting reading exactly like one delivering good news (L400, L557).
+#
+# A FLOOR rather than an exact count, because these files gain fields constantly and an exact number
+# would be a second thing to maintain that fails for the ordinary reason (L63). Measured 2026-09-23:
+# 136 stored fields in Prospect and 111 in Recipient, 247 together, against 174 raw `var` lines in
+# Prospect alone of which 38 are computed properties the rule correctly drops. The floor is far below
+# that and far above zero, so it catches the rule going silent and nothing else.
+REAL_MODELS_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../../Overture/Domain"
+REAL_FIELD_COUNT=$(awk '/^    (var |@Attribute)/ && !/\{/ { print }' \
+  "${REAL_MODELS_ROOT}/Prospect.swift" "${REAL_MODELS_ROOT}/Recipient.swift" 2>/dev/null | wc -l | tr -d ' ')
+if [[ "${REAL_FIELD_COUNT}" -ge 50 ]]; then
+  echo "ok - the shape rule still finds the real models' stored fields (${REAL_FIELD_COUNT} of them)"
+else
+  echo "FAIL - the shape rule finds only ${REAL_FIELD_COUNT} stored field(s) in the real Prospect and"
+  echo "  Recipient, against 247 when it was written. It has stopped matching, so the fingerprint is a"
+  echo "  constant and the live store cost line will report 'not changed shape' for ever (#3919)."
+  FAILURES=$((FAILURES + 1))
+fi
+
+rm -rf "${SHAPE_DIR}"
 
 # Removed here rather than in a trap: this file already has an EXIT trap, and bash keeps exactly one, so
 # a second would silently replace the first and leak what that one was cleaning (#3065's own message

@@ -965,8 +965,13 @@ main() {
   # rather than a second key in the one above, so a run that measured only one cannot erase the other.
   LIVE_COST_RECORD="${OVERTURE_LIVE_STORE_COST_RECORD:-${MAC_DIR}/../.overture-live-store-cost-measured}"
   LIVE_COST_SEEN="$(cat "${LIVE_COST_RECORD}" 2>/dev/null || true)"
-  echo "run-tests-locked.sh: $(live_store_cost_report "${QUEUE_COST_TODAY}" "${LIVE_COST_SEEN}" "${last_output}")" >&2
-  LIVE_COST_NEXT="$(live_store_cost_seen_update "${last_output}" "${QUEUE_COST_TODAY}" "${LIVE_COST_SEEN}")"
+  # #3919: the shape of the two types this reading is a rate over, read once and handed to both halves.
+  # Read here rather than inside them so the report and the record cannot describe different shapes, and
+  # so the paths are named at one call site the fixture can point somewhere else (L70, L196).
+  LIVE_COST_SHAPE="$(model_shape_fingerprint \
+    "${MAC_DIR}/Overture/Domain/Prospect.swift" "${MAC_DIR}/Overture/Domain/Recipient.swift")"
+  echo "run-tests-locked.sh: $(live_store_cost_report "${QUEUE_COST_TODAY}" "${LIVE_COST_SEEN}" "${last_output}" "${LIVE_COST_SHAPE}")" >&2
+  LIVE_COST_NEXT="$(live_store_cost_seen_update "${last_output}" "${QUEUE_COST_TODAY}" "${LIVE_COST_SEEN}" "${LIVE_COST_SHAPE}")"
   if [[ -n "${LIVE_COST_NEXT}" && "${LIVE_COST_NEXT}" != "${LIVE_COST_SEEN}" ]]; then
     printf '%s\n' "${LIVE_COST_NEXT}" > "${LIVE_COST_RECORD}" 2>/dev/null || true
   fi
