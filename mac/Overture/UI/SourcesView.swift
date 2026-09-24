@@ -220,6 +220,20 @@ struct SourcesView: View {
         // The context carries the day, the instant and the client window, and the window is the
         // expensive half (#3645). Keyed by the window's own identity rather than rebuilt here.
         key.add(value: String(describing: clientWindow))
+        // AND WHAT THE CONTEXT REACHES THROUGH `geo`, which is the part this key first MISSED.
+        //
+        // `roomContext` builds a `StageContext(geo:clients:)`, and `geo` is
+        // `GeoRefusals(userExcludedTowns:allowedSeedTowns:)` read from these two tables. So the
+        // derivation reads them, one computed property away, and a key without them serves an answer
+        // that ignores a town Dan just excluded (L40: a cheap key that misses a change shows stale rows,
+        // which is worse than a slow screen).
+        //
+        // `ScopeMemoInputsAreCompleteGuardTests` did not catch it, and cannot: it asks whether the
+        // derivation's body MENTIONS a collection, and this body mentions `roomContext`. That blind spot
+        // is written into the guard beside its rule so the next person keying a memo knows to trace its
+        // computed properties by hand rather than trusting a green run.
+        key.add(excludedTownRows)
+        key.add(allowedSeedTownRows)
         return renderMemo.value(fingerprint: key.finalized(), cardKeys: [], now: Date()) {
             QueueRenderCounter.recordSurfaceDerivation(QueueRenderCounter.sourcesSurface)
             return SourcesRenderPass.make(SourcesRenderPass.Inputs(
