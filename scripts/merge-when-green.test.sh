@@ -13,6 +13,7 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../scripts/lib/shell-asser
 PR_REVIEW_ALLOW="$(mktemp "${TMPDIR:-/tmp}/pr-review-allow.XXXXXX")"
 printf '#!/usr/bin/env bash\nexit 0\n' > "${PR_REVIEW_ALLOW}"
 export PR_REVIEW_CHECK="${PR_REVIEW_ALLOW}"
+trap 'rm -f "${PR_REVIEW_ALLOW}"' EXIT
 
 # Coverage for merge-when-green.sh's classify_stop_reason (#625): whether a check-pr-ci.sh
 # output means "stop polling, and why" or "keep polling". Real-shaped fixtures of

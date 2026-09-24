@@ -38,7 +38,7 @@ TRIAL_MERGE_LOG="$(mktemp "${TMPDIR:-/tmp}/verify-merge-trial.XXXXXX")"
 # reassigned it. And it is one trap rather than two, because bash keeps exactly ONE EXIT trap and a
 # second would silently replace this one and leave the log behind instead (#3249).
 SCRATCH_REPO_ROOT=""
-trap 'rm -f "${TRIAL_MERGE_LOG}"; rm -rf "${SCRATCH_REPO_ROOT:-}"' EXIT
+trap 'rm -f "${TRIAL_MERGE_LOG}" "${PR_REVIEW_ALLOW:-}"; rm -rf "${SCRATCH_REPO_ROOT:-}"' EXIT
 
 # The completeness enumeration AGENTS.md demands and the merge now refuses to skip. Stubbed here for
 # every existing case, so those cases keep testing what they were written to test (the merge decision)

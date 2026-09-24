@@ -44,6 +44,8 @@
 # explain to Dan before using it.
 lessons_review_allows() {
   local pr_number="$1" checker="${PR_REVIEW_CHECK:-${HOME}/.claude/hooks/lib/pr-review.sh}" head_base head base
+  # The commit the review answered for, which merge_pr pins the merge to (L179). Empty when skipped.
+  REVIEWED_HEAD=""
   if [[ "${SKIP_PR_REVIEW:-}" == "1" ]]; then
     echo "SKIP_PR_REVIEW=1: PR #${pr_number} was NOT held for the lessons review. Tell Dan why it was skipped." >&2
     return 0
@@ -68,6 +70,7 @@ lessons_review_allows() {
     return 1
   fi
   printf '%s\n' "${out}"
+  REVIEWED_HEAD="${head}"
   return 0
 }
 
@@ -83,7 +86,13 @@ merge_pr() {
     return 1
   fi
 
-  if ! gh_as_danwright32 pr merge "${pr_number}" -R "${REPO}" --squash --delete-branch; then
+  # Pinned to the commit the review read, so a push landing between the check and this line is
+  # refused by GitHub rather than merged unreviewed (L179; the first real review of this change
+  # found the gap).
+  # Expanded with the guarded form below: macOS bash 3.2 under set -u errors on an EMPTY array (L486).
+  local pin=()
+  [[ -n "${REVIEWED_HEAD:-}" ]] && pin=(--match-head-commit "${REVIEWED_HEAD}")
+  if ! gh_as_danwright32 pr merge "${pr_number}" -R "${REPO}" --squash --delete-branch ${pin[@]+"${pin[@]}"}; then
     echo "gh refused to merge PR #${pr_number}; its message is above. Nothing else was done to it," >&2
     echo "so the branch is untouched and this can be rerun once the cause is dealt with." >&2
     return 1

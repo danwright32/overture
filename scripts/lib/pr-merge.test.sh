@@ -138,6 +138,19 @@ assert_contains "and against its base branch" "$(cat "${FAKE_CHECK_DIR}/calls" 2
 OUT="$(gate_out "${FAKE_CHECK_DIR}/allow.sh"; echo "RC=${MERGE_PR_RC}"; echo "GH=$(tr '\n' ' ' < "${GH_CALL_LOG}")")"
 assert_contains "a review that allows lets the merge run" "${OUT}" "RC=0"
 assert_contains "and gh merged" "${OUT}" "merge"
+# The merge is pinned to the commit the review read, so a push landing between the check and the
+# merge is refused by GitHub rather than merged unreviewed (L179; found by the first real review).
+gh_args_out() {
+  : > "${GH_CALL_LOG}"
+  gh_as_danwright32() {
+    printf '%s\n' "$*" >> "${GH_CALL_LOG}"
+    case "$*" in *headRefOid*) printf 'abc1234\tmain' ;; *"pr merge"*) return 0 ;; *view*) printf 'MERGED' ;; esac
+  }
+  delete_merged_local_branch() { :; }
+  PR_REVIEW_CHECK="${FAKE_CHECK_DIR}/allow.sh" SKIP_PR_REVIEW="" merge_pr "92" "feature-pinned" >/dev/null 2>&1
+  grep "pr merge" "${GH_CALL_LOG}"
+}
+assert_contains "the merge is pinned to the head the review read" "$(gh_args_out)" "--match-head-commit abc1234"
 
 OUT="$(gate_out MISSING; echo "RC=${MERGE_PR_RC}"; echo "GH=$(tr '\n' ' ' < "${GH_CALL_LOG}")")"
 assert_contains "a missing checker refuses rather than merging unread" "${OUT}" "RC=1"
