@@ -56,7 +56,6 @@ struct FollowUpTests {
         let final = FollowUp.nudgeBody(contactName: "Emma", groupName: "Acme Choir", venue: nil, attempt: 2)
         #expect(first != final)                                   // not a verbatim repeat
         #expect(final.contains("one last time"))                  // signals it's the last touch
-        #expect(final.lowercased().contains("no need to reply"))  // soft, low-pressure close
         #expect(final.contains("\u{2014}") == false)                     // still in voice
         for banned in ["love to", "thrilled", "excited", "!"] { #expect(final.lowercased().contains(banned) == false) }
     }
@@ -74,10 +73,43 @@ struct FollowUpTests {
         #expect(!final.lowercased().contains("glad to help"))
         #expect(!final.lowercased().contains("down the line"))
 
-        // 3: "no need to reply" followed by "I'll leave it here either way" is one sentence said twice in
-        // different words, on a surface where every sentence is one Dan is signing (L605).
+        // 3: "no need to reply" followed by "I'll leave it here either way" was one sentence said twice in
+        // different words, on a surface where every sentence is one Dan is signing (L605). The close now
+        // asks for an answer, and asks once.
         #expect(!final.lowercased().contains("leave it here"))
-        #expect(final.components(separatedBy: "no need to reply").count - 1 == 1)
+        #expect(final.lowercased().components(separatedBy: "let me know").count - 1 == 1)
+    }
+
+    // #4064. Dan, reading the final nudge in the send review on 2026-09-20: "I don't want to tell them that
+    // they shouldn't reply. Any reply is more valuable than ignoring me." And his call the same day: BOTH
+    // follow ups, not only the final one. A no, a not this season, or a write to our GM instead each close
+    // the loop and feed reply classification; silence is the one outcome nothing downstream learns from.
+    // The cold pitch already closes by expecting a reply (prep-runbook.md), so the follow ups now match it.
+    static let replyExcusingPhrases = [
+        "no need to reply", "no problem if", "don't worry about replying", "no need to respond",
+        "feel free to ignore", "no worries if", "don't feel obliged",
+    ]
+
+    @Test(arguments: [1, 2])
+    func noFollowUpLetsTheReaderOffAnswering(attempt: Int) {
+        let body = FollowUp.nudgeBody(contactName: "Emma", groupName: "Acme Choir",
+                                      venue: "Weill Recital Hall", attempt: attempt).lowercased()
+        for phrase in Self.replyExcusingPhrases {
+            #expect(!body.contains(phrase), "attempt \(attempt) excuses the reader from answering: \(phrase)")
+        }
+    }
+
+    @Test func theFirstFollowUpAsksToHearANoOrAWrongPerson() {
+        let first = FollowUp.nudgeBody(contactName: "Emma", groupName: "Acme Choir", venue: nil, attempt: 1)
+        // A no and a "someone else handles photography" are both named as answers worth sending.
+        #expect(first.contains("If this isn't the right time, or there's someone better to talk to about "
+            + "photography, just let me know."))
+    }
+
+    @Test func theFinalFollowUpAsksForAReplyEvenIfItIsANo() {
+        let final = FollowUp.nudgeBody(contactName: "Emma", groupName: "Acme Choir", venue: nil, attempt: 2)
+        #expect(final.contains("If the timing doesn't work this time, just let me know and I'll keep you in "
+            + "mind for future shows."))
     }
 
     // #2651 suppresses the after-show closing note for anyone who already received the final nudge,
@@ -86,8 +118,9 @@ struct FollowUpTests {
     @Test func theFinalNudgeStillReadsAsAGoodbye() {
         let final = FollowUp.nudgeBody(contactName: "Emma", groupName: "Acme Choir", venue: nil, attempt: 2)
 
-        #expect(final.contains("last"))
-        #expect(final.lowercased().contains("no need to reply"))
+        // "one last time" is what says goodbye now. It used to be backed by "no need to reply", which Dan
+        // reversed in #4064 because it asked for silence; the goodbye has to survive without it.
+        #expect(final.contains("one last time"))
     }
 
     // #610: "Hello," (Dan's preferred wording), not "Hi there,", when there's no contact name.
