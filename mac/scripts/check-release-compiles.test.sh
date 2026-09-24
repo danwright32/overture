@@ -132,6 +132,33 @@ out="$(run_case other-failure)"; status=$?
 assert_eq "a failure that is not a compile error still exits 1" "1" "${status}"
 assert_contains "and shows what xcodebuild said instead" "${out}" "Could not resolve package dependencies"
 
+# --- it waits its turn behind an earlier queued run (downbeat#524) ----------------------------------------
+# This check takes the machine wide lock through the Mac suite's own take_dir_lock, so it queues in
+# arrival order too. A live waiter that arrived earlier holds the turn even with the lock FREE, and this
+# PATH is the named tools list, which is what the queue must still work under.
+bin="${WORK}/queued-bin"
+make_path "${bin}" "${BASE_TOOLS[@]}"
+make_stubs "${bin}"
+sleep 120 & earlier=$!
+mkdir -p "${WORK}/queued-dirlock.queue"
+printf '%s %s\n' "${earlier}" "$(/bin/ps -o lstart= -p "${earlier}" | sed 's/^ *//; s/ *$//')" \
+  > "${WORK}/queued-dirlock.queue/00000000001.000000.${earlier}"
+out="$(STUB_MODE=pass STUB_RECORD="${WORK}/queued" PATH="${bin}" \
+  STUB_DIR_LOCK="${WORK}/queued-dirlock" OVERTURE_DIR_LOCK="${WORK}/queued-dirlock" \
+  OVERTURE_DIR_LOCK_TIMEOUT=2 OVERTURE_DIR_LOCK_POLL=1 LSREGISTER="${bin}/lsregister" \
+  OVERTURE_FILE_LOCK="${WORK}/the.lock" OVERTURE_RELEASE_CHECK_DERIVED_DATA="${WORK}/queued-dd" \
+  bash "${SCRIPT}" 2>&1)"; status=$?
+assert_eq "behind an earlier queued run it gives up rather than taking a free lock" "3" "${status}"
+assert_contains "and says it was queued" "${out}" "queued behind 1 earlier run(s)"
+if [[ -e "${WORK}/queued.args" ]]; then
+  fail "and it never built" "xcodebuild ran: $(cat "${WORK}/queued.args")"
+else
+  pass "and it never built"
+fi
+assert_eq "and it left the queue on the way out, leaving only the earlier ticket" \
+  "00000000001.000000.${earlier}" "$(ls "${WORK}/queued-dirlock.queue")"
+kill "${earlier}" 2>/dev/null; wait "${earlier}" 2>/dev/null
+
 # --- nothing measured ---------------------------------------------------------------------------------
 bin="${WORK}/no-xcodebuild-bin"
 make_path "${bin}" "${BASE_TOOLS[@]}"
