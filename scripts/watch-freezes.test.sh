@@ -179,6 +179,148 @@ assert_contains "it is reported, because it is in the window being judged" "${ou
 assert_contains "but the chunk taken now does not cover it, so nothing is kept" "${out}" "kept 0 sample"
 assert_equals "and no sample file survives" "" "$(ls "${WORK}/old-long"/KEPT-* 2>/dev/null)"
 
+# --- 8b. the main thread block under the label macOS 26 ACTUALLY writes (#4103) ----------------------
+#
+# Every sample kept on 2026-09-21 (four of them, covering 0.93s and 3.31s stalls) was reported
+# `UNREADABLE, no main thread block in this sample`, and the samples were intact: they were read by
+# hand. The reader accepted only a label containing `com.apple.main-thread`, which macOS writes only
+# while the thread is on the main dispatch queue for the WHOLE sample. A freeze is precisely the case
+# that is not, so the tool could never read the samples it exists to explain.
+#
+# THE HEADER BELOW IS REAL, not invented, which is what the issue asked for. Taken from
+# `~/.overture-mac-test-diagnostics/freeze-watch/KEPT-chunk-*.txt`, where this shape appears 484 times
+# across the kept samples and `com.apple.main-thread` appears not once:
+#
+#     4008 Thread_50084685: Main Thread   DispatchQueue_<multiple>
+#
+# EACH OF THESE DRIVES A LOG WITH A QUALIFYING STALL IN IT, because the reader runs only on a sample
+# the watch KEPT. The first version of this fixture did not, so `assert_not_contains UNREADABLE`
+# passed over a run that had read nothing at all, which is a test satisfied by a fixture where the
+# thing could not happen (L159).
+cat > "${WORK}/modern-sample.sh" <<'STUB'
+#!/usr/bin/env bash
+out=""
+prev=""
+for arg in "$@"; do
+  if [ "${prev}" = "-file" ]; then out="${arg}"; fi
+  prev="${arg}"
+done
+cat > "${out}" <<'GRAPH'
+Analysis of sampling Overture (pid 4242) every 2 milliseconds
+Call graph:
+    4008 Thread_50084685: Main Thread   DispatchQueue_<multiple>
+      4008 start  (in dyld) + 1
+        3000 QueueView.body  (in Overture) + 12
+          2900 QueueView.makeRenderData()  (in Overture) + 44
+        900 idle  (in libsystem_kernel.dylib) + 2
+    17 Thread_50084999: com.apple.NSEventThread
+      17 some_worker  (in libdispatch.dylib) + 3
+GRAPH
+STUB
+chmod +x "${WORK}/modern-sample.sh"
+write_log "${WORK}/modern.ndjson" 6.2 0
+run_watch --out "${WORK}/modern" --log "${WORK}/modern.ndjson" \
+  --sample-cmd "${WORK}/modern-sample.sh"; out="${OUT}"
+assert_contains "the sample really was kept, so the reader really ran" "${out}" "KEPT"
+assert_not_contains "a sample labelled the way macOS 26 labels it is READ, not called unreadable" \
+  "${out}" "UNREADABLE"
+assert_contains "and its main thread sample count is reported" "${out}" "4008 main thread samples"
+assert_contains "and the deepest hot frame of Overture's own is named" \
+  "${out}" "QueueView.makeRenderData()"
+
+# AND A FRAME IS NEVER MISTAKEN FOR THE HEADER. Real samples carry frames whose names contain the word
+# main (`renderOnMainThread`, `withMainThreadRender`, `__NSOPERATION_IS_INVOKING_MAIN__`), and they sit
+# on the same `<count> <label>` shape the header does. A matcher loose enough to take one would report
+# a frame's own sample count as the whole main thread's, which reads as a measurement rather than as
+# the tool failing to find the thread (L11, L98).
+cat > "${WORK}/decoy-sample.sh" <<'STUB'
+#!/usr/bin/env bash
+out=""
+prev=""
+for arg in "$@"; do
+  if [ "${prev}" = "-file" ]; then out="${arg}"; fi
+  prev="${arg}"
+done
+cat > "${out}" <<'GRAPH'
+Analysis of sampling Overture (pid 4242) every 2 milliseconds
+Call graph:
+    9 Thread_50084999: com.apple.NSEventThread
+      9 closure #1 in renderOnMainThread #1 ()  (in SwiftUICore) + 256
+      9 ViewGraphRenderDelegate.withMainThreadRender(wasAsync:_:)  (in SwiftUICore) + 28
+GRAPH
+STUB
+chmod +x "${WORK}/decoy-sample.sh"
+write_log "${WORK}/decoy.ndjson" 6.2 0
+run_watch --out "${WORK}/decoy" --log "${WORK}/decoy.ndjson" \
+  --sample-cmd "${WORK}/decoy-sample.sh"; out="${OUT}"
+assert_contains "the decoy sample was kept too, so this reader also really ran" "${out}" "KEPT"
+assert_contains "a sample with no main thread block at all is still UNREADABLE" "${out}" "UNREADABLE"
+assert_not_contains "and a frame naming the main thread is not counted as one" \
+  "${out}" "9 main thread samples"
+
+# AND THE WATCHDOG'S OWN QUEUE IS NOT THE MAIN THREAD, which is the near miss that really exists in
+# this codebase. Overture runs `com.danwright.overture.main-thread-watchdog` on its own dispatch queue,
+# and every real sample carries its header:
+#
+#     Thread_<multiple>   DispatchQueue_20767: com.danwright.overture.main-thread-watchdog  (serial)
+#
+# A matcher relaxed to `main-thread` would take that line, and then report the WATCHDOG's sample count
+# as the main thread's: a plausible number about the wrong thread, which is worse than UNREADABLE
+# because nothing about it looks wrong (L11, L70). This is the one decoy taken from real output rather
+# than constructed.
+cat > "${WORK}/watchdog-sample.sh" <<'STUB'
+#!/usr/bin/env bash
+out=""
+prev=""
+for arg in "$@"; do
+  if [ "${prev}" = "-file" ]; then out="${arg}"; fi
+  prev="${arg}"
+done
+cat > "${out}" <<'GRAPH'
+Analysis of sampling Overture (pid 4242) every 2 milliseconds
+Call graph:
+    246 Thread_<multiple>   DispatchQueue_20767: com.danwright.overture.main-thread-watchdog  (serial)
+      246 MainThreadWatchdog.ping()  (in Overture) + 12
+GRAPH
+STUB
+chmod +x "${WORK}/watchdog-sample.sh"
+write_log "${WORK}/watchdog.ndjson" 6.2 0
+run_watch --out "${WORK}/watchdog" --log "${WORK}/watchdog.ndjson" \
+  --sample-cmd "${WORK}/watchdog-sample.sh"; out="${OUT}"
+assert_contains "the watchdog sample was kept, so this reader really ran" "${out}" "KEPT"
+assert_contains "the watchdog's own queue is not mistaken for the main thread" "${out}" "UNREADABLE"
+assert_not_contains "and its sample count is never reported as the main thread's" \
+  "${out}" "246 main thread samples"
+
+# AND A FRAME IS NEVER TAKEN FOR A HEADER, which is what anchors the match to a line beginning
+# `Thread_`. Said plainly: this decoy is CONSTRUCTED, not measured. No frame in the 595 samples on disk
+# carries `Main Thread` with a space, so nothing observed needs the anchor today (L48, said rather than
+# implied). It is here so the reader's correctness does not rest on that staying true: a frame line
+# carries the same `<count> <label>` shape a header does, and one taken as the header would report a
+# single frame's count as the whole thread's.
+cat > "${WORK}/frameheader-sample.sh" <<'STUB'
+#!/usr/bin/env bash
+out=""
+prev=""
+for arg in "$@"; do
+  if [ "${prev}" = "-file" ]; then out="${arg}"; fi
+  prev="${arg}"
+done
+cat > "${out}" <<'GRAPH'
+Analysis of sampling Overture (pid 4242) every 2 milliseconds
+Call graph:
+    31 Thread_50084999: com.apple.NSEventThread
+      31 thunk for closure #1 in Main Thread dispatch shim  (in SwiftUICore) + 8
+GRAPH
+STUB
+chmod +x "${WORK}/frameheader-sample.sh"
+write_log "${WORK}/frameheader.ndjson" 6.2 0
+run_watch --out "${WORK}/frameheader" --log "${WORK}/frameheader.ndjson" \
+  --sample-cmd "${WORK}/frameheader-sample.sh"; out="${OUT}"
+assert_contains "that sample was kept too, so this reader really ran" "${out}" "KEPT"
+assert_contains "a frame naming the main thread is not a main thread block" "${out}" "UNREADABLE"
+assert_not_contains "and its count is never reported as the thread's" "${out}" "31 main thread samples"
+
 # --- 9. an unknown argument is refused rather than ignored ----------------------------------------------
 out="$("${WATCH}" --nonsense 2>&1)"; status=$?
 assert_equals "an unknown argument is refused" "2" "${status}"
