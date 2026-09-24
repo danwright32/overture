@@ -973,7 +973,7 @@ struct QueueView: View {
                                                            reason: reason,
                                                            keys: plan.keys, runs: plan.runsPastTheNight,
                                                            keysOnlyThisNight: plan.keysOnlyThisNight,
-                                                           heldBack: split.heldBack, origin: .nightMenu)
+                                                           heldBack: split.heldBack)
                     }
                 }
                 // Both halves, in one place. The title above says how many are GOING; without this nothing
@@ -1735,16 +1735,7 @@ struct QueueView: View {
                                               item, stage: focusedStage),
                                           showingTooFar: false,
                                           userExcludedTowns: userExcludedTowns,
-                                          allowedSeedTowns: allowedSeedTowns,
-                                          // #1819: Keep lives on Scout, so the offer does too, over the
-                                          // night's rows as this pass drew them.
-                                          onKept: focusedStage == .scout ? {
-                                              if let offer = QueueModel.nightClearAfterKeep(
-                                                  keptKey: item.id, rows: night.items, date: night.id,
-                                                  dateLabel: night.monthDay) {
-                                                  sheets.pendingNightDismiss = offer
-                                              }
-                                          } : nil)
+                                          allowedSeedTowns: allowedSeedTowns)
                 }
             }
         }

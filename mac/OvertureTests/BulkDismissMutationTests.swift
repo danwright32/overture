@@ -77,6 +77,26 @@ struct BulkDismissMutationTests {
         #expect(a.dismissedAt == nil)
     }
 
+    // #4132: moved here from KeepOffersToClearTheNightTests, which went with the after-Keep offer it tested.
+    // The truth it held is about the right-click path too and nothing else asserted it: undoing a night
+    // takes back only that night's dismissals, and a show Dan kept on the same night before it stays kept.
+    @Test func undoingANightLeavesAnEarlierKeepStanding() throws {
+        let ctx = try context()
+        let kept = show(ctx, "k"), other = show(ctx, "o")
+        let stack = QueueUndoStack()
+        ProspectMutations.setStatus(QueueItem(kept), .queued, nil, prospects: [kept, other], context: ctx,
+                                    feedback: ActionFeedback(), undo: stack, undoLabel: "Keep")
+        ProspectMutations.dismissAll(["o"], reason: .pitchingOtherShows, dateLabel: "Jul 24",
+                                     prospects: [kept, other], context: ctx, feedback: ActionFeedback(), undo: stack)
+        #expect(other.status == .dismissed)
+
+        let entry = try #require(stack.takeTop())
+        QueueUndo.apply(entry, resolving: { key in [kept, other].first { $0.naturalKey == key } }, in: ctx)
+
+        #expect(other.status == .new, "the dismissed show is back, untriaged")
+        #expect(kept.status == .queued, "and the earlier Keep is still standing")
+    }
+
     @Test func itSaysHowManyLeftAndWhy() throws {
         let ctx = try context()
         let a = show(ctx, "a"), b = show(ctx, "b")

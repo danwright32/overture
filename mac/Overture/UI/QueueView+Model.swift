@@ -4171,42 +4171,6 @@ extension RecipientSnapshot {
 // #1500: the queue row, as the little the whole-night dismiss needs to decide. Here rather than in the
 // domain so BulkDismiss stays independent of the view's QueueItem, and here rather than in the date header
 // so the mapping is one definition instead of one per call site.
-// #1819: after a Keep, the OTHER untriaged shows on that night, as the same confirmation the night's
-// right-click raises. Dan's words, 2026-07-30: "When I keep a show on a given night, it should offer to
-// dismiss all other shows on that night, if there are any." Nil when there are none, which is the common
-// case and stays silent.
-//
-// `rows` is the date group AS RENDERED, captured when the card was drawn, so a filter or a search that
-// narrows the night narrows the offer with it (#1500's visible-rows rule), and the confirmation names the
-// count. Only untriaged rows: a show already kept, drafted or sent on the night is the self double
-// booking case, which `SelfBookingConflict` speaks for, and a Keep must never retract it.
-//
-// The reason is always `pitchingOtherShows`, never offered as a choice (Dan, 2026-08-10 and 2026-08-18):
-// the night worked and he spent it on another show. It is a one-night reason (#2691), so a run on the
-// night loses only this night and comes back under its next one, which is why `offersChoice` (#3365)
-// answers no second button here: the narrower choice is what the reason already does.
-//
-// Stateless on purpose: declining leaves nothing behind, so a second Keep on the same night offers again
-// over whatever is still untriaged (requirement 6).
-extension QueueModel {
-    static func nightClearAfterKeep(keptKey: String, rows: [some QueueScopeFacts], date: String,
-                                    dateLabel: String) -> NightDismiss? {
-        guard EasternDate.date(from: date) != nil else { return nil }
-        let others = rows.filter { $0.id != keptKey && $0.status == .new }
-        // The genre gate the right-click obeys, for the same reason: an ungenred show is held back rather
-        // than dismissed on a guess (#3305).
-        let split = GenreGate.nightSplit(others.map { (key: $0.id, discipline: $0.discipline) })
-        let plan = BulkDismiss.plan(for: others.filter { split.dismissableKeys.contains($0.id) }
-                                        .map(BulkDismiss.Show.init),
-                                    on: date)
-        guard !plan.isEmpty else { return nil }
-        return NightDismiss(dateLabel: dateLabel, date: date, reason: .pitchingOtherShows,
-                            keys: plan.keys, runs: plan.runsPastTheNight,
-                            keysOnlyThisNight: plan.keysOnlyThisNight, heldBack: split.heldBack,
-                            origin: .afterKeep)
-    }
-}
-
 extension BulkDismiss.Show {
     // #3654: over the protocol, so the night dismiss reads a ROW. Every field it needs is one, which is
     // what lets a realized date heading offer the action without a card for every show under it.

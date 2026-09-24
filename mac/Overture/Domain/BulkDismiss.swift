@@ -100,13 +100,6 @@ enum BulkDismiss {
         return "Dismiss \(count) of the \(count + heldBack) shows on \(dateLabel)"
     }
 
-    // #1819: the same confirmation, raised by a Keep rather than a right-click, so it names the OTHER shows
-    // on the night: the one he just kept is not among them, and "Dismiss all 3" would read as though it were.
-    static func keepOfferTitle(count: Int, dateLabel: String) -> String {
-        count == 1 ? "Dismiss the other show on \(dateLabel)?"
-                   : "Dismiss the other \(count) shows on \(dateLabel)?"
-    }
-
     static func confirmTitle(count: Int, dateLabel: String) -> String {
         "\(menuTitle(count: count, dateLabel: dateLabel))?"
     }

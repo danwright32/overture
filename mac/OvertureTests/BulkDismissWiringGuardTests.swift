@@ -19,6 +19,30 @@ struct BulkDismissWiringGuardTests {
     // assertion below now names which of the two it is about, rather than one file standing for both.
     private var sheetsFile: String { source("Overture/UI/QueueSheets.swift") }
 
+    // #4132, Dan's call 2026-09-21: "I actually don't want to auto-dismiss all other events on a date when I
+    // choose to keep one." That reversed #1819, which raised this same sheet after every Keep on Scout. The
+    // right-click on a date heading stays: it is the one place clearing a night is what Dan set out to do.
+    //
+    // So the rule is about WHO raises the sheet, not about one call site: every write that puts a night in
+    // front of Dan is found across the whole app, and there must be exactly one, inside the date heading's
+    // menu. A Keep that raised it again, from any file and by any wiring, is a second write and fails here.
+    @Test func onlyTheDateHeadingsRightClickRaisesTheNightDismiss() throws {
+        // Through the shared walker, which refuses a walk that found too few files, so a broken path fails
+        // here rather than reading as a clean app with no raises at all.
+        var raises: [String] = []
+        for file in AppSourceWalk.appFiles() {
+            for line in file.text.split(separator: "\n") where line.contains("pendingNightDismiss = ")
+                && !line.contains("pendingNightDismiss = nil") {
+                raises.append("\(file.name): \(line.trimmingCharacters(in: .whitespaces))")
+            }
+        }
+        #expect(raises.count == 1, "the night dismiss is raised from more than the date heading: \(raises)")
+        let queue = source("Overture/UI/QueueView.swift")
+        let menu = try #require(SourceGuardHelper.bodyOfFunction(named: "nightDismissMenu", in: queue))
+        #expect(menu.contains("pendingNightDismiss = NightDismiss("),
+                "the one raise is not the date heading's menu")
+    }
+
     @Test func theDateHeaderOffersTheActionOnARightClick() {
         let queue = source("Overture/UI/QueueView.swift")
         #expect(!queue.isEmpty)
