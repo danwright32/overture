@@ -51,6 +51,43 @@ struct QueueRenderPassLiveStoreCostTests {
     // Declared here rather than inline so a change to it is a visible edit to a named calibration rather
     // than a number moved inside an assertion.
     private static let fetchCeilingMsPerRow = 0.50
+
+    // #3918: what one row of the prospect table may cost to fetch AND to fault its recipients, in
+    // milliseconds.
+    //
+    // ITS OWN NUMBER, measured rather than copied from the fetch's, which is what the issue asks for and
+    // is the point of the whole thing. This term moves for TWO reasons (a fetch plus a fault) where the
+    // fetch moves for one, so a ceiling inherited from the fetch would be a number chosen for a
+    // different quantity, and its headroom argument would be about the wrong denominator (L428).
+    //
+    // WHY IT NEEDS A CEILING AT ALL. Until now `:708` asserted only that this arm is at least the
+    // prospect fetch less the run's own noise, because it is a superset of it. An ORDERING cannot see
+    // this term growing on its own: the fault could double while still comfortably exceeding the fetch,
+    // and the assertion would pass every time (L63). The fault is exactly where a relationship that
+    // stopped being read lazily would show, which is a change in KIND rather than in size, and catching
+    // that is what the fetch ratchet was built for.
+    //
+    // PER ROW, never a total, for the fetch ratchet's reason exactly: a total on a growing store rises
+    // for the most ordinary reason there is, so a ratchet on one fires on Dan adding shows (L323). A
+    // rate is flat while the work stays linear.
+    //
+    // THE CEILING, and its headroom argument. Measured 2026-09-23 on the live store: 211.0 ms over 1,334
+    // rows, which is 0.1582 ms a row, with the five runs spanning 208.5 to 213.8 ms (about 1.3% either
+    // side). The ceiling sits about 3.5 times above that, which is the same multiple the fetch ratchet
+    // chose and for the same reason: far enough above that anything approaching it is a change in kind
+    // and not a busy Mac (L172, L224).
+    //
+    // WHAT THE SPREAD DOES NOT COVER, said plainly because the readout beside it says so. The DIFFERENCE
+    // between this arm and the fetch is small and unstable: measured twice a day apart it was 13 ms and
+    // then under 4 ms. So this ceiling is on the WHOLE term, which is stable, and not on the difference,
+    // which is not. A ratchet on the difference would fire on noise.
+    //
+    // Re-take it with
+    //   TEST_RUNNER_MEASURE_QUEUE_LIVE_STORE=1 mac/scripts/run-tests-locked.sh \
+    //     -only-testing:OvertureTests/QueueRenderPassLiveStoreCostTests
+    // and read the printed `per row` figure rather than trusting any number in this comment, which is a
+    // dated measurement and cannot re-take itself (L316).
+    private static let faultCeilingMsPerRow = 0.55
     // `nonisolated` because Swift Testing evaluates `.enabled(if:)` in a Sendable closure outside the
     // suite's actor, and this suite is @MainActor for QueueRenderPass.make's sake. Neither property
     // touches main-actor state.
@@ -688,20 +725,80 @@ struct QueueRenderPassLiveStoreCostTests {
         //     -only-testing:OvertureTests/QueueRenderPassLiveStoreCostTests
         // and read the printed `per row` figure rather than trusting any number in this comment, which
         // is a dated measurement and cannot re-take itself (L316).
+        // #3918: IS THIS RUN STEADY ENOUGH TO JUDGE A CEILING AGAINST?
+        //
+        // Asked BEFORE either ceiling, and it is the correction to a defect this suite shipped with. Run
+        // twice on 2026-09-23 ten minutes apart, same store, same code: quiet, the prospect fetch was
+        // 205.5 ms with repeats spanning 203.6 to 212.5 (4% of the median); loaded, at a one minute load
+        // average of 51.6, it was 694.7 ms with repeats spanning 353.1 to 902.3 (79%). The loaded run
+        // came to 0.5207 ms a row against a ceiling of 0.50 and FAILED, on code that had not changed.
+        //
+        // The ceiling's own docstring argued a per row rate is "immune to how busy this Mac is ...
+        // because both terms move together". The two terms are milliseconds and ROWS, and a row count
+        // does not move with load. Dividing by it removes the STORE'S GROWTH, which is real and is why
+        // the rate is the right shape, and none of the machine's load (L224).
+        //
+        // What is measured in the same run and does answer the question is the spread of the run's own
+        // repeats, which is what `TimingReadability` reads.
+        let steadiness = TimingReadability.worst(of: [
+            TimingReadability.verdict(low: prospectFetch.low, high: prospectFetch.high,
+                                      median: prospectFetch.median),
+            TimingReadability.verdict(low: faultRecipients.low, high: faultRecipients.high,
+                                      median: faultRecipients.median),
+        ])
+
         let fetchPerRowMs = (prospectFetch.median / Double(prospects.count)) * 1000
-        print("""
-        queue-live-store-fetch-ratchet (#3660)
-          the prospect fetch        \(ms(prospectFetch.median)) ms over \(prospects.count) rows
-          per row                   \(String(format: "%.4f", fetchPerRowMs)) ms
-          ceiling                   \(String(format: "%.4f", Self.fetchCeilingMsPerRow)) ms a row
-        """)
-        #expect(fetchPerRowMs < Self.fetchCeilingMsPerRow,
-                Comment(rawValue: "the prospect fetch costs "
-                        + "\(String(format: "%.4f", fetchPerRowMs)) ms a row against a ceiling of "
-                        + "\(String(format: "%.4f", Self.fetchCeilingMsPerRow)). A rate that moves has "
-                        + "changed in KIND rather than grown: a relationship faulted per row, a "
-                        + "descriptor that stopped being linear, or a second read folded into this one. "
-                        + "The store getting bigger cannot do this (#3660)."))
+        let faultPerRowMs = (faultRecipients.median / Double(prospects.count)) * 1000
+
+        switch steadiness {
+        case .steady:
+            print("""
+            queue-live-store-fetch-ratchet (#3660)
+              the prospect fetch        \(ms(prospectFetch.median)) ms over \(prospects.count) rows
+              per row                   \(String(format: "%.4f", fetchPerRowMs)) ms
+              ceiling                   \(String(format: "%.4f", Self.fetchCeilingMsPerRow)) ms a row
+            queue-live-store-fault-ratchet (#3918)
+              fetch plus the fault      \(ms(faultRecipients.median)) ms over \(prospects.count) rows
+              per row                   \(String(format: "%.4f", faultPerRowMs)) ms
+              ceiling                   \(String(format: "%.4f", Self.faultCeilingMsPerRow)) ms a row
+            """)
+            #expect(fetchPerRowMs < Self.fetchCeilingMsPerRow,
+                    Comment(rawValue: "the prospect fetch costs "
+                            + "\(String(format: "%.4f", fetchPerRowMs)) ms a row against a ceiling of "
+                            + "\(String(format: "%.4f", Self.fetchCeilingMsPerRow)). This run WAS steady, "
+                            + "so the machine is not the explanation. A rate that moves has changed in "
+                            + "KIND rather than grown: a relationship faulted per row, a descriptor that "
+                            + "stopped being linear, or a second read folded into this one (#3660)."))
+            #expect(faultPerRowMs < Self.faultCeilingMsPerRow,
+                    Comment(rawValue: "fetching the prospect table and faulting every show's recipients "
+                            + "costs \(String(format: "%.4f", faultPerRowMs)) ms a row against a ceiling "
+                            + "of \(String(format: "%.4f", Self.faultCeilingMsPerRow)). This run WAS "
+                            + "steady, so the machine is not the explanation. A relationship that stopped "
+                            + "being read lazily, or a second fault folded into this one (#3918)."))
+        case .unmeasurable(let spread):
+            // NOT a failure and NOT a pass. The reading exists and cannot bear a ceiling, which is its
+            // own outcome and has to be said out loud, because the emptiest possible failure must never
+            // read as the cleanest possible pass (L98, L11).
+            //
+            // The heading deliberately does NOT match `queue-live-store-cost: one pass over the live
+            // store`, which is what `live_store_cost_seen_update` parses. A run that could not judge
+            // anything must not stamp the freshness record with a reading, or the age would say the
+            // ratchet ran when it did not (#3919, L557).
+            print("""
+            queue-live-store-ratchets: UNMEASURED on this run.
+              the repeats of one timing spanned \(String(format: "%.0f", spread * 100))% of their own
+              median, against a ceiling of \(String(format: "%.0f", TimingReadability.steadySpreadFraction * 100))%,
+              so this Mac was too busy for the figures below to mean anything about the code.
+              the prospect fetch        \(ms(prospectFetch.median)) ms (\(ms(prospectFetch.low)) to \(ms(prospectFetch.high)))
+              fetch plus the fault      \(ms(faultRecipients.median)) ms (\(ms(faultRecipients.low)) to \(ms(faultRecipients.high)))
+              Re-take it on a quiet machine. Nothing here says the code is within or outside its ceiling.
+            """)
+        case .noReading:
+            print("""
+            queue-live-store-ratchets: UNMEASURED on this run.
+              no timing carried a spread to read, so the run cannot say whether it was steady.
+            """)
+        }
 
         let fetchNoise = max(prospectFetch.high - prospectFetch.low,
                              faultRecipients.high - faultRecipients.low)
