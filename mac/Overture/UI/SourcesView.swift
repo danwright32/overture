@@ -199,8 +199,12 @@ struct SourcesView: View {
         // with `surface=sourcesSheet` and `passes=8`, at a load of 4.4). A count cannot say whether that
         // is one cause firing eight times or eight inputs moving once each, and nothing on this surface
         // could say which, because the reason trace existed only for the queue and the root.
+        // Debug only, as at every other call site: `QueueRenderCounter` is declared inside `#if DEBUG`, and
+        // an unguarded call here broke the Release build the Update button makes (2026-09-24).
+        #if DEBUG
         _ = QueueRenderCounter.recordRender(surface: QueueRenderCounter.sourcesSurface,
                                             inputs: renderTrace)
+        #endif
         // #3815: the same pairing as `QueueView.makeRenderData`, and for the same reason: a count with no
         // duration beside it cannot say whether the passes account for a freeze.
         let passStarted = DispatchTime.now().uptimeNanoseconds
@@ -235,7 +239,9 @@ struct SourcesView: View {
         key.add(excludedTownRows)
         key.add(allowedSeedTownRows)
         return renderMemo.value(fingerprint: key.finalized(), cardKeys: [], now: Date()) {
+            #if DEBUG
             QueueRenderCounter.recordSurfaceDerivation(QueueRenderCounter.sourcesSurface)
+            #endif
             return SourcesRenderPass.make(SourcesRenderPass.Inputs(
                 prospects: SourcesRenderPass.Corpus(prospects),
                 sources: sources,

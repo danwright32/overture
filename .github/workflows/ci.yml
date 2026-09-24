@@ -120,6 +120,15 @@ jobs:
       - name: Run the Mac suite
         run: mac/scripts/run-tests-locked.sh CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=YES
 
+      # The suite above builds Debug, and so does everything else that runs before a merge, so code
+      # that compiles only in Debug (a symbol declared inside `#if DEBUG` and used outside it) passed
+      # every check and was first built by the Update button, which failed (2026-09-24, #4204's
+      # unguarded QueueRenderCounter calls). This compiles the configuration the installer builds.
+      # `if: always()` so a red suite still says whether Release compiles too.
+      - name: Compile the Release configuration
+        if: always()
+        run: mac/scripts/check-release-compiles.sh
+
       # The runner's own account of what happened, kept whether the suite passed or failed: a red run
       # whose log has scrolled past is the one worth having the artifact for.
       - name: Keep the run's diagnostics

@@ -313,6 +313,21 @@ echo "==> ${SWIFT_LABEL} (streaming from its first line)"
 SWIFT_STATUS=0
 stream_and_wait "${SWIFT_LOG}" "${SWIFT_PID}" "${SWIFT_STATUS_FILE}" || SWIFT_STATUS=$?
 
+# The suite above builds Debug, so code that compiles only in Debug passes it: on 2026-09-24 #4204's
+# unguarded calls to the Debug-only QueueRenderCounter merged green and the Update button, the first
+# Release build anything ran, failed. Here as well as in CI because the merge scripts run THIS on the
+# branch combined with current main, and two changes can each compile alone and break Release together
+# (L85). After the suite rather than beside it: both take the shared xcodebuild lock, so beside it this
+# would only sit queued, and its output would land in the middle of the cheap lane's.
+# Measured 2026-09-24: 1m47s for a cold build. Any failure counts, UNMEASURED (exit 2) included, which
+# is never a pass (L98).
+echo
+echo "==> mac/scripts/check-release-compiles.sh"
+if ! "${REPO_ROOT}/mac/scripts/check-release-compiles.sh"; then
+  TEST_ALL_CHEAP_FAILURES+=("mac/scripts/check-release-compiles.sh")
+  echo "FAILED - mac/scripts/check-release-compiles.sh"
+fi
+
 if [[ -n "${TREE_SNAPSHOT}" ]]; then
   run_foreground_check "scripts/check-tree-untouched.sh" \
     "${REPO_ROOT}/scripts/check-tree-untouched.sh" compare "${REPO_ROOT}" "${TREE_SNAPSHOT}"
