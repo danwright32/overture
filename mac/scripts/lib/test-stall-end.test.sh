@@ -213,12 +213,14 @@ cat > "${TMP_DIR}/rising-ps" <<STUB
 n=\$(( \$(cat "${CPU_COUNTER}") + 7 ))
 echo "\${n}" > "${CPU_COUNTER}"
 /bin/ps -axo pid=,ppid=,pgid=,time= | awk -v n="\${n}" -v run="\${RISING_RUN_PID:-0}" '
-  \$2 == run { printf "%s %s %s 0:%02d.00\n", \$1, \$2, \$3, n % 60; next } { print }'
+  \$2 == run { printf "%s %s %s %d:%02d.00\n", \$1, \$2, \$3, n / 60, n % 60; next } { print }'
 STUB
 chmod +x "${TMP_DIR}/rising-ps"
 BUSY_RECORD="${TMP_DIR}/busy.record"
 export FAKE_FLOCK_PIDS="${TMP_DIR}/busy.pids"
-start_own_group_job "${FAKE_FLOCK}" 0 /bin/sleep 1.5
+# Long enough for many times the limit in ticks, whatever else this Mac is doing: at 1.5s it was only a
+# few ticks under load, and a mutation that stopped CPU counting as movement survived it.
+start_own_group_job "${FAKE_FLOCK}" 0 /bin/sleep 4
 RUN_PID="${OWN_GROUP_JOB_PID}"
 export RISING_RUN_PID="${RUN_PID}"
 TEST_STALL_END_PS="${TMP_DIR}/rising-ps"
