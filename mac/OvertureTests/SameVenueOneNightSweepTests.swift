@@ -139,6 +139,20 @@ struct SameVenueOneNightSweepTests {
                 // records the verdict.
                 JudgedPair(foldedTitles: ["orli shaham in clara s hands", "orli shaham piano"],
                            night: "2026-10-06", venues: ["Merkin Hall", "Merkin Hall"]),
+                // Judged 2026-09-24. One concert, which Carnegie Hall RETITLED between two scouts. Both
+                // rows carry a Carnegie calendar page for the same night and the same 7pm start, and the
+                // two slugs differ only by the retitle
+                // (`.../2027/01/18/the-music-of-sir-karl-jenkins-0700pm` against
+                // `.../2027/01/18/dciny-the-music-of-sir-karl-jenkins-celebrating-jonathan-griffith-0700pm`).
+                // The retitle adds the presenter's name and an honoree, not a second programme: a third
+                // row, from DCINY's own opportunities page, has carried this concert since July.
+                // Because the slug changed, `matchByStableSource` had nothing to match and the retitled
+                // listing was inserted as its own row on 2026-09-24. That gap is #4200; this
+                // entry only records the verdict.
+                JudgedPair(foldedTitles: ["dciny the music of sir karl jenkins celebrating jonathan griffith",
+                                          "the music of sir karl jenkins"],
+                           night: "2027-01-18",
+                           venues: ["Stern Auditorium / Perelman Stage", "Stern Auditorium / Perelman Stage"]),
             ]
 
             let unjudged = candidates.filter {
