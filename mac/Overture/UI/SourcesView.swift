@@ -169,6 +169,22 @@ struct SourcesView: View {
     // 62 rows on every redraw). Empty whenever no run is in flight.
     @State private var sourcesBeingReadNow: Set<String> = []
 
+    // #4112: the sheet's whole-store derivation, run once per CHANGE rather than once per body pass.
+    //
+    // MEASURED CAUSE, not a guess. A hosted test that removes one of 74 rows and reads why each rebuild
+    // happened reported `feedbackRevision` for the first one: `WatchlistMutations.stopWatching` raises
+    // the undo banner, that writes `ActionFeedback.revision`, this sheet observes it through
+    // `.actionFeedbackBanner()`, and the entire derivation ran again to put a strip of text on screen.
+    // On the live app the same removal cost EIGHT passes of this sheet (2026-09-21, `passes=8` at a
+    // load of 4.4), and nothing could say why until the reason trace was added.
+    //
+    // `ScopeMemo` rather than moving the banner, and that choice matters. Isolating the banner would fix
+    // the banner and leave every OTHER reason this sheet is evaluated without its data changing, which
+    // is the class rather than the instance and is what #3879 built this type for. Its own header says
+    // the triggers cannot be enumerated from the data (L471), so making the pass conditional is the
+    // remedy and chasing them one at a time is not.
+    @State private var renderMemo = ScopeMemo<SourcesRenderPass.RenderData>()
+
     // #3645: everything this redraw derives, worked out ONCE, in a pure function a test can run.
     //
     // Here rather than inside `SourcesRenderPass` for the same reason `QueueView` keeps its own bump
@@ -178,6 +194,13 @@ struct SourcesView: View {
     // never rebuilt" reads as (L11). `EveryRenderPassIsCountedTests` is what keeps this call here.
     private func makeRenderData() -> SourcesRenderPass.RenderData {
         freezeWatch?.recordPass()
+        // #4112: and WHY this pass happened, on `QueueView`'s precedent and for its reason. The freeze
+        // log already said a single removal cost EIGHT passes of this sheet (2026-09-21, a 2.44s stall
+        // with `surface=sourcesSheet` and `passes=8`, at a load of 4.4). A count cannot say whether that
+        // is one cause firing eight times or eight inputs moving once each, and nothing on this surface
+        // could say which, because the reason trace existed only for the queue and the root.
+        _ = QueueRenderCounter.recordRender(surface: QueueRenderCounter.sourcesSurface,
+                                            inputs: renderTrace)
         // #3815: the same pairing as `QueueView.makeRenderData`, and for the same reason: a count with no
         // duration beside it cannot say whether the passes account for a freeze.
         let passStarted = DispatchTime.now().uptimeNanoseconds
@@ -185,12 +208,90 @@ struct SourcesView: View {
             freezeWatch?.recordPassCost(
                 seconds: Double(DispatchTime.now().uptimeNanoseconds - passStarted) / 1_000_000_000)
         }
-        return SourcesRenderPass.make(SourcesRenderPass.Inputs(
-            prospects: SourcesRenderPass.Corpus(prospects),
-            sources: sources,
-            searchQuery: searchQuery,
-            context: roomContext))
+        // The key names THIS view's own inputs, one `add` per input, so an input added here and not to
+        // the key is a line that is missing rather than an argument that is subtly wrong (L96, and
+        // `ScopeFingerprint`'s own header says so). The two collections are hashed by identity, which
+        // sees an insert, a delete, a replacement and a reorder; a field edited in place is caught by
+        // the observation tracking inside the memo instead.
+        var key = ScopeFingerprint()
+        key.add(prospects)
+        key.add(sources)
+        key.add(value: searchQuery)
+        // The context carries the day, the instant and the client window, and the window is the
+        // expensive half (#3645). Keyed by the window's own identity rather than rebuilt here.
+        key.add(value: String(describing: clientWindow))
+        // AND WHAT THE CONTEXT REACHES THROUGH `geo`, which is the part this key first MISSED.
+        //
+        // `roomContext` builds a `StageContext(geo:clients:)`, and `geo` is
+        // `GeoRefusals(userExcludedTowns:allowedSeedTowns:)` read from these two tables. So the
+        // derivation reads them, one computed property away, and a key without them serves an answer
+        // that ignores a town Dan just excluded (L40: a cheap key that misses a change shows stale rows,
+        // which is worse than a slow screen).
+        //
+        // `ScopeMemoInputsAreCompleteGuardTests` did not catch it, and cannot: it asks whether the
+        // derivation's body MENTIONS a collection, and this body mentions `roomContext`. That blind spot
+        // is written into the guard beside its rule so the next person keying a memo knows to trace its
+        // computed properties by hand rather than trusting a green run.
+        key.add(excludedTownRows)
+        key.add(allowedSeedTownRows)
+        return renderMemo.value(fingerprint: key.finalized(), cardKeys: [], now: Date()) {
+            QueueRenderCounter.recordSurfaceDerivation(QueueRenderCounter.sourcesSurface)
+            return SourcesRenderPass.make(SourcesRenderPass.Inputs(
+                prospects: SourcesRenderPass.Corpus(prospects),
+                sources: sources,
+                searchQuery: searchQuery,
+                context: roomContext))
+        }
     }
+
+    #if DEBUG
+    // #4112: a fingerprint of what this sheet derives FROM, so a re-derivation can name its own cause.
+    //
+    // Counts and small state values only, which is the rule `QueueView.renderTrace` states and the
+    // reason it states it: anything here that cost a fetch or a stat would make the diagnostic part of
+    // the problem it measures. Every `@Query` this view holds is counted, and the `@State` values that
+    // change what it derives. The editing drafts and the search text are here because a keystroke in any
+    // of them is a legitimate cause of a redraw, and a burst nobody can attribute to typing is the whole
+    // question.
+    private var renderTrace: [String: String] {
+        [
+            "sources": "\(sources.count)",
+            "prospects": "\(prospects.count)",
+            "dismissedCoverage": "\(dismissedCoverage.count)",
+            "excludedTowns": "\(excludedTownRows.count)",
+            "allowedSeedTowns": "\(allowedSeedTownRows.count)",
+            "clients": "\(clients.count)",
+            "coverageGaps": "\(coverageResult.gaps.count)",
+            "coverageIgnored": "\(coverageResult.ignored.count)",
+            "calendarFlagged": "\(calendarResult.flagged.count)",
+            "calendarSetAside": "\(calendarResult.setAside.count)",
+            "clientFlags": "\(clientFlags.count)",
+            "clientWindow": String(describing: clientWindow),
+            "calendarShoots": "\(calendarShoots.count)",
+            "sourcesBeingReadNow": "\(sourcesBeingReadNow.count)",
+            "searchQuery": searchQuery.isEmpty ? "empty" : "\(searchQuery.count) chars",
+            "showAdd": "\(showAdd)",
+            "showIgnoredClients": "\(showIgnoredClients)",
+            "showSetAsideCalendarClients": "\(showSetAsideCalendarClients)",
+            "editingLocationFor": editingLocationFor ?? "none",
+            "editingVenueNameFor": editingVenueNameFor ?? "none",
+            "editingRoomKey": editingRoomKey ?? "none",
+            "closeRefused": "\(closeRefused)",
+            "addMessage": addMessage == nil ? "none" : "set",
+            // #4112: the banner, which this sheet observes through `.actionFeedbackBanner()` and which
+            // every mutation here writes to. Without it a rebuild provoked by the undo banner reports
+            // "nothing this view reads", which is a claim the trace cannot support while it omits an
+            // input the view really does observe: the reason would send the next investigation looking
+            // outside the sheet for something the sheet itself did (L11, L440).
+            //
+            // `revision` rather than the message, because the message is Dan's own text about a real
+            // show and this trace is written to a log (L222).
+            "feedbackRevision": "\(feedback.revision)",
+        ]
+    }
+    #else
+    private var renderTrace: [String: String] { [:] }
+    #endif
 
     var body: some View {
         // The pass is counted INSIDE `makeRenderData()`, on its first line, exactly where `QueueView`

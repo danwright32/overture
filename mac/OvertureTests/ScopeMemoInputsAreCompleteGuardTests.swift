@@ -49,6 +49,18 @@ struct ScopeMemoInputsAreCompleteGuardTests {
         return names
     }
 
+    // WHAT THIS GUARD CANNOT SEE, stated because a green run here is not a statement that a key is
+    // complete (L400).
+    //
+    // It asks whether a derivation's BODY MENTIONS a collection by name. A derivation that reaches one
+    // through a computed property mentions the property, not the collection, and this rule is blind to
+    // it. Measured 2026-09-24: `SourcesView.makeRenderData` builds `roomContext`, which builds `geo`,
+    // which reads `excludedTownRows` and `allowedSeedTownRows`. Neither was in the key and this guard
+    // was green. The key was fixed; the blind spot is not fixable by a text rule, because following it
+    // means resolving a property chain.
+    //
+    // So: when keying a memo, trace every computed property the derivation touches BY HAND, and treat a
+    // pass here as covering only what the body names directly.
     @Test func everyModelCollectionADerivationReadsIsInTheKeyItsMemoDecidesBy() {
         let models = Self.modelTypes()
         #expect(models.count > 8, Comment(rawValue: """
@@ -73,8 +85,22 @@ struct ScopeMemoInputsAreCompleteGuardTests {
                       open < close else { continue }
                 let element = String(trimmed[trimmed.index(after: open)..<close])
                 guard models.contains(element) else { continue }
-                guard let colon = trimmed.range(of: ":"), colon.lowerBound < open else { continue }
-                let head = String(trimmed[trimmed.startIndex..<colon.lowerBound])
+                // #4112: the LAST colon before the `[`, not the first.
+                //
+                // The first colon is the type annotation's ONLY when no attribute on the line carries
+                // one. `@Query(sort: \WatchedSource.orgName) private var sources: [WatchedSource]` has
+                // one inside the attribute, so taking the first gave the name `@Query(sort`, which no
+                // derivation body ever contains, and that collection was then skipped entirely. Measured
+                // 2026-09-24: removing `key.add(sources)` from `SourcesView.makeRenderData` left this
+                // guard GREEN, which is the whole class of defect it exists to catch, in the guard
+                // itself (L400).
+                //
+                // Exactly one declaration in the app is affected today, and it is the one that exposed
+                // it. That is the reason to fix the rule rather than the instance: the next `@Query`
+                // written with a sort descriptor would have been invisible the same way, silently.
+                let colons = trimmed.indices.filter { trimmed[$0] == ":" && $0 < open }
+                guard let colon = colons.last else { continue }
+                let head = String(trimmed[trimmed.startIndex..<colon])
                 guard let name = head.split(separator: " ").last.map(String.init), !name.isEmpty else { continue }
                 collections[name] = element
             }

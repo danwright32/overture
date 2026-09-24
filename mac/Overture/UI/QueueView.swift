@@ -2164,6 +2164,18 @@ enum QueueRenderCounter {
     // the wrong surface on every line.
     nonisolated(unsafe) private static var previous: [String: [String: String]] = [:]
     nonisolated(unsafe) private static var renders: [String: Int] = [:]
+    // #4112: WHY each render happened, per surface, so a burst can be read rather than just counted.
+    //
+    // A COUNT says a removal cost eight passes. It cannot say whether that is one cause firing eight
+    // times or eight different inputs moving once each, and those need opposite fixes. `recordRender`
+    // already works the reason out and hands it back to its caller, who until now dropped it.
+    //
+    // BOUNDED, because this accumulates for the life of the process and a long session on the queue
+    // renders constantly. The cap keeps the most RECENT, since a burst is read right after it happens
+    // (L191: a cheap writer must not evict the expensive observation, and here the newest IS the
+    // observation).
+    nonisolated(unsafe) private static var reasonsBySurface: [String: [String]] = [:]
+    static let reasonsKept = 50
     // #1931: the rows the LAST derivation produced. Value-type snapshots, already built by that pass, so
     // comparing them costs no fetch and no stat.
     nonisolated(unsafe) private static var previousRows: [QueueScopeRow]?
@@ -2179,6 +2191,14 @@ enum QueueRenderCounter {
 
     static let queueSurface = "queue"
     static let rootSurface = "root"
+    // #4112: the Sources sheet, which derives its own whole-store pass and was counted by nothing.
+    //
+    // Removing ONE row from the 74 row list cost EIGHT render passes of that sheet, measured on the live
+    // app 2026-09-21 (a 2.44s stall with `surface=sourcesSheet` and `passes=8`, at a load of 4.4, so the
+    // Mac was not the cause). `passes` said how MANY, and nothing anywhere could say WHY, because the
+    // reason trace this counter keeps existed only for the queue and the root. That is the same gap
+    // #1930 had before it was instrumented, and the same remedy.
+    static let sourcesSurface = "sourcesSheet"
 
     // Where an unattended observation ends up. Debug builds keep their own data directory, so this can
     // never land beside the live store's files.
@@ -2224,10 +2244,41 @@ enum QueueRenderCounter {
         renders[surface] = n
         let why = reason(for: inputs, since: previous[surface] ?? [:])
         previous[surface] = inputs
+        // #4112: kept as well as returned, so a test or a reader can ask what a whole burst was about
+        // rather than only what the last render was about.
+        var kept = reasonsBySurface[surface] ?? []
+        kept.append(why)
+        if kept.count > reasonsKept { kept.removeFirst(kept.count - reasonsKept) }
+        reasonsBySurface[surface] = kept
         guard !underTests else { return why }
         append(line: "\(surface) #\(n) \(why)", to: url ?? logURL, maxBytes: maxLogBytes)
         return why
     }
+
+    // #4112: how many times a surface has rendered, and why each of those was.
+    //
+    // Readers rather than a reset, deliberately. A test takes a BEFORE and compares, which is what
+    // `BringingTheQueueUpTests` already does with `derivations`; a reset would be a second way to be
+    // wrong about what a count is relative to, and one no production caller would ever use.
+    static func renderCount(for surface: String) -> Int { renders[surface] ?? 0 }
+
+    // #4112: how many times a surface actually DERIVED, as against how many times it was evaluated.
+    //
+    // TWO QUANTITIES, and keeping them apart is the whole point. SwiftUI re-evaluating a body is cheap
+    // and happens for reasons a view cannot control; re-running a whole-store derivation is what costs
+    // seconds. Counting them together would make a memo that removed all the work look like it removed
+    // none, because the body still runs (L63, and `ScopeMemo.builds` exists for exactly this reason).
+    //
+    // `renders` is deliberately NOT redefined to mean this. The freeze log's `passes` field counts body
+    // evaluations and Dan's log holds thousands of records taken under that meaning, so changing it
+    // would make every new record incomparable with every old one, silently (L683, and #3813 refused
+    // the same trade for the same reason).
+    nonisolated(unsafe) private static var derivationsBySurface: [String: Int] = [:]
+    static func recordSurfaceDerivation(_ surface: String) {
+        derivationsBySurface[surface] = (derivationsBySurface[surface] ?? 0) + 1
+    }
+    static func derivationCount(for surface: String) -> Int { derivationsBySurface[surface] ?? 0 }
+    static func reasons(for surface: String) -> [String] { reasonsBySurface[surface] ?? [] }
 
     // Which inputs moved. Pure, so the rule this diagnostic reports by is itself tested rather than being
     // one more thing taken on trust while it is used to judge everything else.
