@@ -905,8 +905,42 @@ queue_cost_seen_update() {
 # on is precisely that a run which measured nothing writes nothing.
 #
 # ADVISORY, with no staleness threshold, for the reason the rebuild figure records.
+# #3919: a fingerprint of the SHAPE of the models a live store cost reading is a rate over.
+#
+# WHY A SHAPE AND NOT A CLOCK. The reading is a cost PER ROW, and a rate does not go stale because the
+# store grew; it goes stale when the thing being measured changes kind. #3919 asks for a staleness
+# window the runner refuses past, and both halves of that were measured on 2026-09-23 before the
+# refusal was dropped: `Prospect` and `Recipient` change shape every 0.7 to 1.5 days (110
+# shape-changing commits in 60 days), and the measurement that would clear a refusal costs 417
+# seconds. A gate on that would block a push about once a day and demand seven minutes each time,
+# which is MORE often than the two day timer it was meant to improve on, and a gate at that cadence is
+# one people route around (L36). Dan's call, this session in chat: stay advisory, and say how stale the
+# reading is in the unit that makes it stale.
+#
+# STORED FIELDS ONLY, derived from the sources rather than listed anywhere (L41). A declaration line is
+# one at the type's own indentation carrying `var` or `@Attribute` and no brace, which is the same rule
+# `SourceGuardHelper.storedPropertyNames` applies on the Swift side and for its reasons: a line with a
+# brace is a computed property, and `var` inside a method is a local. So adding a field moves this and
+# editing a comment does not, which is what keeps the signal from becoming noise on every push.
+#
+# EMPTY when nothing could be read, and never a hash of nothing. Two unreadable runs must not produce
+# equal fingerprints and read as "the models have not changed" (L98).
+model_shape_fingerprint() {
+  local file found=0 lines=""
+  for file in "$@"; do
+    [[ -r "${file}" ]] || continue
+    found=1
+    lines+="$(awk '
+      /^    (var |@Attribute)/ && !/\{/ { print }
+    ' "${file}")"
+    lines+=$'\n'
+  done
+  [[ "${found}" -eq 1 ]] || { printf ''; return 0; }
+  printf '%s' "${lines}" | shasum -a 256 | cut -c1-12
+}
+
 live_store_cost_report() {
-  local today="$1" seen="${2:-}" output="${3:-}" date ms rows days fresh
+  local today="$1" seen="${2:-}" output="${3:-}" shape_now="${4:-}" date ms rows days fresh shape_then note
   # This run's OWN reading wins over the stored one, the way `queue_cost_report` and `live_corpus_report`
   # both do: without it the single run that actually took the measurement reports "NEVER measured on this
   # clone", which is the most misleading moment that sentence has.
@@ -927,7 +961,19 @@ live_store_cost_report() {
     return 0
   fi
   days="$(days_since "${date}" "${today}")"
-  echo "Live store pass cost: ${ms} ms over ${rows} rows, last measured ${date} (${days} days ago)."
+  # #3919: three answers about the shape, never two. "not changed" and "cannot tell" call for opposite
+  # next steps, and a record written before the shape was recorded is the second, not the first (L98).
+  shape_then="$(queue_cost_field shape "${seen}")"
+  if [[ -z "${shape_then}" ]]; then
+    note=", and whether the models have changed shape since is UNKNOWN: this record predates that being written down."
+  elif [[ -z "${shape_now}" ]]; then
+    note=", and whether the models have changed shape since is UNKNOWN: their shape could not be read on this run."
+  elif [[ "${shape_then}" == "${shape_now}" ]]; then
+    note=", and Prospect and Recipient have not changed shape since."
+  else
+    note=", and Prospect or Recipient HAS changed shape since, so it may no longer describe the code. Re-take it with TEST_RUNNER_MEASURE_QUEUE_LIVE_STORE=1."
+  fi
+  echo "Live store pass cost: ${ms} ms over ${rows} rows, last measured ${date} (${days} days ago)${note}"
 }
 
 # What gets REMEMBERED, pure, so the call site only ever writes what this hands back.
@@ -942,7 +988,7 @@ live_store_cost_report() {
 # measurement must change NOTHING, or the date is stamped forward on every push and the age always reads
 # zero, which is the defect wearing a date.
 live_store_cost_seen_update() {
-  local output="$1" today="$2" seen="${3:-}" parsed rows ms
+  local output="$1" today="$2" seen="${3:-}" shape_now="${4:-}" parsed rows ms
   # ONE awk over a herestring, with no pipeline at all, for the reason `queue_cost_seen_update` records:
   # a `grep | head` pipeline under `set -o pipefail` makes an EARLY match and NO match indistinguishable,
   # because `head` kills the producer with SIGPIPE and the 141 becomes the pipeline status (L183, #3275).
@@ -966,7 +1012,15 @@ live_store_cost_seen_update() {
     printf '%s' "${seen}"
     return 0
   fi
-  printf 'date=%s\nms=%s\nrows=%s' "${today}" "${ms}" "${rows}"
+  # #3919: the shape this reading was taken under, so the NEXT run can say whether it still applies.
+  # Omitted entirely when it could not be read, rather than written empty: an empty shape recorded now
+  # would compare equal to an empty shape read later and report "not changed" about two files nobody
+  # read (L98).
+  if [[ -n "${shape_now}" ]]; then
+    printf 'date=%s\nms=%s\nrows=%s\nshape=%s' "${today}" "${ms}" "${rows}" "${shape_now}"
+  else
+    printf 'date=%s\nms=%s\nrows=%s' "${today}" "${ms}" "${rows}"
+  fi
 }
 
 # ---------------------------------------------------------------------------
