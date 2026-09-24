@@ -80,7 +80,7 @@ struct InquiryOnTheSharedReplyScreenTests {
         c = ReplyComposition(title: c.title, subtitle: c.subtitle, contact: c.contact,
                              editableSubject: "  ", aiDraft: nil, audienceControls: nil,
                              cannotContinue: c.cannotContinue,
-                             confirmation: c.confirmation, send: c.send)
+                             confirmation: c.confirmation, send: c.send, feedback: c.feedback)
         #expect(c.refusal(body: "Thursday works.", gmailConnected: true) == .noSubject)
     }
 

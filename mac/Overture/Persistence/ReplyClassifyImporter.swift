@@ -43,6 +43,12 @@ enum ReplyClassifyImporter {
                 guard let rid = r.recipientId else { continue }
                 p.updateRecipient(id: rid) { rec in
                     rec.intentHint = r.intent   // non-binding hint, always the latest read
+                    // #4208: the run has answered this conversation, so a redraft it was asked for is
+                    // resolved whatever came back: a new draft, a draft skipped for Dan's own words, or
+                    // no draft at all (`draftBody` is optional). Cleared once, here, rather than in each
+                    // branch below, because a branch that forgot it would leave the conversation reading
+                    // as drafting and then as a stalled draft on the Follow-ups pill.
+                    rec.replyDraftReplacesDraftOnFile = false
                     // Never clobber a reply Dan hand-edited (#462): his unsent text wins until he sends
                     // or dismisses it, mirroring the cold path (PrepImporter draftEditedByDan). Guard on
                     // actual edited TEXT, not the marker alone, so a draft he already sent in Gmail

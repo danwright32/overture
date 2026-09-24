@@ -554,6 +554,13 @@ final class Recipient {
     var replyDraftSubject: String?
     var replyDraftBody: String?
     var replyDraftRequestedAt: Date?
+    // #4208: the request at `replyDraftRequestedAt` asks to REPLACE the draft already on file. Without it
+    // a draft on file reads as "nothing awaited" to both the drafter's eligibility rule and the screen,
+    // so pressing Draft with AI over an existing draft queued nothing and showed nothing. The old draft
+    // stays on file until the replacement lands, so a run that fails costs nothing (L5). Cleared by
+    // whatever resolves the request: a new draft landing, a result skipped for Dan's own words, an
+    // answer, or a dismissed reply. Defaulted false, so every existing row keeps today's reading.
+    var replyDraftReplacesDraftOnFile: Bool = false
     // #2063: who the reply Overture is answering was itself addressed to (its sender plus everyone else it
     // named, minus Dan), captured with the reply text. Dan's answer goes to exactly these people, so a
     // reply he received privately is not answered in front of everybody he originally emailed.
@@ -1215,6 +1222,7 @@ final class Recipient {
     // only one of them allowed for a request belonging to an exchange already answered.
     var awaitedReplyDraftRequestedAt: Date? {
         ReplyDraftRequest.awaited(requestedAt: replyDraftRequestedAt, draftBody: replyDraftBody,
+                                  replacingDraftOnFile: replyDraftReplacesDraftOnFile,
                                   answeredAt: replyHandledAt)
     }
 
@@ -1303,6 +1311,7 @@ final class Recipient {
     func recordAnswerSent(now: Date) {
         freezeSentReply(now: now)   // capture the committed copy before consuming the draft (#463)
         replyDraftBody = nil
+        replyDraftReplacesDraftOnFile = false   // #4208: answered, so the redraft asked for is moot
         lastFollowUpAt = now
         // The fact that had no home: Dan answered. Stamped LAST and unconditionally, unlike the freeze
         // above, which legitimately declines when there is nothing new to capture. An answer that went
@@ -1348,6 +1357,7 @@ final class Recipient {
         intentHint = nil
         replyDraftBody = nil
         replyDraftRequestedAt = nil
+        replyDraftReplacesDraftOnFile = false
         replyDraftEditedByDan = false
         // The reply was wrong, so any half-captured voice pair for it is bogus too (#463).
         originalReplyDraftBody = nil

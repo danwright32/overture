@@ -121,6 +121,7 @@ struct OutreachFieldClassificationTests {
         "replyAudience": "who a reply went to, captured with the reply that is counted",
         "intentHint": "what a classify run read a REPLY as meaning, and replied is counted",
         "replyDraftEditedByDan": "whether he edited the reply draft, and replyDraftBody is counted",
+        "replyDraftReplacesDraftOnFile": "a pending request to replace the reply draft, and a draft is not a send (#4208)",
         // #2869: the draft is on the clipboard and Dan has NOT said he sent it. Deliberately not
         // outreach, which is the whole of that change: copying is not sending, and the field exists
         // precisely to hold the in-between state that used to be recorded as an answer. `replySentAt`

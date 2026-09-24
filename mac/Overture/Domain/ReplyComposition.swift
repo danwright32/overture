@@ -41,6 +41,10 @@ struct ReplyComposition {
     let cannotContinue: @MainActor () -> String?
     let confirmation: @MainActor (_ body: String, _ subject: String?) -> SendConfirmation?
     let send: @MainActor (_ body: String, _ subject: String?) async -> Bool
+    // #4208: where this screen's acknowledgements are said, the SAME object every closure above reports
+    // through, so the sheet can draw the banner they land on. The sheet is its own window, and the one
+    // behind it cannot be seen (#285).
+    let feedback: ActionFeedback
 
     // Asked, never remembered: taking somebody off the reply has to show without rebuilding the screen.
     var audience: [String] { SendGroup.replyAudience(of: contact) }
@@ -120,7 +124,8 @@ extension ReplyComposition {
                 case .sent: return true
                 case .sendFailed: return false
                 }
-            })
+            },
+            feedback: feedback)
     }
 
     // A scouted show's reply. `recipient` is the peer who actually WROTE, resolved by the caller through
@@ -175,6 +180,7 @@ extension ReplyComposition {
                                                    now: Date(), sender: sender)
                 context.saveOrWarnSendNotConfirmed(org: prospect.groupName, feedback: feedback)
                 return sent
-            })
+            },
+            feedback: feedback)
     }
 }

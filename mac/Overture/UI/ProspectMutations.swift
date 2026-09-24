@@ -596,7 +596,7 @@ enum ProspectMutations {
     // because a source guard can only ever see that the word `only:` is written at a call, never that a
     // real Target arrives there, and nil is exactly the value that spends across every waiting
     // conversation (L3).
-    typealias ReplyDraftLaunch = @MainActor (ModelContext, ReplyClassifyService.Target) -> Void
+    typealias ReplyDraftLaunch = @MainActor (ModelContext, ReplyClassifyService.Target) throws -> Void
 
     // #2975: the seams are here so a test can watch the REAL launcher forward the scope it was handed.
     //
@@ -618,8 +618,8 @@ enum ProspectMutations {
                                    launch: @MainActor () throws -> Void = ReplyClassifyService.launchRunner,
                                    announce: @MainActor () -> Void = {
                                        DetachedRunActivity.replyClassify.runStarted()
-                                   }) {
-        _ = try? ReplyClassifyService.startClassify(from: context, now: Date(), only: target,
+                                   }) throws {
+        try ReplyClassifyService.startClassify(from: context, now: Date(), only: target,
                                                     queueURL: queueURL, markerURL: markerURL,
                                                     cancelURL: cancelURL, launch: launch,
                                                     announce: announce)
@@ -636,11 +636,33 @@ enum ProspectMutations {
                            context: ModelContext, feedback: ActionFeedback,
                            // #2975: wrapped rather than named directly, because `launchReplyDrafter`
                            // now carries its own defaulted seams and no longer has this narrower shape.
-                           start: ReplyDraftLaunch = { launchReplyDrafter($0, $1) }) {
-        guard let model = model(forKey: naturalKey, org: nil, in: prospects, feedback: feedback) else { return }
-        model.updateRecipient(id: recipientId) { $0.replyDraftRequestedAt = Date() }
+                           start: ReplyDraftLaunch = { try launchReplyDrafter($0, $1) }) {
+        guard let model = model(forKey: naturalKey, org: nil, in: prospects, feedback: feedback),
+              let recipient = model.recipients.first(where: { $0.id == recipientId }) else { return }
+        // #4208: held so a launch that starts nothing can put them back. The request stamp is what tells a
+        // newer message from them apart from the draft on file (`replyPostdatesDraftRequest`), so moving
+        // it on a press that ran nothing hides that message.
+        let priorRequestedAt = recipient.replyDraftRequestedAt
+        let priorReplaces = recipient.replyDraftReplacesDraftOnFile
+        model.updateRecipient(id: recipientId) {
+            $0.replyDraftRequestedAt = Date()
+            // #4208: a press over a draft already on file asks for it to be replaced. Without this the
+            // drafter refused the contact as already drafted and the screen read it as nothing awaited.
+            $0.replyDraftReplacesDraftOnFile = $0.replyDraftBody?.isEmpty == false
+        }
         context.saveOrWarn(org: model.groupName, feedback: feedback)
-        start(context, ReplyClassifyService.Target(naturalKey: naturalKey, recipientId: recipientId))
+        do {
+            try start(context, ReplyClassifyService.Target(naturalKey: naturalKey, recipientId: recipientId))
+        } catch {
+            // #4208: every refusal used to be discarded with `try?`, so a press that started nothing looked
+            // exactly like a button that does nothing (L11, L12).
+            model.updateRecipient(id: recipientId) {
+                $0.replyDraftRequestedAt = priorRequestedAt
+                $0.replyDraftReplacesDraftOnFile = priorReplaces
+            }
+            context.saveOrWarn(org: model.groupName, feedback: feedback)
+            feedback.acknowledge(ReplyPanelCopy.draftNotStarted(error), tone: .warning)
+        }
     }
 
     static func editReplyDraft(_ item: QueueItem, _ recipientId: String, _ body: String,

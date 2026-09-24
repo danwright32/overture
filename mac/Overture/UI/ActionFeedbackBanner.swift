@@ -6,6 +6,18 @@ import SwiftUI
 // them), all reading the one inherited ActionFeedback object.
 private struct ActionFeedbackBanner: ViewModifier {
     @Environment(ActionFeedback.self) private var feedback
+
+    func body(content: Content) -> some View {
+        content.modifier(ActionFeedbackBannerOn(feedback: feedback))
+    }
+}
+
+// #4208: the same banner over an ActionFeedback handed in rather than read from the environment, for a
+// surface that already holds the object it acknowledges through. The reply sheet does: its composition's
+// closures capture it. Reading the environment there would make every test that draws the sheet on its
+// own crash for want of an object the sheet never uses directly.
+private struct ActionFeedbackBannerOn: ViewModifier {
+    let feedback: ActionFeedback
     // #924: this surface's spot in the mount order, so only the topmost one draws (no double banner when a
     // sheet is open over the window). Registered on appear, released on disappear.
     @State private var token = 0
@@ -58,4 +70,7 @@ private struct ActionFeedbackBanner: ViewModifier {
 extension View {
     // Attach the shared acknowledgment banner to a window or sheet root.
     func actionFeedbackBanner() -> some View { modifier(ActionFeedbackBanner()) }
+    func actionFeedbackBanner(_ feedback: ActionFeedback) -> some View {
+        modifier(ActionFeedbackBannerOn(feedback: feedback))
+    }
 }
