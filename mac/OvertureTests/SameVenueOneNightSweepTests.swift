@@ -139,6 +139,46 @@ struct SameVenueOneNightSweepTests {
                 // records the verdict.
                 JudgedPair(foldedTitles: ["orli shaham in clara s hands", "orli shaham piano"],
                            night: "2026-10-06", venues: ["Merkin Hall", "Merkin Hall"]),
+                // Judged 2026-09-24. One concert, and the evidence here is WEAKER than every entry above
+                // it, which is why the reason says what it rests on rather than asserting the verdict.
+                //
+                // The three pairs above are all corroborated by the two rows sharing a listing URL, so
+                // the source itself says they are one event. THESE TWO DO NOT SHARE ONE. What the store
+                // holds is two carnegiehall.org listings for the same night:
+                //   .../2027/01/18/the-music-of-sir-karl-jenkins-0700pm
+                //   .../2027/01/18/dciny-the-music-of-sir-karl-jenkins-celebrating-jonathan-griffith-0700pm
+                // captured 2.85 days apart, the second later.
+                //
+                // WHY THERE ARE TWO IS NOT ESTABLISHED, and an earlier draft of this comment said it was.
+                // It claimed Carnegie "publishes them as separate pages". The store cannot show that. A
+                // retitled listing whose slug moved with its title produces exactly this record, and so
+                // does a calendar carrying two pages, and nothing here distinguishes them: neither URL
+                // was fetched. Either way `matchByStableSource` compares the listing URL exactly, so the
+                // second billing was inserted as its own row (L192: a fact inferred from content must
+                // not be recorded as the fact it stands for).
+                //
+                // A THIRD ROW for this night is NOT part of this pair and is not a defect. Dan watches
+                // the Carnegie calendar and DCINY's calendar as separate sources (his note, 2026-09-24),
+                // so `Jenkins: The Armed Man; Jenkins: Gloria` from dciny.org is the expected overlap of
+                // two watched sources rather than a duplicate either one produced.
+                //
+                // What joins them is the room and the clock: same night, same Stern Auditorium, both
+                // billed at 0700pm in their own URLs, same presenter (DCINY). Two concerts cannot both
+                // open at seven in that room, so one event is billed twice, most likely a programme
+                // title and a fuller billing of the same evening. Dan's call on that reading, this
+                // session in chat.
+                //
+                // WHAT THIS DOES NOT ESTABLISH, said because the next person will reach for this entry
+                // as a precedent: it is not evidence that `isSameNightVariant` would be SAFE to build an
+                // ingest rule on for pairs like this. A rule keyed on the title alone would have joined
+                // these two, and it would have been right here by luck of the clock rather than by
+                // anything in the titles (L192, L203). #3330 still needs the corroboration question
+                // answered separately.
+                JudgedPair(foldedTitles: ["dciny the music of sir karl jenkins celebrating jonathan griffith",
+                                          "the music of sir karl jenkins"],
+                           night: "2027-01-18",
+                           venues: ["Stern Auditorium / Perelman Stage",
+                                    "Stern Auditorium / Perelman Stage"]),
             ]
 
             let unjudged = candidates.filter {
