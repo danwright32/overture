@@ -73,13 +73,20 @@ struct AnsweredReplyBackfillLiveStoreTests {
 
         // What was asking before the pass, so the check below compares against a measured before-state
         // rather than against the pass's own opinion of what it did (L70).
+        //
+        // Keyed on the ROW, never on `Recipient.id`. That field is the contact's email address, and the
+        // same person is routinely a contact on more than one show: 21 addresses in the live store on
+        // 2026-09-24. Keyed on the address, a reply arriving on one show made the SAME person's stood
+        // down row on another show read as a row the pass had stamped, so this reported "the pass
+        // returned 0 but 1 rows stopped asking" when the pass had touched nothing, and every merge was
+        // refused over it (L15, L131).
         let before = Set((try ctx.fetch(FetchDescriptor<Prospect>()))
-            .flatMap(\.recipients).filter(\.hasUnhandledReply).map(\.id))
+            .flatMap(\.recipients).filter(\.hasUnhandledReply).map(\.persistentModelID))
 
         let changed = AnsweredReplyBackfill.run(in: ctx)
 
         let all = (try ctx.fetch(FetchDescriptor<Prospect>())).flatMap(\.recipients)
-        let stamped = all.filter { before.contains($0.id) && !$0.hasUnhandledReply }
+        let stamped = all.filter { before.contains($0.persistentModelID) && !$0.hasUnhandledReply }
 
         // 1. It reports exactly what it did. A pass whose return value and effect disagree can never be
         // trusted to say what it touched on the store nobody can inspect afterwards.
@@ -89,7 +96,7 @@ struct AnsweredReplyBackfillLiveStoreTests {
         // 2. Every row it stamped had an answer PROVABLY sent on its own conversation, after the reply
         // arrived. This is the whole safety property: nothing is cleared on the strength of an empty field.
         for r in stamped {
-            let prospect = try #require(all.first { $0.id == r.id }?.prospect)
+            let prospect = try #require(r.prospect, "stamped \(r.id) belongs to no show")
             let answers = SendGroup.peers(of: r, in: prospect)
                 .filter { $0.id == r.id || $0.lastReplyId == r.lastReplyId }
                 .compactMap(\.replySentAt)
@@ -102,7 +109,7 @@ struct AnsweredReplyBackfillLiveStoreTests {
 
         // 3. Nothing that was NOT asking changed. The pass may only ever move a row out of the waiting
         // state, never into it.
-        let nowAsking = Set(all.filter(\.hasUnhandledReply).map(\.id))
+        let nowAsking = Set(all.filter(\.hasUnhandledReply).map(\.persistentModelID))
         #expect(nowAsking.isSubset(of: before), "the pass put a row INTO the waiting state")
 
         // 4. It runs at every launch, so a second pass must be a no-op on the store it just repaired.
