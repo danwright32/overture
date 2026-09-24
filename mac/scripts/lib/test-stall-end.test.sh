@@ -188,6 +188,27 @@ assert_eq "and it ended in seconds, not the 60 the holder would have taken" "pro
 assert_contains "it says so out loud at the moment it happens" \
   "$(cat "${TMP_DIR}/hung.stderr")" "ENDING THIS RUN"
 
+# A LIMIT OF 0 IS OFF, as the header and AGENTS.md promise. The lessons review of PR #4221 found the
+# opposite: the off test read only the check interval, so a limit of 0 tripped `stall_tick` on the first
+# check and ended the run at once, which is the one reading the documented off switch must never have.
+OFF_RECORD="${TMP_DIR}/off.record"
+export FAKE_FLOCK_PIDS="${TMP_DIR}/off.pids"
+TEST_STALL_END_SECONDS=0
+start_own_group_job "${FAKE_FLOCK}" 0 /bin/sleep 3
+RUN_PID="${OWN_GROUP_JOB_PID}"
+RECORD_FOR_STOP="${OFF_RECORD}"
+start_run_stall_end "${RUN_PID}" "$$" "${LOG}" "${OFF_RECORD}" 2>"${TMP_DIR}/off.stderr"
+GUARD_PID="${RUN_STALL_END_PID}"
+wait "${RUN_PID}" 2>/dev/null
+OFF_CODE=$?
+stop_run_stall_end "${GUARD_PID}" "${RECORD_FOR_STOP}"
+TEST_STALL_END_SECONDS=3
+assert_eq "a limit of 0 switches the ending off: a quiet holder is left to finish" "no record" \
+  "$(if [[ -s "${OFF_RECORD}" ]]; then echo "recorded: $(cat "${OFF_RECORD}")"; else echo "no record"; fi)"
+assert_eq "and it finishes with its own exit code" "0" "${OFF_CODE}"
+assert_contains "and the run says the ending is off, naming the setting" \
+  "$(cat "${TMP_DIR}/off.stderr")" "OVERTURE_TEST_STALL_END_SECONDS"
+
 # QUEUED is never a stall: flock with no child for longer than the limit, then a quick holder.
 QUEUED_RECORD="${TMP_DIR}/queued.record"
 export FAKE_FLOCK_PIDS="${TMP_DIR}/queued.pids"

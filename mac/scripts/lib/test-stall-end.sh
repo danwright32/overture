@@ -257,6 +257,12 @@ run_stall_end_loop() {
     echo "run-tests-locked.sh: the stall ending is OFF for this run: OVERTURE_TEST_STALL_END_CHECK_SECONDS is '${interval}', not a whole number of seconds above zero." >&2
     return 0
   fi
+  # A limit of 0 is the documented off switch. `stall_tick` already never trips on it, so this changes no
+  # outcome; it makes the off state say so, as the interval's does, rather than looping in silence (L65).
+  if ! [[ "${limit}" =~ ^[0-9]+$ && "${limit}" -gt 0 ]]; then
+    echo "run-tests-locked.sh: the stall ending is OFF for this run: OVERTURE_TEST_STALL_END_SECONDS is '${limit}'." >&2
+    return 0
+  fi
   rm -f "${record}" "${sig}" "${tick}"
 
   while :; do
