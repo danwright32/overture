@@ -481,6 +481,21 @@ enum ReplyPanelCopy {
     // card's own drafting line uses, shared rather than spelled twice, so the two surfaces cannot drift.
     static let drafting = "Drafting a reply"
     static let draftWithAIHelp = "Write a first draft of this one reply, which you can then edit"
+    // #4208: why a press of Draft with AI started nothing. Each refusal the launcher can raise has its
+    // own sentence, because the error's own wording talks about classifying, a word Dan never sees, and a
+    // press that says nothing reads as a dead button.
+    static func draftNotStarted(_ error: Error) -> String {
+        switch error as? ReplyClassifyService.ClassifyLaunchError {
+        case .alreadyRunning:
+            return "No AI draft started. Another reply is already being drafted, so try again once it finishes."
+        case .nothingToClassify:
+            return "No AI draft started, because this conversation isn't waiting on an answer from you."
+        case .runnerUnavailable(let reason):
+            return "No AI draft started. \(reason)"
+        case nil:
+            return "No AI draft started, because Overture couldn't hand this reply to the drafter: \(error.localizedDescription)"
+        }
+    }
     // #2143: a draft came back while Dan was writing his own. States what happened and nothing else: what
     // it would do to his words is the button's job to say, not this line's.
     static let draftArrivedWhileWriting = "An AI draft came back while you were writing."

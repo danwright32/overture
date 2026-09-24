@@ -228,7 +228,7 @@ struct ScopedReplyDraftTests {
         defer { try? FileManager.default.removeItem(at: dir) }
         let queueURL = dir.appendingPathComponent("queue.json")
 
-        ProspectMutations.launchReplyDrafter(
+        try ProspectMutations.launchReplyDrafter(
             ctx, ReplyClassifyService.Target(naturalKey: "B", recipientId: "b@x.org"),
             queueURL: queueURL,
             markerURL: dir.appendingPathComponent("marker"),

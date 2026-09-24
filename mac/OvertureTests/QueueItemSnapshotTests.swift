@@ -383,7 +383,8 @@ struct QueueItemSnapshotTests {
                               bounced: false, outcomeSource: nil,
                               replyDraftBody: body, replyDraftRequestedAt: requestedAt,
                               awaitedReplyDraftRequestedAt: ReplyDraftRequest.awaited(
-                                  requestedAt: requestedAt, draftBody: body, answeredAt: answeredAt),
+                                  requestedAt: requestedAt, draftBody: body, replacingDraftOnFile: false,
+                                  answeredAt: answeredAt),
                               intentHint: nil)
         }
         let asked = Date(timeIntervalSince1970: 1_780_000_000)

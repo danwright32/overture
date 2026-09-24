@@ -180,6 +180,7 @@ struct SearchCoversEveryContactFieldTests {
                 "inboundReplySentAt", "replyTextCheckedAt", "replyHandledAt", "bounced", "delayNoticeAt",
                 "conversationRemindedAt", "pausedByReply", "replyDraftRequestedAt",
                 "replyDraftEditedByDan", "replySentAt", "prospect", "replyDraftWrittenByDan",
+                "replyDraftReplacesDraftOnFile",
             ],
             // Machine-minted identifiers. Text, but nobody types a Gmail thread id looking for a show, and
             // matching them would make a query of digits hit unrelated rows.

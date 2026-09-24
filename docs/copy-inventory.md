@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1639 sentences**.
+Every sentence Overture can say to Dan: **1643 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -14,7 +14,7 @@ What is not, and why:
   sentences under tokens nobody reads.
 - **Nothing, if it is written as two literals joined with `+`.** Those ARE joined here, into the
   one sentence the running app says (#3155). What is still only part of what Dan reads is a
-  sentence carrying a VALUE: 602 of the 1639 below hold a
+  sentence carrying a VALUE: 604 of the 1643 below hold a
   `\(...)` where a number or a name goes, so what is printed is the template. They are counted
   here rather than listed again, because the hole is visible in the line itself; what was missing
   was any statement of how much of this document is templates.
@@ -1298,6 +1298,14 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/SourceReadState.swift`
 "New listings. The scout is reading them now."
     `Domain/SourceReadState.swift`
+"No AI draft started, because Overture couldn't hand this reply to the drafter: \(error.localizedDescription)"
+    `Domain/ReplyPanel.swift`
+"No AI draft started, because this conversation isn't waiting on an answer from you."
+    `Domain/ReplyPanel.swift`
+"No AI draft started. Another reply is already being drafted, so try again once it finishes."
+    `Domain/ReplyPanel.swift`
+"No AI draft started. \(reason)"
+    `Domain/ReplyPanel.swift`
 "No Downbeat client export was found, so the scout treated every prospect as a cold lead. Open Downbeat to export your client list, then run the scout again."
     `Domain/DownbeatExport.swift`
 "No Prep run or other check can start until it finishes."

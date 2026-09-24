@@ -53,6 +53,9 @@ enum ReplyClassifyImporter {
                     if rec.replyDraftEditedByDan || rec.replyDraftWrittenByDan,
                        rec.replyDraftBody?.isEmpty == false {
                         outcome.skippedEdited += 1
+                        // #4208: the run answered; his words win, so the redraft is resolved rather than
+                        // left reading as under way until the stall timeout.
+                        rec.replyDraftReplacesDraftOnFile = false
                     } else {
                         // A fresh AI draft is not Dan's edit, so clear any stale "edited" marker:
                         // otherwise this AI body would be wrongly protected on the next run.
@@ -66,6 +69,7 @@ enum ReplyClassifyImporter {
                             rec.replyDraftEditedByDan = false
                             rec.replyDraftWrittenByDan = false   // #2131: an AI body is not his words
                             rec.replyDraftModel = results.model
+                            rec.replyDraftReplacesDraftOnFile = false   // #4208: the replacement landed
                         }
                     }
                 }

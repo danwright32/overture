@@ -85,6 +85,10 @@ struct ReplySheet: View {
         }
         .padding(OVSpacing.lg)
         .frame(width: 560)
+        // #4208: this sheet is its own window, so the main window's banner is drawn behind it (#285), and
+        // it is the one sheet that acknowledges while it stays open: a refused Draft with AI, a saved
+        // writer, an address taken off. Without its own banner none of those was ever visible.
+        .actionFeedbackBanner(composition.feedback)
         // #2143: the drafter is detached, so its result lands on the contact while this screen is open.
         // Reading it here is what makes "Draft with AI" finish somewhere Dan is looking.
         .onChange(of: composition.aiDraft?.current()) { _, arrived in

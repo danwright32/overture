@@ -32,11 +32,16 @@ enum ReplyDraftRequest {
     // `answeredAt` is `Recipient.replyHandledAt`. `<=` rather than `<`: an answer stamped at the same
     // instant as the request is still an answer, and the two can share an instant in a test or a fast
     // sequence of writes.
-    static func awaited(requestedAt: Date?, draftBody: String?, answeredAt: Date?) -> Date? {
+    //
+    // #4208: `replacingDraftOnFile` is required, never defaulted (L168). It is the one case where a draft
+    // on file does NOT mean the request was answered: Dan asked for that draft to be replaced, and the
+    // old one stays until the new one lands.
+    static func awaited(requestedAt: Date?, draftBody: String?, replacingDraftOnFile: Bool,
+                        answeredAt: Date?) -> Date? {
         guard let requestedAt else { return nil }
         // Something arrived, so nothing is awaited. Written as "not non-empty" rather than `== nil` because
         // SwiftData hands back whatever was stored and an empty string is not a draft.
-        guard draftBody?.isEmpty != false else { return nil }
+        guard draftBody?.isEmpty != false || replacingDraftOnFile else { return nil }
         if let answeredAt, requestedAt <= answeredAt { return nil }
         return requestedAt
     }

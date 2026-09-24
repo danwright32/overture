@@ -32,6 +32,8 @@ enum ReplyClassifyService {
         guard r.hasUnhandledReply else { return false }
         guard r.outcomeSource != .manual else { return false }
         if r.replyDraftBody == nil { return true }
+        // #4208: Dan pressed Draft with AI over the draft on file, asking for it to be replaced.
+        if r.replyDraftReplacesDraftOnFile { return true }
         // #3573: through the shared property, which the conversation's own state reads too, so what the
         // run treats as redraftable and what the screen offers cannot disagree (L16).
         return r.replyPostdatesDraftRequest
