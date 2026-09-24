@@ -1848,6 +1848,36 @@ assert_equals "the queue is empty once both have run" "0" "$(queue_tickets)"
 assert_equals "and the lock is free" "no" "$([ -d "${QUEUE_LOCK}" ] && echo yes || echo no)"
 rm -rf "${QUEUE_LOCK}" "${QUEUE_LOCK}.queue"
 
+# Stopping a waiting run STOPS it (L473). A trap on INT or TERM that only cleans up lets the script carry
+# on: the signal lands, the cleanup leaves the queue, the loop goes round and the run rejoins at the BACK
+# instead of ending, and during the build the same trap released the lock while the run went on. The
+# runner's pid is read off its own ticket, which names it, because the wrapper puts it two processes deep.
+mkdir -p "${QUEUE_LOCK}"; echo "other:$$" > "${QUEUE_LOCK}/owner"   # held by this live shell
+( OVERTURE_DIR_LOCK="${QUEUE_LOCK}" OVERTURE_DIR_LOCK_TIMEOUT=30 OVERTURE_DIR_LOCK_POLL=1 \
+  run_wrapper_with_stub_xcodebuild "${GREEN_RUN_LOG}" 0 > "${DIR_LOCK_FIXTURE_DIR}/stopped.out" 2>&1 ) &
+STOPPED_WRAPPER=$!
+queue_waited=0
+while [[ "$(queue_tickets)" -lt 1 ]] && [[ "${queue_waited}" -lt 300 ]]; do
+  sleep 0.05; queue_waited=$((queue_waited + 1))
+done
+STOPPED_TICKET="$(ls "${QUEUE_LOCK}.queue" 2>/dev/null | head -1)"
+STOPPED_RUNNER="${STOPPED_TICKET##*.}"
+assert_equals "the waiter queued, so this case measured a stop while waiting" "yes" \
+  "$([[ "${STOPPED_RUNNER}" =~ ^[0-9]+$ ]] && echo yes || echo no)"
+kill -TERM "${STOPPED_RUNNER}" 2>/dev/null
+stop_waited=0
+while kill -0 "${STOPPED_RUNNER}" 2>/dev/null && [[ "${stop_waited}" -lt 100 ]]; do
+  sleep 0.05; stop_waited=$((stop_waited + 1))
+done
+assert_equals "a stopped waiter ends" "ended" \
+  "$(kill -0 "${STOPPED_RUNNER}" 2>/dev/null && echo still-running || echo ended)"
+kill -KILL "${STOPPED_RUNNER}" 2>/dev/null
+wait "${STOPPED_WRAPPER}" 2>/dev/null
+assert_contains "and exits with TERM's status" "exit=143" "$(cat "${DIR_LOCK_FIXTURE_DIR}/stopped.out")"
+assert_equals "and leaves the queue" "0" "$(queue_tickets)"
+assert_equals "and leaves the holder's lock alone" "other:$$" "$(cat "${QUEUE_LOCK}/owner" 2>/dev/null)"
+rm -rf "${QUEUE_LOCK}" "${QUEUE_LOCK}.queue"
+
 # EVERY ACQUIRER QUEUES. The class is "a script that takes the machine wide lock with its own `mkdir`",
 # which would barge past the queue however well this runner behaves. Derived from the tracked tree
 # rather than a list (L96): the only `mkdir` on the directory lock outside a fixture must be the one in

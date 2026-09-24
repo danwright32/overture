@@ -701,7 +701,7 @@ take_dir_lock() {
 # run of a different app, which is the failure this whole thing exists to prevent.
 #
 # downbeat#524: the queue ticket goes too, whether or not the lock was ever taken, because both callers
-# (main here and check-release-compiles.sh) hang THIS on their EXIT, INT and TERM trap, and a ticket left
+# (main here and check-release-compiles.sh) reach THIS from their exit and signal handling, and a ticket left
 # by a waiter killed mid wait would otherwise make the next waiters judge it by liveness first.
 release_dir_lock() {
   lock_queue_leave
@@ -836,6 +836,8 @@ main() {
   # #3571: the directory lock goes with the run too, and on INT and TERM as well as a tidy exit,
   # because a killed run that leaves it planted is precisely the stale lock this has to avoid.
   # #3976: and the RUN goes with it, on a signal as well as a tidy exit. See on_signal.
+  # downbeat#524: and so does this run's arrival queue ticket, through release_dir_lock, and a signal
+  # ENDS a waiter rather than sending it round the loop to rejoin the queue at the back (L473).
   trap 'cleanup_on_exit' EXIT
   trap 'on_signal 130' INT
   trap 'on_signal 143' TERM
