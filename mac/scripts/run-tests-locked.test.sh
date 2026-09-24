@@ -336,7 +336,11 @@ assert_contains() {
   else
     echo "FAIL - ${desc}"
     echo "  expected output to contain: ${needle}"
-    echo "  actual output: ${haystack}"
+    # Indented, every line: the runner's own verdict lines start at column 0, and `scripts/mutate.sh`
+    # reads `^run-tests-locked.sh: NOTHING RAN` and `^run-tests-locked.sh: gave up waiting` as the
+    # verdict of the WHOLE run, so a dump of them here turned a caught mutation into NOTHING RAN (#3976).
+    echo "  actual output:"
+    sed 's/^/    /' <<< "${haystack}"
     FAILURES=$((FAILURES + 1))
   fi
 }
@@ -348,7 +352,8 @@ assert_not_contains() {
   else
     echo "FAIL - ${desc}"
     echo "  expected output NOT to contain: ${needle}"
-    echo "  actual output: ${haystack}"
+    echo "  actual output:"
+    sed 's/^/    /' <<< "${haystack}"
     FAILURES=$((FAILURES + 1))
   fi
 }
