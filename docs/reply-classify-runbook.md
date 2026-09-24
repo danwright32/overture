@@ -39,6 +39,14 @@ Judge the genuine intent, not surface politeness: a warm-sounding note that ends
 strongest forward intent (a question alongside clear booking intent is `wants_to_book`). The reply
 text may include quoted history from earlier in the thread; classify the NEW message, not the quotes.
 
+A "not yet" is `interested`, never `declined`. "We have no plans for photos as of yet", "we haven't
+thought about photography", "nothing in place at this point": each says the decision has not been made,
+and a decision not yet made is the opening Dan wrote to find. `declined` needs an actual no (someone else
+is booked, there is no budget, they do not want it). When a reply could be read either way, lean
+optimistic: pick the warmer reading. A wrong optimistic read costs Dan one friendly extra email; a wrong
+pessimistic one closes a door the contact left open. Measured 2026-09-24: "Thank you Dan! We have no
+plans for photos as of yet!" was drafted as a goodbye.
+
 Write one `results[]` entry per queue item with the echoed `naturalKey` (and the echoed `recipientId`
 when the item had one) and the chosen `intent`. Every state Overture sets from this is a SUGGESTION
 Dan confirms or corrects (#60), so a wrong read is recoverable, but aim for the genuine intent.
@@ -106,6 +114,13 @@ Rules:
   skill alone. It is the authority; the guidance file only ever nudges.
 - Keep drafts short, warm, and concrete, and bring in what Dan actually offers (unobtrusive no-flash
   coverage) where the reply calls for it. A `declined` reply still gets a brief, gracious draft.
+- **An open reply gets a draft that moves it forward, and must never accept a no they did not give.**
+  When the reply is a "not yet" (see "Per reply" above), do not write "Understood", do not frame
+  photography as something that may or may not end up in their plan, and do not close by leaving the
+  door open for them to come back. Treat it as an invitation: make ONE concrete, low pressure offer tied
+  to their nights, such as sending a few examples from similar rooms or sketching what coverage of those
+  performances could look like, and end on a light question that is easy to say yes to. Everything
+  offered must be something Dan actually offers (the fabrication rule above still holds).
 - **A rate question is the ONE place shortness does not apply, and the answer is fixed text (#2874).**
   When they ask what Dan charges, reproduce his own two paragraphs, VERBATIM, from the
   `dan-wright-brand-voice` skill you already invoked ("Answering what do you charge"). They are his
