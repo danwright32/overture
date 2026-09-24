@@ -77,6 +77,9 @@ source "${SCRIPT_DIR}/lib/suite-stats.sh"
 # once a run has ended, and the run this exists for never ends.
 # shellcheck source=./lib/test-progress-watch.sh
 source "${SCRIPT_DIR}/lib/test-progress-watch.sh"
+# #3976: and ENDS a run that has stopped while holding the lock, which the watcher above only reports.
+# shellcheck source=./lib/test-stall-end.sh
+source "${SCRIPT_DIR}/lib/test-stall-end.sh"
 
 # #3191: the shared per-machine stamp rules, sourced BEFORE the library that uses them.
 # shellcheck source=../../scripts/lib/machine-stamp.sh
@@ -620,17 +623,28 @@ claim_dir_lock_if_dead() {
 # ELAPSED IS REAL TIME, never a count of iterations: a deadline in seconds compared against a loop
 # counter measures the poll interval instead, and silently rescales the moment that interval changes
 # (L226).
+#
+# #3976: the give up says WHICH cause it is. It used to offer one, "a run that died holding it", and on
+# 2026-09-17 the holder was alive and hung, so the reader went looking for a corpse. The holder's process
+# tree is read once when the wait begins and again at the give up, because only the CPU used ACROSS the
+# wait tells a live but stalled holder from a live and working one; a total says nothing about now.
+# And it says NOTHING RAN as well, in the runner's own words: a give up executes no test, and on the day
+# this was filed a starved run was very nearly read as a green suite.
 take_dir_lock() {
-  local waited_from
+  local waited_from waited start_table=""
   waited_from="$(date +%s)"
   while ! mkdir "${DIR_LOCK}" 2>/dev/null; do
     if claim_dir_lock_if_dead; then
       echo "run-tests-locked.sh: claimed ${DIR_LOCK} from a holder that is no longer running." >&2
       continue
     fi
-    if [[ "$(( $(date +%s) - waited_from ))" -gt "${DIR_LOCK_TIMEOUT}" ]]; then
+    [[ -n "${start_table}" ]] || start_table="$(process_table)"
+    waited="$(( $(date +%s) - waited_from ))"
+    if [[ "${waited}" -gt "${DIR_LOCK_TIMEOUT}" ]]; then
       echo "run-tests-locked.sh: gave up waiting ${DIR_LOCK_TIMEOUT}s for ${DIR_LOCK} (Downbeat's lock)." >&2
-      echo "  One holder the whole time with nothing running is a run that died holding it." >&2
+      echo "  $(lock_holder_report "$(cat "${DIR_LOCK}/owner" 2>/dev/null || true)" "${start_table}" \
+        "$(process_table)" "${waited}" "${DIR_LOCK}")" >&2
+      echo "run-tests-locked.sh: NOTHING RAN. This run never got the shared test lock, so no test executed and nothing was verified. It is not a pass, and it says nothing about your change." >&2
       exit 3
     fi
     sleep "${DIR_LOCK_POLL}"
@@ -650,6 +664,122 @@ release_dir_lock() {
   fi
 }
 
+# --- running xcodebuild under the lock, so that a stalled run can be ENDED (#3976) ---------------
+#
+# It used to be a foreground pipeline, `flock ... xcodebuild ... | tee`, which left this script holding no
+# pid for either process. That is why both measured hangs ran until a person noticed, and why stopping
+# the driver made it worse: on 2026-09-19 xcodebuild and its flock were reparented to launchd still
+# holding the lock, and three pids had to be found and killed by hand.
+#
+# Now flock is started as a job in a process group of its OWN (start_own_group_job), so this script knows
+# its pid, xcodebuild is its child and shares its group, and one group signal ends both without touching
+# this script, the watcher or the guard. The output still streams, through a FIFO into tee, because a run
+# that only prints at the end looks hung (#1006).
+#
+# stdin is /dev/null: a job in a background process group that reads the terminal is STOPPED by the
+# kernel rather than refused, which would itself be a hang nothing reports.
+
+RUN_PID=""
+RUN_EXIT_CODE=0
+RUN_STALL_RECORD_TEXT=""
+# Scratch paths an attempt in flight owns, one per line, so a run ended by a signal takes them with it
+# rather than leaving one set per interrupted run in the temp folder.
+RUN_SCRATCH_PATHS=""
+
+# The job body: drops this script's traps first, so a signal meant for the run can never run the
+# script's own cleanup (and release the lock) inside the child, then becomes flock.
+run_with_io() {
+  local out="$1"; shift
+  trap - EXIT INT TERM
+  exec "$@" > "${out}" 2>&1 < /dev/null
+}
+
+# Waits for <pid> for at most <ticks> one second sleeps, then kills it. For tee, which ends when the last
+# writer closes the FIFO: if something the run started kept it open, a plain wait would be a hang (L110).
+wait_bounded_then_kill() {
+  local pid="$1" ticks="$2" waited=0
+  [[ "${pid}" =~ ^[0-9]+$ ]] || return 0
+  while kill -0 "${pid}" 2>/dev/null && [[ "${waited}" -lt "${ticks}" ]]; do
+    sleep 1 >/dev/null 2>&1
+    waited=$(( waited + 1 ))
+  done
+  kill "${pid}" 2>/dev/null || true
+  wait "${pid}" 2>/dev/null || true
+}
+
+# run_locked_xcodebuild <output file> <stream: yes|no> <xcodebuild arguments...>
+#
+# Runs `flock LOCK_FILE xcodebuild <arguments>`, watched by the stall ending, and sets RUN_EXIT_CODE and
+# RUN_STALL_RECORD_TEXT (empty unless the guard ended the run). With "yes" the output also streams to
+# this script's stdout, as the main run always has; the pure suite probe keeps it to its file.
+run_locked_xcodebuild() {
+  local output_file="$1" stream="$2"; shift 2
+  local sink="${output_file}" stream_dir="" tee_pid="" record
+  record="$(overture_scratch_file run-stall-record)"
+  rm -f "${record}"
+  RUN_SCRATCH_PATHS="${RUN_SCRATCH_PATHS}"$'\n'"${record}"$'\n'"${record}.sig"$'\n'"${record}.tick"
+  if [[ "${stream}" == "yes" ]]; then
+    stream_dir="$(overture_scratch_dir run-tests-stream)"
+    RUN_SCRATCH_PATHS="${RUN_SCRATCH_PATHS}"$'\n'"${stream_dir}"
+    sink="${stream_dir}/stream"
+    mkfifo "${sink}"
+    tee "${output_file}" < "${sink}" &
+    tee_pid=$!
+  fi
+  start_own_group_job run_with_io "${sink}" flock "${LOCK_FILE}" xcodebuild "$@"
+  RUN_PID="${OWN_GROUP_JOB_PID}"
+  start_run_stall_end "${RUN_PID}" "$$" "${output_file}" "${record}"
+  RUN_EXIT_CODE=0
+  wait "${RUN_PID}" || RUN_EXIT_CODE=$?
+  RUN_PID=""
+  stop_run_stall_end "${RUN_STALL_END_PID}" "${record}"
+  RUN_STALL_END_PID=""
+  [[ -n "${tee_pid}" ]] && wait_bounded_then_kill "${tee_pid}" 10
+  RUN_STALL_RECORD_TEXT="$(cat "${record}" 2>/dev/null || true)"
+  rm -f "${record}" "${record}.sig" "${record}.tick"
+  [[ -n "${stream_dir}" ]] && rm -rf "${stream_dir}"
+  # A run this guard ended has no verdict of its own, whatever its exit code says.
+  if [[ -n "${RUN_STALL_RECORD_TEXT}" && "${RUN_EXIT_CODE}" -eq 0 ]]; then
+    RUN_EXIT_CODE=1
+  fi
+  return 0
+}
+
+# Ends whatever run is in flight, by the pid this script started, and stops its guard. Called from the
+# traps, so killing THIS script can no longer leave xcodebuild and flock behind holding the lock.
+end_active_run() {
+  local holder
+  if [[ -n "${RUN_PID}" ]] && kill -0 "${RUN_PID}" 2>/dev/null; then
+    holder="$(process_children "$(process_table)" "${RUN_PID}")"
+    holder="${holder%%$'\n'*}"
+    end_run_group "${RUN_PID}" "${holder}" 5 >/dev/null
+  fi
+  RUN_PID=""
+  stop_run_stall_end "${RUN_STALL_END_PID}"
+  RUN_STALL_END_PID=""
+}
+
+cleanup_on_exit() {
+  local path
+  end_active_run
+  stop_progress_watch "${PROGRESS_WATCH_PID}"
+  release_dir_lock
+  while IFS= read -r path; do
+    [[ -n "${path}" ]] && rm -rf "${path}"
+  done <<< "${RUN_SCRATCH_PATHS}"
+  RUN_SCRATCH_PATHS=""
+}
+
+# A trap on INT or TERM that only cleans up lets the script CARRY ON (L473), which on 2026-09-19 is what
+# kept an orphaned runner respawning xcodebuild. So each ends the script too, with the signal's own code.
+on_signal() {
+  local code="$1"
+  cleanup_on_exit
+  trap - EXIT
+  echo "run-tests-locked.sh: stopped by a signal. The run it started was ended and the shared lock released." >&2
+  exit "${code}"
+}
+
 main() {
   command -v flock >/dev/null || { echo "flock not found; install it with: brew install flock" >&2; exit 1; }
 
@@ -658,7 +788,10 @@ main() {
   # a worse alarm than none: it would be indistinguishable from a real one and always wrong.
   # #3571: the directory lock goes with the run too, and on INT and TERM as well as a tidy exit,
   # because a killed run that leaves it planted is precisely the stale lock this has to avoid.
-  trap 'stop_progress_watch "${PROGRESS_WATCH_PID}"; release_dir_lock' EXIT INT TERM
+  # #3976: and the RUN goes with it, on a signal as well as a tidy exit. See on_signal.
+  trap 'cleanup_on_exit' EXIT
+  trap 'on_signal 130' INT
+  trap 'on_signal 143' TERM
 
   cd "${MAC_DIR}"
 
@@ -701,6 +834,8 @@ main() {
   # #3392: set inside the loop below and read after it. Declared here so a retry cannot inherit the
   # previous attempt's reading, which is the same reason `last_output` is per attempt.
   local restarted="" TIME_LIMIT_KILL=""
+  # #3976: what the stall guard wrote when it ended this attempt, empty when it did not.
+  local stall_record=""
 
   # #3571: DOWNBEAT'S LOCK FIRST, then this runner's own inside the loop below, which is the fixed
   # order Ovation uses and the one thing making deadlock impossible now that two runners take two
@@ -712,6 +847,7 @@ main() {
     test_exit_code=0
     started_at="${SECONDS}"
     output_file="$(overture_scratch_file run-tests-output)"
+    RUN_SCRATCH_PATHS="${RUN_SCRATCH_PATHS}"$'\n'"${output_file}"
     # #3276: where the live store suite records the corpus counts it measured.
     #
     # The corpus line is a `print()` from a test, and a PARALLEL worker's stdout does not reach
@@ -726,6 +862,7 @@ main() {
     # (L133, L98). The suite writes it only when it actually measures, so an absent file and a measured
     # zero stay different facts.
     corpus_file="$(overture_scratch_file live-corpus)"
+    RUN_SCRATCH_PATHS="${RUN_SCRATCH_PATHS}"$'\n'"${corpus_file}"
     rm -f "${corpus_file}"
     export TEST_RUNNER_OVERTURE_CORPUS_FILE="${corpus_file}"
     # #2577: watch this attempt's own log while it streams. Started BEFORE flock, deliberately, so
@@ -756,9 +893,12 @@ main() {
     #   mac/scripts/run-tests-locked.sh -only-testing:OvertureTests/StoreSchemaGuardTests
     #
     # With no arguments this is exactly what it always was: the whole suite.
-    flock "${LOCK_FILE}" xcodebuild -scheme Overture -destination 'platform=macOS' test "$@" \
-      2>&1 | tee "${output_file}"
-    test_exit_code="${PIPESTATUS[0]}"
+    #
+    # #3976: through run_locked_xcodebuild, so the run can be ENDED when it stalls holding the lock. The
+    # exit code comes from `wait` on flock itself rather than PIPESTATUS, which is #1459's hazard gone.
+    run_locked_xcodebuild "${output_file}" yes -scheme Overture -destination 'platform=macOS' test "$@"
+    test_exit_code="${RUN_EXIT_CODE}"
+    stall_record="${RUN_STALL_RECORD_TEXT}"
     set -e
     # The run is over, so the watcher has nothing left to watch and the log is about to be deleted.
     # Stopped here rather than only in the trap, because a retried attempt starts another one.
@@ -772,6 +912,10 @@ main() {
     # died, not that a test failed, and reading it as a test failure sends whoever sees it hunting for
     # a bug that does not exist.
     outcome="$(run_outcome "$(cat "${output_file}")" "${test_exit_code}")"
+    # #3976: a run the stall guard ENDED is its own outcome. Its output reads as a crash (failed, nothing
+    # named), and a crash is retried and followed by the pure suite, each of which would hold the lock
+    # for another full build. Neither happens for a stall, which is reported by name instead.
+    [[ -n "${stall_record}" ]] && outcome="stalled"
     # #1972: captured before the output is discarded, since the dead host's PID survives nowhere
     # else. The window is this attempt's own duration plus a margin for the launch that precedes
     # its first log line, so the dump covers the run and no more.
@@ -807,6 +951,7 @@ main() {
       [[ -n "${TIME_LIMIT_KILL}" ]] && restarted="time-limit ${TIME_LIMIT_KILL}"
     fi
 
+    [[ "${outcome}" == "stalled" ]] && break
     [[ -z "$(should_retry "${outcome}" "${attempt}" "${max_attempts}" "${TIME_LIMIT_KILL}")" ]] && break
     echo >&2
     if [[ -n "${TIME_LIMIT_KILL}" ]]; then
@@ -857,7 +1002,9 @@ main() {
   bundle_count="$(result_bundle_total_test_count "$(test_run_result_bundle "${last_output}")")"
   authoritative="$(totals_with_authoritative_count "$(test_run_totals "${last_output}")" "${bundle_count}" "${restarted}")"
   executed="$(awk '{print $1}' <<< "${authoritative}")"
-  if [[ "${scoped}" -eq 0 ]]; then
+  # #3976: a run the stall guard ended is short by construction, and SHORT RUN's advice (something is
+  # killing the process) would name this runner's own act as the mystery. Its own report says it.
+  if [[ "${scoped}" -eq 0 && "${outcome}" != "stalled" ]]; then
     [[ -f "${BASELINE_FILE}" ]] && baseline="$(cat "${BASELINE_FILE}" 2>/dev/null || true)"
     truncated="$(truncated_report "${executed}" "${baseline}")"
   fi
@@ -1101,6 +1248,13 @@ main() {
     echo "See #2322, #2323." >&2
   fi
 
+  # #3976: ended by this runner, because it stood still holding the shared lock.
+  if [[ "${outcome}" == "stalled" ]]; then
+    echo >&2
+    stalled_run_report "${stall_record}" \
+      | awk 'NR==1 {print "run-tests-locked.sh: " $0; next} {print}' >&2
+  fi
+
   if [[ "${outcome}" == "build-failed" ]]; then
     echo >&2
     echo "run-tests-locked.sh: the code did not COMPILE, so no test ran. The errors are above." >&2
@@ -1123,19 +1277,25 @@ main() {
       echo "run-tests-locked.sh: asking the PURE suite directly, since it does not need the app..." >&2
       local pure_output pure_code=0 pure_outcome
       pure_output="$(overture_scratch_file pure-suite-output)"
+      RUN_SCRATCH_PATHS="${RUN_SCRATCH_PATHS}"$'\n'"${pure_output}"
       # #2577: the SIBLING of the run above, and the identical shape: flock, then xcodebuild, into a
       # file. It queues for the same lock and runs the same tests, so it can wait the same way and
       # hang the same way, and it is reached at the worst possible moment (after a crash, when
       # somebody is already waiting on an answer). Watched by the same watcher rather than left as
       # the one path where a hang is still invisible (L30).
       start_progress_watch "${pure_output}"
+      # #3976: through the same launcher as the main run, so a stall here is ended the same way.
       set +e
-      flock "${LOCK_FILE}" xcodebuild -scheme OvertureCore -destination 'platform=macOS' test \
-        > "${pure_output}" 2>&1
-      pure_code="$?"
+      run_locked_xcodebuild "${pure_output}" no -scheme OvertureCore -destination 'platform=macOS' test
+      pure_code="${RUN_EXIT_CODE}"
       set -e
       stop_progress_watch "${PROGRESS_WATCH_PID}"
       pure_outcome="$(run_outcome "$(cat "${pure_output}")" "${pure_code}")"
+      if [[ -n "${RUN_STALL_RECORD_TEXT}" ]]; then
+        pure_outcome="stalled"
+        stalled_run_report "${RUN_STALL_RECORD_TEXT}" \
+          | awk 'NR==1 {print "run-tests-locked.sh: the PURE suite probe " $0; next} {print}' >&2
+      fi
       echo >&2
       if [[ -z "${pure_outcome}" ]]; then
         echo "run-tests-locked.sh: the PURE suite PASSED. $(grep -aoE 'Test run with [0-9]+ tests in [0-9]+ suites passed after [0-9.]+ seconds' "${pure_output}" | tail -1)" >&2

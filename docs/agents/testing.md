@@ -335,6 +335,27 @@ the measurement it came from lives here. Read the entry before the rule decides 
   has been observed to hang there, so there is no measured number to set a limit from. Retune with
   `OVERTURE_TEST_STALL_LIMIT_SECONDS`, `OVERTURE_TEST_STALL_CHECK_SECONDS` and
   `OVERTURE_TEST_LOCK_NOTICE_SECONDS`.
+  **Since #3976 a run that stands still holding the lock is ENDED, not only warned about.** Warning was
+  measured to be not enough, twice: a run hung for 2h50m on 2026-09-17 and for 38 minutes on 2026-09-19,
+  each ended only by a person, with `xcodebuild` at 1.33s of CPU in 38 minutes, and stopping the driver by
+  hand left `xcodebuild` and its `flock` reparented to launchd, still holding the lock.
+  `mac/scripts/lib/test-stall-end.sh` ends the run once no test has started or finished AND `xcodebuild`'s
+  OWN CPU has moved less than a floor, for the limit (defaults 5s and 1200s, twice the warning above so
+  the warning always comes first). Its own time rather than its tree's, because `xctest` is its child and
+  was the busy process on 2026-09-17. The build phase is covered, which the warning is not: a cold build
+  prints no test line but keeps `xcodebuild` busy. A queued run is never judged, on evidence rather than
+  the log being empty: `flock` forks the command only once it holds the lock (measured with flock 0.4.0),
+  so a `flock` with no child is queued. It stops `xcodebuild` and `flock` by the pids the runner started
+  (never by matching command text, L1011), TERM then KILL after a grace, and the verdict is
+  `STALLED AND ENDED`, which is never retried, never followed by the pure suite probe, never SHORT RUN and
+  never NOTHING RAN. The guard runs in a process group of its own and outlives the runner, so a runner
+  killed outright has its orphaned run ended on the next tick; INT and TERM on the runner now end the run
+  and the script rather than carrying on (L473). Retune with `OVERTURE_TEST_STALL_END_SECONDS` (0 switches
+  it off), `OVERTURE_TEST_STALL_END_CPU_SECONDS`, `OVERTURE_TEST_STALL_END_CHECK_SECONDS` and
+  `OVERTURE_TEST_STALL_END_GRACE_SECONDS`.
+  And a give up on the shared directory lock now says which cause it is, where it used to offer only "a
+  run that died holding it" while the holder was alive: the holder's PID, whether it is dead, alive and
+  stalled, or alive and working, and its CPU across the wait, followed by the runner's own `NOTHING RAN`.
   A red run that named no failing test is one of THREE things, not two, since #2322. A crashed app
   host is retried once as the known #1331 flake. Code that did not compile is not (#1465). And a run
   that never reached this Mac's TEST SERVICE, whose tell is the daemon's own wording plus a total of
