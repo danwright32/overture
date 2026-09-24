@@ -171,7 +171,9 @@ rides along in `scripts/test-all.sh` and reports how close it is, advisory, neve
   a run that has printed nothing for several minutes as possibly hung and check its CPU time.
   **Since #3976 (2026-09-24) the test runner DOES end a run that stops moving.** The call lives in
   `mac/scripts/lib/test-stall-end.sh`, a fourth caller of `stall_tick`, so the grep above still reads 0
-  on the runner itself. The runner now starts `flock` as a job in a process group of its own, and a guard
+  on the runner itself. (The 600s and 300s quoted above are the progress watcher's own warning and lock
+  notice defaults in `test-progress-watch.sh`; the three detached run scripts stop at 1200s, which is
+  the limit this uses too.) The runner now starts `flock` as a job in a process group of its own, and a guard
   in a group of ITS own ends the run once no test has started or finished AND `xcodebuild`'s own CPU has
   moved less than 5s, for 1200s (`OVERTURE_TEST_STALL_END_SECONDS`, `OVERTURE_TEST_STALL_END_CPU_SECONDS`,
   `OVERTURE_TEST_STALL_END_CHECK_SECONDS`; a limit of 0 switches it off). It stops `xcodebuild` and `flock`
