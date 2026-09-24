@@ -47,9 +47,9 @@ struct SendPickerTests {
 
     @discardableResult
     private func show(_ ctx: ModelContext, together: Bool = true) -> Prospect {
-        let key = Prospect.makeNaturalKey(groupName: "Lumen", performanceDate: "2026-07-01", venue: "V")
+        let key = Prospect.makeNaturalKey(groupName: "Lumen", performanceDate: "2082-07-01", venue: "V")
         let p = Prospect(naturalKey: key, groupName: "Lumen", discipline: "choral", venue: "V",
-                         performanceDate: "2026-07-01", sourceListingURL: nil,
+                         performanceDate: "2082-07-01", sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 7, tier: "high", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,

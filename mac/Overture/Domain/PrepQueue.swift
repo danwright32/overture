@@ -252,11 +252,15 @@ struct ShowListing: Codable, Equatable, Sendable {
 // arguments out again. Spelled out is how the card came to promise a Prep run on a show Prep refuses:
 // #1534's "Contact: pending Prep run" was keyed on `isKept`, which is not what decides it. A new fact
 // added to `needsPrep` now has to be added here too, and every conformer fails to compile until it is.
+// #4136: plus the two dates that say whether the run's last night has passed, because a kept show whose
+// performance is over is no longer Prep work, and the card and the run must agree about that as well.
 protocol PrepEligibilityFacts {
     var status: ReviewStatus { get }
     var hasDraft: Bool { get }
     var reprepDraftRequested: Bool { get }
     var reprepContactsRequested: Bool { get }
+    var performanceDate: String? { get }
+    var runEndDate: String? { get }
 }
 
 extension Prospect: PrepEligibilityFacts {}
@@ -268,8 +272,8 @@ extension Prospect: PrepEligibilityFacts {}
 // #3369: it used to be THREE rules, the third being an open date conflict refusing the show outright. That
 // gate is gone: a clash warns at launch and never decides.
 enum PrepRunIntent: Equatable, Sendable {
-    // The next run will not take this show up at all: it is untriaged, dismissed, or already drafted with
-    // no re-prep asked for. A clash with a night Dan cannot work is NOT a reason any more (#3369): the
+    // The next run will not take this show up at all: it is untriaged, dismissed, already drafted with
+    // no re-prep asked for, or (#4136) its last night has passed. A clash with a night Dan cannot work is NOT a reason any more (#3369): the
     // show is still taken up and the clash is named at launch instead.
     case notQueued
     // The full prep: research a contact, then write the email.
@@ -325,11 +329,22 @@ enum PrepQueueBuilder {
     // with no way past it. The saving is kept where it belongs: the prep-launch confirm names the clash
     // and he presses through it, so the spend is still his decision and now it is actually his.
     //
-    // The SEND gate (`Recipient.isSendablePending`) is untouched and still refuses. That is the committing
-    // moment, and a pitch that has gone cannot be taken back.
+    // The SEND gate (`Recipient.isSendablePending`) is untouched and still refuses a clash. That is the
+    // committing moment, and a pitch that has gone cannot be taken back. (#4136: this sentence was read as
+    // cover for passed dates too, which it never was; the send gate now refuses those separately.)
+    //
+    // #4136: and a show whose LAST night has passed is never prep work, whatever its status or flags.
+    // Dan's call, 2026-09-24: a kept show that has gone by leaves the count, the list, the "Prep kept" gate
+    // and the handoff file, so no paid run researches contacts or drafts a pitch for a performance that is
+    // over. The closing night rather than the opening one, because a kept run that has opened keeps working
+    // (#1540). Required, never defaulted, for #1666's reason: a defaulted correctness argument is how a
+    // caller forgets it invisibly. `PassedKeptRetirement` sweeps these rows out soon after; this is what
+    // holds between the calendar turning over and the next sweep, and it is what the handoff file obeys.
     static func needsPrep(status: ReviewStatus, hasDraft: Bool,
                           reprepDraftRequested: Bool = false,
-                          reprepContactsRequested: Bool = false) -> Bool {
+                          reprepContactsRequested: Bool = false,
+                          lastNightHasPassed: Bool) -> Bool {
+        if lastNightHasPassed { return false }
         if status == .queued && !hasDraft { return true }
         // #4170: `.contacted` is here now, and it is the one status whose inclusion needs an argument.
         //
@@ -358,10 +373,21 @@ enum PrepQueueBuilder {
     // #1666: generic over PrepEligibilityFacts rather than over Prospect alone, so the queue card's
     // snapshot reaches this exact function instead of restating its arguments. Behaviour for a Prospect
     // is unchanged; every existing call site still passes one.
-    static func needsPrepEligible<Facts: PrepEligibilityFacts>(_ p: Facts) -> Bool {
+    // #4136: takes `today`, required, because eligibility now depends on the calendar.
+    static func needsPrepEligible<Facts: PrepEligibilityFacts>(_ p: Facts, today: String) -> Bool {
         needsPrep(status: p.status, hasDraft: p.hasDraft,
                  reprepDraftRequested: p.reprepDraftRequested,
-                 reprepContactsRequested: p.reprepContactsRequested)
+                 reprepContactsRequested: p.reprepContactsRequested,
+                 lastNightHasPassed: EasternDate.lastNightHasPassed(performanceDate: p.performanceDate,
+                                                                    runEndDate: p.runEndDate, today: today))
+    }
+
+    // #4136: the whole rule over a list, for the one surface that cannot ask the function directly.
+    // RootView's "Prep kept" gate is a SwiftData @Query, and a query's predicate cannot carry a clock that
+    // moves while the view stays up, so `needsPrepPredicate` fetches the status half and this applies the
+    // WHOLE rule over what it fetched. The query narrows what is read; this decides.
+    static func eligible<Facts: PrepEligibilityFacts>(_ candidates: [Facts], today: String) -> [Facts] {
+        candidates.filter { needsPrepEligible($0, today: today) }
     }
 
     // #1666: whether a reachability probe has already found this show a contact, which is the fact
@@ -379,8 +405,9 @@ enum PrepQueueBuilder {
     // does. `probedWithContact` is not defaulted, for the reason #1666 recorded above `needsPrep`: a
     // default is how a caller forgets an argument invisibly.
     static func nextRunIntent<Facts: PrepEligibilityFacts>(for p: Facts,
-                                                           probedWithContact: Bool) -> PrepRunIntent {
-        guard needsPrepEligible(p) else { return .notQueued }
+                                                           probedWithContact: Bool,
+                                                           today: String) -> PrepRunIntent {
+        guard needsPrepEligible(p, today: today) else { return .notQueued }
         switch prepMode(hasDraft: p.hasDraft,
                         reprepDraftRequested: p.reprepDraftRequested,
                         reprepContactsRequested: p.reprepContactsRequested,
@@ -454,6 +481,11 @@ enum PrepQueueBuilder {
     // that needs a compiled SwiftData predicate rather than a plain Swift function. Kept as a
     // single named, shared value so there is exactly one place this expression lives, not one
     // reinvented inline in RootView.swift.
+    //
+    // #4136: it mirrors the STATUS half only. The date half needs today's date, which a @Query built once
+    // with the view cannot follow as the calendar turns over, so RootView passes what this fetches through
+    // `eligible(_:today:)` above, which applies the whole rule. This is therefore a superset of the shows
+    // Prep takes, larger by exactly the ones whose last night has passed, and the parity test says so.
     static var needsPrepPredicate: Predicate<Prospect> {
         #Predicate<Prospect> { p in
             // #3369/#3366: the conflict gate that stood here is gone from BOTH halves at once. The

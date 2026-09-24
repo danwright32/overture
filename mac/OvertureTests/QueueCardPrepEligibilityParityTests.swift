@@ -43,9 +43,9 @@ struct QueueCardPrepEligibilityParityTests {
                       hasDraft: Bool = false,
                       draftRequested: Bool = false, contactsRequested: Bool = false,
                       conflicted: Bool = false, clearedAfterConflict: Bool = false,
-                      probedEmail: String? = nil) -> Prospect {
+                      probedEmail: String? = nil, date: String = "2026-09-12") -> Prospect {
         let p = Prospect(naturalKey: key, groupName: key, discipline: "music", venue: "Merkin Hall",
-                         performanceDate: "2026-09-12", sourceListingURL: nil,
+                         performanceDate: date, sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 5, tier: "mid", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
@@ -96,6 +96,9 @@ struct QueueCardPrepEligibilityParityTests {
              draftRequested: true, contactsRequested: true)
         show(ctx, "already-emailed-with-flags-set", status: .contacted, hasDraft: true,
              draftRequested: true, contactsRequested: true)
+        // #4136: kept and undrafted, but its night is behind `today`. The card and the handoff file must
+        // both refuse it, which is the date half of the rule meeting both routes.
+        show(ctx, "kept-undrafted-but-already-performed", status: .queued, date: "2026-06-20")
         try ctx.save()
     }
 
@@ -112,7 +115,7 @@ struct QueueCardPrepEligibilityParityTests {
 
         // Non-vacuous on both sides: a run that took nothing up, or a store the mapping produced no cards
         // from, would agree perfectly while proving nothing (L1, L63).
-        #expect(prospects.count == 14, "the fixture did not land, so nothing was compared")
+        #expect(prospects.count == 15, "the fixture did not land, so nothing was compared")
         #expect(!handedOver.isEmpty, "the Prep run was handed no shows at all, so nothing was compared")
         #expect(handedOver.count < prospects.count, "every show was queued, so no refusal was exercised")
 
@@ -121,12 +124,12 @@ struct QueueCardPrepEligibilityParityTests {
             let queued = handedOver[p.naturalKey]
 
             let handed = queued == nil ? "was not handed it" : "was handed it"
-            #expect(card.isAwaitingPrepRun == (queued != nil),
-                    "\(p.naturalKey): the card says awaiting=\(card.isAwaitingPrepRun) but the Prep run \(handed)")
+            #expect(card.isAwaitingPrepRun(today: today) == (queued != nil),
+                    "\(p.naturalKey): the card says awaiting=\(card.isAwaitingPrepRun(today: today)) but the Prep run \(handed)")
 
             let expected = queued.map { intent(ofQueued: $0.reprepMode) } ?? .notQueued
-            #expect(card.nextPrepRun == expected,
-                    "\(p.naturalKey): the card says \(card.nextPrepRun), the queue says \(expected)")
+            #expect(card.nextPrepRun(today: today) == expected,
+                    "\(p.naturalKey): the card says \(card.nextPrepRun(today: today)), the queue says \(expected)")
         }
     }
 
@@ -136,7 +139,7 @@ struct QueueCardPrepEligibilityParityTests {
         let ctx = try context()
         try populated(ctx)
 
-        let intents = Set(try ctx.fetch(FetchDescriptor<Prospect>()).map { QueueItem($0).nextPrepRun })
+        let intents = Set(try ctx.fetch(FetchDescriptor<Prospect>()).map { QueueItem($0).nextPrepRun(today: today) })
         #expect(intents == [.notQueued, .contactsAndDraft, .draftOnly, .contactsOnly])
     }
 
@@ -153,8 +156,8 @@ struct QueueCardPrepEligibilityParityTests {
         // test is for. Only the answer they agree on changed.
         let card = QueueItem(p)
         #expect(card.isKept, "the fixture must be a kept show, or this proves nothing about isKept")
-        #expect(card.isAwaitingPrepRun)
-        #expect(card.nextPrepRun != .notQueued)
+        #expect(card.isAwaitingPrepRun(today: today))
+        #expect(card.nextPrepRun(today: today) != .notQueued)
 
         let queue = PrepQueueService.buildQueue(from: ctx, generatedAt: "now", today: today,
                                                 venueHistory: emptyHistory)
@@ -168,7 +171,7 @@ struct QueueCardPrepEligibilityParityTests {
         let p = show(ctx, "kept-undrafted-clash-overruled", status: .queued, clearedAfterConflict: true)
         try ctx.save()
 
-        #expect(QueueItem(p).nextPrepRun == .contactsAndDraft)
+        #expect(QueueItem(p).nextPrepRun(today: today) == .contactsAndDraft)
         let queue = PrepQueueService.buildQueue(from: ctx, generatedAt: "now", today: today,
                                                 venueHistory: emptyHistory)
         #expect(queue.items.map(\.naturalKey) == ["kept-undrafted-clash-overruled"])
@@ -184,8 +187,8 @@ struct QueueCardPrepEligibilityParityTests {
         try ctx.save()
 
         let card = QueueItem(p)
-        #expect(card.isAwaitingPrepRun)
-        #expect(card.nextPrepRun == .draftOnly)
+        #expect(card.isAwaitingPrepRun(today: today))
+        #expect(card.nextPrepRun(today: today) == .draftOnly)
 
         let queue = PrepQueueService.buildQueue(from: ctx, generatedAt: "now", today: today,
                                                 venueHistory: emptyHistory)
@@ -199,7 +202,7 @@ struct QueueCardPrepEligibilityParityTests {
         let p = show(ctx, "kept-undrafted-probe-found-nobody", status: .queued, probedEmail: "")
         try ctx.save()
 
-        #expect(QueueItem(p).nextPrepRun == .contactsAndDraft)
+        #expect(QueueItem(p).nextPrepRun(today: today) == .contactsAndDraft)
         let queue = PrepQueueService.buildQueue(from: ctx, generatedAt: "now", today: today,
                                                 venueHistory: emptyHistory)
         #expect(queue.items.first?.reprepMode == nil)
@@ -215,9 +218,9 @@ struct QueueCardPrepEligibilityParityTests {
         let settled = show(ctx, "approved-nothing-asked-for", status: .approved, hasDraft: true)
         try ctx.save()
 
-        #expect(QueueItem(asked).isAwaitingPrepRun)
-        #expect(QueueItem(asked).nextPrepRun == .draftOnly)
-        #expect(!QueueItem(settled).isAwaitingPrepRun)
+        #expect(QueueItem(asked).isAwaitingPrepRun(today: today))
+        #expect(QueueItem(asked).nextPrepRun(today: today) == .draftOnly)
+        #expect(!QueueItem(settled).isAwaitingPrepRun(today: today))
         // The same flag decides both surfaces, so the badge and the accessor cannot disagree.
         #expect(QueueItem(asked).isReprepQueued)
         #expect(!QueueItem(settled).isReprepQueued)
@@ -233,7 +236,7 @@ struct QueueCardPrepEligibilityParityTests {
 
         // #3369: a clash no longer outranks anything. The re-prep request is honoured and the run takes
         // the show; the clash reaches Dan at the launch confirm instead.
-        #expect(QueueItem(p).nextPrepRun != .notQueued)
+        #expect(QueueItem(p).nextPrepRun(today: today) != .notQueued)
         let queue = PrepQueueService.buildQueue(from: ctx, generatedAt: "now", today: today,
                                                 venueHistory: emptyHistory)
         #expect(queue.items.count == 1)

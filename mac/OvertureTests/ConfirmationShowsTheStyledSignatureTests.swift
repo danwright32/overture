@@ -33,9 +33,9 @@ struct ConfirmationShowsTheStyledSignatureTests {
     }
 
     private func show(_ ctx: ModelContext) -> (Prospect, Recipient) {
-        let key = Prospect.makeNaturalKey(groupName: "G", performanceDate: "2026-09-01", venue: "V")
+        let key = Prospect.makeNaturalKey(groupName: "G", performanceDate: "2082-09-01", venue: "V")
         let p = Prospect(naturalKey: key, groupName: "G", discipline: "choral", venue: "V",
-                         performanceDate: "2026-09-01", sourceListingURL: nil,
+                         performanceDate: "2082-09-01", sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 7, tier: "high", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,

@@ -60,15 +60,17 @@ struct ShowOutcomeTests {
     // that a value marked as Overture's own is deliberate and never reachable from a menu, and this
     // caught the new case exactly as it was meant to (L430: find the decision a failing test defended
     // and confirm it was reversed before touching it; here it was not, so the list grows).
-    @Test func overtureWritesThreeEndingsItselfAndNeverOffersThem() {
-        for own in [ShowOutcome.wentBy, .tooFar, .coveredElsewhere] {
+    // #4136 added a fourth, `wentByUnpitched`, the sweep of kept shows whose date went by unpitched.
+    @Test func overtureWritesFourEndingsItselfAndNeverOffersThem() {
+        for own in [ShowOutcome.wentBy, .wentByUnpitched, .tooFar, .coveredElsewhere] {
             #expect(own.isOverturesOwn, Comment(rawValue: "\(own.label) is not marked as Overture's own"))
             #expect(!ShowOutcome.danCanChoose.contains(own),
                     Comment(rawValue: "\(own.label) is offered to Dan as a choice he cannot actually make"))
         }
-        // And those three are the ONLY things held back, so a value cannot go missing from the menus by
+        // And those four are the ONLY things held back, so a value cannot go missing from the menus by
         // being quietly marked as Overture's own.
-        #expect(ShowOutcome.allCases.filter(\.isOverturesOwn) == [.wentBy, .tooFar, .coveredElsewhere])
+        #expect(ShowOutcome.allCases.filter(\.isOverturesOwn)
+                == [.wentBy, .wentByUnpitched, .tooFar, .coveredElsewhere])
     }
 
     // MARK: the words

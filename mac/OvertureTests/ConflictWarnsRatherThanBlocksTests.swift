@@ -16,15 +16,15 @@ import Foundation
 struct ConflictWarnsRatherThanBlocksTests {
     // THE FIX. A kept, undrafted show is prep work whether or not the night carries a clash.
     @Test func aKeptShowIsPrepWorkEvenWithAnOpenClash() {
-        #expect(PrepQueueBuilder.needsPrep(status: .queued, hasDraft: false))
+        #expect(PrepQueueBuilder.needsPrep(status: .queued, hasDraft: false, lastNightHasPassed: false))
     }
 
     // ...and the rest of the eligibility rule is untouched: a clash was the only thing removed.
     @Test func everyOtherReasonToRefusePrepStillHolds() {
-        #expect(!PrepQueueBuilder.needsPrep(status: .new, hasDraft: false))
-        #expect(!PrepQueueBuilder.needsPrep(status: .queued, hasDraft: true))
-        #expect(PrepQueueBuilder.needsPrep(status: .drafted, hasDraft: true, reprepDraftRequested: true))
-        #expect(!PrepQueueBuilder.needsPrep(status: .dismissed, hasDraft: false, reprepDraftRequested: true))
+        #expect(!PrepQueueBuilder.needsPrep(status: .new, hasDraft: false, lastNightHasPassed: false))
+        #expect(!PrepQueueBuilder.needsPrep(status: .queued, hasDraft: true, lastNightHasPassed: false))
+        #expect(PrepQueueBuilder.needsPrep(status: .drafted, hasDraft: true, reprepDraftRequested: true, lastNightHasPassed: false))
+        #expect(!PrepQueueBuilder.needsPrep(status: .dismissed, hasDraft: false, reprepDraftRequested: true, lastNightHasPassed: false))
     }
 
     // #3366's own case, spelled out: a run playing two nights, one blocked and one free, is prep work.
@@ -37,7 +37,7 @@ struct ConflictWarnsRatherThanBlocksTests {
         let clash = cal.conflict(performanceDate: "2026-09-12", runEndDate: "2026-10-07",
                                  nights: ["2026-09-12", "2026-10-07"])
         #expect(clash != nil, "the blocked night is found, or this test proves nothing about what follows")
-        #expect(PrepQueueBuilder.needsPrep(status: .queued, hasDraft: false))
+        #expect(PrepQueueBuilder.needsPrep(status: .queued, hasDraft: false, lastNightHasPassed: false))
     }
 
     // The one gate that KEEPS its teeth. Send is the committing moment: a pitch that has gone cannot be
@@ -113,7 +113,7 @@ struct PrepBlockedStageRetiredTests {
     // The lifecycle stages still cover the whole state space between them (L45): a kept, undrafted show
     // is in Prep whatever its calendar says, so retiring the focus leaves nothing stranded.
     @Test func aKeptShowWithAClashIsInPrepRatherThanNowhere() {
-        #expect(PrepQueueBuilder.needsPrep(status: .queued, hasDraft: false))
+        #expect(PrepQueueBuilder.needsPrep(status: .queued, hasDraft: false, lastNightHasPassed: false))
     }
 }
 

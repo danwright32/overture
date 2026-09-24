@@ -17,10 +17,15 @@ struct PrepQueueEligibilityParityTests {
                            configurations: [ModelConfiguration(isStoredInMemoryOnly: true)])
     }
 
+    // #4136: the rule now reads the calendar, so the day it is judged on is pinned, ahead of every
+    // fixture date below except the one row that exists to have passed.
+    private let today = "2026-06-01"
+
     private func insert(_ ctx: ModelContext, key: String, status: ReviewStatus, hasDraft: Bool,
-                        reprepDraftRequested: Bool = false, reprepContactsRequested: Bool = false) {
+                        reprepDraftRequested: Bool = false, reprepContactsRequested: Bool = false,
+                        date: String = "2026-07-01") {
         let p = Prospect(naturalKey: key, groupName: key, discipline: "choral", venue: "V",
-                         performanceDate: "2026-07-01", sourceListingURL: nil,
+                         performanceDate: date, sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 5, tier: "mid", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
@@ -47,6 +52,9 @@ struct PrepQueueEligibilityParityTests {
                reprepDraftRequested: true, reprepContactsRequested: true)
         insert(ctx, key: "dismissed-with-flags", status: .dismissed, hasDraft: true,
                reprepDraftRequested: true, reprepContactsRequested: true)
+        // #4136: kept and undrafted, but its night is behind `today`.
+        insert(ctx, key: "kept-no-draft-already-performed", status: .queued, hasDraft: false,
+               date: "2026-05-20")
 
         // #3369: the conflict gate is gone from BOTH halves, and these two rows are what proves it left
         // them in step. The predicate is a #Predicate mirror of the function and cannot share code with
@@ -74,20 +82,27 @@ struct PrepQueueEligibilityParityTests {
         try ctx.save()
 
         let all = try ctx.fetch(FetchDescriptor<Prospect>())
-        let viaFunction = Set(all.filter(PrepQueueBuilder.needsPrepEligible).map(\.naturalKey))
+        let viaFunction = Set(all.filter { PrepQueueBuilder.needsPrepEligible($0, today: today) }
+            .map(\.naturalKey))
 
         let viaPredicate = Set(try ctx.fetch(
             FetchDescriptor<Prospect>(predicate: PrepQueueBuilder.needsPrepPredicate)
         ).map(\.naturalKey))
 
-        #expect(viaPredicate == viaFunction)
+        // #4136: the predicate mirrors the STATUS half only, since a @Query cannot follow the clock, so it
+        // is a superset larger by exactly the shows whose last night has passed. RootView applies the whole
+        // rule over what it fetches (`PrepQueueBuilder.eligible`), and that is equal to the function.
+        #expect(viaPredicate.subtracting(viaFunction) == ["kept-no-draft-already-performed"])
+        #expect(viaFunction.isSubset(of: viaPredicate))
+        let fetched = try ctx.fetch(FetchDescriptor<Prospect>(predicate: PrepQueueBuilder.needsPrepPredicate))
+        #expect(Set(PrepQueueBuilder.eligible(fetched, today: today).map(\.naturalKey)) == viaFunction)
         // #4170: `contacted-with-flags` joined this list, and it is the row that would catch the new
         // status being allowed in one half and refused in the other. A sent show is prep eligible ONLY
         // with a flag on it, which nothing but a deliberate press sets; `dismissed-with-flags` is the
         // other half of that rule and is still absent.
-        #expect(viaPredicate == Set(["kept-no-draft", "drafted-draft-flag", "drafted-contacts-flag",
-                                     "approved-both-flags", "contacted-with-flags",
-                                     "kept-but-cleared", "kept-but-booked"]))
+        #expect(viaFunction == Set(["kept-no-draft", "drafted-draft-flag", "drafted-contacts-flag",
+                                    "approved-both-flags", "contacted-with-flags",
+                                    "kept-but-cleared", "kept-but-booked"]))
         #expect(!viaPredicate.contains("dismissed-with-flags"))
         #expect(!viaFunction.contains("dismissed-with-flags"))
         // #3369: the conflicted show is in BOTH now. It is the row that would catch the gate being

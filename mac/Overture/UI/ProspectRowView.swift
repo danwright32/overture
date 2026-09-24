@@ -149,6 +149,16 @@ struct ProspectRowView: View {
                                  today: today, isBooked: item.isBooked)
     }
 
+    // #4136: the colour each tone is drawn in. The DECISION is `QueueModel.timingTone`, tested; this only
+    // paints it.
+    private func timingColor(_ tone: QueueModel.TimingTone) -> Color {
+        switch tone {
+        case .actNow: return OVColor.rust
+        case .confirmed: return OVColor.forestText
+        case .quiet: return OVColor.inkFaint
+        }
+    }
+
     // A booking (confirmed or suggested) owns the forest FILL + border, so the best-contact highlight below
     // defers to it rather than competing on the same colour.
     private var isBookingHighlighted: Bool { item.bookingSuggested || item.isBooked }
@@ -250,6 +260,7 @@ struct ProspectRowView: View {
                     onEditReplyDraft: onEditReplyDraft,
                     onCancelReplyDraft: onCancelReplyDraft,
                     gmailConnected: gmailConnected,
+                    today: today,
                     outboundSendSince: outboundSendSince,
                     replySendSince: replySendSince,
                     highlightedRecipientId: highlightedRecipientId
@@ -492,10 +503,9 @@ struct ProspectRowView: View {
                 if QueueModel.headerShowsTimingLine(isBooked: item.isBooked) {
                     Text("·").foregroundStyle(OVColor.lineStrong)
                     Text(timing.label)
-                        // #1122: an underway run reads with the act-now colour too, not the faint
-                        // "plenty of time" grey, since its remaining window is by definition short.
-                        .foregroundStyle(timing.urgency == .imminent || timing.urgency == .underway ? OVColor.rust
-                                         : timing.urgency == .booked ? OVColor.forestText : OVColor.inkFaint)
+                        // #1122/#4136: the colour comes from the one rule over every urgency, never a
+                        // second list of urgencies here, which is how five of them ended up faint.
+                        .foregroundStyle(timingColor(QueueModel.timingTone(timing.urgency)))
                 }
             }
             .font(OVType.meta.weight(.regular))
@@ -1287,6 +1297,10 @@ struct ProspectRowView: View {
                 Label("Went by", systemImage: "clock.arrow.circlepath")
                     .ovPill(.neutral)
                     .help("This show opened before you triaged it, so it is no longer waiting on you")
+            } else if item.showOutcome == .wentByUnpitched {   // #4136: the kept sibling, own words
+                Label(ShowOutcome.wentByUnpitched.label, systemImage: "clock.arrow.circlepath")
+                    .ovPill(.neutral)
+                    .help("This show's last night passed before it was pitched, so it is no longer waiting on you")
             } else if item.status == .dismissed, let onRestore {
                 Label("Dismissed", systemImage: "archivebox")
                     .ovPill(.neutral)

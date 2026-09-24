@@ -59,11 +59,11 @@ struct APitchToSomebodyElseTests {
     // THE DOMAIN RULE. A sent show Dan has asked for a fresh draft on is prepped again; one nobody
     // asked about is not, which is the refusal that has always been there and is not weakened.
     @Test func asentShowIsPreppedAgainOnlyWhenTheReDraftWasAskedFor() {
-        #expect(PrepQueueBuilder.needsPrep(status: .contacted, hasDraft: true, reprepDraftRequested: true),
+        #expect(PrepQueueBuilder.needsPrep(status: .contacted, hasDraft: true, reprepDraftRequested: true, lastNightHasPassed: false),
                 "a sent show Dan asked for a new draft on cannot reach the prep queue at all")
-        #expect(!PrepQueueBuilder.needsPrep(status: .contacted, hasDraft: true),
+        #expect(!PrepQueueBuilder.needsPrep(status: .contacted, hasDraft: true, lastNightHasPassed: false),
                 "an ordinary sent show became prep eligible, which spends money nobody asked for")
-        #expect(!PrepQueueBuilder.needsPrep(status: .dismissed, hasDraft: true, reprepDraftRequested: true),
+        #expect(!PrepQueueBuilder.needsPrep(status: .dismissed, hasDraft: true, reprepDraftRequested: true, lastNightHasPassed: false),
                 "a dismissed show is still refused, whatever flag it carries")
     }
 
@@ -83,7 +83,7 @@ struct APitchToSomebodyElseTests {
         #expect(show.reprepDraftRequested, "the show never asked for the draft this contact needs")
         #expect(!show.reprepContactsRequested,
                 "it asked for a contact hunt as well, which is the answer Dan just typed in")
-        #expect(PrepQueueBuilder.needsPrepEligible(show),
+        #expect(PrepQueueBuilder.needsPrepEligible(show, today: "2026-09-24"),
                 "the show is not in the prep queue, so no draft is ever written for the new contact")
     }
 

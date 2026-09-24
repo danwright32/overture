@@ -130,7 +130,7 @@ struct StagePillCountMatchesNavigationTests {
         #expect(prep.focus == .prep)
         #expect(prep.count == 1)
         #expect(try targets(ctx, prep) == ["kept-but-booked"])
-        #expect(PrepQueueBuilder.needsPrepEligible(kept))
+        #expect(PrepQueueBuilder.needsPrepEligible(kept, today: today))
 
         // And overruling the clash changes nothing about where it is counted, which is the point: the
         // clash was never a lifecycle position.

@@ -19,10 +19,12 @@ enum PrepQueueService {
     // The kept-undrafted prospects a Prep run would actually draft: needs-prep-eligible, narrowed to the
     // per-run subset Dan chose. Shared by buildQueue (what to encode) and startPrep (what to stamp an
     // experiment arm onto), so the assigned set and the queued set can never disagree.
-    static func eligibleProspects(from context: ModelContext, includedKeys: Set<String>?) -> [Prospect] {
+    // #4136: `today` is required, because a kept show whose last night has passed is no longer eligible,
+    // and this is the list the handoff file is written from.
+    static func eligibleProspects(from context: ModelContext, includedKeys: Set<String>?,
+                                  today: String) -> [Prospect] {
         let all = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
-        return all
-            .filter(PrepQueueBuilder.needsPrepEligible)
+        return PrepQueueBuilder.eligible(all, today: today)
             .filter { includedKeys?.contains($0.naturalKey) ?? true }
     }
 
@@ -81,7 +83,7 @@ enum PrepQueueService {
         let history = venueHistory ?? VenueShootHistory.current(today: today)
         // #2392: the addresses Dan struck, read ONCE per build for the same reason.
         let refusals = ContactRefusal.ledger(in: context)
-        let items: [PrepQueueItem] = eligibleProspects(from: context, includedKeys: includedKeys)
+        let items: [PrepQueueItem] = eligibleProspects(from: context, includedKeys: includedKeys, today: today)
             .map { p in
                 PrepQueueItem(
                     naturalKey: p.naturalKey,
@@ -1266,7 +1268,10 @@ enum PrepQueueService {
         // legitimately means "every eligible prospect" and there is nothing to subtract from. Resolving it
         // through the same `eligibleProspects` both callers already use keeps one definition of eligible
         // (L107), and with nothing held it reproduces today's set exactly.
-        let eligibleKeys = Set(eligibleProspects(from: context, includedKeys: includedKeys).map(\.naturalKey))
+        // #4136: one day for all three reads below, taken from this launch's own `now`.
+        let today = EasternDate.today(now)
+        let eligibleKeys = Set(eligibleProspects(from: context, includedKeys: includedKeys, today: today)
+            .map(\.naturalKey))
         let prepSelection = selection(from: eligibleKeys,
                                       excluding: try heldByOtherRun(slot: .prep, now: now,
                                                                     support: support, defaults: defaults))
@@ -1279,9 +1284,9 @@ enum PrepQueueService {
 
         // #5 Phase 1, continued: over the SURVIVING set, so an excluded show is never stamped.
         try ExperimentAssignment.assignArms(
-            to: eligibleProspects(from: context, includedKeys: selectedKeys), in: context)
+            to: eligibleProspects(from: context, includedKeys: selectedKeys, today: today), in: context)
         // #953: only the rows Dan checked in the Prep sheet, minus anything the other run is holding.
-        let queue = buildQueue(from: context, generatedAt: stamp, includedKeys: selectedKeys)
+        let queue = buildQueue(from: context, generatedAt: stamp, includedKeys: selectedKeys, today: today)
         guard !queue.items.isEmpty else { throw PrepLaunchError.nothingToPrep }
 
         // Take the lock ATOMICALLY (#480, mirrors ReplyClassifyService): clear any stale marker, then

@@ -13,7 +13,7 @@ struct PrepQueueTests {
     @discardableResult
     private func insert(_ ctx: ModelContext, group: String, status: ReviewStatus, hasDraft: Bool = false,
                         reprepDraftRequested: Bool = false, reprepContactsRequested: Bool = false,
-                        sentAt: Date? = nil, performanceDate: String = "2026-07-01") -> Prospect {
+                        sentAt: Date? = nil, performanceDate: String = "2082-07-01") -> Prospect {
         let key = Prospect.makeNaturalKey(groupName: group, performanceDate: performanceDate, venue: "Weill Recital Hall")
         let p = Prospect(naturalKey: key, groupName: group, discipline: "choral", venue: "Weill Recital Hall",
                          performanceDate: performanceDate, sourceListingURL: "https://src",
@@ -34,11 +34,11 @@ struct PrepQueueTests {
     // opposite is now the rule, and `ConflictWarnsRatherThanBlocksTests` asserts it.
 
     @Test func needsPrepOnlyForKeptUndrafted() {
-        #expect(PrepQueueBuilder.needsPrep(status: .queued, hasDraft: false) == true)
-        #expect(PrepQueueBuilder.needsPrep(status: .queued, hasDraft: true) == false)  // already drafted
-        #expect(PrepQueueBuilder.needsPrep(status: .new, hasDraft: false) == false)    // not kept
-        #expect(PrepQueueBuilder.needsPrep(status: .dismissed, hasDraft: false) == false)
-        #expect(PrepQueueBuilder.needsPrep(status: .approved, hasDraft: true) == false)
+        #expect(PrepQueueBuilder.needsPrep(status: .queued, hasDraft: false, lastNightHasPassed: false) == true)
+        #expect(PrepQueueBuilder.needsPrep(status: .queued, hasDraft: true, lastNightHasPassed: false) == false)  // already drafted
+        #expect(PrepQueueBuilder.needsPrep(status: .new, hasDraft: false, lastNightHasPassed: false) == false)    // not kept
+        #expect(PrepQueueBuilder.needsPrep(status: .dismissed, hasDraft: false, lastNightHasPassed: false) == false)
+        #expect(PrepQueueBuilder.needsPrep(status: .approved, hasDraft: true, lastNightHasPassed: false) == false)
     }
 
     // #367: a drafted/approved prospect flagged for re-prep re-enters the queue even though it
@@ -46,18 +46,18 @@ struct PrepQueueTests {
     // no matter what the flags say.
     @Test func needsPrepAlsoTrueForReprepFlaggedEligibleStatuses() {
         #expect(PrepQueueBuilder.needsPrep(status: .drafted, hasDraft: true,
-                                           reprepDraftRequested: true, reprepContactsRequested: false) == true)
+                                           reprepDraftRequested: true, reprepContactsRequested: false, lastNightHasPassed: false) == true)
         #expect(PrepQueueBuilder.needsPrep(status: .drafted, hasDraft: true,
-                                           reprepDraftRequested: false, reprepContactsRequested: true) == true)
+                                           reprepDraftRequested: false, reprepContactsRequested: true, lastNightHasPassed: false) == true)
         #expect(PrepQueueBuilder.needsPrep(status: .approved, hasDraft: true,
-                                           reprepDraftRequested: true, reprepContactsRequested: true) == true)
+                                           reprepDraftRequested: true, reprepContactsRequested: true, lastNightHasPassed: false) == true)
         #expect(PrepQueueBuilder.needsPrep(status: .queued, hasDraft: true,
-                                           reprepDraftRequested: true, reprepContactsRequested: false) == true)
+                                           reprepDraftRequested: true, reprepContactsRequested: false, lastNightHasPassed: false) == true)
     }
 
     @Test func needsPrepFalseWhenReprepFlagsSetButNoFlagsActuallyTrue() {
         #expect(PrepQueueBuilder.needsPrep(status: .drafted, hasDraft: true,
-                                           reprepDraftRequested: false, reprepContactsRequested: false) == false)
+                                           reprepDraftRequested: false, reprepContactsRequested: false, lastNightHasPassed: false) == false)
     }
 
     // #4170: the `.contacted` half of this test is GONE rather than adjusted, because the rule it
@@ -69,9 +69,9 @@ struct PrepQueueTests {
     // the prep queue, whoever set it.
     @Test func needsPrepNeverTrueForDismissedEvenWithReprepFlags() {
         #expect(PrepQueueBuilder.needsPrep(status: .dismissed, hasDraft: true,
-                                           reprepDraftRequested: true, reprepContactsRequested: true) == false)
+                                           reprepDraftRequested: true, reprepContactsRequested: true, lastNightHasPassed: false) == false)
         #expect(PrepQueueBuilder.needsPrep(status: .dismissed, hasDraft: false,
-                                           reprepDraftRequested: true, reprepContactsRequested: false) == false)
+                                           reprepDraftRequested: true, reprepContactsRequested: false, lastNightHasPassed: false) == false)
     }
 
     @Test func gathersOnlyKeptUndraftedProspectsWithExactKey() throws {
@@ -86,7 +86,7 @@ struct PrepQueueTests {
         let item = queue.items[0]
         #expect(item.groupName == "Kept Choir")
         // The key must be the prospect's exact stored key (opaque token).
-        let expectedKey = Prospect.makeNaturalKey(groupName: "Kept Choir", performanceDate: "2026-07-01", venue: "Weill Recital Hall")
+        let expectedKey = Prospect.makeNaturalKey(groupName: "Kept Choir", performanceDate: "2082-07-01", venue: "Weill Recital Hall")
         #expect(item.naturalKey == expectedKey)
         // #366 Phase 1: the AI research step needs to know if a show is self-produced.
         #expect(item.production == "self")
@@ -278,8 +278,8 @@ struct PrepQueueTests {
     // does not second-guess him.
     @Test func everyEligibleShowDefaultsIn() throws {
         let ctx = ModelContext(try container())
-        let near = insert(ctx, group: "Near Show", status: .queued, performanceDate: "2026-10-01")
-        let far = insert(ctx, group: "Far Show", status: .queued, performanceDate: "2027-06-13")
+        let near = insert(ctx, group: "Near Show", status: .queued, performanceDate: "2082-10-01")
+        let far = insert(ctx, group: "Far Show", status: .queued, performanceDate: "2083-06-13")
 
         let selected = PrepQueueBuilder.prepDefaultSelection(prospects: [near, far])
 
@@ -290,8 +290,8 @@ struct PrepQueueTests {
     // though both prospects are eligible.
     @Test func buildQueueIncludesOnlyTheSelectedKeys() throws {
         let ctx = ModelContext(try container())
-        let near = insert(ctx, group: "Near Show", status: .queued, performanceDate: "2026-10-01")
-        let far = insert(ctx, group: "Far Show", status: .queued, performanceDate: "2026-12-01")
+        let near = insert(ctx, group: "Near Show", status: .queued, performanceDate: "2082-10-01")
+        let far = insert(ctx, group: "Far Show", status: .queued, performanceDate: "2082-12-01")
 
         let queue = PrepQueueService.buildQueue(from: ctx, generatedAt: "now",
                                                 includedKeys: [near.naturalKey])
@@ -304,8 +304,8 @@ struct PrepQueueTests {
     // is exactly what runs, not the date-derived default.
     @Test func aToggledSelectionOverridesTheDateDefault() throws {
         let ctx = ModelContext(try container())
-        insert(ctx, group: "Near Show", status: .queued, performanceDate: "2026-10-01")   // defaults IN
-        let far = insert(ctx, group: "Far Show", status: .queued, performanceDate: "2026-12-01")  // defaults OUT
+        insert(ctx, group: "Near Show", status: .queued, performanceDate: "2082-10-01")   // defaults IN
+        let far = insert(ctx, group: "Far Show", status: .queued, performanceDate: "2082-12-01")  // defaults OUT
 
         let queue = PrepQueueService.buildQueue(from: ctx, generatedAt: "now",
                                                 includedKeys: [far.naturalKey])
@@ -316,8 +316,8 @@ struct PrepQueueTests {
     // so the change is backward compatible for every existing call site.
     @Test func aNilSelectionRunsEveryEligibleProspect() throws {
         let ctx = ModelContext(try container())
-        insert(ctx, group: "Near Show", status: .queued, performanceDate: "2026-10-01")
-        insert(ctx, group: "Far Show", status: .queued, performanceDate: "2026-12-01")
+        insert(ctx, group: "Near Show", status: .queued, performanceDate: "2082-10-01")
+        insert(ctx, group: "Far Show", status: .queued, performanceDate: "2082-12-01")
 
         let queue = PrepQueueService.buildQueue(from: ctx, generatedAt: "now", includedKeys: nil)
         #expect(Set(queue.items.map(\.groupName)) == ["Near Show", "Far Show"])
@@ -328,8 +328,8 @@ struct PrepQueueTests {
     // file is written before launch, so the subset is observable.)
     @Test func startPrepWritesOnlyTheSelectedSubset() async throws {
         let ctx = ModelContext(try container())
-        let near = insert(ctx, group: "Near Show", status: .queued, performanceDate: "2026-10-01")
-        insert(ctx, group: "Far Show", status: .queued, performanceDate: "2026-12-01")
+        let near = insert(ctx, group: "Near Show", status: .queued, performanceDate: "2082-10-01")
+        insert(ctx, group: "Far Show", status: .queued, performanceDate: "2082-12-01")
 
         let tmp = FileManager.default.temporaryDirectory
             .appendingPathComponent("prep-queue-\(UUID().uuidString).json")
@@ -350,7 +350,7 @@ struct PrepQueueTests {
     // with an empty selection has nothing to prep, so it refuses rather than launching an empty run.
     @Test func startPrepWithAnEmptySelectionReportsNothingToPrep() async throws {
         let ctx = ModelContext(try container())
-        insert(ctx, group: "Near Show", status: .queued, performanceDate: "2026-10-01")
+        insert(ctx, group: "Near Show", status: .queued, performanceDate: "2082-10-01")
         let marker = FileManager.default.temporaryDirectory.appendingPathComponent("m-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: marker) }
 
@@ -371,9 +371,9 @@ struct PrepQueueTests {
     // A row's dim second line: venue then date, joined only when both are present, so Dan can see why a
     // row defaulted checked or held (the date is the whole basis of the default).
     @Test func rowDetailShowsVenueThenDate() {
-        #expect(PrepSelectionCopy.rowDetail(venue: "Weill Recital Hall", performanceDate: "2026-10-01")
+        #expect(PrepSelectionCopy.rowDetail(venue: "Weill Recital Hall", performanceDate: "2082-10-01")
                 == "Weill Recital Hall · Oct 1")
-        #expect(PrepSelectionCopy.rowDetail(venue: nil, performanceDate: "2026-10-01") == "Oct 1")
+        #expect(PrepSelectionCopy.rowDetail(venue: nil, performanceDate: "2082-10-01") == "Oct 1")
         #expect(PrepSelectionCopy.rowDetail(venue: "Weill Recital Hall", performanceDate: nil)
                 == "Weill Recital Hall")
     }
@@ -387,7 +387,7 @@ struct PrepQueueTests {
 
     @Test func roundTripsThroughJSON() throws {
         let queue = PrepQueue(version: 2, generatedAt: "now", items: [
-            PrepQueueItem(naturalKey: "k", groupName: "G", venue: "V", performanceDate: "2026-07-01",
+            PrepQueueItem(naturalKey: "k", groupName: "G", venue: "V", performanceDate: "2082-07-01",
                           discipline: "choral", sourceListingURL: nil,
                           possibleMatchName: nil, priorRelationship: "none", production: "self")
         ])

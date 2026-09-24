@@ -36,7 +36,7 @@ struct PrepStatusTests {
         _ = prospect(ctx, group: "ToReview", status: .drafted, hasDraft: true, sentAt: nil)
         let all = try ctx.fetch(FetchDescriptor<Prospect>())
 
-        let s = PrepStatus.from(prospects: all, lastRunStartedAt: nil, running: false)
+        let s = PrepStatus.from(prospects: all, lastRunStartedAt: nil, running: false, today: "2026-06-01")
         #expect(s.approved == 1)   // only WaitingToSend
         #expect(s.kept == 1)       // only ToPrep (queued, no draft)
         #expect(s.drafted == 1)    // only ToReview
@@ -53,7 +53,7 @@ struct PrepStatusTests {
         _ = prospect(ctx, group: "OrdinaryDrafted", status: .drafted, hasDraft: true, sentAt: nil)
         let all = try ctx.fetch(FetchDescriptor<Prospect>())
 
-        let s = PrepStatus.from(prospects: all, lastRunStartedAt: nil, running: false)
+        let s = PrepStatus.from(prospects: all, lastRunStartedAt: nil, running: false, today: "2026-06-01")
         #expect(s.kept == 1)       // the flagged one
         #expect(s.drafted == 2)   // both still show as drafted for the review count
     }

@@ -83,7 +83,7 @@ struct ReconcileNoSpendGuardTests {
         ctx.insert(p)
         try ctx.save()
 
-        #expect(PrepQueueBuilder.needsPrepEligible(p))   // precondition: it WOULD be picked up by a Prep run
+        #expect(PrepQueueBuilder.needsPrepEligible(p, today: "2026-09-24"))   // precondition: it WOULD be picked up by a Prep run
         #expect(r.intentHint == nil)                     // precondition: the reply is unread by the model
 
         let scheduler = ReconcileScheduler(context: ctx, replyRunAlive: { _ in false })
@@ -92,7 +92,7 @@ struct ReconcileNoSpendGuardTests {
         // The tick drafted nothing: the prospect is still kept-and-undrafted, still awaiting a Prep run.
         #expect(p.status == .queued)
         #expect(!p.hasDraft)
-        #expect(PrepQueueBuilder.needsPrepEligible(p))
+        #expect(PrepQueueBuilder.needsPrepEligible(p, today: "2026-09-24"))
         // The tick classified nothing: the reply still carries no AI-assigned hint.
         #expect(r.intentHint == nil)
     }

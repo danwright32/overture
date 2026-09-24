@@ -22,7 +22,7 @@ struct QueueItemSnapshotTests {
     @Test func queueItemTracksWhetherARecipientCanStillSend() throws {
         let ctx = ModelContext(try makeContainer())
         let p = Prospect(naturalKey: "k", groupName: "G", discipline: "choral", venue: "V",
-                         performanceDate: "2026-07-01", sourceListingURL: nil,
+                         performanceDate: "2082-07-01", sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 7, tier: "high", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
@@ -54,7 +54,7 @@ struct QueueItemSnapshotTests {
     @Test func aProbedShowWhoseOnlyContactLooksLikeAVenueReadsAsWeakContactOnly() throws {
         let ctx = ModelContext(try makeContainer())
         let p = Prospect(naturalKey: "k", groupName: "G", discipline: "choral", venue: "Weill Recital Hall",
-                         performanceDate: "2026-09-01", sourceListingURL: nil,
+                         performanceDate: "2082-09-01", sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 7, tier: "high", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
@@ -92,7 +92,7 @@ struct QueueItemSnapshotTests {
     @Test func aProbeResultGoesStaleAfterTheFreshnessWindow() throws {
         let ctx = ModelContext(try makeContainer())
         let p = Prospect(naturalKey: "k", groupName: "G", discipline: "choral", venue: "Weill Recital Hall",
-                         performanceDate: "2026-09-01", sourceListingURL: nil,
+                         performanceDate: "2082-09-01", sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 7, tier: "high", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
@@ -123,7 +123,7 @@ struct QueueItemSnapshotTests {
 
         func makeProspect() -> Prospect {
             let p = Prospect(naturalKey: "k", groupName: "G", discipline: "choral", venue: "Weill Recital Hall",
-                             performanceDate: "2026-09-01", sourceListingURL: nil,
+                             performanceDate: "2082-09-01", sourceListingURL: nil,
                              priorRelationship: "none", production: "self", profile: "strong",
                              coverage: "likely_uncovered", fitScore: 7, tier: "high", fitReason: "r",
                              matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
@@ -164,7 +164,7 @@ struct QueueItemSnapshotTests {
     @Test func queueItemTracksWhetherAnyContactHasAnEmailAtAll() throws {
         let ctx = ModelContext(try makeContainer())
         let p = Prospect(naturalKey: "k", groupName: "G", discipline: "choral", venue: "V",
-                         performanceDate: "2026-07-01", sourceListingURL: nil,
+                         performanceDate: "2082-07-01", sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 7, tier: "high", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
@@ -190,7 +190,7 @@ struct QueueItemSnapshotTests {
     @Test func queueItemCarriesReprepFlagsAndEligibility() throws {
         let ctx = ModelContext(try makeContainer())
         let p = Prospect(naturalKey: "k", groupName: "G", discipline: "choral", venue: "V",
-                         performanceDate: "2026-07-01", sourceListingURL: nil,
+                         performanceDate: "2082-07-01", sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 7, tier: "high", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
@@ -219,7 +219,7 @@ struct QueueItemSnapshotTests {
     @Test func queueItemCarriesReprepLastServedAt() throws {
         let ctx = ModelContext(try makeContainer())
         let p = Prospect(naturalKey: "k", groupName: "G", discipline: "choral", venue: "V",
-                         performanceDate: "2026-07-01", sourceListingURL: nil,
+                         performanceDate: "2082-07-01", sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 7, tier: "high", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
@@ -238,7 +238,7 @@ struct QueueItemSnapshotTests {
     @Test func queueItemBuildsContactSnapshotsInSendOrder() throws {
         let ctx = ModelContext(try makeContainer())
         let p = Prospect(naturalKey: "k", groupName: "G", discipline: "music", venue: "V",
-                         performanceDate: "2026-09-01", sourceListingURL: nil,
+                         performanceDate: "2082-09-01", sourceListingURL: nil,
                          priorRelationship: "warm", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 8, tier: "high", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
@@ -265,7 +265,7 @@ struct QueueItemSnapshotTests {
     @Test func queueItemCarriesEachContactsOwnConfidenceMethodFormURLAndSourceURL() throws {
         let ctx = ModelContext(try makeContainer())
         let p = Prospect(naturalKey: "k", groupName: "G", discipline: "music", venue: "V",
-                         performanceDate: "2026-09-01", sourceListingURL: nil,
+                         performanceDate: "2082-09-01", sourceListingURL: nil,
                          priorRelationship: "warm", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 8, tier: "high", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil)
@@ -291,7 +291,7 @@ struct QueueItemSnapshotTests {
     @Test func queueItemCarriesEachContactsOwnConversationState() throws {
         let ctx = ModelContext(try makeContainer())
         let p = Prospect(naturalKey: "k", groupName: "G", discipline: "music", venue: "V",
-                         performanceDate: "2026-09-01", sourceListingURL: nil,
+                         performanceDate: "2082-09-01", sourceListingURL: nil,
                          priorRelationship: "warm", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 8, tier: "high", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil)
@@ -318,7 +318,7 @@ struct QueueItemSnapshotTests {
     @Test func queueItemCarriesTheReplyDraftEditedFlag() throws {
         let ctx = ModelContext(try makeContainer())
         let p = Prospect(naturalKey: "k", groupName: "G", discipline: "music", venue: "V",
-                         performanceDate: "2026-09-01", sourceListingURL: nil,
+                         performanceDate: "2082-09-01", sourceListingURL: nil,
                          priorRelationship: "warm", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 8, tier: "high", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil)
@@ -387,7 +387,7 @@ struct QueueItemSnapshotTests {
                                   answeredAt: answeredAt),
                               intentHint: nil)
         }
-        let asked = Date(timeIntervalSince1970: 1_780_000_000)
+        let asked = Date(timeIntervalSince1970: 3547225600)
         #expect(s(body: "a draft").hasReplyDraft == true)
         #expect(s().hasReplyDraft == false)
         #expect(s(requestedAt: asked).isDraftingReply == true)            // requested, not yet arrived
@@ -411,11 +411,11 @@ struct QueueItemSnapshotTests {
     @Test func itemsFromCarriesTheLinkedEngagementAcrossTwoVenues() throws {
         let ctx = ModelContext(try makeContainer())
         let p1 = Prospect(naturalKey: "moca-25", groupName: "MOCA PERFORMS", discipline: "theater",
-                          venue: "Museum of Chinese in America", performanceDate: "2026-07-25", sourceListingURL: nil, priorRelationship: "none", production: "self", profile: "strong",
+                          venue: "Museum of Chinese in America", performanceDate: "2082-07-25", sourceListingURL: nil, priorRelationship: "none", production: "self", profile: "strong",
                           coverage: "likely_uncovered", fitScore: 9, tier: "high", fitReason: "r",
                           matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil)
         let p2 = Prospect(naturalKey: "moca-24", groupName: "MOCA PERFORMS", discipline: "theater",
-                          venue: "Open Door Senior Center", performanceDate: "2026-07-24", sourceListingURL: nil, priorRelationship: "none", production: "self", profile: "strong",
+                          venue: "Open Door Senior Center", performanceDate: "2082-07-24", sourceListingURL: nil, priorRelationship: "none", production: "self", profile: "strong",
                           coverage: "likely_uncovered", fitScore: 9, tier: "high", fitReason: "r",
                           matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil)
         ctx.insert(p1); ctx.insert(p2)
@@ -423,14 +423,14 @@ struct QueueItemSnapshotTests {
         let items = QueueModel.items(from: [p1, p2])
 
         let item25 = try #require(items.first { $0.id == "moca-25" })
-        #expect(item25.linkedEngagementMembers == [EngagementLink.Member(venue: "Open Door Senior Center", date: "2026-07-24")])
+        #expect(item25.linkedEngagementMembers == [EngagementLink.Member(venue: "Open Door Senior Center", date: "2082-07-24")])
         #expect(QueueModel.linkedEngagementNote(item25) == "This production also plays at Open Door Senior Center on Jul 24.")
     }
 
     @Test func itemsFromCarriesNoLinkWhenThereIsNoSiblingVenue() throws {
         let ctx = ModelContext(try makeContainer())
         let p = Prospect(naturalKey: "k", groupName: "Solo Show", discipline: "music", venue: "Weill Recital Hall",
-                         performanceDate: "2026-07-01", sourceListingURL: nil,
+                         performanceDate: "2082-07-01", sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 7, tier: "high", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil)

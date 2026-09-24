@@ -105,8 +105,15 @@ struct RootView: View {
     // (a #Predicate macro can't call the plain-Swift needsPrep function the other checks use, so
     // this is the one place the SAME logic has to be expressed a second way; see
     // PrepQueueEligibilityParityTests for the guard against the two drifting apart).
+    //
+    // #4136: the query fetches the STATUS half only, because a @Query's predicate is fixed when the view is
+    // built and cannot follow the calendar as it turns over. `toPrep` below applies the whole rule, date
+    // included, so a kept show whose last night has passed never enables the button or reaches the sheet.
     @Query(filter: PrepQueueBuilder.needsPrepPredicate)
-    private var toPrep: [Prospect]
+    private var toPrepByStatus: [Prospect]
+    private var toPrep: [Prospect] {
+        PrepQueueBuilder.eligible(toPrepByStatus, today: QueueModel.easternToday())
+    }
 
     // All prospects, for the time-based follow-up due count (#45).
     @Query private var allProspects: [Prospect]

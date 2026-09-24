@@ -70,7 +70,9 @@ struct NewNightReopensTests {
         // new night DOES reopen it: the row was closed for carrying nothing of its own, so a night
         // nothing else covers is something of its own. Listed here rather than derived, because the
         // whole point of this test is that the partition is stated in full and changing it is noticed.
+        // #4136 added `wentByUnpitched`, the kept sibling of `wentBy`, and it reopens for the same reason:
+        // Dan wanted the show and a night that has not gone by is one he has not missed.
         #expect(Set(reopened) == Set([.dateConflict, .hadPaidWork, .pitchingOtherShows, .tooSoon,
-                                      .wentBy, .coveredElsewhere]))
+                                      .wentBy, .wentByUnpitched, .coveredElsewhere]))
     }
 }

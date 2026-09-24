@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1643 sentences**.
+Every sentence Overture can say to Dan: **1647 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -14,7 +14,7 @@ What is not, and why:
   sentences under tokens nobody reads.
 - **Nothing, if it is written as two literals joined with `+`.** Those ARE joined here, into the
   one sentence the running app says (#3155). What is still only part of what Dan reads is a
-  sentence carrying a VALUE: 604 of the 1643 below hold a
+  sentence carrying a VALUE: 605 of the 1647 below hold a
   `\(...)` where a number or a name goes, so what is printed is the template. They are counted
   here rather than listed again, because the hole is visible in the line itself; what was missing
   was any statement of how much of this document is templates.
@@ -2526,6 +2526,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/DraftReviewNotes.swift`
 "This draft won't send: the greeting names one person but this email goes to \(audience). Open it \"Hello,\" instead."
     `Domain/DraftReviewNotes.swift`
+"This draft won't send: the performance has passed."
+    `Domain/DraftReviewNotes.swift`
 "This group also performs at this venue on other dates"
     `UI/QueueView+Model.swift`
 "This is them"
@@ -2588,6 +2590,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "This show was checked over 90 days ago, so that earlier result may have changed. Run Check reachability again to refresh it before you decide."
     `Domain/Reachability.swift`
 "This show was in an earlier scout but has dropped out of the venue feed across the last two scouts, so it was likely cancelled or pulled. Your keep/dismiss history is preserved."
+    `UI/ProspectRowView.swift`
+"This show's last night passed before it was pitched, so it is no longer waiting on you"
     `UI/ProspectRowView.swift`
 "This town is on the skip list."
     `UI/QueueView+Model.swift`
@@ -2718,6 +2722,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ArchiveStatus.swift`
     `Domain/ShowOutcome.swift`
     `UI/ProspectRowView.swift`
+"Went by before pitching"
+    `Domain/ShowOutcome.swift`
 "What converts"
     `App/RootView.swift`
     `UI/OutcomePatternsView.swift`
@@ -3228,6 +3234,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ShowOutcome.swift`
 "\(org) was merged, or moved to a different night, after this row was drawn. Nothing was changed. The list has caught up, so press it again"
     `Domain/ReachedOutSnapshot.swift`
+"\(org) went by before it was pitched."
+    `Domain/ShowOutcome.swift`
 "\(org) went by before it was triaged."
     `Domain/ShowOutcome.swift`
 "\(org.orgName) (\(Plural.count(org.showCount, "show")))"

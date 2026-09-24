@@ -23,7 +23,7 @@ struct ProspectMutationsTests {
 
     private func makeProspect(_ ctx: ModelContext, key: String = "k", status: ReviewStatus = .new) -> Prospect {
         let p = Prospect(naturalKey: key, groupName: "Aurora Strings", discipline: "music", venue: "Weill Recital Hall",
-                         performanceDate: "2026-08-01", sourceListingURL: nil,
+                         performanceDate: "2082-08-01", sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 6, tier: "mid", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil, status: status)
@@ -360,7 +360,7 @@ struct ProspectMutationsTests {
         // #2645: a pinned day before the fixture's show, not the wall clock, so this cannot age into
         // "the show has already happened" and start failing for a reason it does not assert.
         ProspectMutations.sendFollowUp("k", "r1", prospects: [p], context: ctx, feedback: feedback, sender: sender,
-                                       now: Date(timeIntervalSince1970: 1_780_000_000),
+                                       now: Date(timeIntervalSince1970: 3547225600),
                                        markSending: { marked.append($0) }, clearSending: { cleared.append($0) })
 
         #expect(marked == ["r1"])

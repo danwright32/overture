@@ -32,8 +32,9 @@ struct PrepStatus: Equatable, Sendable {
     // Count the pipeline from the live prospects. approved means approved AND still waiting to
     // send (#200): once sent, a prospect is .contacted (or legacy .approved with a send date),
     // so the send date excludes it here and it stops inflating the "approved" figure.
-    static func from(prospects: [Prospect], lastRunStartedAt: Date?, running: Bool) -> PrepStatus {
-        let keptCount = prospects.filter(PrepQueueBuilder.needsPrepEligible).count
+    static func from(prospects: [Prospect], lastRunStartedAt: Date?, running: Bool,
+                     today: String) -> PrepStatus {
+        let keptCount = PrepQueueBuilder.eligible(prospects, today: today).count
         return PrepStatus(
             kept: keptCount,
             drafted: prospects.filter { $0.status == .drafted }.count,

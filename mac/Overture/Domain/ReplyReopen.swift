@@ -35,7 +35,8 @@ enum ReplyReopen {
         // nothing else covers, and that is `newNightReopens`, a different question asked elsewhere.
         case .booked, .theySaidNo, .theySaidNotNow, .theySaidPriceTooHigh, .turnedThemDown,
              .dateConflict, .hadPaidWork, .pitchingOtherShows, .tooSoon, .notAFit,
-             .dontWantToShoot, .noWayToReachThem, .duplicate, .wentBy, .tooFar, .coveredElsewhere:
+             .dontWantToShoot, .noWayToReachThem, .duplicate, .wentBy, .wentByUnpitched, .tooFar,
+             .coveredElsewhere:
             return false
         }
     }

@@ -60,7 +60,7 @@ struct ClearConflictMutationTests {
         feedback.action?.perform()
 
         #expect(p.hasUnclearedConflict)                                // blocked again
-        #expect(PrepQueueBuilder.needsPrepEligible(p) == false)
+        #expect(PrepQueueBuilder.needsPrepEligible(p, today: "2026-10-01") == false)
     }
 
     // A show with no conflict has nothing to clear, and asking must not invent a clearance that would

@@ -20,7 +20,8 @@ enum ArchiveStatus: Hashable, Sendable {
     // lens once Dan has cut it.
     case dismissed
     // #864: a show whose last night passed while it sat untriaged. Overture retired it; Dan never
-    // decided anything. Its own bucket, because Dismissed means "I cut this", and it is also where he
+    // decided anything. #4136: and a show he kept whose last night passed before it was pitched, which
+    // the calendar closed in the same way (`ShowOutcome.isCalendarRetirement`). Its own bucket, because Dismissed means "I cut this", and it is also where he
     // goes to undo a cut he made by mistake (#28). Filling that list with shows he never even looked at
     // would bury the one he is actually looking for.
     case wentBy
@@ -43,7 +44,8 @@ enum ArchiveStatus: Hashable, Sendable {
     static func of(_ item: some QueueScopeFacts) -> ArchiveStatus {
         // Checked before .dismissed: a retired show IS stored as dismissed (that is how it leaves the
         // queue and stops being counted), and its reason is the only thing that distinguishes it.
-        if item.showOutcome == .wentBy { return .wentBy }
+        // #4136: both calendar retirements, the untriaged `wentBy` and the kept `wentByUnpitched`.
+        if item.showOutcome?.isCalendarRetirement == true { return .wentBy }
         guard item.status != .dismissed else { return .dismissed }
         return .show(item.performanceStatus)
     }

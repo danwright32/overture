@@ -18,9 +18,9 @@ struct SendConfirmationTests {
                       email: String? = "to@org.org", subject: String? = "A photo of your June concert",
                       body: String? = "Hello,\n\nI photograph performing arts.",
                       sentAt: Date? = nil) -> Prospect {
-        let key = Prospect.makeNaturalKey(groupName: "G", performanceDate: "2026-07-01", venue: "V")
+        let key = Prospect.makeNaturalKey(groupName: "G", performanceDate: "2082-07-01", venue: "V")
         let p = Prospect(naturalKey: key, groupName: "G", discipline: "choral", venue: "V",
-                         performanceDate: "2026-07-01", sourceListingURL: nil,
+                         performanceDate: "2082-07-01", sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong", coverage: "likely_uncovered",
                          fitScore: 7, tier: "high", fitReason: "r", matchedClientName: nil,
                          possibleMatchSource: nil, possibleMatchName: nil, status: status, ingestedAt: Date())
@@ -61,9 +61,9 @@ struct SendConfirmationTests {
         private func show(_ ctx: ModelContext,
                           body: String = "Hi Marcus,\n\nI photograph performing arts in New York.")
         -> Prospect {
-            let key = Prospect.makeNaturalKey(groupName: "G", performanceDate: "2026-07-01", venue: "V")
+            let key = Prospect.makeNaturalKey(groupName: "G", performanceDate: "2082-07-01", venue: "V")
             let p = Prospect(naturalKey: key, groupName: "G", discipline: "choral", venue: "V",
-                             performanceDate: "2026-07-01", sourceListingURL: nil,
+                             performanceDate: "2082-07-01", sourceListingURL: nil,
                              priorRelationship: "none", production: "self", profile: "strong",
                              coverage: "likely_uncovered", fitScore: 7, tier: "high", fitReason: "r",
                              matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
@@ -220,9 +220,9 @@ struct SendConfirmationTests {
     // every recipient is sent there is nothing left to confirm (the partial-send gate).
     @Test func targetsTheNextPendingRecipientThenRefusesWhenAllSent() throws {
         let ctx = ModelContext(try container())
-        let key = Prospect.makeNaturalKey(groupName: "G", performanceDate: "2026-07-01", venue: "V")
+        let key = Prospect.makeNaturalKey(groupName: "G", performanceDate: "2082-07-01", venue: "V")
         let p = Prospect(naturalKey: key, groupName: "G", discipline: "choral", venue: "V",
-                         performanceDate: "2026-07-01", sourceListingURL: nil,
+                         performanceDate: "2082-07-01", sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong", coverage: "likely_uncovered",
                          fitScore: 7, tier: "high", fitReason: "r", matchedClientName: nil,
                          possibleMatchSource: nil, possibleMatchName: nil, status: .approved, ingestedAt: Date())

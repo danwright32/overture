@@ -309,7 +309,7 @@ enum StageNavigation {
             // out, this call quietly omitted the conflict gate of the time (retired by #3369), so the pill
             // counted a show the Prep run then refused to draft. The (Prospect) -> Bool wrapper
             // exists precisely so a new field cannot be forgotten at one of two call sites.
-            return PrepQueueBuilder.needsPrepEligible(p)
+            return PrepQueueBuilder.needsPrepEligible(p, today: context.today)
 
         case .review:
             // #2050: a show belongs to Review from the moment it has a draft until every contact on it

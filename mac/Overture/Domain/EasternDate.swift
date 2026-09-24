@@ -205,6 +205,16 @@ enum EasternDate {
         return lastNight < today
     }
 
+    // #4136: the two above composed, as ONE question, because four things now ask it and must agree:
+    // the "Performance passed" label (`QueueModel.outreachTiming`), Prep eligibility
+    // (`PrepQueueBuilder.needsPrep`), the send gate (`Recipient.isSendablePending`) and the sweep of kept
+    // shows (`PassedKeptRetirement`). Each spelling it out again is how a show comes to be labelled passed
+    // while still being counted as work, or refused a send while still being prepped.
+    static func lastNightHasPassed(performanceDate: String?, runEndDate: String?, today: String) -> Bool {
+        runHasPassed(lastNight: runLastNight(runEndDate: runEndDate, performanceDate: performanceDate),
+                     today: today)
+    }
+
     // #1540: has the run STARTED? Judged on its OPENING night, the mirror image of runHasPassed above,
     // and the near edge of the triage queue since Dan ruled that a client's need for photos is over once
     // they have opened. Strictly behind us, so a run opening TONIGHT has not started (his distinction,

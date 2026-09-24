@@ -20,9 +20,9 @@ struct PerformerMatchDismissTests {
     // performer match, snapshotting the cold values on the way.
     private func correctedProspect(_ ctx: ModelContext) -> Prospect {
         let key = Prospect.makeNaturalKey(groupName: "Emerging Artists Series",
-                                          performanceDate: "2026-08-02", venue: "Weill Recital Hall")
+                                          performanceDate: "2082-08-02", venue: "Weill Recital Hall")
         let p = Prospect(naturalKey: key, groupName: "Emerging Artists Series", discipline: "music",
-                         venue: "Weill Recital Hall", performanceDate: "2026-08-02",
+                         venue: "Weill Recital Hall", performanceDate: "2082-08-02",
                          sourceListingURL: nil, priorRelationship: "booked",
                          production: "self", profile: "strong", coverage: "likely_uncovered",
                          fitScore: 27, tier: "high", fitReason: "r", matchedClientName: "Larkin Sable",
@@ -135,9 +135,9 @@ struct PerformerMatchDismissTests {
 
     @Test func dismissingOrConfirmingAProspectWithNoMatchDoesNothing() throws {
         let ctx = ModelContext(try container())
-        let key = Prospect.makeNaturalKey(groupName: "G", performanceDate: "2026-08-02", venue: "V")
+        let key = Prospect.makeNaturalKey(groupName: "G", performanceDate: "2082-08-02", venue: "V")
         let p = Prospect(naturalKey: key, groupName: "G", discipline: "music", venue: "V",
-                         performanceDate: "2026-08-02", sourceListingURL: nil,
+                         performanceDate: "2082-08-02", sourceListingURL: nil,
                          priorRelationship: "warm", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 17, tier: "high", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil)
@@ -200,10 +200,10 @@ struct PerformerMatchDismissTests {
     // may not quietly cool the tone of an ordinary warm lead the scout matched on the org name.
     @Test func anOrdinaryWarmLeadIsUnaffectedByTheGate() throws {
         let ctx = ModelContext(try container())
-        let key = Prospect.makeNaturalKey(groupName: "Aurora Strings", performanceDate: "2026-08-05",
+        let key = Prospect.makeNaturalKey(groupName: "Aurora Strings", performanceDate: "2082-08-05",
                                           venue: "Weill Recital Hall")
         let p = Prospect(naturalKey: key, groupName: "Aurora Strings", discipline: "music",
-                         venue: "Weill Recital Hall", performanceDate: "2026-08-05",
+                         venue: "Weill Recital Hall", performanceDate: "2082-08-05",
                          sourceListingURL: nil, priorRelationship: "booked",
                          production: "self", profile: "strong", coverage: "likely_uncovered",
                          fitScore: 27, tier: "high", fitReason: "r", matchedClientName: "Aurora Strings",
@@ -249,9 +249,9 @@ struct PerformerMatchDismissTests {
     // dismissingOrConfirmingAProspectWithNoMatchDoesNothing above; this pins what it REPORTS.
     @Test func aShowWithNoMatchSaysNothingChanged() throws {
         let ctx = ModelContext(try container())
-        let key = Prospect.makeNaturalKey(groupName: "G", performanceDate: "2026-08-02", venue: "V")
+        let key = Prospect.makeNaturalKey(groupName: "G", performanceDate: "2082-08-02", venue: "V")
         let p = Prospect(naturalKey: key, groupName: "G", discipline: "music", venue: "V",
-                         performanceDate: "2026-08-02", sourceListingURL: nil,
+                         performanceDate: "2082-08-02", sourceListingURL: nil,
                          priorRelationship: "warm", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 17, tier: "high", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil)
