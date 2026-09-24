@@ -143,3 +143,22 @@ describe("the reply drafter is sent to the canonical rate answer (#2874)", () =>
     expect(replyRunbook).not.toMatch(/standing\s+facts\s+only\s+when\s+relevant/i);
   });
 });
+
+// A "not yet" is an opening, not a no. Measured 2026-09-24: a producer wrote "We have no plans for photos
+// as of yet!" and the drafter answered as though they had turned Dan down ("Understood. If photos end up in
+// the plan..."), because the four intents above gave it no reading for an open door and nothing said which
+// way to lean when a reply is unclear. Dan's call, in the session that day: read it as open, and lean
+// optimistic whenever the reply does not plainly say no.
+describe("the reply drafter reads a not yet as an opening", () => {
+  it("classifies a not yet as interested rather than declined", () => {
+    expect(replyRunbook).toMatch(/a\s+"not\s+yet"\s+is\s+`interested`,\s+never\s+`declined`/i);
+  });
+
+  it("leans optimistic when a reply does not plainly say no", () => {
+    expect(replyRunbook).toMatch(/lean\s+optimistic/i);
+  });
+
+  it("tells the draft to make an offer rather than accept a no nobody gave", () => {
+    expect(replyRunbook).toMatch(/never\s+accept\s+a\s+no\s+they\s+did\s+not\s+give/i);
+  });
+});
