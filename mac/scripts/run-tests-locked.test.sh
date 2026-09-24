@@ -1852,9 +1852,16 @@ rm -rf "${QUEUE_LOCK}" "${QUEUE_LOCK}.queue"
 # which would barge past the queue however well this runner behaves. Derived from the tracked tree
 # rather than a list (L96): the only `mkdir` on the directory lock outside a fixture must be the one in
 # `take_dir_lock`, which `check-release-compiles.sh` reaches by sourcing this runner.
+#
+# Two details, both learned by this scan being wrong. Untracked files are read as well as tracked ones,
+# because the script being written is the one a scan of what git tracks cannot see (L456): this passed
+# while `lib/lock-queue.sh` was new and went red the moment it was committed. And comment lines are
+# dropped, because that file's header NAMES the lock and the `mkdir` on it in prose (L208).
 REPO_FOR_SCAN="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-LOCK_MKDIRS="$(cd "${REPO_FOR_SCAN}" && git ls-files '*.sh' | grep -v '\.test\.sh$' \
-  | xargs grep -n -E 'mkdir[^;|&]*(DIR_LOCK\}|xcodebuild-tests\.lock)' 2>/dev/null || true)"
+LOCK_MKDIRS="$(cd "${REPO_FOR_SCAN}" && git ls-files --cached --others --exclude-standard '*.sh' \
+  | grep -v '\.test\.sh$' | sort -u \
+  | xargs grep -n -E 'mkdir[^;|&]*(DIR_LOCK\}|xcodebuild-tests\.lock)' 2>/dev/null \
+  | grep -v -E '^[^:]+:[0-9]+:[[:space:]]*#' || true)"
 assert_equals "exactly one place outside the fixtures takes the directory lock with mkdir" "1" \
   "$(grep -c . <<< "${LOCK_MKDIRS}")"
 assert_contains "and it is take_dir_lock's queued loop" "my_turn_for_dir_lock" "${LOCK_MKDIRS}"
