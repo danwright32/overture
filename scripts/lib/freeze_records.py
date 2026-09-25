@@ -109,3 +109,59 @@ def freeze_verdict(r):
     if sleep_measured(r) and run_loop_measured(r):
         return FREEZE
     return UNMEASURED
+
+
+# #4154: whether the MAIN THREAD was running while a stall lasted.
+#
+# A pass is timed on the wall clock, so `passSeconds` reads the same whether the code did the work or waited
+# for a core. Reproduced 2026-09-25 against a clone of the live store: under CPU contention a pass took 5.45s
+# with the main thread's own CPU clock at 23% of it and the kernel reporting it runnable. These readings are
+# what let a record say so on its own.
+#
+# FIVE ANSWERS. The three states, one for a thread that was not running but carries no state sample to split
+# it, and unmeasured. Never folded: an absent reading is not a computing thread (L98, L11).
+COMPUTING = "computing"
+STARVED = "starved"
+BLOCKED = "blocked"
+NOT_RUNNING_UNSPLIT = "not running unsplit"
+MAIN_THREAD_STATES = (COMPUTING, STARVED, BLOCKED, NOT_RUNNING_UNSPLIT, UNMEASURED)
+
+# The share of a stall's awake time the main thread must have spent on the CPU to count as COMPUTING. Chosen
+# between the two readings #4154 measured on the same pass: 0.92 on a quiet Mac and 0.23 to 0.41 under
+# contention, so a line at one half is far from both rather than tuned to either (L172).
+RUNNING_SHARE = 0.5
+
+
+def _number(r, key):
+    v = r.get(key)
+    return v if isinstance(v, (int, float)) and not isinstance(v, bool) else None
+
+
+def main_thread_measured(r):
+    return _number(r, "mainThreadCPUSeconds") is not None
+
+
+def main_thread_share(r):
+    """CPU seconds over the stall's AWAKE seconds, or None. A sleep is taken out of the denominator, because a
+    thread cannot run while the Mac does not, and #4153 already names those."""
+    cpu = _number(r, "mainThreadCPUSeconds")
+    seconds = _number(r, "seconds")
+    if cpu is None or seconds is None:
+        return None
+    asleep = _number(r, "asleepSeconds") or 0
+    awake = seconds - asleep
+    return cpu / awake if awake > 0 else None
+
+
+def main_thread_verdict(r):
+    """One of MAIN_THREAD_STATES."""
+    share = main_thread_share(r)
+    if share is None:
+        return UNMEASURED
+    if share >= RUNNING_SHARE:
+        return COMPUTING
+    runnable = r.get("mainThreadRunnableSamples")
+    waiting = r.get("mainThreadWaitingSamples")
+    if not isinstance(runnable, int) or not isinstance(waiting, int) or runnable + waiting == 0:
+        return NOT_RUNNING_UNSPLIT
+    return STARVED if runnable >= waiting else BLOCKED
