@@ -7,6 +7,10 @@ import SwiftData
 // been ADDITIVE (a new entity, and at most a defaulted column on an existing one), which SwiftData's
 // lightweight migration handles on its own. The launch-time backup is the only safety net, so each
 // addition is rehearsed against a clone of the live store before it ships (see InquiryMigrationDryRun).
+//
+// #3558: every stored property of every model here is recorded in `fixtures/stored-properties.txt`, and
+// StoredPropertyRatchetTests fails when one disappears, naming the column. A new property is added to
+// that list; a removal deletes its line in a change of its own that states the rehearsal.
 enum AppSchema {
     static let models: [any PersistentModel.Type] = [
         Prospect.self,
