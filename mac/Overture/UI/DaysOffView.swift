@@ -70,6 +70,11 @@ struct DaysOffView: View {
         // #3859: this surface counts its own rebuild. Bound to `_` rather than called as a statement
         // because `body` is a ViewBuilder, which takes a declaration and not a bare void expression.
         let _ = freezeWatch?.recordPass()
+        // #4197: evaluations and derivations counted apart, so `ABannerDerivesNothingOnAnySheetTests` can
+        // hold a banner over this sheet to zero derivations. Debug only: the counter is declared there.
+        #if DEBUG
+        let _ = QueueRenderCounter.recordRender(surface: StallSurface.daysOff.rawValue)
+        #endif
         VStack(alignment: .leading, spacing: 0) {
             header
             Divider().overlay(OVColor.line)
@@ -235,6 +240,9 @@ struct DaysOffView: View {
         //
         // #1421: the calendar and the bookings now come from the app's snapshot, so drawing this section
         // decodes the export ZERO times. `cancelledRows` is still a store fetch, and still read once.
+        #if DEBUG
+        QueueRenderCounter.recordSurfaceDerivation(StallSurface.daysOff.rawValue)
+        #endif
         let cal = availability.calendar
         let bookings = availability.bookings
         let today = QueueModel.easternToday()

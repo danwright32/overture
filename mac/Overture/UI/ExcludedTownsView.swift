@@ -37,12 +37,25 @@ struct ExcludedTownsView: View {
     // way userRows drives his own half. The tested listing reads the same rows, so the two cannot disagree.
     @Query(sort: \AllowedSeedTown.town) private var allowedRows: [AllowedSeedTown]
 
-    private var listing: ExcludedTownEditing.Listing { ExcludedTownEditing.listing(in: context) }
+    private var listing: ExcludedTownEditing.Listing {
+        #if DEBUG
+        QueueRenderCounter.recordSurfaceDerivation(StallSurface.excludedTowns.rawValue)
+        #endif
+        return ExcludedTownEditing.listing(in: context)
+    }
 
     var body: some View {
         // #3859: this surface counts its own rebuild. Bound to `_` rather than called as a statement
         // because `body` is a ViewBuilder, which takes a declaration and not a bare void expression.
         let _ = freezeWatch?.recordPass()
+        // #4197: evaluations and derivations counted apart, so `ABannerDerivesNothingOnAnySheetTests` can
+        // hold a banner over this sheet to zero derivations. Debug only: the counter is declared there.
+        #if DEBUG
+        let _ = QueueRenderCounter.recordRender(surface: StallSurface.excludedTowns.rawValue)
+        #endif
+        // #4197: bound ONCE. `listing` is a store fetch behind a computed property, and the two seed
+        // sections read it five times between them, so one drawing fetched it five times (L383).
+        let listing = self.listing
         VStack(alignment: .leading, spacing: 0) {
             header
             Divider().overlay(OVColor.line)
@@ -50,8 +63,8 @@ struct ExcludedTownsView: View {
             CappedScrollView(maxHeight: 460) {
                 VStack(alignment: .leading, spacing: OVSpacing.lg) {
                     yourTowns
-                    allowedBack
-                    alwaysSkipped
+                    allowedBack(listing)
+                    alwaysSkipped(listing)
                 }
                 .padding(OVSpacing.lg)
             }
@@ -103,7 +116,7 @@ struct ExcludedTownsView: View {
 
     // MARK: - The built-in half: skipped from the start, and now his to take back too (#1221)
 
-    private var alwaysSkipped: some View {
+    private func alwaysSkipped(_ listing: ExcludedTownEditing.Listing) -> some View {
         VStack(alignment: .leading, spacing: OVSpacing.xs) {
             sectionHeading("Always skipped", systemImage: "map", count: listing.seedSkipped.count)
             // Says something the heading does not: these are built in, so he never had to refuse them, and
@@ -126,7 +139,7 @@ struct ExcludedTownsView: View {
 
     // MARK: - Built-in towns he has taken back (#1221)
 
-    @ViewBuilder private var allowedBack: some View {
+    @ViewBuilder private func allowedBack(_ listing: ExcludedTownEditing.Listing) -> some View {
         if !listing.seedAllowed.isEmpty {
             VStack(alignment: .leading, spacing: OVSpacing.xs) {
                 sectionHeading("Allowed back in", systemImage: "map.circle", count: listing.seedAllowed.count)
