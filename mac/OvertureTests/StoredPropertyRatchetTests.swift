@@ -38,6 +38,29 @@ struct StoredPropertyRatchetTests {
         return out
     }
 
+    // "Entity.oldName" for every property renamed the SwiftData way, with `originalName:`. SwiftData
+    // carries the column across under the new name, so the old name leaving the list is not a removal.
+    // Measured 2026-09-25: an attribute WITHOUT the annotation has an EMPTY originalName (not its own
+    // name), so both empty and equal-to-name are read as no rename.
+    static func renamedFrom() -> Set<String> {
+        var out: Set<String> = []
+        for entity in AppSchema.schema.entities {
+            for a in entity.attributes where !a.originalName.isEmpty && a.originalName != a.name {
+                out.insert("\(entity.name).\(a.originalName)")
+            }
+            for r in entity.relationships where !r.originalName.isEmpty && r.originalName != r.name {
+                out.insert("\(entity.name).\(r.originalName)")
+            }
+        }
+        return out
+    }
+
+    // What the recorded list holds that the schema no longer carries under any name, keyed by entity so
+    // a rename on one model never excuses the same property name on another.
+    static func removed(recorded: Set<String>, present: Set<String>, renamedFrom: Set<String>) -> [String] {
+        recorded.subtracting(present).subtracting(renamedFrom).sorted()
+    }
+
     static func recorded() throws -> Set<String> {
         let url = RepoRoot.url.appendingPathComponent(listPath)
         let text = try String(contentsOf: url, encoding: .utf8)
@@ -58,7 +81,7 @@ struct StoredPropertyRatchetTests {
     @Test func noStoredPropertyHasBeenRemoved() throws {
         let present = Self.derived()
         let entities = Set(AppSchema.schema.entities.map(\.name))
-        let gone = try Self.recorded().subtracting(present).sorted()
+        let gone = Self.removed(recorded: try Self.recorded(), present: present, renamedFrom: Self.renamedFrom())
         let lines = gone.map { column -> String in
             let entity = String(column.split(separator: ".").first ?? "")
             return entities.contains(entity) ? "  \(column)" : "  \(column)   (the whole \(entity) model is gone)"
@@ -76,8 +99,40 @@ struct StoredPropertyRatchetTests {
             gets its own change with a rehearsal against a clone of the live store (see \
             InquiryMigrationDryRunTests), and that change deletes these lines from \(Self.listPath) \
             and states the rehearsal. A rename is a removal too, unless it carries \
-            @Attribute(originalName:).
+            @Attribute(originalName:) naming the old property: a rename done that way is recognised and \
+            not listed here, and only its new name needs adding to the list.
             """)
+    }
+
+    // A plain removal is still reported.
+    @Test func aPlainRemovalIsReported() {
+        let gone = Self.removed(recorded: ["M.a", "M.b"], present: ["M.a"], renamedFrom: [])
+        #expect(gone == ["M.b"])
+    }
+
+    // A rename done the SwiftData way leaves the old name recorded and absent, and is not a removal.
+    @Test func aRenameCarryingOriginalNameIsNotARemoval() {
+        let gone = Self.removed(recorded: ["M.a", "M.old"], present: ["M.a", "M.new"], renamedFrom: ["M.old"])
+        #expect(gone.isEmpty)
+    }
+
+    // A rename recognised on one entity must not excuse the same property name on another.
+    @Test func aRenameExcusesOnlyItsOwnEntity() {
+        let gone = Self.removed(recorded: ["M.old", "N.old"], present: ["M.new"], renamedFrom: ["M.old"])
+        #expect(gone == ["N.old"])
+    }
+
+    // A whole model gone is still reported, property by property.
+    @Test func aWholeModelGoneIsReported() {
+        let gone = Self.removed(recorded: ["M.a", "Gone.x", "Gone.y"], present: ["M.a"], renamedFrom: [])
+        #expect(gone == ["Gone.x", "Gone.y"])
+    }
+
+    // The real rename in this app, RefusedContactAddress.emailKey to handleKey, is read off the schema.
+    // Without this the pure tests above would pass while renamedFrom() read nothing (L3).
+    @Test func theLiveSchemaRenameIsRecognised() {
+        #expect(Self.renamedFrom().contains("RefusedContactAddress.emailKey"), "renamedFrom() did not find the emailKey to handleKey rename: \(Self.renamedFrom().sorted())")
+        #expect(Self.renamedFrom().isDisjoint(with: Self.derived()), "An originalName equal to a live property name was read as a rename: \(Self.renamedFrom().intersection(Self.derived()).sorted())")
     }
 
     // Keeps the list complete, so a property added today is protected from being removed tomorrow.
