@@ -81,8 +81,6 @@ A sentence written as a constant is read here at the file that RENDERS it, not o
     ActionAck.manualPrepNeedsSubjectReason  "Add a subject line"
 `Domain/OmniFocusFailureKind.swift`
     OmniFocusSync.couldNotUpdatePhrase  "It could not update "
-`Domain/ReplyComposition.swift`
-    InquiryCopy.replySubjectDefault  "Re: your inquiry"
 `Domain/ReplyPanel.swift`
     AttachConversationWriteCopy.linkedByHand  "You linked this conversation. Overture didn't email them."
     FormOutreachCopy.sentIt  "I sent it"
@@ -124,6 +122,8 @@ A sentence written as a constant is read here at the file that RENDERS it, not o
     SendIdentity.danWright  "Dan Wright"
 `Integration/InquiryConversationAttach.swift`
     SendIdentity.danWright  "Dan Wright"
+`Integration/InquiryReplySender.swift`
+    InquiryCopy.replySubjectDefault  "Re: your inquiry"
 `Integration/ReplyProposalSweep.swift`
     SendIdentity.danWright  "Dan Wright"
 `UI/BuildFreshnessSheet.swift`

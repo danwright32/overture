@@ -268,6 +268,17 @@ enum ReplyDetection {
         return email(from: headerValue("from", of: newest)) == me && wasSentByUser(newest)
     }
 
+    // #3927: what the conversation is called: the Subject of its OLDEST real message, which is the name a
+    // mail client shows for the whole thread. Nil when the thread cannot be read, carries no message, or
+    // that message has no Subject, so a caller never records a name the conversation does not have.
+    static func conversationSubject(threadJSON data: Data) -> String? {
+        guard let obj = ResponseBody.json(data, from: Self.endpoint).value,
+              let messages = obj["messages"] as? [[String: Any]],
+              let oldest = realMessagesNewestFirst(messages).last else { return nil }
+        let subject = headerValue("subject", of: oldest).trimmingCharacters(in: .whitespacesAndNewlines)
+        return subject.isEmpty ? nil : subject
+    }
+
     private static func headerValue(_ name: String, of message: [String: Any]) -> String {
         guard let payload = message["payload"] as? [String: Any],
               let headers = payload["headers"] as? [[String: Any]] else { return "" }

@@ -152,7 +152,8 @@ enum DetachConversation {
     //
     // The field list is derived from what `AttachConversation.attach(to: Inquiry)` writes, not copied
     // from the pitch version above, and the two genuinely differ. An inquiry has no
-    // `attachedThreadSubject`, no recipients frozen by the attach, and no address of the attach's
+    // `attachedThreadSubject` (since #3927 it records the found thread's name in `conversationSubject`,
+    // cleared below), no recipients frozen by the attach, and no address of the attach's
     // making, because it already carries the address it came from: that is why its match is identity
     // rather than a guess and why it needs no confirming. It has one the pitch does not, `sentAt`,
     // filled from Dan's own message on the thread when the inquiry had none.
@@ -173,6 +174,9 @@ enum DetachConversation {
 
         i.gmailThreadId = nil
         i.conversationAttachedAt = nil
+        // #3927: the attach recorded the conversation's subject, and it names a conversation this inquiry
+        // is no longer on, so the next answer would continue the wrong one.
+        i.conversationSubject = nil
 
         // Only the date this attach supplied. One that was already there was never the detach's to
         // remove, which is the same rule `attachWroteAddress` holds above.

@@ -6,6 +6,18 @@ import Foundation
 // by the shared reply-detection pipeline exactly like a prospect's.
 @MainActor
 enum InquiryReplySender {
+    // #3927: what an answer to this inquiry is CALLED, in one place, the mirror of
+    // `SendService.replySubject(for:of:)`. The reply screen starts its subject field here, and the
+    // confirmation and the send fall back to it, so what Dan approves cannot differ from what goes out
+    // (L64). An answer threaded onto a conversation continues that conversation's subject: Spark files a
+    // message whose subject differs from its conversation's as a new conversation whatever its headers
+    // say (#3891). "Re: your inquiry" is only for an inquiry with no conversation to continue.
+    static func replySubject(for inquiry: Inquiry) -> String {
+        guard let subject = inquiry.conversationSubject?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !subject.isEmpty else { return InquiryCopy.replySubjectDefault }
+        return FollowUp.continuing(subject)
+    }
+
     // Returns whether the send succeeded, so the caller surfaces a failure instead of it failing
     // silently (#499 idiom). On success the inquiry records its thread and send time; on failure it is
     // left untouched, so nothing looks sent that was not.
@@ -65,6 +77,13 @@ enum InquiryReplySender {
             let receipt = try await sender.send(mail)
             inquiry.sentAt = now
             inquiry.gmailThreadId = receipt.threadId.isEmpty ? nil : receipt.threadId
+            // #3927: the first send names the conversation it starts, so the next answer continues it.
+            // Only when none is recorded: a conversation found in Gmail already carries its own name, and
+            // a later answer goes out under "Re:" plus this one unless Dan retypes it.
+            if (inquiry.conversationSubject ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                let sent = subject.trimmingCharacters(in: .whitespacesAndNewlines)
+                inquiry.conversationSubject = sent.isEmpty ? nil : sent
+            }
             // #2647: keep a prior real id rather than blanking it when the read back failed, on the same
             // reasoning as the prospect reply path: a real ancestor still threads, nothing does not (L5).
             // #2661: the chain moves WITH the message it is the ancestry of, and only when there is a
