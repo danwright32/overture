@@ -1848,6 +1848,37 @@ assert_equals "the queue is empty once both have run" "0" "$(queue_tickets)"
 assert_equals "and the lock is free" "no" "$([ -d "${QUEUE_LOCK}" ] && echo yes || echo no)"
 rm -rf "${QUEUE_LOCK}" "${QUEUE_LOCK}.queue"
 
+# Stopped the instant after TAKING the lock, before anything else, a run must still free it. The lock
+# used to be recorded as held only after the queue was left and the owner written, so a signal landing in
+# between exited through a cleanup that did not know it held the lock, and left it planted with no owner,
+# which the stale claim reads as ALIVE: stuck until a person removed it. Ovation's port hit this window
+# in its Linux CI (downbeat#524). The pause seam holds the run exactly there, so this is not a race (L134).
+TAKE_PAUSE="${DIR_LOCK_FIXTURE_DIR}/pause-after-take"
+: > "${TAKE_PAUSE}"
+( OVERTURE_DIR_LOCK="${QUEUE_LOCK}" OVERTURE_DIR_LOCK_TIMEOUT=30 OVERTURE_DIR_LOCK_POLL=1 \
+  OVERTURE_DIR_LOCK_PAUSE_AFTER_TAKE_FILE="${TAKE_PAUSE}" \
+  run_wrapper_with_stub_xcodebuild "${GREEN_RUN_LOG}" 0 > "${DIR_LOCK_FIXTURE_DIR}/taken.out" 2>&1 ) &
+TAKEN_WRAPPER=$!
+take_waited=0
+while [[ ! -e "${TAKE_PAUSE}.reached" ]] && [[ "${take_waited}" -lt 300 ]]; do
+  sleep 0.05; take_waited=$((take_waited + 1))
+done
+assert_equals "the run paused holding the lock, so this case measured the window" "held" \
+  "$([ -d "${QUEUE_LOCK}" ] && echo held || echo free)"
+TAKEN_RUNNER="$(cat "${TAKE_PAUSE}.reached" 2>/dev/null)"
+assert_equals "and named itself at the seam" "yes" "$([[ "${TAKEN_RUNNER}" =~ ^[0-9]+$ ]] && echo yes || echo no)"
+kill -TERM "${TAKEN_RUNNER}" 2>/dev/null
+take_waited=0
+while kill -0 "${TAKEN_RUNNER}" 2>/dev/null && [[ "${take_waited}" -lt 200 ]]; do
+  sleep 0.05; take_waited=$((take_waited + 1))
+done
+kill -KILL "${TAKEN_RUNNER}" 2>/dev/null
+wait "${TAKEN_WRAPPER}" 2>/dev/null
+assert_equals "a run stopped just after taking the lock frees it" "free" \
+  "$([ -d "${QUEUE_LOCK}" ] && echo held || echo free)"
+assert_equals "and leaves no ticket" "0" "$(queue_tickets)"
+rm -rf "${QUEUE_LOCK}" "${QUEUE_LOCK}.queue" "${TAKE_PAUSE}" "${TAKE_PAUSE}.reached"
+
 # Stopping a waiting run STOPS it (L473). A trap on INT or TERM that only cleans up lets the script carry
 # on: the signal lands, the cleanup leaves the queue, the loop goes round and the run rejoins at the BACK
 # instead of ending, and during the build the same trap released the lock while the run went on. The

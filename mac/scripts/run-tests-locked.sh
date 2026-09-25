@@ -48,6 +48,9 @@ DIR_LOCK_POLL="${OVERTURE_DIR_LOCK_POLL:-1}"
 # A TEST ONLY SEAM, mirroring Downbeat's. The interleaving below is microseconds wide and mostly does
 # not open, so racing real processes to produce it proves nothing (L134). A test drives it instead.
 DIR_LOCK_PAUSE_FILE="${OVERTURE_DIR_LOCK_PAUSE_FILE:-}"
+# The same kind of TEST ONLY SEAM, at the instant after the lock is TAKEN (downbeat#524): a signal landing
+# there is the window a test cannot hit by racing, so a test holds the run exactly there instead.
+DIR_LOCK_PAUSE_AFTER_TAKE_FILE="${OVERTURE_DIR_LOCK_PAUSE_AFTER_TAKE_FILE:-}"
 DIR_LOCK_HELD=""
 # #2195: how many tests the last green run on this Mac executed. See the completeness check in main().
 # Overridable so the shell fixtures point it at a throwaway path: they drive main() with a stubbed
@@ -579,7 +582,8 @@ dir_lock_owner_is_dead() {
 dir_lock_pause_at() {
   local marker="${1:-}" waited=0
   [[ -n "${marker}" ]] || return 0
-  : > "${marker}.reached"
+  # This run's pid, so a test can signal the runner itself rather than the wrapper around it.
+  echo "$$" > "${marker}.reached"
   while [[ -e "${marker}" ]] && [[ "${waited}" -lt 5000 ]]; do
     sleep 0.05
     waited=$((waited + 50))
@@ -689,12 +693,18 @@ take_dir_lock() {
     fi
     sleep "${DIR_LOCK_POLL}"
   done
+  # Recorded as HELD on the very next line, before anything else (downbeat#524). It used to be the last
+  # line here, after leaving the queue and writing the owner, so a signal landing in between exited
+  # through a cleanup that did not know it held the lock and left it planted with NO owner, which
+  # dir_lock_owner_is_dead reads as alive: stuck until a person removed it. Ovation's port hit exactly
+  # that window in CI. Held first means the exit and signal cleanup (release_dir_lock) always frees it.
+  DIR_LOCK_HELD=1
+  dir_lock_pause_at "${DIR_LOCK_PAUSE_AFTER_TAKE_FILE}"
   # Holding the lock, so this run is nobody's turn to wait for any more.
   lock_queue_leave
   # The owner line is what lets the NEXT run tell a live holder from a dead one, so it is written
   # immediately after the lock is taken rather than later.
   echo "overture:$$" > "${DIR_LOCK}/owner" 2>/dev/null || true
-  DIR_LOCK_HELD=1
 }
 
 # Released on EVERY exit path, not only the tidy one. A directory lock left planted blocks the next
