@@ -52,15 +52,20 @@ struct ReplyProposalSweep {
              now: Date = Date(),
              defaults: UserDefaults = .standard,
              save: (() throws -> Void)? = nil,
+             // #4107: the reconcile tick's one read of the store, shared with the search below. nil
+             // fetches here, as it always did.
+             rows: StoreRows? = nil,
              search: (() async -> GmailReplySearch.Outcome)? = nil,
              attach: (@MainActor (_ inquiries: [Inquiry], _ candidates: [GmailReplySearch.InboundMessage])
                         async -> InquiryConversationAttach.Outcome)? = nil) async -> Outcome {
+        // #4107: one read, shared with the search, when the caller did not bring one.
+        let rows = rows ?? StoreRows.fetch(from: context)
         let outcome: GmailReplySearch.Outcome
         if let search {
             outcome = await search()
         } else {
             outcome = await GmailReplySearch(fromEmail: fromEmail)
-                .search(in: context, now: now, defaults: defaults)
+                .search(in: context, now: now, defaults: defaults, rows: rows)
         }
 
         let candidates: [GmailReplySearch.InboundMessage]
@@ -77,7 +82,9 @@ struct ReplyProposalSweep {
             saveFailed = searchSaveFailed
         }
 
-        let prospects = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
+        // #4107: read AFTER the search's await rather than before it, and live, so a show deleted while the
+        // mailbox was being read is not proposed onto.
+        let prospects = rows.liveProspects
         var proposed = 0
         for p in prospects {
             guard !p.replyWatchManualOutcome, !p.replyWatchIsBooked else { continue }
@@ -107,8 +114,8 @@ struct ReplyProposalSweep {
 
         // #2712: the inquiry half of the same read. A hire inquiry Dan answered in his own Gmail is in
         // exactly the position a form pitch is, so it rides these same candidates rather than a second
-        // mailbox pass. `try?` keeps a container that predates Inquiry working: it yields none.
-        let inquiries = (try? context.fetch(FetchDescriptor<Inquiry>())) ?? []
+        // mailbox pass.
+        let inquiries = rows.liveInquiries
         let attachOutcome: InquiryConversationAttach.Outcome
         if let attach {
             attachOutcome = await attach(inquiries, candidates)

@@ -61,6 +61,7 @@ What is not, and why:
 - `Domain/ProducerShapedName.swift`: parser tokens matched against a ticketing feed, never Overture's voice
 - `Domain/ProducerShapedName.swift`: parser tokens matched against a listing page, never Overture's voice
 - `Domain/ProducerShapedName.swift`: parser tokens matched against a listing page, never Overture's voice
+- `Domain/ReconcileTickTimeline.swift`: developer diagnostic log, not the app's own voice (#915)
 - `Domain/ReplyCandidateMatch.swift`: the reasons behind a score, for diagnosing a wrong proposal.
 - `Domain/RunBoundaryViolations.swift`: a filename and a phrase MATCHED in a log, not sentences Overture says
 - `Domain/SameNightTitleVariantMerge.swift`: developer diagnostic log, not the app's own voice (#915)
