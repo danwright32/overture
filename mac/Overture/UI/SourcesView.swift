@@ -238,7 +238,9 @@ struct SourcesView: View {
         // computed properties by hand rather than trusting a green run.
         key.add(excludedTownRows)
         key.add(allowedSeedTownRows)
-        return renderMemo.value(fingerprint: key.finalized(), cardKeys: [], now: Date()) {
+        // #4106: and any save into this store, through any context (see `ScopeMemo.value`'s `savesIn`).
+        return renderMemo.value(fingerprint: key.finalized(), cardKeys: [], now: Date(),
+                                savesIn: context.container) {
             #if DEBUG
             QueueRenderCounter.recordSurfaceDerivation(QueueRenderCounter.sourcesSurface)
             #endif

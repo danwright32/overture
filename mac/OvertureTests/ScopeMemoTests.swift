@@ -49,7 +49,7 @@ struct ScopeMemoTests {
 
         func evaluate(at when: Date) -> Int {
             memo.value(fingerprint: Self.fingerprint(rows),
-                       cardKeys: ["a"], now: when) { rows.count }
+                       cardKeys: ["a"], now: when, savesIn: nil) { rows.count }
         }
 
         _ = evaluate(at: t0)
@@ -68,7 +68,7 @@ struct ScopeMemoTests {
         // about the fixture rather than about the memo.
         func evaluate(at when: Date) -> String {
             memo.value(fingerprint: Self.fingerprint(rows),
-                       cardKeys: [], now: when) { rows.map(\.groupName).joined(separator: "|") }
+                       cardKeys: [], now: when, savesIn: nil) { rows.map(\.groupName).joined(separator: "|") }
         }
 
         let first = evaluate(at: t0)
@@ -87,7 +87,7 @@ struct ScopeMemoTests {
 
         func evaluate(at when: Date) -> Int {
             memo.value(fingerprint: Self.fingerprint(rows),
-                       cardKeys: [], now: when) { rows.count }
+                       cardKeys: [], now: when, savesIn: nil) { rows.count }
         }
 
         #expect(evaluate(at: t0) == 12)
@@ -105,7 +105,7 @@ struct ScopeMemoTests {
 
         func evaluate(at when: Date) -> String {
             memo.value(fingerprint: Self.fingerprint(rows),
-                       cardKeys: [], now: when) { rows.map(\.naturalKey).joined(separator: "|") }
+                       cardKeys: [], now: when, savesIn: nil) { rows.map(\.naturalKey).joined(separator: "|") }
         }
 
         let before = evaluate(at: t0)
@@ -122,7 +122,7 @@ struct ScopeMemoTests {
 
         func evaluate(keys: Set<String>, at when: Date) -> Set<String> {
             memo.value(fingerprint: Self.fingerprint(rows),
-                       cardKeys: keys, now: when) { keys }
+                       cardKeys: keys, now: when, savesIn: nil) { keys }
         }
 
         _ = evaluate(keys: ["a", "b"], at: t0)
@@ -143,7 +143,7 @@ struct ScopeMemoTests {
 
         func evaluate(at when: Date) -> Int {
             memo.value(fingerprint: Self.fingerprint(rows), cardKeys: [], now: when,
-                       staleAfter: .never) { rows.count }
+                       staleAfter: .never, savesIn: nil) { rows.count }
         }
 
         _ = evaluate(at: t0)
@@ -161,7 +161,7 @@ struct ScopeMemoTests {
 
         func evaluate(at when: Date) -> Int {
             memo.value(fingerprint: Self.fingerprint(rows),
-                       cardKeys: [], now: when) { rows.count }
+                       cardKeys: [], now: when, savesIn: nil) { rows.count }
         }
 
         _ = evaluate(at: t0)
@@ -172,6 +172,56 @@ struct ScopeMemoTests {
             past the window it rebuilds, because the derivation reads the clock and this memo does not \
             claim to know everything in it the clock reaches
             """)
+    }
+
+    // #4106: a save into the store the derivation reads, through ANY context, rebuilds. Measured on the
+    // queue: a write saved through a second context moved no identity and fired no observed field, so the
+    // memo served the answer from before the save and the screen went stale (L40).
+    //
+    // The save count is a counter of this test's OWN, on a notification center of its own, because the
+    // shared one hears every concurrently running suite's saves (L439's shape). The notification is the
+    // one SwiftData posts, carrying a real context; `StoreSaveCountTests` holds the other half, that a
+    // real save posts it.
+    @Test func aSaveIntoTheStoreRebuildsEvenWhenNothingObservedMoved() throws {
+        let c = try container()
+        let ctx = ModelContext(c)
+        let rows = seed(ctx, rows: 12)
+        let center = NotificationCenter()
+        let memo = ScopeMemo<Int>(saves: StoreSaveCount(center: center))
+
+        func evaluate(at when: Date) -> Int {
+            memo.value(fingerprint: Self.fingerprint(rows), cardKeys: [], now: when,
+                       savesIn: c) { rows.count }
+        }
+
+        _ = evaluate(at: t0)
+        _ = evaluate(at: t0.addingTimeInterval(0.1))
+        #expect(memo.builds == 1, Comment(rawValue: "with no save between them the second evaluation "
+                + "must be a hit, or the rebuild below proves nothing"))
+        center.post(name: ModelContext.didSave, object: ModelContext(c))
+        _ = evaluate(at: t0.addingTimeInterval(0.2))
+        #expect(memo.builds == 2, Comment(rawValue:
+            "a save into the store left the memo at \(memo.builds) builds, so it would serve the answer "
+            + "from before a write saved through another context (#4106)"))
+    }
+
+    // And ONLY that store. A save into another container is somebody else's change.
+    @Test func aSaveIntoAnotherStoreRebuildsNothing() throws {
+        let c = try container()
+        let ctx = ModelContext(c)
+        let rows = seed(ctx, rows: 12)
+        let center = NotificationCenter()
+        let memo = ScopeMemo<Int>(saves: StoreSaveCount(center: center))
+
+        func evaluate(at when: Date) -> Int {
+            memo.value(fingerprint: Self.fingerprint(rows), cardKeys: [], now: when,
+                       savesIn: c) { rows.count }
+        }
+
+        _ = evaluate(at: t0)
+        center.post(name: ModelContext.didSave, object: ModelContext(try container()))
+        _ = evaluate(at: t0.addingTimeInterval(0.1))
+        #expect(memo.builds == 1, "a save into a different store rebuilt this one's answer")
     }
 
     @Test func theFingerprintIsCheapEnoughToBeWorthTaking() throws {

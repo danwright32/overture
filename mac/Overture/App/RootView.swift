@@ -247,8 +247,9 @@ struct RootView: View {
         // by observation tracking, both unchanged, so this only ever governs the CLOCK's half.
         let staleAfter: ScopeMemo<DueWork.CountAndNextChange>.Staleness =
             followUpsMemo.held.flatMap(\.couldChangeAt).map { .at($0) } ?? .never
+        // #4106: and any save into this store, through any context (see `ScopeMemo.value`'s `savesIn`).
         return followUpsMemo.value(fingerprint: fingerprint.finalized(), cardKeys: [], now: now,
-                                   staleAfter: staleAfter) {
+                                   staleAfter: staleAfter, savesIn: context.container) {
             DueWork.countAndNextChange(prospects: allProspects, inquiries: allInquiries, now: now,
                                        replyRunAlive: replyRunAlive)
         }.total

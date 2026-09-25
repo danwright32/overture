@@ -532,7 +532,9 @@ struct QueueView: View {
         // as it always was.
         let prebuilt = renderMemo.held?.cards.requestedKeys
         let cardKeysForMemo = prebuilt.map { requested.isSubset(of: $0) ? $0 : requested } ?? requested
-        return renderMemo.value(fingerprint: key.finalized(), cardKeys: cardKeysForMemo, now: now) {
+        // A save through ANY context is a change too, which `ScopeMemo` itself enforces (`savesIn`).
+        return renderMemo.value(fingerprint: key.finalized(), cardKeys: cardKeysForMemo, now: now,
+                                savesIn: context.container) {
             QueueRenderPass.make(QueueRenderPass.Inputs(
                 allProspects: QueueRenderPass.Corpus(allProspects),
                 inquiries: inquiryRows,
@@ -557,7 +559,9 @@ struct QueueView: View {
                 // scrolled past since the app opened.
                 requestedCardKeys: cardKeysForMemo,
                 cardKeyRegistry: cardKeys,
-                producerTables: producerTables(promoted: promoted, demoted: demoted, now: now)))
+                producerTables: producerTables(overrides: ProducerOverrides(promotedRows: promoted,
+                                                                            demotedRows: demoted),
+                                               now: now)))
         }
     }
 
@@ -571,18 +575,19 @@ struct QueueView: View {
     // one keeps the content key its exemption names. Called only on a render memo MISS, so a hit does not
     // pay the per show mapping either.
     //
-    // The two override tables arrive as arguments, read by the caller outside the render memo's build, for
-    // the reason written above that memo's key: a query read inside the build makes every save look like
-    // a change.
-    private func producerTables(promoted: [PromotedProducer], demoted: [DemotedHouse],
-                                now: Date) -> QueueModel.ProducerTables {
+    // The overrides arrive as an argument, built by the caller from the two queries it read outside the
+    // render memo's build, for the reason written above that memo's key.
+    private func producerTables(overrides: ProducerOverrides, now: Date) -> QueueModel.ProducerTables {
         let shows = allProspects.map { ProducerGate.Show(presenter: $0.presenter, venue: $0.venue) }
-        let overrides = ProducerOverrides(promotedRows: promoted, demotedRows: demoted)
         return producerTablesMemo.value(
             fingerprint: QueueModel.ProducerTables.key(shows: shows, overrides: overrides),
             // NO clock window. These tables read no clock at all, so a staleness bound here would be
             // one rebuild of a 68 ms table every two seconds of active use, bought for nothing.
-            cardKeys: [], now: now, staleAfter: .never) {
+            cardKeys: [], now: now, staleAfter: .never,
+            // No save count: this key hashes the presenter and venue CONTENT the tables read, so a save
+            // that changed either is already a different key, and one that did not cannot change the
+            // tables. Keying on saves would rebuild a 68 ms table on every write for nothing.
+            savesIn: nil) {
             QueueModel.ProducerTables(shows: shows, overrides: overrides)
         }
     }

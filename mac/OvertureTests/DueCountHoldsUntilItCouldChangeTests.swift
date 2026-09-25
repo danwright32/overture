@@ -86,7 +86,7 @@ struct DueCountHoldsUntilItCouldChangeTests {
         let staleAfter: ScopeMemo<DueWork.CountAndNextChange>.Staleness =
             memo.held.flatMap(\.couldChangeAt).map { .at($0) } ?? .never
         return memo.value(fingerprint: fingerprint.finalized(), cardKeys: [], now: now,
-                          staleAfter: staleAfter) {
+                          staleAfter: staleAfter, savesIn: nil) {
             DueWork.countAndNextChange(prospects: prospects, inquiries: inquiries, now: now,
                                        replyRunAlive: false)
         }.total

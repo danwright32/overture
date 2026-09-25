@@ -136,7 +136,9 @@ struct ArchiveView: View {
         fingerprint.add(demotedHouses)
         fingerprint.add(watchedSources)
         fingerprint.add(refusedAddresses)
-        return scopeMemo.value(fingerprint: fingerprint.finalized(), cardKeys: keys, now: Date()) {
+        // #4106: and any save into this store, through any context (see `ScopeMemo.value`'s `savesIn`).
+        return scopeMemo.value(fingerprint: fingerprint.finalized(), cardKeys: keys, now: Date(),
+                               savesIn: context.container) {
             QueueModel.scope(from: prospects, answers: orgAnswers,
                              overrides: ProducerOverrides(promotedRows: promotedProducers,
                                                           demotedRows: demotedHouses),

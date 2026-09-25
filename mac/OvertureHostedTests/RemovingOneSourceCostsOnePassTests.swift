@@ -225,4 +225,32 @@ struct RemovingOneSourceCostsOnePassTests {
             + "time(s) over \(evaluations) body evaluation(s). Every message shown while this sheet "
             + "is open costs a whole-store pass (#4112)"))
     }
+
+    // #4106: an edit saved through ANOTHER context must still reach the sheet. The harness's own context
+    // is not the one the sheet reads (the view reads the container's main context), so this is the route
+    // a background run takes. The row's identity does not move, so the fingerprint cannot see it, and the
+    // main context's copy may fire no observed field; the store's save count is what the memo is told by,
+    // and `ScopeMemo` requires every caller to name its store for exactly this reason.
+    @Test func anEditSavedThroughAnotherContextStillDerivesTheSheet() async throws {
+        let c = try container()
+        let ctx = ModelContext(c)
+        let sources = seed(ctx)
+
+        let feedback = ActionFeedback()
+        let (window, hosting) = host(Harness(container: c, prospects: [], feedback: feedback))
+        defer { window.close() }
+
+        _ = await waitUntilQuiet(in: hosting)
+        let before = QueueRenderCounter.derivationCount(for: QueueRenderCounter.sourcesSurface)
+        #expect(before > 0, "the sheet never derived while appearing, so nothing below measures anything")
+
+        sources[3].orgName = "Renamed Organisation"
+        try ctx.save()
+        _ = await waitUntilQuiet(in: hosting)
+        let derivations = QueueRenderCounter.derivationCount(for: QueueRenderCounter.sourcesSurface) - before
+
+        #expect(derivations >= 1, Comment(rawValue:
+            "renaming a source through another context derived the Sources sheet \(derivations) times, "
+            + "so the sheet is still showing the old name (#4106)"))
+    }
 }
