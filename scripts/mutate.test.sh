@@ -746,6 +746,49 @@ assert_contains "a runner that never got the lock is NOTHING RAN" "${VERDICT}" "
 assert_contains "and says it was the lock" "${VERDICT}" "never got the shared test lock"
 assert_not_contains "and is never CAUGHT" "${OUT}" "CAUGHT - the suite went red"
 
+# --- #4218: the runner's stall guard ended the run: nothing was judged, so never CAUGHT -----------------
+#
+# Since #3976 run-tests-locked.sh ends a run that holds the shared lock and stands still, and exits
+# non-zero having named no test. Read as a red run that named no test, that was CAUGHT, the tool's most
+# trusted verdict, given about a run that says nothing about the guard (L154). The report below is the
+# runner's own, rendered by stalled_run_report in mac/scripts/lib/test-stall-end.sh with the prefix
+# run-tests-locked.sh adds, and 143 is the status of an xcodebuild ended by TERM.
+STALL_REPORT="run-tests-locked.sh: STALLED AND ENDED. This run held the shared test lock and made no progress for 20m: no test started or finished, and xcodebuild (PID 48213, 5m 12s of CPU in total) used 1.12s in that time. That is what a HUNG run looks like, measured on this Mac twice (#3976), not a slow one.
+This runner ended it: xcodebuild and its flock wrapper (PID 48190) were stopped, so the shared lock is released rather than held until somebody notices.
+This is NOT a pass and NOT a test failure: nothing after the stall was verified. Run the suite again. If it stalls again, the last test to START above is where to look, and the limit it ended at is OVERTURE_TEST_STALL_END_SECONDS."
+STALLED_RUNNER="$(make_runner stalled 143 "Test Suite 'All tests' started.
+${STALL_REPORT}")"
+write_subject
+OUT="$(OVERTURE_MUTATE_RUNNER="${STALLED_RUNNER}" "${MUTATE}" "${SUBJECT}" 's/"yes"/"no"/' 2>&1)"
+STATUS=$?
+VERDICT="$(grep -E '^(CAUGHT|SURVIVED|NOTHING RAN|NOT PROOF|STALLED)' <<< "${OUT}" | head -1)"
+assert_contains "a run the stall guard ended is its own refusal" "${VERDICT}" "STALLED"
+assert_contains "and says the guard under test was never judged" "${OUT}" "says nothing about any guard"
+assert_not_contains "and is never CAUGHT" "${OUT}" "CAUGHT"
+assert_eq "and exits as a refusal, not a result" "2" "${STATUS}"
+
+# What it must PRESERVE (L104). A test that went red BEFORE the stall is a real catch: it ran and it
+# failed. So that is still CAUGHT, naming the test, and it says the rest of the run never happened.
+STALLED_AFTER_RED_RUNNER="$(make_runner stalled-after-red 143 "${X} Test \"the row draws a quiet exit\" failed after 0.01 seconds with 1 issue.
+${STALL_REPORT}")"
+write_subject
+OUT="$(OVERTURE_MUTATE_RUNNER="${STALLED_AFTER_RED_RUNNER}" "${MUTATE}" "${SUBJECT}" 's/"yes"/"no"/' 2>&1)"
+assert_contains "a test that went red before the stall is still CAUGHT" "${OUT}" "CAUGHT"
+assert_contains "naming that test" "${OUT}" "the row draws a quiet exit"
+assert_contains "and saying the run was then ended by the stall guard" "${OUT}" "ended by the runner's stall guard"
+
+# And a shell fixture that failed an assertion whose HAYSTACK is a stalled run's output puts the marker at
+# the start of a line (assert_contains indents only the first line of what it prints). That fixture DID
+# go red on the assertion under test, so it is CAUGHT, never STALLED.
+DUMPED_STALL_RUNNER="$(make_runner dumped-stall 1 "FAIL - and never NOTHING RAN, which would send the reader to their scope
+  in: run-tests-locked.sh: waiting for the shared test lock...
+${STALL_REPORT}
+1 failure(s)")"
+write_subject
+OUT="$(OVERTURE_MUTATE_RUNNER="${DUMPED_STALL_RUNNER}" "${MUTATE}" "${SUBJECT}" 's/"yes"/"no"/' 2>&1)"
+VERDICT="$(grep -E '^(CAUGHT|SURVIVED|NOTHING RAN|NOT PROOF|STALLED)' <<< "${OUT}" | head -1)"
+assert_contains "a fixture that failed while quoting a stalled run is CAUGHT" "${VERDICT}" "CAUGHT"
+
 # --- #3984: two mutations going at once each judge their OWN run ------------------------------------
 #
 # The log used to be one fixed path, and every verdict is read back out of it, so two lanes mutating at
