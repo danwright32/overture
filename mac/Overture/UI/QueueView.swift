@@ -151,8 +151,8 @@ struct QueueView: View {
     // rebuilt by every scout and Prep run; a plain ScrollView drops its offset to the top on each one
     // (the #974 shape), so mid review the queue snaps away before he can act on a row. Pinned to the top
     // visible date group, not the individual show, because the groups are the stable landmarks a run
-    // reshuffles shows within. Only the to-send date list carries the scroll target layout, so this stays
-    // nil (no restore, nothing to fight) while the reached-out list is showing.
+    // reshuffles shows within. #4062: the Reached out list carries the scroll target layout too, over its
+    // reach out date groups, since a deep link to it had nothing to land on without one.
     // #1573: the scroll position OWNS the jump, so the intentional jumps drive it to the group they want
     // rather than clearing it and asking proxy.scrollTo for a row id. Clearing and scrolling was the bug:
     // the two mechanisms fought over the same ScrollView and the row jump was silently dropped, so a
@@ -1092,7 +1092,8 @@ struct QueueView: View {
         let inQueue = prospects
         // #1121: computed inline (this is a rare deep-link tap, not the render path) now that the queue's
         // reached-out keys live in the per-render RenderData snapshot rather than a standing computed prop.
-        let reachedOutKeys = Set(ReachedOutQueue.activeWithDates(from: inQueue, now: Date()).map(\.prospect.naturalKey))
+        let reachedOut = ReachedOutQueue.activeWithDates(from: inQueue, now: Date())
+        let reachedOutKeys = Set(reachedOut.map(\.prospect.naturalKey))
         // #1134: focus the stage that contains this lead so its row renders; fall back to Scout if the
         // lead is in no stage (RootView routes truly unreachable leads to Archive, so this is a safety net).
         focusedStage = StageNavigation.stage(containing: key, in: inQueue,
@@ -1107,7 +1108,11 @@ struct QueueView: View {
         // asking proxy.scrollTo for the row (what this did before) fought that binding and was silently
         // dropped, so the click read as dead. Computed over `items` rather than the stage's own rows: a
         // group's id is its date either way, and the stage was just set to the one containing this key.
-        jumpTarget = QueueModel.scrollGroupID(containing: key, among: items)
+        //
+        // #4062: resolved against the list the stage actually DRAWS. Reached out groups by reach out date,
+        // so a performance date group id named nothing there and the jump was dropped.
+        jumpTarget = QueueModel.jumpScrollGroupID(for: key, onStage: focusedStage, items: items,
+                                                  reachedOut: reachedOutEntries(reachedOut))
             .map(QueueJumpRequest.init(group:))
         // Stage two: once that group is on screen its rows are realized, so nudge the row itself to the
         // top. If this runs before the layout settles it simply no-ops, leaving Dan on the right date,
@@ -1318,12 +1323,16 @@ struct QueueView: View {
     // times appears twice, each labeled with that contact's own timing. #661: a lightweight row
     // (group name, this one contact, timing, and the state control), not the entire show card, so
     // two contacts due on the same show don't render as two large, nearly-identical cards.
+    // #4062: the Reached out list's rows, built in ONE place, so the list and a deep link resolving its
+    // group against that list can never be looking at two different sets of rows.
+    private func reachedOutEntries(_ dated: [(prospect: Prospect, recipient: Recipient, next: Date)]) -> [ReachedOutEntry] {
+        QueueModel.reachedOutEntries(prospects: dated,
+                                     inquiries: inquiries.filter { StageNavigation.stage(for: $0) == .reachedOut },
+                                     now: Date())
+    }
+
     @ViewBuilder private func reachedOutList(_ dated: [(prospect: Prospect, recipient: Recipient, next: Date)]) -> some View {
-        let entries = QueueModel.reachedOutEntries(prospects: dated,
-                                                   inquiries: inquiries.filter {
-                                                       StageNavigation.stage(for: $0) == .reachedOut
-                                                   },
-                                                   now: Date())
+        let entries = reachedOutEntries(dated)
         if entries.isEmpty {
             VStack(spacing: OVSpacing.xs) {
                 Text("No one to follow up with").font(OVType.dateHeading).foregroundStyle(OVColor.ink)
@@ -1368,15 +1377,20 @@ struct QueueView: View {
                                 // Read INSIDE the wrapper rather than here, on #1922's rule: read at this
                                 // call site every row would re-derive on every tick of the sending row's
                                 // clock.
+                                // #4062: and the row carries the SHOW's key and the jump mark, so a deep
+                                // link to it can scroll here and mark it as it does on every other stage.
                                 ReachedOutSendAwareRow(sendState: sendState,
-                                                       key: prospect.naturalKey) { sendingSince, departure in
-                                    if let departure, !departure.reason.showsSendDelight {
-                                        ClosedOutDepartureRow(item: departure.item)
-                                    } else {
-                                        reachedOutRow((prospect: prospect, recipient: recipient, next: next),
-                                                      now: now, since: sendingSince,
-                                                      sourceCalendars: sourceCalendars)
+                                                       key: prospect.naturalKey) { sendingSince, departure, highlighted in
+                                    Group {
+                                        if let departure, !departure.reason.showsSendDelight {
+                                            ClosedOutDepartureRow(item: departure.item)
+                                        } else {
+                                            reachedOutRow((prospect: prospect, recipient: recipient, next: next),
+                                                          now: now, since: sendingSince,
+                                                          sourceCalendars: sourceCalendars)
+                                        }
                                     }
+                                    .jumpMark(key: prospect.naturalKey, highlighted: highlighted)
                                 }
                             case .inquiry(let inquiry, let row, _):
                                 // #1513: the same row shape as a show, so the two read as one list. The
@@ -1396,8 +1410,14 @@ struct QueueView: View {
                             Divider()
                         }
                     }
+                    // #4062: the id a deep link resolves to (QueueModel.jumpScrollGroupID), namespaced
+                    // apart from the show and inquiry groups.
+                    .id(QueueModel.reachOutGroupScrollID(group.id))
                 }
             }
+            // #4062: the groups are scroll targets, as on every other stage, so a jump can drive the
+            // scroll position to one and a rebuild keeps Dan's place (#976).
+            .scrollTargetLayout()
         }
     }
 

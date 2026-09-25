@@ -29,14 +29,19 @@ struct QueueJumpDrivesScrollPositionGuardTests {
     // edit whatsoever. Both survived the rename green while protecting nothing, which is the
     // a-guard-can-go-vacuous failure mode this whole suite exists to prevent.
     @Test func bothJumpsDriveTheScrollTargetRatherThanClearingIt() {
-        for jump in ["navigateToLead", "focusOnLeads"] {
+        // #4062: each jump names its OWN resolver, rather than either one satisfying both (which would be
+        // the fallback clause this test was rewritten to remove). The deep link lands on a stage, so it
+        // resolves against the list that stage draws; the away-alert path is never on a stage.
+        let resolvers = ["navigateToLead": "QueueModel.jumpScrollGroupID(",
+                         "focusOnLeads": "QueueModel.scrollGroupID("]
+        for (jump, resolver) in resolvers {
             guard let body = SourceGuardHelper.bodyOfFunction(named: jump, in: queueView) else {
                 Issue.record("expected to find the body of \(jump)")
                 continue
             }
             // No fallback clause. The resolved group id must be ASSIGNED to the jump channel, because
             // resolving it and dropping it on the floor is precisely the dead click #1573 fixed.
-            #expect(body.contains("jumpTarget = ") && body.contains("QueueModel.scrollGroupID("),
+            #expect(body.contains("jumpTarget = ") && body.contains(resolver),
                     "\(jump) should drive jumpTarget with the group holding the row")
             #expect(!body.contains("jumpTarget = nil"),
                     "\(jump) must not clear the channel that drives the scroll position")
