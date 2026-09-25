@@ -514,6 +514,11 @@ struct QueueView: View {
         // computed property. Resolved above from the same two reads, so the key and the pass agree.
         key.add(excludedTownRows)
         key.add(allowedSeedTownRows)
+        // And the town NAMES, because `resolvedGeo` is built from them OUTSIDE the build, where the memo's
+        // tracking cannot see a row's `town` edited in place; the identity half above sees only a row
+        // added or removed. The same gap #4112 closed on the Sources sheet.
+        key.add(value: resolvedGeo.userExcludedTowns)
+        key.add(value: resolvedGeo.allowedSeedTowns)
         key.add(value: clients.clientSourceIds)
         key.add(value: focusedStage?.rawValue)
         key.add(value: focusedKeys)
