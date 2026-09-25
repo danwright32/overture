@@ -938,7 +938,7 @@ struct QueueView: View {
             // that read it. Reading it here would be the same dependency one level down.
             ForEach(group.items) { row in
                 prospectRow(row, data: data, departure: departing[row.id],
-                            departingCard: departingCards[row.id], night: group)
+                            departingCard: departingCards[row.id])
             }
         }
     }
@@ -1641,8 +1641,7 @@ struct QueueView: View {
     // what the show is, and the leaving delight is drawing the card as it was when Dan pressed.
     @ViewBuilder private func prospectRow(_ row: QueueScopeRow, data: RenderData,
                                           departure: DepartureReason?,
-                                          departingCard: QueueItem?,
-                                          night: QueueModel.DateGroup) -> some View {
+                                          departingCard: QueueItem?) -> some View {
         let item = departingCard ?? data.cards.card(for: row)
         if let departure, departure.showsSendDelight {
             // #361: the leaving delight. Appears instantly in place of the just-sent row (insertion
