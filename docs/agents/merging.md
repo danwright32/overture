@@ -109,8 +109,8 @@ the measurement it came from lives here. Read the entry before the rule decides 
   before that file lock) is served in ARRIVAL ORDER since downbeat#524: a waiter writes a ticket to
   `/tmp/xcodebuild-tests.lock.queue` and tries `mkdir` only when no live earlier waiter is queued, so a
   run printing `waiting for N earlier run(s) queued` is waiting its turn rather than hung. The protocol
-  is `mac/scripts/lib/lock-queue.sh`, which must stay identical in behaviour to Downbeat's
-  `scripts/lock-queue.sh`; before it, this runner's one second poll kept beating Downbeat's two second
+  is `mac/scripts/lib/lock-queue.sh`, which must stay identical in behaviour to the `lock-queue.sh`
+  in Downbeat's own scripts folder; before it, this runner's one second poll kept beating Downbeat's two second
   one and starved a Downbeat run past its deadline on 2026-09-24.
   That re-run is against CURRENT main, not against the base the branch was cut from (#2353):
   `verify-and-merge-branch.sh` merges `origin/main` into its verify worktree before the suite
