@@ -224,9 +224,12 @@ enum ConflictSweep {
     }
 
     @discardableResult
-    static func reapplyAll(export: DayOffEditing.Export, in context: ModelContext) -> Int {
+    // #4107: `prospects` is the reconcile tick's one read of the store, so the sweep does not fetch every
+    // show again; nil (every hand edit of a day off) fetches here, as it always did.
+    static func reapplyAll(export: DayOffEditing.Export, in context: ModelContext,
+                           prospects: [Prospect]? = nil) -> Int {
         let calendar = ScoutService.blockedCalendar(export: export, context: context)
-        let prospects = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
+        let prospects = prospects ?? (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
 
         var changed = 0
         for p in prospects {

@@ -30,7 +30,7 @@ struct ThreadingRepairFailureIsReportedTests {
             // REAL shared defaults to a test, by a spelling the guard forbidding `UserDefaults.standard`
             // cannot see, and it is unreachable in practice, so it was a silent hole rather than safety.
             defaults: ScratchDefaults.make("overture.tests.2679"),
-            repairThreading: { _ in repair })
+            repairThreading: { _, _ in repair })
     }
 
     // The defect, stated as the tick's own answer. A repair that changed rows and could not write them
