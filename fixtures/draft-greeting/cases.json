@@ -1,0 +1,122 @@
+{
+  "version": 1,
+  "rule": "Does a drafted body OPEN with a greeting (#2545)? Overture holds a send whose body does not (Recipient.draftIsMissingGreeting, isBlockedByGreeting), because nothing composes a greeting above the body any more. Shared by DraftGreetingCasesTests (Swift, in mac/OvertureTests/GreetingLivesInTheBodyTests.swift, DraftGreeting.opensWithAGreeting) and draftGreeting.test.ts (TypeScript, draftGreeting.opensWithAGreeting, which prepEval scores every drafted body with). The Swift side is the source of truth: it is the gate a send actually meets (#3555).",
+  "casesAreNotInvented": "Every case is a string the app's own Swift tests already assert a verdict on, and each names the test it came from in `from`, so the corpus is calibrated against the predicate the send hold uses rather than against anybody's idea of it (L48).",
+  "cases": [
+    {
+      "from": "mac/OvertureTests/GreetingLivesInTheBodyTests.swift abodyThatGreetsIsRecognised",
+      "greets": true,
+      "body": "Hi Emma,\n\nI photograph performing arts."
+    },
+    {
+      "from": "mac/OvertureTests/GreetingLivesInTheBodyTests.swift abodyThatGreetsIsRecognised",
+      "greets": true,
+      "body": "Hello,\n\nI photograph performing arts."
+    },
+    {
+      "from": "mac/OvertureTests/GreetingLivesInTheBodyTests.swift abodyThatGreetsIsRecognised",
+      "greets": true,
+      "body": "Dear Ms Chen,\n\nI photograph performing arts."
+    },
+    {
+      "from": "mac/OvertureTests/GreetingLivesInTheBodyTests.swift abodyThatGreetsIsRecognised",
+      "greets": true,
+      "body": "Hey Emma,\n\nI photograph performing arts."
+    },
+    {
+      "from": "mac/OvertureTests/GreetingLivesInTheBodyTests.swift abodyThatGreetsIsRecognised",
+      "greets": true,
+      "body": "Attn: Raphaele de Boisblanc, Marketing\n\nHello,\n\nI photograph performing arts."
+    },
+    {
+      "from": "mac/OvertureTests/GreetingLivesInTheBodyTests.swift agreetingInDansOwnVoiceIsAccepted",
+      "greets": true,
+      "body": "Marcus, hello again,\n\nI photograph performing arts."
+    },
+    {
+      "from": "mac/OvertureTests/GreetingLivesInTheBodyTests.swift agreetingInDansOwnVoiceIsAccepted",
+      "greets": true,
+      "body": "Emma, good to hear from you,\n\nI photograph performing arts."
+    },
+    {
+      "from": "mac/OvertureTests/GreetingLivesInTheBodyTests.swift agreetingInDansOwnVoiceIsAccepted",
+      "greets": true,
+      "body": "Morning Emma,\n\nI photograph performing arts."
+    },
+    {
+      "from": "mac/OvertureTests/GreetingLivesInTheBodyTests.swift agreetingInDansOwnVoiceIsAccepted",
+      "greets": true,
+      "body": "Sarah and Tom,\n\nI photograph performing arts."
+    },
+    {
+      "from": "mac/OvertureTests/OpenerIsNotAGreetingTests.swift thejudgmentAndTheStripperAgree (greeted)",
+      "greets": true,
+      "body": "Hi Sarah, Great to see you."
+    },
+    {
+      "from": "mac/OvertureTests/OpenerIsNotAGreetingTests.swift thejudgmentAndTheStripperAgree (greeted)",
+      "greets": true,
+      "body": "Hello, I photograph performing arts."
+    },
+    {
+      "from": "mac/OvertureTests/OpenerIsNotAGreetingTests.swift thejudgmentAndTheStripperAgree (greeted)",
+      "greets": true,
+      "body": "Dear Sarah, Great to see you."
+    },
+    {
+      "from": "mac/OvertureTests/OpenerIsNotAGreetingTests.swift thejudgmentAndTheStripperAgree (greeted)",
+      "greets": true,
+      "body": "Attn: Sarah Chen, Marketing\n\nHello, I photograph performing arts."
+    },
+    {
+      "from": "mac/OvertureTests/GreetingLivesInTheBodyTests.swift afirstSentenceWithACommaIsStillNotAGreeting",
+      "greets": false,
+      "body": "I photograph performing arts in New York, and I saw your September concert."
+    },
+    {
+      "from": "mac/OvertureTests/GreetingLivesInTheBodyTests.swift afirstSentenceWithACommaIsStillNotAGreeting",
+      "greets": false,
+      "body": "Aurora Strings are playing Carnegie Hall in March, which is why I am writing."
+    },
+    {
+      "from": "mac/OvertureTests/GreetingLivesInTheBodyTests.swift abodyThatDoesNotGreetIsRecognised",
+      "greets": false,
+      "body": "I photograph performing arts in New York and saw your September concert."
+    },
+    {
+      "from": "mac/OvertureTests/GreetingLivesInTheBodyTests.swift abodyThatDoesNotGreetIsRecognised",
+      "greets": false,
+      "body": "My name is Dan Wright and I photograph performing arts."
+    },
+    {
+      "from": "mac/OvertureTests/GreetingLivesInTheBodyTests.swift abodyThatDoesNotGreetIsRecognised",
+      "greets": false,
+      "body": "Highlights from the season are attached."
+    },
+    {
+      "from": "mac/OvertureTests/GreetingLivesInTheBodyTests.swift abodyThatDoesNotGreetIsRecognised",
+      "greets": false,
+      "body": "Attn: Raphaele de Boisblanc, Marketing\n\nI photograph performing arts in New York."
+    },
+    {
+      "from": "mac/OvertureTests/OpenerIsNotAGreetingTests.swift thejudgmentAndTheStripperAgree (plain)",
+      "greets": false,
+      "body": "I photograph performing arts."
+    },
+    {
+      "from": "mac/OvertureTests/OpenerIsNotAGreetingTests.swift thejudgmentAndTheStripperAgree (plain)",
+      "greets": false,
+      "body": "Highlights from the season are attached."
+    },
+    {
+      "from": "mac/OvertureTests/OpenerIsNotAGreetingTests.swift thejudgmentAndTheStripperAgree (plain)",
+      "greets": false,
+      "body": "Hello Dolly opens at the Palace in March."
+    },
+    {
+      "from": "mac/Overture/Domain/DraftGreeting.swift opensWithAGreeting (an empty body greets nobody)",
+      "greets": false,
+      "body": ""
+    }
+  ]
+}

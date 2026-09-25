@@ -28,6 +28,12 @@ person, org, venue, or email address. `.example` domains and made-up names throu
   add a runbook rule, update every sample in the same change. Where a fixture's item carries no
   `showListing` at all, the honest answer is `showSummaryAbsentReason: "no_listing_page"`, never a summary
   written from the sources: a sample that invents one teaches the eval to accept an invented answer.
+  The same drift happened a second time with the greeting (#3555): all 19 samples opened straight into
+  "My name is Dan...", which the app holds at `Recipient.isBlockedByGreeting`, and every one self-checked
+  clean because the greeting was scored as a wording rule and so never against a sample. It is durable
+  now, judged by `src/lib/draftGreeting.ts`, the twin of the app's own `DraftGreeting.opensWithAGreeting`
+  (both tested against `fixtures/draft-greeting/cases.json`). Each sample opens with the greeting the
+  runbook's three cases give: `Hi <first name>,` for one named contact, `Hello,` otherwise.
 
 ## The two layers
 
