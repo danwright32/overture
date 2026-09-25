@@ -95,6 +95,10 @@ source "${SCRIPT_DIR}/lib/hosted-suite-stamp.sh"
 # shellcheck source=./lib/lock-queue.sh
 source "${SCRIPT_DIR}/lib/lock-queue.sh"
 
+# shellcheck source=./lib/sleep-guard.sh
+source "${SCRIPT_DIR}/lib/sleep-guard.sh"
+DISPLAY_GUARD_PID=""
+
 # Given `ps -eo pid=,command=`-style output (one process per line: PID then its full command),
 # returns the PIDs of any resident Debug-configuration Overture.app test host (#632): the one
 # xcodebuild test boots at .../DerivedData/*/Build/Products/Debug/Overture.app/Contents/MacOS/Overture.
@@ -820,6 +824,8 @@ cleanup_on_exit() {
   local path
   end_active_run
   stop_progress_watch "${PROGRESS_WATCH_PID}"
+  stop_sleep_guard "${DISPLAY_GUARD_PID}"
+  DISPLAY_GUARD_PID=""
   release_dir_lock
   while IFS= read -r path; do
     [[ -n "${path}" ]] && rm -rf "${path}"
@@ -851,6 +857,16 @@ main() {
   trap 'cleanup_on_exit' EXIT
   trap 'on_signal 130' INT
   trap 'on_signal 143' TERM
+
+  # #3580: hold the display on for the run. Four hosted scroll tests need a window the WindowServer lays
+  # out, and with the display asleep it lays out nothing, so they failed every overnight run for a reason
+  # no change caused. Released by the EXIT trap, and by caffeinate's own -w on this pid if the runner is
+  # killed outright. Silent when it works, since a notice on every run is one people learn to skip (L36).
+  # A locked screen is a different state it cannot fix, which #3842 already reports as NOT MEASURED.
+  DISPLAY_GUARD_PID="$(start_sleep_guard "$$" display)" || DISPLAY_GUARD_PID=""
+  if [[ -z "${DISPLAY_GUARD_PID}" ]]; then
+    echo "run-tests-locked.sh: the display was NOT kept awake for this run (caffeinate unavailable), so if it sleeps the hosted scroll tests cannot lay out their window and will fail." >&2
+  fi
 
   cd "${MAC_DIR}"
 

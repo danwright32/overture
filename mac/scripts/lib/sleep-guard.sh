@@ -25,11 +25,21 @@
 # unavailable, print nothing and return nonzero: a missing convenience tool must not abort a paid run,
 # but the caller MUST be able to tell it is unprotected and say so loudly rather than believe a guard is
 # held that never launched. SLEEP_GUARD_BIN overrides the binary (tests point it at a stub).
+#
+# #3580: an optional second argument, `display`, also holds the DISPLAY on (-d). The Mac test runner asks
+# for it, because the hosted scroll tests need a window the WindowServer lays out and a sleeping display
+# does no layout. The detached runs never asked for the display and keep the default. It cannot WAKE a
+# display that is already off; it keeps one that is on from going off for the life of the run.
 start_sleep_guard() {
-  local watch_pid="$1"
+  local watch_pid="$1" mode="${2:-}"
   local bin="${SLEEP_GUARD_BIN:-/usr/bin/caffeinate}"
   if [ ! -x "${bin}" ]; then
     return 1
+  fi
+  if [ "${mode}" = "display" ]; then
+    "${bin}" -d -i -s -w "${watch_pid}" >/dev/null 2>&1 &
+    printf '%s' "$!"
+    return 0
   fi
   # -i no idle sleep, -s no system sleep, -w exit when the watched run exits (crash-safe self-release).
   # stdout/stderr go to /dev/null: the guard has nothing to say, and, crucially, if it inherited the

@@ -372,6 +372,12 @@ the measurement it came from lives here. Read the entry before the rule decides 
   check a suspiciously fast run against what a full one costs: an understated number weakens the
   very warning it was there to support (#2532, L32). Every run ends with its own `Suite shape:`
   line giving the wall clock it actually took, so read that.
+  The runner holds the DISPLAY on for the length of a run (#3580), through the same `sleep-guard.sh` the
+  detached runs use, in its `display` mode (`caffeinate -d -i -s -w <runner pid>`), released on exit and
+  by `-w` if the runner is killed. Four hosted scroll tests need a window the WindowServer lays out, and a
+  sleeping display lays out nothing, so before this they failed every overnight run. It cannot wake a
+  display that is already off, and it cannot help a LOCKED screen, which is a different state that #3842
+  reports as NOT MEASURED. It says nothing when it works, and says loudly when caffeinate is missing.
 
 ## Seeing a guard fail
 
