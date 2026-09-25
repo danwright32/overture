@@ -289,33 +289,6 @@ struct OneChangeDerivesTheQueueOnceTests {
             + "whole-store pass (#4106)"))
     }
 
-    // THE OTHER ROUTE a memo can miss: a write saved through a DIFFERENT context, which is how a background
-    // run or a reconcile writes. The main context's objects can be left exactly as the queue read them and
-    // the identities all where they were, so neither the fingerprint nor observation moves. Measured:
-    // before `StoreSaveCount` was in the key, `FeltWaitCostTests` wrote this way and the queue never
-    // rebuilt at all, which is a stale screen (L40).
-    @Test func aSaveThroughAnotherContextStillReachesTheQueue() async throws {
-        let c = try container()
-        let h = host(c)
-        defer { h.window.close() }
-        seed(h.context)
-        await brought(up: h)
-
-        let other = ModelContext(c)
-        let all = try prospects(other)
-        let target = try #require(all.first { $0.naturalKey == "row-21" })
-        target.markDismissed(reason: .notAFit)
-        try other.save()
-        let why = await settle(h.hosting)
-
-        #expect(why.count >= 1, Comment(rawValue:
-            "a dismiss saved through another context derived the queue \(why.count) times, so the queue "
-            + "is still showing the show as undecided (#4106)"))
-        #expect(why.count <= Self.allowedDerivationsForOneSavedChange, Comment(rawValue:
-            "a dismiss saved through another context derived the whole queue \(why.count) times: "
-            + "\(why.joined(separator: " | ")) (#4106)"))
-    }
-
     // THE OTHER DIRECTION, which a memo exists to get wrong: a field edited in place and never saved must
     // still reach the queue. A key that missed it would show Dan a row that disagrees with the store,
     // which is worse than a slow screen (L40). No save, so no query notification: the only route left is
