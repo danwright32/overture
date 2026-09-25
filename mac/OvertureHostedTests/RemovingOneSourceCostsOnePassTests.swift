@@ -25,7 +25,7 @@ import SwiftData
 // the whole of what anybody could know. This suite reads the reasons, so a burst can be attributed
 // rather than guessed at, which is what #4112 asks for in as many words.
 @MainActor
-@Suite("Removing one watched source costs one pass (#4112)")
+@Suite("Removing one watched source costs one pass (#4112)", .serialized)
 struct RemovingOneSourceCostsOnePassTests {
 
     private func container() throws -> ModelContainer {
@@ -119,21 +119,14 @@ struct RemovingOneSourceCostsOnePassTests {
     // suite went green.
     //
     // Measured here after the memo landed: a removal derives twice. The first is the change itself and
-    // is not waste. The second is the memo being invalidated by its own subject: `ScopeMemo` builds
-    // inside `withObservationTracking`, so the derivation that ran WHILE the delete was propagating read
-    // objects the delete then mutated, and that marks the answer stale. One re-derivation after a write
-    // that changed what the last one read is correct behaviour, not a defect.
+    // is not waste. The second was first read as the memo being invalidated by its own subject; measured
+    // on 2026-09-25 with a per field observer, it is SwiftData's re-fetch of the `WatchedSource` query
+    // after the save, which fires `willSet` on every field of every row it returns whether or not it
+    // changed. This harness hands the sheet a constant empty store, so the `Prospect` re-fetch that the
+    // app shaped test below also counts cannot happen here. Why neither is removed is written there.
     //
-    // WHAT IS NOT KNOWN, said rather than implied. Dan's live measurement was EIGHT passes of this sheet
-    // for one removal, and this harness showed TWO before the memo and two after. So this suite cannot
-    // say the live case is fixed: it hosts `SourcesView` alone, without `RootView` above it, without the
-    // Downbeat roster, and without the coverage and calendar work that only runs when there are clients.
-    // The six passes the harness never reproduced are still unaccounted for. What the memo IS proved to
-    // remove is the banner case, which `aBannerWithNoDataChangeDerivesNothing` holds at zero and which
-    // the reason trace named as the first of the removal's own two.
-    //
-    // So this is pinned at what it measures, and lowering it is a real improvement somebody can go and
-    // make, not an assertion to delete.
+    // The app shaped tests below are the answer to what this harness could not see: the sheet under
+    // `RootView`'s own queries, with a roster, which is where the rest of the live count was.
     private static let allowedDerivationsForOneRemoval = 2
 
     @Test func removingOneSourceRebuildsTheSheetOnce() async throws {
@@ -179,6 +172,239 @@ struct RemovingOneSourceCostsOnePassTests {
             + "an allowance of \(Self.allowedDerivationsForOneRemoval), over \(evaluations) body "
             + "evaluation(s). Each derivation is a whole-store pass. What moved before each "
             + "evaluation: \(why.joined(separator: " | ")) (#4112)"))
+    }
+
+    // THE SHEET UNDER THE APP'S OWN INPUTS, which is the harness #4112's comment asked for.
+    //
+    // The harness above hosts `SourcesView` alone, handed an empty constant for the store and with no
+    // Downbeat roster, so the coverage and calendar work never runs and nothing above the sheet re-fetches
+    // anything. This one puts the sheet under a parent that holds the SAME queries `RootView` holds
+    // (`RootView.swift`, the `@Query` block at the top of the view) and hands the whole-table read down the
+    // way `RootView` does, with a roster that names some of the watched sources, so every input the live
+    // sheet has is live here too.
+    //
+    // A parent holding the queries rather than `RootView` itself, because the sheet is presented from a
+    // private `@State` flag that a hosted test cannot raise, and a window that is never ordered front
+    // presents no sheet at all (#3480). What the parent reproduces is the part that matters to a count:
+    // every query that re-fetches after a save, and a store read handed down anew each time.
+    private struct AppShapedHarness: View {
+        let container: ModelContainer
+        let feedback: ActionFeedback
+        let roster: ClientRoster
+        var body: some View {
+            Parent()
+                .modelContainer(container)
+                .environment(feedback)
+                .environment(roster)
+        }
+        struct Parent: View {
+            @Query(filter: PrepQueueBuilder.needsPrepPredicate) private var toPrepByStatus: [Prospect]
+            @Query private var allProspects: [Prospect]
+            @Query private var allInquiries: [Inquiry]
+            @Query private var watchedSources: [WatchedSource]
+            @Query private var excludedTownRows: [ExcludedTown]
+            @Query private var allowedSeedTownRows: [AllowedSeedTown]
+            var body: some View {
+                // Read, so each query is live and re-fetches after a save as `RootView`'s do.
+                let _ = (toPrepByStatus.count, allInquiries.count, watchedSources.count,
+                         excludedTownRows.count, allowedSeedTownRows.count)
+                SourcesView(prospects: allProspects)
+            }
+        }
+    }
+
+    // A roster the test can change after the sheet is up, without touching the store.
+    @MainActor
+    private final class RosterFile {
+        var clients: [DownbeatClient]
+        init(_ clients: [DownbeatClient]) { self.clients = clients }
+    }
+
+    private static func client(_ name: String) -> DownbeatClient {
+        DownbeatClient(id: "client-\(name)", displayName: name, shortName: nil, email: "", contractEmail: "",
+                       phoneNumber: nil, isTaxExempt: nil, hasLeftReview: false, specialBehaviors: [],
+                       notes: nil, hostingSite: "")
+    }
+
+    // Twelve of the watched sources are a client's, by name, so the client window holds twelve ids. A
+    // window of one or two cannot show the ordering defect `aRosterReloadThatChangesNoVerdictDerivesNothing`
+    // is about, because a set that small prints the same way however it was built.
+    private static let clients = (0..<12).map { client("Organisation \($0 * 5)") } + [client("Unmatched Guild")]
+
+    private func seedProspects(_ ctx: ModelContext, rows: Int) {
+        let dates = LiveDateClustering.dates(forRows: rows)
+        for n in 0..<rows {
+            let p = Prospect(naturalKey: "row-\(n)", groupName: "Ensemble \(n % 90)", discipline: "music",
+                             venue: "Venue \(n % 169) Hall", performanceDate: dates[n],
+                             sourceListingURL: nil, priorRelationship: "none",
+                             production: "presenter", profile: "strong",
+                             coverage: "likely_uncovered", fitScore: 4 + (n % 5), tier: "mid",
+                             fitReason: "r", matchedClientName: nil, possibleMatchSource: nil,
+                             possibleMatchName: nil, status: n % 3 == 0 ? .drafted : .new)
+            p.sourceIds = ["src-\(n % Self.rows)"]
+            p.location = "New York, NY"
+            ctx.insert(p)
+        }
+        try? ctx.save()
+    }
+
+    private struct AppShaped {
+        let container: ModelContainer
+        let sources: [WatchedSource]
+        let feedback: ActionFeedback
+        let roster: ClientRoster
+        let file: RosterFile
+        let window: NSWindow
+        let hosting: NSHostingView<AnyView>
+    }
+
+    // Seeds, hosts and SETTLES, and reports what appearing cost, so every test below measures a change
+    // from a quiet sheet rather than folding the cost of appearing into it (L63).
+    private func appShaped() async throws -> (AppShaped, appearing: Int) {
+        let c = try container()
+        let ctx = c.mainContext
+        let sources = seed(ctx)
+        seedProspects(ctx, rows: 400)
+        let file = RosterFile(Self.clients)
+        let roster = ClientRoster(load: { [file] _ in MainActor.assumeIsolated { (file.clients, .ok) } })
+        roster.reload()
+        let feedback = ActionFeedback()
+        let before = QueueRenderCounter.derivationCount(for: QueueRenderCounter.sourcesSurface)
+        let (window, hosting) = host(AppShapedHarness(container: c, feedback: feedback, roster: roster))
+        _ = await waitUntilQuiet(in: hosting)
+        let appearing = QueueRenderCounter.derivationCount(for: QueueRenderCounter.sourcesSurface) - before
+        return (AppShaped(container: c, sources: sources, feedback: feedback, roster: roster, file: file,
+                          window: window, hosting: hosting), appearing)
+    }
+
+    // OPENING THE SHEET derives the store ONCE.
+    //
+    // It derived TWICE, measured here on 2026-09-25, and the second was a key that moved with nothing
+    // changed. The first body evaluation runs before `.onChange(initial: true)` has decided the client
+    // window, so `roomContext` builds the window itself and the derivation is right. The `.onChange` then
+    // stores the SAME window, and the key had it as `String(describing: clientWindow)`: `nil` on the first
+    // pass, `Optional(...)` on the second, so the key moved and the whole store was derived again for an
+    // identical answer. The key now names the window's set of ids, which is the same on both passes.
+    @Test func openingTheSheetWithClientsDerivesOnce() async throws {
+        let (sheet, appearing) = try await appShaped()
+        defer { sheet.window.close() }
+        #expect(!sheet.roster.window(for: sheet.sources).clientSourceIds.isEmpty, Comment(rawValue:
+            "no watched source is a client's, so the client window this test is about is empty and "
+            + "the count below measures a sheet without it (L159)"))
+        #expect(appearing == 1, Comment(rawValue:
+            "opening the Sources sheet derived the whole store \(appearing) times, against one. What "
+            + "moved: \(QueueRenderCounter.reasons(for: QueueRenderCounter.sourcesSurface).suffix(4)) (#4112)"))
+    }
+
+    // A ROSTER RELOAD THAT CHANGES NO VERDICT derives nothing.
+    //
+    // A client nobody's source matches joins the roster. `ClientCoverage.signature` moves (the client list
+    // is part of it), so the `.onChange` runs and writes all four of its values: the coverage result, the
+    // calendar result, the flags and the window. The window it writes holds exactly the ids it held, so
+    // nothing the derivation reads has changed. This is the path that exposed the second key defect: a
+    // `Set` printed with `String(describing:)` lists its members in an order that is not a property of
+    // its contents, so the re-built window could print differently and move the key. No store write here,
+    // deliberately, so SwiftData's own re-fetch (see the removal test below) cannot be what derives.
+    @Test func aRosterReloadThatChangesNoVerdictDerivesNothing() async throws {
+        let (sheet, _) = try await appShaped()
+        defer { sheet.window.close() }
+        let before = QueueRenderCounter.derivationCount(for: QueueRenderCounter.sourcesSurface)
+        let rendersBefore = QueueRenderCounter.renderCount(for: QueueRenderCounter.sourcesSurface)
+        let reasonsBefore = QueueRenderCounter.reasons(for: QueueRenderCounter.sourcesSurface).count
+
+        sheet.file.clients = Self.clients + [Self.client("Another Unmatched Society")]
+        sheet.roster.reload()
+
+        _ = await waitUntilQuiet(in: sheet.hosting)
+        let derivations = QueueRenderCounter.derivationCount(for: QueueRenderCounter.sourcesSurface) - before
+        let evaluations = QueueRenderCounter.renderCount(for: QueueRenderCounter.sourcesSurface) - rendersBefore
+        let why = QueueRenderCounter.reasons(for: QueueRenderCounter.sourcesSurface).dropFirst(reasonsBefore)
+        // THE POSITIVE CONTROL: the reload reached the sheet and the cascade ran, or a zero below means
+        // nothing happened rather than that nothing was re-derived (L159).
+        #expect(evaluations >= 1 && why.contains { $0.contains("clients") }, Comment(rawValue:
+            "the reload never reached the sheet (\(evaluations) evaluations, reasons \(Array(why))), so "
+            + "this fixture did not exercise the cascade"))
+        #expect(derivations == 0, Comment(rawValue:
+            "a roster reload that changed no source's verdict derived the whole store \(derivations) "
+            + "time(s). What moved: \(why.joined(separator: " | ")) (#4112)"))
+    }
+
+    // A TOWN RENAMED IN PLACE still re-derives, which is what the key's town NAMES are for.
+    //
+    // `geo` used to be built inside the memo's observation tracking, so an in-place edit of a row's
+    // `town` was caught there. It is built outside it now (the removal test says why), and the identity
+    // half of the key cannot see a field edit. Unsaved, deliberately: a save makes SwiftData refresh every
+    // row, which re-derives on its own and would pass this test whatever the key said.
+    @Test func aTownRenamedInPlaceStillReDerives() async throws {
+        let (sheet, _) = try await appShaped()
+        defer { sheet.window.close() }
+        let ctx = sheet.container.mainContext
+        let town = ExcludedTown(town: "yonkers")
+        ctx.insert(town)
+        try ctx.save()
+        _ = await waitUntilQuiet(in: sheet.hosting)
+        let before = QueueRenderCounter.derivationCount(for: QueueRenderCounter.sourcesSurface)
+
+        town.town = "white plains"
+
+        _ = await waitUntilQuiet(in: sheet.hosting)
+        let derivations = QueueRenderCounter.derivationCount(for: QueueRenderCounter.sourcesSurface) - before
+        #expect(derivations >= 1, Comment(rawValue:
+            "renaming an excluded town in place derived the sheet \(derivations) times, so its rooms are "
+            + "still judged against the old town (L40, #4112)"))
+    }
+
+    // ONE REMOVAL UNDER THE APP'S INPUTS, and what each derivation it costs is for.
+    //
+    // THREE, and each is named, which is what #4112 asked for in place of a count. Measured 2026-09-25
+    // with the memo's stale flag and a per field observer on sample rows:
+    //
+    //   1. The write. `WatchlistEditing.stopWatching` sets `isActive` and `inactiveReasonRaw`, which the
+    //      pass reads to section the row. One re-derivation after a write that changed what the last one
+    //      read is correct.
+    //   2. The `WatchedSource` re-fetch. After the save, SwiftData re-fetches every query over the table
+    //      and, doing so, fires `willSet` on EVERY property of EVERY row it returns, changed or not:
+    //      an untouched row fired all 41 of its fields. Observation cannot tell that from a real edit.
+    //   3. The `Prospect` re-fetch, the same thing again: one untouched show fired all 136 of its fields,
+    //      although the save touched no show at all.
+    //
+    // Before this change the tracking also watched the queries' OWN result storage, because the sources
+    // and the town tables were read inside it. That is removed, and it was measured to share its turn
+    // with the row refresh, so it did not change the count. The queries coalesce by table: holding all
+    // six of `RootView`'s queries here costs the same three as holding one.
+    //
+    // WHY 2 AND 3 REMAIN. Telling a refresh from an edit needs the VALUES, and a value snapshot of what
+    // the pass reads was measured at 3.95 ms against a 6.21 ms derivation (`SourcesSheetCostTests`,
+    // 2026-09-08) and paid on every body evaluation, which is most of the cost it would save and a
+    // regression on every scroll. #3656 also ruled out hashing it, because a collision draws a number the
+    // store disagrees with. So they are explained here rather than removed.
+    //
+    // WHAT THIS SAYS ABOUT THE LIVE EIGHT. The live `passes=8` counts BODY EVALUATIONS, and it was taken
+    // before the memo landed, when every evaluation derived. The evaluations a removal causes here are
+    // the three above plus the banner's; menu and hover state on a real press add more, and since the
+    // memo those derive nothing (`aBannerWithNoDataChangeDerivesNothing`).
+    private static let allowedDerivationsForOneRemovalUnderTheApp = 3
+
+    @Test func removingOneSourceUnderTheAppsInputsDerivesOncePerThingThatMoved() async throws {
+        let (sheet, _) = try await appShaped()
+        defer { sheet.window.close() }
+        let before = QueueRenderCounter.derivationCount(for: QueueRenderCounter.sourcesSurface)
+        let reasonsBefore = QueueRenderCounter.reasons(for: QueueRenderCounter.sourcesSurface).count
+
+        // Through the same path and the same context the button uses.
+        WatchlistMutations.stopWatching(sheet.sources[3], context: sheet.container.mainContext,
+                                        feedback: sheet.feedback)
+
+        _ = await waitUntilQuiet(in: sheet.hosting)
+        let derivations = QueueRenderCounter.derivationCount(for: QueueRenderCounter.sourcesSurface) - before
+        let why = QueueRenderCounter.reasons(for: QueueRenderCounter.sourcesSurface).dropFirst(reasonsBefore)
+        #expect(derivations >= 1, Comment(rawValue:
+            "removing a row derived the sheet \(derivations) times, so the sheet never reacted and the "
+            + "ceiling below would pass over one that had stopped working (L159)"))
+        #expect(derivations <= Self.allowedDerivationsForOneRemovalUnderTheApp, Comment(rawValue:
+            "removing ONE of \(Self.rows) rows under the app's inputs derived the Sources sheet "
+            + "\(derivations) times against \(Self.allowedDerivationsForOneRemovalUnderTheApp). What "
+            + "moved: \(why.joined(separator: " | ")) (#4112)"))
     }
 
     // THE CASE THE MEMO EXISTS FOR, asked separately because the removal case cannot answer it.
