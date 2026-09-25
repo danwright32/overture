@@ -108,8 +108,7 @@ struct QueueSheetStateTests {
         check("pendingNightDismiss",
               raise: { sheets.pendingNightDismiss = NightDismiss(dateLabel: "Nov 14", date: "2026-11-14", reason: .wentBy,
                                                                  keys: ["k1"], runs: [],
-                                                                 keysOnlyThisNight: ["k1"], heldBack: 0,
-                                                                 origin: .nightMenu) },
+                                                                 keysOnlyThisNight: ["k1"], heldBack: 0) },
               clear: { sheets.pendingNightDismiss = nil })
 
         // The count is asserted, so a `check` call quietly deleted in a refactor is caught rather than

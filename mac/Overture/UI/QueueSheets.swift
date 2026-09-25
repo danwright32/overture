@@ -66,18 +66,10 @@ struct NightDismiss: Identifiable {
     // Carried rather than recomputed here: the split that produced it is the one decision, and a second
     // derivation on this side could disagree with the title Dan just read (L70).
     let heldBack: Int
-    // #1819: what raised it. A right-click on the date asks about the whole night; a Keep asks about the
-    // OTHER shows on it, so only the title differs, and the rest of the sheet, the write and the undo are
-    // the same ones (#1819: "a wiring and copy job, not new machinery").
-    enum Origin: Equatable { case nightMenu, afterKeep }
-    let origin: Origin
+    // #4132: only the date heading's right-click raises this now. #1819 also raised it after a Keep, under
+    // an `origin` that retitled it; Dan reversed that on 2026-09-21, so there is one origin and one title.
     var title: String {
-        switch origin {
-        case .nightMenu:
-            return BulkDismiss.confirmTitle(count: keys.count, heldBack: heldBack, dateLabel: dateLabel)
-        case .afterKeep:
-            return BulkDismiss.keepOfferTitle(count: keys.count, dateLabel: dateLabel)
-        }
+        BulkDismiss.confirmTitle(count: keys.count, heldBack: heldBack, dateLabel: dateLabel)
     }
     // #3365: through BulkDismiss, never restated here. It was a second copy of the same rule, and the
     // rule has just gained a condition (a one-night reason offers no choice); a copy would have kept
@@ -86,7 +78,7 @@ struct NightDismiss: Identifiable {
         BulkDismiss.offersChoice(reason: reason, runsPastTheNight: runs,
                                  keysOnlyThisNight: keysOnlyThisNight)
     }
-    var id: String { "\(dateLabel)|\(reason.rawValue)|\(origin)" }
+    var id: String { "\(dateLabel)|\(reason.rawValue)" }
 }
 
 // What the queue is currently asking Dan, if anything.

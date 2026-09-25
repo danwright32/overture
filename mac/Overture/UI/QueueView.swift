@@ -938,7 +938,7 @@ struct QueueView: View {
             // that read it. Reading it here would be the same dependency one level down.
             ForEach(group.items) { row in
                 prospectRow(row, data: data, departure: departing[row.id],
-                            departingCard: departingCards[row.id], night: group)
+                            departingCard: departingCards[row.id])
             }
         }
     }
@@ -973,7 +973,7 @@ struct QueueView: View {
                                                            reason: reason,
                                                            keys: plan.keys, runs: plan.runsPastTheNight,
                                                            keysOnlyThisNight: plan.keysOnlyThisNight,
-                                                           heldBack: split.heldBack, origin: .nightMenu)
+                                                           heldBack: split.heldBack)
                     }
                 }
                 // Both halves, in one place. The title above says how many are GOING; without this nothing
@@ -1641,8 +1641,7 @@ struct QueueView: View {
     // what the show is, and the leaving delight is drawing the card as it was when Dan pressed.
     @ViewBuilder private func prospectRow(_ row: QueueScopeRow, data: RenderData,
                                           departure: DepartureReason?,
-                                          departingCard: QueueItem?,
-                                          night: QueueModel.DateGroup) -> some View {
+                                          departingCard: QueueItem?) -> some View {
         let item = departingCard ?? data.cards.card(for: row)
         if let departure, departure.showsSendDelight {
             // #361: the leaving delight. Appears instantly in place of the just-sent row (insertion
@@ -1735,16 +1734,7 @@ struct QueueView: View {
                                               item, stage: focusedStage),
                                           showingTooFar: false,
                                           userExcludedTowns: userExcludedTowns,
-                                          allowedSeedTowns: allowedSeedTowns,
-                                          // #1819: Keep lives on Scout, so the offer does too, over the
-                                          // night's rows as this pass drew them.
-                                          onKept: focusedStage == .scout ? {
-                                              if let offer = QueueModel.nightClearAfterKeep(
-                                                  keptKey: item.id, rows: night.items, date: night.id,
-                                                  dateLabel: night.monthDay) {
-                                                  sheets.pendingNightDismiss = offer
-                                              }
-                                          } : nil)
+                                          allowedSeedTowns: allowedSeedTowns)
                 }
             }
         }
