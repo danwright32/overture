@@ -87,8 +87,9 @@ struct CoalescingRunnerTests {
     // so a mention elsewhere in the file cannot answer for it (L135).
     @Test func everyPlaceThatStartsATickGoesThroughTheRunner() throws {
         let source = SourceGuardHelper.source("Overture/App/ReconcileScheduler.swift")
-        for name in ["start", "runNow"] {
-            let body = try SourceGuard.functionBody(named: name, in: source)
+        let start = try SourceGuard.functionBody(named: "start", in: source)
+        let runNow = try SourceGuard.functionBody(named: "runNow", in: source)
+        for (name, body) in [("start", start), ("runNow", runNow)] {
             #expect(body.contains("ticks.request()"), "\(name) does not start its tick through the runner")
             #expect(!body.contains("runSafeReconcilesOnce("), "\(name) starts a tick directly, so ticks can overlap")
         }
