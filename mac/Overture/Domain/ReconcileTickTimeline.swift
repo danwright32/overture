@@ -27,37 +27,43 @@ struct ReconcileTickTimeline: Equatable, Sendable {
         case replyProposals      // awaits Gmail
         case signature           // awaits Gmail
         case omniFocus           // awaits the permission probe and the AppleScript
-        case closingCount        // the fresh read the badge and the away alert are counted from
+        case closingRead         // #4250: the fresh read the badge and away alert are counted from, off the
+                                 // main actor (awaited) unless the main context held unsaved changes
+        case closingCount        // publishing the badge and naming what arrived, from that reading
 
         var awaits: Bool {
             switch self {
-            case .replyCheck, .threadingRepair, .replyProposals, .signature, .omniFocus: return true
+            case .replyCheck, .threadingRepair, .replyProposals, .signature, .omniFocus, .closingRead: return true
             case .readRows, .bookings, .conflicts, .feedFreshness, .retirement, .closingCount: return false
             }
         }
     }
 
+    // `awaited` is the phase's own `awaits` unless the tick says otherwise for THIS run. #4250: the closing
+    // read is awaited when it runs off the main actor and a plain hold when it could not, and a hold marked
+    // as waiting would drop out of `longestHold`, the one number that says what the tick held (L11).
     struct Entry: Equatable, Sendable {
         let phase: Phase
         let seconds: Double
+        let awaited: Bool
     }
 
     private(set) var entries: [Entry] = []
 
-    mutating func record(_ phase: Phase, seconds: Double) {
-        entries.append(Entry(phase: phase, seconds: seconds))
+    mutating func record(_ phase: Phase, seconds: Double, awaited: Bool? = nil) {
+        entries.append(Entry(phase: phase, seconds: seconds, awaited: awaited ?? phase.awaits))
     }
 
     // The longest single stretch the tick is KNOWN to have held the main actor: the slowest pass that
     // never awaits. The awaiting passes are left out on purpose, since their wall time is mostly waiting.
     var longestHold: Entry? {
-        entries.filter { !$0.phase.awaits }.max { $0.seconds < $1.seconds }
+        entries.filter { !$0.awaited }.max { $0.seconds < $1.seconds }
     }
 
     // copy-inventory:ignore-start  developer diagnostic log, not the app's own voice (#915)
     var logLine: String {
         let parts = entries.map { e in
-            "\(e.phase.rawValue) \(e.phase.awaits ? "~" : "")\(Self.ms(e.seconds))"
+            "\(e.phase.rawValue) \(e.awaited ? "~" : "")\(Self.ms(e.seconds))"
         }
         let hold = longestHold.map { " (longest main actor hold: \($0.phase.rawValue) \(Self.ms($0.seconds)))" } ?? ""
         return "[Overture] reconcile tick, ms per pass, ~ includes waiting: " + parts.joined(separator: ", ") + hold

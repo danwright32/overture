@@ -145,10 +145,18 @@ struct DueBadgeRepublishTests {
     @Test func aStoreWithNothingComingDueArmsNothing() throws {
         let ctx = ModelContext(try container())
         let scheduler = ReconcileScheduler(context: ctx, replyRunAlive: { _ in false })
-        scheduler.armBadgeRepublish(prospects: [], now: eastern(2026, 9, 4, 14, 0))
+        let at = eastern(2026, 9, 4, 14, 0)
+        #expect(DueWork.nextChange(prospects: [], now: at, replyRunAlive: false) == nil)
+        scheduler.armBadgeRepublish(nextChange: DueWork.nextChange(prospects: [], now: at, replyRunAlive: false),
+                                    now: at)
+        // #4250: the instant is worked out where the rows are (off the main actor for the tick) and handed
+        // in, so the derivation is asserted where it now lives, and the arming on the instant it is handed.
         #expect(SourceGuardHelper.source("Overture/App/ReconcileScheduler.swift")
-            .contains("guard let next = DueWork.nextChange"),
-                "the timer must be armed from the derivation, not from a fixed cadence")
+            .contains("guard let next = nextChange else { return }"),
+                "the timer must be armed from the derived instant, not from a fixed cadence")
+        #expect(SourceGuardHelper.source("Overture/Domain/StoreRows.swift")
+            .contains("nextChange: DueWork.nextChange(prospects: prospects"),
+                "the tick's closing reading must derive the instant from the store, not a fixed cadence")
     }
 
     // The other half of #3474, and the reason the badge and the pill drifted at all: the badge was a
