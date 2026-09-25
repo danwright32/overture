@@ -81,11 +81,18 @@ struct CappedScrollView<Content: View>: View {
         .onPreferenceChange(MoreBelowPreference.self) { hidden in
             MainActor.assumeIsolated { moreBelow = hidden }
         }
-        .mask(fade)
+        .mask(fade.animation(cueAnimation, value: moreBelow))
         // After the mask, so the chevron itself is never faded by it.
-        .overlay(alignment: .bottom) { chevron }
-        .animation(reduceMotion ? nil : .easeOut(duration: 0.12), value: moreBelow)
+        .overlay(alignment: .bottom) { chevron.animation(cueAnimation, value: moreBelow) }
     }
+
+    // #4109: on the fade and the chevron, never on the box. An `.animation(_:value:)` animates EVERY change
+    // beneath it in the transaction its value changes in, and on the box that includes the rows, which is
+    // the shape that drew a moved queue card over its neighbour from the acknowledgement banner. Measured
+    // here with a hosted probe on the rows: the flip arrives in a preference update of its own, so the
+    // rows were never caught in it, but the modifier belongs on what it is for rather than on a promise
+    // about when the flip happens.
+    private var cueAnimation: Animation? { reduceMotion ? nil : .easeOut(duration: 0.12) }
 
     private var fade: some View {
         VStack(spacing: 0) {

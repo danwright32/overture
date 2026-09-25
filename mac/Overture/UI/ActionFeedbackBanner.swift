@@ -26,44 +26,52 @@ private struct ActionFeedbackBannerOn: ViewModifier {
         content
             .onAppear { token = feedback.registerBanner() }
             .onDisappear { feedback.releaseBanner(token) }
+            // #4109: the animation belongs to the PILL, so it sits on a container inside the overlay and
+            // never on `content`. On `content` it animated every change made in the same transaction as an
+            // acknowledgement, and attached at `RootView` that content is the whole window: a genre
+            // correction that re-sorted the queue slid the moved card from its old slot to its new one over
+            // 0.2s, and a main thread stall mid-flight left it drawn over its neighbour. A container rather
+            // than the pill itself, because a transition only plays when the animation is above the `if`.
             .overlay(alignment: .bottom) {
-                if let message = feedback.message, token == feedback.topBanner {
-                    HStack(spacing: OVSpacing.sm) {
-                        Text(message)
-                            .font(OVType.meta)
-                            .foregroundStyle(OVColor.onForest)
-                        // #845: an acknowledgment Dan can take back, right where it tells him what
-                        // happened. The banner's own life is stretched for one of these (see
-                        // ActionFeedback.dismissAfter): an Undo that vanishes in three seconds is one he
-                        // will miss, and a mis-click he notices a minute later is still a mis-click.
-                        if let action = feedback.action {
-                            Button(action.label) {
-                                action.perform()
+                ZStack {
+                    if let message = feedback.message, token == feedback.topBanner {
+                        HStack(spacing: OVSpacing.sm) {
+                            Text(message)
+                                .font(OVType.meta)
+                                .foregroundStyle(OVColor.onForest)
+                            // #845: an acknowledgment Dan can take back, right where it tells him what
+                            // happened. The banner's own life is stretched for one of these (see
+                            // ActionFeedback.dismissAfter): an Undo that vanishes in three seconds is one he
+                            // will miss, and a mis-click he notices a minute later is still a mis-click.
+                            if let action = feedback.action {
+                                Button(action.label) {
+                                    action.perform()
+                                }
+                                .buttonStyle(.plain)
+                                .font(OVType.meta.weight(.semibold))
+                                .foregroundStyle(OVColor.onForest)
+                                .padding(.horizontal, OVSpacing.sm)
+                                .padding(.vertical, 2)
+                                .background(Capsule().strokeBorder(OVColor.onForest.opacity(0.6), lineWidth: 1))
                             }
-                            .buttonStyle(.plain)
-                            .font(OVType.meta.weight(.semibold))
-                            .foregroundStyle(OVColor.onForest)
-                            .padding(.horizontal, OVSpacing.sm)
-                            .padding(.vertical, 2)
-                            .background(Capsule().strokeBorder(OVColor.onForest.opacity(0.6), lineWidth: 1))
+                        }
+                        .padding(.horizontal, OVSpacing.lg)
+                        .padding(.vertical, OVSpacing.sm)
+                        .background(
+                            Capsule().fill(feedback.tone == .warning ? OVColor.rust : OVColor.forest)
+                        )
+                        .shadow(color: .black.opacity(0.18), radius: 8, y: 2)
+                        .padding(.bottom, OVSpacing.lg)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                        .task(id: feedback.revision) {
+                            let seconds = ActionFeedback.dismissAfter(hasAction: feedback.action != nil)
+                            try? await Task.sleep(for: .seconds(seconds))
+                            feedback.clear()
                         }
                     }
-                    .padding(.horizontal, OVSpacing.lg)
-                    .padding(.vertical, OVSpacing.sm)
-                    .background(
-                        Capsule().fill(feedback.tone == .warning ? OVColor.rust : OVColor.forest)
-                    )
-                    .shadow(color: .black.opacity(0.18), radius: 8, y: 2)
-                    .padding(.bottom, OVSpacing.lg)
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
-                    .task(id: feedback.revision) {
-                        let seconds = ActionFeedback.dismissAfter(hasAction: feedback.action != nil)
-                        try? await Task.sleep(for: .seconds(seconds))
-                        feedback.clear()
-                    }
                 }
+                .animation(.easeInOut(duration: 0.2), value: feedback.revision)
             }
-            .animation(.easeInOut(duration: 0.2), value: feedback.revision)
     }
 }
 
