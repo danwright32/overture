@@ -69,6 +69,17 @@ final class Inquiry {
     // meaningful as the ancestry OF that message, and updating one without the other emits a chain that
     // skips a generation. Nil until a reply has been sent, which is the first message with any ancestry.
     var gmailReferences: String?
+    // #3927: what this inquiry's conversation is called, so an answer continues it rather than starting
+    // from "Re: your inquiry" on a thread whose headers say it belongs to a conversation of another name.
+    // Spark files a message whose subject differs from its conversation's as a new conversation whatever
+    // its headers say, and Gmail groups the recipient's mail by a similar rule (#3891, the show side).
+    //
+    // Writers: `InquiryReplySender.sendReply` (the subject Dan's FIRST answer went out under) and
+    // `AttachConversation.attach(to: Inquiry)` (the Subject of the found thread's first message).
+    // `DetachConversation.detach` takes it back with the thread it names. Reader:
+    // `InquiryReplySender.replySubject(for:)`, which the reply screen, its confirmation and the send all
+    // ask. Nil on an inquiry with no conversation, which is the one case "Re: your inquiry" is for.
+    var conversationSubject: String?
     var threadIdDegraded: Bool = false
     // #2647: the Message-ID read back off the sent reply could not be read, so a later message on this
     // inquiry's thread cannot reference it. The Recipient side carries the same flag for the same reason.

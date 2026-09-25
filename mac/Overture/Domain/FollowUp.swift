@@ -284,7 +284,13 @@ enum FollowUp {
     // if the original is missing (#74).
     static func replySubject(originalSubject: String?, groupName: String) -> String {
         let base = (originalSubject?.isEmpty == false) ? originalSubject! : nudgeSubject(groupName: groupName)
-        return base.lowercased().hasPrefix("re:") ? base : "Re: \(base)"
+        return continuing(base)
+    }
+
+    // #3927: the "Re:" rule on its own, so an inquiry's answer continues its conversation through the same
+    // rule a show's does rather than a second copy of it. One prefix, never "Re: Re:".
+    static func continuing(_ subject: String) -> String {
+        subject.lowercased().hasPrefix("re:") ? subject : "Re: \(subject)"
     }
 
     // A short, low-key nudge in Dan's voice: no performative enthusiasm, no em dashes. The

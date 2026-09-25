@@ -263,6 +263,10 @@ enum AttachConversation {
 
         inquiry.gmailThreadId = thread
         inquiry.conversationAttachedAt = now
+        // #3927: the name the found conversation already goes by, so Dan's answer from Overture continues
+        // it. Nothing is recorded when the thread's first message carries no Subject, rather than a name
+        // the conversation does not have.
+        inquiry.conversationSubject = ReplyDetection.conversationSubject(threadJSON: threadJSON)
 
         // WHEN Dan answered, taken from his own message on the thread rather than from the clock. Without
         // it the row goes on reading "Awaiting your first reply" on a conversation he answered days ago,

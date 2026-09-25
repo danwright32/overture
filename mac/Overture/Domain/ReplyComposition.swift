@@ -100,7 +100,8 @@ extension ReplyComposition {
             title: InquiryCopy.replyTitle(to: inquiry.inquirerName),
             subtitle: inquiry.notes,
             contact: inquiry,
-            editableSubject: InquiryCopy.replySubjectDefault,
+            // #3927: the conversation's own subject when there is one, never a fixed default.
+            editableSubject: InquiryReplySender.replySubject(for: inquiry),
             aiDraft: nil,
             audienceControls: nil,
             // #2796: an inquiry names itself, so the sentence says which conversation is meant.
@@ -112,13 +113,13 @@ extension ReplyComposition {
                 // The subject he TYPED, never the default it started at, or the sheet would show one
                 // subject while another shipped (L64).
                 SendConfirmation(replyTo: SendGroup.replyAudience(of: inquiry),
-                                 subject: subject ?? InquiryCopy.replySubjectDefault, body: body)
+                                 subject: subject ?? InquiryReplySender.replySubject(for: inquiry), body: body)
             },
             send: { body, subject in
                 // What to do next is decided in InquiryMutations (tested, including the sent-but-not-saved
                 // path), exactly as it was before this screen was shared.
                 switch await InquiryMutations.sendReply(inquiry,
-                                                        subject: subject ?? InquiryCopy.replySubjectDefault,
+                                                        subject: subject ?? InquiryReplySender.replySubject(for: inquiry),
                                                         body: body, now: Date(), sender: sender,
                                                         context: context, feedback: feedback) {
                 case .sent: return true
