@@ -65,7 +65,7 @@ struct StoredPropertyRatchetTests {
         }
         #expect(gone.isEmpty, """
             \(gone.count) stored propert\(gone.count == 1 ? "y" : "ies") recorded in \(Self.listPath) \
-            no longer exist on any model in AppSchema:
+            no longer exist\(gone.count == 1 ? "s" : "") on any model in AppSchema:
 
             \(lines.joined(separator: "\n"))
 
