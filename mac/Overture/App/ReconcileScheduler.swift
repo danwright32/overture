@@ -31,6 +31,12 @@ final class ReconcileScheduler {
     // run as a dead one (#471) on the Dock tile and menu bar, a wrong badge instead of a compile error.
     private let replyRunAlive: (Date) -> Bool
 
+    // #4107: every tick the timer, the export watcher and the menu start goes through here, so ticks never
+    // overlap and a request made during one gets exactly one rerun after it. See `CoalescingRunner`.
+    private lazy var ticks = CoalescingRunner<ReconcileSummary> { [weak self] in
+        await self?.runSafeReconcilesOnce() ?? ReconcileSummary(omniFocusChanged: 0)
+    }
+
     init(context: ModelContext, replyRunAlive: @escaping (Date) -> Bool) {
         self.context = context
         self.replyRunAlive = replyRunAlive
@@ -41,7 +47,7 @@ final class ReconcileScheduler {
     // click never appears to do nothing (#285).
     func runNow(notify: @escaping (String) -> Void = { NotificationService.post(.reconcile, title: "Overture", body: $0) }) {
         Task { @MainActor in
-            let summary = await self.runSafeReconcilesOnce()
+            let summary = await self.ticks.request()
             notify(summary.message)
         }
     }
@@ -60,11 +66,11 @@ final class ReconcileScheduler {
     func start() {
         timerTask = Task { @MainActor [weak self] in
             guard let self else { return }
-            self.notifyIfNewWhileAway(await self.runSafeReconcilesOnce())
+            self.notifyIfNewWhileAway(await self.ticks.request())
             while !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: UInt64(ReconcileScheduler.intervalSeconds() * 1_000_000_000))
                 if Task.isCancelled { break }
-                self.notifyIfNewWhileAway(await self.runSafeReconcilesOnce())
+                self.notifyIfNewWhileAway(await self.ticks.request())
             }
         }
         watcherTask = Task { @MainActor [weak self] in
@@ -74,7 +80,7 @@ final class ReconcileScheduler {
                 let current = ReconcileScheduler.exportModifiedAt()
                 if DownbeatExportWatcher.shouldReconcile(previous: lastSeen, current: current) {
                     lastSeen = current
-                    self.notifyIfNewWhileAway(await self.runSafeReconcilesOnce())
+                    self.notifyIfNewWhileAway(await self.ticks.request())
                 }
             }
         }
