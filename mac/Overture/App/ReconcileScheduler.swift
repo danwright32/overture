@@ -121,6 +121,9 @@ final class ReconcileScheduler {
                                sweepProposals: @MainActor (ModelContext, Date, StoreRows) async -> ReplyProposalSweep.Outcome = {
                                    await ReplyProposalSweep().run(in: $0, now: $1, rows: $2)
                                },
+                               readClosing: @MainActor (ModelContext, Date, Bool) async -> DueReading = {
+                                   await DueReading.read(from: $0, now: $1, replyRunAlive: $2)
+                               },
                                recordTimeline: (ReconcileTickTimeline) -> Void = { AgentLog.note($0.logLine) })
         async -> ReconcileSummary {
         // #4107: what each pass costs, measured on every tick. `lap` closes the pass that just ran; `resume`
@@ -129,9 +132,10 @@ final class ReconcileScheduler {
         let clock = ContinuousClock()
         var timeline = ReconcileTickTimeline()
         var mark = clock.now
-        func lap(_ phase: ReconcileTickTimeline.Phase) {
+        func lap(_ phase: ReconcileTickTimeline.Phase, awaited: Bool? = nil) {
             let elapsed = (clock.now - mark).components
-            timeline.record(phase, seconds: Double(elapsed.seconds) + Double(elapsed.attoseconds) / 1e18)
+            timeline.record(phase, seconds: Double(elapsed.seconds) + Double(elapsed.attoseconds) / 1e18,
+                            awaited: awaited)
         }
         // #4107: between passes the tick yields, so whatever else is waiting on the main actor gets a turn
         // between two passes rather than only after all eleven. Every pass is still awaited in order, so
@@ -247,10 +251,26 @@ final class ReconcileScheduler {
         // #4107: a FRESH read, deliberately, and the only other one the tick makes. What the Dock and the
         // menu bar say must be what the store holds now, including a show a scout added while this tick
         // was waiting on Gmail, which the shared rows above cannot contain.
-        let closing = StoreRows.fetch(from: context)
-        let after = closing.prospects
-        let repliedAfter = after.filter(Self.hasNewReply).map { (key: $0.naturalKey, name: $0.groupName) }
-        let bookedAfter = after.filter { $0.outcome == .booked }.map { (key: $0.naturalKey, name: $0.groupName) }
+        // #4250: taken off the main actor, as values, since nothing below writes a row. See `DueReading`
+        // for the measurement and for when it is still taken on the main actor (unsaved changes), which
+        // the timeline reports rather than folding into a number marked as waiting.
+        let closing = await readClosing(context, now, replyRunAlive(now))
+        lap(.closingRead, awaited: !closing.readOnMainThread)
+        mark = clock.now
+        // #4250: the reading is a picture of the store at one moment and this runs after it, so a show
+        // deleted in between must not be named in the away alert, whose deep link would then open nothing.
+        // Only the shows NEW this tick are checked (usually none), one keyed count each, never the whole store.
+        func stillStored(_ show: DueReading.ShowName) -> Bool {
+            let key = show.key
+            return ((try? context.fetchCount(FetchDescriptor<Prospect>(
+                predicate: #Predicate { $0.naturalKey == key }))) ?? 0) > 0
+        }
+        let repliedAfter = closing.replied
+            .filter { repliedBefore.contains($0.key) || stillStored($0) }
+            .map { (key: $0.key, name: $0.name) }
+        let bookedAfter = closing.booked
+            .filter { bookedBefore.contains($0.key) || stillStored($0) }
+            .map { (key: $0.key, name: $0.name) }
         let newReplies = AwayAlert.newNames(before: repliedBefore, after: repliedAfter)
         let newBookings = AwayAlert.newNames(before: bookedBefore, after: bookedAfter)
         // #301: keep the keys aligned with the names so the away alert can deep-link to a sole new lead.
@@ -264,14 +284,13 @@ final class ReconcileScheduler {
         // because neither surface that draws it can hold a SwiftData query of its own. Same predicate as
         // the toolbar's Due badge, so the three can never state different numbers.
         // #3890: with the replies waiting on an answer in it, and their own count beside it for the menu.
-        let due = DueWork.counts(prospects: after, inquiries: closing.inquiries,
-                                 now: now, replyRunAlive: replyRunAlive(now))
+        let due = closing.due
         DueBadge.publish(due.total, replies: due.repliesToAnswer, into: defaults)
         // #3474: and again at the moment the count next changes, rather than only at the next tick.
         // Work comes due on the clock (a post-event prompt at Eastern midnight), and with the window
         // closed nothing re-renders, so these two surfaces were blind to newly due work for up to half
         // an hour on exactly the state they exist for.
-        armBadgeRepublish(prospects: after, now: now, defaults: defaults)
+        armBadgeRepublish(nextChange: closing.nextChange, now: now, defaults: defaults)
         // #2091: the watch heartbeat, carrying the observed sleep alongside the wall clock so the next
         // tick can tell a sleeping Mac (nothing missed) from a dead process (everything missed).
         WatchHeartbeatStore.stamp(now: now, readings: readings, into: defaults)
@@ -493,7 +512,8 @@ final class ReconcileScheduler {
         let due = DueWork.counts(prospects: all, inquiries: inquiries, now: now,
                                  replyRunAlive: replyRunAlive(now))
         DueBadge.publish(due.total, replies: due.repliesToAnswer, into: defaults)
-        armBadgeRepublish(prospects: all, now: now, defaults: defaults)
+        armBadgeRepublish(nextChange: DueWork.nextChange(prospects: all, now: now, replyRunAlive: replyRunAlive(now)),
+                          now: now, defaults: defaults)
         return due.total
     }
 
@@ -508,11 +528,11 @@ final class ReconcileScheduler {
     // Nothing coming due means NO timer at all, not one armed far out: a timer for a change that cannot
     // happen is a promise nothing can keep, and the reconcile tick remains the backstop for every change
     // this cannot see (a store edit, an eligibility that turns over on the clock).
-    func armBadgeRepublish(prospects: [Prospect], now: Date, defaults: UserDefaults = .standard) {
+    // #4250: handed the instant rather than the rows, so the tick can work it out off the main actor.
+    func armBadgeRepublish(nextChange: Date?, now: Date, defaults: UserDefaults = .standard) {
         badgeTask?.cancel()
         badgeTask = nil
-        guard let next = DueWork.nextChange(prospects: prospects, now: now,
-                                            replyRunAlive: replyRunAlive(now)) else { return }
+        guard let next = nextChange else { return }
         let delay = next.timeIntervalSince(now)
         guard delay > 0 else { return }
         badgeTask = Task { @MainActor [weak self] in

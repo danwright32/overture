@@ -57,3 +57,64 @@ struct StoreRows {
         return isLive(model)
     }
 }
+
+// #4250: what the tick's closing count needs from the store, as VALUES, so it can be read off the main actor.
+//
+// Measured 2026-09-25 against a clone of the live store (1,340 prospects, three rounds within 3%): the
+// closing read was a second whole store fetch on the main actor, 189 to 199ms, and deriving the badge
+// (`DueWork.counts` plus `nextChange`) over those rows took another 130ms when the rows were fresh. Unlike
+// the tick's OPENING read, nothing here writes a row: it counts, names and arms a timer. So it can be read
+// through a background `ModelContext` and handed across as values, with no main context object crossing.
+//
+// The opening read was measured too and stays on the main actor. Every pass writes to the rows it reads,
+// so a background read would have to be re-resolved on the main context by identifier, and re-resolving
+// all 1,340 on a context that does not already hold them cost 370ms, nearly twice the 190ms read it would
+// replace. It is only cheap (2.6ms) when the main context already holds every row, which is true while the
+// queue is on screen and nothing guarantees otherwise.
+//
+// Two limits, stated rather than hidden. A background context reads what is SAVED, so with unsaved changes
+// on the main context `read` takes the reading on the main actor as before, and says so in
+// `readOnMainThread`, which is what the tick's timeline reports it by. And the reading is a picture of one
+// moment: a show deleted between it and the tick's apply is dropped from the away alert there (see
+// `ReconcileScheduler.runSafeReconcilesOnce`); the badge count can be one stale until the next tick or
+// republish, which is the same staleness any edit made after a tick already has.
+struct DueReading: Sendable {
+    struct ShowName: Sendable, Equatable {
+        let key: String
+        let name: String
+    }
+
+    let replied: [ShowName]
+    let booked: [ShowName]
+    let due: DueWork.Counts
+    let nextChange: Date?
+    let readOnMainThread: Bool
+
+    static func derive(prospects: [Prospect], inquiries: [Inquiry], now: Date, replyRunAlive: Bool) -> DueReading {
+        DueReading(
+            replied: prospects.filter(ReconcileScheduler.hasNewReply).map { ShowName(key: $0.naturalKey, name: $0.groupName) },
+            booked: prospects.filter { $0.outcome == .booked }.map { ShowName(key: $0.naturalKey, name: $0.groupName) },
+            due: DueWork.counts(prospects: prospects, inquiries: inquiries, now: now, replyRunAlive: replyRunAlive),
+            nextChange: DueWork.nextChange(prospects: prospects, now: now, replyRunAlive: replyRunAlive),
+            readOnMainThread: Thread.isMainThread)
+    }
+
+    // The reading through a context of its own. Nonisolated and async, so it runs on the global executor,
+    // never the main actor; everything it fetches stays inside this function.
+    static func readInBackground(container: ModelContainer, now: Date, replyRunAlive: Bool) async -> DueReading {
+        let context = ModelContext(container)
+        let prospects = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
+        let inquiries = (try? context.fetch(FetchDescriptor<Inquiry>())) ?? []
+        return derive(prospects: prospects, inquiries: inquiries, now: now, replyRunAlive: replyRunAlive)
+    }
+
+    // Off the main actor when the store holds everything the main context does; on it otherwise.
+    @MainActor
+    static func read(from context: ModelContext, now: Date, replyRunAlive: Bool) async -> DueReading {
+        if context.hasChanges {
+            let rows = StoreRows.fetch(from: context)
+            return derive(prospects: rows.prospects, inquiries: rows.inquiries, now: now, replyRunAlive: replyRunAlive)
+        }
+        return await readInBackground(container: context.container, now: now, replyRunAlive: replyRunAlive)
+    }
+}

@@ -215,6 +215,7 @@ struct ReconcileTickReadsTheStoreOnceTests {
     private func tick(_ ctx: ModelContext, defaults: UserDefaults,
                       clock: @escaping () -> Date = { Date() },
                       timeline: ((ReconcileTickTimeline) -> Void)? = nil,
+                      readClosing: (@MainActor (ModelContext, Date, Bool) async -> DueReading)? = nil,
                       mailbox: @escaping (URLRequest) async throws -> (Data, URLResponse)) async -> ReconcileSummary {
         await ReconcileScheduler(context: ctx, replyRunAlive: { _ in false }).runSafeReconcilesOnce(
             now: now, defaults: defaults,
@@ -229,6 +230,7 @@ struct ReconcileTickReadsTheStoreOnceTests {
                     },
                     attach: { _, _ in InquiryConversationAttach.Outcome() })
             },
+            readClosing: readClosing ?? { await DueReading.read(from: $0, now: $1, replyRunAlive: $2) },
             recordTimeline: timeline ?? { _ in })
     }
 
@@ -348,5 +350,102 @@ struct ReconcileTickReadsTheStoreOnceTests {
         #expect(t.longestHold?.phase == .closingCount)
         #expect(t.logLine.contains("replyProposals ~4000"))
         #expect(t.logLine.contains("longest main actor hold: closingCount 50"))
+    }
+
+    // MARK: #4250, the closing read off the main actor
+
+    // #4250: the closing count used to be a second whole store read ON the main actor (about 190ms on the
+    // live store, plus the badge derivation over every row). It is read-only, so it now runs through a
+    // background context and hands the main actor values. Held the only way it can fail: the reading says
+    // which thread it was taken on, and a reader made main actor again says so.
+    @Test func theClosingCountIsReadOffTheMainActor() async throws {
+        let ctx = try context()
+        show(ctx)
+        try ctx.save()
+        var taken: DueReading?
+
+        _ = await tick(ctx, defaults: ScratchDefaults.make("4250-off-main"),
+                       readClosing: { context, at, alive in
+                           let r = await DueReading.read(from: context, now: at, replyRunAlive: alive)
+                           taken = r
+                           return r
+                       },
+                       mailbox: { req in self.respond(req, self.emptyList(), 200) })
+
+        let reading = try #require(taken, "the tick never took its closing reading through the background reader")
+        #expect(reading.readOnMainThread == false)
+    }
+
+    // #4250: the background reading is a picture of the store at one moment, and the away alert is
+    // applied on the main actor after it. A show deleted in between must not be named in the alert (its
+    // deep link would open nothing). The positive control is in the same fixture: a show turned replied in
+    // the same window and NOT deleted is named, so "not named" cannot be a fixture where nobody could be.
+    @Test func aShowDeletedBetweenTheClosingReadAndItsApplyIsNotNamed() async throws {
+        let ctx = try context()
+        let goes = show(ctx, key: "goes")
+        let stays = show(ctx, key: "stays")
+        try ctx.save()
+
+        let summary = await tick(ctx, defaults: ScratchDefaults.make("4250-deleted-mid-read"),
+                                 readClosing: { context, at, alive in
+                                     // Both replied after the tick's opening snapshot, so both are new.
+                                     goes.outcome = .replied
+                                     stays.outcome = .replied
+                                     try? ctx.save()
+                                     let r = await DueReading.read(from: context, now: at, replyRunAlive: alive)
+                                     // Another writer removes one after the read, before the apply.
+                                     ctx.delete(goes)
+                                     try? ctx.save()
+                                     return r
+                                 },
+                                 mailbox: { req in self.respond(req, self.emptyList(), 200) })
+
+        #expect(summary.newReplyKeys == ["stays"])
+        #expect(summary.newReplies == ["G stays"])
+    }
+
+    // #4250: a background context reads what is SAVED. With unsaved changes on the main context the two
+    // disagree, so the reading is taken on the main actor as it always was, and says so, which is what
+    // the tick's timeline reports it by. The saved case above is the control: same reader, off main.
+    @Test func unsavedChangesAreReadOnTheMainActorAndSaySo() async throws {
+        let ctx = try context()
+        show(ctx)
+        try ctx.save()
+        show(ctx, key: "unsaved").outcome = .replied
+
+        let reading = await DueReading.read(from: ctx, now: now, replyRunAlive: false)
+
+        #expect(reading.readOnMainThread == true)
+        #expect(reading.replied.map(\.key) == ["unsaved"])
+    }
+
+    // #4250: and the tick reports that fallback as the hold it is. Marked as waiting it would drop out of
+    // the log line's "longest main actor hold", the one number that says what a tick held (L11).
+    @Test func aClosingReadTakenOnTheMainActorIsReportedAsAHold() async throws {
+        let ctx = try context()
+        show(ctx)
+        try ctx.save()
+        var recorded: ReconcileTickTimeline?
+
+        _ = await tick(ctx, defaults: ScratchDefaults.make("4250-hold"), timeline: { recorded = $0 },
+                       readClosing: { context, at, alive in
+                           _ = self.show(context, key: "unsaved")
+                           return await DueReading.read(from: context, now: at, replyRunAlive: alive)
+                       },
+                       mailbox: { req in self.respond(req, self.emptyList(), 200) })
+
+        let timeline = try #require(recorded)
+        let read = try #require(timeline.entries.first { $0.phase == .closingRead })
+        #expect(read.awaited == false)
+        #expect(timeline.logLine.contains("closingRead ~") == false)
+    }
+
+    @Test func aPassThatWaitsCanBeRecordedAsAHoldWhenItDidNot() {
+        var t = ReconcileTickTimeline()
+        t.record(.closingRead, seconds: 0.190, awaited: false)
+        t.record(.closingCount, seconds: 0.010)
+
+        #expect(t.longestHold?.phase == .closingRead)
+        #expect(t.logLine.contains("closingRead 190"))
     }
 }
