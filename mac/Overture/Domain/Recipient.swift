@@ -830,8 +830,21 @@ final class Recipient {
         return .unaccountedAddress
     }
 
-    var isSendablePending: Bool {
+    var isSendablePending: Bool { isSendablePending(today: EasternDate.today()) }
+
+    // #4136: the same gate judged against a given day, so a test can pin the clock. The property above is
+    // the spelling every send path reads, and it asks with the real one.
+    func isSendablePending(today: String) -> Bool {
         sendState == .pending && (email?.isEmpty == false) && !pausedByReply
+            // #4136: a show whose last night has passed does not get pitched. Every other hold here is about
+            // the words or the person; this one is about the calendar, and before it nothing in the funnel
+            // asked, so an approved draft for a performance that was over went out like any other. The
+            // committing moment, and the one place a wrong answer cannot be taken back. No override: there
+            // is no night left to pitch. `DraftReviewNotes.performancePassed` is the sentence beside the
+            // button, and `PassedKeptRetirement` sweeps a never pitched show like this out of Review.
+            && !(prospect.map { EasternDate.lastNightHasPassed(performanceDate: $0.performanceDate,
+                                                                runEndDate: $0.runEndDate,
+                                                                today: today) } ?? false)
             // #901: a date conflict Dan has not cleared stops the send, not just the draft. The prep gate
             // alone would miss the case that matters most: the draft already existed, was approved, and
             // THEN he blocked the week or took a booking. Nothing should go out pitching a night he

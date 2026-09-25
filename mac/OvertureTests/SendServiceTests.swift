@@ -87,7 +87,7 @@ struct SendServiceTests {
     // became "the show has already happened" as real time passed it, so a gate on the show still being
     // ahead turned them red for a reason that had nothing to do with what they assert. A pinned clock
     // cannot age; a literal fixture date read against `Date()` always will.
-    static let beforeTheShow = Date(timeIntervalSince1970: 1_780_000_000)   // 2026-05-28
+    static let beforeTheShow = Date(timeIntervalSince1970: 3547225600)   // 2026-05-28
 
     private func container() throws -> ModelContainer {
         try ModelContainer(for: Schema([Prospect.self, Recipient.self]),
@@ -96,9 +96,9 @@ struct SendServiceTests {
 
     private func approved(_ ctx: ModelContext, group: String, email: String? = "to@org.org",
                           draft: String? = "Hello,\n\nI photograph performing arts.", ingested: Date) {
-        let key = Prospect.makeNaturalKey(groupName: group, performanceDate: "2026-07-01", venue: "V")
+        let key = Prospect.makeNaturalKey(groupName: group, performanceDate: "2082-07-01", venue: "V")
         let p = Prospect(naturalKey: key, groupName: group, discipline: "choral", venue: "V",
-                         performanceDate: "2026-07-01", sourceListingURL: nil,
+                         performanceDate: "2082-07-01", sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong", coverage: "likely_uncovered",
                          fitScore: 7, tier: "high", fitReason: "r", matchedClientName: nil,
                          possibleMatchSource: nil, possibleMatchName: nil, status: .approved, ingestedAt: ingested)
@@ -123,9 +123,9 @@ struct SendServiceTests {
     private func approvedNamed(_ ctx: ModelContext, group: String, name: String?, email: String,
                                body: String, ingested: Date,
                                role: String? = nil, method: ContactMethod? = nil) -> Prospect {
-        let key = Prospect.makeNaturalKey(groupName: group, performanceDate: "2026-07-01", venue: "V")
+        let key = Prospect.makeNaturalKey(groupName: group, performanceDate: "2082-07-01", venue: "V")
         let p = Prospect(naturalKey: key, groupName: group, discipline: "choral", venue: "V",
-                         performanceDate: "2026-07-01", sourceListingURL: nil,
+                         performanceDate: "2082-07-01", sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong", coverage: "likely_uncovered",
                          fitScore: 7, tier: "high", fitReason: "r", matchedClientName: nil,
                          possibleMatchSource: nil, possibleMatchName: nil, status: .approved, ingestedAt: ingested)
@@ -196,7 +196,7 @@ struct SendServiceTests {
         // match can tell a genuine new booking from a pre-existing client.
         let ctx = ModelContext(try container())
         let p = Prospect(naturalKey: "k", groupName: "Repeat Client", discipline: "choral", venue: "V",
-                         performanceDate: "2026-07-01", sourceListingURL: nil,
+                         performanceDate: "2082-07-01", sourceListingURL: nil,
                          priorRelationship: "booked", production: "self", profile: "strong", coverage: "likely_uncovered",
                          fitScore: 7, tier: "high", fitReason: "r", matchedClientName: nil,
                          possibleMatchSource: nil, possibleMatchName: nil, status: .approved)
@@ -213,9 +213,9 @@ struct SendServiceTests {
     // prospect still waiting in the send queue is NOT contacted; once sent it is.
     @Test func approvedButUnsentIsNotYetContacted() throws {
         let ctx = ModelContext(try container())
-        let key = Prospect.makeNaturalKey(groupName: "Held", performanceDate: "2026-07-01", venue: "V")
+        let key = Prospect.makeNaturalKey(groupName: "Held", performanceDate: "2082-07-01", venue: "V")
         let p = Prospect(naturalKey: key, groupName: "Held", discipline: "choral", venue: "V",
-                         performanceDate: "2026-07-01", sourceListingURL: nil,
+                         performanceDate: "2082-07-01", sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 7, tier: "high", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
@@ -261,9 +261,9 @@ struct SendServiceTests {
     @discardableResult
     private func sentContact(_ ctx: ModelContext, group: String, threadId: String? = "th",
                              msgId: String? = "<m>") -> (Prospect, Recipient) {
-        let key = Prospect.makeNaturalKey(groupName: group, performanceDate: "2026-07-01", venue: "V")
+        let key = Prospect.makeNaturalKey(groupName: group, performanceDate: "2082-07-01", venue: "V")
         let p = Prospect(naturalKey: key, groupName: group, discipline: "choral", venue: "V",
-                         performanceDate: "2026-07-01", sourceListingURL: nil,
+                         performanceDate: "2082-07-01", sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong", coverage: "likely_uncovered",
                          fitScore: 7, tier: "high", fitReason: "r", matchedClientName: nil,
                          possibleMatchSource: nil, possibleMatchName: nil, status: .contacted)
@@ -467,9 +467,9 @@ struct SendServiceTests {
     // Two contacts on one show, both still to be written to, sharing the same letter.
     private func showWithTwoContacts(_ ctx: ModelContext, body: String = "Hello,\n\nI document dance.",
                                      secondName: String? = "Noah Ellis") -> (Prospect, Recipient, Recipient) {
-        let key = Prospect.makeNaturalKey(groupName: "Aurora", performanceDate: "2026-07-01", venue: "V")
+        let key = Prospect.makeNaturalKey(groupName: "Aurora", performanceDate: "2082-07-01", venue: "V")
         let p = Prospect(naturalKey: key, groupName: "Aurora", discipline: "dance", venue: "V",
-                         performanceDate: "2026-07-01", sourceListingURL: nil,
+                         performanceDate: "2082-07-01", sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 7, tier: "high", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
@@ -671,9 +671,9 @@ struct SendServiceTests {
 
     // An approved performance with two recipients (an act and a presenter) sharing one drafted body.
     private func twoRecipients(_ ctx: ModelContext, body: String, ingested: Date) -> Prospect {
-        let key = Prospect.makeNaturalKey(groupName: "Lumen", performanceDate: "2026-07-01", venue: "V")
+        let key = Prospect.makeNaturalKey(groupName: "Lumen", performanceDate: "2082-07-01", venue: "V")
         let p = Prospect(naturalKey: key, groupName: "Lumen", discipline: "choral", venue: "V",
-                         performanceDate: "2026-07-01", sourceListingURL: nil,
+                         performanceDate: "2082-07-01", sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong", coverage: "likely_uncovered",
                          fitScore: 7, tier: "high", fitReason: "r", matchedClientName: nil,
                          possibleMatchSource: nil, possibleMatchName: nil, status: .approved, ingestedAt: ingested)
@@ -760,9 +760,9 @@ struct SendServiceTests {
     // simply the ordinary case, and this says so on the provenance that used to differ.
     @Test func aPerformerReceivesTheShowsOwnLetter() async throws {
         let ctx = ModelContext(try container())
-        let key = Prospect.makeNaturalKey(groupName: "Solo Act", performanceDate: "2026-08-15", venue: "Weill Recital Hall")
+        let key = Prospect.makeNaturalKey(groupName: "Solo Act", performanceDate: "2082-08-15", venue: "Weill Recital Hall")
         let p = Prospect(naturalKey: key, groupName: "Solo Act", discipline: "choral", venue: "Weill Recital Hall",
-                         performanceDate: "2026-08-15", sourceListingURL: nil,
+                         performanceDate: "2082-08-15", sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong", coverage: "likely_uncovered",
                          fitScore: 7, tier: "high", fitReason: "r", matchedClientName: nil,
                          possibleMatchSource: nil, possibleMatchName: nil, status: .approved,

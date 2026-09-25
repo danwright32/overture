@@ -110,6 +110,10 @@ struct ProspectRowRestoreGuardTests {
         }
         #expect(wentBy.lowerBound < dismissed.lowerBound,
                 "a retired show must be caught before the Restore branch, or it offers a Restore that undoes itself")
+        // #4136: and the kept sibling, which is stored dismissed in exactly the same way.
+        let unpitched = body.range(of: "item.showOutcome == .wentByUnpitched")
+        #expect(unpitched != nil && unpitched!.lowerBound < dismissed.lowerBound,
+                "a kept show the calendar closed must be caught before the Restore branch too")
         #expect(!body.contains("Went by\", systemImage: \"archivebox\""))
     }
 

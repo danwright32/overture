@@ -19,7 +19,7 @@ import SwiftData
 @MainActor
 @Suite("Hand-marked reply")
 struct HandMarkedReplyTests {
-    private let now = Date(timeIntervalSince1970: 1_700_000_000)
+    private let now = Date(timeIntervalSince1970: 3467225600)
 
     private func container() throws -> ModelContainer {
         try ModelContainer(for: Schema([Prospect.self, Recipient.self]),
@@ -31,7 +31,7 @@ struct HandMarkedReplyTests {
     private func dmPitched(_ ctx: ModelContext, route: String = "https://instagram.com/auroraquartet")
     -> (Prospect, Recipient) {
         let p = Prospect(naturalKey: "Aurora|2026-09-01", groupName: "Aurora Quartet", discipline: "music",
-                         venue: "Jalopy", performanceDate: "2026-09-01", sourceListingURL: nil, priorRelationship: "none", production: "self", profile: "strong",
+                         venue: "Jalopy", performanceDate: "2082-09-01", sourceListingURL: nil, priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 7, tier: "high", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
                          status: .drafted)

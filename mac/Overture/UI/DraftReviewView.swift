@@ -61,6 +61,9 @@ struct DraftReviewView: View {
     // the sentinel on its next heartbeat tick), not just this one recipient's draft.
     var onCancelReplyDraft: () -> Void = {}
     var gmailConnected: Bool = false
+    // #4136: the day the send gate judges a passed show against, handed down by the row so the note beside
+    // the button and the row's own "Performance passed" label read one clock.
+    var today: String = EasternDate.today()
     // #436: when this outbound draft is mid-send, the instant it was launched (nil = not sending), so the
     // Send button is replaced by a live "Sending… m:ss" indicator that flips to "looks stuck" past the
     // send timeout. #468: a retry IS safe here (unlike when this comment was written): both sendOne and
@@ -431,6 +434,12 @@ struct DraftReviewView: View {
         // address: an email held by a review guard is a different, already-explained case.
         if let note = DraftReviewNotes.noSendableEmail(hasPendingRecipient: item.hasPendingRecipient,
                                                        hasAnyEmailContact: item.hasAnyEmailContact) {
+            Text(note).font(.system(size: 10)).foregroundStyle(OVColor.rust).lineLimit(1)
+        }
+        // #4136: the performance is over, which holds the send and has no fix. First among the draft's own
+        // reasons, because it makes every other one moot.
+        if let note = DraftReviewNotes.performancePassed(performanceDate: item.performanceDate,
+                                                         runEndDate: item.runEndDate, today: today) {
             Text(note).font(.system(size: 10)).foregroundStyle(OVColor.rust).lineLimit(1)
         }
         // #2052: a missing subject line, which holds the send just as hard and is two clicks from fixed.

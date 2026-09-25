@@ -27,7 +27,7 @@ private final class RecordingSender: MailSender, @unchecked Sendable {
 @Suite("Approving and sending are one action (#2050)")
 struct ApproveAndSendIsOneActionTests {
     private let today = ScoutTestClock.stageNavigationAnchor
-    private let now = Date(timeIntervalSince1970: 1_768_000_000)
+    private let now = Date(timeIntervalSince1970: 3535225600)
 
     private func context() throws -> ModelContext {
         ModelContext(try ModelContainer(for: Schema([Prospect.self, Recipient.self]),
@@ -38,7 +38,7 @@ struct ApproveAndSendIsOneActionTests {
     private func draftedShow(_ ctx: ModelContext, contacts: Int = 1,
                              together: Bool = false, subject: String? = "Photographing your concert") -> Prospect {
         let p = Prospect(naturalKey: "k", groupName: "Aurora Strings", discipline: "music",
-                         venue: "Weill Recital Hall", performanceDate: "2026-09-19", sourceListingURL: nil, priorRelationship: "none", production: "self", profile: "strong",
+                         venue: "Weill Recital Hall", performanceDate: "2082-09-19", sourceListingURL: nil, priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 6, tier: "mid", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
                          status: .drafted)

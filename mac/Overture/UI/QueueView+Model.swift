@@ -340,15 +340,18 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     // open date conflict, and promised a contact hunt on a show whose contact a probe had already found.
     // Deleting that line removed the instance; this removes the gap, so the next status line the card
     // grows has somewhere correct to read from and no reason to work it out again.
-    var nextPrepRun: PrepRunIntent {
+    // #4136: a function of `today`, because the rule now reads the calendar and a card snapshot holds no
+    // clock of its own.
+    func nextPrepRun(today: String) -> PrepRunIntent {
         PrepQueueBuilder.nextRunIntent(
             for: self,
             probedWithContact: PrepQueueBuilder.probedWithContact(
-                probedAt: reachabilityProbedAt, contactEmails: contacts.map(\.email)))
+                probedAt: reachabilityProbedAt, contactEmails: contacts.map(\.email)),
+            today: today)
     }
 
     // The plain yes or no, over the accessor above rather than beside it, so the two cannot disagree.
-    var isAwaitingPrepRun: Bool { nextPrepRun != .notQueued }
+    func isAwaitingPrepRun(today: String) -> Bool { nextPrepRun(today: today) != .notQueued }
 
     // #1583: whether this show clashes with the calendar AT ALL, as opposed to `hasUnclearedConflict`,
     // which is whether that clash still BLOCKS it. Keep is now the acceptance, so the two diverge the
@@ -1729,12 +1732,48 @@ enum QueueModel {
     struct Timing: Equatable { let label: String; let urgency: Urgency
         static func == (l: Timing, r: Timing) -> Bool { l.label == r.label && l.urgency == r.urgency } }
 
+    // #4136: how the timing label is coloured, decided once for EVERY urgency rather than by the row
+    // comparing a few of them and leaving the rest to a default. The row used to give rust to `imminent`
+    // and `underway`, forest to `booked`, and the faint grey to everything else, so "Performance passed"
+    // and "Performs today, too close to book" were drawn exactly as quietly as "In 40 days, send ~3 weeks
+    // out": the exceptions got the treatment meant for the unremarkable case (L609).
+    //
+    // Dan's call, 2026-09-24: "Performance passed" stops being faint, and the rule is decided for the whole
+    // enum. So the two exceptions join the act now colour. A passed or too close show is the thing on the
+    // row most worth a second look, and the ordinary upcoming timings keep the quiet treatment so those
+    // stand out against it. A switch with no default, so a ninth urgency cannot compile until it is placed.
+    enum TimingTone: Equatable, Sendable { case actNow, confirmed, quiet }
+
+    // #4136: which surface is drawing the row. Dan's call, 2026-09-24 (in session, picker answer "Rust only
+    // in the queue"): the rust for a passed or too close show belongs where work is still owed. In Archive,
+    // and on any row whose show is already closed, a passed date is the ordinary state, and drawing it rust
+    // there would turn the commonest value into the loudest one (L609).
+    enum TimingSurface: Equatable, Sendable { case queue, archive }
+
+    // ONE rule, with Archive as the queue's rule minus the two urgencies that only mean "act" while work is
+    // owed. Written as a difference from the queue's answer rather than a second table, so a change to the
+    // queue's colours reaches Archive by construction.
+    static func timingTone(_ urgency: Urgency, on surface: TimingSurface) -> TimingTone {
+        let queueTone: TimingTone
+        switch urgency {
+        case .imminent, .underway, .tooSoon, .past: queueTone = .actNow
+        case .booked: queueTone = .confirmed
+        case .soon, .ahead, .unknown: queueTone = .quiet
+        }
+        switch surface {
+        case .queue: return queueTone
+        case .archive: return (urgency == .past || urgency == .tooSoon) ? .quiet : queueTone
+        }
+    }
+
     static func outreachTiming(performanceDate: String?, runEndDate: String? = nil, today: String) -> Timing {
         // #1122: a run is judged by its CLOSING night, never its opening one (EasternDate.runLastNight,
         // the same rule the scout import guard already honors). A run that opened last week and runs
         // through next week is still live, so only once its last night is behind us has it "passed".
-        let lastNight = EasternDate.runLastNight(runEndDate: runEndDate, performanceDate: performanceDate)
-        if EasternDate.runHasPassed(lastNight: lastNight, today: today) {
+        // #4136: through the one helper Prep eligibility, the send gate and the kept show sweep also read,
+        // so the label and the rules can never disagree about which shows have passed.
+        if EasternDate.lastNightHasPassed(performanceDate: performanceDate, runEndDate: runEndDate,
+                                          today: today) {
             return Timing(label: "Performance passed", urgency: .past)
         }
         guard let days = daysUntil(performanceDate: performanceDate, today: today) else {

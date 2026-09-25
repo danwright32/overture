@@ -32,7 +32,7 @@ struct GreetingLivesInTheBodyTests {
 
     private func prospect(_ ctx: ModelContext, body: String?) -> Prospect {
         let p = Prospect(naturalKey: "k|2026-09-12|weill", groupName: "Aurora Strings",
-                         discipline: "music", venue: "Weill Recital Hall", performanceDate: "2026-09-12",
+                         discipline: "music", venue: "Weill Recital Hall", performanceDate: "2082-09-12",
                          sourceListingURL: nil, priorRelationship: "none",
                          production: "self", profile: "strong", coverage: "likely_uncovered",
                          fitScore: 5, tier: "mid", fitReason: "r", matchedClientName: nil,

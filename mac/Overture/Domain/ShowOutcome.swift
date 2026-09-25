@@ -98,6 +98,17 @@ enum ShowOutcome: String, CaseIterable, Equatable, Hashable, Sendable {
     // never read as a judgement Dan made. `tooFar` is the consequence of blocking a town, a separate
     // action rather than a per-show ending.
     case wentBy = "went_by"
+    // #4136: the sibling of `wentBy` for a show Dan KEPT. Its last night passed while it sat kept, drafted
+    // or approved and nothing had been sent, so `PassedKeptRetirement` closed it. Overture's own, like
+    // `wentBy`, and for the same reason: the calendar decided, Dan did not, so it must teach the ranker
+    // nothing about the organisation.
+    //
+    // A case of its own rather than reusing `wentBy`, because `wentBy` records a different fact and its
+    // words say so ("went by before it was triaged", "opened before you triaged it"). Borrowing it would
+    // put a false sentence on every kept show it closed, and would merge "I never looked at this" with "I
+    // wanted this and it was not pitched in time", which #16 can only ask about while they stay apart.
+    // #3002's `coveredElsewhere` is the precedent: split from `duplicate` for exactly this (L163).
+    case wentByUnpitched = "went_by_unpitched"
     case tooFar = "too_far"
     // #3002/#4082: the nights this row carried are all held by another stored row, so Overture closed it
     // on Dan's behalf. THREE now, not two, and it is the same fact at two levels: `dropNight` records a
@@ -138,6 +149,7 @@ enum ShowOutcome: String, CaseIterable, Equatable, Hashable, Sendable {
         case .theySaidPriceTooHigh: return "They said the price was too high"
         case .turnedThemDown: return "I turned them down"
         case .wentBy: return "Went by"
+        case .wentByUnpitched: return "Went by before pitching"
         case .tooFar: return "Too far"
         // Dan's wording, chosen this session (2026-09-21) over "Already in the queue" and "Duplicate of
         // another entry". It states a fact about the NIGHTS rather than a judgement about the show, which
@@ -178,7 +190,7 @@ enum ShowOutcome: String, CaseIterable, Equatable, Hashable, Sendable {
         // the label is not merely unread for them, it is wrong: "3 Date conflict" and "3 Duplicate" are
         // not sentences, which is what the old default produced.
         case .dateConflict, .hadPaidWork, .pitchingOtherShows, .tooSoon, .notAFit, .dontWantToShoot,
-             .noWayToReachThem, .duplicate, .wentBy, .tooFar, .coveredElsewhere:
+             .noWayToReachThem, .duplicate, .wentBy, .wentByUnpitched, .tooFar, .coveredElsewhere:
             return nil
         }
     }
@@ -213,6 +225,20 @@ enum ShowOutcome: String, CaseIterable, Equatable, Hashable, Sendable {
     // this vocabulary rather than about run nights, and the show level caller should not have to reach
     // through a type about nights to ask it.
     static let automaticRelease: ShowOutcome = .coveredElsewhere
+
+    // #4136: the endings the CALENDAR wrote, where a show's date went by and Overture closed it. Archive
+    // files them together under "Went by" rather than among the cuts Dan made (#28), and the row offers no
+    // Restore on either: the date has passed, so there is nothing to put the show back into, and the next
+    // sweep would close it again. A switch, so a new ending is classified before it compiles.
+    var isCalendarRetirement: Bool {
+        switch self {
+        case .wentBy, .wentByUnpitched: return true
+        case .dateConflict, .hadPaidWork, .pitchingOtherShows, .tooSoon, .notAFit, .dontWantToShoot,
+             .noWayToReachThem, .duplicate, .booked, .neverHeardBack, .emailBounced, .theySaidNotNow,
+             .theySaidNo, .theySaidPriceTooHigh, .turnedThemDown, .tooFar, .coveredElsewhere:
+            return false
+        }
+    }
 
     // The ONE place the choice of menu is made. Takes the send record's answer as a parameter and is
     // not defaulted, so a caller that has not worked out whether the show was pitched cannot compile.
@@ -266,6 +292,10 @@ extension ShowOutcome {
         // judgement to respect, so a night that has not gone by is live. Folding this in with the
         // judgements below would read Overture's own bookkeeping as though Dan had said no.
         case .wentBy:
+            return true
+        // #4136: the same, for a show Dan kept. He wanted it and its date went by unpitched, so a night
+        // that has not gone by is exactly the chance the sweep says he missed.
+        case .wentByUnpitched:
             return true
         // Judgements about the show itself. A different night does not make a show he does not want to
         // shoot into one he does.
@@ -343,6 +373,8 @@ extension ShowOutcome {
         // need words rather than a crash, because a switch that cannot answer for every value is a trap
         // waiting for the first caller who does not know the rule.
         case .wentBy: return "\(org) went by before it was triaged."
+        // #4136: the kept sibling. Never acknowledged to Dan in practice, for the same reason.
+        case .wentByUnpitched: return "\(org) went by before it was pitched."
         // #3002: the third of Overture's own, and the same rule applies. Never acknowledged to Dan in
         // practice, because nothing records it by hand, and still written out rather than defaulted.
         // Says what happened to the NIGHTS, which is the fact, rather than naming it a duplicate, which
@@ -443,7 +475,7 @@ extension ShowOutcome {
         case .theySaidPriceTooHigh: return .lostDoorOpen
         case .turnedThemDown: return .stoodDown
         case .dateConflict, .hadPaidWork, .pitchingOtherShows, .tooSoon, .notAFit, .dontWantToShoot,
-             .noWayToReachThem, .duplicate, .wentBy, .tooFar, .coveredElsewhere:
+             .noWayToReachThem, .duplicate, .wentBy, .wentByUnpitched, .tooFar, .coveredElsewhere:
             return nil
         }
     }
@@ -472,7 +504,9 @@ extension ShowOutcome {
         //
         // #3002 joins it for exactly the same reason, and the argument is stronger here: this value was
         // minted today, so no store written under the old vocabulary can possibly hold it.
-        case .noWayToReachThem, .coveredElsewhere: return nil
+        //
+        // #4136's `wentByUnpitched` likewise: minted after the old vocabulary stopped being written.
+        case .noWayToReachThem, .coveredElsewhere, .wentByUnpitched: return nil
         }
     }
 }

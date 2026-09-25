@@ -133,7 +133,8 @@ struct ReachabilityProbeQueueTests {
         p.status = .queued                      // buildQueue only admits kept, undrafted shows
         try? ctx.save()
 
-        let queue = PrepQueueService.buildQueue(from: ctx, generatedAt: "now",
+        // #4136: `today` pinned before the show's night, since a passed show is no longer Prep work.
+        let queue = PrepQueueService.buildQueue(from: ctx, generatedAt: "now", today: "2026-08-19",
                                                 venueHistory: VenueShootHistory(shoots: [], bookings: [],
                                                                                   today: "2026-08-19"))
 

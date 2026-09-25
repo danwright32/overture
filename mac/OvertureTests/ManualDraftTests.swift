@@ -65,10 +65,10 @@ struct ManualDraftTests {
     // as an AI-prepped one does, and shows up in the review count instead.
     @Test func savingAManualDraftMovesTheShowOutOfPrepAndIntoReview() {
         let p = prospect()
-        #expect(PrepStatus.from(prospects: [p], lastRunStartedAt: nil, running: false).kept == 1)
+        #expect(PrepStatus.from(prospects: [p], lastRunStartedAt: nil, running: false, today: "2026-10-01").kept == 1)
 
         p.writeManualDraft(subject: "s", body: "b")
-        let after = PrepStatus.from(prospects: [p], lastRunStartedAt: nil, running: false)
+        let after = PrepStatus.from(prospects: [p], lastRunStartedAt: nil, running: false, today: "2026-10-01")
 
         #expect(after.kept == 0)
         #expect(after.drafted == 1)

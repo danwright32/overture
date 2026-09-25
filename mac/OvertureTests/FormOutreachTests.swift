@@ -20,9 +20,9 @@ struct FormOutreachTests {
     @discardableResult
     private func formOnlyDrafted(_ ctx: ModelContext, group: String = "Aurora Strings",
                                  formURL: String = "https://aurorastrings.example/contact") -> Prospect {
-        let key = Prospect.makeNaturalKey(groupName: group, performanceDate: "2026-09-01", venue: "Jalopy")
+        let key = Prospect.makeNaturalKey(groupName: group, performanceDate: "2082-09-01", venue: "Jalopy")
         let p = Prospect(naturalKey: key, groupName: group, discipline: "music", venue: "Jalopy",
-                         performanceDate: "2026-09-01", sourceListingURL: nil,
+                         performanceDate: "2082-09-01", sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 7, tier: "high", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
@@ -86,7 +86,7 @@ struct FormOutreachTests {
 
         let reachedOutKeys = Set(ReachedOutQueue.activeWithDates(from: [p], now: now).map { $0.prospect.naturalKey })
         let stage = StageNavigation.stage(containing: p.naturalKey, in: [p],
-                                          reachedOutKeys: reachedOutKeys, context: .at("2026-07-28", now: now))
+                                          reachedOutKeys: reachedOutKeys, context: .at("2082-07-28", now: now))
 
         #expect(stage == .reachedOut)
     }
@@ -121,7 +121,7 @@ struct FormOutreachTests {
 
         let due = ReachedOutQueue.nextReachOut(for: r, of: p, now: now)
 
-        #expect(due == EasternDate.date(from: "2026-09-01"))
+        #expect(due == EasternDate.date(from: "2082-09-01"))
     }
 
     // The fallback, and the reason it exists: an undated show has no night to wait for, and returning
@@ -148,9 +148,9 @@ struct FormOutreachTests {
     // DOES auto-book, so the only difference in play is the channel.
     @Test func aFormPitchCountsAsContactedButItsBookingIsOnlyASuggestion() throws {
         let ctx = ModelContext(try container())
-        let sendDay = Date(timeIntervalSince1970: 1_751_328_000 - 30 * 86_400)
+        let sendDay = Date(timeIntervalSince1970: 3518553600 - 30 * 86_400)
         let p = Prospect(naturalKey: "Acme Festival Chorus", groupName: "Acme Festival Chorus",
-                         discipline: "choral", venue: "V", performanceDate: "2026-07-01",
+                         discipline: "choral", venue: "V", performanceDate: "2082-07-01",
                          sourceListingURL: nil, priorRelationship: "none",
                          production: "self", profile: "strong", coverage: "likely_uncovered",
                          fitScore: 5, tier: "mid", fitReason: "r", matchedClientName: nil,
@@ -168,7 +168,7 @@ struct FormOutreachTests {
         #expect(p.wasProvablyContacted)
 
         let b = OvertureBooking(id: "B99", clientId: "C1", clientDisplayName: "Acme Festival Chorus",
-                                shootName: "Gala", startDate: "2026-07-01", endDate: "2026-07-01",
+                                shootName: "Gala", startDate: "2082-07-01", endDate: "2082-07-01",
                                 venueId: nil, venueName: "V")
         let count = DownbeatBooking.reconcileBooked(prospects: [p], clients: [], bookings: [b],
                                                     health: .ok, now: Date(timeIntervalSince1970: 9_999))
@@ -285,7 +285,7 @@ struct FormPitchStateTests {
     private func show(_ ctx: ModelContext, email: String? = nil,
                       formURL: String? = "https://aurorastrings.example/contact") -> Prospect {
         let p = Prospect(naturalKey: "k", groupName: "Aurora Strings", discipline: "music", venue: "Jalopy",
-                         performanceDate: "2026-09-01", sourceListingURL: nil,
+                         performanceDate: "2082-09-01", sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 7, tier: "high", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,

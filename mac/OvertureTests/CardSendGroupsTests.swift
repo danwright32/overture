@@ -25,10 +25,10 @@ struct CardSendGroupsTests {
     private func show(_ ctx: ModelContext, status: ReviewStatus = .approved, together: Bool = true,
                       contacts: [String] = ["chelsea@everyvoicechoirs.org", "marcus@everyvoicechoirs.org"])
     -> Prospect {
-        let key = Prospect.makeNaturalKey(groupName: "Every Voice Choirs", performanceDate: "2026-09-01",
+        let key = Prospect.makeNaturalKey(groupName: "Every Voice Choirs", performanceDate: "2082-09-01",
                                           venue: "Merkin Hall")
         let p = Prospect(naturalKey: key, groupName: "Every Voice Choirs", discipline: "choral",
-                         venue: "Merkin Hall", performanceDate: "2026-09-01", sourceListingURL: nil, priorRelationship: "none", production: "self", profile: "strong",
+                         venue: "Merkin Hall", performanceDate: "2082-09-01", sourceListingURL: nil, priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 7, tier: "high", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
                          status: status, ingestedAt: Date())

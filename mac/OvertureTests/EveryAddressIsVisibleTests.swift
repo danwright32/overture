@@ -26,7 +26,7 @@ struct EveryAddressIsVisibleTests {
 
     private func approvedProspect(_ ctx: ModelContext) -> Prospect {
         let p = Prospect(naturalKey: "k|2026-09-12|weill", groupName: "Aurora Strings",
-                         discipline: "music", venue: "Weill Recital Hall", performanceDate: "2026-09-12",
+                         discipline: "music", venue: "Weill Recital Hall", performanceDate: "2082-09-12",
                          sourceListingURL: nil, priorRelationship: "none",
                          production: "self", profile: "strong", coverage: "likely_uncovered",
                          fitScore: 5, tier: "mid", fitReason: "r", matchedClientName: nil,
@@ -124,7 +124,7 @@ struct EveryAddressIsVisibleTests {
         let p = approvedProspect(ctx)
         let sent = add(ctx, to: p, email: "sarah@company.example", name: "Sarah Chen", provenance: .act)
         sent.sendState = .sent
-        sent.sentAt = Date(timeIntervalSince1970: 1_780_000_000)
+        sent.sentAt = Date(timeIntervalSince1970: 3547225600)
         add(ctx, to: p, email: "info@thevenue.example", name: nil, provenance: .presenter)
 
         let item = QueueItem(p)

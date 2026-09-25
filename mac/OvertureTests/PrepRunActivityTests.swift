@@ -42,9 +42,9 @@ struct PrepRunActivityTests {
 
     @discardableResult
     private func kept(_ ctx: ModelContext, group: String) -> Prospect {
-        let key = Prospect.makeNaturalKey(groupName: group, performanceDate: "2026-09-11", venue: "The Room")
+        let key = Prospect.makeNaturalKey(groupName: group, performanceDate: "2082-09-11", venue: "The Room")
         let p = Prospect(naturalKey: key, groupName: group, discipline: "other", venue: "The Room",
-                         performanceDate: "2026-09-11", sourceListingURL: nil,
+                         performanceDate: "2082-09-11", sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 7, tier: "high", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,

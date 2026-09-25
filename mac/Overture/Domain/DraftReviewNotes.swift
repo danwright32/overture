@@ -119,6 +119,16 @@ enum DraftReviewNotes {
         return "No subject line. Edit the draft to add one."
     }
 
+    // #4136: the send gate refuses a show whose last night has passed (Recipient.isSendablePending), and
+    // a greyed button that does not say why is a dead end (L109). Asked through the same helper the gate
+    // uses, so the sentence and the refusal cannot disagree. It names no fix, because there is none: the
+    // night is gone, and `PassedKeptRetirement` takes a never pitched show like this out of Review.
+    static func performancePassed(performanceDate: String?, runEndDate: String?, today: String) -> String? {
+        guard EasternDate.lastNightHasPassed(performanceDate: performanceDate, runEndDate: runEndDate,
+                                             today: today) else { return nil }
+        return "This draft won't send: the performance has passed."
+    }
+
     // #2629: names both routes the control now takes. It used to say "Add a contact by hand" full stop,
     // which pointed at a popover that accepted only an address, on exactly the shows that have no address
     // to give it. Saying what it accepts is the half that makes the instruction followable.

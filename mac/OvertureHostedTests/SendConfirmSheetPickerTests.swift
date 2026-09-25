@@ -20,9 +20,9 @@ import ViewInspector
 struct SendConfirmSheetPickerTests {
     private func show(contacts: Int) throws -> Prospect {
         let ctx = ModelContext(try TestModelContainer.inMemory([Prospect.self, Recipient.self]))
-        let key = Prospect.makeNaturalKey(groupName: "Lumen", performanceDate: "2026-09-01", venue: "V")
+        let key = Prospect.makeNaturalKey(groupName: "Lumen", performanceDate: "2082-09-01", venue: "V")
         let p = Prospect(naturalKey: key, groupName: "Lumen", discipline: "choral", venue: "V",
-                         performanceDate: "2026-09-01", sourceListingURL: nil,
+                         performanceDate: "2082-09-01", sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 7, tier: "high", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,

@@ -123,6 +123,10 @@ struct ProspectRowView: View {
     // this has zero effect on any existing Queue row.
     var onRestore: (() -> Void)? = nil
     var gmailConnected: Bool = false
+    // #4136: which surface this row is drawn on, which decides whether a passed date is drawn loud. The
+    // default exists only for the hosted tests that build this view directly; `ProspectRowFactory.row`,
+    // the one production constructor, takes it with NO default, so each surface has to say which it is.
+    var timingSurface: QueueModel.TimingSurface = .queue
     // #436: in-flight send timestamps so the row shows a live "Sending…" state (see DraftReviewView).
     var outboundSendSince: Date? = nil
     var replySendSince: (_ recipientId: String) -> Date? = { _ in nil }
@@ -147,6 +151,16 @@ struct ProspectRowView: View {
     private var timing: QueueModel.Timing {
         QueueModel.displayTiming(performanceDate: item.performanceDate, runEndDate: item.runEndDate,
                                  today: today, isBooked: item.isBooked)
+    }
+
+    // #4136: the colour each tone is drawn in. The DECISION is `QueueModel.timingTone`, tested; this only
+    // paints it.
+    private func timingColor(_ tone: QueueModel.TimingTone) -> Color {
+        switch tone {
+        case .actNow: return OVColor.rust
+        case .confirmed: return OVColor.forestText
+        case .quiet: return OVColor.inkFaint
+        }
     }
 
     // A booking (confirmed or suggested) owns the forest FILL + border, so the best-contact highlight below
@@ -250,6 +264,7 @@ struct ProspectRowView: View {
                     onEditReplyDraft: onEditReplyDraft,
                     onCancelReplyDraft: onCancelReplyDraft,
                     gmailConnected: gmailConnected,
+                    today: today,
                     outboundSendSince: outboundSendSince,
                     replySendSince: replySendSince,
                     highlightedRecipientId: highlightedRecipientId
@@ -492,10 +507,9 @@ struct ProspectRowView: View {
                 if QueueModel.headerShowsTimingLine(isBooked: item.isBooked) {
                     Text("·").foregroundStyle(OVColor.lineStrong)
                     Text(timing.label)
-                        // #1122: an underway run reads with the act-now colour too, not the faint
-                        // "plenty of time" grey, since its remaining window is by definition short.
-                        .foregroundStyle(timing.urgency == .imminent || timing.urgency == .underway ? OVColor.rust
-                                         : timing.urgency == .booked ? OVColor.forestText : OVColor.inkFaint)
+                        // #1122/#4136: the colour comes from the one rule over every urgency, never a
+                        // second list of urgencies here, which is how five of them ended up faint.
+                        .foregroundStyle(timingColor(QueueModel.timingTone(timing.urgency, on: timingSurface)))
                 }
             }
             .font(OVType.meta.weight(.regular))
@@ -1287,6 +1301,10 @@ struct ProspectRowView: View {
                 Label("Went by", systemImage: "clock.arrow.circlepath")
                     .ovPill(.neutral)
                     .help("This show opened before you triaged it, so it is no longer waiting on you")
+            } else if item.showOutcome == .wentByUnpitched {   // #4136: the kept sibling, own words
+                Label(ShowOutcome.wentByUnpitched.label, systemImage: "clock.arrow.circlepath")
+                    .ovPill(.neutral)
+                    .help("This show's last night passed before it was pitched, so it is no longer waiting on you")
             } else if item.status == .dismissed, let onRestore {
                 Label("Dismissed", systemImage: "archivebox")
                     .ovPill(.neutral)

@@ -162,7 +162,7 @@ struct ExperimentTests {
         ctx.insert(exp)
         // A kept-undrafted prospect: needs-prep-eligible, so it is queued and thus assignment-eligible.
         let toPrep = Prospect(naturalKey: "to-prep", groupName: "G", discipline: "music", venue: "V",
-                              performanceDate: "2026-08-01", sourceListingURL: nil,
+                              performanceDate: "2082-08-01", sourceListingURL: nil,
                               priorRelationship: "none", production: "self", profile: "strong",
                               coverage: "likely_uncovered", fitScore: 7, tier: "high", fitReason: "r",
                               matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
@@ -191,14 +191,14 @@ struct ExperimentTests {
     @Test func buildQueueCarriesTheAssignedArmAsTheItemInstruction() throws {
         let ctx = ModelContext(try container())
         let assigned = Prospect(naturalKey: "assigned", groupName: "G", discipline: "music", venue: "V",
-                                performanceDate: "2026-08-01", sourceListingURL: nil,
+                                performanceDate: "2082-08-01", sourceListingURL: nil,
                                 priorRelationship: "none", production: "self", profile: "strong",
                                 coverage: "likely_uncovered", fitScore: 7, tier: "high", fitReason: "r",
                                 matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
                                 status: .queued)
         assigned.assignedArm = "credential-first"
         let plain = Prospect(naturalKey: "plain", groupName: "G2", discipline: "music", venue: "V",
-                             performanceDate: "2026-08-02", sourceListingURL: nil,
+                             performanceDate: "2082-08-02", sourceListingURL: nil,
                              priorRelationship: "none", production: "self", profile: "strong",
                              coverage: "likely_uncovered", fitScore: 7, tier: "high", fitReason: "r",
                              matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
@@ -207,7 +207,7 @@ struct ExperimentTests {
         ctx.insert(plain)
         try ctx.save()
 
-        let queue = PrepQueueService.buildQueue(from: ctx, generatedAt: "2026-06-25T00:00:00.000Z")
+        let queue = PrepQueueService.buildQueue(from: ctx, generatedAt: "2082-06-25T00:00:00.000Z")
         let byKey = Dictionary(uniqueKeysWithValues: queue.items.map { ($0.naturalKey, $0) })
         #expect(byKey["assigned"]?.experimentArmInstruction == "credential-first")
         #expect(byKey["plain"]?.experimentArmInstruction == nil)

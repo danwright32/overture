@@ -49,7 +49,7 @@ struct ConflictSweepTests {
         // #3369: still ON the Prep work-list. The sweep's job is to FLAG the night immediately, which is
         // what the two lines above assert; what the flag then stops is #3369's question and the answer is
         // "nothing at Prep". The send gate still reads it.
-        #expect(PrepQueueBuilder.needsPrepEligible(p))
+        #expect(PrepQueueBuilder.needsPrepEligible(p, today: "2026-10-01"))
     }
 
     // The other direction, which matters just as much: the trip is cancelled, and the shows he can now
@@ -66,7 +66,7 @@ struct ConflictSweepTests {
 
         #expect(p.hasUnclearedConflict == false)
         #expect(p.conflictNote == nil)
-        #expect(PrepQueueBuilder.needsPrepEligible(p) == true)        // draftable again
+        #expect(PrepQueueBuilder.needsPrepEligible(p, today: "2026-10-01") == true)        // draftable again
     }
 
     // #1416: the banner's Undo WIRING, not just the rule above. Blocking a range from the dismiss offer runs

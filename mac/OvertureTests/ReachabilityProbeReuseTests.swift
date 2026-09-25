@@ -41,13 +41,13 @@ struct ReachabilityProbeReuseTests {
     // End to end through buildQueue: a kept, probed-with-contact show is queued draft_only.
     @Test func buildQueueMarksAProbedKeptShowDraftOnly() throws {
         let ctx = ModelContext(try container())
-        let key = Prospect.makeNaturalKey(groupName: "Aurora Strings", performanceDate: "2026-09-12", venue: "Weill Recital Hall")
+        let key = Prospect.makeNaturalKey(groupName: "Aurora Strings", performanceDate: "2082-09-12", venue: "Weill Recital Hall")
         let p = Prospect(naturalKey: key, groupName: "Aurora Strings", discipline: "music", venue: "Weill Recital Hall",
-                         performanceDate: "2026-09-12", sourceListingURL: nil,
+                         performanceDate: "2082-09-12", sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong", coverage: "likely_uncovered",
                          fitScore: 7, tier: "high", fitReason: "r", matchedClientName: nil,
                          possibleMatchSource: nil, possibleMatchName: nil, status: .queued)
-        p.reachabilityProbedAt = Date(timeIntervalSince1970: 1_780_000_000)
+        p.reachabilityProbedAt = Date(timeIntervalSince1970: 3547225600)
         let r = Recipient(id: "jane@aurora.org", email: "jane@aurora.org", provenance: .act)
         p.recipients = [r]
         ctx.insert(p)

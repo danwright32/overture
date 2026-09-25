@@ -365,7 +365,12 @@ final class ReconcileScheduler {
     // asserted only by reading it, which is how #499's silent `try?` survived in the first place.
     @discardableResult
     func retireShowsThatOpened(now: Date, save: (() throws -> Void)? = nil) -> (count: Int, saveFailed: Bool) {
-        let n = WentByRetirement.run(in: context, today: QueueModel.easternToday(now))
+        // #4136: and the kept shows whose last night has passed before anything was sent, on the same tick
+        // for the same reason: a show goes by while the app is open, and waiting for a relaunch leaves it
+        // counted as Prep work and in Review meanwhile.
+        let today = QueueModel.easternToday(now)
+        let n = WentByRetirement.run(in: context, today: today)
+            + PassedKeptRetirement.run(in: context, today: today)
         guard n > 0 else { return (0, false) }
         do {
             if let save { try save() } else { try context.save() }
