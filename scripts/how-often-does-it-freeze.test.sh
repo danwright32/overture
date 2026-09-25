@@ -160,6 +160,19 @@ assert_not_contains "and does not call any of them unjudged" "${out}" "cannot be
 # 12. The per session table carries the same split, so a session's stalled share is not a sleep.
 assert_contains "the table has the not-a-freeze column" "${out}" "not freezes"
 
+# 14. The RATE's numerator and denominator cover the same population (L711). Watched time cannot be split
+#     by load, so the rate counts stalls at EVERY load; a baseline-only count over it would read 1 per
+#     hour here rather than 2.
+mkdir -p "${WORK}/mixedload"
+{ record ml 100 0.150 baseline; record ml 36000 0.400 elevated; } > "${WORK}/mixedload/log.ndjson"
+out="$("${READER}" --log "${WORK}/mixedload/log.ndjson" 2>&1)"
+assert_contains "the rate counts every load over all watched time" "${out}" \
+  "2 stall(s) over 1.00h watched, 2.0 per hour"
+# And the without-rate drops the not-a-freeze records at every load, from the mixed log above.
+out="$("${READER}" --log "${WORK}/mixed/log.ndjson" 2>&1)"
+assert_contains "the rate without the records that are not freezes is stated too" "${out}" \
+  "without the 2 not freezes at every load: 3 stall(s)"
+
 # 13. `notRecorded` is how the app SPELLS an absent run loop reading (every record where nothing was
 #     sampled), so it is unmeasured exactly as a missing key is, never a reading that says "freeze".
 mkdir -p "${WORK}/notrecorded"

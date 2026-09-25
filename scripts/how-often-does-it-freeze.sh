@@ -153,13 +153,11 @@ if not baseline:
 def distribution(label, group):
     secs = [r.get("seconds", 0) for r in group]
     print(f"    {label}  n={len(secs)}   p50 {statistics.median(secs):.3f}s   p90 {quantile(secs, 0.90):.3f}s   "
-          f"p95 {quantile(secs, 0.95):.3f}s   p99 {quantile(secs, 0.99):.3f}s   max {max(secs):.3f}s   "
-          f"{len(secs) / (modern_watched / 3600):.1f} per hour")
+          f"p95 {quantile(secs, 0.95):.3f}s   p99 {quantile(secs, 0.99):.3f}s   max {max(secs):.3f}s")
 
 
 print()
 print("  THE BAR is about baseline load at the 100 ms floor, so that is the only comparable set.")
-print(f"  {modern_watched / 3600:.2f}h watched.")
 distribution("every record:", baseline)
 
 # #4188: the same set WITHOUT the records that say of themselves they are not freezes, stated beside it
@@ -202,6 +200,17 @@ _other = [r for r, v in zip(baseline, _verdicts) if v == FREEZE and r.get("runLo
 if _other:
     print(f"    {len(_other)} of those counted were taken in a run loop mode this build does not name, so")
     print("      what they are is UNKNOWN rather than shown to be a freeze. They stay in every line.")
+
+# THE RATE is over EVERY load, never baseline alone, because watched time cannot be split by load: a
+# record carries its load, a ping does not. A baseline count over all watched time would mix two
+# populations in one fraction and understate the rate by however much busy time was watched (L711).
+_modern_not = sum(1 for r in modern if freeze_verdict(r) == NOT_A_FREEZE)
+print(f"    rate, every load (watched time cannot be split by load): {len(modern)} stall(s) over "
+      f"{modern_watched / 3600:.2f}h watched, {len(modern) / (modern_watched / 3600):.1f} per hour")
+if _modern_not:
+    _left = len(modern) - _modern_not
+    print(f"      without the {_modern_not} not freezes at every load: {_left} stall(s), "
+          f"{_left / (modern_watched / 3600):.1f} per hour")
 print()
 print("  Read as a RATE, never as a proportion over the bar: the watchdog's storage floor IS the")
 print("  bar, so 100 percent of these are over it by construction and that says nothing (L178).")
