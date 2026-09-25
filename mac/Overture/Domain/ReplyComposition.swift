@@ -141,7 +141,9 @@ extension ReplyComposition {
             contact: recipient,
             editableSubject: nil,
             aiDraft: AIDraft(
-                current: { recipient.replyDraftBody },
+                // #4224: never the raw draft field, which also holds a draft older than their newest
+                // message and one being replaced. The card asks the same rule.
+                current: { recipient.offerableReplyDraftBody },
                 isRunning: { ReplyPanel.isDrafting(recipient) },
                 requestedAt: { recipient.replyDraftRequestedAt },
                 request: {

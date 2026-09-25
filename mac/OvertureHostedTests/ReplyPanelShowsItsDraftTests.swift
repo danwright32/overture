@@ -19,7 +19,8 @@ struct ReplyPanelShowsItsDraftTests {
 
     // Dan's real row (#2151): Every Voice Choirs, answered by the contact he pitched.
     private func panel(draft: String? = nil, requestedAt: Date? = nil,
-                       writtenByDan: Bool = false, editedByDan: Bool = false) throws -> ReplySheet {
+                       writtenByDan: Bool = false, editedByDan: Bool = false,
+                       theyWroteAt: Date? = nil) throws -> ReplySheet {
         let ctx = ModelContext(try container())
         let p = Prospect(naturalKey: "k", groupName: "Every Voice Choirs", discipline: "choral",
                          venue: "Merkin Hall", performanceDate: "2026-10-31", sourceListingURL: nil, priorRelationship: "none", production: "self",
@@ -40,6 +41,8 @@ struct ReplyPanelShowsItsDraftTests {
         r.replyDraftRequestedAt = requestedAt
         r.replyDraftWrittenByDan = writtenByDan
         r.replyDraftEditedByDan = editedByDan
+        r.inboundReplySentAt = theyWroteAt
+        r.repliedAt = theyWroteAt
         p.setRecipients([r])
         return ReplySheet(composition: .answering(r, of: p, context: ctx, feedback: ActionFeedback()),
                           gmailConnected: true)
@@ -108,6 +111,17 @@ struct ReplyPanelShowsItsDraftTests {
     // Nor an empty box, which is the ordinary state: Dan writes these himself.
     @Test func anemptyBoxGainsNoLineOnScreen() throws {
         let view = try panel()
+        #expect(!(try texts(view).contains(ReplyPanelCopy.aiWroteThisDraft)))
+    }
+
+    // #4224: the contact wrote again after the draft was asked for, so the draft answers their previous
+    // message. The window opens on an empty box with no "Written by AI" line, as the card already did.
+    @Test func aDraftOlderThanTheirNewestMessageIsNotInTheBox() throws {
+        let requested = Date(timeIntervalSince1970: 1_000)
+        let view = try panel(draft: "An answer to the message before this one.", requestedAt: requested,
+                             theyWroteAt: requested.addingTimeInterval(3_600))
+        #expect(try view.inspect().find(ViewType.TextEditor.self).input() == "",
+                "the reply window opened on a draft older than the contact's newest message (#4224)")
         #expect(!(try texts(view).contains(ReplyPanelCopy.aiWroteThisDraft)))
     }
 }

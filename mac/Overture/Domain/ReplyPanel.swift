@@ -35,10 +35,11 @@ enum ReplyPanel {
     // the only surface he uses, and typing over it and sending threw it away (L5).
     //
     // Hand-written stays the default: a contact with nothing drafted still opens on an empty box.
+    //
+    // #4224: only a draft the shared rule may offer, never the raw field, which also holds a draft older
+    // than their newest message and one being replaced.
     static func openingBody(_ recipient: Recipient) -> String {
-        guard let draft = recipient.replyDraftBody,
-              !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return "" }
-        return draft
+        recipient.offerableReplyDraftBody ?? ""
     }
 
     // #2143: whether an AI draft is on its way for THIS reply, so the panel can show a live run rather

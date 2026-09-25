@@ -23,11 +23,11 @@ struct ReplyConversationModeTests {
     // The live case: a reply nobody has answered. Every control stays exactly as it was.
     @Test func anUnansweredReplyKeepsTheWholeSurface() {
         #expect(ReplyConversationMode.of(hasUnhandledReply: true, replyIsAnswered: false,
-                                         hasReplyDraft: false, isDrafting: false, replyPostdatesDraftRequest: false) == .offerADraft)
+                                         hasReplyDraft: false, isDrafting: false, replyPostdatesDraftRequest: false, replacingDraftOnFile: false) == .offerADraft)
         #expect(ReplyConversationMode.of(hasUnhandledReply: true, replyIsAnswered: false,
-                                         hasReplyDraft: false, isDrafting: true, replyPostdatesDraftRequest: false) == .drafting)
+                                         hasReplyDraft: false, isDrafting: true, replyPostdatesDraftRequest: false, replacingDraftOnFile: false) == .drafting)
         #expect(ReplyConversationMode.of(hasUnhandledReply: true, replyIsAnswered: false,
-                                         hasReplyDraft: true, isDrafting: false, replyPostdatesDraftRequest: false) == .draftReadyToSend)
+                                         hasReplyDraft: true, isDrafting: false, replyPostdatesDraftRequest: false, replacingDraftOnFile: false) == .draftReadyToSend)
     }
 
     // #3573: they wrote AGAIN after the draft was asked for, so the draft on file answers their previous
@@ -39,15 +39,15 @@ struct ReplyConversationModeTests {
     @Test func aReplyThatArrivedAfterTheDraftOffersAFreshOneRatherThanTheStaleDraft() {
         #expect(ReplyConversationMode.of(hasUnhandledReply: true, replyIsAnswered: false,
                                          hasReplyDraft: true, isDrafting: false,
-                                         replyPostdatesDraftRequest: true) == .offerADraft)
+                                         replyPostdatesDraftRequest: true, replacingDraftOnFile: false) == .offerADraft)
         // And the ordinary case is untouched: a draft written for the message still waiting is sendable.
         #expect(ReplyConversationMode.of(hasUnhandledReply: true, replyIsAnswered: false,
                                          hasReplyDraft: true, isDrafting: false,
-                                         replyPostdatesDraftRequest: false) == .draftReadyToSend)
+                                         replyPostdatesDraftRequest: false, replacingDraftOnFile: false) == .draftReadyToSend)
         // A run that is drafting RIGHT NOW is drafting the newer message, so it shows progress as usual.
         #expect(ReplyConversationMode.of(hasUnhandledReply: true, replyIsAnswered: false,
                                          hasReplyDraft: true, isDrafting: true,
-                                         replyPostdatesDraftRequest: true) == .drafting)
+                                         replyPostdatesDraftRequest: true, replacingDraftOnFile: false) == .drafting)
     }
 
     // The snapshot carries the contact's own answer to that question too, so the queue row and the
@@ -85,25 +85,25 @@ struct ReplyConversationModeTests {
     // THE fix: an answered conversation never offers to draft, and never claims to be drafting.
     @Test func anAnsweredConversationNeverOffersADraft() {
         #expect(ReplyConversationMode.of(hasUnhandledReply: false, replyIsAnswered: true,
-                                         hasReplyDraft: false, isDrafting: false, replyPostdatesDraftRequest: false) == .answeredNothingToShow)
+                                         hasReplyDraft: false, isDrafting: false, replyPostdatesDraftRequest: false, replacingDraftOnFile: false) == .answeredNothingToShow)
         #expect(ReplyConversationMode.of(hasUnhandledReply: false, replyIsAnswered: true,
-                                         hasReplyDraft: false, isDrafting: true, replyPostdatesDraftRequest: false) == .answeredNothingToShow)
+                                         hasReplyDraft: false, isDrafting: true, replyPostdatesDraftRequest: false, replacingDraftOnFile: false) == .answeredNothingToShow)
     }
 
     // The draft that was already written stays, as a RECORD: the Archive card is where Dan looks at what
     // happened, so the text belongs. What it must not carry is Send, which would answer a second time.
     @Test func adraftOnAnAnsweredConversationIsKeptAsARecord() {
         #expect(ReplyConversationMode.of(hasUnhandledReply: false, replyIsAnswered: true,
-                                         hasReplyDraft: true, isDrafting: false, replyPostdatesDraftRequest: false) == .answeredDraftAsRecord)
+                                         hasReplyDraft: true, isDrafting: false, replyPostdatesDraftRequest: false, replacingDraftOnFile: false) == .answeredDraftAsRecord)
     }
 
     // A conversation that is not unhandled for some OTHER reason (a contact stood down, a bounce) is not
     // "answered", so it must not be told it was. It shows the record and says nothing.
     @Test func aConversationClosedWithoutAnAnswerClaimsNoAnswer() {
         #expect(ReplyConversationMode.of(hasUnhandledReply: false, replyIsAnswered: false,
-                                         hasReplyDraft: true, isDrafting: false, replyPostdatesDraftRequest: false) == .closedDraftAsRecord)
+                                         hasReplyDraft: true, isDrafting: false, replyPostdatesDraftRequest: false, replacingDraftOnFile: false) == .closedDraftAsRecord)
         #expect(ReplyConversationMode.of(hasUnhandledReply: false, replyIsAnswered: false,
-                                         hasReplyDraft: false, isDrafting: false, replyPostdatesDraftRequest: false) == .closedNothingToShow)
+                                         hasReplyDraft: false, isDrafting: false, replyPostdatesDraftRequest: false, replacingDraftOnFile: false) == .closedNothingToShow)
     }
 
     // Only the two answered modes may speak, and only they carry the sentence. A mode that says nothing

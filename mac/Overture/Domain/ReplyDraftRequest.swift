@@ -45,4 +45,20 @@ enum ReplyDraftRequest {
         if let answeredAt, requestedAt <= answeredAt { return nil }
         return requestedAt
     }
+
+    // #4224: whether the draft on file may be offered as the answer to send, defined once.
+    //
+    // Two surfaces offer it: the card's reply block (`ReplyConversationMode`) and the reply window, which
+    // seeds its compose box from it (`ReplyComposition`). Only the card asked whether the draft was
+    // current (#3573), so on 2026-09-24 the window opened on a draft answering Alan's morning message,
+    // with "Written by AI" and Send under it, after he had written again that evening (L16, L30).
+    //
+    // Not offered when their newest message arrived after the draft was asked for, since it answers the
+    // message before that one. Nor while a replacement is being drafted (#4208), since the draft on file
+    // is the one Dan asked to have replaced, and offering it would put the old text back in the box
+    // during the run.
+    static func offersDraftOnFile(hasDraft: Bool, replyPostdatesDraftRequest: Bool,
+                                  replacingDraftOnFile: Bool) -> Bool {
+        hasDraft && !replyPostdatesDraftRequest && !replacingDraftOnFile
+    }
 }
