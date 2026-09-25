@@ -78,13 +78,15 @@ struct QueueDateGroups<Header: View, Content: View>: View {
 struct ReachedOutSendAwareRow<Content: View>: View {
     let sendState: SendProgressState
     let key: String
-    @ViewBuilder let content: (_ sendingSince: Date?, _ departure: Departure?) -> Content
+    @ViewBuilder let content: (_ sendingSince: Date?, _ departure: Departure?, _ highlighted: Bool) -> Content
 
     var body: some View {
         // The pairing itself lives on SendProgressState, where a test can reach it: putting the snapshot
         // and the reason in step is a rule, and a rule decided in a view body is one only a source-text
         // guard can watch, which is a guard that passes on the words rather than the behaviour.
-        content(sendState.sendingSince(key), sendState.departure(key))
+        // #4062: and whether a jump is marking THIS row, the third transient fact, read here with the
+        // other two rather than by a second wrapper. Without it no mark could ever be drawn on this list.
+        content(sendState.sendingSince(key), sendState.departure(key), sendState.highlighted == key)
     }
 }
 
@@ -110,5 +112,18 @@ struct QueueSendAwareRow<Content: View>: View {
                 // card, and reading it here rather than at the call site keeps the dependency below
                 // QueueView's derivation (#1922, #1916).
                 { email in sendState.isStruck(SendProgressState.strikeKey(show: key, email: email)) })
+    }
+}
+
+// #4062: what makes a row something a jump can land on and mark: the show's key as its scroll identity,
+// and the gold mark while a jump is pointing at it. ONE definition, used by the date grouped cards and the
+// Reached out rows alike, because the Reached out list was built without either and every jump to it was
+// dropped in silence (L500).
+extension View {
+    func jumpMark(key: String, highlighted: Bool) -> some View {
+        padding(highlighted ? OVSpacing.sm : 0)
+            .background(highlighted ? OVColor.gold.opacity(0.18) : Color.clear,
+                        in: RoundedRectangle(cornerRadius: 8))
+            .id(key)
     }
 }

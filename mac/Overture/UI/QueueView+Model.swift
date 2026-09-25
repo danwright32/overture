@@ -2025,6 +2025,28 @@ enum QueueModel {
     // view identity is namespaced.
     static func showGroupScrollID(_ date: String) -> String { "show-group:\(date)" }
     static func inquiryGroupScrollID(_ date: String) -> String { "inquiry-group:\(date)" }
+    // #4062: the Reached out stage's groups, in a namespace of their own. They are keyed on the REACH OUT
+    // date rather than the performance date, so a bare date or a show group id names a different target.
+    static func reachOutGroupScrollID(_ date: String) -> String { "reach-out-group:\(date)" }
+
+    // #4062: the Reached out group holding `key`, or nil when no row there is that show. Resolved THROUGH
+    // reachOutDateGroups, for #1573's reason: the id a jump names can never drift from the ids the list
+    // actually draws.
+    static func reachOutScrollGroupID(containing key: String, among entries: [ReachedOutEntry]) -> String? {
+        guard let group = reachOutDateGroups(entries, reachDate: { $0.next }).first(where: { group in
+            group.rows.contains { $0.showKey == key }
+        }) else { return nil }
+        return reachOutGroupScrollID(group.id)
+    }
+
+    // #4062: the ONE place a deep link's group is resolved, against the list the stage actually draws.
+    // Resolving every stage through the performance date groups named a group the Reached out list never
+    // draws, so the jump was dropped on the one stage every OmniFocus task points at.
+    static func jumpScrollGroupID(for key: String, onStage stage: StageFocus?, items: [QueueItem],
+                                  reachedOut: [ReachedOutEntry]) -> String? {
+        if stage == .reachedOut { return reachOutScrollGroupID(containing: key, among: reachedOut) }
+        return scrollGroupID(containing: key, among: items)
+    }
 
     // #1573: the group a jump should land on to bring `key` into view, or nil when the key is not among
     // the rendered rows at all. Resolved THROUGH groupByDate rather than by reading the item's date

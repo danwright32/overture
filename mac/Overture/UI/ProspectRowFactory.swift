@@ -230,12 +230,8 @@ enum ProspectRowFactory {
             }
         )
         // #236: tag each row with its key so a deep link can scroll to it, and highlight the target.
-        let highlighted = highlightedKey == item.id
-        let framed = row
-            .padding(highlighted ? OVSpacing.sm : 0)
-            .background(highlighted ? OVColor.gold.opacity(0.18) : Color.clear,
-                        in: RoundedRectangle(cornerRadius: 8))
-            .id(item.id)
+        // #4062: through the shared jumpMark, so the Reached out rows carry the identical mark and identity.
+        let framed = row.jumpMark(key: item.id, highlighted: highlightedKey == item.id)
         // #244: a sent draft Dan hand edited is a voice learning candidate. Let him opt a poor
         // example out (or back in) from a right click, so the loop never learns from a rushed send.
         //

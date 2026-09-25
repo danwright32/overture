@@ -84,9 +84,23 @@ enum ReachedOutEntry: Identifiable {
         }
     }
 
+    // #4062: the SHOW this row stands for, which is the key a jump (an OmniFocus link, a search pick, an
+    // away alert) addresses. Nil for an inquiry, which no jump names. The row's scroll identity and its
+    // jump mark are both read from here, so the Reached out list answers to the same key every other
+    // stage's cards do.
+    var showKey: String? {
+        switch self {
+        case .prospect(let prospect, _, _): return prospect.naturalKey
+        case .inquiry: return nil
+        }
+    }
+
     var id: String {
         switch self {
-        case .prospect(_, let recipient, _): return "p:\(recipient.id)"
+        // #4062: the SHOW, never the contact. `Recipient.id` is deliberately not unique (the same address
+        // pitched about two performances shares one), so a contact keyed id gave two rows one identity,
+        // and it was never the key a jump carries either.
+        case .prospect(let prospect, _, _): return "p:\(prospect.naturalKey)"
         case .inquiry(_, let row, _): return "i:\(row.id)"
         }
     }
