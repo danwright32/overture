@@ -306,12 +306,19 @@ enum FollowUp {
             // anyone who has received this one, on the premise that it already said goodbye. "one last
             // time" is what carries that, and `theFinalNudgeStillReadsAsAGoodbye` asserts it rather than
             // leaving the premise living in a comment (L3).
+            //
+            // #4064: the close asks for an answer instead of excusing one. Dan, 2026-09-20: "I don't want to
+            // tell them that they shouldn't reply. Any reply is more valuable than ignoring me." A no closes
+            // the loop and feeds reply classification; silence is the one outcome nothing learns from. The
+            // cold pitch already closes by expecting a reply (docs/prep-runbook.md), and this now matches it.
             return greeting + "\n\nI'm following up one last time about photographing "
-                + "\(groupName)\(venueClause). If the timing doesn't work, no need to reply."
+                + "\(groupName)\(venueClause). If the timing doesn't work this time, just let me know and I'll keep you in mind for future shows."
         }
+        // #4064, Dan's call the same day: the first follow up invites an answer too, and names the other
+        // answer worth having, that somebody else handles photography.
         return greeting + "\n\nI wanted to follow up on my earlier note about photographing \(groupName)\(venueClause). "
             + "If a few sample frames from similar performances would be useful, I'm glad to send some over.\n\n"
-            + "No problem if the timing isn't right."
+            + "If this isn't the right time, or there's someone better to talk to about photography, just let me know."
     }
     // copy-inventory:ignore-end
 }

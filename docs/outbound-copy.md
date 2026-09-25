@@ -24,11 +24,11 @@ three days earlier, because nothing ever put it in front of a person.
     `Domain/FollowUp.swift`
 "If a few sample frames from similar performances would be useful, I'm glad to send some over.\n\n"
     `Domain/FollowUp.swift`
-"No problem if the timing isn't right."
+"If this isn't the right time, or there's someone better to talk to about photography, just let me know."
     `Domain/FollowUp.swift`
 "Re: \(base)"
     `Domain/FollowUp.swift`
-"\(groupName)\(venueClause). If the timing doesn't work, no need to reply."
+"\(groupName)\(venueClause). If the timing doesn't work this time, just let me know and I'll keep you in mind for future shows."
     `Domain/FollowUp.swift`
 "\n\nI wanted to follow up on my earlier note about photographing \(groupName)\(venueClause). "
     `Domain/FollowUp.swift`
