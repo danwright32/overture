@@ -227,10 +227,6 @@ done
 # ordinary and correct.
 unescaped_perl_variable() {
   local expression="$1"
-  if [[ "${expression}" =~ (^|[^\\])(\$[0&]) ]]; then
-    echo "${BASH_REMATCH[2]}"
-    return 0
-  fi
   # #3109: the same trap wearing the other sigil. `@name` is a perl ARRAY, interpolated in the
   # replacement AND in the pattern, so `"someone@arealpersonsite.com"` lands as `"someone.com"`. That
   # one was measured on 2026-08-22 proving #2839's guard: the guard judges an address by its domain,
@@ -242,19 +238,46 @@ unescaped_perl_variable() {
   # Narrower than the character on purpose (L93): an `@` with no identifier after it is not a variable,
   # and e-mail addresses are ordinary test data in this repo, so a rule firing on every `@` would fire
   # on the ordinary case and be switched off within a day.
-  if [[ "${expression}" =~ (^|[^\\])(@[A-Za-z_][A-Za-z0-9_]*) ]]; then
-    echo "${BASH_REMATCH[2]}"
-    return 0
-  fi
-  local without_escaped_parens="${expression//\\(/}"
-  if [[ "${without_escaped_parens}" != *"("* && "${expression}" =~ (^|[^\\])(\$[1-9]) ]]; then
-    echo "${BASH_REMATCH[2]}"
-    return 0
-  fi
-  return 1
+  #
+  # #3816: and the braced scalar. `${LOG}` is perl's own `$LOG`, so a mutation of a SHELL script
+  # carrying one landed as `[ -f "" ]`, broke far more than it was aimed at, and read CAUGHT: measured
+  # 2026-09-11 proving #3789, 10 of 24 assertions red, and a much narrower result once escaped. Rather
+  # than add that one spelling, the set below is what perl was MEASURED to interpolate on 2026-09-25
+  # (perl 5.34, in the replacement and in the pattern alike), narrowed to the spellings shell or perl
+  # text in a mutation can plausibly carry (L30): a name (`$LOG`, `$_`), a braced anything (`${LOG}`,
+  # `${^W}`), a package name (`$::x`), the shell's special parameters (`$$`, `$?`, `$@`, `$!`, `$#`),
+  # the match variables (`$&`, `$'`, `` $` ``), `$0`, and the array forms `@name`, `@{...}`, `@$x`,
+  # `@::x`. Deliberately NOT refused: `$` before `)`, `|`, `/`, a space or the end, which is how an END
+  # ANCHOR is written in the pattern half, and `$+{name}`, a named capture. Measured against the 99
+  # expressions quoted in the last 400 merged PR bodies: the only one this refuses is a `$0` the old
+  # rule already refused, so it adds no refusal of anything anybody actually wrote correctly (L93).
+  #
+  # Scanned by a TOKENIZER, in perl, rather than a bash regex: a backslash escapes the ONE character
+  # after it, so `\\${LOG}` is a literal backslash and a live `${LOG}`, which "not preceded by a
+  # backslash" gets wrong, and a first-match regex cannot skip a correct `${1}` to reach a `${LOG}`
+  # further along. It prints the token and its escaped spelling, tab separated.
+  #
+  # `$1` through `$9`, braced or not, are only refused when the expression has no capture group for
+  # them to refer to, since with one they are ordinary and correct (#2995).
+  perl -e '
+    my $e = $ARGV[0];
+    (my $unescaped_parens = $e) =~ s/\\\(//g;
+    my $has_group = index($unescaped_parens, "(") >= 0;
+    while ($e =~ /\G(?:(\\.)|(\$\{[^}]*\}|\$::\w*|\$[A-Za-z_]\w*|\$\d+|\$[\$\@?!#\x27`&]|\@\{[^}]*\}|\@\$\w*|\@::\w*|\@[A-Za-z_]\w*)|(.))/gs) {
+      my $token = $2;
+      next unless defined $token;
+      if ($token =~ /^\$\{?([1-9]\d*)\}?$/) { next if $has_group; }
+      (my $escaped = $token) =~ s/([\$\@])/\\$1/g;
+      print "$token\t$escaped";
+      exit 0;
+    }
+    exit 1;
+  ' -- "${expression}"
 }
 
-if PERL_VARIABLE="$(unescaped_perl_variable "${EXPRESSION}")"; then
+if PERL_VARIABLE_FOUND="$(unescaped_perl_variable "${EXPRESSION}")"; then
+  PERL_VARIABLE="${PERL_VARIABLE_FOUND%%$'\t'*}"
+  PERL_VARIABLE_ESCAPED="${PERL_VARIABLE_FOUND#*$'\t'}"
   echo "PERL VARIABLE - ${EXPRESSION} carries an unescaped ${PERL_VARIABLE}, which perl reads as a variable."
   echo
   echo "  Nothing was mutated and nothing was run. ${PERL_VARIABLE} interpolates away, so the text that"
@@ -262,7 +285,7 @@ if PERL_VARIABLE="$(unescaped_perl_variable "${EXPRESSION}")"; then
   echo "  not compile, or worse a verdict passed on text nobody authored. In the pattern half the search"
   echo "  is not the one you asked for, so it misses and the run answers about an expression you did not"
   echo "  write."
-  echo "  To put the characters ${PERL_VARIABLE} into the file, escape it: write \\${PERL_VARIABLE}."
+  echo "  To put the characters ${PERL_VARIABLE} into the file, escape it: write ${PERL_VARIABLE_ESCAPED}."
   exit 2
 fi
 
