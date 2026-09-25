@@ -195,7 +195,14 @@ rm -f "${TMP}/caffeinate.args"
 SLEEP_GUARD_BIN="${ARGS_STUB}" start_sleep_guard "$$" >/dev/null
 waited=0
 while [ ! -s "${TMP}/caffeinate.args" ] && [ "${waited}" -lt 50 ]; do sleep 0.05; waited=$((waited + 1)); done
-case " $(cat "${TMP}/caffeinate.args" 2>/dev/null) " in
+# Proved launched FIRST, so an absent -d means the display was left alone and not that nothing ran: an empty
+# record also contains no -d, and would pass this for the wrong reason (L159, the lessons review of #4229).
+DEFAULT_ARGS="$(cat "${TMP}/caffeinate.args" 2>/dev/null)"
+case " ${DEFAULT_ARGS} " in
+  *" -w $$ "*) pass "the default mode launched a guard watching this process" ;;
+  *) fail "the default mode must launch a guard with -w <pid>" "got: '${DEFAULT_ARGS}'" ;;
+esac
+case " ${DEFAULT_ARGS} " in
   *" -d "*) fail "the default mode must not hold the display, which the detached runs never asked for" ;;
   *) pass "the default mode leaves the display alone, as the detached runs expect" ;;
 esac
