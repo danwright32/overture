@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import SwiftData
 
 // #3879: a whole-store derivation that runs once per CHANGE rather than once per body evaluation.
 //
@@ -93,6 +94,15 @@ final class ScopeMemo<Value> {
     private var key: Key?
     private var value: Value?
     private var builtAt: Date?
+    // #4106: the store's save count when the answer was built. See `value(...)`'s `savesIn`.
+    private var savesAtBuild: Int?
+    private let saves: StoreSaveCount
+
+    /// `saves` is injected so a test can drive the save count with notifications of its own rather than
+    /// sharing the one every concurrently running suite writes to.
+    init(saves: StoreSaveCount = .shared) {
+        self.saves = saves
+    }
     // Written by `withObservationTracking`'s onChange, which fires on whatever thread performed the
     // mutation. `@MainActor` on the class is not enough on its own, so this one field is isolated by a
     // lock rather than by the actor.
@@ -114,20 +124,30 @@ final class ScopeMemo<Value> {
     /// is a statement about the machine and "it did not build" is a statement about this code (L63).
     private(set) var builds = 0
 
-    init() {}
-
     /// The derivation's answer, rebuilt only when one of the four parts of the key has moved.
     ///
     /// `fingerprintOf` is handed in rather than computed here so the caller names its own inputs, which
     /// is what makes an input added to the caller and not to the fingerprint a visible omission rather
     /// than a silent one. `ScopeMemoInputsAreCompleteGuardTests` is the half that makes it visible.
+    ///
+    /// #4106: `savesIn` is the FIFTH part of the key, and it is REQUIRED so no caller can leave it out.
+    /// A write saved through a context other than the one the derivation read from reaches this view as a
+    /// merge and a refetch, which can leave every identity where it was and fire no observed field, so
+    /// the four parts above all hold still and the memo served the answer from before the save: measured
+    /// on the queue, where `FeltWaitCostTests` writes through a second context and the memoised queue
+    /// never rebuilt (L40). So any save into the store a derivation reads makes its answer stale. A
+    /// derivation that reads no store, or whose fingerprint already hashes the CONTENT it reads, passes
+    /// nil and says why at the call site.
     func value(fingerprint: Int,
                cardKeys: Set<String>,
                now: Date,
                staleAfter: Staleness = .seconds(ScopeMemo.staleAfterSeconds),
+               savesIn store: ModelContainer?,
                build: () -> Value) -> Value {
         let wanted = Key(fingerprint: fingerprint, cardKeys: cardKeys)
+        let savesNow = store.map { saves.value(for: $0) }
         if !staleFlag.isSet,
+           savesAtBuild == savesNow,
            let key, key == wanted,
            let value,
            let builtAt,
@@ -150,6 +170,7 @@ final class ScopeMemo<Value> {
         key = wanted
         value = result
         builtAt = now
+        savesAtBuild = savesNow
         return result
     }
 

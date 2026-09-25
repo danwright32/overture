@@ -171,15 +171,16 @@ struct SourcesView: View {
 
     // #4112: the sheet's whole-store derivation, run once per CHANGE rather than once per body pass.
     //
-    // MEASURED CAUSE, not a guess. A hosted test that removes one of 74 rows and reads why each rebuild
-    // happened reported `feedbackRevision` for the first one: `WatchlistMutations.stopWatching` raises
-    // the undo banner, that writes `ActionFeedback.revision`, this sheet observes it through
-    // `.actionFeedbackBanner()`, and the entire derivation ran again to put a strip of text on screen.
-    // On the live app the same removal cost EIGHT passes of this sheet (2026-09-21, `passes=8` at a
-    // load of 4.4), and nothing could say why until the reason trace was added.
+    // WHAT #4112 FIRST RECORDED HERE, AND WHAT #4247 CORRECTED. A hosted test that removed one of 74 rows
+    // reported `feedbackRevision` as the first reason: the undo banner writes `ActionFeedback.revision`,
+    // and the whole derivation ran again. That reason was produced by the instrument. The reason trace
+    // itself read `feedback.revision` during body evaluation, which subscribed the sheet to every banner;
+    // the banner's own modifier never did (#4197 measured that on four other sheets, and #4247 on this
+    // one once the read was gone). On the live app the removal cost EIGHT passes of this sheet
+    // (2026-09-21, `passes=8` at a load of 4.4), before this memo existed.
     //
-    // `ScopeMemo` rather than moving the banner, and that choice matters. Isolating the banner would fix
-    // the banner and leave every OTHER reason this sheet is evaluated without its data changing, which
+    // `ScopeMemo` still earns its place without the banner case, and that is why it stays. It covers every
+    // OTHER reason this sheet is evaluated without its data changing, which
     // is the class rather than the instance and is what #3879 built this type for. Its own header says
     // the triggers cannot be enumerated from the data (L471), so making the pass conditional is the
     // remedy and chasing them one at a time is not.
@@ -270,7 +271,9 @@ struct SourcesView: View {
         // because `geo` was built inside it, and would otherwise now be caught by nothing.
         key.add(value: inputs.context.geo.userExcludedTowns)
         key.add(value: inputs.context.geo.allowedSeedTowns)
-        return renderMemo.value(fingerprint: key.finalized(), cardKeys: [], now: Date()) {
+        // #4106: and any save into this store, through any context (see `ScopeMemo.value`'s `savesIn`).
+        return renderMemo.value(fingerprint: key.finalized(), cardKeys: [], now: Date(),
+                                savesIn: context.container) {
             #if DEBUG
             QueueRenderCounter.recordSurfaceDerivation(QueueRenderCounter.sourcesSurface)
             #endif
@@ -312,15 +315,13 @@ struct SourcesView: View {
             "editingRoomKey": editingRoomKey ?? "none",
             "closeRefused": "\(closeRefused)",
             "addMessage": addMessage == nil ? "none" : "set",
-            // #4112: the banner, which this sheet observes through `.actionFeedbackBanner()` and which
-            // every mutation here writes to. Without it a rebuild provoked by the undo banner reports
-            // "nothing this view reads", which is a claim the trace cannot support while it omits an
-            // input the view really does observe: the reason would send the next investigation looking
-            // outside the sheet for something the sheet itself did (L11, L440).
-            //
-            // `revision` rather than the message, because the message is Dan's own text about a real
-            // show and this trace is written to a log (L222).
-            "feedbackRevision": "\(feedback.revision)",
+            // #4247: NOT the banner. This trace first carried `feedback.revision` (#4112), on the reasoning
+            // that the sheet observes the banner and a rebuild it caused would otherwise read as "nothing
+            // this view reads". The premise was the instrument's own doing: the sheet does NOT observe the
+            // banner, whose modifier reads the feedback in its own body, and it was this trace reading
+            // `revision` during body evaluation that subscribed the whole sheet to every message. Measured
+            // on 2026-09-25 with the real type hosted: with the read, a banner re-evaluated the sheet once;
+            // without it, zero times. `ABannerSurfaceNeverReadsItsBannerGuardTests` keeps it out.
         ]
     }
     #else

@@ -96,6 +96,9 @@ struct QueueView: View {
     // venue or an override does. Folding them together would make this table rebuild on every strike
     // and dismissal, which is exactly the 68 ms #3742 exists to stop paying.
     @State private var producerTablesMemo = ScopeMemo<QueueModel.ProducerTables>()
+    // #4106: the whole pass, reused across body evaluations that change nothing it reads. See the key in
+    // `makeRenderData` for what it decides by and why.
+    @State private var renderMemo = ScopeMemo<RenderData>()
 
     private var geo: GeoRefusals {
         GeoRefusals(userExcludedTowns: userExcludedTowns, allowedSeedTowns: allowedSeedTowns)
@@ -436,48 +439,162 @@ struct QueueView: View {
         // Same two marker reads either way: `runInFlight` is this call now.
         let runStatus = PrepQueueService.slotStatus(now: now)
         let inFlight = runStatus.inFlight
-        // #3742: built once and reused until a presenter, a venue or an override moves. The key is
-        // derived from those inputs and from nothing cheaper (L40): the shows are mapped here, the key
-        // is taken from that mapping, and the tables are built from the same mapping on a miss, so the
-        // three can never describe different store states.
+        // #3186: asked ONLY while a check is really running. Both read a marker from disk, and this
+        // runs once per render pass, so an idle queue must not pay for them (#1770).
+        let checkRunSince = inFlight == .reachabilityCheck
+            ? PrepQueueService.lastRunStartedAt(slot: .check) : nil
+        let checkLookups = inFlight == .reachabilityCheck ? PrepQueueService.liveCheckLookups() : nil
+        let replyRunAlive = ReplyClassifyService.isRunning(now: now)
+        // #1770: read once for the whole pass, from the cache rather than from the token file.
+        let gmailConnected = GmailConnection.shared.isConnected
+        let clients = clientWindow
+        // #3654: the rows the LAST frame drew. Drained on EVERY evaluation, hit or miss, which is what
+        // `ScopeMemo`'s header requires: skipping the drain on a hit would let the registry accumulate
+        // every frame's keys and quietly grow the next real pass.
+        let requested = cardKeys.takeKeys()
+
+        // #4106: ONE derivation per change, however many times the body is evaluated for it.
+        //
+        // WHAT WAS MEASURED. Every action Dan took on 2026-09-21 left the same signature in the freeze
+        // log, a stall covering two passes and then one covering one, and a hosted `QueueView` shows the
+        // same shape: one dismiss derived the whole store twice, the first reporting `prospects` and the
+        // second `nothing this view reads`; one genre edit derived twice, `rows changed` then `nothing
+        // this view reads` (`OneChangeDerivesTheQueueOnceTests`). The cause is two notifications of ONE
+        // write arriving in different updates: the model's own observation fires the moment a field is
+        // set, so the body re-derives while the store still has the save in flight, and then the query
+        // publishes its fresh results after the save and the body is evaluated again over identical
+        // data. Neither notification is wrong, and neither can be removed from here: the first is how an
+        // edit in place reaches the screen at all, and the second is SwiftData's.
+        //
+        // So the second evaluation is made cheap rather than prevented, the same remedy `ArchiveView`
+        // (#3879) and `SourcesView` (#4112) already use. Every input the pass reads is named below: the
+        // model collections by identity, everything else by value, and a field edited in place is caught
+        // by the observation tracking inside the memo. That also covers every OTHER evaluation that
+        // changes nothing this pass reads (a banner, an undo entry, a sheet, `RootView` redrawing), which
+        // cannot be enumerated from here and each used to cost a whole-store pass (L471).
+        //
+        // WHAT A HIT DOES NOT DO. The freeze log's `passes` still counts this body's EVALUATIONS, as the
+        // two lines at the top of this function always have, because Dan's log holds thousands of records
+        // taken under that meaning (L683). A hit shows up there as a pass with almost no `passSeconds`.
+        //
+        // EVERY QUERY IS READ HERE, OUTSIDE THE BUILD, and the build only ever sees these locals. A
+        // `@Query` keeps its results on an observable object of its own, and read inside the build it
+        // becomes something the memo observes: measured, with them inside, the first thing to mark the
+        // answer stale after a save was that storage, from inside `_SwiftData_SwiftUI`. What a query's
+        // results ARE is the fingerprint's job (identity, in order), so outside is where they belong.
+        //
+        // WHAT THIS DOES NOT FIX, said so nobody reads it as the cure for the saved change's second
+        // derivation. With the queries outside, the next thing to mark it stale is the refetched ROWS:
+        // SwiftData calls `willSet` on the fields of every row it refetches after a save, changed or not.
+        // No observation-keyed memo can tell that from an edit, which is why a saved change still derives
+        // twice and why the rest of this is #4252.
+        let orgAnswerRows = orgAnswers
+        let inquiryRows = inquiries
+        let sources = watchedSources
+        let refused = refusedAddresses
+        let promoted = promotedProducers
+        let demoted = demotedHouses
+        let excluded = excludedTownRows
+        let allowed = allowedSeedTownRows
+        // The Debug diagnostic reads the same queries (counts of them), so it is taken here too.
+        let trace = renderTrace
+        let resolvedGeo = GeoRefusals(userExcludedTowns: Set(excluded.map(\.town)),
+                                      allowedSeedTowns: Set(allowed.map(\.town)))
+        var key = ScopeFingerprint()
+        key.add(allProspects)
+        // Named by the query rather than by the local above, so `ScopeMemoInputsAreCompleteGuardTests`
+        // can match each one against what this body reads. Same array either way.
+        key.add(inquiries)
+        key.add(orgAnswers)
+        key.add(watchedSources)
+        key.add(refusedAddresses)
+        key.add(promotedProducers)
+        key.add(demotedHouses)
+        // What `geo` reads, which `ScopeMemoInputsAreCompleteGuardTests` says it cannot follow through a
+        // computed property. Resolved above from the same two reads, so the key and the pass agree.
+        key.add(excludedTownRows)
+        key.add(allowedSeedTownRows)
+        // And the town NAMES, because `resolvedGeo` is built from them OUTSIDE the build, where the memo's
+        // tracking cannot see a row's `town` edited in place; the identity half above sees only a row
+        // added or removed. The same gap #4112 closed on the Sources sheet.
+        key.add(value: resolvedGeo.userExcludedTowns)
+        key.add(value: resolvedGeo.allowedSeedTowns)
+        key.add(value: clients.clientSourceIds)
+        key.add(value: focusedStage?.rawValue)
+        key.add(value: focusedKeys)
+        key.add(value: gmailConnected)
+        key.add(value: String(describing: inFlight))
+        key.add(value: runStatus.prepSlotRunning)
+        key.add(value: runStatus.checkSlotRunning)
+        key.add(value: checkRunSince)
+        key.add(value: checkLookups)
+        key.add(value: replyRunAlive)
+        // THE CARDS, which the fingerprint cannot see. A pass builds a card only for the rows the last
+        // frame drew, inside the memo's observation tracking, and a card built on demand afterwards is
+        // built OUTSIDE it, so a field only that card read would never mark the answer stale. So an
+        // answer is reused only when every row the last frame drew was prebuilt by the build that made
+        // it; one row it did not prebuild (a scroll, a row revealed by a removal) is a rebuild, exactly
+        // as it always was.
+        let prebuilt = renderMemo.held?.cards.requestedKeys
+        let cardKeysForMemo = prebuilt.map { requested.isSubset(of: $0) ? $0 : requested } ?? requested
+        // A save through ANY context is a change too, which `ScopeMemo` itself enforces (`savesIn`).
+        return renderMemo.value(fingerprint: key.finalized(), cardKeys: cardKeysForMemo, now: now,
+                                savesIn: context.container) {
+            QueueRenderPass.make(QueueRenderPass.Inputs(
+                allProspects: QueueRenderPass.Corpus(allProspects),
+                inquiries: inquiryRows,
+                orgAnswers: orgAnswerRows,
+                sources: sources,
+                refusals: ContactRefusal.ledger(from: refused),
+                overrides: ProducerOverrides(promotedRows: promoted, demotedRows: demoted),
+                context: StageContext(now: now, geo: resolvedGeo, clients: clients),
+                focusedStage: focusedStage,
+                focusedKeys: focusedKeys,
+                gmailConnected: gmailConnected,
+                runInFlight: inFlight,
+                // #3646: the two slot facts, from the same single reading above.
+                prepSlotRunning: runStatus.prepSlotRunning,
+                checkSlotRunning: runStatus.checkSlotRunning,
+                checkRunSince: checkRunSince,
+                checkLookups: checkLookups,
+                replyRunAlive: replyRunAlive,
+                trace: trace,
+                // #3654: the rows the LAST frame drew, and the register this one writes into. Taken
+                // rather than read, so the set is what the last frame drew and not everything Dan has
+                // scrolled past since the app opened.
+                requestedCardKeys: cardKeysForMemo,
+                cardKeyRegistry: cardKeys,
+                producerTables: producerTables(overrides: ProducerOverrides(promotedRows: promoted,
+                                                                            demotedRows: demoted),
+                                               now: now)))
+        }
+    }
+
+    // #3742: built once and reused until a presenter, a venue or an override moves. The key is derived
+    // from those inputs and from nothing cheaper (L40): the shows are mapped here, the key is taken from
+    // that mapping, and the tables are built from the same mapping on a miss, so the three can never
+    // describe different store states.
+    //
+    // #4106: its own declaration rather than inline in `makeRenderData`, so that
+    // `ScopeMemoInputsAreCompleteGuardTests` can hold the render memo's key to the `.add` rule while this
+    // one keeps the content key its exemption names. Called only on a render memo MISS, so a hit does not
+    // pay the per show mapping either.
+    //
+    // The overrides arrive as an argument, built by the caller from the two queries it read outside the
+    // render memo's build, for the reason written above that memo's key.
+    private func producerTables(overrides: ProducerOverrides, now: Date) -> QueueModel.ProducerTables {
         let shows = allProspects.map { ProducerGate.Show(presenter: $0.presenter, venue: $0.venue) }
-        let overrides = ProducerOverrides(promotedRows: promotedProducers, demotedRows: demotedHouses)
-        let tables = producerTablesMemo.value(
+        return producerTablesMemo.value(
             fingerprint: QueueModel.ProducerTables.key(shows: shows, overrides: overrides),
             // NO clock window. These tables read no clock at all, so a staleness bound here would be
             // one rebuild of a 68 ms table every two seconds of active use, bought for nothing.
-            cardKeys: [], now: now, staleAfter: .never) {
+            cardKeys: [], now: now, staleAfter: .never,
+            // No save count: this key hashes the presenter and venue CONTENT the tables read, so a save
+            // that changed either is already a different key, and one that did not cannot change the
+            // tables. Keying on saves would rebuild a 68 ms table on every write for nothing.
+            savesIn: nil) {
             QueueModel.ProducerTables(shows: shows, overrides: overrides)
         }
-        return QueueRenderPass.make(QueueRenderPass.Inputs(
-            allProspects: QueueRenderPass.Corpus(allProspects),
-            inquiries: inquiries,
-            orgAnswers: orgAnswers,
-            sources: watchedSources,
-            refusals: ContactRefusal.ledger(from: refusedAddresses),
-            overrides: overrides,
-            context: StageContext(now: now, geo: geo, clients: clientWindow),
-            focusedStage: focusedStage,
-            focusedKeys: focusedKeys,
-            // #1770: read once for the whole pass, from the cache rather than from the token file.
-            gmailConnected: GmailConnection.shared.isConnected,
-            runInFlight: inFlight,
-            // #3646: the two slot facts, from the same single reading above.
-            prepSlotRunning: runStatus.prepSlotRunning,
-            checkSlotRunning: runStatus.checkSlotRunning,
-            // #3186: asked ONLY while a check is really running. Both read a marker from disk, and this
-            // runs once per render pass, so an idle queue must not pay for them (#1770).
-            checkRunSince: inFlight == .reachabilityCheck
-                ? PrepQueueService.lastRunStartedAt(slot: .check) : nil,
-            checkLookups: inFlight == .reachabilityCheck ? PrepQueueService.liveCheckLookups() : nil,
-            replyRunAlive: ReplyClassifyService.isRunning(now: now),
-            trace: renderTrace,
-            // #3654: the rows the LAST frame drew, and the register this one writes into. Taken rather
-            // than read, so the set is what the last frame drew and not everything Dan has scrolled past
-            // since the app opened.
-            requestedCardKeys: cardKeys.takeKeys(),
-            cardKeyRegistry: cardKeys,
-            producerTables: tables))
     }
 
     #if DEBUG
@@ -511,9 +628,15 @@ struct QueueView: View {
     #endif
 
     var body: some View {
+        #if DEBUG
+        _ = QueueRenderCounter.recordRender(surface: QueueRenderCounter.queueBodySurface)
+        #endif
+        let buildsBefore = renderMemo.builds
         let data = makeRenderData()
         // #3654 step 4c: recorded here, where the pass's answer arrives, rather than inside the pass.
-        recordCardCheck(data.cardCheck, now: Date())
+        // #4106: and only when a pass actually RAN. A reused answer carries the check the build made, and
+        // recording it again would write the same divergence once per body evaluation.
+        if renderMemo.builds != buildsBefore { recordCardCheck(data.cardCheck, now: Date()) }
         // #3658 Phase 8: the eight sheets, presented by the host rather than by this body, so raising one
         // no longer invalidates the body that derives the store. The content is a CLOSURE for
         // `QueueScrollHolder`'s reason (#1774): a built view would be constructed here, which is the pass
@@ -2202,6 +2325,10 @@ enum QueueRenderCounter {
 
     static let queueSurface = "queue"
     static let rootSurface = "root"
+    // #4106: QueueView's own body EVALUATIONS, counted apart from its derivations. The render memo exists
+    // to make those two numbers differ, and a test that a memo served an evaluation needs the evaluation
+    // counted, or a zero derivation count cannot tell a hit from a body that never ran (L159).
+    static let queueBodySurface = "queueBody"
     // #4112: the Sources sheet, which derives its own whole-store pass and was counted by nothing.
     //
     // Removing ONE row from the 74 row list cost EIGHT render passes of that sheet, measured on the live

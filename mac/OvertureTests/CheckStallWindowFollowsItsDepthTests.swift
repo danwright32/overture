@@ -156,8 +156,12 @@ struct CheckStallWindowFollowsItsDepthTests {
     // while a check is really in flight, so an idle queue pays nothing for a control it is offering.
     @Test func theRowIsHandedThoseFactsRatherThanReadingThemPerCard() {
         let queue = SourceGuardHelper.source("Overture/UI/QueueView.swift")
-        #expect(queue.contains("checkRunSince: inFlight == .reachabilityCheck"))
-        #expect(queue.contains("checkLookups: inFlight == .reachabilityCheck ? PrepQueueService.liveCheckLookups() : nil"))
+        // #4106: read into a local once per evaluation, because the render memo keys on it before the
+        // pass runs, and then handed to the pass. Still gated on a check being in flight.
+        #expect(queue.contains("let checkRunSince = inFlight == .reachabilityCheck")
+                && queue.contains("checkRunSince: checkRunSince,"))
+        #expect(queue.contains("let checkLookups = inFlight == .reachabilityCheck ? PrepQueueService.liveCheckLookups() : nil")
+                && queue.contains("checkLookups: checkLookups,"))
         let row = SourceGuardHelper.source("Overture/UI/ProspectRowView.swift")
         #expect(!row.contains("PrepQueueService.liveCheckLookups()"),
                 "the row reads the marker itself, which is a disk read per card per scroll frame (#1770)")
