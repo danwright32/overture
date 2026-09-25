@@ -26,7 +26,7 @@ three days earlier, because nothing ever put it in front of a person.
     `Domain/FollowUp.swift`
 "If this isn't the right time, or there's someone better to talk to about photography, just let me know."
     `Domain/FollowUp.swift`
-"Re: \(base)"
+"Re: \(subject)"
     `Domain/FollowUp.swift`
 "\(groupName)\(venueClause). If the timing doesn't work this time, just let me know and I'll keep you in mind for future shows."
     `Domain/FollowUp.swift`
