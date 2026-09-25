@@ -55,6 +55,7 @@ Inquiry.bookingSuggested
 Inquiry.bookingSuggestionDismissed
 Inquiry.bounced
 Inquiry.conversationAttachedAt
+Inquiry.conversationSubject
 Inquiry.createdAt
 Inquiry.delayNoticeAt
 Inquiry.dismissedBounceId
