@@ -437,7 +437,12 @@ enum SourceFetcher {
                                         allowTicketLinkHop: Bool,
                                         allowSiblingProbe: Bool = true,
                                         source: SourceContext = SourceContext()) async throws -> FetchedPage {
-        let (html, normalized, finalURL) = try await plainFetch(url, session: session)
+        let html: String, normalized: String, finalURL: URL
+        do {
+            (html, normalized, finalURL) = try await plainFetch(url, session: session)
+        } catch let shell as ClientRenderedErrorShell {
+            return try await renderErrorShell(shell, render: render)
+        }
 
         // #1127: a tickettailor box-office embed's events live in its widget URL, not this shell (which
         // reads as "readable" but carries no events). Follow it once to the server-rendered widget and read
@@ -538,10 +543,40 @@ enum SourceFetcher {
                            contentHash: PageNormalizer.contentHash(best), wasRendered: rendered)
     }
 
+    // #4105: an HTTP error that answered with a client-rendered shell. Private to this file on purpose:
+    // it exists only to carry the status from `plainFetch` to `fetchSinglePage`, which always turns it
+    // back into a page or into `.http(status)`, so no caller ever has a new error to handle.
+    private struct ClientRenderedErrorShell: Error {
+        let status: Int
+        let finalURL: URL
+    }
+
+    // ONE bounded render of the address that errored (RenderedPage carries its own timeout), and nothing
+    // further: no sibling probe and no ticket hop, because the server has already said this address does
+    // not exist and only a page the browser actually draws can overrule that. A render that fails, or
+    // draws nothing readable, leaves the honest `.http(status)` standing rather than a quietly empty page.
+    private static func renderErrorShell(_ shell: ClientRenderedErrorShell,
+                                         render: ((URL) async throws -> String)?) async throws -> FetchedPage {
+        let renderer = render ?? { try await RenderedPage.html(for: $0) }
+        guard let renderedHTML = try? await renderer(shell.finalURL) else {
+            throw SourceFetchError.http(shell.status)
+        }
+        let normalized = PageNormalizer.normalize(renderedHTML)
+        guard PageNormalizer.carriesReadableContent(normalized) else {
+            throw SourceFetchError.http(shell.status)
+        }
+        return FetchedPage(normalizedHTML: normalized, finalURL: shell.finalURL.absoluteString,
+                           contentHash: PageNormalizer.contentHash(normalized), wasRendered: true)
+    }
+
     // The plain download half of a fetch, shared by the primary page and by the #1056 sibling probe so
     // the two can never diverge on the content-type, redirect, or decoding rules. Returns the raw HTML
     // (the ticket hop's OrgIdentity read needs it), the normalized HTML, and the resolved final URL.
-    // Throws a TYPED SourceFetchError on any HTTP, content-type, redirect, or transport failure.
+    // Throws a TYPED SourceFetchError on any HTTP, content-type, redirect, or transport failure, with ONE
+    // exception (#4105): an HTTP error whose body is a client-rendered shell throws the private
+    // `ClientRenderedErrorShell` instead, so `fetchSinglePage` can give it one render before failing it.
+    // The sibling probe swallows it exactly as it swallows `.http`, and `fetchSinglePage` never lets it
+    // out: it leaves there as a rendered page or as `.http(status)`.
     private static func plainFetch(_ url: URL, session: URLSession)
         async throws -> (html: String, normalized: String, finalURL: URL) {
         let (data, response): (Data, URLResponse)
@@ -560,9 +595,27 @@ enum SourceFetcher {
         }
 
         guard let http = response as? HTTPURLResponse else { throw SourceFetchError.unreachable }
-        guard (200..<300).contains(http.statusCode) else { throw SourceFetchError.http(http.statusCode) }
-
         let contentType = http.value(forHTTPHeaderField: "Content-Type")
+        guard (200..<300).contains(http.statusCode) else {
+            // #4105: Compagnia's /events is a React app on GitHub Pages. The server has no /events, so it
+            // answers 404 with a script-only shell that sends the browser on to /?p=/events, and the page
+            // exists only after that runs. Throwing here stopped the fetch before the render fallback
+            // could reach it, so the source read as a dead link Dan could not fix by changing the link.
+            // Only a SHELL qualifies: an HTML body carrying a script and nothing readable. An ordinary
+            // "Page not found" page, a JSON error, or an error served from a different site stays the
+            // named HTTP failure it always was, and nobody spends a WebKit instance on it.
+            let finalURL = http.url ?? url
+            let body = String(data: data, encoding: .utf8) ?? String(data: data, encoding: .isoLatin1) ?? ""
+            let isHTML = contentType.map { $0.lowercased().contains("html") } ?? true
+            let sameSiteAnswer = url.host.flatMap { from in finalURL.host.map { sameSite(from, $0) } } ?? true
+            if isHTML, sameSiteAnswer,
+               PageNormalizer.looksLikeClientRenderedShell(rawHTML: body,
+                                                           normalized: PageNormalizer.normalize(body)) {
+                throw ClientRenderedErrorShell(status: http.statusCode, finalURL: finalURL)
+            }
+            throw SourceFetchError.http(http.statusCode)
+        }
+
         if let contentType, !contentType.lowercased().contains("html") {
             throw SourceFetchError.notHTML(contentType.components(separatedBy: ";").first)
         }
@@ -754,6 +807,15 @@ enum PageNormalizer {
         let text = visibleText(normalized)
         if text.count >= thinTextFloor { return true }
         return mentionsADate(text)
+    }
+
+    // #4105: does an ERROR body look like a page a browser would go on to draw? It must carry a script
+    // (read from the RAW bytes, since normalizing strips every script) and nothing readable. The script
+    // is what separates Compagnia's spa-github-pages 404, which is empty apart from the script that
+    // routes it, from a plain "Page not found" page, which is a dead link and must stay one.
+    static func looksLikeClientRenderedShell(rawHTML: String, normalized: String) -> Bool {
+        rawHTML.range(of: "<script", options: .caseInsensitive) != nil
+            && !carriesReadableContent(normalized)
     }
 
     private static func mentionsADate(_ text: String) -> Bool {
