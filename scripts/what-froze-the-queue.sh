@@ -30,6 +30,10 @@ set -uo pipefail
 # installed carries no pass count at all, so on a log that has not turned over it answers UNMEASURED. That
 # is the honest answer and not a fault.
 
+# Captured before anything else runs, so the shared reader below is found wherever this is invoked from.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+LIB_DIR="${SCRIPT_DIR}/lib"
+
 LOG="${HOME}/Library/Application Support/Overture/freeze-log.ndjson"
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -57,50 +61,28 @@ fi
 # `FreezeLog.archiveURL(besideLogAt:)` derives it, rather than taken as a second argument nobody passes.
 ARCHIVE="$(dirname "${LOG}")/freeze-log-archive.ndjson"
 
-python3 - "${LOG}" "${ARCHIVE}" <<'PY'
-import json, os, sys
+# #4188: loading the log and deciding which records are not freezes live in ONE module this and
+# scripts/how-often-does-it-freeze.sh both import, so the two readers cannot disagree about the population
+# they both describe (L216, L263). A missing module is refused by name: Python would otherwise die with
+# exit 1, which this script's callers read as a finding (L488, L490).
+if [ ! -f "${LIB_DIR}/freeze_records.py" ]; then
+  echo "what-froze-the-queue: UNMEASURED. The shared reader ${LIB_DIR}/freeze_records.py is missing."
+  exit 2
+fi
+
+python3 - "${LOG}" "${ARCHIVE}" "${LIB_DIR}" <<'PY'
+import sys
 
 path, archive_path = sys.argv[1], sys.argv[2]
-rows, unreadable = [], 0
-# #4122: the compaction notes the live file carries, kept apart from the stalls. A note is not a stall,
-# and letting one into `rows` would add a record with no `seconds` and no `passes` to every population
-# counted below, which is the defect this tool exists to report arriving through the tool itself (L387).
-notes = []
-sources = []
+# No bytecode cache: importing would otherwise leave a __pycache__ inside the checkout on every run.
+sys.dont_write_bytecode = True
+sys.path.insert(0, sys.argv[3])
+from freeze_records import load, menu_idle, run_loop_measured, sleep_measured, slept, tracking
 
-
-def plural(n, word):
-    return f"{n} {word}" if n == 1 else f"{n} {word}s"
-
-
-def load(p):
-    global unreadable
-    added = 0
-    with open(p) as handle:
-        for line in handle:
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                parsed = json.loads(line)
-            except ValueError:
-                unreadable += 1
-                continue
-            # The `note` key is the one no stall record carries, which is how the app's own reader tells
-            # them apart. Counted separately rather than skipped, because what it says is the whole point.
-            if isinstance(parsed, dict) and "note" in parsed:
-                notes.append(parsed)
-                continue
-            rows.append(parsed)
-            added += 1
-    return added
-
-
-# The ARCHIVE first, so the combined list is roughly chronological: a compaction only ever moves records
-# OLDER than everything the live file kept.
-if os.path.exists(archive_path):
-    sources.append(f"{os.path.basename(archive_path)} ({plural(load(archive_path), 'record')})")
-sources.append(f"{os.path.basename(path)} ({plural(load(path), 'record')})")
+# #4122: the compaction notes the live file carries come back apart from the stalls. A note is not a
+# stall, and letting one into `rows` would add a record with no `seconds` and no `passes` to every
+# population counted below. The archive is read first, so the combined list is roughly chronological.
+rows, notes, unreadable, sources = load(path, archive_path)
 
 # A record written before #3760 shipped has no `passes` key at all. That is not a zero: it is a record
 # this tool cannot judge, and folding it into either verdict is the whole thing this exit code exists
@@ -242,8 +224,8 @@ if untimed_count:
 # Reported only where the field is PRESENT. Every record written before #4153 shipped has none, and
 # absent is not zero: a reader told "0 slept" about a record nobody measured would draw exactly the wrong
 # conclusion from it (L98).
-_sleep_measured = [r for r in rows if isinstance(r.get("asleepSeconds"), (int, float))]
-_slept_through = [r for r in _sleep_measured if r["asleepSeconds"] > 0]
+_sleep_measured = [r for r in rows if sleep_measured(r)]
+_slept_through = [r for r in _sleep_measured if slept(r)]
 print()
 if not _sleep_measured:
     print(f"  sleep: UNMEASURED. None of the {len(rows)} record(s) says whether the Mac was asleep, so")
@@ -289,9 +271,8 @@ else:
 # without them, and it does not decide for the reader: a tracking record carrying real render time is a
 # genuine freeze that overlapped a menu, and one carrying none is the contaminated shape. The two are
 # separated here by `passes` and `passSeconds`, which is the judgement #4114 asked to be made explicit.
-_activity_measured = [r for r in rows if isinstance(r.get("runLoopActivity"), str)
-                      and r["runLoopActivity"] != "notRecorded"]
-_tracking = [r for r in _activity_measured if r["runLoopActivity"] == "tracking"]
+_activity_measured = [r for r in rows if run_loop_measured(r)]
+_tracking = [r for r in _activity_measured if tracking(r)]
 print()
 if not _activity_measured:
     print(f"  run loop: UNMEASURED. None of the {len(rows)} record(s) says what the main run loop was")
@@ -305,10 +286,8 @@ else:
         # The contaminated shape is a tracking record that ran NO render pass and spent NO time in one. A
         # record that spanned real render time is a freeze whatever mode it was in, so it is counted
         # apart rather than swept in with the others (L11).
-        def _ran_nothing(r):
-            return r.get("passes") == 0 and r.get("passSeconds") in (0, 0.0)
-        _idle = [r for r in _tracking if _ran_nothing(r)]
-        _busy = [r for r in _tracking if not _ran_nothing(r)]
+        _idle = [r for r in _tracking if menu_idle(r)]
+        _busy = [r for r in _tracking if not menu_idle(r)]
         _idle_seconds = sum(r.get("seconds", 0) for r in _idle)
         _all_seconds = sum(r.get("seconds", 0) for r in rows)
         print(f"  run loop: {len(_tracking)} of {len(_activity_measured)} record(s) carrying a reading")

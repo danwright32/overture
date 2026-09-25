@@ -19,6 +19,10 @@ set -uo pipefail
 #   0  a reading was taken and printed
 #   2  UNMEASURED: no log, nothing readable in it, or nothing this reader can size
 
+# Captured before anything else runs, so the shared reader below is found wherever this is invoked from.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+LIB_DIR="${SCRIPT_DIR}/lib"
+
 LOG="${HOME}/Library/Application Support/Overture/freeze-log.ndjson"
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -44,36 +48,27 @@ fi
 # report on the recent window while looking exactly like a reader of the whole history (L46, L98).
 ARCHIVE="$(dirname "${LOG}")/freeze-log-archive.ndjson"
 
-python3 - "${LOG}" "${ARCHIVE}" <<'PY'
-import json, os, statistics, sys
+# #4188: which records are not freezes is decided in ONE place both freeze log readers import. A missing
+# module is refused by name here: Python would otherwise die with a traceback and an exit code the caller
+# reads as a result (L488, L490).
+if [ ! -f "${LIB_DIR}/freeze_records.py" ]; then
+  echo "how-often-does-it-freeze: UNMEASURED. The shared reader ${LIB_DIR}/freeze_records.py is missing."
+  exit 2
+fi
+
+python3 - "${LOG}" "${ARCHIVE}" "${LIB_DIR}" <<'PY'
+import statistics, sys
 
 path, archive_path = sys.argv[1], sys.argv[2]
-rows, unreadable, sources = [], 0, []
+# No bytecode cache: importing would otherwise leave a __pycache__ inside the checkout on every run.
+sys.dont_write_bytecode = True
+sys.path.insert(0, sys.argv[3])
+from freeze_records import (FREEZE, NOT_A_FREEZE, UNMEASURED, freeze_verdict, load, menu_idle, plural,
+                            run_loop_measured, sleep_measured, slept)
 
-
-def plural(n, word):
-    return f"{n} {word}" if n == 1 else f"{n} {word}s"
-
-
-def load(p):
-    global unreadable
-    added = 0
-    with open(p) as handle:
-        for line in handle:
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                rows.append(json.loads(line))
-                added += 1
-            except ValueError:
-                unreadable += 1
-    return added
-
-
-if os.path.exists(archive_path):
-    sources.append(f"{os.path.basename(archive_path)} ({plural(load(archive_path), 'record')})")
-sources.append(f"{os.path.basename(path)} ({plural(load(path), 'record')})")
+# #4122: a compaction note is not a stall. Before #4188 this reader counted it as one, in a session of
+# its own named "?", so every total here was one higher than the stalls it described.
+rows, _notes, unreadable, sources = load(path, archive_path)
 
 if not rows:
     print(f"how-often-does-it-freeze: UNMEASURED. {path} holds no records.")
@@ -109,7 +104,10 @@ def interval_of(group):
 print(f"how-often-does-it-freeze: {len(rows)} record(s) over {plural(len(sessions), 'session')}.")
 print(f"  read from: {', '.join(sources)}")
 print()
-print("  session   floor   watched   stalls   per hour   stalled   share")
+# #4188: `not freezes` is how many of a session's stalls say of themselves that they are not one, and
+# `unjudged` how many carry no reading to say either way. Both stay IN the row's figures: the columns name
+# them so a session whose stalled time is one long sleep cannot pass for a session that froze (L116).
+print("  session    floor   watched   stalls   per hour   stalled    share   not freezes   unjudged")
 modern, modern_watched, unknown_floor = [], 0.0, 0
 for name, group in sorted(sessions.items(), key=lambda kv: kv[1][0].get("at", "")):
     interval = interval_of(group)
@@ -125,8 +123,10 @@ for name, group in sorted(sessions.items(), key=lambda kv: kv[1][0].get("at", ""
         print(f"  {name[:8]}   {interval * 1000:3.0f}ms   UNMEASURED (no sequence to size it by)")
         continue
     rate = len(group) / (watched / 3600)
+    not_freezes = sum(1 for r in group if freeze_verdict(r) == NOT_A_FREEZE)
+    unjudged = sum(1 for r in group if freeze_verdict(r) == UNMEASURED)
     print(f"  {name[:8]}   {interval * 1000:3.0f}ms   {watched / 3600:6.2f}h   {len(group):6}   "
-          f"{rate:8.1f}   {stalled:6.1f}s   {100 * stalled / watched:5.2f}%")
+          f"{rate:8.1f}   {stalled:6.1f}s   {100 * stalled / watched:5.2f}%   {not_freezes:11}   {unjudged:8}")
     modern.extend(group)
     modern_watched += watched
 
@@ -150,12 +150,58 @@ if not baseline:
     print("  machine was busy, and the bar is about a quiet one.")
     sys.exit(2)
 
-secs = [r.get("seconds", 0) for r in baseline]
-print("  THE BAR is about baseline load at the 100 ms floor, so that is the only comparable set:")
-print(f"    n={len(secs)}   p50 {statistics.median(secs):.3f}s   p90 {quantile(secs, 0.90):.3f}s   "
-      f"p95 {quantile(secs, 0.95):.3f}s   p99 {quantile(secs, 0.99):.3f}s   max {max(secs):.3f}s")
-print(f"    {len(modern)} stall(s) over {modern_watched / 3600:.2f}h watched, "
-      f"{len(modern) / (modern_watched / 3600):.1f} per hour")
+def distribution(label, group):
+    secs = [r.get("seconds", 0) for r in group]
+    print(f"    {label}  n={len(secs)}   p50 {statistics.median(secs):.3f}s   p90 {quantile(secs, 0.90):.3f}s   "
+          f"p95 {quantile(secs, 0.95):.3f}s   p99 {quantile(secs, 0.99):.3f}s   max {max(secs):.3f}s   "
+          f"{len(secs) / (modern_watched / 3600):.1f} per hour")
+
+
+print()
+print("  THE BAR is about baseline load at the 100 ms floor, so that is the only comparable set.")
+print(f"  {modern_watched / 3600:.2f}h watched.")
+distribution("every record:", baseline)
+
+# #4188: the same set WITHOUT the records that say of themselves they are not freezes, stated beside it
+# rather than instead of it (L116). #3660 reads this block, so each line names what it counts and the
+# three states are counted apart: a record with no reading is neither excluded nor called a freeze (L98).
+_verdicts = [freeze_verdict(r) for r in baseline]
+_not = [r for r, v in zip(baseline, _verdicts) if v == NOT_A_FREEZE]
+_unjudged = [r for r, v in zip(baseline, _verdicts) if v == UNMEASURED]
+_kept = [r for r, v in zip(baseline, _verdicts) if v != NOT_A_FREEZE]
+if _not:
+    label = f"without the {len(_not)} that are not freezes:" if len(_not) != 1 else \
+        "without the 1 that is not a freeze:"
+    if _kept:
+        distribution(label, _kept)
+    else:
+        print(f"    {label}  n=0. Every record here says of itself that it is not a freeze, so this set")
+        print("      states no measured freeze at all.")
+    _slept = sum(1 for r in _not if slept(r))
+    _menu = sum(1 for r in _not if menu_idle(r) and not slept(r))
+    reasons = []
+    if _slept:
+        reasons.append(f"{_slept} spanned a sleep (#4153)")
+    if _menu:
+        verb = "was" if _menu == 1 else "were"
+        reasons.append(f"{_menu} {verb} taken while a menu tracked and ran no render pass (#4114)")
+    print(f"    not freezes: {', '.join(reasons)}.")
+    print("      Marked rather than dropped: the first line keeps them.")
+if _unjudged:
+    _no_sleep = sum(1 for r in _unjudged if not sleep_measured(r))
+    _no_loop = sum(1 for r in _unjudged if not run_loop_measured(r))
+    print(f"    {len(_unjudged)} of the {len(baseline)} cannot be judged: {_no_sleep} carry no sleep reading, "
+          f"{_no_loop} no run loop reading.")
+    print("      Absent is not zero, so they are in EVERY line above, neither excluded nor shown to be")
+    print("      freezes. Any of them may be a sleep or an open menu. Install a build carrying #4153 and")
+    print("      #4114 and read again.")
+if not _not and not _unjudged:
+    print(f"    none of the {len(baseline)} is shown not to be a freeze: each carries a sleep and a run loop")
+    print("      reading, and neither says it was a sleep or an idle open menu.")
+_other = [r for r, v in zip(baseline, _verdicts) if v == FREEZE and r.get("runLoopActivity") == "otherMode"]
+if _other:
+    print(f"    {len(_other)} of those counted were taken in a run loop mode this build does not name, so")
+    print("      what they are is UNKNOWN rather than shown to be a freeze. They stay in every line.")
 print()
 print("  Read as a RATE, never as a proportion over the bar: the watchdog's storage floor IS the")
 print("  bar, so 100 percent of these are over it by construction and that says nothing (L178).")
