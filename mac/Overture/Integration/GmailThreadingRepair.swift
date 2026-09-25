@@ -41,10 +41,11 @@ struct GmailThreadingRepair {
     // that ran and found nothing to do, so the caller can say which happened rather than reporting an
     // empty repair either way (L11, L98).
     @discardableResult
-    func repair(in context: ModelContext) async -> Outcome? {
+    // #4107: `rows` is the reconcile tick's one read of the store; nil fetches here, as it always did.
+    func repair(in context: ModelContext, rows: StoreRows? = nil) async -> Outcome? {
         guard GmailConnection.shared.refreshedIsConnected(),
               let token = try? await GmailAuthManager.shared.validAccessToken() else { return nil }
-        return await repairMessageIds(in: context, token: token)
+        return await repairMessageIds(in: context, token: token, rows: rows)
     }
 
     // The testable core: a token in hand and an injected fetch, so the whole decision path runs with no
@@ -53,14 +54,13 @@ struct GmailThreadingRepair {
     func repairMessageIds(
         in context: ModelContext,
         token: String,
+        rows: StoreRows? = nil,
         fetch: (URLRequest) async throws -> (Data, URLResponse) = { try await GmailNetworking.session.data(for: $0) }
     ) async -> Outcome {
-        let prospects = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
-        // `try?` keeps a container that predates Inquiry (an older test harness) working: it yields none,
-        // the same allowance GmailReplyChecker makes for the same reason.
-        let inquiries = (try? context.fetch(FetchDescriptor<Inquiry>())) ?? []
-        let all: [any ReplyWatchableRecipient] = prospects.flatMap(\.replyWatchRecipients)
-            + inquiries.map { $0 as any ReplyWatchableRecipient }
+        // #4107: the tick's rows when it has them, otherwise one read here.
+        let rows = rows ?? StoreRows.fetch(from: context)
+        let all: [any ReplyWatchableRecipient] = rows.liveProspects.flatMap(\.replyWatchRecipients)
+            + rows.liveInquiries.map { $0 as any ReplyWatchableRecipient }
 
         // One read per CONVERSATION, not per row. #2046 sends one email to several contacts, so several
         // rows share a thread, and the newest message Dan sent on it is a fact about the conversation that
@@ -101,11 +101,13 @@ struct GmailThreadingRepair {
         // Sorted so a run is reproducible and its log reads the same way twice; a dictionary's order is
         // not stable between runs.
         for thread in rowsByThread.keys.sorted() {
-            let rows = rowsByThread[thread] ?? []
             guard let data = await fetchThread(id: thread, token: token, fetch: fetch) else {
-                outcome.unreadable += rows.count
+                outcome.unreadable += (rowsByThread[thread] ?? []).count
                 continue
             }
+            // #4107: chosen before the await, applied after it, so a row deleted while this pass waited on
+            // Gmail is dropped here rather than written to.
+            let rows = (rowsByThread[thread] ?? []).filter(StoreRows.isLiveRow)
             guard let realID = ReplyDetection.latestSentMessageID(threadJSON: data, selfEmail: fromEmail) else {
                 // Read fine, and named no message of Dan's to reference. The stored value is left exactly
                 // as it is, and the row RECORDS that it could not be repaired rather than the pass

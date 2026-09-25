@@ -104,39 +104,79 @@ final class ReconcileScheduler {
     // #2679: the threading repair is injected, defaulting to the real one, for the same reason
     // `retireShowsThatOpened(save:)` takes its save: without a seam its `saveFailed` cannot be driven from
     // a test, and a fold nothing can exercise is indistinguishable from no fold at all (L3).
+    // #4107: the proposal sweep is injected for the same reason, so a test can drive the tick's own path
+    // through a mailbox read that fails or times out, and `recordTimeline` is where the tick says what
+    // each pass cost (the system log, through `AgentLog.note`, unless a test captures it).
     func runSafeReconcilesOnce(now: Date = Date(), defaults: UserDefaults = .standard,
                                watchReadings: WatchGap.Readings? = nil,
-                               repairThreading: @MainActor (ModelContext) async -> GmailThreadingRepair.Outcome? = {
-                                   await GmailThreadingRepair().repair(in: $0)
-                               })
+                               repairThreading: @MainActor (ModelContext, StoreRows) async -> GmailThreadingRepair.Outcome? = {
+                                   await GmailThreadingRepair().repair(in: $0, rows: $1)
+                               },
+                               sweepProposals: @MainActor (ModelContext, Date, StoreRows) async -> ReplyProposalSweep.Outcome = {
+                                   await ReplyProposalSweep().run(in: $0, now: $1, rows: $2)
+                               },
+                               recordTimeline: (ReconcileTickTimeline) -> Void = { AgentLog.note($0.logLine) })
         async -> ReconcileSummary {
+        // #4107: what each pass costs, measured on every tick. `lap` closes the pass that just ran; `resume`
+        // restarts the clock after the tick has given the main actor back, so a turn somebody else took is
+        // never counted against the next pass.
+        let clock = ContinuousClock()
+        var timeline = ReconcileTickTimeline()
+        var mark = clock.now
+        func lap(_ phase: ReconcileTickTimeline.Phase) {
+            let elapsed = (clock.now - mark).components
+            timeline.record(phase, seconds: Double(elapsed.seconds) + Double(elapsed.attoseconds) / 1e18)
+        }
+        // #4107: between passes the tick yields, so whatever else is waiting on the main actor gets a turn
+        // between two passes rather than only after all eleven. Every pass is still awaited in order, so
+        // nothing about what the tick does or in what order changes.
+        func handBack() async {
+            await Task.yield()
+            mark = clock.now
+        }
+
         let readings = watchReadings ?? WatchHeartbeatStore.readings(now: now, defaults: defaults)
         // #2091: note a silence this tick is resuming after, BEFORE the stamp at the end hides it. Why
         // that ordering is the whole design, and why it lives here rather than in start(), is in WatchGap.
         WatchHeartbeatStore.observeResume(
             now: now, readings: readings,
             intervalSeconds: ReconcileScheduler.intervalSeconds(defaults: defaults), into: defaults)
+        // #4107: the tick's ONE read of the store, handed to every pass below. Each pass used to fetch every
+        // Prospect for itself, roughly 90 main thread samples apiece in the recording that opened #4107,
+        // which was most of what the tick held the main actor for. See `StoreRows`.
+        let rows = StoreRows.fetch(from: context)
         // #269: snapshot which leads are already replied/booked BEFORE mutating, so the diff after the
         // reconcile names exactly what arrived this tick (each item reported once).
-        let before = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
-        let repliedBefore = Set(before.filter(Self.hasNewReply).map(\.naturalKey))
-        let bookedBefore = Set(before.filter { $0.outcome == .booked }.map(\.naturalKey))
+        let repliedBefore = Set(rows.prospects.filter(Self.hasNewReply).map(\.naturalKey))
+        let bookedBefore = Set(rows.prospects.filter { $0.outcome == .booked }.map(\.naturalKey))
+        lap(.readRows)
+        await handBack()
 
-        let bookingResult = reconcileBookings(now: now)
+        let bookingResult = reconcileBookings(now: now, rows: rows)
+        lap(.bookings)
+        await handBack()
         // #923: same trigger as the booking pass. Re-judge conflicts so a night newly booked in the export
         // flags its show at once, instead of leaving it sendable until the next scout.
-        reapplyConflicts(now: now)
+        reapplyConflicts(now: now, prospects: rows.liveProspects)
+        lap(.conflicts)
+        await handBack()
         // #1456: watch whether Downbeat's feed is still MOVING, on this same free tick, so the dry-pipe
         // nudge advances daily without a scout.
         observeFeedFreshness(now: now)
+        lap(.feedFreshness)
+        await handBack()
         // #1566: retire the shows that opened since the last tick, so the queue stops offering a run Dan
         // will not pitch just because the app has not been relaunched since it opened.
         let retirement = retireShowsThatOpened(now: now)
+        lap(.retirement)
+        await handBack()
         // Reply detection: gated on a live Gmail connection inside checkReplies; best-effort.
         // #2741: the whole outcome, not a Bool that meant "a save failed" and was shared by three other
         // states. `everyThreadUnreadable` is the one that reaches Dan, and only on the rate.
-        let replyCheck = await GmailReplyChecker().checkReplies(in: context)
+        let replyCheck = await GmailReplyChecker().checkReplies(in: context, rows: rows)
         let replyCheckSaveFailed = replyCheck.saveFailed
+        lap(.replyCheck)
+        await handBack()
         // #2649: repair the stored Message-ID on conversations that are still live, where Overture wrote
         // the id it minted and Gmail discarded (#2647 fixed this from the next send onward and could not
         // touch what was already stored). Rides this same free tick for the same reasons the two Gmail
@@ -162,7 +202,9 @@ final class ReconcileScheduler {
         // act on it (L80). An unreadable thread says Gmail could not be read this tick, which the next
         // free tick retries and which #1912 is the right home for; a count of it here would be a number
         // with no action attached.
-        let threadingRepair = await repairThreading(context)
+        let threadingRepair = await repairThreading(context, rows)
+        lap(.threadingRepair)
+        await handBack()
         // #2718: read the mailbox for a reply to a pitch Overture cannot watch, rank what it finds, and
         // store at most one question per contact. Rides this same free tick for the reasons the two Gmail
         // calls above do: it is read only, it is gated on the connection inside itself, and it spends no
@@ -172,20 +214,35 @@ final class ReconcileScheduler {
         //
         // Its failure gets its OWN field on the summary rather than the shared `saveFailed`: that flag's
         // message is about a save, and a Gmail READ that failed is a different fact (L11, L53).
-        let proposals = await sweepReplyProposals(context, now)
+        let proposals = await sweepReplyProposals(context, now, rows: rows, sweep: sweepProposals)
+        lap(.replyProposals)
+        await handBack()
         // #1158: keep the cached Gmail signature current so a signature Dan changes in Gmail is picked up
         // without a manual reconnect. Rides this safe, free tick (launch + periodic + export-change) but
         // self-throttles to at most one fetch per day, and can never clobber a good stored signature on a
         // failed fetch. Best-effort and free, like the reply detection above; no paid AI run.
         await GmailSignatureService.refreshIfDue()
+        lap(.signature)
+        await handBack()
         var omniFocusChanged = 0
         let config = OmniFocusSyncConfig.loaded()
         if config.enabled {
+            // #4107: the silent Automation probe waits on a semaphore inside Apple Events (10 of the
+            // recording's samples sat in `_dispatch_semaphore_wait_slow`), so it runs off the main actor
+            // and the tick awaits its answer, the same move #3419 made for the AppleScript itself.
+            let permission = await Task.detached { OmniFocusAutomationPermission.current() }.value
             omniFocusChanged = await syncOmniFocus(now: now, client: AppleScriptOmniFocusClient(),
-                                                   horizonDays: config.horizonDays)
+                                                   horizonDays: config.horizonDays,
+                                                   permission: permission, rows: rows)
         }
+        lap(.omniFocus)
+        await handBack()
 
-        let after = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
+        // #4107: a FRESH read, deliberately, and the only other one the tick makes. What the Dock and the
+        // menu bar say must be what the store holds now, including a show a scout added while this tick
+        // was waiting on Gmail, which the shared rows above cannot contain.
+        let closing = StoreRows.fetch(from: context)
+        let after = closing.prospects
         let repliedAfter = after.filter(Self.hasNewReply).map { (key: $0.naturalKey, name: $0.groupName) }
         let bookedAfter = after.filter { $0.outcome == .booked }.map { (key: $0.naturalKey, name: $0.groupName) }
         let newReplies = AwayAlert.newNames(before: repliedBefore, after: repliedAfter)
@@ -201,8 +258,7 @@ final class ReconcileScheduler {
         // because neither surface that draws it can hold a SwiftData query of its own. Same predicate as
         // the toolbar's Due badge, so the three can never state different numbers.
         // #3890: with the replies waiting on an answer in it, and their own count beside it for the menu.
-        let due = DueWork.counts(prospects: after,
-                                 inquiries: (try? context.fetch(FetchDescriptor<Inquiry>())) ?? [],
+        let due = DueWork.counts(prospects: after, inquiries: closing.inquiries,
                                  now: now, replyRunAlive: replyRunAlive(now))
         DueBadge.publish(due.total, replies: due.repliesToAnswer, into: defaults)
         // #3474: and again at the moment the count next changes, rather than only at the next tick.
@@ -213,6 +269,8 @@ final class ReconcileScheduler {
         // #2091: the watch heartbeat, carrying the observed sleep alongside the wall clock so the next
         // tick can tell a sleeping Mac (nothing missed) from a dead process (everything missed).
         WatchHeartbeatStore.stamp(now: now, readings: readings, into: defaults)
+        lap(.closingCount)
+        recordTimeline(timeline)
         return ReconcileSummary(omniFocusChanged: omniFocusChanged,
                                 newReplies: newReplies, newBookings: newBookings,
                                 newReplyKeys: newReplyKeys, newBookingKeys: newBookingKeys,
@@ -235,12 +293,12 @@ final class ReconcileScheduler {
     // #2798: it also returns the two facts the INQUIRY half of that sweep establishes, which had no
     // reader at all before. Both are about a tick that could not read Gmail for the conversations a hire
     // inquiry is on, and neither is "nothing arrived", so neither may be swallowed by the same silence.
-    func sweepReplyProposals(_ context: ModelContext, _ now: Date,
-                             sweep: @MainActor (ModelContext, Date) async -> ReplyProposalSweep.Outcome = {
-                                 await ReplyProposalSweep().run(in: $0, now: $1)
+    func sweepReplyProposals(_ context: ModelContext, _ now: Date, rows: StoreRows,
+                             sweep: @MainActor (ModelContext, Date, StoreRows) async -> ReplyProposalSweep.Outcome = {
+                                 await ReplyProposalSweep().run(in: $0, now: $1, rows: $2)
                              }) async -> (saveFailed: Bool, failure: String?,
                                           inquiryThreadsUnreadable: Bool, inquiryNotConnected: Bool) {
-        switch await sweep(context, now) {
+        switch await sweep(context, now, rows) {
         case .notConnected, .nothingInScope: return (false, nil, false, false)
         case .failed(let reason): return (false, reason, false, false)
         case .swept(_, _, let saveFailed, let threadsUnreadable, let notConnected):
@@ -278,7 +336,8 @@ final class ReconcileScheduler {
     // above already reads the export on the same trigger (launch, timer, export-change); this closes the
     // other half on that same trigger. ConflictSweep is pure, tested, and idempotent, and preserves any
     // clearance Dan already made (setScoutConflict compares against the key he cleared).
-    func reapplyConflicts(now: Date, from url: URL = DownbeatBridge.defaultURL) {
+    // #4107: `prospects` is the tick's one read of the store; nil fetches inside the sweep.
+    func reapplyConflicts(now: Date, from url: URL = DownbeatBridge.defaultURL, prospects: [Prospect]? = nil) {
         let loaded = DownbeatBridge.loadWithHealth(from: url, now: now)
         // #2692: clear the cancellations whose booking Downbeat no longer exports, BEFORE the sweep below
         // reads the calendar, so a night freed by a row that no longer stands for anything is re-blocked
@@ -292,7 +351,7 @@ final class ReconcileScheduler {
         // Dan's cancellations with it (L214).
         CancelledShootEditing.sweep(against: loaded.bookings, in: context)
         ConflictSweep.reapplyAll(export: (loaded.bookings, loaded.blockedDates, loaded.health),
-                                 in: context)
+                                 in: context, prospects: prospects)
     }
 
     // Mark prospects Booked from the Downbeat export. No-op when the export is absent or unchanged.
@@ -320,14 +379,16 @@ final class ReconcileScheduler {
     // ReconcileSummary instead of failing silently. #617: `from` mirrors DownbeatBridge.loadWithHealth's
     // own injectable URL, so a test can drive a real booking match without touching Dan's real export.
     @discardableResult
-    func reconcileBookings(now: Date, from url: URL = DownbeatBridge.defaultURL) -> (count: Int, saveFailed: Bool) {
+    // #4107: `rows` is the tick's one read of the store; nil fetches here, as it always did.
+    func reconcileBookings(now: Date, from url: URL = DownbeatBridge.defaultURL,
+                           rows: StoreRows? = nil) -> (count: Int, saveFailed: Bool) {
         let loaded = DownbeatBridge.loadWithHealth(from: url, now: now)
         // #1434/#1435: one generic reconcile pass over prospects AND inquiries, so a booking is
         // consumed once across both types. Inquiries are suggestion-only but claim a booking to win the
         // tie-break. `try?` yields none on a container predating Inquiry.
         // The prospects are fetched here rather than inside the call below because the contact-score
         // settle further down needs them whatever the export's health says.
-        let prospects = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
+        let prospects = rows?.liveProspects ?? (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
         // #1960: the inquiries and the boxing are built INSIDE the call, so an unhealthy export refuses
         // before paying for them.
         let n = DownbeatBooking.reconcileBooked(
@@ -387,7 +448,8 @@ final class ReconcileScheduler {
     func syncOmniFocus(now: Date, client: OmniFocusClient, horizonDays: Int,
                        permission: AutomationAuthorization = OmniFocusAutomationPermission.current(),
                        notifier: OmniFocusNotifier = OmniFocusUserNotifier(),
-                       statusDefaults: UserDefaults = .standard) async -> Int {
+                       statusDefaults: UserDefaults = .standard,
+                       rows: StoreRows? = nil) async -> Int {
         // #268: gate on a SILENT Automation pre-check. If OmniFocus isn't already grantable, the runner
         // skips the AppleScript (so this windowless process can't post a TCC modal into the void) and
         // notifies once; otherwise it applies and records success/failure.
@@ -398,15 +460,17 @@ final class ReconcileScheduler {
         // found false: `BlockingWorkThreadTests.appleScriptRunsOffTheMainThread` executes a script on a
         // background queue and gets its answer (L82, L316). The tick still AWAITS the result, so the
         // write completes before it returns; what changed is that the main actor is free meanwhile.
-        let all = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
-        let desired = OmniFocusSync.desired(from: all, now: now, horizonDays: horizonDays)
+        // #4107: the tick's one read of the store when it has one; nil fetches here, as it always did.
+        let rows = rows ?? StoreRows.fetch(from: context)
+        let desired = OmniFocusSync.desired(from: rows.liveProspects, now: now, horizonDays: horizonDays)
         let changed = await OmniFocusSyncRunner.run(
             desired: desired, permission: permission, client: client,
             notifier: notifier, now: now, defaults: statusDefaults,
             // #2899: carry back what Dan ticked off in OmniFocus. Passed as a closure because the
             // runner is pure over value types and the model lives here, on the main actor.
+            // #4107: read live AFTER the AppleScript's await, so a show deleted meanwhile is not written to.
             recordCompletions: { handled in
-                OmniFocusSync.recordCompletions(handled, in: all, now: now)
+                OmniFocusSync.recordCompletions(handled, in: rows.liveProspects, now: now)
             })
         if changed.stamped > 0 { try? context.save() }
         return changed.tasks

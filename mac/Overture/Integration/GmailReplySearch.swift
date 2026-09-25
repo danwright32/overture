@@ -250,11 +250,12 @@ struct GmailReplySearch {
 
     // Connected, with a token in hand. `.notConnected` rather than an empty result, so a tick that never
     // reached Gmail is never reported as one that read it and found nothing.
+    // #4107: `rows` is the reconcile tick's one read of the store; nil fetches here, as it always did.
     func search(in context: ModelContext, now: Date = Date(),
-                defaults: UserDefaults = .standard) async -> Outcome {
+                defaults: UserDefaults = .standard, rows: StoreRows? = nil) async -> Outcome {
         guard GmailConnection.shared.refreshedIsConnected(),
               let token = try? await GmailAuthManager.shared.validAccessToken() else { return .notConnected }
-        return await searchMailbox(in: context, token: token, now: now, defaults: defaults)
+        return await searchMailbox(in: context, token: token, now: now, defaults: defaults, rows: rows)
     }
 
     // The testable core: a token in hand and an injected fetch, so the whole decision path runs with no
@@ -272,15 +273,14 @@ struct GmailReplySearch {
         // asserted only by reading it, which is exactly how #499's silent `try?` survived. The same seam
         // and the same reason as `ReconcileScheduler.retireShowsThatOpened(now:save:)`.
         save: (() throws -> Void)? = nil,
+        rows: StoreRows? = nil,
         fetch: (URLRequest) async throws -> (Data, URLResponse) = { try await GmailNetworking.session.data(for: $0) }
     ) async -> Outcome {
-        let prospects = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
         // #2712: a hire inquiry Dan answered in his own Gmail is in exactly the position a form pitch is,
-        // so it rides this same one-search-per-tick read rather than a second pass beside it (L30). `try?`
-        // keeps a container that predates Inquiry (an older test harness) working: it yields none, the
-        // same allowance `GmailReplyChecker` makes for the same reason.
-        let inquiries = (try? context.fetch(FetchDescriptor<Inquiry>())) ?? []
-        let targets = ReplySearchScope.targets(in: prospects, inquiries: inquiries, now: now)
+        // so it rides this same one-search-per-tick read rather than a second pass beside it (L30).
+        // #4107: the tick's rows when it has them, otherwise one read here.
+        let rows = rows ?? StoreRows.fetch(from: context)
+        let targets = ReplySearchScope.targets(in: rows.liveProspects, inquiries: rows.liveInquiries, now: now)
         guard !targets.isEmpty,
               let windowStart = ReplySearchScope.windowStart(
                 for: targets, searchedThrough: ReplySearchHighWater.searchedThrough(from: defaults), now: now)
@@ -320,7 +320,9 @@ struct GmailReplySearch {
         // Only now, and only on a tick that completed. A failed tick above returned before reaching any
         // of this, so it leaves the mark exactly where it was and stamps nobody: the messages it never
         // examined stay unexamined rather than being stepped over for ever.
-        for target in targets { target.replyCandidateSearchedAt = now }
+        // #4107: chosen before the Gmail read, stamped after it, so a contact deleted while the read was in
+        // flight is dropped here rather than written to.
+        for target in targets where StoreRows.isLiveRow(target) { target.replyCandidateSearchedAt = now }
         var saveFailed = false
         do {
             if let save { try save() } else { try context.save() }

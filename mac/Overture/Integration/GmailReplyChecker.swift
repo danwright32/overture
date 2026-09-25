@@ -43,7 +43,9 @@ struct GmailReplyChecker {
     // #499: reports whether a detected reply's context.save() failed, so the caller can surface it
     // instead of it failing silently.
     @discardableResult
-    func checkReplies(in context: ModelContext, now: Date = Date()) async -> Outcome {
+    // #4107: `rows` is the reconcile tick's one read of the store, so this pass does not fetch every
+    // Prospect again. nil (every other caller) fetches them here, as it always did.
+    func checkReplies(in context: ModelContext, now: Date = Date(), rows: StoreRows? = nil) async -> Outcome {
         // #1770: the periodic check is a natural place to notice a credential that died since launch,
         // and it is nowhere near a render path, so it pays for a fresh read.
         //
@@ -57,7 +59,7 @@ struct GmailReplyChecker {
         // outright and the first symptom was that replies stopped arriving (L13).
         if let failure = Self.authFailure(isConnected: connected, token: token) { return failure }
         guard let token else { return Outcome(notConnected: true) }
-        return await markReplies(in: context, token: token, now: now)
+        return await markReplies(in: context, token: token, now: now, rows: rows)
     }
 
     // Which auth state a pass is in, or nil when there is a usable credential and the pass may go ahead.
@@ -79,14 +81,18 @@ struct GmailReplyChecker {
         in context: ModelContext,
         token: String,
         now: Date = Date(),
+        rows: StoreRows? = nil,
         fetch: (URLRequest) async throws -> (Data, URLResponse) = { try await GmailNetworking.session.data(for: $0) }
     ) async -> Outcome {
-        let prospects = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
-        // #1435: hire inquiries ride the SAME reply/bounce pipeline as a single self-thread. `try?`
-        // keeps a container that predates Inquiry (an older test harness) working: it just yields none.
-        let inquiries = (try? context.fetch(FetchDescriptor<Inquiry>())) ?? []
-        let all: [any ReplyWatchable] = prospects.map { $0 as any ReplyWatchable }
-            + inquiries.map { $0 as any ReplyWatchable }
+        // #1435: hire inquiries ride the SAME reply/bounce pipeline as a single self-thread.
+        // #4107: read from the tick's rows when it has them, and read LIVE both times: before the Gmail
+        // reads to choose the threads, and again after them to apply, since a row can be deleted while
+        // this pass waits on the network and must not be written to afterwards.
+        let rows = rows ?? StoreRows.fetch(from: context)
+        func watchable() -> [any ReplyWatchable] {
+            rows.liveProspects.map { $0 as any ReplyWatchable } + rows.liveInquiries.map { $0 as any ReplyWatchable }
+        }
+        let all = watchable()
         // Watch EVERY sent recipient's own thread (#418 A2), not just the lead's first-send thread,
         // so a reply to any contact is seen. Skip a show only on a MANUAL lead resolution or a booking
         // (a closed show); never on the auto .replied rollup, or a second contact's reply would be missed.
@@ -118,13 +124,14 @@ struct GmailReplyChecker {
                 fullThreads[id] = full
             }
         }
-        let repliesMarked = ReplyService.detectReplies(in: all, selfEmail: fromEmail, now: now,
+        let live = watchable()
+        let repliesMarked = ReplyService.detectReplies(in: live, selfEmail: fromEmail, now: now,
                                                        fetchThread: { threads[$0] }, fetchFullThread: { fullThreads[$0] })
-        let bouncesMarked = BounceService.detectBounces(in: all, selfEmail: fromEmail, now: now,
+        let bouncesMarked = BounceService.detectBounces(in: live, selfEmail: fromEmail, now: now,
                                                         fetchThread: { threads[$0] })
         // #2113: name the writer on threads that replied before any of this was recorded. Runs after
         // detection, so a reply found on this very pass has already named its own writer and is skipped.
-        let respondersFilled = ReplyService.backfillResponders(in: all, selfEmail: fromEmail, now: now,
+        let respondersFilled = ReplyService.backfillResponders(in: live, selfEmail: fromEmail, now: now,
                                                                fetchThread: { threads[$0] },
                                                                fetchFullThread: { fullThreads[$0] })
         guard repliesMarked > 0 || bouncesMarked > 0 || respondersFilled > 0 else { return outcome }
