@@ -130,6 +130,11 @@ protocol ReplyWatchable: AnyObject {
     var replyWatchDisplayName: String { get }
     // A fresh reply on this entity pauses its still-unsent contacts pending Dan's triage (#430).
     func pausePendingForReply()
+    // #3937: is this still current enough that every thread it has watched rides the FAST lane, with or
+    // without a reply? A show answers by its run, an inquiry by whether it is open. A required member
+    // rather than a defaulted answer, so a later conformer has to state its own (L129). Read only by
+    // `ReplyWatchScope.isFastChecked`.
+    func replyWatchIsCurrent(today: String) -> Bool
 }
 
 extension Recipient: ReplyWatchableRecipient {
@@ -168,6 +173,13 @@ extension Prospect: ReplyWatchable {
     var replyWatchManualOutcome: Bool { outcomeSourceRaw == OutcomeSource.manual.rawValue }
     var replyWatchIsBooked: Bool { outcome == .booked }
     var replyWatchRecipients: [any ReplyWatchableRecipient] { recipients }
+    // #3937: the run has not passed, judged by its CLOSING night (`runEndDate ?? performanceDate`) through
+    // `EasternDate.runHasPassed`. Chosen among the three run predicates on purpose: an unknown date has NOT
+    // passed, so an undated pitch stays on the fast lane rather than dropping out silently, and a show
+    // midway through its run is still a live pitch (`runHasOpened` would drop it).
+    func replyWatchIsCurrent(today: String) -> Bool {
+        !EasternDate.lastNightHasPassed(performanceDate: performanceDate, runEndDate: runEndDate, today: today)
+    }
 }
 
 

@@ -152,13 +152,22 @@ struct GmailReplyChecker {
     // feature rather than an oversight: watching it is the whole reason Dan links it. Detection itself
     // (`ReplyService`) is unchanged for the same reason. The readers that had to change are the ones that
     // would WRITE to the conversation or blame this contact for something on it, not the ones that read it.
-    static func threadsToCheck(in entities: [any ReplyWatchable]) -> Set<String> {
+    //
+    // #3937: `fastOnly` narrows it to the fast lane's set (`ReplyWatchScope.isFastChecked`) in this same
+    // loop, so there is still ONE place threads are collected and the fast set can never be wider than the
+    // watched one. The default is the watched set, unchanged. `now` is read only when `fastOnly` is set.
+    static func threadsToCheck(in entities: [any ReplyWatchable], fastOnly: Bool = false,
+                               now: Date = Date()) -> Set<String> {
         var threadIds: Set<String> = []
+        let today = EasternDate.today(now)
         for p in entities {
             if p.replyWatchManualOutcome || p.replyWatchIsBooked { continue }
             for r in p.replyWatchRecipients {
                 guard let t = r.gmailThreadId, !t.isEmpty,
                       !r.replyWatchManualOutcome, !r.replyWatchIsBooked else { continue }
+                if fastOnly {
+                    guard ReplyWatchScope.isFastChecked(p, r, today: today) else { continue }
+                }
                 guard ReplyWatchScope.isWatched(r) else { continue }
                 threadIds.insert(t)
             }
