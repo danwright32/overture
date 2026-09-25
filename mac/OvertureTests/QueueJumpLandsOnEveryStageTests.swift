@@ -65,8 +65,8 @@ struct QueueJumpLandsOnEveryStageTests {
     // reads the PERFORMANCE date names a group the Reached out list never draws.
     @Test func aJumpNamesAGroupAndARowTheTargetStageDraws() throws {
         let ctx = ModelContext(try container())
-        let r = Recipient(id: "mail@moonjapan.net", email: "mail@moonjapan.net", name: "Them", provenance: .act)
-        let key = "kempire after dark|2026-09-25|the green room 42"
+        let r = Recipient(id: "booker@act.example", email: "booker@act.example", name: "Them", provenance: .act)
+        let key = "invented act|2026-09-25|invented room"
         let p = prospect(key: key, performanceDate: "2026-09-25", recipient: r)
         ctx.insert(p)
         let items = [item(key: "other", date: "2026-09-02"), item(key: key, date: "2026-09-25")]
@@ -95,7 +95,7 @@ struct QueueJumpLandsOnEveryStageTests {
     // group belonging to some other show.
     @Test func aKeyTheStageDoesNotHoldResolvesToNothing() throws {
         let ctx = ModelContext(try container())
-        let r = Recipient(id: "a@x.org", email: "a@x.org", name: "A", provenance: .act)
+        let r = Recipient(id: "a@contact.example", email: "a@contact.example", name: "A", provenance: .act)
         let p = prospect(key: "k", performanceDate: "2026-10-01", recipient: r)
         ctx.insert(p)
         let reachedOut = [ReachedOutEntry.prospect(prospect: p, recipient: r, next: day("2026-09-17"))]
@@ -118,8 +118,8 @@ struct QueueJumpLandsOnEveryStageTests {
     // Reached out rows one id.
     @Test func twoShowsPitchedToOneAddressAreTwoRows() throws {
         let ctx = ModelContext(try container())
-        let r1 = Recipient(id: "box@venue.org", email: "box@venue.org", name: "Box", provenance: .act)
-        let r2 = Recipient(id: "box@venue.org", email: "box@venue.org", name: "Box", provenance: .act)
+        let r1 = Recipient(id: "box@venue.example", email: "box@venue.example", name: "Box", provenance: .act)
+        let r2 = Recipient(id: "box@venue.example", email: "box@venue.example", name: "Box", provenance: .act)
         let a = prospect(key: "a|2026-10-01|v", performanceDate: "2026-10-01", recipient: r1)
         let b = prospect(key: "b|2026-10-08|v", performanceDate: "2026-10-08", recipient: r2)
         ctx.insert(a)
