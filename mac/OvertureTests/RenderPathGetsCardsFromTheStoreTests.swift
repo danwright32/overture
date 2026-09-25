@@ -57,7 +57,11 @@ struct RenderPathGetsCardsFromTheStoreTests {
             Issue.record("expected to find QueueView.makeRenderData")
             return
         }
-        #expect(body.contains("requestedCardKeys: cardKeys.takeKeys()"), Comment(rawValue:
+        // #4106: drained into a local first, because the render memo decides by it before the pass
+        // runs, and then handed to the pass. Both halves asserted: a drain that no longer reaches the
+        // pass is the same inert registry as no drain at all.
+        #expect(body.contains("let requested = cardKeys.takeKeys()")
+                && body.contains("requestedCardKeys: cardKeysForMemo"), Comment(rawValue:
             "the pass no longer reads what the last frame drew, so it prebuilds nothing and every row on "
             + "screen is an on-the-spot build"))
         #expect(body.contains("cardKeyRegistry: cardKeys"), Comment(rawValue:

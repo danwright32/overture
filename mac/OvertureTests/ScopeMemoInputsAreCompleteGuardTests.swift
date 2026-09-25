@@ -25,7 +25,7 @@ struct ScopeMemoInputsAreCompleteGuardTests {
     /// with the test that asserts THAT key is complete. Written as the reason plus its evidence, never
     /// as a bare name: an exemption with nothing behind it is worse than no list (L233, L362).
     static let keyedElsewhere: [String: String] = [
-        "QueueView.swift.makeRenderData":
+        "QueueView.swift.producerTables":
             "keys through QueueModel.ProducerTables.key, which hashes the presenter and venue CONTENT "
             + "rather than identity because a name edited in place changes the answer; its completeness "
             + "is driven in all three directions by ProducerTablesReuseTests (#3742)",
