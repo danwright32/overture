@@ -793,6 +793,118 @@ struct SourceFetcherTests {
             _ = try await SourceFetcher.fetch(url, session: stubSession())
         }
     }
+
+    // MARK: - #4105: a single page app route that the server answers with 404
+
+    // The REAL body https://www.compagnia.org/events answered with, fetched once on 2026-09-24 with the
+    // fetcher's own user agent: `HTTP/2 404`, `server: GitHub.com`, `content-type: text/html;
+    // charset=utf-8`, 713 bytes. It is the spa-github-pages 404.html: no content at all, only a script
+    // that rewrites the address to `/?p=/events` for the client router to draw. Kept byte for byte,
+    // because the guard is only as good as its resemblance to what the site really serves (L48).
+    static let compagniaEvents404Body = """
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <meta charset="utf-8">
+        <title>Compagnia</title>
+        <script type="text/javascript">
+          // Single Page Apps for GitHub Pages
+          // https://github.com/rafgraph/spa-github-pages
+          var pathSegmentsToKeep = 0;
+
+          var l = window.location;
+          l.replace(
+            l.protocol + '//' + l.hostname + (l.port ? ':' + l.port : '') +
+            l.pathname.split('/').slice(0, 1 + pathSegmentsToKeep).join('/') + '/?p=/' +
+            l.pathname.slice(1).split('/').slice(pathSegmentsToKeep).join('/').replace(/&/g, '~and~') +
+            (l.search ? '&q=' + l.search.slice(1).replace(/&/g, '~and~') : '') +
+            l.hash
+          );
+        </script>
+      </head>
+      <body>
+      </body>
+    </html>
+
+    """
+
+    private let compagnia = URL(string: "https://www.compagnia.org/events")!
+
+    private func serveCompagnia404() {
+        PageStubURLProtocol.reset()
+        PageStubURLProtocol.status = 404
+        PageStubURLProtocol.body = Data(Self.compagniaEvents404Body.utf8)
+    }
+
+    // The defect: the 404 threw before the render fallback could run, so a site that is BOTH drawn by
+    // JavaScript and serving its routes as 404 could never be read, and "Change the page link" could not
+    // help because no plain download on that site carries events. The rendered page below is a STAND IN
+    // (the real one exists only inside a browser); what matters is that the render is asked for, of the
+    // same address, and that what it drew is what comes back.
+    @Test func aClientRenderedShellServedWithA404IsRenderedRatherThanFailed() async throws {
+        serveCompagnia404()
+        let rendered = """
+        <html><body><h1>Events</h1>
+        <div><h3>September 16, 2026</h3><p>In concert. <a href="https://www.eventbrite.com/e/1">Tickets</a></p></div>
+        <div><h3>April 9, 2027</h3><p>In concert. <a href="https://www.eventbrite.com/e/2">Tickets</a></p></div>
+        </body></html>
+        """
+
+        var renderedURLs: [URL] = []
+        let page = try await SourceFetcher.fetch(compagnia, session: stubSession(),
+                                                 render: { renderedURLs.append($0); return rendered })
+
+        #expect(renderedURLs == [compagnia])            // one bounded render, of the address Dan watches
+        #expect(page.wasRendered)
+        #expect(page.normalizedHTML.contains("September 16, 2026"))
+        #expect(page.finalURL == compagnia.absoluteString)
+    }
+
+    // The honest failure must survive a render that ALSO draws nothing: a real dead route on a single page
+    // app renders to the same empty shell, and that is still a 404, never a quietly empty calendar.
+    @Test func aShellThatRendersToNothingStillFailsWithItsOwn404() async {
+        serveCompagnia404()
+        var renderedCount = 0
+        await #expect(throws: SourceFetchError.http(404)) {
+            _ = try await SourceFetcher.fetch(compagnia, session: stubSession(),
+                                              render: { _ in
+                                                  renderedCount += 1
+                                                  return "<html><head></head><body><div id=\"root\"></div></body></html>"
+                                              })
+        }
+        #expect(renderedCount == 1)
+    }
+
+    // A browser that hangs or fails is not allowed to replace the 404 with a vaguer error, or with nothing.
+    @Test func aShellWhoseRenderFailsStillFailsWithItsOwn404() async {
+        serveCompagnia404()
+        await #expect(throws: SourceFetchError.http(404)) {
+            _ = try await SourceFetcher.fetch(compagnia, session: stubSession(),
+                                              render: { _ in throw SourceFetchError.unreachable })
+        }
+    }
+
+    // Only a SHELL earns the render. An ordinary error page (text, no script) is a dead link and says so
+    // without spending seconds and a WebKit instance on it; neither does an error that is not a web page.
+    @Test func anOrdinaryErrorPageIsNeverRendered() async {
+        let cases: [(Int, String, String)] = [
+            (404, "text/html; charset=utf-8", "<html><body><h1>Page not found</h1></body></html>"),
+            (500, "text/html; charset=utf-8", "<html><body>Internal Server Error</body></html>"),
+            (404, "application/json", "{\"error\":\"<script>not a page</script>\"}"),
+        ]
+        for (status, contentType, body) in cases {
+            PageStubURLProtocol.reset()
+            PageStubURLProtocol.status = status
+            PageStubURLProtocol.contentType = contentType
+            PageStubURLProtocol.body = Data(body.utf8)
+            var renderedCount = 0
+            await #expect(throws: SourceFetchError.http(status)) {
+                _ = try await SourceFetcher.fetch(url, session: stubSession(),
+                                                  render: { _ in renderedCount += 1; return "" })
+            }
+            #expect(renderedCount == 0)
+        }
+    }
 }
 
 // #972: an http source is upgraded to https before the fetch. The comment on `secured` rests its whole
