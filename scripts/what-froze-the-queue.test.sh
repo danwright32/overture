@@ -349,6 +349,14 @@ assert_contains "the worst starved stall is quoted with its own CPU" "${out}" "1
 assert_contains "the table carries the main thread's share of each stall" "${out}" "asleep     cpu  surface"
 assert_contains "and the starved stall's share is printed in it" "${out}" "      2%"
 
+# A count that is not a whole number (a JSON true is an int to Python) is not a sample, so a stall carrying
+# one is not split into starved or blocked on it.
+printf '{"session":"s","sequence":1,"at":"2026-09-22T15:24:00Z","seconds":9.0,"surface":"queue","load":"elevated","loadAverage":34.7,"passes":1,"passSeconds":1.0,"asleepSeconds":0.0,"mainThreadCPUSeconds":0.2,"mainThreadRunnableSamples":true,"mainThreadWaitingSamples":false}\n' \
+  > "${WORK}/thread-bool.ndjson"
+out="$("${READER}" --log "${WORK}/thread-bool.ndjson" 2>&1)"
+assert_contains "a boolean sample count is not read as a count" "${out}" "1 not running unsplit"
+assert_not_contains "and the stall is not called starved on it" "${out}" "STARVED"
+
 # A reading at the CPU without the state counts, or the reverse, is not a verdict either way.
 thread_record 5.00 none 40 2 > "${WORK}/thread-half.ndjson"
 out="$("${READER}" --log "${WORK}/thread-half.ndjson" 2>&1)"

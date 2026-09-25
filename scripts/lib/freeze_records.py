@@ -16,6 +16,7 @@
 # freeze that overlapped a sleep or a menu (L116).
 
 import json
+import math
 import os
 
 # The three answers `freeze_verdict` gives. Spelled once, here, so a reader cannot compare against a typo.
@@ -133,8 +134,18 @@ RUNNING_SHARE = 0.5
 
 
 def _number(r, key):
+    """A finite number, or None. A bool is an int to Python and NaN compares false against every line, so
+    both would land a record silently on one side of a verdict (L50)."""
     v = r.get(key)
-    return v if isinstance(v, (int, float)) and not isinstance(v, bool) else None
+    if isinstance(v, bool) or not isinstance(v, (int, float)):
+        return None
+    return v if math.isfinite(v) else None
+
+
+def _count(r, key):
+    """A whole count, or None, on `_number`'s rule: `true` is not one sample."""
+    v = r.get(key)
+    return v if isinstance(v, int) and not isinstance(v, bool) else None
 
 
 def main_thread_measured(r):
@@ -160,8 +171,8 @@ def main_thread_verdict(r):
         return UNMEASURED
     if share >= RUNNING_SHARE:
         return COMPUTING
-    runnable = r.get("mainThreadRunnableSamples")
-    waiting = r.get("mainThreadWaitingSamples")
-    if not isinstance(runnable, int) or not isinstance(waiting, int) or runnable + waiting == 0:
+    runnable = _count(r, "mainThreadRunnableSamples")
+    waiting = _count(r, "mainThreadWaitingSamples")
+    if runnable is None or waiting is None or runnable + waiting == 0:
         return NOT_RUNNING_UNSPLIT
     return STARVED if runnable >= waiting else BLOCKED
