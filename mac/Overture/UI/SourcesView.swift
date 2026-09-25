@@ -212,6 +212,24 @@ struct SourcesView: View {
             freezeWatch?.recordPassCost(
                 seconds: Double(DispatchTime.now().uptimeNanoseconds - passStarted) / 1_000_000_000)
         }
+        // #4112: the INPUTS are gathered here, OUTSIDE the memo's observation tracking, and only the pure
+        // pass runs inside it. Reading `sources`, the town tables and `roomContext` inside the tracking
+        // registered the `@Query` result storage itself as something this derivation observes, so every
+        // re-fetch marked the answer stale even when it returned the same rows (measured 2026-09-25 from
+        // the stale flag's own call stack, inside SwiftData's query machinery). A re-fetch is already seen
+        // by the key: the identity fingerprint below catches an insert, a delete, a replacement and a
+        // reorder of every collection. So the tracking is left to see what only it can see, which is a
+        // field of a row the pass read being edited in place.
+        //
+        // What this does NOT remove, stated so it is not read as a fix for it: after a save SwiftData
+        // also fires `willSet` on every field of every row a query re-fetches, changed or not, and that
+        // is indistinguishable from an edit. `RemovingOneSourceCostsOnePassTests` names each derivation a
+        // removal still costs and why the remaining two stay.
+        let inputs = SourcesRenderPass.Inputs(
+            prospects: SourcesRenderPass.Corpus(prospects),
+            sources: sources,
+            searchQuery: searchQuery,
+            context: roomContext)
         // The key names THIS view's own inputs, one `add` per input, so an input added here and not to
         // the key is a line that is missing rather than an argument that is subtly wrong (L96, and
         // `ScopeFingerprint`'s own header says so). The two collections are hashed by identity, which
@@ -222,8 +240,17 @@ struct SourcesView: View {
         key.add(sources)
         key.add(value: searchQuery)
         // The context carries the day, the instant and the client window, and the window is the
-        // expensive half (#3645). Keyed by the window's own identity rather than rebuilt here.
-        key.add(value: String(describing: clientWindow))
+        // expensive half (#3645).
+        //
+        // #4112: keyed by the window's SET OF IDS as the pass will actually use it, not by
+        // `String(describing: clientWindow)` as this first was. That was wrong twice over, both measured
+        // on 2026-09-25. On opening, the first pass has no window yet and `roomContext` builds the same
+        // one itself, then `.onChange(initial: true)` stores it, so the described key went from `nil` to
+        // `Optional(...)` and the whole store was derived a second time for an identical answer. And a
+        // `Set` prints its members in an order that is not a property of its contents, so a roster reload
+        // that changed no verdict rebuilt an equal window that printed differently and derived again.
+        // `Set`'s own hash is order independent, which is the property a key needs.
+        key.add(value: inputs.context.clients.clientSourceIds)
         // AND WHAT THE CONTEXT REACHES THROUGH `geo`, which is the part this key first MISSED.
         //
         // `roomContext` builds a `StageContext(geo:clients:)`, and `geo` is
@@ -238,15 +265,16 @@ struct SourcesView: View {
         // computed properties by hand rather than trusting a green run.
         key.add(excludedTownRows)
         key.add(allowedSeedTownRows)
+        // #4112: and the town NAMES, now that `geo` is read outside the tracking. The identity half sees
+        // a row added or removed; a row's `town` edited in place used to be caught by the tracking,
+        // because `geo` was built inside it, and would otherwise now be caught by nothing.
+        key.add(value: inputs.context.geo.userExcludedTowns)
+        key.add(value: inputs.context.geo.allowedSeedTowns)
         return renderMemo.value(fingerprint: key.finalized(), cardKeys: [], now: Date()) {
             #if DEBUG
             QueueRenderCounter.recordSurfaceDerivation(QueueRenderCounter.sourcesSurface)
             #endif
-            return SourcesRenderPass.make(SourcesRenderPass.Inputs(
-                prospects: SourcesRenderPass.Corpus(prospects),
-                sources: sources,
-                searchQuery: searchQuery,
-                context: roomContext))
+            return SourcesRenderPass.make(inputs)
         }
     }
 
