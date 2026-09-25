@@ -241,6 +241,24 @@ rm -f "${TMP_DIR}/marker"
 # checkout, and every one of those fixtures passed. Same class as #2585, where the identical habit at
 # Xcode's scale filled the disk and stopped the machine.
 
+# DECOYS, running for the whole of the leak cases below (#3458, #3689). Each carries exactly the command
+# line of a stray the synthetic fixtures create, and none of them belongs to any fixture. So every
+# assertion that a fixture's stray was ended must pass WITH these still running: an assertion answered by
+# a pattern over the whole Mac is answered by these instead, which is the red this file used to produce on
+# a busy machine (another worktree's run, an interrupted sweep, a session polling with `sleep 300`).
+# They are ended, and waited for, once the leak cases are done, and by the EXIT trap if the file dies first.
+DECOY_PIDS=()
+for decoy_seconds in 299 300 301; do
+  sleep "${decoy_seconds}" >/dev/null 2>&1 &
+  DECOY_PIDS+=("$!")
+done
+end_decoys() {
+  kill "${DECOY_PIDS[@]}" 2>/dev/null
+  wait "${DECOY_PIDS[@]}" 2>/dev/null
+  return 0
+}
+trap 'end_decoys; rm -rf "${TMP_DIR}"' EXIT
+
 LEAKY="${TMP_DIR}/leaky.test.sh"
 cat > "${LEAKY}" <<'LEAKY_EOF'
 #!/usr/bin/env bash
@@ -923,17 +941,49 @@ EMPTY_OUT="$(REPO_ROOT="${TMP_DIR}/empty-root" main 2>&1)" || EMPTY_RC=$?
 assert_equals "a sweep that found no fixture at all refuses" "2" "${EMPTY_RC}"
 assert_contains "and says it measured nothing rather than that all is well" "${EMPTY_OUT}" "UNMEASURED"
 
-# Waits for a pattern to stop matching any process, with a deadline, rather than sleeping a fixed time
-# and hoping. A fixed sleep asserts about the machine's load rather than about the code (L290), and these
-# cases run beside seven other fixtures on a busy Mac.
-wait_for_no_process_matching() {
-  local pattern="$1" attempt=0
-  while [[ "${attempt}" -lt 100 ]]; do
-    pgrep -f "${pattern}" >/dev/null 2>&1 || { echo 0; return 0; }
+# How many of the processes a synthetic fixture STARTED are still running, waiting with a deadline rather
+# than sleeping a fixed time and hoping, because a fixed sleep asserts about the machine's load rather
+# than about the code (L290), and these cases run beside seven other fixtures on a busy Mac.
+#
+# Each synthetic fixture writes one line per process it starts, `<pid> <command>`, the moment it starts
+# it, and this judges exactly those pids. It asked `pgrep -f 'sleep 300'` until #3458 and #3689, which is
+# a question about the whole MAC: another worktree running this same file, a sweep interrupted earlier,
+# a session polling with `sleep 300`, even the shell that wrote a probe fixture (its own argv names the
+# text) all answered it, and it turned the mandatory pre-push run red on four measured occasions while
+# the runner had done exactly the right thing (L237, L444). A pid is only counted while it is still
+# running the command recorded beside it, so a pid macOS has since handed to something else is not
+# mistaken for the stray.
+#
+# Prints a count, or UNMEASURED when the record does not hold the number of processes the fixture was
+# written to start: an empty record and a clean result would otherwise be the same 0 (L98).
+started_processes_still_running() {
+  local record="$1" expected="$2" line pid command
+  local -a pids=() commands=()
+  if [[ -s "${record}" ]]; then
+    while read -r pid command; do
+      [[ "${pid}" =~ ^[0-9]+$ && -n "${command}" ]] || continue
+      pids+=("${pid}")
+      commands+=("${command}")
+    done < "${record}"
+  fi
+  if [[ "${#pids[@]}" -ne "${expected}" ]]; then
+    echo "UNMEASURED: the fixture recorded ${#pids[@]} of the ${expected} processes it starts"
+    return 0
+  fi
+  local attempt=0 alive i
+  while :; do
+    alive=0
+    for (( i = 0; i < ${#pids[@]}; i++ )); do
+      line="$(ps -o command= -p "${pids[i]}" 2>/dev/null)"
+      [[ "${line}" == "${commands[i]}" ]] && alive=$(( alive + 1 ))
+    done
+    if [[ "${alive}" -eq 0 || "${attempt}" -ge 100 ]]; then
+      echo "${alive}"
+      return 0
+    fi
     sleep 0.1
     attempt=$(( attempt + 1 ))
   done
-  pgrep -f "${pattern}" 2>/dev/null | wc -l | tr -d ' '
 }
 
 # --- a fixture that leaves a PROCESS running fails, not only one that leaves a file (#3254) -----------
@@ -950,7 +1000,9 @@ wait_for_no_process_matching() {
 # `set -m`, which gives it a process GROUP of its own, and the group is the answer.
 
 LEAKY="${TMP_DIR}/leaky.test.sh"
-printf '#!/usr/bin/env bash\nsleep 300 &\necho "ok - started something and walked away"\nexit 0\n' > "${LEAKY}"
+LEAKY_STARTED="${TMP_DIR}/leaky.started"
+printf '#!/usr/bin/env bash\nsleep 300 &\necho "$! sleep 300" >> %q\necho "ok - started something and walked away"\nexit 0\n' \
+  "${LEAKY_STARTED}" > "${LEAKY}"
 chmod +x "${LEAKY}"
 LEAK_OUTPUT="$(run_shell_fixtures "${LEAKY}" 2>&1)"
 LEAK_STATUS=$?
@@ -969,7 +1021,7 @@ esac
 # group precisely so it can end one. Asserted rather than assumed, because a report that claims a
 # cleanup it did not do is worse than no cleanup (L12).
 assert_equals "and the leak is not still running after the report" "0" \
-  "$(wait_for_no_process_matching 'sleep 300')"
+  "$(started_processes_still_running "${LEAKY_STARTED}" 1)"
 
 # The mirror, so the rule cannot be satisfied by condemning everything: an ordinary fixture that starts
 # something and waits for it is fine. Without this the check could pass by failing every fixture.
@@ -985,17 +1037,21 @@ assert_equals "a fixture that waits for its own child passes" "0" "$?"
 # `mac/scripts/prep-run-chunking.test.sh` is the real one: it runs prep-run.sh end to end, and the stray
 # is created by the production code under test (#3292), not by the fixture.
 DECLARED="${TMP_DIR}/declared.test.sh"
-printf '#!/usr/bin/env bash\necho "shell-fixture-leaks-process: sleep 300 (#3292)"\nsleep 300 &\necho "ok - declared it"\nexit 0\n' > "${DECLARED}"
+DECLARED_STARTED="${TMP_DIR}/declared.started"
+printf '#!/usr/bin/env bash\necho "shell-fixture-leaks-process: sleep 300 (#3292)"\nsleep 300 &\necho "$! sleep 300" >> %q\necho "ok - declared it"\nexit 0\n' \
+  "${DECLARED_STARTED}" > "${DECLARED}"
 chmod +x "${DECLARED}"
 run_shell_fixtures "${DECLARED}" >/dev/null 2>&1
 assert_equals "a DECLARED leak does not fail the fixture" "0" "$?"
 assert_equals "and the declared leak is ended anyway, because declaring is not keeping" "0" \
-  "$(wait_for_no_process_matching 'sleep 300')"
+  "$(started_processes_still_running "${DECLARED_STARTED}" 1)"
 
 # The declaration is per COMMAND, never a blanket exemption, so a fixture that declares one stray and
 # leaves a different one is still caught. Without this the mechanism is an off switch.
 PARTLY="${TMP_DIR}/partly.test.sh"
-printf '#!/usr/bin/env bash\necho "shell-fixture-leaks-process: sleep 300 (#3292)"\nsleep 300 &\nsleep 301 &\necho "ok - declared one of two"\nexit 0\n' > "${PARTLY}"
+PARTLY_STARTED="${TMP_DIR}/partly.started"
+printf '#!/usr/bin/env bash\necho "shell-fixture-leaks-process: sleep 300 (#3292)"\nsleep 300 &\necho "$! sleep 300" >> %q\nsleep 301 &\necho "$! sleep 301" >> %q\necho "ok - declared one of two"\nexit 0\n' \
+  "${PARTLY_STARTED}" "${PARTLY_STARTED}" > "${PARTLY}"
 chmod +x "${PARTLY}"
 PARTLY_OUT="$(run_shell_fixtures "${PARTLY}" 2>&1)"
 PARTLY_STATUS=$?
@@ -1008,16 +1064,18 @@ case "${PARTLY_OUT}" in
   *"    sleep 300"*) echo "FAIL - the report named the declared one too"; FAILURES=$((FAILURES + 1)) ;;
   *) echo "ok - and does not name the declared one" ;;
 esac
-assert_equals "and both are ended" "0" "$(wait_for_no_process_matching 'sleep 30[01]')"
+assert_equals "and both are ended" "0" "$(started_processes_still_running "${PARTLY_STARTED}" 2)"
 
 # A declaration with no issue number is not a declaration. It is a debt with an owner or it is nothing,
 # because an exemption nobody has to come back to is permanent (L523, L65).
 UNOWNED="${TMP_DIR}/unowned.test.sh"
-printf '#!/usr/bin/env bash\necho "shell-fixture-leaks-process: sleep 300"\nsleep 300 &\necho "ok - declared without an owner"\nexit 0\n' > "${UNOWNED}"
+UNOWNED_STARTED="${TMP_DIR}/unowned.started"
+printf '#!/usr/bin/env bash\necho "shell-fixture-leaks-process: sleep 300"\nsleep 300 &\necho "$! sleep 300" >> %q\necho "ok - declared without an owner"\nexit 0\n' \
+  "${UNOWNED_STARTED}" > "${UNOWNED}"
 chmod +x "${UNOWNED}"
 run_shell_fixtures "${UNOWNED}" >/dev/null 2>&1
 assert_equals "a declaration carrying no issue number does not exempt anything" "1" "$?"
-assert_equals "and that leak is ended too" "0" "$(wait_for_no_process_matching 'sleep 300')"
+assert_equals "and that leak is ended too" "0" "$(started_processes_still_running "${UNOWNED_STARTED}" 1)"
 
 # --- #3682: a fixture that never finishes is ENDED at a deadline, and named ---------------------------
 #
@@ -1026,7 +1084,11 @@ assert_equals "and that leak is ended too" "0" "$(wait_for_no_process_matching '
 # run that returns at all proves the deadline ended it. Timed by the runner returning, not by a fixed
 # sleep in this file (L290).
 HANGING="${TMP_DIR}/hanging.test.sh"
-printf '#!/usr/bin/env bash\necho "ok - started"\nsleep 299\necho "ok - never reached"\n' > "${HANGING}"
+HANGING_STARTED="${TMP_DIR}/hanging.started"
+# Started in the background and then waited for, rather than run in the foreground, only so its pid can
+# be recorded: the fixture still does nothing but wait on it until the deadline ends the group.
+printf '#!/usr/bin/env bash\necho "ok - started"\nsleep 299 &\necho "$! sleep 299" >> %q\nwait\necho "ok - never reached"\n' \
+  "${HANGING_STARTED}" > "${HANGING}"
 chmod +x "${HANGING}"
 HANG_STARTED="${SECONDS}"
 HANG_OUTPUT="$(OVERTURE_FIXTURE_TIMEOUT_SECONDS=1 run_shell_fixtures "${HANGING}" "${PASSING}" 2>&1)"
@@ -1039,7 +1101,7 @@ case "${HANG_OUTPUT}" in
 esac
 assert_equals "the run ended at the deadline rather than waiting the fixture out" "1" \
   "$([[ "${HANG_TOOK}" -lt 60 ]] && echo 1 || echo 0)"
-assert_equals "and the hung fixture's process is gone" "0" "$(wait_for_no_process_matching 'sleep 299')"
+assert_equals "and the hung fixture's process is gone" "0" "$(started_processes_still_running "${HANGING_STARTED}" 1)"
 case "${HANG_OUTPUT}" in
   *"passing.test.sh"*) echo "ok - and the fixture beside it still ran" ;;
   *) echo "FAIL - the fixture beside the hung one was not run"; FAILURES=$((FAILURES + 1)) ;;
@@ -1048,6 +1110,15 @@ esac
 # And the deadline does not fire on a fixture that finishes in time: its timer is gone with it.
 OVERTURE_FIXTURE_TIMEOUT_SECONDS=30 run_shell_fixtures "${PASSING}" >/dev/null 2>&1
 assert_equals "a fixture inside its deadline passes as before" "0" "$?"
+
+# And the decoys were really there for every case above, so none of those passes could have come from
+# a Mac with nothing on it matching (L159).
+DECOYS_ALIVE=0
+for decoy in "${DECOY_PIDS[@]}"; do
+  kill -0 "${decoy}" 2>/dev/null && DECOYS_ALIVE=$(( DECOYS_ALIVE + 1 ))
+done
+assert_equals "the unrelated look-alike processes were running throughout the leak cases" "3" "${DECOYS_ALIVE}"
+end_decoys
 
 # Zero subjects examined is UNMEASURED, never clean (L98). A process group that could not be read and a
 # process group with nothing left in it leave the same empty answer, and only one of them is a pass.
