@@ -13,6 +13,7 @@
 
 import { assertPrepResultsShape } from "./fixtureShape";
 import { eventDateVerdict } from "./draftEventDate";
+import { opensWithAGreeting } from "./draftGreeting";
 
 export interface EvalSource {
   label: string;
@@ -185,11 +186,11 @@ const DASH = /[\u2014\u2013]/; // em dash / en dash, written as escapes so the s
 // headless and Overture refuses to send it. The scorer has to judge what the app judges, or it marks a
 // run perfect whose every draft is unsendable.
 //
-// An `Attn:` line for a shared inbox sits ABOVE the greeting (#610), so it is stripped before the check
-// rather than counted as the opening. Kept deliberately looser than the runbook, which asks for the
-// greeting on its own line: this scores whether a draft can be SENT, and the app accepts either shape.
-const ATTN_BLOCK = /^\s*Attn:[^\n]*\n\s*/i;
-const GREETING = /^\s*(hi|hello|hey|dear|greetings|good morning|good afternoon|good evening)\b/i;
+// #3555: judged by `opensWithAGreeting`, the twin of the app's own `DraftGreeting.opensWithAGreeting`,
+// which both languages test against `fixtures/draft-greeting/cases.json`. This file used to carry a
+// second, looser spelling of the rule, and it disagreed with the app in both directions. It sees past an
+// `Attn:` block (#610) exactly as the app does.
+
 // #1215: the ways a draft reintroduces Dan as if unknown (a cold self-introduction), which a booked or
 // warm returning client must NOT get. Anchored on the naming and the "I am a photographer" credential
 // self-description; a warm lead's light STYLE credential ("I shoot unobtrusive documentary coverage")
@@ -390,8 +391,8 @@ function checkUniversal(entries: ResultEntry[], failures: string[], coldRegister
   // A wording rule is one Dan retunes by reading a draft and changing his mind about how it should
   // sound. A durable one is a defect in any output whenever it appears, no matter the register or the
   // year: a stray dash, an unfilled placeholder, a link somewhere other than the portfolio, a press
-  // inbox, or a "high" confidence with nothing behind it. Only the second kind is scored against a
-  // stored sample.
+  // inbox, a "high" confidence with nothing behind it, or a body the app refuses to send because it does
+  // not open with a greeting (#3555). Only the second kind is scored against a stored sample.
   const wordingRules = scope === "full";
   for (const c of collectContacts(entries)) {
     if (c.email) {
@@ -407,7 +408,10 @@ function checkUniversal(entries: ResultEntry[], failures: string[], coldRegister
   for (const { label, body } of collectBodies(entries)) {
     if (wordingRules && CONCESSION.test(body)) failures.push(`${label}: contains concession language (discount/flexible/free/complimentary)`);
     if (DASH.test(body)) failures.push(`${label}: contains an em/en dash`);
-    if (wordingRules && !GREETING.test(body.replace(ATTN_BLOCK, ""))) {
+    // #3555: DURABLE, not a wording rule. Whether the app will send a body at all is a structural fact
+    // rather than a choice Dan retunes, the same reasoning that makes the gallery link check durable. As
+    // a wording rule it never judged a stored sample, and every one of them had quietly gone headless.
+    if (!opensWithAGreeting(body)) {
       failures.push(`${label}: does not open with a greeting, so Overture will refuse to send it (#2545)`);
     }
     if (PLACEHOLDER.test(body)) failures.push(`${label}: contains an unfilled placeholder (#789)`);

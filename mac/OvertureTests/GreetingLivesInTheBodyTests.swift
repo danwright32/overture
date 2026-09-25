@@ -329,3 +329,59 @@ struct GreetingLivesInTheBodyTests {
         #expect(DraftGreeting.withoutLeadingOpening(body) == body)
     }
 }
+
+// #3555: the greeting rule's shared corpus, the same arrangement the ask and date rules use (#2531, #2864).
+//
+// The judgment lives in two languages: `DraftGreeting.opensWithAGreeting` holds a send on Dan's screen,
+// and its twin in `src/lib/draftGreeting.ts` scores what a Prep run produced, so a run whose drafts the
+// app would refuse cannot score as compliant. The eval used to carry its own looser spelling of the rule
+// and disagreed with this one in both directions. Two implementations of one rule drift the moment either
+// is touched, so both are tested against ONE committed file (L26), and this side is the declared source of
+// truth because it is the gate a send actually meets.
+@Suite("The greeting rule's shared corpus (#3555)")
+struct DraftGreetingCasesTests {
+
+    private struct Corpus: Decodable {
+        struct Case: Decodable {
+            var from: String
+            var greets: Bool
+            var body: String
+        }
+        var version: Int
+        var cases: [Case]
+    }
+
+    @Test func everyCaseInTheCorpusGetsTheVerdictItDeclares() throws {
+        let url = RepoRoot.url.appendingPathComponent("fixtures/draft-greeting/cases.json")
+        let corpus = try JSONDecoder().decode(Corpus.self, from: try Data(contentsOf: url))
+        // A corpus drifted to one side would pass every case while proving nothing (L98).
+        #expect(corpus.cases.filter(\.greets).count >= 8)
+        #expect(corpus.cases.filter { !$0.greets }.count >= 8)
+        for c in corpus.cases {
+            #expect(DraftGreeting.opensWithAGreeting(c.body) == c.greets,
+                    "expected greets=\(c.greets) for \(c.body) (from \(c.from))")
+        }
+    }
+
+    // The issue itself: every reference answer in the prep eval opened straight into "My name is Dan...",
+    // so the harness certified as compliant a draft this very predicate holds. Judged here by the APP's
+    // predicate rather than the TypeScript twin, so a sample the twin wrongly accepted still goes red.
+    @Test func everyPrepEvalReferenceDraftOpensWithAGreetingTheAppAccepts() throws {
+        let dir = RepoRoot.url.appendingPathComponent("fixtures/prep-eval")
+        let files = try FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)
+            .filter { $0.pathExtension == "json" }
+        var bodies = 0
+        for file in files {
+            let json = try JSONSerialization.jsonObject(with: try Data(contentsOf: file)) as? [String: Any]
+            let sample = json?["sampleCompliantOutput"] as? [String: Any]
+            for result in sample?["results"] as? [[String: Any]] ?? [] {
+                guard let body = (result["draft"] as? [String: Any])?["body"] as? String else { continue }
+                bodies += 1
+                #expect(DraftGreeting.opensWithAGreeting(body),
+                        "\(file.lastPathComponent): its reference draft would be held for a missing greeting")
+            }
+        }
+        // Zero bodies read would pass the loop above for free (L98).
+        #expect(bodies >= 19)
+    }
+}

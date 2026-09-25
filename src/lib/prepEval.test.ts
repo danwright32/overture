@@ -151,6 +151,36 @@ describe("evaluatePrepResult - universal invariants (always-true runbook rules)"
     expect(r.failures.join(" ")).not.toMatch(/greeting/i);
   });
 
+  // #3555: the greeting is a DURABLE rule, not a wording one. It was scored only against real model
+  // output, so every stored reference answer could skip it, and all of them did: every
+  // sampleCompliantOutput opened straight into "My name is Dan...", which the app would hold at
+  // Recipient.isBlockedByGreeting. A body the app refuses to send is a defect whatever the register or
+  // the year, the same reasoning that makes the gallery link check durable.
+  it("flags a headless body in the durable scope too, so a stored sample cannot skip it (#3555)", () => {
+    const bad = results([NAMED_ACT], {}, BODY_WITHOUT_A_GREETING);
+    const r = evaluatePrepResult(bad, { description: "opens with a greeting" }, { scope: "durable" });
+    expect(r.pass).toBe(false);
+    expect(r.failures.join(" ")).toMatch(/does not open with a greeting/);
+  });
+
+  // #3555: judged by the app's own predicate, never a looser second spelling. "Hello Dolly opens..." is a
+  // sentence that happens to start with an opener word, and the app does NOT read it as a greeting
+  // (OpenerIsNotAGreetingTests), so a draft opening with it is held. The scorer used to accept any body
+  // whose first word was an opener, which marked that draft sendable.
+  it("does not mistake a sentence that starts with an opener word for a greeting (#3555)", () => {
+    const bad = results([NAMED_ACT], {}, "Hello Dolly opens at the Palace in March. " + BODY_WITHOUT_A_GREETING);
+    const r = evaluatePrepResult(bad, { description: "opens with a greeting" }, { scope: "durable" });
+    expect(r.failures.join(" ")).toMatch(/does not open with a greeting/);
+  });
+
+  // #3555: and the other direction. Dan's own greeting shape, which leads with the name rather than an
+  // opener word, is one the app accepts, so the scorer must too.
+  it("accepts a greeting in the shape the app accepts without an opener word (#3555)", () => {
+    const good = results([NAMED_ACT], {}, "Emma, good to hear from you,\n\n" + BODY_WITHOUT_A_GREETING);
+    const r = evaluatePrepResult(good, { description: "opens with a greeting" }, { scope: "durable" });
+    expect(r.failures.join(" ")).not.toMatch(/greeting/i);
+  });
+
   it("flags a link to a host other than danwrightphotography.com (#789 invented URL)", () => {
     const bad = results([NAMED_ACT], {}, CANONICAL_BODY.replace("I look forward to hearing from you.", "My rates are at danwright-pricing.example/rates. I look forward to hearing from you."));
     const r = evaluatePrepResult(bad, { description: "only danwrightphotography.com links" });
