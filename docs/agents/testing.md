@@ -417,6 +417,12 @@ the measurement it came from lives here. Read the entry before the rule decides 
   or any existing file), because xcodebuild's own options take values that do not start with a dash. And
   a run in which `run-tests-locked.sh` **gave up waiting for the shared lock** is now `NOTHING RAN`,
   naming the lock: no test ran, and it used to read as CAUGHT (seen 2026-09-18 in another lane's proof).
+  **Since #4218 a run the runner's stall guard ENDED is `STALLED`**, keyed on the runner's own
+  `run-tests-locked.sh: STALLED AND ENDED` line at the start of a line. Since #3976 the runner stops a run
+  that holds the shared lock and stands still, and exits non-zero naming no test, so it too used to read
+  as CAUGHT. It refuses only when nothing was named red first: a test that failed before the stall is
+  still CAUGHT, with a line saying the rest of the run never happened, and a shell fixture that went red
+  while PRINTING a stalled run's output (its `FAIL - ` line is the tell) is still CAUGHT too.
   **Since #3240 every proof also says how much of itself was BUILD rather than tests.** That issue asked
   whether the one to four proofs a PR body carries could share one build, and the measurement says there
   is nothing to share: each proof mutates a different file, each is already incremental on top of the

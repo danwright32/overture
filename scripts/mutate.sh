@@ -30,6 +30,7 @@ set -uo pipefail
 #   SCOPE MISSED THE FILE  the scope ran real tests, but none that name the mutated file (#3098).
 #   LOG OVERWRITTEN   another run wrote to this run's log, so its verdict would be about theirs (#3984).
 #   SCOPE NOT FOR THIS RUNNER  a file was passed as a scope to the Swift runner, which cannot run it (#3923).
+#   STALLED           the runner's stall guard ended the run before any test went red (#4218).
 #
 # The last three are the three ways a MALFORMED INSTRUCTION used to be reported as a verdict. Each was
 # measured: a build failure was folded into CAUGHT ("the compiler caught it"), which is true of a
@@ -791,6 +792,32 @@ fi
 # Which tests went red, from the runner's own lines, so the report names them rather than saying "some".
 FAILED="$(grep -oE '✘ Test "[^"]+"|✘ Test [A-Za-z_][A-Za-z0-9_]*\(\)' "${RUN_LOG}" | sed 's/✘ Test //' | sort -u || true)"
 
+# #4218: the runner's stall guard (#3976) ENDED this run because it held the shared lock and stood still.
+# It exits non-zero and names no test, so it used to fall through to CAUGHT ("failed without naming a
+# test"), the most trusted verdict, given about a run that never judged the guard (L154). Anchored at the
+# start of a line and to the runner's own prefix, as the lock give up above is.
+#
+# Refused only when NOTHING was named red. A test that failed before the stall ran and failed, which is a
+# real catch. And a shell fixture whose failing assertion prints a stalled run's output as its haystack
+# puts this same line at the start of a line (assert_contains indents only the haystack's first line), so
+# a `FAIL - ` line counts as named too: that fixture went red on the assertion under test.
+RUN_STALLED="false"
+if grep -qE "^run-tests-locked\.sh: STALLED AND ENDED\b" "${RUN_LOG}"; then
+  RUN_STALLED="true"
+  if [[ -z "${FAILED}" ]] && ! grep -qE '^FAIL - ' "${RUN_LOG}"; then
+    echo "STALLED - the runner's stall guard ended this run, so it says nothing about any guard."
+    echo "  ${EXPRESSION}"
+    echo
+    echo "  The run held the shared test lock and made no progress until the runner stopped it, and no"
+    echo "  test was named red before that. Nothing after the stall was verified, the guard under test"
+    echo "  included. Run the mutation again. If it stalls again with the mutation and not without it,"
+    echo "  the hang is the mutation's own doing (a loop that no longer ends, say), and the last test to"
+    echo "  START in the full log below is where it hangs; no test named that as a failure."
+    echo "  full log: ${RUN_LOG}"
+    exit 2
+  fi
+fi
+
 # How MUCH went red, read before the log is removed (#2820). A mutation that breaks a file badly enough
 # makes every check fail, and a run in which everything went red is indistinguishable from one in which
 # the guard under test fired.
@@ -870,6 +897,9 @@ if [[ "${RUN_STATUS}" -ne 0 ]]; then
     # an unquoted expansion word-splits it into one line per word. Found by running this script against a
     # real suite, which reported eleven "failing tests" that were the words of two.
     printf '%s\n' "${FAILED}" | sed 's/^/    /' 
+    if [[ "${RUN_STALLED}" == "true" ]]; then
+      echo "  The run was then ended by the runner's stall guard, so every test after the stall never ran."
+    fi
   else
     # #2995: this no longer says "a build failure counts". A build failure is DID NOT BUILD above, so
     # what is left here is a run that failed, named no test, and does not look like a build failure,
