@@ -77,8 +77,8 @@ struct DueCountHoldsUntilItCouldChangeTests {
     // rig that happens to agree with it (L472). The one thing it cannot carry is SwiftUI's own `@State`,
     // which changes nothing about the memo.
     @discardableResult
-    private func read(_ memo: ScopeMemo<DueWork.CountAndNextChange>, prospects: [Prospect],
-                      inquiries: [Inquiry], now: Date) -> Int {
+    private func read(_ memo: ScopeMemo<DueWork.CountAndNextChange>, in store: ModelContainer,
+                      prospects: [Prospect], inquiries: [Inquiry], now: Date) -> Int {
         var fingerprint = ScopeFingerprint()
         fingerprint.add(prospects)
         fingerprint.add(inquiries)
@@ -86,7 +86,7 @@ struct DueCountHoldsUntilItCouldChangeTests {
         let staleAfter: ScopeMemo<DueWork.CountAndNextChange>.Staleness =
             memo.held.flatMap(\.couldChangeAt).map { .at($0) } ?? .never
         return memo.value(fingerprint: fingerprint.finalized(), cardKeys: [], now: now,
-                          staleAfter: staleAfter, savesIn: nil) {
+                          staleAfter: staleAfter, savesIn: store) {
             DueWork.countAndNextChange(prospects: prospects, inquiries: inquiries, now: now,
                                        replyRunAlive: false)
         }.total
@@ -96,16 +96,35 @@ struct DueCountHoldsUntilItCouldChangeTests {
 
     // Without this, a memo that never invalidated at all would satisfy every other test here, and that
     // would be a far worse defect than the one under repair (L159, L98).
+    // #4106: as `RootView.followUpsDue` now does, a save into the store rebuilds the count even when
+    // nothing it observed moved, because a write saved through another context can leave every object it
+    // read untouched. A genre is not something the count reads (`aGenreEditDoesNotRebuildTheCount` holds
+    // that unsaved), which is the point: only the save count can have moved.
+    @Test("a save into the store rebuilds the count")
+    func aSaveIntoTheStoreRebuildsTheCount() throws {
+        let ctx = ModelContext(try container())
+        let rows = seed(ctx)
+        try ctx.save()
+        let memo = ScopeMemo<DueWork.CountAndNextChange>()
+        read(memo, in: ctx.container, prospects: rows, inquiries: [], now: Self.now)
+        read(memo, in: ctx.container, prospects: rows, inquiries: [], now: Self.now)
+        #expect(memo.builds == 1, "with no save between them the second read must be a hit")
+        rows[0].discipline = "theater"
+        try ctx.save()
+        read(memo, in: ctx.container, prospects: rows, inquiries: [], now: Self.now)
+        #expect(memo.builds == 2, "a save into the store did not rebuild the Due count (#4106)")
+    }
+
     @Test("a change the count IS derived from rebuilds it")
     func aRelevantEditRebuildsTheCount() throws {
         let ctx = ModelContext(try container())
         let rows = seed(ctx)
         let memo = ScopeMemo<DueWork.CountAndNextChange>()
 
-        read(memo, prospects: rows, inquiries: [], now: Self.now)
+        read(memo, in: ctx.container, prospects: rows, inquiries: [], now: Self.now)
         #expect(memo.builds == 1)
         rows[7].recipients.first?.sentAt = Self.now.addingTimeInterval(-400 * 86_400)
-        read(memo, prospects: rows, inquiries: [], now: Self.now)
+        read(memo, in: ctx.container, prospects: rows, inquiries: [], now: Self.now)
 
         #expect(memo.builds == 2, Comment(rawValue:
             "the count did not rebuild after a change to the very field it is derived from, so it never "
@@ -136,11 +155,11 @@ struct DueCountHoldsUntilItCouldChangeTests {
         let rows = seed(ctx)
         let memo = ScopeMemo<DueWork.CountAndNextChange>()
 
-        read(memo, prospects: rows, inquiries: [], now: Self.now)
+        read(memo, in: ctx.container, prospects: rows, inquiries: [], now: Self.now)
         #expect(memo.builds == 1)
         // Well past the two second window that used to expire it, and nothing about the store has moved.
-        read(memo, prospects: rows, inquiries: [], now: Self.now.addingTimeInterval(2.5))
-        read(memo, prospects: rows, inquiries: [], now: Self.now.addingTimeInterval(30))
+        read(memo, in: ctx.container, prospects: rows, inquiries: [], now: Self.now.addingTimeInterval(2.5))
+        read(memo, in: ctx.container, prospects: rows, inquiries: [], now: Self.now.addingTimeInterval(30))
 
         #expect(memo.builds == 1, Comment(rawValue:
             "the count was rebuilt \(memo.builds) times on a store nothing touched, so every render pass "
@@ -155,11 +174,11 @@ struct DueCountHoldsUntilItCouldChangeTests {
         let rows = seed(ctx)
         let memo = ScopeMemo<DueWork.CountAndNextChange>()
 
-        read(memo, prospects: rows, inquiries: [], now: Self.now)
+        read(memo, in: ctx.container, prospects: rows, inquiries: [], now: Self.now)
         #expect(memo.builds == 1)
         // Through the shipping writer, which is the only thing allowed to set a genre.
         GenreVisibility.write(.music, to: rows[7])
-        read(memo, prospects: rows, inquiries: [], now: Self.now)
+        read(memo, in: ctx.container, prospects: rows, inquiries: [], now: Self.now)
 
         #expect(memo.builds == 1, Comment(rawValue:
             "a genre change rebuilt the due count, which reads every prospect and every recipient's "
@@ -174,17 +193,17 @@ struct DueCountHoldsUntilItCouldChangeTests {
         let rows = seed(ctx)
         let memo = ScopeMemo<DueWork.CountAndNextChange>()
 
-        read(memo, prospects: rows, inquiries: [], now: Self.now)
+        read(memo, in: ctx.container, prospects: rows, inquiries: [], now: Self.now)
         let moment = try #require(memo.held?.couldChangeAt, Comment(rawValue:
             "this corpus names no future moment at all, so it cannot exercise the expiry and the test "
             + "above would pass over a memo that simply never expires"))
         #expect(moment > Self.now)
 
         // One instant before, still held.
-        read(memo, prospects: rows, inquiries: [], now: moment.addingTimeInterval(-1))
+        read(memo, in: ctx.container, prospects: rows, inquiries: [], now: moment.addingTimeInterval(-1))
         #expect(memo.builds == 1)
         // At it, rebuilt.
-        read(memo, prospects: rows, inquiries: [], now: moment)
+        read(memo, in: ctx.container, prospects: rows, inquiries: [], now: moment)
         #expect(memo.builds == 2, Comment(rawValue:
             "the count was still being served at the instant it said it could change, so the badge can "
             + "show a number that is no longer true"))
