@@ -316,6 +316,15 @@ out="$("${READER}" --log "${WORK}/activity-off.ndjson" 2>&1)"
 assert_contains "a stall with the main thread off the run loop is named apart" "${out}" "OFF the run loop entirely"
 assert_contains "and called a freeze rather than contamination" "${out}" "those are freezes"
 
+# #4188: the shared reader is refused BY NAME when it is missing. Without the check Python dies with a
+# traceback and exit 1, which a caller of this script reads as a result rather than as nothing measured.
+mkdir -p "${WORK}/nolib/scripts"
+cp "${READER}" "${WORK}/nolib/scripts/"
+printf '{"session":"s","sequence":1,"at":"2026-09-10T17:47:37Z","seconds":0.2,"load":"baseline"}\n' > "${WORK}/nolib/log.ndjson"
+out="$("${WORK}/nolib/scripts/$(basename "${READER}")" --log "${WORK}/nolib/log.ndjson" 2>&1)"; status=$?
+assert_equals "a missing shared reader is UNMEASURED, never a result" "2" "${status}"
+assert_contains "and it names the file it could not find" "${out}" "freeze_records.py is missing"
+
 if [ "${FAILURES}" -eq 0 ]; then
   echo "what-froze-the-queue.test.sh: all passed"
 else

@@ -100,6 +100,97 @@ assert_contains "and the archived records are in the population" "${out}" "4 rec
 assert_contains "and it names the archive it read, so one file cannot pass for two" \
   "${out}" "freeze-log-archive.ndjson"
 
+# 9. #4188: the records that are NOT freezes, and the three states that must stay apart. Until #4188 this
+#    reader took each record's `seconds` and nothing else, so a Mac asleep for 1,057.90s (#4153) and a
+#    stall taken while a menu was tracking with no render pass run (#4114) were both counted as freezes by
+#    the one tool whose job is counting them, while scripts/what-froze-the-queue.sh had been taught both.
+#    Marked, never dropped: the count is stated WITH and WITHOUT them. And a record carrying neither field
+#    is a third state, UNMEASURED, never folded into either of the others (absent is not zero, L98).
+#
+# full_record session sequence seconds asleep activity passes passSeconds -> one line; "none" omits the field
+full_record() {
+  local tail=""
+  [ "$4" != "none" ] && tail="${tail},\"asleepSeconds\":$4"
+  [ "$5" != "none" ] && tail="${tail},\"runLoopActivity\":\"$5\""
+  printf '{"session":"%s","sequence":%s,"at":"2026-09-22T03:07:14Z","seconds":%s,"surface":"queue","load":"baseline","loadAverage":3.7,"passes":%s,"passSeconds":%s%s}\n' \
+    "$1" "$2" "$3" "$6" "$7" "${tail}"
+}
+mkdir -p "${WORK}/mixed"
+{ full_record mixed 100   0.150   0      ordinary 1 0.10        # a freeze, both fields present
+  full_record mixed 200   1057.90 1074.0 ordinary 0 0.0         # the sleeping Mac: not a freeze
+  full_record mixed 300   1.62    0      tracking 0 0.0         # a menu tracking, nothing ran: not a freeze
+  full_record mixed 400   2.50    0      tracking 3 1.90        # a menu tracking WITH render time: a freeze
+  full_record mixed 36000 0.400   none   none     1 0.20        # neither field: UNMEASURED
+  printf '{"note":"compaction","at":"2026-09-21T21:05:00Z","kept":5,"archived":0,"promotedAt":null,"promotedSeconds":null}\n'
+} > "${WORK}/mixed/log.ndjson"
+out="$("${READER}" --log "${WORK}/mixed/log.ndjson" 2>&1)"; status=$?
+assert_equals "a log holding records that are not freezes still reports" "0" "${status}"
+assert_contains "the compaction note is not a stall (#4122)" "${out}" "5 record(s) over 1 session."
+assert_contains "the count with every record is stated and labelled" "${out}" "every record:  n=5"
+assert_contains "and the maximum with every record is the sleep, said where it is quoted" "${out}" "max 1057.900s"
+assert_contains "the count without the records that are not freezes is stated beside it" "${out}" \
+  "without the 2 that are not freezes:  n=3"
+assert_contains "and its maximum is the real freeze that overlapped a menu" "${out}" "p99 2.500s   max 2.500s"
+assert_contains "the sleep is named as a reason, with its issue" "${out}" "1 spanned a sleep (#4153)"
+assert_contains "the idle menu record is named as a reason, with its issue" "${out}" \
+  "1 was taken while a menu tracked and ran no render pass (#4114)"
+assert_contains "a record carrying neither field is UNMEASURED, not a freeze and not excluded" "${out}" \
+  "1 of the 5 cannot be judged"
+assert_contains "and it says which field each one lacks" "${out}" "1 carry no sleep reading, 1 no run loop reading"
+
+# 10. The UNMEASURED state alone. A log written before #4153 and #4114 must not print a "without" line
+#     that reads as a measured exclusion of nothing: nothing was measured, so it says that instead.
+mkdir -p "${WORK}/unjudged"
+{ record unjudged 100 0.150 baseline; record unjudged 36000 0.400 baseline; } > "${WORK}/unjudged/log.ndjson"
+out="$("${READER}" --log "${WORK}/unjudged/log.ndjson" 2>&1)"; status=$?
+assert_equals "a log with neither field still reports its rate" "0" "${status}"
+assert_contains "and says none of it could be judged" "${out}" "2 of the 2 cannot be judged"
+assert_not_contains "and prints no without-line pretending the exclusion was measured" "${out}" "that are not freezes:"
+
+# 11. Both fields present and neither says not-a-freeze: every record is a freeze, and it says so rather
+#     than printing nothing, because silence here is indistinguishable from the unmeasured case above.
+mkdir -p "${WORK}/allfreeze"
+{ full_record allf 100 0.150 0 ordinary 1 0.1; full_record allf 36000 0.400 0 offTheRunLoop 0 0.0; } \
+  > "${WORK}/allfreeze/log.ndjson"
+out="$("${READER}" --log "${WORK}/allfreeze/log.ndjson" 2>&1)"; status=$?
+assert_equals "a log of measured freezes reports" "0" "${status}"
+assert_contains "and says none of them is anything but a freeze" "${out}" "none of the 2 is shown not to be a freeze"
+assert_not_contains "and does not call any of them unjudged" "${out}" "cannot be judged"
+
+# 12. The per session table carries the same split, so a session's stalled share is not a sleep.
+assert_contains "the table has the not-a-freeze column" "${out}" "not freezes"
+
+# 14. The RATE's numerator and denominator cover the same population (L711). Watched time cannot be split
+#     by load, so the rate counts stalls at EVERY load; a baseline-only count over it would read 1 per
+#     hour here rather than 2.
+mkdir -p "${WORK}/mixedload"
+{ record ml 100 0.150 baseline; record ml 36000 0.400 elevated; } > "${WORK}/mixedload/log.ndjson"
+out="$("${READER}" --log "${WORK}/mixedload/log.ndjson" 2>&1)"
+assert_contains "the rate counts every load over all watched time" "${out}" \
+  "2 stall(s) over 1.00h watched, 2.0 per hour"
+# And the without-rate drops the not-a-freeze records at every load, from the mixed log above.
+out="$("${READER}" --log "${WORK}/mixed/log.ndjson" 2>&1)"
+assert_contains "the rate without the records that are not freezes is stated too" "${out}" \
+  "without the 2 not freezes at every load: 3 stall(s)"
+
+# 13. `notRecorded` is how the app SPELLS an absent run loop reading (every record where nothing was
+#     sampled), so it is unmeasured exactly as a missing key is, never a reading that says "freeze".
+mkdir -p "${WORK}/notrecorded"
+{ full_record nr 100 0.150 0 notRecorded 1 0.1; full_record nr 36000 0.400 0 ordinary 1 0.1; } \
+  > "${WORK}/notrecorded/log.ndjson"
+out="$("${READER}" --log "${WORK}/notrecorded/log.ndjson" 2>&1)"
+assert_contains "a notRecorded run loop is unjudged, and named as the field it lacks" "${out}" \
+  "1 of the 2 cannot be judged: 0 carry no sleep reading, 1 no run loop reading."
+
+# #4188: the shared reader is refused BY NAME when it is missing. Without the check Python dies with a
+# traceback and exit 1, which a caller of this script reads as a result rather than as nothing measured.
+mkdir -p "${WORK}/nolib/scripts"
+cp "${READER}" "${WORK}/nolib/scripts/"
+printf '{"session":"s","sequence":1,"at":"2026-09-10T17:47:37Z","seconds":0.2,"load":"baseline"}\n' > "${WORK}/nolib/log.ndjson"
+out="$("${WORK}/nolib/scripts/$(basename "${READER}")" --log "${WORK}/nolib/log.ndjson" 2>&1)"; status=$?
+assert_equals "a missing shared reader is UNMEASURED, never a result" "2" "${status}"
+assert_contains "and it names the file it could not find" "${out}" "freeze_records.py is missing"
+
 if [ "${FAILURES}" -eq 0 ]; then
   echo "how-often-does-it-freeze.test.sh: all passed"
 else
