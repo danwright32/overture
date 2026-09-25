@@ -68,13 +68,16 @@ struct RemovingOneSourceCostsOnePassTests {
         }
     }
 
-    private func host(_ view: some View) -> (window: NSWindow, hosting: NSHostingView<AnyView>) {
+    // #4247: the REAL type is hosted, never wrapped in `AnyView`. The first version of this suite wrapped
+    // it, which is a tree the app does not have (`ExternalRebuildProbeTests` records the difference, L472),
+    // so a count read through it was a count of the wrapper's behaviour as much as the sheet's.
+    private func host<V: View>(_ view: V) -> (window: NSWindow, hosting: NSHostingView<V>) {
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 900, height: 800),
                               styleMask: [.borderless], backing: .buffered, defer: false)
         // AppKit's default releases the window while this scope still holds it, which crashed the shared
         // app host and truncated the whole hosted target once already (#3480).
         window.isReleasedWhenClosed = false
-        let hosting = NSHostingView(rootView: AnyView(view))
+        let hosting = NSHostingView(rootView: view)
         hosting.frame = window.contentLayoutRect
         hosting.autoresizingMask = [.width, .height]
         window.contentView?.addSubview(hosting)
@@ -115,18 +118,20 @@ struct RemovingOneSourceCostsOnePassTests {
     // derivation is what costs seconds. Holding the count of EVALUATIONS to one would be asking SwiftUI
     // for a guarantee it does not give, and it would fail for reasons that are not defects (L63).
     //
-    // TWO, not the one #4112 asks for, and this is that "say why" rather than a number nudged until the
-    // suite went green.
+    // TWO as the ceiling, and what is known about the reading under it.
     //
-    // Measured here after the memo landed: a removal derives twice. The first is the change itself and
-    // is not waste. The second was first read as the memo being invalidated by its own subject; measured
-    // on 2026-09-25 with a per field observer, it is SwiftData's re-fetch of the `WatchedSource` query
-    // after the save, which fires `willSet` on every field of every row it returns whether or not it
-    // changed. This harness hands the sheet a constant empty store, so the `Prospect` re-fetch that the
-    // app shaped test below also counts cannot happen here. Why neither is removed is written there.
+    // Under #4112 this harness read TWO, and the second was put down first to the memo being invalidated
+    // by its own subject and then to SwiftData's re-fetch after the save. Those readings were taken with
+    // the sheet wrapped in `AnyView` and with the reason trace reading the banner's revision during body
+    // evaluation. In every run taken under #4247 it read ONE derivation over two evaluations: with the
+    // real type hosted, with the read removed, and with `AnyView` put back by mutation, so the wrapper is
+    // not what the difference turns on. The write here goes through a SEPARATE context, so the sheet's own
+    // rows only learn of it when the main context merges and its query re-fetches.
     //
-    // The app shaped tests below are the answer to what this harness could not see: the sheet under
-    // `RootView`'s own queries, with a roster, which is where the rest of the live count was.
+    // The ceiling is NOT lowered to one, because nothing measured here says why #4112 read two, and a
+    // ceiling set at a count whose cause is unknown is a flake waiting for a loaded machine (L290). The
+    // app shaped test below writes through the sheet's own context, as the button does, and names each
+    // of the three derivations that costs.
     private static let allowedDerivationsForOneRemoval = 2
 
     @Test func removingOneSourceRebuildsTheSheetOnce() async throws {
@@ -160,6 +165,7 @@ struct RemovingOneSourceCostsOnePassTests {
         let evaluations = QueueRenderCounter.renderCount(for: QueueRenderCounter.sourcesSurface) - rendersBefore
         let why = Array(QueueRenderCounter.reasons(for: QueueRenderCounter.sourcesSurface)
             .dropFirst(reasonsBefore))
+        print("removal-reading bare: derivations=\(derivations) evaluations=\(evaluations) reasons=\(why)")
 
         // THE POSITIVE CONTROL FIRST. A test asserting a count stays AT OR BELOW one is satisfied by a
         // sheet that never reacted to the removal at all, which is the fixture where the thing could not
@@ -255,7 +261,7 @@ struct RemovingOneSourceCostsOnePassTests {
         let roster: ClientRoster
         let file: RosterFile
         let window: NSWindow
-        let hosting: NSHostingView<AnyView>
+        let hosting: NSView
     }
 
     // Seeds, hosts and SETTLES, and reports what appearing cost, so every test below measures a change
@@ -380,9 +386,13 @@ struct RemovingOneSourceCostsOnePassTests {
     // store disagrees with. So they are explained here rather than removed.
     //
     // WHAT THIS SAYS ABOUT THE LIVE EIGHT. The live `passes=8` counts BODY EVALUATIONS, and it was taken
-    // before the memo landed, when every evaluation derived. The evaluations a removal causes here are
-    // the three above plus the banner's; menu and hover state on a real press add more, and since the
-    // memo those derive nothing (`aBannerWithNoDataChangeDerivesNothing`).
+    // before the memo landed, when every evaluation derived. Menu and hover state on a real press add
+    // evaluations of their own, and since the memo those derive nothing.
+    //
+    // #4247: the reason trace used to name the FIRST of these three `feedbackRevision`. That was the trace
+    // itself reading the banner's revision during body evaluation, which subscribed the sheet to every
+    // message; the banner's own modifier never did. With the read gone the first derivation still
+    // happens, because the write marked it stale, and it now arrives on whichever evaluation comes next.
     private static let allowedDerivationsForOneRemovalUnderTheApp = 3
 
     @Test func removingOneSourceUnderTheAppsInputsDerivesOncePerThingThatMoved() async throws {
@@ -398,6 +408,8 @@ struct RemovingOneSourceCostsOnePassTests {
         _ = await waitUntilQuiet(in: sheet.hosting)
         let derivations = QueueRenderCounter.derivationCount(for: QueueRenderCounter.sourcesSurface) - before
         let why = QueueRenderCounter.reasons(for: QueueRenderCounter.sourcesSurface).dropFirst(reasonsBefore)
+        // The reading itself, printed so a run records it and not only a verdict over it.
+        print("removal-reading app-shaped: derivations=\(derivations) reasons=\(Array(why))")
         #expect(derivations >= 1, Comment(rawValue:
             "removing a row derived the sheet \(derivations) times, so the sheet never reacted and the "
             + "ceiling below would pass over one that had stopped working (L159)"))
@@ -407,16 +419,25 @@ struct RemovingOneSourceCostsOnePassTests {
             + "moved: \(why.joined(separator: " | ")) (#4112)"))
     }
 
-    // THE CASE THE MEMO EXISTS FOR, asked separately because the removal case cannot answer it.
+    // A BANNER WITH NO DATA CHANGE neither rebuilds the sheet nor derives it.
     //
-    // A banner with NO data change is the shape the reason trace named: `feedbackRevision` moved and
-    // nothing else did. If the sheet still derives there, then every message Overture shows Dan while
-    // this sheet is open costs a whole-store pass, and the removal burst is only the most visible case
-    // of it.
+    // #4247 CORRECTS WHAT #4112 FIRST RECORDED HERE. #4112's reason trace named `feedbackRevision` as the
+    // first cause of a removal's rebuilds, and this test was written to hold a banner at zero
+    // DERIVATIONS, with at least one EVALUATION as its positive control. Both halves described the
+    // instrument. The trace read `feedback.revision` while the body was evaluated, and reading an
+    // observed property there subscribes the whole body to it, so the trace added to explain the
+    // rebuilds was itself what rebuilt the sheet on every banner. #4197 measured the same shape on four
+    // other sheets: the banner is a `ViewModifier` that reads the feedback in its OWN body, so a message
+    // invalidates the modifier and never the sheet beneath it.
     //
-    // ZERO derivations, not one. Nothing about the data moved, so there is nothing to re-derive, and
-    // "it rebuilt but quickly" is a statement about the machine (L63).
-    @Test func aBannerWithNoDataChangeDerivesNothing() async throws {
+    // So the assertion is now the stronger one: ZERO evaluations, not only zero derivations. A body pass
+    // behind the memo is cheaper than a derivation but it is not free (the key alone walks every row's
+    // identity), and a banner has no business causing one.
+    //
+    // THE POSITIVE CONTROL is that the banner is really up over this sheet, not that the sheet rebuilt:
+    // the sheet's own banner has mounted and carries the message just raised (L159, and
+    // `ABannerDerivesNothingOnAnySheetTests` reads it the same way).
+    @Test func aBannerWithNoDataChangeNeitherRebuildsNorDerives() async throws {
         let c = try container()
         let ctx = ModelContext(c)
         _ = seed(ctx)
@@ -433,22 +454,25 @@ struct RemovingOneSourceCostsOnePassTests {
             + "from one that was never asked (L98)"))
 
         // A message, and nothing else. No store write, no query change.
-        feedback.acknowledge("Stopped watching Organisation 0.")
+        let message = "Stopped watching Organisation 0. \(UUID().uuidString)"
+        feedback.acknowledge(message)
 
         _ = await waitUntilQuiet(in: hosting)
         let derivations = QueueRenderCounter.derivationCount(for: QueueRenderCounter.sourcesSurface)
             - derivationsBefore
         let evaluations = QueueRenderCounter.renderCount(for: QueueRenderCounter.sourcesSurface)
             - rendersBefore
+        print("banner-reading sourcesSheet: derivations=\(derivations) evaluations=\(evaluations)")
 
-        // THE POSITIVE CONTROL. The banner must really have reached the sheet, or a zero below means
-        // the message never arrived rather than that the derivation was skipped (L159).
-        #expect(evaluations >= 1, Comment(rawValue:
-            "raising a banner did not re-evaluate the sheet at all (\(evaluations) evaluations), so "
-            + "this fixture never exercised the case and the assertion below proves nothing"))
+        #expect(feedback.topBanner > 0 && feedback.message == message, Comment(rawValue:
+            "the banner never appeared over the Sources sheet, so this fixture never exercised the case "
+            + "and the counts below prove nothing (L159)"))
+        #expect(evaluations == 0, Comment(rawValue:
+            "raising a banner with no data change re-evaluated the Sources sheet \(evaluations) "
+            + "time(s). The banner modifier reads the feedback in its own body; the sheet re-evaluates "
+            + "only if something in ITS body reads it too (#4247, #4197)"))
         #expect(derivations == 0, Comment(rawValue:
             "raising a banner with no data change derived the whole Sources sheet \(derivations) "
-            + "time(s) over \(evaluations) body evaluation(s). Every message shown while this sheet "
-            + "is open costs a whole-store pass (#4112)"))
+            + "time(s) over \(evaluations) body evaluation(s) (#4112, #4247)"))
     }
 }
