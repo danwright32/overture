@@ -187,6 +187,8 @@ final class ScopeMemo<Value> {
 struct ScopeFingerprint {
     private var hasher = Hasher()
 
+    init() {}
+
     mutating func add<Element: AnyObject>(_ items: [Element]) {
         // The count is combined as well as the members, so two adjacent inputs cannot trade an element
         // and leave the running hash identical.
