@@ -885,6 +885,8 @@ struct RecipientSnapshot: Identifiable, Equatable, Sendable {
     // #3573: their newest message postdates the draft request, so the draft on file is stale. Carried
     // from the contact rather than re-read here, like every other reply fact on this snapshot.
     var replyPostdatesDraftRequest: Bool = false
+    // #4224: a redraft under way (#4208), so the draft on file is not offered for sending meanwhile.
+    var replyDraftReplacesDraftOnFile: Bool = false
     var replyIsAnswered: Bool = false
     var intentHint: String? = nil
     var replyDraftEditedByDan: Bool = false
@@ -1018,7 +1020,8 @@ struct RecipientSnapshot: Identifiable, Equatable, Sendable {
     var replyConversationMode: ReplyConversationMode {
         ReplyConversationMode.of(hasUnhandledReply: hasUnhandledReply, replyIsAnswered: replyIsAnswered,
                                  hasReplyDraft: hasReplyDraft, isDrafting: isDraftingReply,
-                                 replyPostdatesDraftRequest: replyPostdatesDraftRequest)
+                                 replyPostdatesDraftRequest: replyPostdatesDraftRequest,
+                                 replacingDraftOnFile: replyDraftReplacesDraftOnFile)
     }
 
     var displayName: String {
@@ -4098,6 +4101,7 @@ extension RecipientSnapshot {
                   awaitedReplyDraftRequestedAt: r.awaitedReplyDraftRequestedAt,
                   hasUnhandledReply: r.hasUnhandledReply,
                   replyPostdatesDraftRequest: r.replyPostdatesDraftRequest,
+                  replyDraftReplacesDraftOnFile: r.replyDraftReplacesDraftOnFile,
                   replyIsAnswered: r.replyIsAnswered,
                   intentHint: r.intentHint,
                   replyDraftEditedByDan: r.replyDraftEditedByDan,

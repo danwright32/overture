@@ -753,6 +753,18 @@ final class Recipient {
         return theirs > requested
     }
 
+    // #4224: the draft the reply window may put in its compose box, or nil when there is none it may
+    // offer. The same rule the card's reply block reads (`ReplyDraftRequest.offersDraftOnFile`).
+    var offerableReplyDraftBody: String? {
+        guard let body = replyDraftBody,
+              !body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              ReplyDraftRequest.offersDraftOnFile(hasDraft: true,
+                                                  replyPostdatesDraftRequest: replyPostdatesDraftRequest,
+                                                  replacingDraftOnFile: replyDraftReplacesDraftOnFile)
+        else { return nil }
+        return body
+    }
+
     var replyIsAnswered: Bool {
         replied && !bounced && resolution == nil && replyHandledAt != nil && !hasUnhandledReply
     }
