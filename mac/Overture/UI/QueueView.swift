@@ -2418,6 +2418,16 @@ enum QueueRenderCounter {
     static func derivationCount(for surface: String) -> Int { derivationsBySurface[surface] ?? 0 }
     static func reasons(for surface: String) -> [String] { reasonsBySurface[surface] ?? [] }
 
+    // #4113: each card's OWN body evaluations, keyed by the show. Opening a menu on one card is a state
+    // change inside that card, and whether it re-evaluates its neighbours (or the queue above it) is a
+    // question only a per card count can answer: the queue's own count says nothing about the cards,
+    // and one count over all cards cannot tell the opened card from the ones beside it. Counts only, no
+    // log line, because a card evaluates far more often than the queue does and a line each would bury
+    // the log the queue's derivations are read from.
+    nonisolated(unsafe) private static var cardBodies: [String: Int] = [:]
+    static func recordCardBody(_ key: String) { cardBodies[key, default: 0] += 1 }
+    static func cardBodyCounts() -> [String: Int] { cardBodies }
+
     // Which inputs moved. Pure, so the rule this diagnostic reports by is itself tested rather than being
     // one more thing taken on trust while it is used to judge everything else.
     static func reason(for inputs: [String: String], since previous: [String: String],

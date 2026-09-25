@@ -179,6 +179,10 @@ struct ProspectRowView: View {
     }
 
     var body: some View {
+        // #4113: counted so a test can say which cards a change inside ONE card re-evaluated.
+        #if DEBUG
+        let _ = QueueRenderCounter.recordCardBody(item.id)
+        #endif
         VStack(alignment: .leading, spacing: OVSpacing.sm) {
             HStack(alignment: .top, spacing: OVSpacing.md) {
                 if item.isBooked { bookedSeal } else { fitSeal }
