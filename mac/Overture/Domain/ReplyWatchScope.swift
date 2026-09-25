@@ -37,4 +37,25 @@ enum ReplyWatchScope {
     static func isWatched(_ r: any ReplyWatchableRecipient) -> Bool {
         couldReceiveANewMessage(r) || ReplyGap.needsFilling(r)
     }
+
+    // #3937 (phase 1 of #2920): should the FAST lane read this thread too? Dan's scope, 2026-09-16: a
+    // conversation with a live reply, or a pitch whose run has not passed.
+    //
+    // It takes the ENTITY as well as the recipient because a recipient carries no date, and the date is
+    // half the question (L83). It starts from `isWatched`, so the fast set is the watched set narrowed and
+    // can never reach a thread the half-hourly check would not (L16). Rows watched only for a gap
+    // (`ReplyGap`) ride the fast lane only while their run is current; the fast lane's reader is reply
+    // detection, and `backfillResponders` skips a thread it was not given rather than stamping it checked.
+    static func isFastChecked(_ entity: any ReplyWatchable, _ r: any ReplyWatchableRecipient,
+                              today: String) -> Bool {
+        guard isWatched(r) else { return false }
+        return hasLiveReply(r) || entity.replyWatchIsCurrent(today: today)
+    }
+
+    // They wrote, and nothing has closed the conversation since. Deliberately the same bound
+    // `couldReceiveANewMessage` applies to a replied row, so a reply the watcher still reads on a live
+    // conversation is exactly the one the fast lane reads, whatever the show's date.
+    static func hasLiveReply(_ r: any ReplyWatchableRecipient) -> Bool {
+        r.replied && r.replyWatchConversationIsOpen
+    }
 }

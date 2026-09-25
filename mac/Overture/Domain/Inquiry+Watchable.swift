@@ -52,6 +52,10 @@ extension Inquiry: ReplyWatchable {
     // An inquiry has no other unsent contacts to hold back while Dan triages a reply, so the
     // prospect-side pause is a no-op here.
     func pausePendingForReply() {}
+    // #3937: an open inquiry is always fast checked, whatever its event date: someone is waiting on a
+    // reply, which is the same reason an inquiry bypasses the queue's lead-time window. Its optional
+    // `performanceDate` is deliberately not consulted.
+    func replyWatchIsCurrent(today: String) -> Bool { isOpen }
 }
 
 // Booking match for an inquiry (#1435): the "org" to name-match against a Downbeat booking is the
