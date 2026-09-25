@@ -96,6 +96,13 @@ final class ScopeMemo<Value> {
     private var builtAt: Date?
     // #4106: the store's save count when the answer was built. See `value(...)`'s `savesIn`.
     private var savesAtBuild: Int?
+    // #4252: the foreign writes this memo has accounted for, and the rows among them its last build had not
+    // yet seen merged into the main context. See `StoreSaveCount.ForeignWrite`.
+    private var foreignCheckedThrough = 0
+    private var pendingForeign: [StoreSaveCount.ForeignRow] = []
+    // True when foreign writes were dropped before this memo could check them, so a refetch cannot be told
+    // from their merge until the next build re-reads the log.
+    private var foreignUnknown = false
     private let saves: StoreSaveCount
 
     /// `saves` is injected so a test can drive the save count with notifications of its own rather than
@@ -124,6 +131,12 @@ final class ScopeMemo<Value> {
     /// is a statement about the machine and "it did not build" is a statement about this code (L63).
     private(set) var builds = 0
 
+    /// #4252: how many times observation said the answer was stale, nothing had been saved since the build
+    /// and nothing was unsaved, so it was served and observation re-armed rather than the derivation run.
+    /// Read by the tests beside `builds`, because a zero here with a build count that did not move would
+    /// mean the refetch never reached this memo, which is not the same as it being served (L98).
+    private(set) var servedUnchanged = 0
+
     /// The derivation's answer, rebuilt only when one of the four parts of the key has moved.
     ///
     /// `fingerprintOf` is handed in rather than computed here so the caller names its own inputs, which
@@ -144,23 +157,104 @@ final class ScopeMemo<Value> {
                staleAfter: Staleness = .seconds(ScopeMemo.staleAfterSeconds),
                savesIn store: ModelContainer?,
                build: () -> Value) -> Value {
+        resolve(fingerprint: fingerprint, cardKeys: cardKeys, now: now, staleAfter: staleAfter,
+                savesIn: store, build: build)
+    }
+
+    /// #4252: what an observed change means when nothing has been saved since the build.
+    ///
+    /// Required of every caller keyed by a `ScopeFingerprint`, with its reason at the call site, because the
+    /// right answer depends on what the derivation costs, which only the caller knows. Serving means
+    /// re-registering observation on every stored property of every row, which is 134 ms over the live
+    /// store (1,340 shows, measured 2026-09-25): well under a 364 ms queue pass, well OVER a 27 ms Due
+    /// count, which is cheaper to derive again than to re-arm.
+    enum Refetch {
+        /// Derive again, as every observed change always did.
+        case rebuild
+        /// Serve the answer and re-arm, when no save has happened since the build and nothing is unsaved.
+        case serveWhenNothingChanged
+    }
+
+    /// #4252: the same, keyed by a `ScopeFingerprint`, which also carries the rows it was given, so a
+    /// refetch that changed nothing can be served rather than derived again.
+    ///
+    /// WHAT CHANGES. SwiftData's `@Query` refetches after every save and calls `willSet` on every field of
+    /// every row it returns, changed or not, so observation marks the answer stale a second time for one
+    /// saved change (#4106). With `.serveWhenNothingChanged`, an answer marked stale by observation alone is
+    /// served when the identities, card keys and clock are where they were, NO save into the store has
+    /// happened since the build (a change made and saved after the build moves the save count, which still
+    /// rebuilds), the main context holds nothing unsaved (a change made and not saved), and no write saved
+    /// through another context has since been merged in (compared by value, `StoreSaveCount`). Those are
+    /// every way a row's value can change, so what is left is the refetch.
+    ///
+    /// WHAT KEEPS IT HONEST. The refetch spent the tracking the build armed, so serving re-arms it on every
+    /// stored property of every row (`ScopeValueSources.armAll`): a superset of what the build read, so no
+    /// later edit is missed, and inside a view's body it keeps the body subscribed too.
+    ///
+    /// WHAT IT ASSUMES, stated because nothing can check it: the build reads model rows and the values
+    /// already in the key, and no other observable object. A derivation reading some other `@Observable`
+    /// would have that change served as a refetch. Every derivation keyed this way is a static function of
+    /// the inputs its caller names (`ScopeMemoInputsAreCompleteGuardTests` holds the model half).
+    func value(fingerprint: ScopeFingerprint,
+               cardKeys: Set<String>,
+               now: Date,
+               staleAfter: Staleness = .seconds(ScopeMemo.staleAfterSeconds),
+               savesIn store: ModelContainer,
+               onRefetch: Refetch,
+               build: () -> Value) -> Value {
+        let main = store.mainContext
+        let wanted = Key(fingerprint: fingerprint.finalized(), cardKeys: cardKeys)
+        let savesNow = saves.value(for: store)
+        if let current = held(wanted, now: now, staleAfter: staleAfter) {
+            // A row a foreign write changed, merged in since the build: a change, whatever else holds still.
+            let foreignMerged = pendingForeign.contains { Self.merged($0, into: main) == true }
+            if !foreignMerged, savesAtBuild == savesNow {
+                if !staleFlag.isSet { return current }
+                if onRefetch == .serveWhenNothingChanged, !foreignUnknown, !main.hasChanges {
+                    let generation = staleFlag.arm()
+                    withObservationTracking {
+                        fingerprint.sources.armAll()
+                    } onChange: { [staleFlag] in
+                        staleFlag.set(ifArmedAt: generation)
+                    }
+                    servedUnchanged += 1
+                    return current
+                }
+            }
+        }
+        let result = rebuild(wanted, now: now, savesNow: savesNow, build: build)
+        settleForeignWrites(in: store, main: main, through: savesNow)
+        return result
+    }
+
+    private func held(_ wanted: Key, now: Date, staleAfter: Staleness) -> Value? {
+        guard let key, key == wanted, let value, let builtAt,
+              !staleAfter.hasExpired(builtAt: builtAt, now: now) else { return nil }
+        return value
+    }
+
+    private func resolve(fingerprint: Int,
+                         cardKeys: Set<String>,
+                         now: Date,
+                         staleAfter: Staleness,
+                         savesIn store: ModelContainer?,
+                         build: () -> Value) -> Value {
         let wanted = Key(fingerprint: fingerprint, cardKeys: cardKeys)
         let savesNow = store.map { saves.value(for: $0) }
-        if !staleFlag.isSet,
-           savesAtBuild == savesNow,
-           let key, key == wanted,
-           let value,
-           let builtAt,
-           !staleAfter.hasExpired(builtAt: builtAt, now: now) {
-            return value
+        if let current = held(wanted, now: now, staleAfter: staleAfter), !staleFlag.isSet,
+           savesAtBuild == savesNow {
+            return current
         }
+        return rebuild(wanted, now: now, savesNow: savesNow, build: build)
+    }
 
+    private func rebuild(_ wanted: Key, now: Date, savesNow: Int?, build: () -> Value) -> Value {
         var built: Value?
-        staleFlag.clear()
+        let generation = staleFlag.arm()
         withObservationTracking {
             built = build()
         } onChange: { [staleFlag] in
-            staleFlag.set()
+            staleFlag.set(ifArmedAt: generation)
         }
         // `withObservationTracking` runs its `apply` closure synchronously and exactly once, so this is
         // set by the time control reaches here. Force unwrapped rather than defaulted, because a default
@@ -172,6 +266,33 @@ final class ScopeMemo<Value> {
         builtAt = now
         savesAtBuild = savesNow
         return result
+    }
+
+    // After a build: every foreign write up to the save count it built at is either merged (the build read
+    // its values) or still pending, and a pending row that turns up merged later is a change.
+    private func settleForeignWrites(in store: ModelContainer, main: ModelContext, through savesNow: Int) {
+        guard let writes = saves.foreignWrites(after: foreignCheckedThrough, in: store) else {
+            foreignUnknown = true
+            foreignCheckedThrough = savesNow
+            pendingForeign = []
+            return
+        }
+        foreignUnknown = false
+        // A write with a later index landed while the build ran; the save count has moved past this build,
+        // so the next evaluation rebuilds and settles it then.
+        let arrived = writes.filter { $0.index <= savesNow }.flatMap(\.rows)
+        pendingForeign = (pendingForeign + arrived).filter { Self.merged($0, into: main) == false }
+        foreignCheckedThrough = savesNow
+    }
+
+    // Whether the main context's copy of a row a foreign write saved now holds what that write saved.
+    // `nil` when the main context holds no copy at all, which is neither: there is nothing there to be stale.
+    private static func merged(_ row: StoreSaveCount.ForeignRow, into main: ModelContext) -> Bool? {
+        func check<T: ScopeCompared>(_ type: T.Type) -> Bool? {
+            guard let copy = T.registered(row.id, in: main) else { return nil }
+            return copy.scopeValuesMatch(row.values)
+        }
+        return check(row.type)
     }
 
 }
@@ -186,14 +307,19 @@ final class ScopeMemo<Value> {
 /// `ScopeMemoInputsAreCompleteGuardTests` can see it (L96).
 struct ScopeFingerprint {
     private var hasher = Hasher()
+    // #4252: the rows themselves, so the memo can compare their values when observation or a save says
+    // they may have changed. Kept by the same `add` that hashes their identities, so a collection cannot
+    // be keyed without also being compared.
+    private(set) var sources = ScopeValueSources()
 
     init() {}
 
-    mutating func add<Element: AnyObject>(_ items: [Element]) {
+    mutating func add<Element: ScopeCompared>(_ items: [Element]) {
         // The count is combined as well as the members, so two adjacent inputs cannot trade an element
         // and leave the running hash identical.
         hasher.combine(items.count)
         for item in items { hasher.combine(ObjectIdentifier(item)) }
+        sources.add(items)
     }
 
     /// A value that is not a collection of model objects, for an input a derivation reads that the store
@@ -208,22 +334,33 @@ struct ScopeFingerprint {
 
 /// A Bool that may be set from any thread, because `withObservationTracking`'s onChange runs wherever
 /// the mutation happened.
+///
+/// #4252: GENERATIONS, because the memo now arms tracking twice for one evaluation that goes on to build:
+/// once for the value comparison and once for the build. Tracking cannot be cancelled with supported API,
+/// so the comparison's tracking stays registered after the build replaces it, and without this a later
+/// change to a property only the comparison read would mark the build's answer stale. Each arming clears
+/// the flag and hands back a generation; only the tracking armed last may set it.
 final class StaleFlag: @unchecked Sendable {
     private let lock = NSLock()
     private var flag = true
+    private var generation = 0
 
     var isSet: Bool {
         lock.lock(); defer { lock.unlock() }
         return flag
     }
 
-    func set() {
-        lock.lock(); defer { lock.unlock() }
-        flag = true
-    }
-
-    func clear() {
+    /// Clears the flag and starts a new generation of tracking.
+    func arm() -> Int {
         lock.lock(); defer { lock.unlock() }
         flag = false
+        generation += 1
+        return generation
+    }
+
+    /// Marks the answer stale, but only for tracking armed by the latest `arm()`.
+    func set(ifArmedAt armed: Int) {
+        lock.lock(); defer { lock.unlock() }
+        if armed == generation { flag = true }
     }
 }

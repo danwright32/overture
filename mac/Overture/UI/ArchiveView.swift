@@ -137,8 +137,11 @@ struct ArchiveView: View {
         fingerprint.add(watchedSources)
         fingerprint.add(refusedAddresses)
         // #4106: and any save into this store, through any context (see `ScopeMemo.value`'s `savesIn`).
-        return scopeMemo.value(fingerprint: fingerprint.finalized(), cardKeys: keys, now: Date(),
-                               savesIn: context.container) {
+        return scopeMemo.value(fingerprint: fingerprint, cardKeys: keys, now: Date(),
+                               savesIn: context.container,
+                               // #4252: the whole-store scope (277 ms on the live store, 2026-09-25) against
+                               // 134 ms to re-arm observation, so the refetch after a save is served.
+                               onRefetch: .serveWhenNothingChanged) {
             QueueModel.scope(from: prospects, answers: orgAnswers,
                              overrides: ProducerOverrides(promotedRows: promotedProducers,
                                                           demotedRows: demotedHouses),

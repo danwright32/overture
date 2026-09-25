@@ -24,13 +24,12 @@ import Observation
 // derivation is announced as a change by the framework, and nothing that decides by observation can
 // tell it from a real one.
 //
-// WHAT THE FIX DOES, then. `QueueView` now derives through a `ScopeMemo`, so an evaluation that changes
-// nothing the pass reads is served the answer it already has. That removes every derivation provoked by
-// something other than the store (a banner, an undo entry, a sheet, `RootView` redrawing), which is
-// `aRedrawWithNoDataChangeDerivesNothing` below. It does NOT remove the saved write's second derivation,
-// for the reason above, and the three saved-change tests pin that at two rather than pretending
-// otherwise, so it cannot become three. Taking it to one needs a derivation that can say WHICH shows
-// changed, which is the incremental half #4106 names as its direction, filed as #4252.
+// WHAT THE FIX DOES, then. `QueueView` derives through a `ScopeMemo`, so an evaluation that changes
+// nothing the pass reads is served the answer it already has (#4106), which is
+// `aRedrawWithNoDataChangeDerivesNothing` below. And since #4252 the memo compares the VALUES of every row
+// before it rebuilds on an observed change or a save, so the refetch's second notification finds nothing
+// changed and is served too: the three saved-change tests are held at ONE. Dan's call, 2026-09-25 in
+// chat: tell the two apart by comparing values, with supported API only.
 //
 // A COUNT, NOT A DURATION. A count is a statement about this code; a duration is a statement about the
 // machine, which is slowest exactly when it is being judged (L63, L290).
@@ -48,9 +47,10 @@ struct OneChangeDerivesTheQueueOnceTests {
     private static let rows = 60
     private static let showsPerNight = 3
 
-    // One saved change: its own derivation, and the one SwiftData's refetch re-announces. See the header
-    // for the measurement, and #4106 for what taking this to one needs.
-    private static let allowedDerivationsForOneSavedChange = 2
+    // One saved change, ONE derivation. It was two until #4252: the change's own, and the one SwiftData's
+    // refetch re-announced with nothing changed. `ScopeMemo` now compares values before rebuilding, so the
+    // refetch is served the answer the change already derived.
+    private static let allowedDerivationsForOneSavedChange = 1
 
     private static func night(_ n: Int) -> String {
         let day = Calendar(identifier: .gregorian).date(byAdding: .day, value: 20 + n, to: Date())!
@@ -308,6 +308,58 @@ struct OneChangeDerivesTheQueueOnceTests {
         #expect(why.count >= 1, Comment(rawValue:
             "renaming a refused town in place derived the queue \(why.count) times, so the queue is "
             + "still applying the old name (#4106)"))
+    }
+
+    // #4252: the same edit in place, but AFTER an evaluation the memo served. A served evaluation reads no
+    // row field, so if nothing else keeps the body subscribed to them, the edit reaches nobody.
+    @Test func anEditInPlaceAfterAServedRedrawStillReachesTheQueue() async throws {
+        let c = try container()
+        let h = host(c)
+        defer { h.window.close() }
+        seed(h.context)
+        await brought(up: h)
+
+        h.tick.value += 1
+        let served = await settle(h.hosting)
+        #expect(served.isEmpty, Comment(rawValue:
+            "the redraw derived \(served.count) time(s), so the next edit does not follow a served answer"))
+
+        let all = try prospects(h.context)
+        let target = try #require(all.first { $0.naturalKey == "row-13" })
+        target.markDismissed(reason: .notAFit)
+        let why = await settle(h.hosting)
+
+        #expect(why.count == 1, Comment(rawValue:
+            "an unsaved in-place dismiss after a served redraw derived the queue \(why.count) times: "
+            + "\(why.joined(separator: " | ")). Zero means the screen kept the answer from before the edit"))
+    }
+
+    // #4252: and after a saved change has SETTLED, which is the case the value comparison creates. The
+    // refetch's notification spent the tracking the build armed, and the comparison that served it is
+    // what re-armed it; if it did not, this edit reaches nobody.
+    @Test func anEditInPlaceAfterASavedChangeSettledStillReachesTheQueue() async throws {
+        let c = try container()
+        let h = host(c)
+        defer { h.window.close() }
+        seed(h.context)
+        await brought(up: h)
+
+        let all = try prospects(h.context)
+        let first = try #require(all.first { $0.naturalKey == "row-5" })
+        ProspectMutations.dismissForReason(QueueItem(first), .notAFit, prospects: all, context: h.context,
+                                           feedback: h.feedback, offer: h.offer, undo: h.undo)
+        let settled = await settle(h.hosting)
+        #expect(settled.count == 1, Comment(rawValue:
+            "the saved dismiss derived \(settled.count) times, so the edit below does not follow a "
+            + "refetch served by value"))
+
+        let second = try #require(all.first { $0.naturalKey == "row-14" })
+        second.markDismissed(reason: .notAFit)
+        let why = await settle(h.hosting)
+        #expect(why.count == 1, Comment(rawValue:
+            "an unsaved dismiss after a settled saved change derived the queue \(why.count) times: "
+            + "\(why.joined(separator: " | ")). Zero means the refetch's comparison did not re-arm the "
+            + "memo and the screen kept the answer from before the edit"))
     }
 
     // THE OTHER DIRECTION, which a memo exists to get wrong: a field edited in place and never saved must

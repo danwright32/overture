@@ -248,8 +248,11 @@ struct RootView: View {
         let staleAfter: ScopeMemo<DueWork.CountAndNextChange>.Staleness =
             followUpsMemo.held.flatMap(\.couldChangeAt).map { .at($0) } ?? .never
         // #4106: and any save into this store, through any context (see `ScopeMemo.value`'s `savesIn`).
-        return followUpsMemo.value(fingerprint: fingerprint.finalized(), cardKeys: [], now: now,
-                                   staleAfter: staleAfter, savesIn: context.container) {
+        return followUpsMemo.value(fingerprint: fingerprint, cardKeys: [], now: now,
+                                   staleAfter: staleAfter, savesIn: context.container,
+                                   // #4252: 27 ms to derive on the live store (2026-09-25), cheaper than
+                                   // the 134 ms re-arming a served refetch would cost, so it derives again.
+                                   onRefetch: .rebuild) {
             DueWork.countAndNextChange(prospects: allProspects, inquiries: allInquiries, now: now,
                                        replyRunAlive: replyRunAlive)
         }.total

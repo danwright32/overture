@@ -483,11 +483,11 @@ struct QueueView: View {
         // answer stale after a save was that storage, from inside `_SwiftData_SwiftUI`. What a query's
         // results ARE is the fingerprint's job (identity, in order), so outside is where they belong.
         //
-        // WHAT THIS DOES NOT FIX, said so nobody reads it as the cure for the saved change's second
-        // derivation. With the queries outside, the next thing to mark it stale is the refetched ROWS:
-        // SwiftData calls `willSet` on the fields of every row it refetches after a save, changed or not.
-        // No observation-keyed memo can tell that from an edit, which is why a saved change still derives
-        // twice and why the rest of this is #4252.
+        // THE SAVED CHANGE'S SECOND DERIVATION, and how #4252 removed it. With the queries outside, the
+        // next thing to mark it stale is the refetched ROWS: SwiftData calls `willSet` on the fields of
+        // every row it refetches after a save, changed or not, and observation alone cannot tell that from
+        // an edit. `ScopeMemo` now compares the VALUES of every row this key was handed before it rebuilds,
+        // so the refetch is served the answer the change already derived (`ScopeValues.swift`).
         let orgAnswerRows = orgAnswers
         let inquiryRows = inquiries
         let sources = watchedSources
@@ -538,8 +538,11 @@ struct QueueView: View {
         let prebuilt = renderMemo.held?.cards.requestedKeys
         let cardKeysForMemo = prebuilt.map { requested.isSubset(of: $0) ? $0 : requested } ?? requested
         // A save through ANY context is a change too, which `ScopeMemo` itself enforces (`savesIn`).
-        return renderMemo.value(fingerprint: key.finalized(), cardKeys: cardKeysForMemo, now: now,
-                                savesIn: context.container) {
+        return renderMemo.value(fingerprint: key, cardKeys: cardKeysForMemo, now: now,
+                                savesIn: context.container,
+                                // #4252: a whole-store pass (364 ms on the live store, 2026-09-25) against
+                                // 134 ms to re-arm observation, so the refetch after a save is served.
+                                onRefetch: .serveWhenNothingChanged) {
             QueueRenderPass.make(QueueRenderPass.Inputs(
                 allProspects: QueueRenderPass.Corpus(allProspects),
                 inquiries: inquiryRows,
