@@ -16,8 +16,10 @@ import SwiftData
 // and nil means "fetch them", which is a complete answer rather than a missing one.
 //
 // The rows are held across the tick's awaits, and another writer (a scout merging duplicates, Dan
-// removing a contact) can delete one meanwhile. Reading a deleted model's properties is not safe, so
-// every read goes through `liveProspects` / `liveInquiries`, which drop what was deleted since the fetch.
+// removing a contact) can delete one meanwhile. A pass must not act on a row that is gone, so every read
+// goes through `liveProspects` / `liveInquiries`, which drop what was deleted since the fetch. (Measured in
+// the tests for this: a write to a contact deleted and saved mid await was silently dropped rather than
+// crashing. That is SwiftData's behaviour to change, not something to lean on.)
 // A pass that awaits must read them AFTER its await, not before, since the await is when the deleting
 // happens. Rows INSERTED mid tick are not in here; the next tick sees them, and the tick's closing badge
 // count fetches afresh so it never states a number the store does not hold.

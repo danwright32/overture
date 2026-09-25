@@ -10,8 +10,10 @@ import SwiftData
 //
 // 1. Each pass handed rows READS them rather than fetching its own. Asserted the only way that can fail:
 //    the pass is handed rows that deliberately DISAGREE with the store, and has to act on the rows.
-// 2. Holding rows across a network await is safe. A row deleted while the pass waited on Gmail is not
-//    written to afterwards.
+// 2. Holding rows across a network await is safe. A show deleted while the pass waited on Gmail does not
+//    stop the tick, and the rows still standing are applied. What keeps a deleted row out of every pass is
+//    `StoreRows.isLive`, held by the first two tests below (the tick level test cannot see it: a write to a
+//    deleted contact was measured to be dropped silently, so removing the filter leaves it green).
 // 3. A pass whose network half fails or times out leaves its apply half UNDONE rather than half done, and
 //    says so on the tick's summary, while the passes after it still run.
 private let me = "dan@danwrightphotography.com"
