@@ -46,6 +46,15 @@ the measurement it came from lives here. Read the entry before the rule decides 
   judge are REPORTED as unjudged rather than folded into either verdict.
   Its judging half rides along on every push through `scripts/what-froze-the-queue.test.sh`, which builds
   its own logs rather than reading the live one.
+  **Which records are not freezes is decided in ONE place (#4188).** `scripts/lib/freeze_records.py`
+  loads the log (archive first, compaction notes kept apart) and gives each record one of three verdicts:
+  NOT A FREEZE (it spanned a sleep, #4153, or a menu tracked while no render pass ran, #4114), FREEZE
+  (both readings present and neither says otherwise), or UNMEASURED (a reading is absent, and absent is
+  not zero). This script and `scripts/how-often-does-it-freeze.sh`, the counter #3660's bar reads, both
+  import it, because until #4188 only this one had been taught the distinction and the two disagreed
+  about the population they both describe. The counter states its baseline distribution with every
+  record and again without the ones that are not freezes, and says how many could not be judged. Teach a
+  new distinction there, never in one reader.
 
 
 ## Recording the main thread DURING a freeze
