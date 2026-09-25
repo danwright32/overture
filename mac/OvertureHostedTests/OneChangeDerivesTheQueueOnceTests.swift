@@ -30,7 +30,7 @@ import Observation
 // `aRedrawWithNoDataChangeDerivesNothing` below. It does NOT remove the saved write's second derivation,
 // for the reason above, and the three saved-change tests pin that at two rather than pretending
 // otherwise, so it cannot become three. Taking it to one needs a derivation that can say WHICH shows
-// changed, which is the incremental half #4106 names as its direction and is recorded there.
+// changed, which is the incremental half #4106 names as its direction, filed as #4252.
 //
 // A COUNT, NOT A DURATION. A count is a statement about this code; a duration is a statement about the
 // machine, which is slowest exactly when it is being judged (L63, L290).

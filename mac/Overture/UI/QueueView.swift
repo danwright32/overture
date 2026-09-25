@@ -477,14 +477,17 @@ struct QueueView: View {
         // two lines at the top of this function always have, because Dan's log holds thousands of records
         // taken under that meaning (L683). A hit shows up there as a pass with almost no `passSeconds`.
         //
-        // EVERY QUERY IS READ HERE, OUTSIDE THE BUILD, and the build only ever sees these locals. That is
-        // load bearing rather than tidy. A `@Query` keeps its results on an observable object of its own,
-        // and SwiftData rewrites those results after every save whether or not they changed. Read inside
-        // the build, each of the seven queries below became something the memo was observing, so every
-        // save marked the answer stale and the second pass rebuilt anyway: measured, the memo in place and
-        // still two derivations per change, every one of them marked stale from inside
-        // `_SwiftData_SwiftUI` rather than by any model field. What a query's results ARE is the
-        // fingerprint's job (identity, in order); only the models' own fields are observation's.
+        // EVERY QUERY IS READ HERE, OUTSIDE THE BUILD, and the build only ever sees these locals. A
+        // `@Query` keeps its results on an observable object of its own, and read inside the build it
+        // becomes something the memo observes: measured, with them inside, the first thing to mark the
+        // answer stale after a save was that storage, from inside `_SwiftData_SwiftUI`. What a query's
+        // results ARE is the fingerprint's job (identity, in order), so outside is where they belong.
+        //
+        // WHAT THIS DOES NOT FIX, said so nobody reads it as the cure for the saved change's second
+        // derivation. With the queries outside, the next thing to mark it stale is the refetched ROWS:
+        // SwiftData calls `willSet` on the fields of every row it refetches after a save, changed or not.
+        // No observation-keyed memo can tell that from an edit, which is why a saved change still derives
+        // twice and why the rest of this is #4252.
         let orgAnswerRows = orgAnswers
         let inquiryRows = inquiries
         let sources = watchedSources
