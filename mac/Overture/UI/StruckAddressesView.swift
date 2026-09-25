@@ -47,7 +47,10 @@ struct StruckAddressesView: View {
     }
 
     private var entries: [StruckAddressListing.Entry] {
-        StruckAddressListing.build(
+        #if DEBUG
+        QueueRenderCounter.recordSurfaceDerivation(StallSurface.struckAddresses.rawValue)
+        #endif
+        return StruckAddressListing.build(
             rows: rows,
             shows: prospects.map { .init(naturalKey: $0.naturalKey, groupName: $0.groupName,
                                          presenter: $0.presenter) })
@@ -57,6 +60,11 @@ struct StruckAddressesView: View {
         // #3859: this surface counts its own rebuild. Bound to `_` rather than called as a statement
         // because `body` is a ViewBuilder, which takes a declaration and not a bare void expression.
         let _ = freezeWatch?.recordPass()
+        // #4197: evaluations and derivations counted apart, so `ABannerDerivesNothingOnAnySheetTests` can
+        // hold a banner over this sheet to zero derivations. Debug only: the counter is declared there.
+        #if DEBUG
+        let _ = QueueRenderCounter.recordRender(surface: StallSurface.struckAddresses.rawValue)
+        #endif
         // #3852: bound ONCE. `entries` is a computed property that maps the whole prospect store, and it
         // was read twice here, once to ask whether it was empty and once to draw it, so one question
         // walked the store twice. A computed property reads as a free field access at the call site and

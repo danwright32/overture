@@ -37,12 +37,22 @@ struct ExcludedTownsView: View {
     // way userRows drives his own half. The tested listing reads the same rows, so the two cannot disagree.
     @Query(sort: \AllowedSeedTown.town) private var allowedRows: [AllowedSeedTown]
 
-    private var listing: ExcludedTownEditing.Listing { ExcludedTownEditing.listing(in: context) }
+    private var listing: ExcludedTownEditing.Listing {
+        #if DEBUG
+        QueueRenderCounter.recordSurfaceDerivation(StallSurface.excludedTowns.rawValue)
+        #endif
+        return ExcludedTownEditing.listing(in: context)
+    }
 
     var body: some View {
         // #3859: this surface counts its own rebuild. Bound to `_` rather than called as a statement
         // because `body` is a ViewBuilder, which takes a declaration and not a bare void expression.
         let _ = freezeWatch?.recordPass()
+        // #4197: evaluations and derivations counted apart, so `ABannerDerivesNothingOnAnySheetTests` can
+        // hold a banner over this sheet to zero derivations. Debug only: the counter is declared there.
+        #if DEBUG
+        let _ = QueueRenderCounter.recordRender(surface: StallSurface.excludedTowns.rawValue)
+        #endif
         VStack(alignment: .leading, spacing: 0) {
             header
             Divider().overlay(OVColor.line)

@@ -109,6 +109,12 @@ struct FollowUpsView: View {
     // load).
     private func makeRenderData() -> FollowUpsRenderPass.RenderData {
         freezeWatch?.recordPass()
+        // #4197: this surface's evaluations and derivations, counted apart, on `SourcesView`'s precedent.
+        // Debug only, because `QueueRenderCounter` is declared inside `#if DEBUG`.
+        #if DEBUG
+        _ = QueueRenderCounter.recordRender(surface: StallSurface.followUps.rawValue)
+        QueueRenderCounter.recordSurfaceDerivation(StallSurface.followUps.rawValue)
+        #endif
         let passStarted = DispatchTime.now().uptimeNanoseconds
         defer {
             freezeWatch?.recordPassCost(
