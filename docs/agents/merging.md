@@ -105,6 +105,13 @@ the measurement it came from lives here. Read the entry before the rule decides 
   opening a PR (it never merges and never launches the live app); the coordinating
   session then independently re-runs the full suite on every branch under the same
   lock before merging, rather than trusting each agent's self report.
+  The machine wide directory lock Downbeat and Ovation share (`/tmp/xcodebuild-tests.lock`, taken
+  before that file lock) is served in ARRIVAL ORDER since downbeat#524: a waiter writes a ticket to
+  `/tmp/xcodebuild-tests.lock.queue` and tries `mkdir` only when no live earlier waiter is queued, so a
+  run printing `waiting for N earlier run(s) queued` is waiting its turn rather than hung. The protocol
+  is `mac/scripts/lib/lock-queue.sh`, which must stay identical in behaviour to the `lock-queue.sh`
+  in Downbeat's own scripts folder; before it, this runner's one second poll kept beating Downbeat's two second
+  one and starved a Downbeat run past its deadline on 2026-09-24.
   That re-run is against CURRENT main, not against the base the branch was cut from (#2353):
   `verify-and-merge-branch.sh` merges `origin/main` into its verify worktree before the suite
   is allowed to judge anything, and refuses (verifying nothing, merging nothing) when that combine

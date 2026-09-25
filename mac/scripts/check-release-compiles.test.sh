@@ -132,6 +132,59 @@ out="$(run_case other-failure)"; status=$?
 assert_eq "a failure that is not a compile error still exits 1" "1" "${status}"
 assert_contains "and shows what xcodebuild said instead" "${out}" "Could not resolve package dependencies"
 
+# --- it waits its turn behind an earlier queued run (downbeat#524) ----------------------------------------
+# This check takes the machine wide lock through the Mac suite's own take_dir_lock, so it queues in
+# arrival order too. A live waiter that arrived earlier holds the turn even with the lock FREE, and this
+# PATH is the named tools list, which is what the queue must still work under.
+bin="${WORK}/queued-bin"
+make_path "${bin}" "${BASE_TOOLS[@]}"
+make_stubs "${bin}"
+sleep 120 & earlier=$!
+mkdir -p "${WORK}/queued-dirlock.queue"
+printf '%s %s\n' "${earlier}" "$(/bin/ps -o lstart= -p "${earlier}" | sed 's/^ *//; s/ *$//')" \
+  > "${WORK}/queued-dirlock.queue/00000000001.000000.${earlier}"
+out="$(STUB_MODE=pass STUB_RECORD="${WORK}/queued" PATH="${bin}" \
+  STUB_DIR_LOCK="${WORK}/queued-dirlock" OVERTURE_DIR_LOCK="${WORK}/queued-dirlock" \
+  OVERTURE_DIR_LOCK_TIMEOUT=2 OVERTURE_DIR_LOCK_POLL=1 LSREGISTER="${bin}/lsregister" \
+  OVERTURE_FILE_LOCK="${WORK}/the.lock" OVERTURE_RELEASE_CHECK_DERIVED_DATA="${WORK}/queued-dd" \
+  bash "${SCRIPT}" 2>&1)"; status=$?
+assert_eq "behind an earlier queued run it gives up rather than taking a free lock" "3" "${status}"
+assert_contains "and says it was queued" "${out}" "queued behind 1 earlier run(s)"
+if [[ -e "${WORK}/queued.args" ]]; then
+  fail "and it never built" "xcodebuild ran: $(cat "${WORK}/queued.args")"
+else
+  pass "and it never built"
+fi
+assert_eq "and it left the queue on the way out, leaving only the earlier ticket" \
+  "00000000001.000000.${earlier}" "$(ls "${WORK}/queued-dirlock.queue")"
+kill "${earlier}" 2>/dev/null; wait "${earlier}" 2>/dev/null
+
+# --- stopping it while it waits STOPS it (L473) ---------------------------------------------------------
+# A trap on INT or TERM that only cleans up lets the script carry on round the wait loop, rejoining the
+# queue at the back, and would let it build after releasing the lock. Its pid is read off its own ticket.
+mkdir -p "${WORK}/stopped-dirlock"; echo "other:$$" > "${WORK}/stopped-dirlock/owner"
+STUB_MODE=pass STUB_RECORD="${WORK}/stopped" PATH="${bin}" \
+  STUB_DIR_LOCK="${WORK}/stopped-dirlock" OVERTURE_DIR_LOCK="${WORK}/stopped-dirlock" \
+  OVERTURE_DIR_LOCK_TIMEOUT=30 OVERTURE_DIR_LOCK_POLL=1 LSREGISTER="${bin}/lsregister" \
+  OVERTURE_FILE_LOCK="${WORK}/the.lock" OVERTURE_RELEASE_CHECK_DERIVED_DATA="${WORK}/stopped-dd" \
+  bash "${SCRIPT}" > "${WORK}/stopped.out" 2>&1 &
+stopped=$!
+waited=0
+while [[ -z "$(ls "${WORK}/stopped-dirlock.queue" 2>/dev/null)" ]] && [[ "${waited}" -lt 300 ]]; do
+  sleep 0.05; waited=$((waited + 1))
+done
+assert_eq "it queued, so this case measured a stop while waiting" "${stopped}" \
+  "$(ls "${WORK}/stopped-dirlock.queue" 2>/dev/null | sed 's/.*\.//')"
+kill -TERM "${stopped}" 2>/dev/null
+waited=0
+while kill -0 "${stopped}" 2>/dev/null && [[ "${waited}" -lt 100 ]]; do sleep 0.05; waited=$((waited + 1)); done
+assert_eq "a stopped check ends" "ended" "$(kill -0 "${stopped}" 2>/dev/null && echo still-running || echo ended)"
+kill -KILL "${stopped}" 2>/dev/null; wait "${stopped}" 2>/dev/null; status=$?
+assert_eq "with TERM's status" "143" "${status}"
+assert_eq "and leaves the queue" "" "$(ls "${WORK}/stopped-dirlock.queue" 2>/dev/null)"
+assert_eq "and leaves the holder's lock alone" "other:$$" "$(cat "${WORK}/stopped-dirlock/owner" 2>/dev/null)"
+if [[ -e "${WORK}/stopped.args" ]]; then fail "and never built"; else pass "and never built"; fi
+
 # --- nothing measured ---------------------------------------------------------------------------------
 bin="${WORK}/no-xcodebuild-bin"
 make_path "${bin}" "${BASE_TOOLS[@]}"

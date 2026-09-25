@@ -88,6 +88,10 @@ source "${SCRIPT_DIR}/../../scripts/lib/machine-stamp.sh"
 # shellcheck source=./lib/hosted-suite-stamp.sh
 source "${SCRIPT_DIR}/lib/hosted-suite-stamp.sh"
 
+# downbeat#524: the arrival order queue beside DIR_LOCK, which take_dir_lock joins before it waits.
+# shellcheck source=./lib/lock-queue.sh
+source "${SCRIPT_DIR}/lib/lock-queue.sh"
+
 # Given `ps -eo pid=,command=`-style output (one process per line: PID then its full command),
 # returns the PIDs of any resident Debug-configuration Overture.app test host (#632): the one
 # xcodebuild test boots at .../DerivedData/*/Build/Products/Debug/Overture.app/Contents/MacOS/Overture.
@@ -618,6 +622,13 @@ claim_dir_lock_if_dead() {
   return 1
 }
 
+# Whether this run may try for the directory lock now: no live earlier waiter is queued. Sets
+# LOCK_QUEUE_AHEAD, which take_dir_lock reads to tell "queued behind somebody" from "the lock is held".
+my_turn_for_dir_lock() {
+  lock_queue_ahead
+  [[ "${LOCK_QUEUE_AHEAD}" -eq 0 ]]
+}
+
 # Take Downbeat's directory lock, claiming it from a dead holder rather than waiting one out.
 #
 # ELAPSED IS REAL TIME, never a count of iterations: a deadline in seconds compared against a loop
@@ -630,10 +641,38 @@ claim_dir_lock_if_dead() {
 # wait tells a live but stalled holder from a live and working one; a total says nothing about now.
 # And it says NOTHING RAN as well, in the runner's own words: a give up executes no test, and on the day
 # this was filed a starved run was very nearly read as a green suite.
+#
+# downbeat#524: IN ARRIVAL ORDER. Every waiter used to retry on its own timer and whichever retried first
+# after a release won, and this runner's one second poll beat Downbeat's two second one, so on 2026-09-24
+# a Downbeat run waited 15 to 20 minutes three times behind newer Overture runs and a Downbeat push failed
+# on its deadline. So this joins the queue beside the lock (lib/lock-queue.sh, the protocol Downbeat's
+# `scripts/lock-queue.sh` defines) before the first look, and tries `mkdir` only when no live earlier
+# waiter is queued. `mkdir` is still the ONLY exclusion, which is why a failed join just waits the old way.
+#
+# A queued waiter never attempts the stale claim either: a stale lock is the earliest waiter's to clear,
+# and a later one clearing it would take the turn it is queued behind.
 take_dir_lock() {
-  local waited_from waited start_table=""
+  local waited_from waited start_table="" ahead_said=""
   waited_from="$(date +%s)"
-  while ! mkdir "${DIR_LOCK}" 2>/dev/null; do
+  if ! lock_queue_join "${DIR_LOCK}" "$$"; then
+    echo "run-tests-locked.sh: could not join the queue at ${DIR_LOCK}.queue, so waiting unordered." >&2
+  fi
+  while ! { my_turn_for_dir_lock && mkdir "${DIR_LOCK}" 2>/dev/null; }; do
+    if [[ "${LOCK_QUEUE_AHEAD}" -gt 0 ]]; then
+      if [[ "$(( $(date +%s) - waited_from ))" -gt "${DIR_LOCK_TIMEOUT}" ]]; then
+        echo "run-tests-locked.sh: gave up waiting ${DIR_LOCK_TIMEOUT}s for ${DIR_LOCK} (Downbeat's lock), queued behind ${LOCK_QUEUE_AHEAD} earlier run(s)." >&2
+        echo "  The queue is ${DIR_LOCK}.queue. A waiter there is judged alive by its pid and start time." >&2
+        echo "run-tests-locked.sh: NOTHING RAN. This run never got the shared test lock, so no test executed and nothing was verified. It is not a pass, and it says nothing about your change." >&2
+        lock_queue_leave
+        exit 3
+      fi
+      if [[ "${ahead_said}" != "${LOCK_QUEUE_AHEAD}" ]]; then
+        echo "run-tests-locked.sh: waiting for ${LOCK_QUEUE_AHEAD} earlier run(s) queued for ${DIR_LOCK}..." >&2
+        ahead_said="${LOCK_QUEUE_AHEAD}"
+      fi
+      sleep "${DIR_LOCK_POLL}"
+      continue
+    fi
     if claim_dir_lock_if_dead; then
       echo "run-tests-locked.sh: claimed ${DIR_LOCK} from a holder that is no longer running." >&2
       continue
@@ -645,10 +684,13 @@ take_dir_lock() {
       echo "  $(lock_holder_report "$(cat "${DIR_LOCK}/owner" 2>/dev/null || true)" "${start_table}" \
         "$(process_table)" "${waited}" "${DIR_LOCK}")" >&2
       echo "run-tests-locked.sh: NOTHING RAN. This run never got the shared test lock, so no test executed and nothing was verified. It is not a pass, and it says nothing about your change." >&2
+      lock_queue_leave
       exit 3
     fi
     sleep "${DIR_LOCK_POLL}"
   done
+  # Holding the lock, so this run is nobody's turn to wait for any more.
+  lock_queue_leave
   # The owner line is what lets the NEXT run tell a live holder from a dead one, so it is written
   # immediately after the lock is taken rather than later.
   echo "overture:$$" > "${DIR_LOCK}/owner" 2>/dev/null || true
@@ -657,7 +699,12 @@ take_dir_lock() {
 
 # Released on EVERY exit path, not only the tidy one. A directory lock left planted blocks the next
 # run of a different app, which is the failure this whole thing exists to prevent.
+#
+# downbeat#524: the queue ticket goes too, whether or not the lock was ever taken, because both callers
+# (main here and check-release-compiles.sh) reach THIS from their exit and signal handling, and a ticket left
+# by a waiter killed mid wait would otherwise make the next waiters judge it by liveness first.
 release_dir_lock() {
+  lock_queue_leave
   if [[ -n "${DIR_LOCK_HELD}" ]]; then
     rm -rf "${DIR_LOCK}" 2>/dev/null || true
     DIR_LOCK_HELD=""
@@ -789,6 +836,8 @@ main() {
   # #3571: the directory lock goes with the run too, and on INT and TERM as well as a tidy exit,
   # because a killed run that leaves it planted is precisely the stale lock this has to avoid.
   # #3976: and the RUN goes with it, on a signal as well as a tidy exit. See on_signal.
+  # downbeat#524: and so does this run's arrival queue ticket, through release_dir_lock, and a signal
+  # ENDS a waiter rather than sending it round the loop to rejoin the queue at the back (L473).
   trap 'cleanup_on_exit' EXIT
   trap 'on_signal 130' INT
   trap 'on_signal 143' TERM

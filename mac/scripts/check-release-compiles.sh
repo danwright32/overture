@@ -58,7 +58,12 @@ remove_product() {
   overture_unregister_path "${DERIVED_DATA}/Build/Products/Release/Overture.app"
   rm -rf "${DERIVED_DATA}/Build/Products" 2>/dev/null || true
 }
-trap 'remove_product; release_dir_lock; rm -f "${BUILD_LOG:-}"' EXIT INT TERM
+# Cleanup on EXIT only, and an interrupt EXITS (L473, downbeat#524): a trap on INT or TERM that only
+# cleaned up let this carry on round the lock wait, rejoining the queue at the back, or go on building
+# after it had released the lock. `exit` runs the EXIT trap, so the cleanup still happens once.
+trap 'remove_product; release_dir_lock; rm -f "${BUILD_LOG:-}"' EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 BUILD_LOG="$(mktemp "${TMPDIR:-/tmp}/overture-release-check.XXXXXX")"
 

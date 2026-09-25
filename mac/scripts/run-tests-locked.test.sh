@@ -405,6 +405,11 @@ if [ -n "${FLOCK_STUB_WITNESS:-}" ]; then
     echo "dir-lock-MISSING" >> "${FLOCK_STUB_WITNESS}"
   fi
 fi
+# downbeat#524: which run got through the directory lock, in the order they got through. Inert unless a
+# fixture names a file, so every other caller is unchanged.
+if [ -n "${FLOCK_STUB_ORDER:-}" ]; then
+  echo "${FLOCK_STUB_RUN_NAME:-unnamed}" >> "${FLOCK_STUB_ORDER}"
+fi
 shift
 exec "$@"
 STUB
@@ -1774,6 +1779,122 @@ STRANDED="$(ls -d "${LIVE_UNDER_LOCK}".stale.* 2>/dev/null || true)"
 assert_equals "and nothing was left stranded at a .stale path" "no" \
   "$([ -n "${STRANDED}" ] && echo yes || echo no)"
 rm -rf "${LIVE_UNDER_LOCK}"
+
+# ---------------------------------------------------------------------------
+# downbeat#524: the directory lock is served in ARRIVAL ORDER.
+#
+# Every waiter used to retry on its own timer and whichever retried first after a release won. This
+# runner polls every second and Downbeat's every two, so on 2026-09-24 a one minute Downbeat run waited
+# 15 to 20 minutes three times while newer Overture runs kept taking the lock, and a Downbeat push failed
+# on its 1800s deadline having run nothing. The queue beside the lock (`lib/lock-queue.sh`, the same
+# protocol as Downbeat's `scripts/lock-queue.sh`) is what orders them; `mkdir` is still the only thing
+# that excludes. Every lock and queue here is a throwaway one (L2).
+QUEUE_LOCK="${DIR_LOCK_FIXTURE_DIR}/queued.lock"
+queue_tickets() { ls "${QUEUE_LOCK}.queue" 2>/dev/null | wc -l | tr -d ' '; }
+
+# A live waiter that arrived earlier holds the turn even when the lock is FREE. Taking it anyway is
+# exactly the barging the queue exists to stop.
+sleep 120 & EARLIER_WAITER=$!
+mkdir -p "${QUEUE_LOCK}.queue"
+printf '%s %s\n' "${EARLIER_WAITER}" "$(/bin/ps -o lstart= -p "${EARLIER_WAITER}" | sed 's/^ *//; s/ *$//')" \
+  > "${QUEUE_LOCK}.queue/00000000001.000000.${EARLIER_WAITER}"
+: > "${WITNESS}"
+BEHIND_RUN="$(OVERTURE_DIR_LOCK="${QUEUE_LOCK}" OVERTURE_DIR_LOCK_TIMEOUT=2 OVERTURE_DIR_LOCK_POLL=1 \
+  FLOCK_STUB_WITNESS="${WITNESS}" run_wrapper_with_stub_xcodebuild "${GREEN_RUN_LOG}" 0)"
+assert_contains "a run behind an earlier queued waiter does not take a FREE lock, and gives up" \
+  "exit=3" "${BEHIND_RUN}"
+assert_equals "and never reached the test phase" "" "$(cat "${WITNESS}")"
+assert_equals "and never created the lock" "no" "$([ -d "${QUEUE_LOCK}" ] && echo yes || echo no)"
+assert_contains "it says it is queued behind an earlier run" "1 earlier run" "${BEHIND_RUN}"
+# `scripts/mutate.sh` reads exactly this prefix to call a starved run NOTHING RAN rather than CAUGHT.
+assert_contains "and gives up in the words mutate.sh reads as never having got the lock" \
+  "run-tests-locked.sh: gave up waiting 2s for ${QUEUE_LOCK}" "${BEHIND_RUN}"
+assert_equals "a run that gave up leaves the queue, and only the earlier ticket remains" \
+  "00000000001.000000.${EARLIER_WAITER}" "$(ls "${QUEUE_LOCK}.queue" 2>/dev/null | tr '\n' ' ' | sed 's/ $//')"
+kill "${EARLIER_WAITER}" 2>/dev/null; wait "${EARLIER_WAITER}" 2>/dev/null
+rm -rf "${QUEUE_LOCK}" "${QUEUE_LOCK}.queue"
+
+# Two runs waiting on a HELD lock go in the order they arrived. The LATER one polls four times as often,
+# so without the queue it is the one that looks first after the release and wins, most times. With both
+# on one rhythm this passed with the queue switched off, which Downbeat measured before splitting the
+# rhythms (L1), so the split is the point of the case rather than a detail.
+QUEUE_ORDER="${DIR_LOCK_FIXTURE_DIR}/order"
+rm -f "${QUEUE_ORDER}"
+mkdir -p "${QUEUE_LOCK}"; echo "other:$$" > "${QUEUE_LOCK}/owner"   # held by this live shell
+( OVERTURE_DIR_LOCK="${QUEUE_LOCK}" OVERTURE_DIR_LOCK_TIMEOUT=30 OVERTURE_DIR_LOCK_POLL=4 \
+  FLOCK_STUB_ORDER="${QUEUE_ORDER}" FLOCK_STUB_RUN_NAME=first \
+  run_wrapper_with_stub_xcodebuild "${GREEN_RUN_LOG}" 0 > "${DIR_LOCK_FIXTURE_DIR}/first.out" 2>&1 ) &
+FIRST_RUN=$!
+queue_waited=0
+while [[ "$(queue_tickets)" -lt 1 ]] && [[ "${queue_waited}" -lt 300 ]]; do
+  sleep 0.05; queue_waited=$((queue_waited + 1))
+done
+( OVERTURE_DIR_LOCK="${QUEUE_LOCK}" OVERTURE_DIR_LOCK_TIMEOUT=30 OVERTURE_DIR_LOCK_POLL=1 \
+  FLOCK_STUB_ORDER="${QUEUE_ORDER}" FLOCK_STUB_RUN_NAME=second \
+  run_wrapper_with_stub_xcodebuild "${GREEN_RUN_LOG}" 0 > "${DIR_LOCK_FIXTURE_DIR}/second.out" 2>&1 ) &
+SECOND_RUN=$!
+queue_waited=0
+while [[ "$(queue_tickets)" -lt 2 ]] && [[ "${queue_waited}" -lt 300 ]]; do
+  sleep 0.05; queue_waited=$((queue_waited + 1))
+done
+assert_equals "both runs queued, so this case measured the ordering" "2" "$(queue_tickets)"
+rm -rf "${QUEUE_LOCK}"
+wait "${FIRST_RUN}" "${SECOND_RUN}"
+assert_equals "they went through the lock in the order they arrived" "first second " \
+  "$(tr '\n' ' ' < "${QUEUE_ORDER}" 2>/dev/null)"
+assert_contains "the later run said how many earlier runs it waited for" \
+  "waiting for 1 earlier run(s) queued" "$(cat "${DIR_LOCK_FIXTURE_DIR}/second.out")"
+assert_equals "the queue is empty once both have run" "0" "$(queue_tickets)"
+assert_equals "and the lock is free" "no" "$([ -d "${QUEUE_LOCK}" ] && echo yes || echo no)"
+rm -rf "${QUEUE_LOCK}" "${QUEUE_LOCK}.queue"
+
+# Stopping a waiting run STOPS it (L473). A trap on INT or TERM that only cleans up lets the script carry
+# on: the signal lands, the cleanup leaves the queue, the loop goes round and the run rejoins at the BACK
+# instead of ending, and during the build the same trap released the lock while the run went on. The
+# runner's pid is read off its own ticket, which names it, because the wrapper puts it two processes deep.
+mkdir -p "${QUEUE_LOCK}"; echo "other:$$" > "${QUEUE_LOCK}/owner"   # held by this live shell
+( OVERTURE_DIR_LOCK="${QUEUE_LOCK}" OVERTURE_DIR_LOCK_TIMEOUT=30 OVERTURE_DIR_LOCK_POLL=1 \
+  run_wrapper_with_stub_xcodebuild "${GREEN_RUN_LOG}" 0 > "${DIR_LOCK_FIXTURE_DIR}/stopped.out" 2>&1 ) &
+STOPPED_WRAPPER=$!
+queue_waited=0
+while [[ "$(queue_tickets)" -lt 1 ]] && [[ "${queue_waited}" -lt 300 ]]; do
+  sleep 0.05; queue_waited=$((queue_waited + 1))
+done
+STOPPED_TICKET="$(ls "${QUEUE_LOCK}.queue" 2>/dev/null | head -1)"
+STOPPED_RUNNER="${STOPPED_TICKET##*.}"
+assert_equals "the waiter queued, so this case measured a stop while waiting" "yes" \
+  "$([[ "${STOPPED_RUNNER}" =~ ^[0-9]+$ ]] && echo yes || echo no)"
+kill -TERM "${STOPPED_RUNNER}" 2>/dev/null
+stop_waited=0
+while kill -0 "${STOPPED_RUNNER}" 2>/dev/null && [[ "${stop_waited}" -lt 100 ]]; do
+  sleep 0.05; stop_waited=$((stop_waited + 1))
+done
+assert_equals "a stopped waiter ends" "ended" \
+  "$(kill -0 "${STOPPED_RUNNER}" 2>/dev/null && echo still-running || echo ended)"
+kill -KILL "${STOPPED_RUNNER}" 2>/dev/null
+wait "${STOPPED_WRAPPER}" 2>/dev/null
+assert_contains "and exits with TERM's status" "exit=143" "$(cat "${DIR_LOCK_FIXTURE_DIR}/stopped.out")"
+assert_equals "and leaves the queue" "0" "$(queue_tickets)"
+assert_equals "and leaves the holder's lock alone" "other:$$" "$(cat "${QUEUE_LOCK}/owner" 2>/dev/null)"
+rm -rf "${QUEUE_LOCK}" "${QUEUE_LOCK}.queue"
+
+# EVERY ACQUIRER QUEUES. The class is "a script that takes the machine wide lock with its own `mkdir`",
+# which would barge past the queue however well this runner behaves. Derived from the tracked tree
+# rather than a list (L96): the only `mkdir` on the directory lock outside a fixture must be the one in
+# `take_dir_lock`, which `check-release-compiles.sh` reaches by sourcing this runner.
+#
+# Two details, both learned by this scan being wrong. Untracked files are read as well as tracked ones,
+# because the script being written is the one a scan of what git tracks cannot see (L456): this passed
+# while `lib/lock-queue.sh` was new and went red the moment it was committed. And comment lines are
+# dropped, because that file's header NAMES the lock and the `mkdir` on it in prose (L208).
+REPO_FOR_SCAN="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+LOCK_MKDIRS="$(cd "${REPO_FOR_SCAN}" && git ls-files --cached --others --exclude-standard '*.sh' \
+  | grep -v '\.test\.sh$' | sort -u \
+  | xargs grep -n -E 'mkdir[^;|&]*(DIR_LOCK\}|xcodebuild-tests\.lock)' 2>/dev/null \
+  | grep -v -E '^[^:]+:[0-9]+:[[:space:]]*#' || true)"
+assert_equals "exactly one place outside the fixtures takes the directory lock with mkdir" "1" \
+  "$(grep -c . <<< "${LOCK_MKDIRS}")"
+assert_contains "and it is take_dir_lock's queued loop" "my_turn_for_dir_lock" "${LOCK_MKDIRS}"
 
 # `fixture_scratch_dir` does not sweep itself, and `check-temp-dir-leaks.sh` reads the runner's
 # directory for exactly this, so what this block made it takes away again.
