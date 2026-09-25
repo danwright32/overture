@@ -289,6 +289,27 @@ struct OneChangeDerivesTheQueueOnceTests {
             + "whole-store pass (#4106)"))
     }
 
+    // A TOWN renamed in place, unsaved. The queue resolves Dan's town refusals OUTSIDE the memo's build,
+    // so the build's own tracking never read `town` and cannot be marked stale by it; the body still
+    // re-evaluates (it read the name), and only the town names in the key stop that evaluation being
+    // served the answer from before the rename (#4112 closed the same gap on Sources).
+    @Test func aRefusedTownRenamedInPlaceStillReachesTheQueue() async throws {
+        let c = try container()
+        let h = host(c)
+        defer { h.window.close() }
+        let town = ExcludedTown(town: "Poughkeepsie")
+        h.context.insert(town)
+        seed(h.context)
+        await brought(up: h)
+
+        town.town = "Hoboken"
+        let why = await settle(h.hosting)
+
+        #expect(why.count >= 1, Comment(rawValue:
+            "renaming a refused town in place derived the queue \(why.count) times, so the queue is "
+            + "still applying the old name (#4106)"))
+    }
+
     // THE OTHER DIRECTION, which a memo exists to get wrong: a field edited in place and never saved must
     // still reach the queue. A key that missed it would show Dan a row that disagrees with the store,
     // which is worse than a slow screen (L40). No save, so no query notification: the only route left is
