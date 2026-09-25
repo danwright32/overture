@@ -439,6 +439,90 @@ OUT="$(OVERTURE_MUTATE_RUNNER="${RED_RUNNER}" "${MUTATE}" "${SUBJECT}" 's/"yes"/
 assert_contains "an @ with no name after it is left alone" "${OUT}" "CAUGHT"
 assert_not_contains "and that one is not refused either" "${OUT}" "PERL VARIABLE"
 
+# --- a braced shell name, and every sibling perl interpolates, is refused (#3816) ---------------------
+#
+# Measured 2026-09-11 proving #3789: `${LOG}` in a replacement is perl's own braced scalar, interpolated
+# to the empty string, so the line landed as `[ -f "" ]`, the script stopped working, 10 of 24
+# assertions went red, and the verdict printed was CAUGHT. That is a lie in the direction CAUGHT is quoted
+# in, as proof a guard is real, and the aim check cannot see it because the substitution lands on the
+# aimed line. This repo mutates shell scripts constantly, and shell code is full of `${NAME}`.
+write_subject
+OUT="$(OVERTURE_MUTATE_RUNNER="${RED_RUNNER}" "${MUTATE}" "${SUBJECT}" 's/"yes"/"${LOG}"/' 2>&1)"
+STATUS=$?
+assert_contains "an unescaped braced name is refused" "${OUT}" "PERL VARIABLE"
+# The escaped spelling, not the bare one, which the refusal quotes back inside the expression anyway.
+assert_contains "and hands back the escaped form" "${OUT}" 'write \${LOG}'
+assert_not_contains "and is never reported as caught" "${OUT}" "CAUGHT"
+assert_equals "and does not exit 0" "1" "$([ "${STATUS}" -ne 0 ] && echo 1 || echo 0)"
+assert_contains "the subject is left exactly as it was" "$(cat "${SUBJECT}")" 'static let answer = "yes"'
+
+# Escaped, it is what the author meant, so it runs. This is the remedy the message names.
+write_subject
+OUT="$(OVERTURE_MUTATE_RUNNER="${RED_RUNNER}" "${MUTATE}" "${SUBJECT}" 's/"yes"/"\${LOG}"/' 2>&1)"
+assert_contains "an escaped braced name is left alone" "${OUT}" "CAUGHT"
+assert_not_contains "and is not refused" "${OUT}" "PERL VARIABLE"
+
+# The siblings, enumerated from what perl was MEASURED to interpolate (2026-09-25, perl 5.34, in both
+# the replacement and the pattern half) rather than from the one incident, so the next spelling is not
+# a fresh incident (L30). Each is shell or perl text a mutation of this repo could plausibly carry.
+# Every one must be refused AND hand back its own escaped spelling, which for a two-sigil token such as
+# `$$` escapes both, since `\$$` still leaves a live `$`.
+check_refused() {
+  local expression="$1" escaped="$2" out status
+  write_subject
+  out="$(OVERTURE_MUTATE_RUNNER="${RED_RUNNER}" "${MUTATE}" "${SUBJECT}" "${expression}" 2>&1)"
+  status=$?
+  assert_contains "${expression} is refused" "${out}" "PERL VARIABLE"
+  assert_contains "${expression} hands back ${escaped}" "${out}" "write ${escaped}"
+  assert_equals "${expression} does not exit 0" "1" "$([ "${status}" -ne 0 ] && echo 1 || echo 0)"
+}
+check_refused 's/"yes"/"$LOG"/' '\$LOG'
+check_refused 's/"yes"/"$_"/' '\$_'
+check_refused 's/"yes"/"$$"/' '\$\$'
+check_refused 's/"yes"/"$?"/' '\$?'
+check_refused 's/"yes"/"$@"/' '\$\@'
+check_refused 's/"yes"/"$!"/' '\$!'
+check_refused 's/"yes"/"$#"/' '\$#'
+check_refused "s/\"yes\"/\"\$'\"/" "\\\$'"
+check_refused 's/"yes"/"$`"/' '\$`'
+check_refused 's/"yes"/"$::x"/' '\$::x'
+check_refused 's/"yes"/"${^W}"/' '\${^W}'
+check_refused 's/"yes"/"@{x}"/' '\@{x}'
+check_refused 's/"yes"/"@$x"/' '\@\$x'
+check_refused 's/"yes"/"@::x"/' '\@::x'
+# The pattern half interpolates the same way, so a braced name there is refused too.
+check_refused 's/"${LOG}"/"x"/' '\${LOG}'
+# A backslash that is itself escaped does not escape the sigil after it: `\\${LOG}` is a literal
+# backslash followed by a live `${LOG}`. Measured: perl turns `[\\$x]` into `[\]`.
+check_refused 's/"yes"/"\\${LOG}"/' '\${LOG}'
+# `${1}` is `$1` braced, so with no capture group it is refused exactly as `$1` already is.
+check_refused 's/"yes"/"${1}"/' '\${1}'
+
+# Each escaped spelling handed back is a REMEDY, so it is run rather than trusted (L406): put into a
+# replacement exactly as the message prints it, it must land as the characters the author meant, and
+# mutate.sh must then let it through.
+for pair in '${LOG}|\${LOG}' '$LOG|\$LOG' '$_|\$_' '$$|\$\$' '$?|\$?' '$@|\$\@' '$!|\$!' '$#|\$#' \
+  "\$'|\\\$'" '$`|\$`' '$::x|\$::x' '${^W}|\${^W}' '@{x}|\@{x}' '@$x|\@\$x' '@::x|\@::x' '${1}|\${1}'; do
+  token="${pair%%|*}"
+  escaped="${pair#*|}"
+  landed="$(printf 'A' | perl -0pe "s/A/[${escaped}]/" 2>&1)"
+  assert_equals "the remedy ${escaped} lands as ${token}" "[${token}]" "${landed}"
+  write_subject
+  out="$(OVERTURE_MUTATE_RUNNER="${RED_RUNNER}" "${MUTATE}" "${SUBJECT}" "s/\"yes\"/\"${escaped}\"/" 2>&1)"
+  assert_not_contains "and ${escaped} is let through" "${out}" "PERL VARIABLE"
+done
+
+# And the ordinary shapes stay allowed, or the rule fires on correct expressions and is switched off
+# (L93). A braced capture reference WITH a group is correct perl, and so is `$` as an end anchor.
+write_subject
+OUT="$(OVERTURE_MUTATE_RUNNER="${RED_RUNNER}" "${MUTATE}" "${SUBJECT}" 's/"(yes)"/"${1}!"/' 2>&1)"
+assert_contains "a braced capture with a group is left alone" "${OUT}" "CAUGHT"
+assert_not_contains "and is not refused" "${OUT}" "PERL VARIABLE"
+write_subject
+OUT="$(OVERTURE_MUTATE_RUNNER="${RED_RUNNER}" "${MUTATE}" "${SUBJECT}" 's/"yes"$/"no"/m' 2>&1)"
+assert_contains "an end anchor is left alone" "${OUT}" "CAUGHT"
+assert_not_contains "and is not refused" "${OUT}" "PERL VARIABLE"
+
 # --- it refuses what it cannot do --------------------------------------------------------------------
 OUT="$("${MUTATE}" "${WORK}/does-not-exist.swift" 's/a/b/' 2>&1)"
 assert_contains "a missing file is refused by name" "${OUT}" "does-not-exist.swift"

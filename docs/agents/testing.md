@@ -488,7 +488,15 @@ the measurement it came from lives here. Read the entry before the rule decides 
   address by its DOMAIN correctly said nothing about a string holding no `@`, and the verdict printed
   was SURVIVED for a guard that works. The aim check structurally cannot catch it, since the
   substitution lands on exactly the line it was aimed at. E-mail addresses are ordinary test data here,
-  so write `\@` whenever you mean the character. And `MISPLACED FLAG` refuses a `--` argument sitting where a
+  so write `\@` whenever you mean the character. **Since #3816 it refuses a braced name too**, and
+  the rest of what perl interpolates: `${LOG}` is perl's own `$LOG`, so a mutation of a shell script
+  carrying one landed as `[ -f "" ]` and read CAUGHT with 10 of 24 assertions red (measured 2026-09-11
+  proving #3789). The set is what perl was measured to interpolate rather than one spelling at a time: a
+  name, a braced anything, `$::x`, the shell's `$$ $? $@ $! $#`, the match variables, and the array
+  forms `@{...}`, `@$x` and `@::x`. An end anchor (`$` before `)`, `|`, `/` or the end) and a capture
+  reference with a group, braced or not, are left alone. The refusal prints the escaped spelling to
+  write, escaping every sigil in it (`$$` is `\$\$`), and a backslash that is itself escaped does not
+  count as escaping what follows. And `MISPLACED FLAG` refuses a `--` argument sitting where a
   test scope goes: **put `--at` FIRST**, because after the expression it used to fall into the trailing
   scopes, reach xcodebuild as an unrecognised option and send the runner to the PURE suite, so the aim
   check was off and a targeted proof became a full-suite run.
