@@ -39,11 +39,9 @@ struct ABannerSurfaceNeverReadsItsBannerGuardTests {
 
     // Written as the reason plus its issue, never a bare name (L233, L65). Delete the entry when the issue
     // closes; `exemptionsStillHaveSomethingToExempt` fails the day it stops being needed.
-    static let exempt: [String: String] = [
-        "SourcesView.swift":
-            "its Debug-only `renderTrace` reads `feedback.revision` inside the body (#4112), so the "
-            + "instrument itself subscribes the sheet to every banner; #4247 removes the read",
-    ]
+    // Empty since #4247 removed the one read it held (SourcesView's Debug trace). Kept as the place a
+    // future exemption would go, with its reason, rather than deleted along with its last entry.
+    static let exempt: [String: String] = [:]
 
     /// The finding, as a pure function over (file name, source), so it can be PRODUCED by a test rather
     /// than only watched not to happen (L151).
