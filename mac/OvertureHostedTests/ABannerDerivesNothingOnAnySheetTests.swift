@@ -33,7 +33,7 @@ import SwiftData
 // zero below would mean the banner never arrived (L159). And the sheet must have derived at least once
 // while appearing, so a counter that was never wired cannot read as a sheet that never derived (L98).
 @MainActor
-@Suite("A banner with no data change derives nothing on any sheet (#4197)")
+@Suite("A banner with no data change derives nothing on any sheet (#4197)", .serialized)
 struct ABannerDerivesNothingOnAnySheetTests {
 
     // The live store's shape, read off a copy on 2026-09-25: 1,340 prospects and 47 struck addresses.
@@ -220,6 +220,29 @@ struct ABannerDerivesNothingOnAnySheetTests {
         let appeared = QueueRenderCounter.derivationCount(for: StallSurface.excludedTowns.rawValue)
         let reading = await raiseABanner(over: .excludedTowns, in: hosting, feedback: feedback)
         expectNothingDerived(reading, .excludedTowns, appeared: appeared)
+    }
+
+    // ONE fetch of the listing per drawing. The two seed sections used to read the computed `listing`, a
+    // store fetch, five times between them per body (L383), found by the #4197 lessons review. Evaluations
+    // and derivations are counted apart, so their ratio is the number of fetches per drawing.
+    @Test func skippedTownsFetchesItsListingOncePerDrawing() async throws {
+        let c = try container()
+        let ctx = ModelContext(c)
+        for town in ["Albany", "Buffalo", "Ithaca"] { ctx.insert(ExcludedTown(town: town)) }
+        try ctx.save()
+        let surface = StallSurface.excludedTowns.rawValue
+        let derivationsBefore = QueueRenderCounter.derivationCount(for: surface)
+        let evaluationsBefore = QueueRenderCounter.renderCount(for: surface)
+        let (window, hosting) = host(ExcludedTownsView().modelContainer(c).environment(ActionFeedback()))
+        defer { window.close() }
+
+        await waitUntilQuiet(.excludedTowns, in: hosting)
+        let evaluations = QueueRenderCounter.renderCount(for: surface) - evaluationsBefore
+        let derivations = QueueRenderCounter.derivationCount(for: surface) - derivationsBefore
+        #expect(evaluations >= 1, "the sheet never drew, so the ratio below measures nothing (L98)")
+        #expect(derivations == evaluations, Comment(rawValue:
+            "the Skipped towns sheet fetched its listing \(derivations) time(s) over \(evaluations) "
+            + "drawing(s); it should be once per drawing (#4197, L383)"))
     }
 
     @Test func daysOff() async throws {
