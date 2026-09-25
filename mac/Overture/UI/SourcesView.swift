@@ -271,7 +271,9 @@ struct SourcesView: View {
         // because `geo` was built inside it, and would otherwise now be caught by nothing.
         key.add(value: inputs.context.geo.userExcludedTowns)
         key.add(value: inputs.context.geo.allowedSeedTowns)
-        return renderMemo.value(fingerprint: key.finalized(), cardKeys: [], now: Date()) {
+        // #4106: and any save into this store, through any context (see `ScopeMemo.value`'s `savesIn`).
+        return renderMemo.value(fingerprint: key.finalized(), cardKeys: [], now: Date(),
+                                savesIn: context.container) {
             #if DEBUG
             QueueRenderCounter.recordSurfaceDerivation(QueueRenderCounter.sourcesSurface)
             #endif
