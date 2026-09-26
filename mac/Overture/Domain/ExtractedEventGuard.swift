@@ -24,7 +24,7 @@ import Foundation
 //
 //   - The agent path applies it at its BOUNDARY, by construction: `ScoutExtractResults.events(for:)`
 //     filters on `isUsable`, so an ingest cannot forget to ask.
-//   - The native path (Carnegie's structured feed) applies it in `ScoutService.runNative`, which filters
+//   - The native path (Carnegie's structured feed) applies it in `ScoutService.readNative`, which filters
 //     `extractor.extract().events` before `applySweep`.
 //
 // Until #987 the native path did not apply it at all: it handed the raw feed straight to `applySweep`

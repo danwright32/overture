@@ -91,10 +91,16 @@ struct TheMatchLoopLeavesTheMainActorTests {
         let source = SourceGuardHelper.source("Overture/Integration/ScoutService.swift")
         #expect(!source.isEmpty, "ScoutService.swift could not be read, so this measured nothing")
 
-        let sweepsOffTheActor = SourceGuardHelper.containsCode("await applySweepOffTheActor(", in: source)
-        #expect(sweepsOffTheActor, Comment(rawValue:
-            "runNative calls applySweep directly again, so the whole match pass is back on the main "
-            + "actor and the window cannot draw while a source is matched (#3884)"))
+        // #4102 split the sweep's one source step into a READ (`readNative`, which awaits the classify pass
+        // off the actor) and a LAND (`landNative`, which hands that pass to `applySweep`). Both halves are
+        // asserted, because either one missing puts the match pass back on the main actor.
+        let classifiesOffTheActor = SourceGuardHelper.containsCode("await ScoutClassify.offTheCallersActor(",
+                                                                   in: source)
+        let landsThePassItWasHanded =
+            SourceGuardHelper.containsCode("preClassified: listed.preClassified", in: source)
+        #expect(classifiesOffTheActor && landsThePassItWasHanded, Comment(rawValue:
+            "the sweep no longer lands the pass it classified off the actor, so the whole match pass is "
+            + "back on the main actor and the window cannot draw while a source is matched (#3884)"))
 
         // The corpus read is LAZY on the pre-classified path. Reading it there anyway would add a whole
         // table fetch, measured at 158.8 ms over 1,238 rows, to the very block this shortens.
