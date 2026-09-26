@@ -252,9 +252,14 @@ for r in new:
     if seconds >= report:
         local = datetime.fromtimestamp(epoch(r["at"])).strftime("%H:%M:%S")
         cost = r.get("passSeconds")
-        print("STALL {} {:.2f}s on {} passes={} passSeconds={} load={}".format(
+        # #4154: the main thread's own CPU across the stall, printed beside the wall clock pass time so a
+        # kept sample can be read against it: little CPU is a thread that was not running, whatever the
+        # sample's frames look like. "?" on a record written before the field shipped, never 0 (L98).
+        cpu = r.get("mainThreadCPUSeconds")
+        print("STALL {} {:.2f}s on {} passes={} passSeconds={} mainThreadCPU={} load={}".format(
             local, seconds, r.get("surface"), r.get("passes"),
             "?" if cost is None else round(cost, 2),
+            "?" if cpu is None else round(cpu, 2),
             round(r.get("loadAverage") or 0, 1)), flush=True)
     if seconds >= keep:
         at = epoch(r["at"])

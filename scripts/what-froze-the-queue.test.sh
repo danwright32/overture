@@ -316,6 +316,53 @@ out="$("${READER}" --log "${WORK}/activity-off.ndjson" 2>&1)"
 assert_contains "a stall with the main thread off the run loop is named apart" "${out}" "OFF the run loop entirely"
 assert_contains "and called a freeze rather than contamination" "${out}" "those are freezes"
 
+# #4154: whether the MAIN THREAD was running while a stall lasted, which is what "no sample says why"
+# needed. Reproduced 2026-09-25 against a clone of the live store: under CPU contention the pass took 5.45s
+# with the main thread's own CPU clock at 23% of it and the kernel reporting it runnable, which is a thread
+# other processes kept off the CPU. The record now carries both readings, and this tool has to name the
+# three states apart and never fold an absent reading into any of them (L98).
+thread_record() { # seconds cpu runnable waiting -> one ndjson line; "none" omits the field
+  local tail=""
+  [ "$2" != "none" ] && tail="${tail},\"mainThreadCPUSeconds\":$2"
+  [ "$3" != "none" ] && tail="${tail},\"mainThreadRunnableSamples\":$3"
+  [ "$4" != "none" ] && tail="${tail},\"mainThreadWaitingSamples\":$4"
+  printf '{"session":"s","sequence":1,"at":"2026-09-22T15:24:00Z","seconds":%s,"surface":"queue","load":"elevated","loadAverage":34.7,"passes":1,"passSeconds":9.53,"asleepSeconds":0.0%s}\n' "$1" "${tail}"
+}
+
+thread_record 18.64 none none none > "${WORK}/thread-none.ndjson"
+out="$("${READER}" --log "${WORK}/thread-none.ndjson" 2>&1)"
+assert_contains "a log with no main thread reading says it is unmeasured" "${out}" "main thread: UNMEASURED"
+
+{ thread_record 18.64 0.41 180 6      # starved: little CPU, runnable
+  thread_record 15.98 0.33 150 4      # starved again, so the two states are different counts
+  thread_record 6.20  0.05 2 58       # blocked: little CPU, waiting
+  thread_record 3.10  2.90 30 1       # computing: CPU close to the duration
+  thread_record 2.40  0.10 0 0        # not running, and no state sample to split it
+} > "${WORK}/thread-mixed.ndjson"
+out="$("${READER}" --log "${WORK}/thread-mixed.ndjson" 2>&1)"
+assert_contains "the starved stalls are named as starved" "${out}" "2 STARVED"
+assert_contains "and what starved means is said beside it" "${out}" "runnable and not scheduled"
+assert_contains "the blocked stall is named apart" "${out}" "1 BLOCKED"
+assert_contains "the computing stall is named apart" "${out}" "1 COMPUTING"
+assert_contains "a stall with no state sample is not guessed at" "${out}" "1 not running unsplit"
+assert_contains "the worst starved stall is quoted with its own CPU" "${out}" "18.64s with 0.41s on the CPU"
+assert_contains "the table carries the main thread's share of each stall" "${out}" "asleep     cpu  surface"
+assert_contains "and the starved stall's share is printed in it" "${out}" "      2%"
+
+# A count that is not a whole number (a JSON true is an int to Python) is not a sample, so a stall carrying
+# one is not split into starved or blocked on it.
+printf '{"session":"s","sequence":1,"at":"2026-09-22T15:24:00Z","seconds":9.0,"surface":"queue","load":"elevated","loadAverage":34.7,"passes":1,"passSeconds":1.0,"asleepSeconds":0.0,"mainThreadCPUSeconds":0.2,"mainThreadRunnableSamples":true,"mainThreadWaitingSamples":false}\n' \
+  > "${WORK}/thread-bool.ndjson"
+out="$("${READER}" --log "${WORK}/thread-bool.ndjson" 2>&1)"
+assert_contains "a boolean sample count is not read as a count" "${out}" "1 not running unsplit"
+assert_not_contains "and the stall is not called starved on it" "${out}" "STARVED"
+
+# A reading at the CPU without the state counts, or the reverse, is not a verdict either way.
+thread_record 5.00 none 40 2 > "${WORK}/thread-half.ndjson"
+out="$("${READER}" --log "${WORK}/thread-half.ndjson" 2>&1)"
+assert_contains "state counts without a CPU reading are unmeasured, not starved" "${out}" "main thread: UNMEASURED"
+assert_not_contains "and nothing is called starved" "${out}" "STARVED"
+
 # #4188: the shared reader is refused BY NAME when it is missing. Without the check Python dies with a
 # traceback and exit 1, which a caller of this script reads as a result rather than as nothing measured.
 mkdir -p "${WORK}/nolib/scripts"

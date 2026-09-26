@@ -226,6 +226,35 @@ enum RunLoopActivity: String, Codable, CaseIterable, Equatable, Sendable {
     }
 }
 
+// #4154: what the kernel says the main thread is doing, in the only three states a stall reader acts on.
+// RUNNABLE is Mach's `TH_STATE_RUNNING`, which covers both on a core and queued for one: that is the point,
+// since a queued thread with no CPU time is the starved shape. WAITING covers `TH_STATE_WAITING` and
+// `TH_STATE_UNINTERRUPTIBLE`. Anything else (stopped, halted) is OTHER and counted in neither.
+enum MainThreadRunState: Sendable, Equatable {
+    case runnable, waiting, other
+}
+
+// #4154: one reading of the main thread: its CPU clock and its run state, taken together.
+struct MainThreadReading: Sendable, Equatable {
+    let cpuSeconds: Double
+    let state: MainThreadRunState
+}
+
+// #4154: the run state samples of one stall, counted by state. Pure, so the counting rule is exercised
+// rather than watched.
+struct MainThreadStateTally: Sendable, Equatable {
+    var runnable = 0
+    var waiting = 0
+
+    mutating func observe(_ state: MainThreadRunState) {
+        switch state {
+        case .runnable: runnable += 1
+        case .waiting: waiting += 1
+        case .other: break
+        }
+    }
+}
+
 struct StallRecord: Codable, Equatable, Sendable {
     // The process this was recorded in, so a retry or a crash mid-write cannot double count: a record is
     // identified by its session and its sequence, and both are assigned by the watchdog.
@@ -367,6 +396,33 @@ struct StallRecord: Codable, Equatable, Sendable {
     // overlap a menu. Nothing here excludes either (L116, L11).
     let runLoopActivity: RunLoopActivity
 
+    // #4154: how much CPU the MAIN THREAD itself consumed while this stall lasted, or nothing where its
+    // clock could not be read at both ends.
+    //
+    // WHAT IT SEPARATES. A stall whose main thread spent close to its whole duration on the CPU was
+    // COMPUTING. One whose main thread spent little was NOT RUNNING, and `passSeconds` cannot say which:
+    // a pass is timed on the wall clock, so a 9.53s pass (2026-09-22, load 34.7) reads the same whether
+    // the code did 9.53s of work or 0.25s of work spread over 9.53s of waiting for a core. #4154
+    // reproduced the second against a clone of the live store: the pass took 5.45s with the main thread's
+    // own clock at 23% of it.
+    //
+    // THREE VALUES, the same as every field beside it: `nil` is UNMEASURED, `0` means the main thread ran
+    // nothing during the stall, `N` is the CPU seconds. Absent on every record written before it shipped.
+    let mainThreadCPUSeconds: Double?
+
+    // #4154: the kernel's RUN STATE for the main thread, sampled at the ping's post and on every skipped
+    // ping while it was outstanding (#4114's sampling point), counted by state.
+    //
+    // WHY A SECOND READING. Little CPU says the thread was not running and not why. RUNNABLE while not
+    // running is a thread other processes kept off the CPU (STARVED); WAITING is a thread blocked on a
+    // lock, a read or a semaphore (BLOCKED). Those have different remedies and only this tells them apart.
+    //
+    // Two counts rather than a verdict, so a reader can re-judge the line (L316). `nil` on both is
+    // UNMEASURED; a measured stall always carries both, and a sample in neither state (stopped, halted)
+    // is counted in neither.
+    let mainThreadRunnableSamples: Int?
+    let mainThreadWaitingSamples: Int?
+
     // The whole identity, as one string, because a reader that remembers what it has said has to remember
     // BOTH halves: the sequence restarts at 1 in every process, so it is not an identity on its own.
     var identity: String { "\(session)#\(sequence)" }
@@ -375,6 +431,8 @@ struct StallRecord: Codable, Equatable, Sendable {
          load: MachineLoad, loadAverage: Double?, passes: Int?, rootDraws: Int? = nil,
          passSeconds: Double? = nil, windows: WindowPresence = .unknown,
          asleepSeconds: Double? = nil, runLoopActivity: RunLoopActivity = .notRecorded,
+         mainThreadCPUSeconds: Double? = nil, mainThreadRunnableSamples: Int? = nil,
+         mainThreadWaitingSamples: Int? = nil,
          promotedFromOlderWindow: Bool? = nil) {
         self.session = session
         self.sequence = sequence
@@ -394,6 +452,9 @@ struct StallRecord: Codable, Equatable, Sendable {
         self.windows = windows
         self.asleepSeconds = asleepSeconds
         self.runLoopActivity = runLoopActivity
+        self.mainThreadCPUSeconds = mainThreadCPUSeconds
+        self.mainThreadRunnableSamples = mainThreadRunnableSamples
+        self.mainThreadWaitingSamples = mainThreadWaitingSamples
         self.promotedFromOlderWindow = promotedFromOlderWindow
     }
 
@@ -428,6 +489,10 @@ struct StallRecord: Codable, Equatable, Sendable {
         // #4153: absent on every record written before it shipped, which is the whole of the "before" half
         // this milestone compares against, so absence is `nil` and never `0`.
         asleepSeconds = try c.decodeIfPresent(Double.self, forKey: .asleepSeconds)
+        // #4154: absent on every record written before it shipped, so absence is `nil` and never `0`.
+        mainThreadCPUSeconds = try c.decodeIfPresent(Double.self, forKey: .mainThreadCPUSeconds)
+        mainThreadRunnableSamples = try c.decodeIfPresent(Int.self, forKey: .mainThreadRunnableSamples)
+        mainThreadWaitingSamples = try c.decodeIfPresent(Int.self, forKey: .mainThreadWaitingSamples)
         // #4122: absent on a record nobody promoted, which is almost all of them.
         promotedFromOlderWindow = try c.decodeIfPresent(Bool.self, forKey: .promotedFromOlderWindow)
         // Decoded as a STRING and mapped, never as the enum directly. `decodeIfPresent` on an enum THROWS on
@@ -502,6 +567,17 @@ enum StallLog {
         let start = before ?? 0
         guard after >= start else { return nil }
         return after - start
+    }
+
+    // #4154: how much CPU the main thread consumed between two readings of its own clock.
+    //
+    // ITS OWN FUNCTION, on `sleepSpanned`'s reasoning, and its absent case is STRICTER than theirs. Those
+    // count from nothing when the first reading is missing, because their totals start at zero with the
+    // process. A thread's CPU clock does not: a reading at the far end alone is the thread's whole
+    // lifetime, and recording that as one stall would be a large number that measured nothing (L11).
+    static func cpuSpanned(from before: Double?, to after: Double?) -> Double? {
+        guard let before, let after, after >= before else { return nil }
+        return after - before
     }
 
     // How often the watchdog pings, and therefore what it can see.

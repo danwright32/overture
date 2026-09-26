@@ -63,8 +63,9 @@ path, archive_path = sys.argv[1], sys.argv[2]
 # No bytecode cache: importing would otherwise leave a __pycache__ inside the checkout on every run.
 sys.dont_write_bytecode = True
 sys.path.insert(0, sys.argv[3])
-from freeze_records import (FREEZE, NOT_A_FREEZE, UNMEASURED, freeze_verdict, load, menu_idle, plural,
-                            run_loop_measured, sleep_measured, slept)
+from freeze_records import (BLOCKED, COMPUTING, FREEZE, NOT_A_FREEZE, NOT_RUNNING_UNSPLIT, STARVED, UNMEASURED,
+                            freeze_verdict, load, main_thread_verdict, menu_idle, plural, run_loop_measured,
+                            sleep_measured, slept)
 
 # #4122: a compaction note is not a stall. Before #4188 this reader counted it as one, in a session of
 # its own named "?", so every total here was one higher than the stalls it described.
@@ -211,6 +212,16 @@ if _modern_not:
     _left = len(modern) - _modern_not
     print(f"      without the {_modern_not} not freezes at every load: {_left} stall(s), "
           f"{_left / (modern_watched / 3600):.1f} per hour")
+# #4154: what the main thread was doing across those stalls, at EVERY load, because starvation is a
+# property of a contended machine and a baseline-only count would hide the population it describes. A day
+# of stalls the main thread spent runnable and unscheduled is not a day the code got slower, and before
+# this field nothing in the file could tell the two apart. Absent is its own count (L98).
+_threads = [main_thread_verdict(r) for r in modern]
+print(f"    main thread, every load: {_threads.count(COMPUTING)} computing, {_threads.count(STARVED)} starved, "
+      f"{_threads.count(BLOCKED)} blocked, {_threads.count(NOT_RUNNING_UNSPLIT)} not running unsplit, "
+      f"{_threads.count(UNMEASURED)} unmeasured")
+if _threads.count(STARVED):
+    print("      starved is runnable and not scheduled: another process had the CPU (#4154).")
 print()
 print("  Read as a RATE, never as a proportion over the bar: the watchdog's storage floor IS the")
 print("  bar, so 100 percent of these are over it by construction and that says nothing (L178).")

@@ -164,6 +164,26 @@ final class MainThreadWatchdog: @unchecked Sendable {
 
     let runLoopActivity = ActivityBox()
 
+    // #4154: the main thread's run state samples across one stall, the sibling of `ActivityBox` above and
+    // reset and sampled at exactly the same points. `nil` until a reading succeeds, so a stall during
+    // which the kernel refused every reading records UNMEASURED rather than zero samples (L98).
+    final class ThreadStateBox: @unchecked Sendable {
+        private let lock = NSLock()
+        private var value: MainThreadStateTally?
+        func reset() { lock.withLock { value = nil } }
+        func observe(_ reading: MainThreadReading?) {
+            guard let reading else { return }
+            lock.withLock {
+                var next = value ?? MainThreadStateTally()
+                next.observe(reading.state)
+                value = next
+            }
+        }
+        var current: MainThreadStateTally? { lock.withLock { value } }
+    }
+
+    let mainThreadStates = ThreadStateBox()
+
     private let queue = DispatchQueue(label: "com.danwright.overture.main-thread-watchdog", qos: .utility)
     private let interval: TimeInterval
     private let now: @Sendable () -> Date
@@ -175,6 +195,8 @@ final class MainThreadWatchdog: @unchecked Sendable {
     private let observedSleep: @Sendable (Date) -> Double
     // #4114: the MAIN run loop's current mode, readable from this queue while the main thread is wedged.
     private let mainRunLoopMode: @Sendable () -> String?
+    // #4154: the main thread's CPU clock and run state, readable from this queue while it is wedged.
+    private let mainThreadReading: @Sendable () -> MainThreadReading?
 
     private var timer: DispatchSourceTimer?
     private var sequence = 0
@@ -197,6 +219,7 @@ final class MainThreadWatchdog: @unchecked Sendable {
          loadReading: @escaping @Sendable () -> (MachineLoad, Double?) = MachineLoadReading.take,
          observedSleep: @escaping @Sendable (Date) -> Double = MainThreadWatchdog.observedSleep,
          mainRunLoopMode: @escaping @Sendable () -> String? = MainThreadWatchdog.mainRunLoopMode,
+         mainThreadReading: @escaping @Sendable () -> MainThreadReading? = MainThreadWatchdog.mainThreadReading,
          cap: Int = StallLog.cap,
          record: @escaping @Sendable (StallRecord) -> Void) {
         self.session = session
@@ -205,6 +228,7 @@ final class MainThreadWatchdog: @unchecked Sendable {
         self.loadReading = loadReading
         self.observedSleep = observedSleep
         self.mainRunLoopMode = mainRunLoopMode
+        self.mainThreadReading = mainThreadReading
         self.cap = cap
         self.record = record
     }
@@ -245,6 +269,36 @@ final class MainThreadWatchdog: @unchecked Sendable {
     // gives that its own case rather than folding it into the absent one.
     static let mainRunLoopMode: @Sendable () -> String? = {
         CFRunLoopCopyCurrentMode(CFRunLoopGetMain())?.rawValue as String?
+    }
+
+    // #4154: the MAIN thread's own CPU clock and kernel run state, asked from whatever thread is asking.
+    //
+    // Named and shipped as a value rather than written inline as the default, on `observedSleep`'s
+    // precedent, so the wiring is one symbol a test can point at and a guard can name.
+    //
+    // `thread_info` on another thread's port is a legal question from any thread, which is what lets it be
+    // asked while the main thread is wedged. The port is looked up per call rather than cached: it is a
+    // name lookup of a few microseconds, and a cached port would be one more piece of state to get wrong.
+    // `nil` when the kernel refuses, which the record carries as unmeasured rather than as zero.
+    static let mainThreadReading: @Sendable () -> MainThreadReading? = {
+        let port = pthread_mach_thread_np(overtureMainPthread())
+        var info = thread_basic_info()
+        var count = mach_msg_type_number_t(MemoryLayout<thread_basic_info_data_t>.size / MemoryLayout<integer_t>.size)
+        let result = withUnsafeMutablePointer(to: &info) {
+            $0.withMemoryRebound(to: integer_t.self, capacity: Int(count)) {
+                thread_info(port, thread_flavor_t(THREAD_BASIC_INFO), $0, &count)
+            }
+        }
+        guard result == KERN_SUCCESS else { return nil }
+        let cpu = Double(info.user_time.seconds) + Double(info.user_time.microseconds) / 1_000_000
+            + Double(info.system_time.seconds) + Double(info.system_time.microseconds) / 1_000_000
+        let state: MainThreadRunState
+        switch info.run_state {
+        case TH_STATE_RUNNING: state = .runnable
+        case TH_STATE_WAITING, TH_STATE_UNINTERRUPTIBLE: state = .waiting
+        default: state = .other
+        }
+        return MainThreadReading(cpuSeconds: cpu, state: state)
     }
 
     var snapshot: StallLog.Kept { keptLock.withLock { kept } }
@@ -300,6 +354,9 @@ final class MainThreadWatchdog: @unchecked Sendable {
         // record. At the shipped 0.1s interval a 1.6s stall gives about sixteen samples.
         guard claimed else {
             runLoopActivity.observe(RunLoopActivity(modeName: mainRunLoopMode()))
+            // #4154: the same sampling point, for the same reason: this is the moment that is awake
+            // during a freeze with nothing else to do.
+            mainThreadStates.observe(mainThreadReading())
             return
         }
 
@@ -308,6 +365,11 @@ final class MainThreadWatchdog: @unchecked Sendable {
         // skipped ping still carries a reading rather than nothing.
         runLoopActivity.reset()
         runLoopActivity.observe(RunLoopActivity(modeName: mainRunLoopMode()))
+        // #4154: reset and sampled with the run loop above. The post reading also supplies the CPU clock
+        // at this end, so the two come from ONE call and cannot describe different instants.
+        mainThreadStates.reset()
+        let threadAtPost = mainThreadReading()
+        mainThreadStates.observe(threadAtPost)
 
         let posted = now()
         // #3760: read BEFORE the ping is posted, and again below when it finally runs, which is the
@@ -333,6 +395,8 @@ final class MainThreadWatchdog: @unchecked Sendable {
             // notification has not been handled yet, so this does not depend on that notification having
             // landed first.
             let sleptAtRun = self.observedSleep(ran)
+            // #4154: the CPU clock at the instant the main thread became free, taken on it.
+            let cpuAtRun = self.mainThreadReading()?.cpuSeconds
             let delay = ran.timeIntervalSince(posted) - self.interval
             // Back on the watchdog's queue to judge and write, because everything after this point must
             // be able to happen while the main thread is wedged.
@@ -351,14 +415,18 @@ final class MainThreadWatchdog: @unchecked Sendable {
                                      // #4114: read AFTER the ping has run, so every sample taken while
                                      // it was outstanding is folded in. Read on this queue, which is
                                      // where they were written.
-                                     runLoop: self.runLoopActivity.current)
+                                     runLoop: self.runLoopActivity.current,
+                                     mainThreadCPU: StallLog.cpuSpanned(from: threadAtPost?.cpuSeconds,
+                                                                       to: cpuAtRun),
+                                     mainThreadStates: self.mainThreadStates.current)
             }
         }
     }
 
     private func recordIfStalled(_ delay: TimeInterval, sequence: Int, at: Date, passes: Int?,
                                  rootDraws: Int?, passSeconds: Double?, asleep: Double?,
-                                 runLoop: RunLoopActivity) {
+                                 runLoop: RunLoopActivity, mainThreadCPU: Double?,
+                                 mainThreadStates: MainThreadStateTally?) {
         // A ping that ran EARLY or on time is not a stall. Clamped rather than recorded as a negative,
         // which would be a measurement of the timer's own jitter dressed as a freeze.
         guard delay > 0 else { return }
@@ -381,7 +449,12 @@ final class MainThreadWatchdog: @unchecked Sendable {
                                 // folded from every sample taken across it. Recorded beside the duration
                                 // and never subtracted from it, for the reason above: a freeze that
                                 // happened to overlap a menu is still a freeze (L116).
-                                runLoopActivity: runLoop)
+                                runLoopActivity: runLoop,
+                                // #4154: whether the main thread was running, starved or blocked while
+                                // this stall lasted. Recorded beside `passSeconds`, never divided into it.
+                                mainThreadCPUSeconds: mainThreadCPU,
+                                mainThreadRunnableSamples: mainThreadStates?.runnable,
+                                mainThreadWaitingSamples: mainThreadStates?.waiting)
         // #3812: the decision is the PURE rule's, taken whole. This used to compare the kept set's count
         // before and after, which tied "what is held in memory" to "what is written to the file" and made
         // the session stop recording at its 200th stall.
@@ -431,3 +504,9 @@ enum MachineLoadReading {
         return oneMinute > cores ? .elevated : .baseline
     }
 }
+
+// #4154: libsystem_pthread's `pthread_main_thread_np`, which the Darwin module does not import into Swift.
+// It is exported and stable, and it answers from ANY thread, which is the property the watchdog needs: the
+// reading is taken while the main thread is wedged, so it cannot be asked for its own identity.
+@_silgen_name("pthread_main_thread_np")
+private func overtureMainPthread() -> pthread_t
