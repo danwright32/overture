@@ -5,7 +5,7 @@ import SwiftData
 //
 // WHY A MEMO NEEDS IT. `ScopeMemo` notices an edit in place through observation tracking, and that only
 // sees a write made to the very model objects the derivation read. A write saved through a DIFFERENT
-// context (a background run, a reconcile, a test's own context) reaches the main context as a merge and
+// context (in this app only ever a test's own; see below) reaches the main context as a merge and
 // a refetch, which can leave every object the queue read untouched and every identity where it was. So
 // the fingerprint matched, no observed field fired, and the memo served the answer from before the
 // save: measured, `FeltWaitCostTests` wrote through a second context and the queue never rebuilt at all
@@ -27,11 +27,16 @@ import SwiftData
 // rows that did not change. One write breaks that reasoning: one saved through ANOTHER context before the
 // build, whose merge reaches the main context after it. The main context's rows then change with no save
 // since the build. So for every save that did not come through a store's main context, the values of every
-// row it inserted or updated are read HERE, on the saving thread, from the saving context, and kept, and a
-// memo compares the main context's copy of each row with them (Dan's call, 2026-09-25 in chat: compare
-// values, with supported API only). In the running app every save is the main context's, so this records
-// nothing there today; it is the net under a background context (#4250), and under every test that writes
-// through a second one.
+// row it updated are read HERE, on the saving thread, from the saving context, and kept, and a memo
+// compares the main context's copy of each row with them (Dan's call, 2026-09-25 in chat: compare values,
+// with supported API only).
+//
+// A SECOND CONTEXT MAY ONLY READ. Measured by #4102's agent on 2026-09-25: a second context that fetched a
+// row and saved an edit to one field, after the main context had saved another field on the same row,
+// wrote the whole object back and reverted the main context's field. So in the running app every save is
+// the main context's and this records nothing; `OnlyTheMainContextWritesGuardTests` keeps it that way
+// (`StoreRows.readInBackground` reads through one and never saves). What is recorded here is the net under
+// a violation, and what every test that writes through a second context exercises.
 final class StoreSaveCount: @unchecked Sendable {
     static let shared = StoreSaveCount()
 

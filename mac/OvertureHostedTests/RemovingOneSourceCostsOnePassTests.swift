@@ -379,11 +379,11 @@ struct RemovingOneSourceCostsOnePassTests {
     // with the row refresh, so it did not change the count. The queries coalesce by table: holding all
     // six of `RootView`'s queries here costs the same three as holding one.
     //
-    // WHY 2 AND 3 REMAIN. Telling a refresh from an edit needs the VALUES, and a value snapshot of what
-    // the pass reads was measured at 3.95 ms against a 6.21 ms derivation (`SourcesSheetCostTests`,
-    // 2026-09-08) and paid on every body evaluation, which is most of the cost it would save and a
-    // regression on every scroll. #3656 also ruled out hashing it, because a collision draws a number the
-    // store disagrees with. So they are explained here rather than removed.
+    // WHY 2 AND 3 REMAIN, and since #4252 it is a measured choice rather than a limit. `ScopeMemo` can now
+    // serve a refetch that changed nothing (`ScopeMemo.Refetch`), and the queue and the Archive do. This
+    // sheet deliberately does not: serving means re-registering observation on every stored property of
+    // every row, 123 ms over the live store, and deriving this sheet again costs 10 ms (2026-09-25,
+    // `ScopeValueComparisonCostTests`, which fails if that ever turns round).
     //
     // WHAT THIS SAYS ABOUT THE LIVE EIGHT. The live `passes=8` counts BODY EVALUATIONS, and it was taken
     // before the memo landed, when every evaluation derived. Menu and hover state on a real press add

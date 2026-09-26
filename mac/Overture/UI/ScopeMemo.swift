@@ -148,7 +148,8 @@ final class ScopeMemo<Value> {
     /// merge and a refetch, which can leave every identity where it was and fire no observed field, so
     /// the four parts above all hold still and the memo served the answer from before the save: measured
     /// on the queue, where `FeltWaitCostTests` writes through a second context and the memoised queue
-    /// never rebuilt (L40). So any save into the store a derivation reads makes its answer stale. A
+    /// never rebuilt (L40). (App code never writes through a second context, which reverts concurrent
+    /// edits, #4252; the save count still covers every context, since a test does.) So any save into the store a derivation reads makes its answer stale. A
     /// derivation that reads no store, or whose fingerprint already hashes the CONTENT it reads, passes
     /// nil and says why at the call site.
     func value(fingerprint: Int,
