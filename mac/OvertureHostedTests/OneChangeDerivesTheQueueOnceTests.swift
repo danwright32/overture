@@ -26,10 +26,11 @@ import Observation
 //
 // WHAT THE FIX DOES, then. `QueueView` derives through a `ScopeMemo`, so an evaluation that changes
 // nothing the pass reads is served the answer it already has (#4106), which is
-// `aRedrawWithNoDataChangeDerivesNothing` below. And since #4252 the memo compares the VALUES of every row
-// before it rebuilds on an observed change or a save, so the refetch's second notification finds nothing
-// changed and is served too: the three saved-change tests are held at ONE. Dan's call, 2026-09-25 in
-// chat: tell the two apart by comparing values, with supported API only.
+// `aRedrawWithNoDataChangeDerivesNothing` below. And since #4252 an observed change with no save since the
+// build, nothing unsaved and no other context's save behind it is served as the refetch it is, with
+// observation re-armed, so the three saved-change tests are held at ONE. Dan's call, 2026-09-25 in chat,
+// was to tell the two apart by comparing values with supported API only; comparing every value was
+// measured at more than the pass it saved, so the memo reads those three supported facts instead.
 //
 // A COUNT, NOT A DURATION. A count is a statement about this code; a duration is a statement about the
 // machine, which is slowest exactly when it is being judged (L63, L290).

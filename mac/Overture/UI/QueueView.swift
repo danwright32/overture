@@ -486,8 +486,10 @@ struct QueueView: View {
         // THE SAVED CHANGE'S SECOND DERIVATION, and how #4252 removed it. With the queries outside, the
         // next thing to mark it stale is the refetched ROWS: SwiftData calls `willSet` on the fields of
         // every row it refetches after a save, changed or not, and observation alone cannot tell that from
-        // an edit. `ScopeMemo` now compares the VALUES of every row this key was handed before it rebuilds,
-        // so the refetch is served the answer the change already derived (`ScopeValues.swift`).
+        // an edit. `ScopeMemo` now recognises it by what supported API states for nothing: no save since
+        // the build, nothing unsaved in the main context, and no other context has ever saved into the
+        // store. Then the refetch is served the answer the change already derived and observation is
+        // re-armed on every stored property (`ScopeMemo.Refetch`, `ScopeObservation.swift`).
         let orgAnswerRows = orgAnswers
         let inquiryRows = inquiries
         let sources = watchedSources

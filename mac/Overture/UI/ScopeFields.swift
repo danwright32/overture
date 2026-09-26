@@ -1,11 +1,11 @@
 import Foundation
 import SwiftData
 
-// #4252: every stored property of every model, as `ScopeMemo` compares it. See `ScopeValues.swift`.
+// #4252: every stored property of every model, as `ScopeMemo` re-arms observation on it. See `ScopeObservation.swift`.
 //
 // One line per property, in the schema's own spelling. `ScopeFieldsMatchTheSchemaTests` derives the
 // expected list from `AppSchema.schema` and fails on any property missing here or named here that the
-// schema does not hold, so a property added to a model cannot quietly go uncompared (L41, L96).
+// schema does not hold, so a property added to a model cannot quietly go unwatched (L41, L96).
 
 extension AllowedSeedTown: ScopeObserved {
     func scopeAccess<V>(_ keyPath: KeyPath<AllowedSeedTown, V>) { access(keyPath: keyPath) }

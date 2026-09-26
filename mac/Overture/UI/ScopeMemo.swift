@@ -269,9 +269,9 @@ final class ScopeMemo<Value> {
 /// `ScopeMemoInputsAreCompleteGuardTests` can see it (L96).
 struct ScopeFingerprint {
     private var hasher = Hasher()
-    // #4252: the rows themselves, so the memo can compare their values when observation or a save says
-    // they may have changed. Kept by the same `add` that hashes their identities, so a collection cannot
-    // be keyed without also being compared.
+    // #4252: the rows themselves, so a memo that serves a refetch can re-arm observation on every one of
+    // them. Kept by the same `add` that hashes their identities, so a collection cannot be keyed without
+    // also being re-armed.
     private(set) var sources = ScopeRows()
 
     init() {}
@@ -297,11 +297,11 @@ struct ScopeFingerprint {
 /// A Bool that may be set from any thread, because `withObservationTracking`'s onChange runs wherever
 /// the mutation happened.
 ///
-/// #4252: GENERATIONS, because the memo now arms tracking twice for one evaluation that goes on to build:
-/// once for the value comparison and once for the build. Tracking cannot be cancelled with supported API,
-/// so the comparison's tracking stays registered after the build replaces it, and without this a later
-/// change to a property only the comparison read would mark the build's answer stale. Each arming clears
-/// the flag and hands back a generation; only the tracking armed last may set it.
+/// #4252: GENERATIONS, because a memo that served a refetch has tracking armed on EVERY stored property,
+/// and when a later build replaces it, that tracking cannot be cancelled with supported API. Without this,
+/// a later change to a property only the served re-arm watched (one the build never reads) would mark the
+/// build's answer stale. Each arming clears the flag and hands back a generation; only the tracking armed
+/// last may set it.
 final class StaleFlag: @unchecked Sendable {
     private let lock = NSLock()
     private var flag = true
