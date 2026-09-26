@@ -352,10 +352,7 @@ struct QueueEnginePhase0ProbeTests {
         return out
     }
 
-    private func scratchDefaults() -> UserDefaults {
-        let name = "phase0-\(UUID().uuidString)"
-        return UserDefaults(suiteName: name)!
-    }
+    private func scratchDefaults() -> UserDefaults { ScratchDefaults.make("phase0") }
 
     private func settle() async { try? await Task.sleep(for: .milliseconds(150)) }
 
