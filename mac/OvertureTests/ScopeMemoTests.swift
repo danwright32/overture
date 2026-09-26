@@ -36,7 +36,7 @@ struct ScopeMemoTests {
     /// A fixed instant, so nothing here is measuring the clock (L130, L290).
     private let t0 = Date(timeIntervalSince1970: 1_800_000_000)
 
-    private static func fingerprint<Element: AnyObject>(_ items: [Element]) -> Int {
+    private static func fingerprint<Element: ScopeObserved>(_ items: [Element]) -> Int {
         var f = ScopeFingerprint()
         f.add(items)
         return f.finalized()

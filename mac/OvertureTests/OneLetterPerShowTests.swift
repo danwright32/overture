@@ -88,6 +88,10 @@ struct OneLetterPerShowTests {
                     retainedDeclaration = "\(file.name):\(line)"
                     continue
                 }
+                // #4252: the list of every stored property a served memo re-arms observation on, held to
+                // the schema, which must name the retained column because the schema still stores it. It
+                // registers observation and never reads or writes the letter.
+                if file.name == "ScopeFields.swift", trimmed == ".init(\\.overrideBody)," { continue }
                 found.append("\(file.name):\(line)  \(trimmed)")
             }
         }

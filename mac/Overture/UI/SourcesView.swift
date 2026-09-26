@@ -272,8 +272,11 @@ struct SourcesView: View {
         key.add(value: inputs.context.geo.userExcludedTowns)
         key.add(value: inputs.context.geo.allowedSeedTowns)
         // #4106: and any save into this store, through any context (see `ScopeMemo.value`'s `savesIn`).
-        return renderMemo.value(fingerprint: key.finalized(), cardKeys: [], now: Date(),
-                                savesIn: context.container) {
+        return renderMemo.value(fingerprint: key, cardKeys: [], now: Date(),
+                                savesIn: context.container,
+                                // #4252: 10 ms to derive on the live store (74 sources, 2026-09-25),
+                                // far cheaper than the 123 ms re-arming a served refetch would cost.
+                                onRefetch: .rebuild) {
             #if DEBUG
             QueueRenderCounter.recordSurfaceDerivation(QueueRenderCounter.sourcesSurface)
             #endif
