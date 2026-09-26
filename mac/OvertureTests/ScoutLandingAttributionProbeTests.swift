@@ -178,7 +178,7 @@ private struct RootQueriesStandIn: View {
 }
 
 @MainActor
-@Suite("Where the main thread goes while a scout lands (#4275)", .serialized)
+@Suite("Where the main thread goes while a scout lands (#4275)", .serialized, .sharesTheRenderCounter)
 struct ScoutLandingAttributionProbeTests {
 
     private let sandboxes = TemporarySandboxes()
