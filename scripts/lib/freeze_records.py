@@ -16,6 +16,7 @@
 # freeze that overlapped a sleep or a menu (L116).
 
 import json
+import math
 import os
 
 # The three answers `freeze_verdict` gives. Spelled once, here, so a reader cannot compare against a typo.
@@ -109,3 +110,69 @@ def freeze_verdict(r):
     if sleep_measured(r) and run_loop_measured(r):
         return FREEZE
     return UNMEASURED
+
+
+# #4154: whether the MAIN THREAD was running while a stall lasted.
+#
+# A pass is timed on the wall clock, so `passSeconds` reads the same whether the code did the work or waited
+# for a core. Reproduced 2026-09-25 against a clone of the live store: under CPU contention a pass took 5.45s
+# with the main thread's own CPU clock at 23% of it and the kernel reporting it runnable. These readings are
+# what let a record say so on its own.
+#
+# FIVE ANSWERS. The three states, one for a thread that was not running but carries no state sample to split
+# it, and unmeasured. Never folded: an absent reading is not a computing thread (L98, L11).
+COMPUTING = "computing"
+STARVED = "starved"
+BLOCKED = "blocked"
+NOT_RUNNING_UNSPLIT = "not running unsplit"
+MAIN_THREAD_STATES = (COMPUTING, STARVED, BLOCKED, NOT_RUNNING_UNSPLIT, UNMEASURED)
+
+# The share of a stall's awake time the main thread must have spent on the CPU to count as COMPUTING. Chosen
+# between the two readings #4154 measured on the same pass: 0.92 on a quiet Mac and 0.23 to 0.41 under
+# contention, so a line at one half is far from both rather than tuned to either (L172).
+RUNNING_SHARE = 0.5
+
+
+def _number(r, key):
+    """A finite number, or None. A bool is an int to Python and NaN compares false against every line, so
+    both would land a record silently on one side of a verdict (L50)."""
+    v = r.get(key)
+    if isinstance(v, bool) or not isinstance(v, (int, float)):
+        return None
+    return v if math.isfinite(v) else None
+
+
+def _count(r, key):
+    """A whole count, or None, on `_number`'s rule: `true` is not one sample."""
+    v = r.get(key)
+    return v if isinstance(v, int) and not isinstance(v, bool) else None
+
+
+def main_thread_measured(r):
+    return _number(r, "mainThreadCPUSeconds") is not None
+
+
+def main_thread_share(r):
+    """CPU seconds over the stall's AWAKE seconds, or None. A sleep is taken out of the denominator, because a
+    thread cannot run while the Mac does not, and #4153 already names those."""
+    cpu = _number(r, "mainThreadCPUSeconds")
+    seconds = _number(r, "seconds")
+    if cpu is None or seconds is None:
+        return None
+    asleep = _number(r, "asleepSeconds") or 0
+    awake = seconds - asleep
+    return cpu / awake if awake > 0 else None
+
+
+def main_thread_verdict(r):
+    """One of MAIN_THREAD_STATES."""
+    share = main_thread_share(r)
+    if share is None:
+        return UNMEASURED
+    if share >= RUNNING_SHARE:
+        return COMPUTING
+    runnable = _count(r, "mainThreadRunnableSamples")
+    waiting = _count(r, "mainThreadWaitingSamples")
+    if runnable is None or waiting is None or runnable + waiting == 0:
+        return NOT_RUNNING_UNSPLIT
+    return STARVED if runnable >= waiting else BLOCKED
