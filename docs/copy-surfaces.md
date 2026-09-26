@@ -346,7 +346,7 @@ A sentence written as a constant is read here at the file that RENDERS it, not o
 `UI/PrepSelectionSheet.swift`
     Sheet
 `UI/ProspectRowView.swift`
-    Popover, Sheet
+    Sheet
 `UI/QueueSheets.swift`
     Sheet
 `UI/QueueView.swift`
