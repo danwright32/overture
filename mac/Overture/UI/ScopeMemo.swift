@@ -96,13 +96,6 @@ final class ScopeMemo<Value> {
     private var builtAt: Date?
     // #4106: the store's save count when the answer was built. See `value(...)`'s `savesIn`.
     private var savesAtBuild: Int?
-    // #4252: the foreign writes this memo has accounted for, and the rows among them its last build had not
-    // yet seen merged into the main context. See `StoreSaveCount.ForeignWrite`.
-    private var foreignCheckedThrough = 0
-    private var pendingForeign: [StoreSaveCount.ForeignRow] = []
-    // True when foreign writes were dropped before this memo could check them, so a refetch cannot be told
-    // from their merge until the next build re-reads the log.
-    private var foreignUnknown = false
     private let saves: StoreSaveCount
 
     /// `saves` is injected so a test can drive the save count with notifications of its own rather than
@@ -184,12 +177,13 @@ final class ScopeMemo<Value> {
     /// saved change (#4106). With `.serveWhenNothingChanged`, an answer marked stale by observation alone is
     /// served when the identities, card keys and clock are where they were, NO save into the store has
     /// happened since the build (a change made and saved after the build moves the save count, which still
-    /// rebuilds), the main context holds nothing unsaved (a change made and not saved), and no write saved
-    /// through another context has since been merged in (compared by value, `StoreSaveCount`). Those are
-    /// every way a row's value can change, so what is left is the refetch.
+    /// rebuilds), the main context holds nothing unsaved (a change made and not saved), and the store has
+    /// never taken a save through another context (whose merge can land after a build with no save behind
+    /// it; `StoreSaveCount.hasForeignSaves`). Those are every way a row's value can change, so what is left
+    /// is the refetch.
     ///
     /// WHAT KEEPS IT HONEST. The refetch spent the tracking the build armed, so serving re-arms it on every
-    /// stored property of every row (`ScopeValueSources.armAll`): a superset of what the build read, so no
+    /// stored property of every row (`ScopeRows.armAll`): a superset of what the build read, so no
     /// later edit is missed, and inside a view's body it keeps the body subscribed too.
     ///
     /// WHAT IT ASSUMES, stated because nothing can check it: the build reads model rows and the values
@@ -206,26 +200,20 @@ final class ScopeMemo<Value> {
         let main = store.mainContext
         let wanted = Key(fingerprint: fingerprint.finalized(), cardKeys: cardKeys)
         let savesNow = saves.value(for: store)
-        if let current = held(wanted, now: now, staleAfter: staleAfter) {
-            // A row a foreign write changed, merged in since the build: a change, whatever else holds still.
-            let foreignMerged = pendingForeign.contains { Self.merged($0, into: main) == true }
-            if !foreignMerged, savesAtBuild == savesNow {
-                if !staleFlag.isSet { return current }
-                if onRefetch == .serveWhenNothingChanged, !foreignUnknown, !main.hasChanges {
-                    let generation = staleFlag.arm()
-                    withObservationTracking {
-                        fingerprint.sources.armAll()
-                    } onChange: { [staleFlag] in
-                        staleFlag.set(ifArmedAt: generation)
-                    }
-                    servedUnchanged += 1
-                    return current
+        if let current = held(wanted, now: now, staleAfter: staleAfter), savesAtBuild == savesNow {
+            if !staleFlag.isSet { return current }
+            if onRefetch == .serveWhenNothingChanged, !main.hasChanges, !saves.hasForeignSaves(in: store) {
+                let generation = staleFlag.arm()
+                withObservationTracking {
+                    fingerprint.sources.armAll()
+                } onChange: { [staleFlag] in
+                    staleFlag.set(ifArmedAt: generation)
                 }
+                servedUnchanged += 1
+                return current
             }
         }
-        let result = rebuild(wanted, now: now, savesNow: savesNow, build: build)
-        settleForeignWrites(in: store, main: main, through: savesNow)
-        return result
+        return rebuild(wanted, now: now, savesNow: savesNow, build: build)
     }
 
     private func held(_ wanted: Key, now: Date, staleAfter: Staleness) -> Value? {
@@ -269,33 +257,6 @@ final class ScopeMemo<Value> {
         return result
     }
 
-    // After a build: every foreign write up to the save count it built at is either merged (the build read
-    // its values) or still pending, and a pending row that turns up merged later is a change.
-    private func settleForeignWrites(in store: ModelContainer, main: ModelContext, through savesNow: Int) {
-        guard let writes = saves.foreignWrites(after: foreignCheckedThrough, in: store) else {
-            foreignUnknown = true
-            foreignCheckedThrough = savesNow
-            pendingForeign = []
-            return
-        }
-        foreignUnknown = false
-        // A write with a later index landed while the build ran; the save count has moved past this build,
-        // so the next evaluation rebuilds and settles it then.
-        let arrived = writes.filter { $0.index <= savesNow }.flatMap(\.rows)
-        pendingForeign = (pendingForeign + arrived).filter { Self.merged($0, into: main) == false }
-        foreignCheckedThrough = savesNow
-    }
-
-    // Whether the main context's copy of a row a foreign write saved now holds what that write saved.
-    // `nil` when the main context holds no copy at all, which is neither: there is nothing there to be stale.
-    private static func merged(_ row: StoreSaveCount.ForeignRow, into main: ModelContext) -> Bool? {
-        func check<T: ScopeCompared>(_ type: T.Type) -> Bool? {
-            guard let copy = T.registered(row.id, in: main) else { return nil }
-            return copy.scopeValuesMatch(row.values)
-        }
-        return check(row.type)
-    }
-
 }
 
 /// The identity half of a `ScopeMemo` key: each input collection hashed by its elements' identities, in
@@ -311,11 +272,11 @@ struct ScopeFingerprint {
     // #4252: the rows themselves, so the memo can compare their values when observation or a save says
     // they may have changed. Kept by the same `add` that hashes their identities, so a collection cannot
     // be keyed without also being compared.
-    private(set) var sources = ScopeValueSources()
+    private(set) var sources = ScopeRows()
 
     init() {}
 
-    mutating func add<Element: ScopeCompared>(_ items: [Element]) {
+    mutating func add<Element: ScopeObserved>(_ items: [Element]) {
         // The count is combined as well as the members, so two adjacent inputs cannot trade an element
         // and leave the running hash identical.
         hasher.combine(items.count)

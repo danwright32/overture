@@ -383,7 +383,7 @@ struct RemovingOneSourceCostsOnePassTests {
     // serve a refetch that changed nothing (`ScopeMemo.Refetch`), and the queue and the Archive do. This
     // sheet deliberately does not: serving means re-registering observation on every stored property of
     // every row, 123 ms over the live store, and deriving this sheet again costs 10 ms (2026-09-25,
-    // `ScopeValueComparisonCostTests`, which fails if that ever turns round).
+    // `ScopeRefetchCostTests`, which fails if that ever turns round).
     //
     // WHAT THIS SAYS ABOUT THE LIVE EIGHT. The live `passes=8` counts BODY EVALUATIONS, and it was taken
     // before the memo landed, when every evaluation derived. Menu and hover state on a real press add

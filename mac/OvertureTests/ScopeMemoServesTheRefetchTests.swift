@@ -11,7 +11,7 @@ import SwiftData
 // memo asks whether anything is unsaved.
 @MainActor
 @Suite("A memo serves a refetch that changed nothing, and nothing else (#4252)")
-struct ScopeMemoComparesValuesTests {
+struct ScopeMemoServesTheRefetchTests {
 
     private func seed(_ ctx: ModelContext, rows: Int) -> [Prospect] {
         var made: [Prospect] = []
@@ -186,24 +186,23 @@ struct ScopeMemoComparesValuesTests {
             + "outlived the build that replaced it"))
     }
 
-    // THE ONE CASE VALUES DECIDE. A write saved through another context BEFORE the build, merged into the
-    // main context after it: no save since the build, nothing unsaved, and a row that changed.
-    @Test func aWriteFromAnotherContextMergedAfterTheBuildRebuilds() throws {
+    // A write saved through ANOTHER context before the build can be merged into the main context after it:
+    // no save since the build, nothing unsaved, and a row that changed. So a store that has ever taken such
+    // a save never has a refetch served. (App code never makes one: `OnlyTheMainContextWritesGuardTests`.)
+    @Test func aStoreWrittenThroughAnotherContextNeverServesARefetch() throws {
         let h = try harness()
         let other = ModelContext(h.container)
         let theirs = try #require(try other.fetch(FetchDescriptor<Prospect>()).first { $0.naturalKey == "row-6" })
         theirs.groupName = "Written Elsewhere"
         try other.save()
 
-        let before = h.evaluate()
-        try #require(!before.contains("Written Elsewhere"), Comment(rawValue:
-            "the main context had already merged the other context's write when the memo built, so this "
-            + "fixture cannot produce the merge-after-build case it exists for"))
-
+        h.evaluate()
         try h.refetch()
+        h.reannounce()
         let after = h.evaluate()
-        #expect(after.contains("Written Elsewhere"), Comment(rawValue:
-            "a write merged in from another context after the build was served as a refetch "
-            + "(builds \(h.memo.builds), served \(h.memo.servedUnchanged)): the screen disagrees with the store"))
+        #expect(h.memo.servedUnchanged == 0 && h.memo.builds == 2, Comment(rawValue:
+            "a store written through another context had a refetch served (builds \(h.memo.builds), served "
+            + "\(h.memo.servedUnchanged)), so a merge landing after the build would keep the old answer"))
+        #expect(after.contains("Written Elsewhere"), "the rebuild did not see the other context's write")
     }
 }

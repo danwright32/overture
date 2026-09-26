@@ -125,7 +125,11 @@ struct TestOnlyReachableDomainCodeTests {
     static func findings() -> [Finding] { memo.value(uncachedFindings) }
 
     static func uncachedFindings() -> [Finding] {
-        let appFiles = scanned(app, floor: 200)
+        // #4252: `ScopeFields.swift` names every stored property of every model BY CONSTRUCTION (it is held
+        // to the schema by `ScopeFieldsMatchTheSchemaTests`, so a memo can re-arm observation on all of
+        // them), so a mention there says nothing about whether any code uses the property, and counting it
+        // would clear every stored property this guard exists to find.
+        let appFiles = scanned(app, floor: 200).filter { $0.name != "ScopeFields.swift" }
         var testFiles = scanned(RepoRoot.mac.appendingPathComponent("OvertureTests"), floor: 400)
         testFiles += scanned(RepoRoot.mac.appendingPathComponent("OvertureHostedTests"), floor: 20)
         testFiles += scanned(RepoRoot.mac.appendingPathComponent("TestSupport"), floor: 5)

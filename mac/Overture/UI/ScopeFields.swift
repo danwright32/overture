@@ -7,7 +7,7 @@ import SwiftData
 // expected list from `AppSchema.schema` and fails on any property missing here or named here that the
 // schema does not hold, so a property added to a model cannot quietly go uncompared (L41, L96).
 
-extension AllowedSeedTown: ScopeCompared {
+extension AllowedSeedTown: ScopeObserved {
     func scopeAccess<V>(_ keyPath: KeyPath<AllowedSeedTown, V>) { access(keyPath: keyPath) }
     static let scopeFields: [ScopeField<AllowedSeedTown>] = [
         .init(\.addedAt),
@@ -15,7 +15,7 @@ extension AllowedSeedTown: ScopeCompared {
     ]
 }
 
-extension CancelledShoot: ScopeCompared {
+extension CancelledShoot: ScopeObserved {
     func scopeAccess<V>(_ keyPath: KeyPath<CancelledShoot, V>) { access(keyPath: keyPath) }
     static let scopeFields: [ScopeField<CancelledShoot>] = [
         .init(\.bookingId),
@@ -25,7 +25,7 @@ extension CancelledShoot: ScopeCompared {
     ]
 }
 
-extension DayOff: ScopeCompared {
+extension DayOff: ScopeObserved {
     func scopeAccess<V>(_ keyPath: KeyPath<DayOff, V>) { access(keyPath: keyPath) }
     static let scopeFields: [ScopeField<DayOff>] = [
         .init(\.createdAt),
@@ -35,7 +35,7 @@ extension DayOff: ScopeCompared {
     ]
 }
 
-extension DemotedHouse: ScopeCompared {
+extension DemotedHouse: ScopeObserved {
     func scopeAccess<V>(_ keyPath: KeyPath<DemotedHouse, V>) { access(keyPath: keyPath) }
     static let scopeFields: [ScopeField<DemotedHouse>] = [
         .init(\.addedAt),
@@ -43,7 +43,7 @@ extension DemotedHouse: ScopeCompared {
     ]
 }
 
-extension DismissedCoverageClient: ScopeCompared {
+extension DismissedCoverageClient: ScopeObserved {
     func scopeAccess<V>(_ keyPath: KeyPath<DismissedCoverageClient, V>) { access(keyPath: keyPath) }
     static let scopeFields: [ScopeField<DismissedCoverageClient>] = [
         .init(\.clientId),
@@ -51,7 +51,7 @@ extension DismissedCoverageClient: ScopeCompared {
     ]
 }
 
-extension ExcludedTown: ScopeCompared {
+extension ExcludedTown: ScopeObserved {
     func scopeAccess<V>(_ keyPath: KeyPath<ExcludedTown, V>) { access(keyPath: keyPath) }
     static let scopeFields: [ScopeField<ExcludedTown>] = [
         .init(\.addedAt),
@@ -59,7 +59,7 @@ extension ExcludedTown: ScopeCompared {
     ]
 }
 
-extension Experiment: ScopeCompared {
+extension Experiment: ScopeObserved {
     func scopeAccess<V>(_ keyPath: KeyPath<Experiment, V>) { access(keyPath: keyPath) }
     static let scopeFields: [ScopeField<Experiment>] = [
         .init(\.dimensionRaw),
@@ -73,7 +73,7 @@ extension Experiment: ScopeCompared {
     ]
 }
 
-extension GenreCorrection: ScopeCompared {
+extension GenreCorrection: ScopeObserved {
     func scopeAccess<V>(_ keyPath: KeyPath<GenreCorrection, V>) { access(keyPath: keyPath) }
     static let scopeFields: [ScopeField<GenreCorrection>] = [
         .init(\.classifierRead),
@@ -86,7 +86,7 @@ extension GenreCorrection: ScopeCompared {
     ]
 }
 
-extension Inquiry: ScopeCompared {
+extension Inquiry: ScopeObserved {
     func scopeAccess<V>(_ keyPath: KeyPath<Inquiry, V>) { access(keyPath: keyPath) }
     static let scopeFields: [ScopeField<Inquiry>] = [
         .init(\.attachWroteSentAt),
@@ -140,7 +140,7 @@ extension Inquiry: ScopeCompared {
     ]
 }
 
-extension OrgReachabilityAnswer: ScopeCompared {
+extension OrgReachabilityAnswer: ScopeObserved {
     func scopeAccess<V>(_ keyPath: KeyPath<OrgReachabilityAnswer, V>) { access(keyPath: keyPath) }
     static let scopeFields: [ScopeField<OrgReachabilityAnswer>] = [
         .init(\.foundEmailsRaw),
@@ -153,7 +153,7 @@ extension OrgReachabilityAnswer: ScopeCompared {
     ]
 }
 
-extension PromotedProducer: ScopeCompared {
+extension PromotedProducer: ScopeObserved {
     func scopeAccess<V>(_ keyPath: KeyPath<PromotedProducer, V>) { access(keyPath: keyPath) }
     static let scopeFields: [ScopeField<PromotedProducer>] = [
         .init(\.addedAt),
@@ -161,7 +161,7 @@ extension PromotedProducer: ScopeCompared {
     ]
 }
 
-extension Prospect: ScopeCompared {
+extension Prospect: ScopeObserved {
     func scopeAccess<V>(_ keyPath: KeyPath<Prospect, V>) { access(keyPath: keyPath) }
     static let scopeFields: [ScopeField<Prospect>] = [
         .init(\.alreadyCoveredDismissed),
@@ -303,7 +303,7 @@ extension Prospect: ScopeCompared {
     ]
 }
 
-extension Recipient: ScopeCompared {
+extension Recipient: ScopeObserved {
     func scopeAccess<V>(_ keyPath: KeyPath<Recipient, V>) { access(keyPath: keyPath) }
     static let scopeFields: [ScopeField<Recipient>] = [
         .init(\.attachDisplacedEmail),
@@ -421,7 +421,7 @@ extension Recipient: ScopeCompared {
     ]
 }
 
-extension RefusedContactAddress: ScopeCompared {
+extension RefusedContactAddress: ScopeObserved {
     func scopeAccess<V>(_ keyPath: KeyPath<RefusedContactAddress, V>) { access(keyPath: keyPath) }
     static let scopeFields: [ScopeField<RefusedContactAddress>] = [
         .init(\.handleKey),
@@ -432,7 +432,7 @@ extension RefusedContactAddress: ScopeCompared {
     ]
 }
 
-extension VenuePlaceAnswer: ScopeCompared {
+extension VenuePlaceAnswer: ScopeObserved {
     func scopeAccess<V>(_ keyPath: KeyPath<VenuePlaceAnswer, V>) { access(keyPath: keyPath) }
     static let scopeFields: [ScopeField<VenuePlaceAnswer>] = [
         .init(\.answeredAt),
@@ -442,7 +442,7 @@ extension VenuePlaceAnswer: ScopeCompared {
     ]
 }
 
-extension WatchedSource: ScopeCompared {
+extension WatchedSource: ScopeObserved {
     func scopeAccess<V>(_ keyPath: KeyPath<WatchedSource, V>) { access(keyPath: keyPath) }
     static let scopeFields: [ScopeField<WatchedSource>] = [
         .init(\.addedAt),
@@ -489,7 +489,7 @@ extension WatchedSource: ScopeCompared {
     ]
 }
 
-extension WeeklyDayOff: ScopeCompared {
+extension WeeklyDayOff: ScopeObserved {
     func scopeAccess<V>(_ keyPath: KeyPath<WeeklyDayOff, V>) { access(keyPath: keyPath) }
     static let scopeFields: [ScopeField<WeeklyDayOff>] = [
         .init(\.createdAt),

@@ -13,7 +13,7 @@ import SwiftData
 // The opt-in half reads the live store and prints the numbers #4252's PR quotes.
 @MainActor
 @Suite("Serving a refetch costs less than the derivation it saves, where it is chosen (#4252)")
-struct ScopeValueComparisonCostTests {
+struct ScopeRefetchCostTests {
 
     // The same live shape as `QueueRenderPassCostTests`, so check-fixture-corpus-drift.sh holds it too.
     // LIVE-SHAPE: prospects

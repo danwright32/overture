@@ -11,8 +11,8 @@ import Foundation
 //
 // It is also the premise `ScopeMemo` serves a refetch on: that every save the app makes comes through the
 // main context, so a change behind an observed notification either moved the save count or is still
-// unsaved there. A write through another context is caught by value too (`StoreSaveCount.ForeignWrite`),
-// as a net, but this is what keeps the app from making one.
+// unsaved there. A store that ever takes a save through another context stops serving refetches
+// (`StoreSaveCount.hasForeignSaves`), as a net, but this is what keeps the app from making one.
 //
 // WHAT IT CAN SEE. Every `ModelContext(...)` constructed in app code, which must be bound to a name, and
 // that name must never have `save` or `transaction` called on it in the same file. It cannot follow a
