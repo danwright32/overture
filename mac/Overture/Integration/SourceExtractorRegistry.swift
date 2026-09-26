@@ -2,7 +2,7 @@ import Foundation
 
 // #1237: which native extractor reads a given source. The scout used to inject ONE extractor for every
 // native source, which worked only because Carnegie was the only one. Now that the two host-routed feed
-// adapters ingest natively too, runNative asks this registry per source and falls back to the injected
+// adapters ingest natively too, readNative asks this registry per source and falls back to the injected
 // extractor (Carnegie, or a test stub) for anything it does not own.
 //
 // It returns nil for Carnegie's .algolia and for .html sources on purpose: those are not this registry's to
