@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #4102: a scout now READS every free source first and APPLIES them all in one block at the end of the
 // sweep, so the queue sees one change per run rather than one per source (`AScoutRunDerivesTheQueueOnceTests`
