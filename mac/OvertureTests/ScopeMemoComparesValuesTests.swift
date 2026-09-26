@@ -155,18 +155,30 @@ struct ScopeMemoComparesValuesTests {
     }
 
     // Serving re-arms EVERY property; the build that follows arms only what the derivation reads. The
-    // serving's tracking cannot be cancelled, so it must not mark the next answer stale.
+    // serving's tracking cannot be cancelled, so it must not mark the next answer stale. The rebuild here
+    // is provoked by a save that touches none of the rows, so the serving's registrations are still armed
+    // when the build replaces them (a field edit would have spent them).
     @Test func aBuildAfterAServedRefetchWatchesOnlyWhatItRead() throws {
         let h = try harness()
         h.evaluate()
         try savedChange(h)
         h.evaluate()
-        h.rows[2].groupName = "Second Edit"
+        #expect(h.memo.servedUnchanged == 1, "the refetch was not served, so the case below never arises")
+
+        let elsewhere = Prospect(naturalKey: "not-an-input", groupName: "Elsewhere", discipline: "music",
+                                 venue: "Merkin Hall", performanceDate: "2027-06-01", sourceListingURL: nil,
+                                 priorRelationship: "none", production: "self", profile: "strong",
+                                 coverage: "likely_uncovered", fitScore: 5, tier: "mid", fitReason: "r",
+                                 matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
+                                 status: .new)
+        h.container.mainContext.insert(elsewhere)
         try h.container.mainContext.save()
         h.evaluate()
-        #expect(h.memo.builds == 3, "the second saved change did not rebuild, so the case below never arises")
+        #expect(h.memo.builds == 3, "the save did not rebuild, so the serving's tracking was never replaced")
 
-        // Unsaved, to a property the derivation never reads: nothing the answer depends on moved.
+        // To a property the derivation never reads: nothing the answer depends on moved. It is left
+        // UNSAVED, so if the serving's tracking still marks the answer stale, the unsaved change behind it
+        // makes the memo rebuild, which is what this refuses.
         h.rows[4].discipline = "dance"
         h.evaluate()
         #expect(h.memo.builds == 3, Comment(rawValue:
