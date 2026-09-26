@@ -339,6 +339,9 @@ enum ScoutService {
             sources.append(contentsOf: other.sources)
             unqueuedResultIds.append(contentsOf: other.unqueuedResultIds)
             suppressedOrgs.append(contentsOf: other.suppressedOrgs)
+            // #4147's renames, which this used to drop, so a run built by merging one Outcome per source
+            // reported none however many it made (`ScoutReadsLandTogetherTests`).
+            titleRenames.append(contentsOf: other.titleRenames)
             // #888 part B: reports ACCUMULATE across a merge rather than the last one winning. That is
             // the whole point: a caller that landed six sources must be able to hand all six to one
             // reconcile, or "every owner was asked" can never be true of a co-listed show.
@@ -518,12 +521,36 @@ enum ScoutService {
         // the injected extractor, so the app is never dead in the window between upgrading and the first
         // launch migration.
         let nativeSources: [WatchedSource?] = plan.native.isEmpty && watchlist.isEmpty ? [nil] : plan.native
+
+        // #4102: every free source is READ first and LANDED together, after the html loop below, in one
+        // synchronous block. Reading awaits (the network, and the classify pass off the actor), and the
+        // window draws at every await, so a source landed as soon as it was read reached the screen as a
+        // change of its own: the queue re-derived the whole store once per source, then again for each
+        // notification that follows a save (measured in `AScoutRunDerivesTheQueueOnceTests`: four sources,
+        // sixteen whole-store derivations, against four for one source). Landed together, a run is one
+        // change however long Dan's watchlist grows.
+        //
+        // `reports` keeps the order each source was CHECKED in, so a read that lands later still sits in
+        // the report where it was checked rather than at the end.
+        enum ReportSlot { case read(Int), checked(SourceResult) }
+        var reads: [NativeRead] = []
+        var reports: [ReportSlot] = []
+        // Read at the first free source rather than per source, and not at all on a run that has none.
+        var corpusRead: (brands: ProducerGate.VenueBrands, degradedReads: [StoreRead])?
+        func corpus() -> (brands: ProducerGate.VenueBrands, degradedReads: [StoreRead]) {
+            if let corpusRead { return corpusRead }
+            let read = venueBrandCorpus(in: context)
+            corpusRead = read
+            return read
+        }
         for source in nativeSources {
             // #1237: each native source reads through its own extractor (OPERA/VenueTix via the registry),
             // falling back to the injected one for Carnegie and any row the registry does not own.
             let resolved = extractorRegistry(source) ?? extractor
-            outcome.merge(await runNative(source, extractor: resolved, clients: loaded.clients,
-                                          history: history, blocked: blocked, now: now, into: context))
+            let brands = corpus()
+            reports.append(.read(reads.count))
+            reads.append(await readNative(source, extractor: resolved, clients: loaded.clients,
+                                          history: history, corpus: brands, now: now))
         }
 
         // The html sources: fetch, hash, and decide. Nothing is READ here: this loop is free, and it runs
@@ -547,7 +574,7 @@ enum ScoutService {
             // #1295 / #1529: the fetched page carries the structure it was built from (a TicketTailor
             // widget's embedded JSON, or the ticketing feed body a hop landed on), so it is parsed NATIVELY
             // here, for free, instead of paying a detached read to look at a document Overture wrote itself.
-            // runNative gives either one the SAME usable-event guard and #887 cancellation tolerance every
+            // readNative gives either one the SAME usable-event guard and #887 cancellation tolerance every
             // native feed gets, so this can never falsely mark shows gone.
             if let page, let inlineExtractor = inlineNativeExtractor(for: page, source: source, now: now) {
                 // The pending hash/months belong to the detached ingest, which a native parse never runs,
@@ -563,28 +590,47 @@ enum ScoutService {
                 if let feed = page.ticketingFeedURL, page.followedTicketLinkFrom != nil {
                     source.ticketingFeedURL = feed
                 }
-                let native = await runNative(source, extractor: inlineExtractor, clients: loaded.clients,
-                                             history: history, blocked: blocked, now: now,
-                                             // #1529: a feed parse follows no per-event detail page, so a row
-                                             // the feed named no venue for is the feed's own gap, never a page
-                                             // Overture failed to read (#1472's rule, applied to the READ that
-                                             // happened rather than to the kind on the row: these two paths
-                                             // ingest natively while the row still says .html).
-                                             venueGapsAreStructural: true,
-                                             into: context)
-                if let s = native.sources.first, case .ingested = s.state {
-                    source.lastContentHash = page.contentHash
-                    source.hasUnreadChanges = false
-                }
-                outcome.merge(native)
+                let brands = corpus()
+                reports.append(.read(reads.count))
+                reads.append(await readNative(source, extractor: inlineExtractor, clients: loaded.clients,
+                                              history: history, corpus: brands, now: now,
+                                              // #1529: a feed parse follows no per-event detail page, so a
+                                              // row the feed named no venue for is the feed's own gap, never
+                                              // a page Overture failed to read (#1472's rule, applied to the
+                                              // READ that happened rather than to the kind on the row: these
+                                              // two paths ingest natively while the row still says .html).
+                                              venueGapsAreStructural: true,
+                                              // Marked read only once its shows have landed (#4102).
+                                              markReadAs: page.contentHash))
             } else {
-                outcome.sources.append(result)
+                reports.append(.checked(result))
                 if let page { toRead.append((source, page)) }
             }
             // #1034: the native-phase heartbeat. Fired for every fetched source, changed or not, so the
             // takeover modal's count advances through the whole sweep rather than stalling on the ones
             // that happened not to be re-read.
             onNativeProgress(source.orgName, index + 1, plan.fetch.count)
+        }
+
+        // #4102: every read lands HERE, in one block with no await in it, in the order the sources were
+        // checked. Each still saves and reconciles on its own exactly as before, so a source whose save
+        // fails carries no report and marks nothing gone (#499, #888), and a source whose read failed
+        // lands nothing at all: it was recorded on its row and reported when it was read.
+        for slot in reports {
+            switch slot {
+            case .checked(let result):
+                outcome.sources.append(result)
+            case .read(let i):
+                let native = reads[i]
+                let landed = landNative(native, clients: loaded.clients, history: history, blocked: blocked,
+                                        now: now, into: context)
+                if let hash = native.markReadAs, let source = native.source,
+                   let s = landed.sources.first, case .ingested = s.state {
+                    source.lastContentHash = hash
+                    source.hasUnreadChanges = false
+                }
+                outcome.merge(landed)
+            }
         }
 
         // ONE batched detached run for every page that changed, never N subprocesses: one hung source
@@ -701,16 +747,50 @@ enum ScoutService {
         return TicketingFeedRead.extractor(for: page, source: source, now: now)
     }
 
-    // One native source: extract, classify, upsert, reconcile. Its failure is recorded and reported,
-    // never thrown, so a source that is down cannot cost Dan the rest of his watchlist.
-    private static func runNative(_ source: WatchedSource?, extractor: any SourceExtractor,
-                                  clients: [DownbeatClient], history: [HistoryRecord],
-                                  blocked: BlockedCalendar, now: Date,
-                                  // #1529: overrides the row's own answer for a read that ingested natively
-                                  // while the row still says .html. nil keeps the kind's rule (SourceKind
-                                  // .venueGapsAreStructural), which is right for every other caller.
-                                  venueGapsAreStructural: Bool? = nil,
-                                  into context: ModelContext) async -> Outcome {
+    // #4102: one free source, READ but not yet landed. What `readNative` hands to `landNative`.
+    //
+    // The two halves travel as one value because they are one source's read: the events, what the guard
+    // made of them, the feed health they are judged against and the classify pass run over them. Handed
+    // over as loose parameters, a caller could land one source's pass with another's health.
+    struct NativeRead {
+        enum Read {
+            // The extractor threw. Already recorded on the row and already a finished report, because a
+            // source that could not be read has nothing to land.
+            case failed(Outcome)
+            case listed(Listed)
+        }
+        struct Listed {
+            let usable: [ExtractedEvent]
+            let rejection: RejectionCounts
+            let health: FeedReconcile.FeedHealthState
+            let preClassified: PreClassified
+        }
+        let source: WatchedSource?
+        let sourceId: String
+        let orgName: String
+        let read: Read
+        // #1295 / #1529: an html page read natively is marked READ (its hash stamped as ingested) only once
+        // its shows have landed, so the stamp can never describe bytes whose shows never reached the store.
+        let markReadAs: String?
+    }
+
+    // One native source, READ: extract and classify, both awaited, and nothing written to the store but the
+    // row's own failure when the extractor throws. Its failure is recorded and reported, never thrown, so
+    // a source that is down cannot cost Dan the rest of his watchlist.
+    //
+    // #4102: this used to be `runNative`, which also UPSERTED, one source at a time between the awaits of
+    // the sweep, so every source reached the screen as its own change and the queue re-derived the whole
+    // store for each one (measured: four sources, sixteen derivations, against four for one source). The
+    // writes now happen in `landNative`, for every source at once, at the end of the sweep.
+    private static func readNative(_ source: WatchedSource?, extractor: any SourceExtractor,
+                                   clients: [DownbeatClient], history: [HistoryRecord],
+                                   corpus: (brands: ProducerGate.VenueBrands, degradedReads: [StoreRead]),
+                                   now: Date,
+                                   // #1529: overrides the row's own answer for a read that ingested natively
+                                   // while the row still says .html. nil keeps the kind's rule (SourceKind
+                                   // .venueGapsAreStructural), which is right for every other caller.
+                                   venueGapsAreStructural: Bool? = nil,
+                                   markReadAs: String? = nil) async -> NativeRead {
         let sourceId = source?.sourceId ?? WatchedSource.carnegieId
         let orgName = source?.orgName ?? "Carnegie Hall"
 
@@ -728,7 +808,8 @@ enum ScoutService {
             var outcome = Outcome(found: 0, inserted: 0, updated: 0, skipped: 0)
             outcome.sources = [SourceResult(sourceId: sourceId, orgName: orgName, state: .failed(failure),
                                             listingsURL: source?.listingsURL)]
-            return outcome
+            return NativeRead(source: source, sourceId: sourceId, orgName: orgName, read: .failed(outcome),
+                              markReadAs: markReadAs)
         }
 
         // #801: this source's feed health lives on its own row, seeded from the three old global keys by
@@ -738,7 +819,6 @@ enum ScoutService {
             baseline: source?.baselineFeedCount ?? 0,
             degradedStreak: source?.degradedStreak ?? 0,
             lastDegradedCount: source?.lastDegradedCount ?? 0)
-        let hadBaseline = health.baseline > 0
 
         // #987: the SAME usable-event rule the agent path applies at its boundary. This path used to hand
         // the raw feed straight to applySweep and never see the guard, so the same show got a different
@@ -768,17 +848,51 @@ enum ScoutService {
         let kind = source?.kind ?? .algolia
         let rejection = ExtractedEventGuard.rejectionCounts(
             for: events, venueGapsAreStructural: venueGapsAreStructural ?? kind.venueGapsAreStructural)
+
+        // #3884: the per event classify and match loop is pure over values, so it is awaited OFF the main
+        // actor; only the upserts in `landNative` need the context. `applySweep` is `@MainActor` and
+        // synchronous, so one source's whole match pass used to be one uninterrupted block of main thread
+        // work with the window unable to draw: measured over the 127 second scout window of 2026-09-13
+        // 22:25:05 EDT, 97.4 seconds of recorded main thread stall inside it, the longest 27.2 seconds.
+        //
+        // The corpus it classifies against is read ONCE per run by the caller (#4102), rather than once per
+        // source: a whole table fetch, measured at 158.8 ms over 1,238 rows, per source, on the main thread.
+        // It is the store as it stood before this run landed anything, because nothing lands until every
+        // source has been read. Before #4102 a later source saw an earlier source's new shows in it; the
+        // difference is one run's new shows, and the next run's corpus holds them.
+        let classifiedPass = await ScoutClassify.offTheCallersActor(
+            events: usable, clients: clients, history: history,
+            venueBrands: corpus.brands, sourceIds: [sourceId])
+        return NativeRead(source: source, sourceId: sourceId, orgName: orgName,
+                          read: .listed(.init(usable: usable, rejection: rejection, health: health,
+                                              preClassified: PreClassified(result: classifiedPass,
+                                                                           degradedReads: corpus.degradedReads))),
+                          markReadAs: markReadAs)
+    }
+
+    // #4102: one source's read, LANDED: upsert, reconcile, and fold the run into the row's feed health.
+    // Synchronous on purpose, and the caller lands every source of a sweep in one go, with no await
+    // between them, so the screen sees the whole run as ONE change rather than one per source.
+    private static func landNative(_ native: NativeRead, clients: [DownbeatClient], history: [HistoryRecord],
+                                   blocked: BlockedCalendar, now: Date, into context: ModelContext) -> Outcome {
+        let listed: NativeRead.Listed
+        switch native.read {
+        case .failed(let outcome): return outcome
+        case .listed(let read): listed = read
+        }
+        let source = native.source
+        let usable = listed.usable
+        let rejection = listed.rejection
+        let health = listed.health
         let rejectedCount = rejection.unreadTotal
 
         // #888 part B: applySweep, because this IS a single-source sweep and it must still reconcile its
         // own report. `apply` alone no longer reconciles, and using it here would make Carnegie silently
         // stop marking anything gone: nothing would fail, shows would just quietly linger forever.
-        // #3884: the OFF THE ACTOR entry point, not `applySweep` itself. `runNative` is already async, so
-        // this costs the call nothing, and it is the one production path the 27 second freezes were
-        // measured on.
-        var outcome = await applySweepOffTheActor(
+        // #3884: handed the pass `readNative` already ran off the actor, so only the upserts run here.
+        var outcome = applySweep(
             events: usable, clients: clients, history: history, blocked: blocked,
-            feed: FeedCheck(sourceId: sourceId,
+            feed: FeedCheck(sourceId: native.sourceId,
                             baseline: health.baseline,
                             // No row yet means no history, so it is treated as still in its warmup: it
                             // can find and rank shows but cannot mark any of them gone, which is exactly
@@ -802,7 +916,7 @@ enum ScoutService {
             // the extractor's own now-relative upcoming filter only to be dropped again by applySweep
             // against the real day, so a native-feed run was never fully time-controllable.
             today: QueueModel.easternToday(now),
-            sourceIds: [sourceId], into: context)
+            sourceIds: [native.sourceId], preClassified: listed.preClassified, into: context)
 
         // Fold this run into the source's own feed-health state: a full feed re-baselines immediately,
         // and a feed that stays degraded at a stable smaller level across selfHealThreshold scouts
@@ -829,9 +943,9 @@ enum ScoutService {
                     // the Dan-facing line the count fed; the count still records for #970's drift check.)
                     placed: SourcePlacement.placedCount(locations: usable.map(\.location)))
 
-        outcome.sources = [SourceResult(sourceId: sourceId, orgName: orgName,
+        outcome.sources = [SourceResult(sourceId: native.sourceId, orgName: native.orgName,
                                         state: .ingested(found: usable.count),
-                                        hadBaseline: hadBaseline,
+                                        hadBaseline: health.baseline > 0,
                                         listingsURL: source?.listingsURL)]
         return outcome
     }
@@ -1095,7 +1209,7 @@ enum ScoutService {
         feed: FeedCheck,
         today: String = QueueModel.easternToday(),
         sourceIds: [String] = [],
-        // #3884: passed straight through to `apply`. See `applySweepOffTheActor` below.
+        // #3884: passed straight through to `apply`. See `readNative`, which runs it off the actor.
         preClassified: PreClassified? = nil,
         into context: ModelContext
     ) -> Outcome {
@@ -1112,44 +1226,6 @@ enum ScoutService {
             }
         }
         return outcome
-    }
-
-    // #3884: the scout's own entry point, and the whole of what that issue asked for.
-    //
-    // `applySweep` is `@MainActor` and synchronous, so one source's whole match pass was one
-    // uninterrupted block of main thread work with the window unable to draw. Measured over the 127
-    // second scout window of 2026-09-13 22:25:05 EDT: 97.4 seconds of recorded main thread stall inside
-    // it, 77% of the window, of which only 12.5% was inside any counted render pass. The longest single
-    // stall was 27.2 seconds.
-    //
-    // THE SPLIT, in the order it has to happen. The corpus read needs the `ModelContext` and stays here.
-    // The per event classify and match loop is pure over values and is awaited OFF this actor. The
-    // upserts need the context again and run here on the way back. That is exactly "only the upsert
-    // touches the ModelContext there", which is what #3884 asked for.
-    //
-    // WHAT THIS DOES NOT REMOVE, said plainly: the upsert half still runs on the main actor and still
-    // blocks for as long as it takes, and this does not make the scout faster. It makes the window able
-    // to draw during the half that does not need the store.
-    @discardableResult
-    static func applySweepOffTheActor(
-        events: [ExtractedEvent],
-        clients: [DownbeatClient],
-        history: [HistoryRecord],
-        blocked: BlockedCalendar,
-        feed: FeedCheck,
-        today: String = QueueModel.easternToday(),
-        sourceIds: [String] = [],
-        into context: ModelContext
-    ) async -> Outcome {
-        let corpus = venueBrandCorpus(in: context)
-        let classifiedPass = await ScoutClassify.offTheCallersActor(
-            events: events, clients: clients, history: history,
-            venueBrands: corpus.brands, sourceIds: sourceIds)
-        return applySweep(events: events, clients: clients, history: history, blocked: blocked,
-                          feed: feed, today: today, sourceIds: sourceIds,
-                          preClassified: PreClassified(result: classifiedPass,
-                                                       degradedReads: corpus.degradedReads),
-                          into: context)
     }
 
     // Application of already-extracted events with injected data, so the full
@@ -1169,7 +1245,7 @@ enum ScoutService {
 
     // #1702/#1719: which presenter names read as their building's own brand, judged over the store as it
     // stands, plus Dan's own corrections. ONE implementation, because `apply` reads it when it classifies
-    // for itself and `applySweepOffTheActor` reads it before handing a pass in, and two readings of the
+    // for itself and `runScout` reads it (once per run, #4102) before `readNative` hands a pass in, and two readings of the
     // same corpus is how the two would come to judge different brands (L263).
     //
     // #3071: a corpus built from an invented empty is a THINNER brand list, so a hall's own brand can
