@@ -34,15 +34,39 @@ struct ProspectRowGuardTests {
     }
 
     // The genre line is the control, so a correction stays reachable now that the badge which used to
-    // host the editor is gone.
-    @Test func theGenreLineOpensTheEditor() {
+    // host the editor is gone. #4113: it is a dropdown on that line, never a popover again. The popover
+    // built its own window and re-laid out the screen on every open (about a second, measured on #4113),
+    // which a menu tracked by AppKit does not do.
+    @Test func theGenreLineIsADropdownRatherThanAPopover() {
         guard let labelRange = prospectRow.range(of: "QueueModel.disciplineLabel(item.discipline).uppercased()") else {
             Issue.record("Genre line not found in the header")
             return
         }
-        let around = prospectRow[..<labelRange.lowerBound].suffix(400)
-        #expect(around.contains("showGenreEditor = true"))
-        #expect(prospectRow.contains(".popover(isPresented: $showGenreEditor)"))
+        let around = prospectRow[..<labelRange.lowerBound].suffix(1400)
+        #expect(around.contains("Menu {"))
+        #expect(around.contains("selection: genreChoice"))
+        #expect(!prospectRow.contains("showGenreEditor"))
+        #expect(!prospectRow.contains(".popover(isPresented: $showGenreEditor)"))
+    }
+
+    // #4113, Dan's call on seeing the pictures (2026-09-25, in the working session): the chevron sits
+    // AFTER the genre word, "DANCE" then the chevron, where it was before. A borderless menu draws its own
+    // indicator after the label, and moves any image IN the label in front of the text, so the order holds
+    // only while the label is the word alone and the indicator is left showing. The first draft hid the
+    // indicator and drew its own chevron, which rendered as a black chevron BEFORE the genre.
+    @Test func theChevronFollowsTheGenreWord() {
+        guard let labelRange = prospectRow.range(of: "QueueModel.disciplineLabel(item.discipline).uppercased()"),
+              let styleRange = prospectRow[labelRange.upperBound...].range(of: ".menuStyle(.borderlessButton)")
+        else {
+            Issue.record("Genre dropdown label not found in the header")
+            return
+        }
+        let label = prospectRow[labelRange.lowerBound..<styleRange.lowerBound]
+        let after = prospectRow[labelRange.upperBound...].prefix(900)
+        let before = prospectRow[..<labelRange.lowerBound].suffix(120)
+        #expect(!label.contains("Image("), "an image in a borderless menu's label is drawn BEFORE the word")
+        #expect(!before.contains("Image("), "an image in a borderless menu's label is drawn BEFORE the word")
+        #expect(!after.contains(".menuIndicator(.hidden)"), "the chevron after the word IS the menu indicator")
     }
 }
 
@@ -63,12 +87,13 @@ struct GenreEditorGuardTests {
         #expect(!prospectRow.contains("Agency/presented"))
     }
 
-    // An unchanged pick must write nothing. Setting the override flag on a Save that changed nothing
-    // would tell every later scout to stop refreshing a genre Dan never actually corrected.
-    @Test func saveRoutesThroughTheResolverSoAnUnchangedPickWritesNothing() {
+    // An unchanged pick must write nothing. Setting the override flag on a choice that changed nothing
+    // would tell every later scout to stop refreshing a genre Dan never actually corrected. #4113: the
+    // choice itself is the decision now, so there is no Save; `GenreDropdownTests` drives it.
+    @Test func aChoiceRoutesThroughTheResolverSoAnUnchangedPickWritesNothing() {
         #expect(prospectRow.contains("ClassificationResolution.resolve"))
         #expect(prospectRow.contains("case let .correct(discipline)"))
-        #expect(prospectRow.contains("Button(\"Save\")"))
+        #expect(!prospectRow.contains("Button(\"Save\")"))
     }
 }
 

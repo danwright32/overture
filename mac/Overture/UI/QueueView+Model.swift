@@ -4210,10 +4210,8 @@ extension BulkDismiss.Show {
 // person HEARS appears in the copy inventory beside the ones they read, and so the label cannot quietly
 // become a raw stored value ("other" is a database word, "Performance" is Dan's).
 enum GenreControlCopy {
-    // Sits after the genre at rest, never on hover alone: Dan met this row in a screenshot, and a cue
-    // that needs a mouse does not exist in one. A chevron rather than the title's pencil because what
-    // opens is a one-picker popover, and the glyph should promise the thing that actually happens.
-    static let icon = "chevron.down"
+    // #4113: the cue after the genre (a chevron, at rest, never on hover alone, #1742) is now the
+    // dropdown's own menu indicator, so there is no glyph of this control's own to name here.
     static let help = "Set this show's genre"
 
     static func accessibilityLabel(for discipline: String) -> String {

@@ -3,8 +3,6 @@ import SwiftUI
 // One editorial "call sheet" entry. High-fit prospects carry a gold edge; the fit
 // score reads like a grade. Keep and Dismiss act on the local store directly.
 struct ProspectRowView: View {
-    // #1533: the genre editor, opened from the genre line in the header.
-    @State private var showGenreEditor = false
     // #1274: the manual-rename sheet and its in-progress text.
     @State private var showingRename = false
     @State private var renameDraft = ""
@@ -388,26 +386,34 @@ struct ProspectRowView: View {
             // him there was anything to ask. He reported the missing feature from a screenshot while
             // looking at it. The chevron sits after the word AT REST, not on hover: a hover cue does not
             // exist in a screenshot, or to anyone scanning the queue without moving the mouse.
-            Button {
-                showGenreEditor = true
-            } label: {
-                HStack(alignment: .firstTextBaseline, spacing: 3) {
-                    Text(QueueModel.disciplineLabel(item.discipline).uppercased())
-                        .font(.system(size: 11, weight: .semibold))
-                        .tracking(1.0)
-                        .foregroundStyle(OVColor.gold)
-                    // Faint rather than gold, in the register of the title's rename pencil: gold is
-                    // reserved for what Dan can act on, and the genre WORD is the thing he reads.
-                    Image(systemName: GenreControlCopy.icon)
-                        .font(.system(size: 8, weight: .semibold))
-                        .foregroundStyle(OVColor.inkFaint)
+            // #4113: a dropdown that saves on the choice, where it was a popover holding a picker and a
+            // Save button. Opening the popover cost about a second: SwiftUI built the popover's own window
+            // and re-laid out what was on screen, while the queue's body never ran at all (`passes=0`,
+            // `rootDraws=0` on the issue). A menu is tracked by AppKit and writes nothing SwiftUI observes,
+            // so opening one costs neither. The choice goes through the same resolver the Save did, so
+            // choosing the genre already on the card still writes nothing.
+            Menu {
+                Picker(GenreControlCopy.help, selection: genreChoice) {
+                    ForEach(Discipline.allCases, id: \.self) { discipline in
+                        Text(QueueModel.disciplineLabel(discipline.rawValue)).tag(discipline)
+                    }
                 }
-                .contentShape(Rectangle())
+                .pickerStyle(.inline)
+                .labelsHidden()
+            } label: {
+                Text(QueueModel.disciplineLabel(item.discipline).uppercased())
+                    .font(.system(size: 11, weight: .semibold))
+                    .tracking(1.0)
+                    .foregroundStyle(OVColor.gold)
             }
-            .buttonStyle(.plain)
+            // The chevron after the word is now the menu's own indicator, the one the Dismiss menu on the
+            // same card wears, so the two read as the same kind of control. A chevron drawn in the label
+            // is not kept: a borderless menu moves a label's image in front of its text and drops its
+            // styling, which rendered as a black chevron BEFORE the genre.
+            .menuStyle(.borderlessButton)
+            .fixedSize()
             .help(GenreControlCopy.help)
             .accessibilityLabel(GenreControlCopy.accessibilityLabel(for: item.discipline))
-            .popover(isPresented: $showGenreEditor) { genreEditorPopover }
             HStack(alignment: .firstTextBaseline, spacing: 6) {
                 Text(item.groupName)
                     .font(OVType.groupName)
@@ -1434,68 +1440,20 @@ struct ProspectRowView: View {
             .help("Write this email yourself, with no Prep run and no AI draft")
     }
 
-    // #1363/#348: one editor, both dimensions at once. Opened by tapping the badge or automatically
-    // right after Keep on an unconfirmed prospect. Genre and production are independent (#349), so both
-    // pickers show together, pre-filled with the scout's guess; a single Confirm resolves everything in
-    // one pass. Confirming an unchanged guess accepts it (marks reviewed, no override); changing either
-    // dimension corrects only what changed. The resolve decision lives in ClassificationResolution so it
-    // stays testable outside the view (#863).
-    private var genreEditorPopover: some View {
-        GenreEditor(
-            currentDiscipline: item.discipline,
-            onCorrect: onCorrectClassification,
-            onClose: { showGenreEditor = false }
-        )
-    }
-}
-
-// The genre editor (#1363, rescoped by #1533). One picker, pre-filled with the genre the scout read,
-// and one Save. A separate view so each open starts its picker state fresh from the current value.
-//
-// It carried a production-type picker until #1533. That question is no longer asked: answering it
-// honestly means reading the presenter's site to see who is putting the show on, which Dan does not do,
-// and an unanswered production already scores a neutral 0.
-private struct GenreEditor: View {
-    let currentDiscipline: String
-    let onCorrect: (Discipline) -> Void
-    let onClose: () -> Void
-
-    @State private var selectedDiscipline: Discipline
-
-    init(currentDiscipline: String,
-         onCorrect: @escaping (Discipline) -> Void,
-         onClose: @escaping () -> Void) {
-        self.currentDiscipline = currentDiscipline
-        self.onCorrect = onCorrect
-        self.onClose = onClose
-        _selectedDiscipline = State(initialValue: Discipline(rawValue: currentDiscipline) ?? .other)
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: OVSpacing.md) {
-            Text("Genre").font(OVType.dateHeading).foregroundStyle(OVColor.ink)
-            Picker("", selection: $selectedDiscipline) {
-                ForEach(Discipline.allCases, id: \.self) { discipline in
-                    Text(QueueModel.disciplineLabel(discipline.rawValue)).tag(discipline)
+    // #4113: what the genre dropdown shows as chosen, and what a choice does. The write goes through
+    // `ClassificationResolution`, the rule the old editor's Save used (#1533): choosing the genre already
+    // on the card writes nothing, because an override flag set by a choice that changed nothing would stop
+    // every later scout refreshing a genre Dan never corrected. A stored value no genre matches shows as
+    // "No genre read", and choosing that WRITES it, so the card and the store cannot disagree.
+    private var genreChoice: Binding<Discipline> {
+        Binding(
+            get: { Discipline(rawValue: item.discipline) ?? .other },
+            set: { chosen in
+                if case let .correct(discipline) = ClassificationResolution.resolve(
+                    currentDiscipline: item.discipline, selectedDiscipline: chosen) {
+                    onCorrectClassification(discipline)
                 }
-            }
-            .labelsHidden()
-            HStack {
-                Spacer()
-                Button("Save") {
-                    // The no-change arm writes NOTHING: an override flag set by a Save that changed
-                    // nothing would tell every later scout to stop refreshing a genre Dan never corrected.
-                    if case let .correct(discipline) = ClassificationResolution.resolve(
-                        currentDiscipline: currentDiscipline, selectedDiscipline: selectedDiscipline) {
-                        onCorrect(discipline)
-                    }
-                    onClose()
-                }
-                .keyboardShortcut(.defaultAction)
-            }
-        }
-        .padding(OVSpacing.lg)
-        .frame(width: 240)
+            })
     }
 }
 
