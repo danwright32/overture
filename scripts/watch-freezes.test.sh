@@ -113,10 +113,23 @@ write_log "${WORK}/stall.ndjson" 6.2 0
 run_watch --out "${WORK}/kept" --log "${WORK}/stall.ndjson"; out="${OUT}"
 assert_equals "a watch that kept something still finishes cleanly" "0" "${STATUS}"
 assert_contains "the stall is reported as it is read" "${out}" "STALL"
+assert_contains "and a record with no main thread reading says so rather than 0 (#4154)" "${out}" "mainThreadCPU=?"
 assert_contains "the overlapping chunk is kept" "${out}" "KEPT"
 assert_contains "and the reading names the main thread total" "${out}" "1000"
 assert_contains "and names the deepest frame carrying most of it" "${out}" "makeRenderData"
 assert_equals "and exactly one sample file survives" "1" "$(ls "${WORK}/kept"/KEPT-* 2>/dev/null | grep -c . )"
+
+# --- 3b. #4154: the main thread's own CPU is printed beside the pass time ---------------------------
+write_log "${WORK}/cpu.ndjson" 6.2 0
+python3 - "${WORK}/cpu.ndjson" <<'PYFIX'
+import json, sys
+p = sys.argv[1]
+r = json.loads(open(p).read())
+r["mainThreadCPUSeconds"] = 0.41
+open(p, "w").write(json.dumps(r) + "\n")
+PYFIX
+run_watch --out "${WORK}/cpu" --log "${WORK}/cpu.ndjson"; out="${OUT}"
+assert_contains "the main thread's CPU across the stall is printed" "${out}" "mainThreadCPU=0.41"
 
 # --- 4. a short stall keeps nothing, and the two thresholds are different quantities ----------------
 write_log "${WORK}/short.ndjson" 0.4 0

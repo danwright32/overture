@@ -77,7 +77,9 @@ path, archive_path = sys.argv[1], sys.argv[2]
 # No bytecode cache: importing would otherwise leave a __pycache__ inside the checkout on every run.
 sys.dont_write_bytecode = True
 sys.path.insert(0, sys.argv[3])
-from freeze_records import load, menu_idle, run_loop_measured, sleep_measured, slept, tracking
+from freeze_records import (BLOCKED, COMPUTING, NOT_RUNNING_UNSPLIT, STARVED, load, main_thread_measured,
+                            main_thread_share, main_thread_verdict, menu_idle, run_loop_measured,
+                            sleep_measured, slept, tracking)
 
 # #4122: the compaction notes the live file carries come back apart from the stalls. A note is not a
 # stall, and letting one into `rows` would add a record with no `seconds` and no `passes` to every
@@ -155,7 +157,7 @@ elif _old_vocabulary:
     print("  Every record here predates #3859, so every `queue` is the queue OR any of seven sheets over")
     print("  it. Nothing in this file can say which.")
 print()
-print("  when                  seconds  passes  root  in passes   asleep  surface        load")
+print("  when                  seconds  passes  root  in passes   asleep     cpu  surface        load")
 for r in counted[:25]:
     when = str(r.get("at", ""))[:19].replace("T", " ")
     cost = r.get("passSeconds")
@@ -169,8 +171,12 @@ for r in counted[:25]:
     # answers, and a 0 here would read as "the machine stayed awake" (L98, L11).
     asleep = r.get("asleepSeconds")
     asleep_shown = "{:>7.2f}".format(asleep) if isinstance(asleep, (int, float)) else "      ?"
-    print("  {:<20}  {:>7.2f}  {:>6}  {}  {}  {}  {:<13}  {}".format(
-        when, r.get("seconds", 0), r["passes"], root_shown, shown, asleep_shown,
+    # #4154: the share of the stall's awake time the main thread spent on the CPU. "?" where the record
+    # carries no reading, for the reason the two columns before it do.
+    cpu_share = main_thread_share(r)
+    cpu_shown = "{:>6.0f}%".format(100 * cpu_share) if cpu_share is not None else "      ?"
+    print("  {:<20}  {:>7.2f}  {:>6}  {}  {}  {}  {}  {:<13}  {}".format(
+        when, r.get("seconds", 0), r["passes"], root_shown, shown, asleep_shown, cpu_shown,
         str(r.get("surface", "?")), str(r.get("load", "?"))))
 if len(counted) > 25:
     print(f"  ... and {len(counted) - 25} more, shown longest first.")
@@ -322,6 +328,40 @@ else:
         print("    are freezes is UNKNOWN: an unnamed mode is not evidence either way, and ordinary")
         print("    window work passes through one. Worst {:.2f}s, and it is worth looking at.".format(
             _worst_other.get("seconds", 0)))
+
+# #4154: whether the MAIN THREAD was running while each stall lasted, which is what a stall's duration and
+# its pass time cannot say: both are wall clock. Reproduced 2026-09-25 against a clone of the live store,
+# a pass under CPU contention took 5.45s with the main thread's own CPU clock at 23% of it and the kernel
+# reporting it runnable. Named per state, and never folded: absent is not computing (L98, L11).
+_thread = [r for r in rows if main_thread_measured(r)]
+print()
+if not _thread:
+    print(f"  main thread: UNMEASURED. None of the {len(rows)} record(s) carries the main thread's own CPU")
+    print("  reading, so none of them can say whether its time was work, waiting for a core, or waiting on")
+    print("  a lock or a read. Install a build carrying #4154 and read again.")
+else:
+    _by = {}
+    for r in _thread:
+        _by.setdefault(main_thread_verdict(r), []).append(r)
+    print(f"  main thread: {len(_thread)} record(s) carry its own CPU reading.")
+    _said = {
+        COMPUTING: "the main thread was on the CPU for at least half of it: the code was the time",
+        STARVED: "runnable and not scheduled: other processes had the CPU, which no change here removes",
+        BLOCKED: "waiting in the kernel: a lock, a read or a semaphore, which is worth a stack sample",
+        NOT_RUNNING_UNSPLIT: "not running, and no run state sample to say whether starved or blocked",
+    }
+    for state in (STARVED, BLOCKED, COMPUTING, NOT_RUNNING_UNSPLIT):
+        group = _by.get(state, [])
+        if not group:
+            continue
+        worst = max(group, key=lambda r: r.get("seconds", 0))
+        label = state.upper() if state != NOT_RUNNING_UNSPLIT else state
+        print(f"    {len(group)} {label}: {_said[state]}.")
+        print("      worst {:.2f}s with {:.2f}s on the CPU".format(
+            worst.get("seconds", 0), worst["mainThreadCPUSeconds"]))
+    _unmeasured = len(rows) - len(_thread)
+    if _unmeasured:
+        print(f"    {_unmeasured} record(s) carry no reading and are not judged either way.")
 
 # The finding. A stall over the floor that counted no pass is UNATTRIBUTED: this tool cannot say what the
 # main thread was doing, and #3783 is why it must not guess.

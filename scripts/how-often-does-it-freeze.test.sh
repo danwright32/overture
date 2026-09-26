@@ -182,6 +182,25 @@ out="$("${READER}" --log "${WORK}/notrecorded/log.ndjson" 2>&1)"
 assert_contains "a notRecorded run loop is unjudged, and named as the field it lacks" "${out}" \
   "1 of the 2 cannot be judged: 0 carry no sleep reading, 1 no run loop reading."
 
+# 15. #4154: the main thread's own reading, counted by state beside the rate, so a day of stalls on a
+#     contended Mac can be told from a day the code was slow. Absent stays its own count (L98).
+thread_line() { # sequence seconds cpu runnable waiting
+  local tail=""
+  [ "$3" != "none" ] && tail="${tail},\"mainThreadCPUSeconds\":$3,\"mainThreadRunnableSamples\":$4,\"mainThreadWaitingSamples\":$5"
+  printf '{"session":"th","sequence":%s,"at":"2026-09-22T15:24:00Z","seconds":%s,"surface":"queue","load":"baseline","loadAverage":3.7,"passes":1,"passSeconds":0.1,"asleepSeconds":0,"runLoopActivity":"ordinary"%s}\n' "$1" "$2" "${tail}"
+}
+mkdir -p "${WORK}/thread"
+{ thread_line 100 0.150 0.14 2 0      # computing
+  thread_line 200 4.00  0.30 40 1     # starved
+  thread_line 250 3.00  0.20 30 1     # starved again, so the two states are different counts
+  thread_line 300 2.00  0.02 1 20     # blocked
+  thread_line 36000 0.40 none         # unmeasured
+} > "${WORK}/thread/log.ndjson"
+out="$("${READER}" --log "${WORK}/thread/log.ndjson" 2>&1)"; status=$?
+assert_equals "a log carrying main thread readings still reports" "0" "${status}"
+assert_contains "the main thread states are counted apart, with the unmeasured named" "${out}" \
+  "main thread, every load: 1 computing, 2 starved, 1 blocked, 0 not running unsplit, 1 unmeasured"
+
 # #4188: the shared reader is refused BY NAME when it is missing. Without the check Python dies with a
 # traceback and exit 1, which a caller of this script reads as a result rather than as nothing measured.
 mkdir -p "${WORK}/nolib/scripts"
