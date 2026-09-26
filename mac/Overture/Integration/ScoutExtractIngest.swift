@@ -31,6 +31,21 @@ enum ScoutExtractIngest {
     // ONE implementation, made async, rather than a second `ingestOffTheActor` beside it. The loop below
     // is long and carries the source resolution, the health state and the reconcile; a second copy of it
     // is how the two would come to disagree about what an ingest does (L263).
+    // #4102: one source's result, read and classified, waiting to land with the rest of the file.
+    private struct Pending {
+        let source: WatchedSource
+        let events: [ExtractedEvent]
+        let rejection: RejectionCounts
+        let health: FeedReconcile.FeedHealthState
+        let effectiveVerdict: PageVerdict
+        let preClassified: ScoutService.PreClassified
+    }
+
+    private enum Slot {
+        case settled(ScoutService.Outcome)
+        case pending(Pending)
+    }
+
     @discardableResult
     static func ingest(_ results: ScoutExtractResults,
                        clients: [DownbeatClient], history: [HistoryRecord], blocked: BlockedCalendar,
@@ -39,14 +54,31 @@ enum ScoutExtractIngest {
                        into context: ModelContext) async -> ScoutService.Outcome {
         var outcome = ScoutService.Outcome(found: 0, inserted: 0, updated: 0, skipped: 0)
 
+        // #4102: every source is READ first (its checks, and its classify pass awaited off the actor) and
+        // every source's shows LAND afterwards, together, in one block with no await in it. Landed as each
+        // one was classified, every source reached the screen as its own change and the queue re-derived
+        // the whole store once per source, then again for each notification that follows a save: the
+        // shape `AScoutRunDerivesTheQueueOnceTests` measured on the sweep, where four sources cost sixteen
+        // whole-store derivations. `slots` keeps the results in the order the file lists them, so a source
+        // settled while reading still sits in the report where it was read.
+        var slots: [Slot] = []
+        // The brand corpus, read at the first source that needs it rather than once per source: a whole
+        // table fetch, measured at 158.8 ms over 1,238 rows. Nothing lands until every source is read,
+        // so a per source read would return the same store every time.
+        var corpusRead: (brands: ProducerGate.VenueBrands, degradedReads: [ScoutService.StoreRead])?
+
         for result in results.results {
+            // What this source settled while being read (a failure, a confirmed quiet page, an id nobody
+            // queued), reported in its own slot so the order holds.
+            var settled = ScoutService.Outcome(found: 0, inserted: 0, updated: 0, skipped: 0)
             // A source id the app never queued resolves to NOTHING. The results file is written by a
             // Claude run, and if it ever rebuilt an id instead of echoing it verbatim, the work must
             // vanish loudly rather than land on some other org's row. A silent mismatch has to read as
             // absence, never as the wrong show. #857: recorded, so "loudly" is true: the drop is
             // surfaced in the run's warning rather than being a bare `continue` nobody ever sees.
             guard let source = row(for: result.sourceId, in: context) else {
-                outcome.unqueuedResultIds.append(result.sourceId)
+                settled.unqueuedResultIds.append(result.sourceId)
+                slots.append(.settled(settled))
                 continue
             }
 
@@ -70,7 +102,8 @@ enum ScoutExtractIngest {
             // which it would otherwise stamp as a healthy quiet read).
             if let reason = ScoutResultAudit.contradiction(in: result) {
                 source.notes = reason
-                fail(source, as: .inconsistentResult, now: now, outcome: &outcome)
+                fail(source, as: .inconsistentResult, now: now, outcome: &settled)
+                slots.append(.settled(settled))
                 continue
             }
 
@@ -87,10 +120,12 @@ enum ScoutExtractIngest {
                 if SourceConfirmation.isConfirmedQuiet(verdict: result.verdict,
                                                        readHash: source.pendingContentHash,
                                                        confirmedEmptyHash: source.confirmedEmptyHash) {
-                    recordConfirmedEmpty(on: source, now: now, outcome: &outcome)
+                    recordConfirmedEmpty(on: source, now: now, outcome: &settled)
+                    slots.append(.settled(settled))
                     continue
                 }
-                fail(source, as: failure, now: now, outcome: &outcome)
+                fail(source, as: failure, now: now, outcome: &settled)
+                slots.append(.settled(settled))
                 continue
             }
 
@@ -136,13 +171,28 @@ enum ScoutExtractIngest {
             // watchlist that could smuggle a refused org back in by a side door would be worse than no
             // watchlist at all.
             // #3905: the corpus is read HERE, on the main actor, because it needs the `ModelContext`;
-            // the loop over this source's events is awaited off it; the upserts below run here again.
-            // The same three steps `ScoutService.applySweepOffTheActor` takes, and the same shared
-            // pieces, so the two paths cannot drift about what a classify pass is.
-            let corpus = ScoutService.venueBrandCorpus(in: context)
+            // the loop over this source's events is awaited off it; the upserts in `land` run here again.
+            // The same three steps the scout's own sweep takes (`ScoutService.readNative` and
+            // `landNative`), and the same shared pieces, so the two paths cannot drift about what a
+            // classify pass is.
+            let corpus = corpusRead ?? ScoutService.venueBrandCorpus(in: context)
+            corpusRead = corpus
             let classifiedPass = await ScoutClassify.offTheCallersActor(
                 events: events, clients: clients, history: history,
                 venueBrands: corpus.brands, sourceIds: [source.sourceId])
+            slots.append(.pending(Pending(source: source, events: events, rejection: rejection, health: health,
+                                          effectiveVerdict: effectiveVerdict,
+                                          preClassified: ScoutService.PreClassified(
+                                              result: classifiedPass, degradedReads: corpus.degradedReads))))
+        }
+
+        // #4102: every source lands here, in the order it was read, with no await between them.
+        func land(_ pending: Pending) {
+            let source = pending.source
+            let events = pending.events
+            let rejection = pending.rejection
+            let health = pending.health
+            let effectiveVerdict = pending.effectiveVerdict
             let applied = ScoutService.apply(
                 events: events, clients: clients, history: history, blocked: blocked,
                 // #887: the events this run THREW AWAY are handed over with the ones it kept. They were
@@ -167,8 +217,7 @@ enum ScoutExtractIngest {
                                              structuralGapURLs: rejection.structuralGapURLs,
                                              structuralGapDates: rejection.structuralGapDates),
                 today: today, sourceIds: [source.sourceId],
-                preClassified: ScoutService.PreClassified(result: classifiedPass,
-                                                          degradedReads: corpus.degradedReads),
+                preClassified: pending.preClassified,
                 into: context)
             outcome.merge(applied)
 
@@ -180,7 +229,7 @@ enum ScoutExtractIngest {
                 outcome.sources.append(ScoutService.SourceResult(
                     sourceId: source.sourceId, orgName: source.orgName,
                     state: .ingested(found: events.count), hadBaseline: health.baseline > 0))
-                continue
+                return
             }
 
             // #986: how many of the shows this run KEPT said where they are, by the SAME rule the native
@@ -221,6 +270,12 @@ enum ScoutExtractIngest {
                 // drops: a row rejected outright and a row the page published no venue for are equally
                 // "read, and not usable", and neither is a page format that changed.
                 droppedRowCount: rejection.unreadTotal + rejection.structuralGapCount))
+        }
+        for slot in slots {
+            switch slot {
+            case .settled(let settled): outcome.merge(settled)
+            case .pending(let pending): land(pending)
+            }
         }
 
         // #888 part B: ONE reconcile, with EVERY source this run landed.
