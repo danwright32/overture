@@ -69,6 +69,14 @@ enum Phase0 {
     /// cross-row clusters keyed on those form their own clusters rather than growing fourfold. Dates are
     /// kept, so a night holds `factor` times the shows it did: pessimistic for any term grouped by night,
     /// and stated beside every reading taken on it.
+    ///
+    /// Listings are part of that identity too (#4106, found by the #4275 attribution): a copy's
+    /// `sourceListingURL` and every one of its `runSourceURLs` carry the copy's glue, so a listing holding N
+    /// shows in the clone holds N in each copy rather than 4N in one. `ScaledCorpusKeepsListingsDistinctTests`
+    /// holds that. `runSourceURLs` is an archived blob SQL cannot edit, so it is rewritten through the model
+    /// after the rows are copied.
+    nonisolated static func glue(forCopy k: Int) -> String { "q" + String(UnicodeScalar(UInt8(96 + k))) }
+
     nonisolated static func scaledCopy(of clone: URL, factor: Int, in dir: URL) throws -> URL {
         let out = dir.appendingPathComponent("Overture-x\(factor).store")
         for suffix in ["", "-wal", "-shm"] {
@@ -81,7 +89,8 @@ enum Phase0 {
         guard sqlite3_open_v2(out.path, &db, SQLITE_OPEN_READWRITE, nil) == SQLITE_OK else {
             throw ScaleError.sql("open failed")
         }
-        defer { sqlite3_close(db) }
+        var closed = false
+        defer { if !closed { sqlite3_close(db) } }
         func columns(_ table: String) throws -> [String] {
             var stmt: OpaquePointer?
             guard sqlite3_prepare_v2(db, "PRAGMA table_info(\(table))", -1, &stmt, nil) == SQLITE_OK else {
@@ -104,7 +113,8 @@ enum Phase0 {
         }
         let offset = 100_000
         let showSuffixed: Set<String> = ["ZNATURALKEY", "ZPRESENTER", "ZVENUE", "ZGROUPNAME", "ZSCOUTGROUPNAME",
-                                         "ZSCOUTVENUE", "ZSERIESID", "ZGMAILTHREADID", "ZGMAILMESSAGEID"]
+                                         "ZSCOUTVENUE", "ZSERIESID", "ZGMAILTHREADID", "ZGMAILMESSAGEID",
+                                         "ZSOURCELISTINGURL"]
         let contactPrefixed: Set<String> = ["ZEMAIL", "ZID"]
         let contactSuffixed: Set<String> = ["ZGMAILTHREADID", "ZGMAILMESSAGEID", "ZSENDGROUPID"]
         let showCols = try columns("ZPROSPECT")
@@ -116,7 +126,7 @@ enum Phase0 {
             // into one bucket of any word-indexed term (`ProducerGate.VenueKeyIndex`), which made the first
             // reading of this corpus superlinear for a reason no real store has. Glued, "Hall" becomes
             // "Hallqa", so names share words within a copy exactly as they do in the clone.
-            let glue = "q" + String(UnicodeScalar(UInt8(96 + k)))
+            let glue = Self.glue(forCopy: k)
             let showExprs = showCols.map { c -> String in
                 if c == "Z_PK" { return "Z_PK + \(shift)" }
                 if showSuffixed.contains(c) { return "\(c) || '\(glue)'" }
@@ -136,6 +146,31 @@ enum Phase0 {
         try exec("UPDATE Z_PRIMARYKEY SET Z_MAX = (SELECT MAX(Z_PK) FROM ZPROSPECT) WHERE Z_NAME = 'Prospect'")
         try exec("UPDATE Z_PRIMARYKEY SET Z_MAX = (SELECT MAX(Z_PK) FROM ZRECIPIENT) WHERE Z_NAME = 'Recipient'")
         try exec("COMMIT")
+
+        // Which copy each copied row belongs to, by its (already glued) natural key, for the blob rewrite.
+        var copyOf: [String: Int] = [:]
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, "SELECT ZNATURALKEY, Z_PK / \(offset) FROM ZPROSPECT WHERE Z_PK >= \(offset)",
+                                 -1, &stmt, nil) == SQLITE_OK else { throw ScaleError.sql("copied keys") }
+        while sqlite3_step(stmt) == SQLITE_ROW {
+            if let key = sqlite3_column_text(stmt, 0) {
+                copyOf[String(cString: key)] = Int(sqlite3_column_int64(stmt, 1))
+            }
+        }
+        sqlite3_finalize(stmt)
+        sqlite3_close(db)
+        closed = true
+
+        let context = ModelContext(try openContainer(at: out))
+        var rewritten = 0
+        for row in try context.fetch(FetchDescriptor<Prospect>()) {
+            guard let k = copyOf[row.naturalKey], !row.runSourceURLs.isEmpty else { continue }
+            let glue = Self.glue(forCopy: k)
+            row.runSourceURLs = row.runSourceURLs.map { $0.isEmpty ? $0 : $0 + glue }
+            rewritten += 1
+        }
+        try context.save()
+        say("scaled corpus: \(copyOf.count) copied shows, run listings re-identified on \(rewritten)")
         return out
     }
 
