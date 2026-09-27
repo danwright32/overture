@@ -522,6 +522,13 @@ extension Phase0cLapsWorld {
             guard !all.isEmpty else { return nil }
             let rule = all[Int.random(in: 0..<all.count, using: &rng)]
             if op == .weeklyReblock {
+                // With no freed date anywhere, free one in the same step first: both halves sweep, and the
+                // index is judged on the net change, which is what the two sweeps leave behind.
+                if !all.contains(where: { !$0.freedDates.isEmpty }) {
+                    let block = WeeklyDayOffEditing.block(all[0])
+                    guard let date = (0..<90).map(day).first(where: { block.blocks($0) }) else { return nil }
+                    _ = WeeklyDayOffEditing.free(date, from: all[0], export: export, in: context)
+                }
                 guard let rule = all.first(where: { !$0.freedDates.isEmpty }),
                       let date = rule.freedDates.sorted().first else { return nil }
                 WeeklyDayOffEditing.reblock(date, on: rule, export: export, in: context)
@@ -780,12 +787,21 @@ final class QueueEnginePhase0cLapsProbeTests {
         return [("live clone", base), ("4x", try Phase0.scaledCopy(of: base, factor: 4, in: dir))]
     }
 
+    /// A copy of the RELEASE app's Downbeat export. Not `DownbeatBridge.defaultURL`: under test that resolves
+    /// to the test run's own handoff folder (#2097), where no export exists, so 0b.5 timed the bookings lap
+    /// with the export MISSING and the health guard refused before boxing or classifying anything.
     private func scratchExport() throws -> URL {
         let out = try sandboxes.make(named: "phase0c7-export").appendingPathComponent("downbeat-export.json")
-        if FileManager.default.fileExists(atPath: DownbeatBridge.defaultURL.path) {
-            try FileManager.default.copyItem(at: DownbeatBridge.defaultURL, to: out)
+        let live = StoreLocation.handoffDirectory(appSupport: StoreLocation.appSupport, isDebugBuild: false)
+            .appendingPathComponent("downbeat-export.json")
+        if FileManager.default.fileExists(atPath: live.path) {
+            try FileManager.default.copyItem(at: live, to: out)
         }
         return out
+    }
+
+    private func missingExport() throws -> URL {
+        try sandboxes.make(named: "phase0c7-no-export").appendingPathComponent("downbeat-export.json")
     }
 
     @Test(.enabled(if: Phase0.liveStoreExists, "no live store on this machine"))
@@ -821,6 +837,16 @@ final class QueueEnginePhase0cLapsProbeTests {
         let loaded = DownbeatBridge.loadWithHealth(from: exportURL, now: now)
 
         let whole = Phase0.median5 { _ = scheduler.reconcileBookings(now: now, from: exportURL, rows: rows) }
+        let noExport = try missingExport()
+        let wholeMissing = Phase0.median5 { _ = scheduler.reconcileBookings(now: now, from: noExport, rows: rows) }
+        // 0b.5 read the rows through a fetch it had not walked; this is the lap on a context that has read
+        // nothing, so relationship faults are paid inside it. Five fresh contexts, one sample each.
+        let freshContext = Phase0b.reading((0..<5).map { _ in
+            let fresh = ModelContext(ctx.container)
+            let freshScheduler = ReconcileScheduler(context: fresh, replyRunAlive: { _ in false })
+            let freshRows = StoreRows.fetch(from: fresh)
+            return Phase0.time { _ = freshScheduler.reconcileBookings(now: now, from: exportURL, rows: freshRows) }
+        })
         let load = Phase0.median5 { _ = DownbeatBridge.loadWithHealth(from: exportURL, now: now) }
         var live: [Prospect] = []
         let liveFilter = Phase0.median5 { live = rows.liveProspects }
@@ -838,6 +864,32 @@ final class QueueEnginePhase0cLapsProbeTests {
             }
         }
         let classify = Phase0.median5 { for e in sorted { _ = BookingMatch.classify(entity: e, bookings: loaded.bookings) } }
+        // The two other things the loop does per contacted row: read its guards, and (on no match) ask every
+        // client whether it confidently names the row's group.
+        func orgMatch(_ e: any BookingMatchable) -> Bool {
+            loaded.clients.contains { client in
+                GroupNameMatch.isConfident(client.displayName, e.groupName)
+                    || (client.shortName.map { GroupNameMatch.isConfident($0, e.groupName) } ?? false)
+            }
+        }
+        let results = sorted.map { BookingMatch.classify(entity: $0, bookings: loaded.bookings) }
+        let unmatched = zip(sorted, results).filter { $0.1 == .none && !$0.0.bookingPriorRelationshipBooked }.map(\.0)
+        let clientMatch = Phase0.median5 { for e in unmatched { _ = orgMatch(e) } }
+        let guards = Phase0.median5 {
+            for e in sorted {
+                _ = e.bookingManualOutcome || e.bookingIsBooked || e.autoBookingRejectedWithoutId
+                    || e.rejectedBookingIds.isEmpty || e.bookingSuggestionDismissed || e.bookingPriorRelationshipBooked
+            }
+        }
+        // A bookings patch re-asks one row when that row changes: classify plus the client match, every
+        // contacted row, median of three.
+        var perContacted: [Double] = []
+        for e in sorted {
+            perContacted.append(Phase0cLaps.median3 {
+                if BookingMatch.classify(entity: e, bookings: loaded.bookings) == .none { _ = orgMatch(e) }
+            })
+        }
+        let contactedSpread = Phase0cLaps.Spread(samples: perContacted)
         let reconcile = Phase0.median5 {
             _ = DownbeatBooking.reconcileBooked(entities: entities, clients: loaded.clients, bookings: loaded.bookings,
                                                 health: loaded.health, now: now)
@@ -883,13 +935,20 @@ final class QueueEnginePhase0cLapsProbeTests {
         // Clock: advance across each pending crossing in turn, one sample each (the state moves).
         var perCrossing: [Double] = []
         var moving = index
-        for c in crossings { perCrossing.append(Phase0.time { moving.advance(to: c.addingTimeInterval(0.001)) }) }
+        var rowsPerCrossing: [Int] = []
+        for c in crossings {
+            moving.judged = 0
+            perCrossing.append(Phase0.time { moving.advance(to: c.addingTimeInterval(0.001)) })
+            rowsPerCrossing.append(moving.judged)
+        }
         let rowSpread = Phase0cLaps.Spread(samples: perRow), clockSpread = Phase0cLaps.Spread(samples: perCrossing)
         let equal = indexMismatch == 0 && mirrorMismatch == 0
         Phase0cLaps.say("""
             bookings [\(label)] \(live.count) shows, \(entities.count) booking entities, \(contacted.count) contacted, \
             \(loaded.bookings.count) bookings, export \(loaded.health), \(Phase0.load())
               today's whole lap (reconcileBookings)                 \(whole.text)
+              the same lap with the export missing (0b.5's case)    \(wholeMissing.text)
+              the whole lap on a fresh context, faults included     \(freshContext.text)
               attribution: export load                              \(load.text)
                            liveProspects filter                     \(liveFilter.text)
                            boxing (bookingEntities, inquiry fetch)  \(boxing.text)
@@ -897,18 +956,22 @@ final class QueueEnginePhase0cLapsProbeTests {
                              of which: contacted filter             \(filter.text)
                                        sort                         \(sort.text)
                                        classify loop (dry)          \(classify.text)
+                                       client match on \(unmatched.count) unmatched rows over \(loaded.clients.count) clients  \(clientMatch.text)
+                                       guard reads                  \(guards.text)
                            settleAll (real, rolled back)            \(settleReal.text)
                            settle guard alone (dry run)             \(settleDry.text)
+              per contacted row re-asked (classify + client match)  \(contactedSpread.text)
                            named parts sum \(String(format: "%.1f", named)) ms against the whole \(String(format: "%.1f", whole.median)) ms
               settle due set: cold build                            \(cold.text)
                 due set against dry run at \(instants.count) instants (\(sampled.count) of \(crossings.count) crossings in 400 days, each at -1 ms, 0, +1 ms): \
             \(indexMismatch) mismatches; dry run against real settle: \(mirrorMismatch); most rows due at one instant \(dueMost)
                 per row change (extract + update)                   \(rowSpread.text)
-                per clock crossing (advance)                        \(clockSpread.text)
+                per clock crossing (advance)                        \(clockSpread.text); rows judged per crossing max \(rowsPerCrossing.max() ?? 0), median \(rowsPerCrossing.sorted().dropFirst(rowsPerCrossing.count / 2).first ?? 0)
             """)
         return ["settle due set [\(label)]: \(equal ? "PASS" : "FAIL") equality (\(indexMismatch) index, \(mirrorMismatch) mirror mismatches); "
                 + "row change max \(String(format: "%.3f", rowSpread.max)) ms, crossing max \(String(format: "%.3f", clockSpread.max)) ms "
-                + "(\(max(rowSpread.max, clockSpread.max) < 1 ? "under" : "OVER") 1 ms, the retirement line, since T9 names none for settle)"]
+                + "judging up to \(rowsPerCrossing.max() ?? 0) rows at one instant (\(max(rowSpread.max, clockSpread.max) < 1 ? "under" : "OVER") "
+                + "1 ms, the retirement line, since T9 names none for settle)"]
     }
 
     // MARK: retirement
@@ -996,34 +1059,50 @@ final class QueueEnginePhase0cLapsProbeTests {
         // Equality on sampled real keys: each change made in the context (unsaved), the dry run read from it,
         // the index judged against the same inputs, then rolled back and the index judged back.
         var sampleMismatch = 0, samples = 0
-        func sample(_ make: () -> Void, rowsTouched: [Prospect] = [], export ex: DayOffEditing.Export? = nil) {
+        var sampleDetail: [String] = []
+        func sample(_ kind: String, _ make: () -> Void, rowsTouched: [Prospect] = [], export ex: DayOffEditing.Export? = nil,
+                    putBack: () -> Void = {}) {
             make()
             let e = ex ?? export
             for p in rowsTouched { index.update(p.persistentModelID, Phase0cConflictFacts.extract(p)) }
             let intended = index.judge(Phase0cCalendarInputs.read(export: e, context: ctx))
             let dry = Phase0cLapOracle.conflictDryRun(rows, export: e, context: ctx)
             samples += 1
-            if intended != dry { sampleMismatch += 1 }
+            if intended != dry {
+                sampleMismatch += 1
+                let extra = intended.keys.filter { dry[$0] == nil }.count
+                let missed = dry.keys.filter { intended[$0] == nil }.count
+                let differ = intended.keys.filter { k in dry[k].map { $0 != intended[k]! } ?? false }.count
+                sampleDetail.append("\(kind): index \(intended.count) writes, dry run \(dry.count); extra \(extra), missed \(missed), "
+                                    + "different key \(differ); judged \(index.lastJudgedRows) rows over \(index.lastChangedNights) "
+                                    + "changed of \(index.lastCandidateNights) candidate nights")
+            }
             ctx.rollback()
+            putBack()   // rollback() leaves a fetched row's values as they were written (measured above)
             for p in rowsTouched { index.update(p.persistentModelID, Phase0cConflictFacts.extract(p)) }
             _ = index.judge(Phase0cCalendarInputs.read(export: export, context: ctx))
         }
         var g = SeededGenerator(seed: 47)
         for n in nights.shuffled(using: &g).prefix(10) {
-            sample { ctx.insert(DayOff(startDate: n, endDate: n, note: "Probe")) }
+            sample("day off") { ctx.insert(DayOff(startDate: n, endDate: n, note: "Probe")) }
         }
-        for w in [2, 5, 7] { sample { ctx.insert(WeeklyDayOff(weekday: w, note: "Probe")) } }
+        for w in [2, 5, 7] { sample("weekly \(w)") { ctx.insert(WeeklyDayOff(weekday: w, note: "Probe")) } }
         for b in loaded.bookings.prefix(5) {
-            sample { ctx.insert(CancelledShoot(bookingId: b.id, shootName: b.shootName, startDate: b.startDate, cancelledAt: now)) }
-            sample({}, export: (loaded.bookings.filter { $0 != b }, loaded.blockedDates, loaded.health))
+            sample("cancel") { ctx.insert(CancelledShoot(bookingId: b.id, shootName: b.shootName, startDate: b.startDate, cancelledAt: now)) }
+            sample("booking lost", {}, export: (loaded.bookings.filter { $0 != b }, loaded.blockedDates, loaded.health))
         }
         for p in rows.shuffled(using: &g).prefix(5) where p.performanceDate != nil {
-            sample({
+            let (nights, end, opening) = (p.runNights, p.runEndDate, p.performanceDate)
+            sample("date move", {
                 p.runNights = []
                 p.runEndDate = nil
                 p.performanceDate = QueueModel.easternToday(
                     (EasternDate.date(from: p.performanceDate!) ?? now).addingTimeInterval(7 * 86_400 + 43_200))
-            }, rowsTouched: [p])
+            }, rowsTouched: [p], putBack: {
+                p.runNights = nights
+                p.runEndDate = end
+                p.performanceDate = opening
+            })
         }
 
         // Cost over every real key, each change and its reverse timed as a pair, three times (median).
@@ -1114,14 +1193,20 @@ final class QueueEnginePhase0cLapsProbeTests {
               building the calendar from them                       \(build.text)
               index cold build                                      \(cold.text)
               sampled real keys against the dry run: \(sampleMismatch) mismatches of \(samples)
+              \(sampleDetail.joined(separator: "\n  "))
               widest weekly rule judged \(biggest.judged) rows over \(biggest.changed) changed of \(biggest.candidates) candidate nights
               \(kinds.map { Phase0b.pad($0.0, 58) + " " + $0.1.text }.joined(separator: "\n  "))
               the index's judge includes building the new calendar; reading the inputs above is paid on top of it
             """)
         let equal = sampleMismatch == 0 && firstEqual
-        return ["conflicts [\(label)]: \(equal && worst + readInputs.median < 2 ? "PASS" : "FAIL") (\(sampleMismatch) sampled mismatches, "
-                + "first sweep mirror \(firstEqual ? "equal" : "UNEQUAL"); worst calendar change \(String(format: "%.3f", worst)) ms "
-                + "plus \(String(format: "%.3f", readInputs.median)) ms reading inputs, against 2 ms)"]
+        let weeklyWorst = max(kinds[2].1.max, kinds[3].1.max)
+        let datedWorst = calendarKinds.enumerated().filter { $0.offset != 2 && $0.offset != 3 }.map(\.element.1.max).max() ?? 0
+        let verdict = !equal ? "STAYS WHOLE (not proven equal)"
+            : worst + readInputs.median < 2 ? "PASS" : "FAIL on cost, proven equal"
+        return ["conflicts [\(label)]: \(verdict) (\(sampleMismatch) sampled mismatches, first sweep mirror "
+                + "\(firstEqual ? "equal" : "UNEQUAL"); worst dated change \(String(format: "%.3f", datedWorst)) ms, worst weekly "
+                + "rule \(String(format: "%.3f", weeklyWorst)) ms, each plus \(String(format: "%.3f", readInputs.median)) ms "
+                + "reading inputs, against 2 ms per calendar change)"]
     }
 
     // MARK: the closing read
