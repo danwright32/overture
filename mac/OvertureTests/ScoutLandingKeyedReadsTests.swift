@@ -121,6 +121,8 @@ struct ScoutLandingKeyedReadsTests {
         #expect(try landing.stored(key: fresh.naturalKey) === fresh)
         #expect(try landing.stored(key: gone.naturalKey) == nil, Comment(rawValue:
             "a deleted row was still answered from the key index"))
+        #expect(try !landing.rows().contains { $0 === gone }, Comment(rawValue:
+            "a row deleted after the rows were read was still among them"))
     }
 
     // MARK: a landing, counted

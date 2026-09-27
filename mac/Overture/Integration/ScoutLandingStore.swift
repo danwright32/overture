@@ -109,6 +109,9 @@ final class ScoutLandingStore {
     private let readKey: ReadKey
     let policy: Policy
     private var loaded: [Prospect]?
+    // `loaded` without deleted rows, as the last read found it. Dropped whenever it could have changed: a
+    // row joins, a save begins, or a deletion is pending.
+    private var members: [Prospect]?
     private var folds: [ObjectIdentifier: Fold] = [:]
     // Rows SwiftData has named as written since their fold, or their key entry, was taken. Two sets because
     // the two are consumed separately: a fold is re-checked when it is asked for, a key when a key is.
@@ -148,7 +151,10 @@ final class ScoutLandingStore {
         // context is this actor.
         saveWatch.token = NotificationCenter.default.addObserver(
             forName: ModelContext.willSave, object: context, queue: nil) { [weak self] _ in
-            MainActor.assumeIsolated { self?.noteWrittenRows() }
+            MainActor.assumeIsolated {
+                self?.noteWrittenRows()
+                self?.members = nil
+            }
         }
     }
 
@@ -175,10 +181,18 @@ final class ScoutLandingStore {
         if policy == .everyRead { return try read(context) }
         if let loaded {
             noteWrittenRows()
-            return loaded.filter { !$0.isDeleted }
+            // Re-filtering every row on every read was, once keyed lookups came here, a larger cost than the
+            // keyed fetch it replaced (measured on the #4275 probe, Debug). So the filtered list is kept, and
+            // used only while no deletion is pending, which is what makes it the answer the filter would give.
+            let deletionPending = context.hasChanges && !context.deletedModelsArray.isEmpty
+            if let members, !deletionPending { return members }
+            let current = loaded.filter { !$0.isDeleted }
+            members = deletionPending ? nil : current
+            return current
         }
         let fetched = try read(context)
         loaded = fetched
+        members = fetched
         return fetched
     }
 
@@ -187,6 +201,7 @@ final class ScoutLandingStore {
     func inserted(_ p: Prospect) {
         guard policy == .once, loaded != nil else { return }
         loaded?.append(p)
+        members = nil
         generation += 1
         if keyIndex != nil { index(p, at: (loaded?.count ?? 1) - 1) }
     }
@@ -197,11 +212,13 @@ final class ScoutLandingStore {
     // one of them is safe to write a unique key on (#2754, L105).
     func stored(key: String) throws -> Prospect? {
         if policy == .everyRead { return try readKey(key, context) }
-        let members = try rows()
+        // The rows are loaded once; after that only what was written is asked about. A deleted row stays in
+        // the index and is refused below, so no read of every row's `isDeleted` is needed here.
+        if loaded == nil { _ = try rows() } else { noteWrittenRows() }
         if keyIndex == nil {
             keyIndex = [:]
             keysToCheck = [:]
-            for (i, p) in (loaded ?? members).enumerated() { index(p, at: i) }
+            for (i, p) in (loaded ?? []).enumerated() { index(p, at: i) }
         } else {
             for (id, p) in keysToCheck where indexedKey[id] != nil && indexedKey[id] != p.naturalKey {
                 unindex(p)
