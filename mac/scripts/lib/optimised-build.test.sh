@@ -42,7 +42,7 @@ OPT_LOG="$(frontend Overture '-O -enable-testing')
 $(frontend OvertureTests '-O -enable-testing')
 $(frontend OvertureTests '-O -enable-testing')"
 assert_equals "an optimised log is VERIFIED, with its counts" \
-  "VERIFIED: every swift-frontend invocation carried -O and -enable-testing and none carried -Onone (Overture 1, OvertureTests 2)." \
+  "VERIFIED: every compile invocation carried -O and -enable-testing and none carried -Onone (Overture 1, OvertureTests 2)." \
   "$(optimised_build_verdict "${OPT_LOG}")"
 
 DEBUG_LOG="$(frontend Overture '-Onone -enable-testing')
@@ -70,7 +70,7 @@ expect_in "an optimised build that dropped testability is REFUSED" \
 
 ONE_MODULE_LOG="$(frontend Overture '-O -enable-testing')"
 expect_in "a module with no compile line is UNMEASURED" \
-  "UNMEASURED: no swift-frontend invocation for OvertureTests" "$(optimised_build_verdict "${ONE_MODULE_LOG}")"
+  "UNMEASURED: no compile invocation for OvertureTests" "$(optimised_build_verdict "${ONE_MODULE_LOG}")"
 expect_in "and an empty log names both" "for Overture, OvertureTests" "$(optimised_build_verdict "")"
 
 # A module whose name merely BEGINS with a wanted one, and an SDK module the build also compiles, are
@@ -79,6 +79,20 @@ OTHER_LOG="${OPT_LOG}
 $(frontend OvertureHostedTests '-Onone -enable-testing')
 $(frontend SwiftUI '-Onone')"
 expect_in "other modules are not read" "VERIFIED" "$(optimised_build_verdict "${OTHER_LOG}")"
+
+# The shape this Mac's xcodebuild actually prints (measured 2026-09-27): no frontend line at all, and the
+# module's flags on the swiftc line under its SwiftDriver task.
+driver() {
+  printf '    builtin-SwiftDriver -- /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc -module-name %s %s @/d/%s.SwiftFileList -DDEBUG\n' "$1" "$2" "$1"
+}
+DRIVER_DEBUG="$(driver Overture '-Onone -enable-testing -incremental')
+$(driver OvertureTests '-Onone -enable-testing -incremental')"
+expect_in "a Debug driver line is REFUSED" "REFUSED: Overture was compiled WITHOUT optimisation" \
+  "$(optimised_build_verdict "${DRIVER_DEBUG}")"
+DRIVER_OPT="$(driver Overture '-O -whole-module-optimization -enable-testing')
+$(driver OvertureTests '-O -whole-module-optimization -enable-testing')"
+expect_in "an optimised driver line is VERIFIED" "VERIFIED" "$(optimised_build_verdict "${DRIVER_OPT}")"
+assert_equals "and a driver line is kept as evidence" "2" "$(optimised_build_evidence "${DRIVER_OPT}" | grep -c .)"
 
 # Evidence keeps only the compile lines, so a retry's log can be added to the first attempt's.
 EVIDENCE="$(optimised_build_evidence "Test run with 4 tests

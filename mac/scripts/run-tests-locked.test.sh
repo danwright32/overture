@@ -1993,10 +1993,12 @@ echo
 # it always has. Asserted against the literal list rather than against "no override present", so an
 # argument added for any other reason on the ordinary path also goes red here.
 OPT_DIR="$(fixture_scratch_dir)"
-OPT_DEBUG_FRONTEND='    builtin-swiftTaskExecution -- /X/usr/bin/swift-frontend -frontend -c -module-name Overture -Onone -enable-testing -D DEBUG
-    builtin-swiftTaskExecution -- /X/usr/bin/swift-frontend -frontend -c -module-name OvertureTests -Onone -enable-testing -D DEBUG'
-OPT_OPTIMISED_FRONTEND='    builtin-swiftTaskExecution -- /X/usr/bin/swift-frontend -frontend -c -module-name Overture -O -enable-testing -D DEBUG
-    builtin-swiftTaskExecution -- /X/usr/bin/swift-frontend -frontend -c -module-name OvertureTests -O -enable-testing -D DEBUG'
+# The shape xcodebuild really prints here (2026-09-27): each module's flags on the swiftc line under its
+# SwiftDriver task, and no swift-frontend line at all.
+OPT_DEBUG_FRONTEND='    builtin-SwiftDriver -- /X/usr/bin/swiftc -module-name Overture -Onone @/X/Overture.SwiftFileList -DDEBUG -enable-testing
+    builtin-SwiftDriver -- /X/usr/bin/swiftc -module-name OvertureTests -Onone @/X/OvertureTests.SwiftFileList -DDEBUG -enable-testing'
+OPT_OPTIMISED_FRONTEND='    builtin-SwiftDriver -- /X/usr/bin/swiftc -module-name Overture -O @/X/Overture.SwiftFileList -DDEBUG -enable-testing
+    builtin-SwiftDriver -- /X/usr/bin/swiftc -module-name OvertureTests -O @/X/OvertureTests.SwiftFileList -DDEBUG -enable-testing'
 
 : > "${OPT_DIR}/default-args"
 OPT_DEFAULT_RUN="$(OVERTURE_TEST_OPTIMISED= XCODEBUILD_ARGS_FILE="${OPT_DIR}/default-args" \
