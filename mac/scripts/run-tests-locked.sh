@@ -1259,12 +1259,12 @@ main() {
   # A SCOPED run writes nothing, for the same reason it cannot move the short-run baseline: its size is a
   # handful of tests and its duration is a handful of seconds, and both would poison the series. A run
   # that could not state a size writes nothing either, decided inside `suite_run_series_append`.
-  SUITE_SERIES_RECORD="${OVERTURE_SUITE_RUN_SERIES:-${MAC_DIR}/../.overture-suite-run-series}"
+  #
   # #4106: nor an OPTIMISED one. The series is Debug durations, so an optimised run would both be judged
-  # against the wrong spread and become a fast outlier every later Debug run is judged against.
-  if [[ "${optimised}" == "on" ]]; then
-    echo "run-tests-locked.sh: this run was OPTIMISED, so its duration and any cost reading it took were not recorded beside the Debug ones." >&2
-  elif [[ "${scoped}" -eq 0 ]]; then
+  # against the wrong spread and become a fast outlier every later Debug run is judged against. The
+  # scoped guard stays the line straight after the record's path, which suite-stats.test.sh reads.
+  SUITE_SERIES_RECORD="${OVERTURE_SUITE_RUN_SERIES:-${MAC_DIR}/../.overture-suite-run-series}"
+  if [[ "${scoped}" -eq 0 && "${optimised}" == "off" ]]; then
     SUITE_SERIES_TEXT="$(cat "${SUITE_SERIES_RECORD}" 2>/dev/null || true)"
     if [[ -z "${SUITE_SERIES_TEXT}" ]]; then
       SUITE_SERIES_TEXT="# One line per FULL suite run: date, tests, suites, seconds, and why it was retried."
@@ -1277,6 +1277,8 @@ main() {
     if [[ -n "${SUITE_SERIES_NEXT}" && "${SUITE_SERIES_NEXT}" != "${SUITE_SERIES_TEXT}" ]]; then
       printf '%s\n' "${SUITE_SERIES_NEXT}" > "${SUITE_SERIES_RECORD}" 2>/dev/null || true
     fi
+  elif [[ "${optimised}" == "on" ]]; then
+    echo "run-tests-locked.sh: this run was OPTIMISED, so its duration and any cost reading it took were not recorded beside the Debug ones." >&2
   fi
 
   # #1995: and whether THIS run verified the screens, beside the two readouts above.

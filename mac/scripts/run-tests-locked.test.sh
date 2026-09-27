@@ -2020,6 +2020,10 @@ assert_equals "the switch adds the optimiser overrides, keeping testability, bef
 assert_contains "an optimised log is VERIFIED" "optimised build check: VERIFIED" "${OPT_VERIFIED_RUN}"
 assert_not_contains "and is not refused" "NOT trusted" "${OPT_VERIFIED_RUN}"
 assert_equals "and the green run stays green" "exit=0" "$(tail -n 1 <<< "${OPT_VERIFIED_RUN}")"
+# The duration series holds Debug durations, so an optimised FULL run must not append to it, where an
+# ordinary full run appends exactly one reading.
+assert_contains "an optimised full run writes nothing into the duration series" "seriesrecord=0" "${OPT_VERIFIED_RUN}"
+assert_contains "where an ordinary full run writes one" "seriesrecord=1" "${OPT_DEFAULT_RUN}"
 assert_contains "an optimised run waits longer before calling its build stalled" \
   "ended as stalled only after 3600s" "${OPT_VERIFIED_RUN}"
 assert_not_contains "an ordinary run keeps the ordinary stall limit" "ended as stalled only after" "${OPT_DEFAULT_RUN}"
