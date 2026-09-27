@@ -1003,17 +1003,24 @@ struct QueueEnginePhase0cLinksProbeTests {
 
         // One change through T2 and on into T3, timed together, the way the engine would run them.
         var testsMax = 0
+        var lastSplit: (t2: Double, t3: Double, tests: Int) = (0, 0, 0)
+        func splitText() -> String {
+            String(format: "(T2 %.3f ms over %d pair tests, T3 %.3f ms)", lastSplit.t2, lastSplit.tests, lastSplit.t3)
+        }
         func step(_ keys: [Phase0cKey], into stats: inout Phase0cStats) {
             let c2 = keys.map { ($0, byKey[$0].map(T2.Facts.init)) }
             let c3 = keys.map { ($0, byKey[$0].map(T3.Facts.init)) }
             var tests = 0
-            let ms = Phase0.time {
+            var flips: [Phase0cKey: Bool] = [:]
+            let t2ms = Phase0.time {
                 let r = t2.apply(c2)
                 tests = r.tests
-                t3.apply(c3, coveredFlips: Dictionary(uniqueKeysWithValues: r.flips.map { ($0, t2.contradicted.contains($0)) }))
+                flips = Dictionary(uniqueKeysWithValues: r.flips.map { ($0, t2.contradicted.contains($0)) })
             }
+            let t3ms = Phase0.time { t3.apply(c3, coveredFlips: flips) }
+            lastSplit = (t2ms, t3ms, tests)
             testsMax = max(testsMax, tests)
-            stats.add(ms)
+            stats.add(t2ms + t3ms)
         }
         func stride(_ n: Int) -> Int { max(1, n / 6) }
         func firstByID(_ keys: Set<Phase0cKey>) -> Phase0cKey? {
@@ -1117,12 +1124,14 @@ struct QueueEnginePhase0cLinksProbeTests {
         let flaggedAll = byKey.filter { $0.value.disappearedFromFeed }.map { $0.key }
         for key in flaggedAll { byKey[key]?.missedScoutCount += 1 }
         step(flaggedAll, into: &accrual)
+        let upSplit = splitText()
         verify("accrual")
         for key in flaggedAll { byKey[key]?.missedScoutCount -= 1 }
         step(flaggedAll, into: &accrualBack)
+        let backSplit = splitText()
         verify("accrual undone")
-        lines.append("T3 scout accrual, every flagged row (\(flaggedAll.count) rows) up one      \(accrual.text)")
-        lines.append("T3 and back                                               \(accrualBack.text)")
+        lines.append("T3 scout accrual, every flagged row (\(flaggedAll.count) rows) up one      \(accrual.text) \(upSplit)")
+        lines.append("T3 and back                                               \(accrualBack.text) \(backSplit)")
         all.merge(accrual)
         all.merge(accrualBack)
 
