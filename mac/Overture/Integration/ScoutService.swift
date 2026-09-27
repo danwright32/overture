@@ -1450,9 +1450,8 @@ enum ScoutService {
 
         // #4098: how ambiguous each URL this sweep carries is, for the two URL matching arms.
         let batchAmbiguousURLs: AmbiguousURLs
-        if let storedRows = storedRowsForBatch,
-           let measured = try? ambiguousURLsForBatch(batchRows, storedRows: { storedRows },
-                                                     fold: landing.fold(of:)) {
+        if storedRowsForBatch != nil,
+           let measured = try? ambiguousURLsForBatch(batchRows, landing: landing) {
             batchAmbiguousURLs = measured
         } else {
             let everyURL = Set(batchRows.flatMap {
@@ -1996,32 +1995,43 @@ enum ScoutService {
         ShowLink.foldedTitle(a) == ShowLink.foldedTitle(b)
     }
 
-    // #4275: `fold` hands back a stored row's folds, cached across a landing by `ScoutLandingStore`, so
-    // the whole store is not folded again for every source. The default folds afresh.
     static func ambiguousURLsForBatch(_ incoming: [AssembledProspect],
-                                      storedRows: () throws -> [Prospect],
-                                      fold: (Prospect) -> ScoutLandingStore.Fold = ScoutLandingStore.Fold.init)
-        throws -> AmbiguousURLs {
-        var seen: [(url: String, title: String, venue: String)] = []
-        func add(urls: [String], title: String, venue: String?) {
-            let theirTitle = title
-            let theirRoom = ShowLink.foldedVenue(venue)
-            for url in ListingURL.foldedSet(urls) {
-                seen.append((url: url, title: theirTitle, venue: theirRoom))
-            }
-        }
-        for p in try storedRows() {
-            let folded = fold(p)
-            for url in folded.allURLFolds {
-                seen.append((url: url, title: folded.groupName, venue: folded.foldedVenue))
-            }
-        }
-        for p in incoming {
-            add(urls: (p.sourceListingURL.map { [$0] } ?? []) + p.runSourceURLs,
-                title: p.groupName, venue: p.venue)
-        }
+                                      storedRows: () throws -> [Prospect]) throws -> AmbiguousURLs {
+        let stored = try storedRows().flatMap { ambiguityEntries(of: ScoutLandingStore.Fold($0)) }
+        let seen = stored + ambiguityEntries(of: incoming)
         return AmbiguousURLs(atAVenue: ShowLink.ambiguousURLs(seen, scopedByVenue: true),
                              anywhere: ShowLink.ambiguousURLs(seen, scopedByVenue: false))
+    }
+
+    // #4275: the same answer, continuing from the stored rows' shows the landing has already folded
+    // (`ScoutLandingStore.storedShowsPerURL`) rather than walking every stored row again for each source.
+    // Measured after the working set landed: that walk, and its pairwise title test, was 1.7 s of a 3.3 s
+    // landing at 1x, recomputed identically for each of 39 sources.
+    static func ambiguousURLsForBatch(_ incoming: [AssembledProspect],
+                                      landing: ScoutLandingStore) throws -> AmbiguousURLs {
+        var shows = try landing.storedShowsPerURL()
+        let seen = ambiguityEntries(of: incoming)
+        ShowLink.addShows(seen, scopedByVenue: true, into: &shows.atAVenue)
+        ShowLink.addShows(seen, scopedByVenue: false, into: &shows.anywhere)
+        return AmbiguousURLs(atAVenue: ShowLink.ambiguousKeys(shows.atAVenue, scopedByVenue: true),
+                             anywhere: ShowLink.ambiguousKeys(shows.anywhere, scopedByVenue: false))
+    }
+
+    // What one stored row contributes to the ambiguity walk: each folded URL it carries, with its title as
+    // written and its folded room. ONE builder for both halves of the walk, so the stored rows and the
+    // incoming ones cannot come to be entered differently (L370).
+    nonisolated static func ambiguityEntries(of folded: ScoutLandingStore.Fold)
+        -> [(url: String, title: String, venue: String)] {
+        folded.allURLFolds.map { (url: $0, title: folded.groupName, venue: folded.foldedVenue) }
+    }
+
+    nonisolated static func ambiguityEntries(of incoming: [AssembledProspect])
+        -> [(url: String, title: String, venue: String)] {
+        incoming.flatMap { p -> [(url: String, title: String, venue: String)] in
+            let room = ShowLink.foldedVenue(p.venue)
+            return ListingURL.foldedSet((p.sourceListingURL.map { [$0] } ?? []) + p.runSourceURLs)
+                .map { (url: $0, title: p.groupName, venue: room) }
+        }
     }
 
     // The store is the reader on every shipping path. The seam exists so the FAILED read can be

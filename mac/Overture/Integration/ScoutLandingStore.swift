@@ -93,6 +93,16 @@ final class ScoutLandingStore {
     let policy: Policy
     private var loaded: [Prospect]?
     private var folds: [ObjectIdentifier: Fold] = [:]
+    // Moves whenever any row's folds are (re)computed or a row joins, so a value derived from every row's
+    // folds knows when it has to be derived again.
+    private var generation = 0
+    private var shows: (generation: Int, count: Int, value: StoredShows)?
+
+    // The stored rows' URLs folded into SHOWS (`ShowLink.addShows`), in both scopes the ambiguity rule asks.
+    struct StoredShows {
+        var atAVenue: [String: [String]] = [:]
+        var anywhere: [String: [String]] = [:]
+    }
 
     init(context: ModelContext, read: @escaping Read = ScoutService.readProspectTable,
          policy: Policy = .once) {
@@ -115,6 +125,7 @@ final class ScoutLandingStore {
     func inserted(_ p: Prospect) {
         guard policy == .once, loaded != nil else { return }
         loaded?.append(p)
+        generation += 1
     }
 
     // This row's folds, re-derived if any field they came from has changed since they were cached.
@@ -124,6 +135,25 @@ final class ScoutLandingStore {
         if let cached = folds[id], cached.describes(p) { return cached }
         let fresh = Fold(p)
         folds[id] = fresh
+        generation += 1
         return fresh
+    }
+
+    // The stored rows folded into shows, walked once and walked again only when a row joined, left, or had
+    // a folded field change since. The walk is the expensive half of the ambiguous URL rule (a pairwise
+    // title test per URL), and before this it was repeated, identically, for every source of a landing.
+    // Every row's fold is re-checked first, which is what notices an in place write.
+    func storedShowsPerURL() throws -> StoredShows {
+        let rows = try rows()
+        for row in rows { _ = fold(of: row) }
+        if policy == .once, let shows, shows.generation == generation, shows.count == rows.count {
+            return shows.value
+        }
+        var value = StoredShows()
+        let seen = rows.flatMap { ScoutService.ambiguityEntries(of: fold(of: $0)) }
+        ShowLink.addShows(seen, scopedByVenue: true, into: &value.atAVenue)
+        ShowLink.addShows(seen, scopedByVenue: false, into: &value.anywhere)
+        shows = (generation, rows.count, value)
+        return value
     }
 }

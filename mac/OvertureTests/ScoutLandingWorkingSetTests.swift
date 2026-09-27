@@ -140,6 +140,25 @@ struct ScoutLandingWorkingSetTests {
             + "\(rows.map { "\($0.groupName) \($0.performanceDate ?? "-")" }.sorted())"))
     }
 
+    // A ROW AN EARLIER SOURCE INSERTED can make a listing page ambiguous for a later one. Source A brings a
+    // second, different show onto a page the stored show already sits on, so the page now carries two shows
+    // and the URL arms must ask the strict title test there. Source B then lists the stored show with a
+    // subtitle added: over an ambiguous page that is a card of its own. Stored shows walked before A landed
+    // call the page unambiguous and rename the stored row onto B's billing.
+    @Test func aRowAnEarlierSourceInsertedMakesAPageAmbiguousForALaterOne() throws {
+        let page = "https://merkin.example/season"
+        let ctx = try landBothWays(seed: { ctx in
+            stored(ctx, "Zeta Trio", "2026-10-11", url: page)
+        }, [
+            ("source-a", [event("Eta Band", "2026-10-20", url: page)]),
+            ("source-b", [event("Zeta Trio: An Evening", "2026-10-11", url: page)]),
+        ])
+        let rows = try ctx.fetch(FetchDescriptor<Prospect>())
+        #expect(rows.map(\.groupName).sorted() == ["Eta Band", "Zeta Trio", "Zeta Trio: An Evening"],
+                Comment(rawValue: "a subtitle on an ambiguous page joined a stored row: got "
+                        + "\(rows.map { "\($0.groupName) \($0.performanceDate ?? "-")" }.sorted())"))
+    }
+
     // THE SAME SOURCE, event by event. Two listings in one batch whose second re-keys onto the first's new
     // row is the in-source half of the same rule; before #4275 every arm fetched afresh per event.
     @Test func withinOneSourceALaterEventSeesAnEarlierOnesWrites() throws {
