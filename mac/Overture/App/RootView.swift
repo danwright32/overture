@@ -740,6 +740,9 @@ struct RootView: View {
                   // 2026-09-12 over 1,238 rows. Both views are always on screen, so the app read the
                   // whole prospect table twice on every store change.
                   allProspects: allProspects,
+                  // #4106 Step V: the queue derives its own RenderData through the render memo. A served
+                  // one is a test seam only (`QueueRenderDataProviderWiringTests`, L718).
+                  renderDataProvider: QueueMemoRenderData(),
                   onConnectGmail: connectGmail,
                   // #2204: out of the toolbar's status slot, which macOS hides in the overflow chevron at
                   // Dan's ordinary window width, and onto the masthead he reads.
