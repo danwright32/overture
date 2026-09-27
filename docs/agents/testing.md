@@ -379,6 +379,32 @@ the measurement it came from lives here. Read the entry before the rule decides 
   display that is already off, and it cannot help a LOCKED screen, which is a different state that #3842
   reports as NOT MEASURED. It says nothing when it works, and says loudly when caffeinate is missing.
 
+## Running the suite OPTIMISED
+
+- **An optimised run: `OVERTURE_TEST_OPTIMISED=1 mac/scripts/run-tests-locked.sh ...` (#4106, plan v7
+  probe 0c.9).** Every timing before it came from a Debug build, where nothing generic is specialised,
+  so a cost measured there can belong to the build rather than the code. The switch passes Release's
+  optimiser to xcodebuild as overrides (`SWIFT_OPTIMIZATION_LEVEL=-O`, `SWIFT_COMPILATION_MODE=wholemodule`,
+  `ENABLE_TESTABILITY=YES`, from `mac/scripts/lib/optimised-build.sh`). It is not the Release
+  configuration: `DEBUG` stays defined, because tests reach `#if DEBUG` seams. Unset, the runner passes
+  exactly the arguments it always did, which `run-tests-locked.test.sh` asserts against the literal list;
+  any value other than `1` is refused before anything builds.
+  The run is believed only once its own build log shows it (L188, L416): every compile invocation for
+  the `Overture` AND `OvertureTests` modules must carry `-O` and `-enable-testing` and none `-Onone`.
+  Both modules, because the pure suite compiles the app's sources into `OvertureTests`, so a pure probe
+  never runs code compiled as `Overture`. On this Mac's Xcode the log holds no `swift-frontend` line at
+  all (measured 2026-09-27); a module's flags appear on the `builtin-SwiftDriver -- .../swiftc` line under
+  its SwiftDriver task, so that is read, and a frontend line is read too where a toolchain prints one.
+  The verdict is printed as `optimised build check:` and anything but `VERIFIED` fails the run.
+  `UNMEASURED` means no compile line for a module reached the log, which is what a build that planned
+  no compile for it looks like, so clean the build folder or touch a source and run again. Switching
+  between Debug and optimised rebuilds everything each way. An optimised run writes no cost or duration
+  record, since those are Debug figures later runs are compared with.
+  Before believing an optimised timing, run the fixed microbenchmark both ways and compare the medians:
+  `TEST_RUNNER_MEASURE_OPTIMISED_BUILD=1 mac/scripts/run-tests-locked.sh -only-testing:OvertureTests/OptimisedBuildBenchmarkTests`,
+  with and without the switch. Each prints `optimised-build-benchmark:` with its median and spread, and
+  the compiled code's own account of how it was built (`_isDebugAssertConfiguration`).
+
 ## Seeing a guard fail
 
 - **Seeing a guard fail, which every guard here is supposed to have been (L1): `scripts/mutate.sh`
