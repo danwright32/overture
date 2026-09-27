@@ -85,13 +85,14 @@ struct TrailingSlashListingURLTests {
     // comment named `matchByStableSource` and was wrong. BOTH URL arms fold, and on this fixture EITHER
     // ONE ALONE is enough, so this test asserts the pipeline's outcome and not any single arm:
     //
-    //   `ListingURL.sameListing` stopped folding  -> this test stayed GREEN (the run URL arm joined it)
+    //   the stable source arm stopped folding    -> this test stayed GREEN (the run URL arm joined it)
     //   `ListingURL.foldedSet` stopped folding    -> this test stayed GREEN (the stable source arm did)
     //
     // The redundancy is real and worth having, and each arm is proved separately rather than through
     // this one: the run URL arm by `aRunMemberURLDifferingOnlyByASlashIsTheSameMember` below, which
-    // caught the `foldedSet` mutation, and `sameListing` by `twoAbsentAddressesAreNotOneListing`, which
-    // caught the other. Saying this here is the difference between a test that measures a pipeline and a
+    // caught the `foldedSet` mutation. (#4275 removed `ListingURL.sameListing`, the stable source arm's
+    // helper and the subject of `twoAbsentAddressesAreNotOneListing`: that arm now compares the landing's
+    // cached listing fold, where an absent address is nil and never equals a page.) Saying this here is the difference between a test that measures a pipeline and a
     // comment that claims an arm nobody checked (L400).
     @Test func aDriftedTitleOnOnePageAddressedTwoWaysDoesNotMintASecondRow() throws {
         let ctx = try context()
@@ -251,14 +252,6 @@ struct ListingURLFoldTests {
     @Test func aValueThatIsNotAURLComesBackUnchanged() {
         #expect(ListingURL.fold("") == "")
         #expect(ListingURL.fold("not a url") == "not a url")
-    }
-
-    // `sameListing` answers nil as NOT the same listing rather than as agreement, because two rows that
-    // both lack an address share nothing and joining them would be the #797 failure with no URL at all.
-    @Test func twoAbsentAddressesAreNotOneListing() {
-        #expect(!ListingURL.sameListing(nil, nil))
-        #expect(!ListingURL.sameListing("https://example.org/a", nil))
-        #expect(ListingURL.sameListing("https://example.org/a", "https://example.org/a/"))
     }
 }
 

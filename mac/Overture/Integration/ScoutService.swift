@@ -2127,9 +2127,9 @@ enum ScoutService {
     // Friedman drifted) still overlaps its own stored dates. The same production remounted next season
     // does not, so it correctly becomes a new card Dan is asked about rather than silently inheriting an
     // old dismissal and vanishing.
-    // #2758: THROWS rather than swallowing. A `(try? fetch) ?? []` here answers "no match" for a store
-    // that could not answer, which sends the chain to the final insert, the most destructive of the five
-    // arms: it puts a new row on a key another row may already hold.
+    // #2758: THROWS rather than swallowing. A swallowed fetch here, answering an empty array, answers "no
+    // match" for a store that could not answer, which sends the chain to the final insert, the most
+    // destructive of the five arms: it puts a new row on a key another row may already hold.
     private static func matchByConcertIdentity(_ seriesId: String?, groupName: String,
                                                openingNight: String?, runEndDate: String?, venue: String?,
                                                landing: ScoutLandingStore) throws -> Prospect? {
@@ -2254,8 +2254,10 @@ enum ScoutService {
         let all = try landing.rows()
         let room = venueKey(venue)
         return all.first {
-            // #4116: `ListingURL.sameListing` rather than `==`, so one page addressed with and without
-            // its trailing slash is one page. Measured on the live store 2026-09-21: four stored pairs
+            // #4116: both sides FOLDED rather than compared raw, so one page addressed with and without
+            // its trailing slash is one page. (#4275: the stored side's fold is the landing's cached one,
+            // `Fold.listingFold`, and a stored row with no listing URL folds to nil, which never equals
+            // the incoming page, so two absent addresses still never read as one listing.) Measured on the live store 2026-09-21: four stored pairs
             // share a night and a page and differ only by that slash, and every one is a second billing
             // of one concert. The fold touches the trailing slash and nothing else; the reasoning for
             // each rule NOT adopted is recorded on `ListingURL` rather than here.
