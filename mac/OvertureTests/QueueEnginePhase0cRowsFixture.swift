@@ -34,6 +34,9 @@ final class Phase0cRowsFixture {
     private(set) var answers: [OrgReachabilityAnswer] = []
     var refusalRows: [ContactRefusal.Ledger.Row] = []
     var excludedTowns: Set<String> = []
+    // Dan's producer corrections, which decide which presenters qualify and so which rows inherit an
+    // org answer. Starts empty; the `producerOverride` operation toggles one of each direction.
+    var overrides = ProducerOverrides.none
     var now: Date = baseNow
     var replyRunAlive = false
     private var rng: SeededGenerator
@@ -189,11 +192,12 @@ final class Phase0cRowsFixture {
     }
 
     func upstream() -> Phase0cUpstream {
-        Phase0cRowOracle.upstream(every: rows, answers: answers, refusals: refusals, now: now)
+        Phase0cRowOracle.upstream(every: rows, answers: answers, refusals: refusals, overrides: overrides, now: now)
     }
 
     func oracle(order: [Prospect]? = nil) -> Phase0cRowOracle {
         Phase0cRowOracle(every: order ?? rows, inquiries: inquiries, answers: answers, refusals: refusals,
+                         overrides: overrides,
                          stage: stage, replyRunAlive: replyRunAlive)
     }
 
@@ -201,7 +205,7 @@ final class Phase0cRowsFixture {
 
     enum Kind: String, CaseIterable {
         case stageMove, dismissToggle, sentAt, reprep, reply, clock, replyRunAlive, geo, presenter, inquiry,
-             collapsedFront, refusal, recipientFlag, insertRow, dateMove
+             collapsedFront, refusal, recipientFlag, insertRow, dateMove, producerOverride
     }
 
     struct Op {
@@ -383,6 +387,16 @@ final class Phase0cRowsFixture {
                 try? self.context.save()
                 return [fpid]
             }
+        case .producerOverride:
+            let old = overrides
+            let lark = ProducerGate.key(Self.larkPresenter) ?? ""
+            let finch = ProducerGate.key("Finch Players") ?? ""
+            if coin(0.5) {
+                if overrides.demoted.contains(lark) { overrides.demoted.remove(lark) } else { overrides.demoted.insert(lark) }
+            } else {
+                if overrides.promoted.contains(finch) { overrides.promoted.remove(finch) } else { overrides.promoted.insert(finch) }
+            }
+            return Op(kind: kind, label: "producer override toggle", changed: []) { self.overrides = old; return [] }
         case .dateMove:
             let (oldDate, oldEnd) = (p.performanceDate, p.runEndDate)
             p.performanceDate = Self.day(draw(120) - 10, from: now)

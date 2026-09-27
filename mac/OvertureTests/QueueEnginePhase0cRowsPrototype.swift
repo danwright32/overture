@@ -395,13 +395,14 @@ struct Phase0cRowOracle {
     var rowCounts: [String: Int]
 
     init(every: [Prospect], inquiries: [Inquiry], answers: [OrgReachabilityAnswer],
-         refusals: ContactRefusal.Ledger, stage raw: StageContext, replyRunAlive: Bool) {
+         refusals: ContactRefusal.Ledger, overrides: ProducerOverrides, stage raw: StageContext,
+         replyRunAlive: Bool) {
         let canonicalEvery = every.sorted(by: CanonicalOracle.byNaturalKey)
         let inQueue = CanonicalOracle.queueScope(every)
         let context = raw.resolvingPlaces(of: inQueue)
         let scope = QueueModel.scope(from: inQueue, answers: answers.sorted(by: CanonicalOracle.answerOrder),
-                                     corpus: canonicalEvery, overrides: .none, refusals: refusals,
-                                     clients: context.clients, now: context.now, cardKeys: [], today: context.today)
+                                     corpus: canonicalEvery, overrides: overrides, refusals: refusals, clients: context.clients,
+                                     now: context.now, cardKeys: [], today: context.today)
         let byKey = Dictionary(inQueue.map { ($0.naturalKey, $0) }, uniquingKeysWith: { a, _ in a })
         rows = Dictionary(scope.rows.map { row -> (String, QueueScopeRow) in
             var canonical = row
@@ -426,13 +427,16 @@ struct Phase0cRowOracle {
     }
 
     /// The upstream tables as today's code computes them, in the canonical order.
+    // `overrides` carries no default (L168): Dan's promoted producers and demoted houses decide which
+    // presenters qualify, and so which rows inherit an answer, so a caller that forgot them would get an
+    // oracle agreeing with a prototype while both ignore what the app applies.
     static func upstream(every: [Prospect], answers: [OrgReachabilityAnswer], refusals: ContactRefusal.Ledger,
-                         now: Date) -> Phase0cUpstream {
+                         overrides: ProducerOverrides, now: Date) -> Phase0cUpstream {
         let canonicalEvery = every.sorted(by: CanonicalOracle.byNaturalKey)
         let drawn = Set(every.filter { $0.statusRaw != "dismissed" }.map(\.naturalKey))
         let hidden = CanonicalOracle.showLinkCollapse(canonicalEvery.map(ShowLink.Row.init), drawn: drawn).hidden
         let inherited = QueueModel.inheritedAnswers(answers.sorted(by: CanonicalOracle.answerOrder),
-                                                    corpus: canonicalEvery, overrides: .none, refusals: refusals,
+                                                    corpus: canonicalEvery, overrides: overrides, refusals: refusals,
                                                     heldKeys: [], now: now)
         return Phase0cUpstream(hidden: hidden, inherited: inherited)
     }

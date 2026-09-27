@@ -76,6 +76,9 @@ struct QueueEnginePhase0cRowsProbeTests {
         var inheritedMoves = 0
         var permutedDisagreements = 0
         var contactOrderMoved = 0
+        var overrideTouchedDrawn = 0
+        var overrideTouchedDisagreeing = 0
+        var productionDisagreeing = 0
     }
 
     private static func same(_ a: Phase0cRowOracle, _ b: Phase0cRowOracle) -> Bool {
@@ -132,6 +135,34 @@ struct QueueEnginePhase0cRowsProbeTests {
             }
             if result.failures.count >= 5 { break }
         }
+        // Positive control that the oracle SEES Dan's producer corrections (L159): with the Lark presenter
+        // demoted, the rows whose inherited answer that changes, and the oracle's row for each against the
+        // row the production pass builds with the same overrides.
+        let keptOverrides = fx.overrides
+        fx.overrides.demoted.insert(ProducerGate.key(Phase0cRowsFixture.larkPresenter) ?? "")
+        let bare = Phase0cRowOracle.upstream(every: fx.rows, answers: fx.answers, refusals: fx.refusals,
+                                             overrides: .none, now: fx.now).inherited
+        let applied = fx.upstream().inherited
+        let touched = Set(bare.keys).union(applied.keys).filter { bare[$0] != applied[$0] }
+        let production = QueueRenderPass.make(QueueRenderPass.Inputs(
+            allProspects: QueueRenderPass.Corpus(fx.rows), inquiries: fx.inquiries, orgAnswers: fx.answers,
+            refusals: fx.refusals, overrides: fx.overrides, context: fx.stage, focusedStage: .scout,
+            focusedKeys: nil, requestedCardKeys: []))
+        let byKey = fx.rowsByKey
+        var productionRows: [String: QueueScopeRow] = [:]
+        for row in production.rows {
+            var canonical = row
+            if let p = byKey[row.id] { canonical.facts = Phase0cRowBuild.canonicalFacts(p) }
+            productionRows[row.id] = canonical
+        }
+        let oracleRows = fx.oracle().rows
+        let common = Set(productionRows.keys).intersection(oracleRows.keys)
+        let touchedDrawn = touched.intersection(common)
+        result.overrideTouchedDrawn += touchedDrawn.count
+        result.overrideTouchedDisagreeing += touchedDrawn.filter { productionRows[$0] != oracleRows[$0] }.count
+        result.productionDisagreeing += common.filter { productionRows[$0] != oracleRows[$0] }.count
+        fx.overrides = keptOverrides
+
         // The oracle itself, over reversed and shuffled input, at the end of the sequence (plan section 4):
         // through the canonical wrapper it must give one answer whatever order the rows arrive in.
         var generator = SeededGenerator(seed: seed ^ 0x5eed)
@@ -160,6 +191,9 @@ struct QueueEnginePhase0cRowsProbeTests {
             total.inheritedMoves += r.inheritedMoves
             total.permutedDisagreements += r.permutedDisagreements
             total.contactOrderMoved += r.contactOrderMoved
+            total.overrideTouchedDrawn += r.overrideTouchedDrawn
+            total.overrideTouchedDisagreeing += r.overrideTouchedDisagreeing
+            total.productionDisagreeing += r.productionDisagreeing
             for (k, v) in r.opsByKind { total.opsByKind[k, default: 0] += v }
             for (k, v) in r.oracleMovedByKind { total.oracleMovedByKind[k, default: 0] += v }
             for (k, v) in r.changedKeysByKind { total.changedKeysByKind[k, default: 0] += v }
@@ -175,6 +209,7 @@ struct QueueEnginePhase0cRowsProbeTests {
               per kind (applied / oracle output moved / prototype ChangedKeys non-empty): \(kinds.joined(separator: ", "))
               upstream hand-offs seen: \(total.hiddenFlips) hidden flips, \(total.inheritedMoves) inherited moves
               oracle over reversed and shuffled input disagreeing with forward: \(total.permutedDisagreements)
+              producer override control: \(total.overrideTouchedDrawn) drawn rows whose inherited answer a demotion changes, \(total.overrideTouchedDisagreeing) of them differ from the production pass; \(total.productionDisagreeing) rows differ overall
               entry-comparisons where p.recipients came back in a different order than when the entry was built, the row unchanged: \(total.contactOrderMoved)
             """)
         #expect(total.failures.isEmpty, Comment(rawValue: total.failures.prefix(5).joined(separator: "\n")))
@@ -185,5 +220,8 @@ struct QueueEnginePhase0cRowsProbeTests {
         #expect(total.inheritedMoves > 0, "no operation ever moved an inherited answer")
         #expect((total.oracleMovedByKind["collapsedFront"] ?? 0) > 0, "dismissing a front never changed the output")
         #expect((total.oracleMovedByKind["clock"] ?? 0) > 0, "no clock move ever changed the output")
+        #expect(total.overrideTouchedDrawn > 0, "no drawn row's inherited answer depended on a producer override")
+        #expect(total.overrideTouchedDisagreeing == 0, "the oracle's rows ignore overrides the production pass applies")
+        #expect(total.productionDisagreeing == 0, "the oracle's rows differ from the production pass")
     }
 }

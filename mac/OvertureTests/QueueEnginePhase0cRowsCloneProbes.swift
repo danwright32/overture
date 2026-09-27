@@ -42,12 +42,12 @@ struct Phase0cRowsTables {
     }
 
     func upstream(_ now: Date) -> Phase0cUpstream {
-        Phase0cRowOracle.upstream(every: rows, answers: answers, refusals: refusals, now: now)
+        Phase0cRowOracle.upstream(every: rows, answers: answers, refusals: refusals, overrides: overrides, now: now)
     }
 
     func oracle(_ now: Date, alive: Bool = false) -> Phase0cRowOracle {
-        Phase0cRowOracle(every: rows, inquiries: inquiries, answers: answers, refusals: refusals, stage: stage(now),
-                         replyRunAlive: alive)
+        Phase0cRowOracle(every: rows, inquiries: inquiries, answers: answers, refusals: refusals,
+                         overrides: overrides, stage: stage(now), replyRunAlive: alive)
     }
 }
 
@@ -119,6 +119,38 @@ extension QueueEnginePhase0cRowsProbeTests {
                 proto = Phase0cRowEntries(rows: every, context: t.rowContext(base), upstream: t.upstream(base))
             }
             let atBase = t.oracle(base).mismatches(proto, rowsByKey: byKey)
+
+            // Positive control that the oracle can SEE an override (L159): the rows whose inherited answer
+            // Dan's promoted producers and demoted houses change, and the oracle's row for each against the
+            // row the production pass builds with those overrides. Compared on the keys both draw, with
+            // contact facts in id order on both sides (finding 1 of this probe).
+            let withoutOverrides = Phase0cRowOracle.upstream(every: every, answers: t.answers, refusals: t.refusals,
+                                                             overrides: .none, now: base).inherited
+            let withOverrides = t.upstream(base).inherited
+            let touched = Set(withoutOverrides.keys).union(withOverrides.keys)
+                .filter { withoutOverrides[$0] != withOverrides[$0] }
+            let production = QueueRenderPass.make(QueueRenderPass.Inputs(
+                allProspects: QueueRenderPass.Corpus(every), inquiries: t.inquiries, orgAnswers: t.answers,
+                sources: t.sources, refusals: t.refusals, overrides: t.overrides, context: t.stage(base),
+                focusedStage: .scout, focusedKeys: nil, requestedCardKeys: []))
+            var productionRows: [String: QueueScopeRow] = [:]
+            for row in production.rows {
+                var canonical = row
+                if let p = byKey[row.id] { canonical.facts = Phase0cRowBuild.canonicalFacts(p) }
+                productionRows[row.id] = canonical
+            }
+            let oracleRows = t.oracle(base).rows
+            let common = Set(productionRows.keys).intersection(oracleRows.keys)
+            let touchedDrawn = touched.intersection(common)
+            let disagreeing = common.filter { productionRows[$0] != oracleRows[$0] }
+            let touchedDisagreeing = touchedDrawn.filter { productionRows[$0] != oracleRows[$0] }
+            let overrideControl = touchedDrawn.isEmpty
+                ? "UNMEASURED: no drawn row's inherited answer depends on an override on this store"
+                : "\(touchedDisagreeing.count) of \(touchedDrawn.count) override-touched rows differ from the production pass"
+            #expect(touchedDisagreeing.isEmpty,
+                    "oracle rows differ from the production pass on \(touchedDisagreeing.count) override-touched rows [\(label)]")
+            #expect(disagreeing.isEmpty,
+                    "oracle rows differ from the production pass on \(disagreeing.count) of \(common.count) rows [\(label)]")
 
             // A row change, over EVERY real row: subtract the old contribution, build the entry, add it.
             let up = proto.upstream
@@ -213,6 +245,8 @@ extension QueueEnginePhase0cRowsProbeTests {
                   today's whole T7 terms (the oracle: scope rows, placements, AgentInputs, organisationRowCounts, DueWork, ReachedOut), five runs: \(todayTerms.text)
                   prototype cold build, every entry                 \(String(format: "%.1f", cold)) ms
                   prototype against the oracle at the base instant  \(atBase.isEmpty ? "0 mismatches" : atBase.joined(separator: "; "))
+                  overrides: \(t.overrides == .none ? "none stored" : "stored"); rows whose inherited answer an override changes \(touched.count), \(touchedDrawn.count) of them drawn
+                  oracle rows against the production pass (overrides applied): \(disagreeing.count) of \(common.count) common rows differ; \(overrideControl)
                   a row change, every real row                      \(rowStats.text)
                   rows over 1 ms (\(slow.count)): \(slowShape)
                   per-row noise, five fixed rows x5                 \(fixedSpread.joined(separator: " | "))
