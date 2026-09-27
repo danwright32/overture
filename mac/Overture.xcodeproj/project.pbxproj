@@ -1407,6 +1407,7 @@
 		95E6933B6ECFB98F5F3B27D0 /* Signature2086Fixture.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60202E6AD064F2F94493F91B /* Signature2086Fixture.swift */; };
 		95E928F561A68B8164E25078 /* ReachabilityProbeQueueTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8FEDA1F78AE7B4ED5B77970D /* ReachabilityProbeQueueTests.swift */; };
 		95FA968A34EE5F74D750A3F0 /* FollowUpsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 420EC153064F83BE06351CC9 /* FollowUpsView.swift */; };
+		960C8118DAF8D2A312888B6C /* QueueEnginePhase0cLapsPrototypes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5CC6BC22E7D0ED573A64B985 /* QueueEnginePhase0cLapsPrototypes.swift */; };
 		9676857FFB22C7E5FDCBE9D0 /* RecipientTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00808F64D5725ECB3A4619DE /* RecipientTests.swift */; };
 		968BDD1A9C5E87F86F430BC0 /* ProducerCorpusIsBuiltOnceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C9064E2167420B0021F80693 /* ProducerCorpusIsBuiltOnceTests.swift */; };
 		969A27A402BC24FC6BEBE48E /* WeeklyDayOffTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0192C4587CB4CA708384F96 /* WeeklyDayOffTests.swift */; };
@@ -2231,6 +2232,7 @@
 		ED45B4463308638C31A1E156 /* BulkDismiss.swift in Sources */ = {isa = PBXBuildFile; fileRef = 66778757A51FEA3E0F1E94AB /* BulkDismiss.swift */; };
 		ED4CA353D2AA4008B4ECCBDB /* NoSubjectRefusedTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0EE5E7087E8933A18444C180 /* NoSubjectRefusedTests.swift */; };
 		ED6E8A328FE3402DDFF0066C /* ReachedOutRowChrome.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1044393031A6274CC5BF79C3 /* ReachedOutRowChrome.swift */; };
+		ED6EA2316D630379BC33FD0C /* QueueEnginePhase0cLapsProbeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A68DD0466D65F63F82561DE3 /* QueueEnginePhase0cLapsProbeTests.swift */; };
 		ED712CB3CF93FD95F889519A /* RefusedOrgKeyRealignmentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 45DEE245043BA1B646646EC8 /* RefusedOrgKeyRealignmentTests.swift */; };
 		ED86DFD9827D306056D8201F /* ReplyReopensAClosedShowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 347434B339F108F5693418F5 /* ReplyReopensAClosedShowTests.swift */; };
 		EDCD7084EB3A8993A15B666D /* ClientCoverage.swift in Sources */ = {isa = PBXBuildFile; fileRef = D7C658710DD1D5B1A0453E21 /* ClientCoverage.swift */; };
@@ -3081,6 +3083,7 @@
 		5C78FAF6E339D7D7CD533449 /* BuildMemo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BuildMemo.swift; sourceTree = "<group>"; };
 		5CB0523213D49948BAEA94FE /* ReplyClassifyRunSummaryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReplyClassifyRunSummaryTests.swift; sourceTree = "<group>"; };
 		5CC14B86868BE9F16FCEB0B8 /* ConflictWarnsRatherThanBlocksTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConflictWarnsRatherThanBlocksTests.swift; sourceTree = "<group>"; };
+		5CC6BC22E7D0ED573A64B985 /* QueueEnginePhase0cLapsPrototypes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QueueEnginePhase0cLapsPrototypes.swift; sourceTree = "<group>"; };
 		5CC8C3FF6F444021E825CFBE /* DownbeatExportWatcherTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DownbeatExportWatcherTests.swift; sourceTree = "<group>"; };
 		5CD9A4270B134410900E70F4 /* ARoleIsQuotedOrCharacterisedTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ARoleIsQuotedOrCharacterisedTests.swift; sourceTree = "<group>"; };
 		5D44A4C8F631AB5C94B42847 /* QueueScrollTargetTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QueueScrollTargetTests.swift; sourceTree = "<group>"; };
@@ -3647,6 +3650,7 @@
 		A5F7741AD8EDE1AA7266DD4E /* OutboundCopyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutboundCopyTests.swift; sourceTree = "<group>"; };
 		A65C20935D9FD02443632657 /* ScrollPassthroughWebViewTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScrollPassthroughWebViewTests.swift; sourceTree = "<group>"; };
 		A67B23D25F4778E0789FB020 /* StoodDownIsItsOwnStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StoodDownIsItsOwnStateTests.swift; sourceTree = "<group>"; };
+		A68DD0466D65F63F82561DE3 /* QueueEnginePhase0cLapsProbeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QueueEnginePhase0cLapsProbeTests.swift; sourceTree = "<group>"; };
 		A698C83EB398046D2D8691AB /* FormOutreachTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FormOutreachTests.swift; sourceTree = "<group>"; };
 		A6A24C0EDD3F72C6E15DC128 /* SeedTableCensusLiveStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SeedTableCensusLiveStoreTests.swift; sourceTree = "<group>"; };
 		A6D73F47ACC4A26CDC4408A5 /* SourceYieldTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourceYieldTests.swift; sourceTree = "<group>"; };
@@ -5139,6 +5143,8 @@
 				DA14434886B6CC5AF9B91D46 /* QueueDerivationCounterTests.swift */,
 				3802AA2883BE11846616F4A0 /* QueueDerivationReasonTests.swift */,
 				3118EE9FC5DA578075EBDA37 /* QueueEnginePhase0bProbeTests.swift */,
+				A68DD0466D65F63F82561DE3 /* QueueEnginePhase0cLapsProbeTests.swift */,
+				5CC6BC22E7D0ED573A64B985 /* QueueEnginePhase0cLapsPrototypes.swift */,
 				7BCF6C579DC369636635CAB0 /* QueueEnginePhase0Extraction.swift */,
 				FE583E4ABB9A384B55C6A6B4 /* QueueEnginePhase0ProbeTests.swift */,
 				7789EB6D1891A589E48D370E /* QueueExcludedTownTests.swift */,
@@ -8021,6 +8027,8 @@
 				D81E03A2968087AF842DEFA8 /* QueueEnginePhase0Extraction.swift in Sources */,
 				12DC30388FDB599DEBFAD061 /* QueueEnginePhase0ProbeTests.swift in Sources */,
 				5CFD7ED5609D0EB968786D12 /* QueueEnginePhase0bProbeTests.swift in Sources */,
+				ED6EA2316D630379BC33FD0C /* QueueEnginePhase0cLapsProbeTests.swift in Sources */,
+				960C8118DAF8D2A312888B6C /* QueueEnginePhase0cLapsPrototypes.swift in Sources */,
 				4F048CA00B8C8D7AE39B68E6 /* QueueExcludedTownTests.swift in Sources */,
 				5B6961FAF0732201386A9684 /* QueueGeoFilterTests.swift in Sources */,
 				49C77C7EF9AA642ED79CE4A9 /* QueueGeoIsOneFilterTests.swift in Sources */,
