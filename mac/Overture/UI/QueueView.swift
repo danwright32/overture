@@ -175,6 +175,11 @@ struct QueueView: View {
     @Binding var deepLinkedKeys: LeadsDeepLink?
     // #3846: see the note beside `orgAnswers`. RootView's single whole-table read, handed down.
     let allProspects: [Prospect]
+    // #4106 Step V: where the body's RenderData comes from. The memo one serves nothing, so
+    // `makeRenderData` derives exactly as it always did; a provider that serves a prebuilt pass is a test
+    // seam for timing the body alone (Phase 0c.8), and `QueueRenderDataProviderWiringTests` keeps it out
+    // of the app (L718). Defaulted to the memo one so every harness that names none runs the real path.
+    var renderDataProvider: any QueueRenderDataProvider = QueueMemoRenderData()
     @State private var focusedKeys: [String]?
     // #1140: which STAGE the focused view is showing, when it was entered by tapping a stage pill (nil
     // for the #308 away-alert leads path). Set, the focused list re-derives its membership and heading
@@ -417,6 +422,9 @@ struct QueueView: View {
     }
 
     private func makeRenderData() -> RenderData {
+        // #4106 Step V: a served pass is drawn as it is, ahead of the stamp below, because nothing was
+        // derived and counting it would record a pass that never ran. Production's provider serves nil.
+        if let served = renderDataProvider.servedRenderData() { return served }
         // #3760: the main thread stamps, the watchdog reads. Here rather than inside `QueueRenderPass`
         // because that is a pure static derivation and this is a side effect on the app's own instrument;
         // the guard that keeps every future call site honest is a source test, not this comment.

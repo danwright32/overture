@@ -153,6 +153,20 @@ struct SameVenueOneNightSweepTests {
                                           "the music of sir karl jenkins"],
                            night: "2027-01-18",
                            venues: ["Stern Auditorium / Perelman Stage", "Stern Auditorium / Perelman Stage"]),
+                // Judged 2026-09-26 by Dan, in the working session: ONE concert, billed with and without its
+                // edition number ("7th"). Both rows carry a Carnegie calendar page for the same night and the
+                // same 1pm start, and the two slugs differ only by that number
+                // (`.../2027/01/10/new-york-global-music-competition-winners-concert-0100pm` against
+                // `.../2027/01/10/7th-new-york-global-music-competition-winners-concert-0100pm`). An
+                // edition number names which year's winners are playing, not a second programme.
+                // The unnumbered row was first seen on 2026-09-13 and the numbered one on 2026-09-26, so
+                // this is the same shape as the Karl Jenkins entry above: the slug changed between scouts,
+                // `matchByStableSource` had nothing to match, and the second billing was inserted as its
+                // own row. That gap is #4200; this entry only records the verdict.
+                JudgedPair(foldedTitles: ["7th new york global music competition winners concert",
+                                          "new york global music competition winners concert"],
+                           night: "2027-01-10",
+                           venues: ["Weill Recital Hall", "Weill Recital Hall"]),
             ]
 
             let unjudged = candidates.filter {

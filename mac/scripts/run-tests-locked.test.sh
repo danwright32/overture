@@ -454,8 +454,11 @@ esac
 exec /usr/bin/pgrep "\$@"
 STUB
 
+  # #4106: XCODEBUILD_ARGS_FILE records every argument list the runner hands xcodebuild, one call per
+  # line, so a fixture can assert what an ordinary run and an optimised run each PASS. Inert unless set.
   cat > "${bin_dir}/xcodebuild" <<STUB
 #!/usr/bin/env bash
+echo "\$*" >> "\${XCODEBUILD_ARGS_FILE:-/dev/null}"
 cat <<'XCODEBUILD_OUTPUT'
 ${xcodebuild_output}
 XCODEBUILD_OUTPUT
@@ -1982,6 +1985,70 @@ PREFS_RUN="$(OVERTURE_PREFERENCES_DIR="${PREFS_DIR}" run_wrapper_with_stub_xcode
 assert_contains "a run names the files it removed" \
   "removed 1 test defaults file(s) from ~/Library/Preferences" "${PREFS_RUN}"
 rm -rf "${PREFS_DIR}"
+
+echo
+# --- #4106: the OPTIMISED run (plan v7 probe 0c.9) --------------------------------------------------
+#
+# Off by default, and OFF MEANS UNCHANGED: an ordinary run must hand xcodebuild byte for byte the arguments
+# it always has. Asserted against the literal list rather than against "no override present", so an
+# argument added for any other reason on the ordinary path also goes red here.
+OPT_DIR="$(fixture_scratch_dir)"
+# The shape xcodebuild really prints here (2026-09-27): each module's flags on the swiftc line under its
+# SwiftDriver task, and no swift-frontend line at all.
+OPT_DEBUG_FRONTEND='    builtin-SwiftDriver -- /X/usr/bin/swiftc -module-name Overture -Onone @/X/Overture.SwiftFileList -DDEBUG -enable-testing
+    builtin-SwiftDriver -- /X/usr/bin/swiftc -module-name OvertureTests -Onone @/X/OvertureTests.SwiftFileList -DDEBUG -enable-testing'
+OPT_OPTIMISED_FRONTEND='    builtin-SwiftDriver -- /X/usr/bin/swiftc -module-name Overture -O @/X/Overture.SwiftFileList -DDEBUG -enable-testing
+    builtin-SwiftDriver -- /X/usr/bin/swiftc -module-name OvertureTests -O @/X/OvertureTests.SwiftFileList -DDEBUG -enable-testing'
+
+: > "${OPT_DIR}/default-args"
+OPT_DEFAULT_RUN="$(OVERTURE_TEST_OPTIMISED= XCODEBUILD_ARGS_FILE="${OPT_DIR}/default-args" \
+  run_wrapper_with_stub_xcodebuild "${OPT_DEBUG_FRONTEND}
+${GREEN_RUN_LOG}" 0)"
+assert_equals "an ordinary run passes xcodebuild exactly the arguments it always has" \
+  "-scheme Overture -destination platform=macOS test" \
+  "$(grep -a ' test' "${OPT_DIR}/default-args" || true)"
+assert_not_contains "an ordinary run says nothing about optimisation" "optimised build check" "${OPT_DEFAULT_RUN}"
+assert_not_contains "and does not refuse a Debug build" "NOT trusted" "${OPT_DEFAULT_RUN}"
+
+: > "${OPT_DIR}/opt-args"
+OPT_VERIFIED_RUN="$(OVERTURE_TEST_OPTIMISED=1 XCODEBUILD_ARGS_FILE="${OPT_DIR}/opt-args" \
+  run_wrapper_with_stub_xcodebuild "${OPT_OPTIMISED_FRONTEND}
+${GREEN_RUN_LOG}" 0)"
+assert_equals "the switch adds the optimiser overrides, keeping testability, before the action" \
+  "-scheme Overture -destination platform=macOS SWIFT_OPTIMIZATION_LEVEL=-O SWIFT_COMPILATION_MODE=wholemodule ENABLE_TESTABILITY=YES test" \
+  "$(grep -a ' test' "${OPT_DIR}/opt-args" || true)"
+assert_contains "an optimised log is VERIFIED" "optimised build check: VERIFIED" "${OPT_VERIFIED_RUN}"
+assert_not_contains "and is not refused" "NOT trusted" "${OPT_VERIFIED_RUN}"
+assert_equals "and the green run stays green" "exit=0" "$(tail -n 1 <<< "${OPT_VERIFIED_RUN}")"
+# The duration series holds Debug durations, so an optimised FULL run must not append to it, where an
+# ordinary full run appends exactly one reading.
+assert_contains "an optimised full run writes nothing into the duration series" "seriesrecord=0" "${OPT_VERIFIED_RUN}"
+assert_contains "where an ordinary full run writes one" "seriesrecord=1" "${OPT_DEFAULT_RUN}"
+assert_contains "an optimised run waits longer before calling its build stalled" \
+  "ended as stalled only after 3600s" "${OPT_VERIFIED_RUN}"
+assert_not_contains "an ordinary run keeps the ordinary stall limit" "ended as stalled only after" "${OPT_DEFAULT_RUN}"
+OPT_SET_LIMIT_RUN="$(OVERTURE_TEST_OPTIMISED=1 OVERTURE_TEST_STALL_END_SECONDS=1200 \
+  run_wrapper_with_stub_xcodebuild "${OPT_OPTIMISED_FRONTEND}
+${GREEN_RUN_LOG}" 0)"
+assert_not_contains "and a limit the caller set still wins" "ended as stalled only after" "${OPT_SET_LIMIT_RUN}"
+
+OPT_DEBUG_RUN="$(OVERTURE_TEST_OPTIMISED=1 run_wrapper_with_stub_xcodebuild "${OPT_DEBUG_FRONTEND}
+${GREEN_RUN_LOG}" 0)"
+assert_contains "a Debug log under the switch is REFUSED by name" "optimised build check: REFUSED" "${OPT_DEBUG_RUN}"
+assert_contains "and the green run it came from fails" "exit=1" "${OPT_DEBUG_RUN}"
+
+OPT_EMPTY_RUN="$(OVERTURE_TEST_OPTIMISED=1 run_wrapper_with_stub_xcodebuild "${GREEN_RUN_LOG}" 0)"
+assert_contains "a log with no compile lines is UNMEASURED, never a pass" \
+  "optimised build check: UNMEASURED" "${OPT_EMPTY_RUN}"
+assert_contains "and fails the run" "exit=1" "${OPT_EMPTY_RUN}"
+
+: > "${OPT_DIR}/typo-args"
+OPT_TYPO_RUN="$(OVERTURE_TEST_OPTIMISED=yes XCODEBUILD_ARGS_FILE="${OPT_DIR}/typo-args" \
+  run_wrapper_with_stub_xcodebuild "${OPT_OPTIMISED_FRONTEND}
+${GREEN_RUN_LOG}" 0)"
+assert_contains "a switch value that is neither 1 nor unset is refused" "OVERTURE_TEST_OPTIMISED is 'yes'" "${OPT_TYPO_RUN}"
+assert_equals "and nothing is built" "" "$(grep -a ' test' "${OPT_DIR}/typo-args" || true)"
+rm -rf "${OPT_DIR}"
 
 if [[ "${FAILURES}" -eq 0 ]]; then
   echo "All run-tests-locked.sh stale-host fixtures passed."
