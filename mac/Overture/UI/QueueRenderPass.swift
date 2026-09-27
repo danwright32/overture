@@ -123,7 +123,8 @@ enum QueueRenderPass {
                               oracleCards: 0, oracleSendGroupBuilds: 0, oracleDraftLintRuns: 0,
                               oracleRecipientReaches: 0, nightTimeMapBuilds: 0,
                               stagePlacements: 0, producerIndexes: 0,
-                              producerKeyFolds: 0, clientNameMatches: 0)
+                              producerKeyFolds: 0, clientNameMatches: 0,
+                              contradictionSweeps: 0, reachedOutSweeps: 0)
 
         // #3654 step 4c: the in-app divergence check is a SECOND WRITER of this tally, and that is
         // settled here rather than discovered in a red run.
@@ -209,6 +210,13 @@ enum QueueRenderPass {
         // carries, and `SourcesRenderPassCostTests` pins a Sources pass at zero of them.
         var clientNameMatches: Int { lock.withLock { counts.clientNameMatches } }
 
+        // #4106 Step C: how many times one pass swept the whole corpus for contradicted cancellations, and
+        // how many times it built the reached-out list. Each is a whole-corpus answer the pass takes once
+        // and hands to every reader; a second derivation from the same inputs is the defect, and a count of
+        // SWEEPS is the quantity (each call is one, whatever it finds), never a proxy for it (L63).
+        var contradictionSweeps: Int { lock.withLock { counts.contradictionSweeps } }
+        var reachedOutSweeps: Int { lock.withLock { counts.reachedOutSweeps } }
+
         // What the divergence check itself spent, held apart from every number above so the pass's own
         // pins mean what their names say.
         var oracleCards: Int { lock.withLock { counts.oracleCards } }
@@ -238,6 +246,14 @@ enum QueueRenderPass {
         static func recordStagePlacement() {
             guard let t = current else { return }
             t.lock.withLock { t.counts.stagePlacements += 1 }
+        }
+        static func recordContradictionSweep() {
+            guard let t = current else { return }
+            t.lock.withLock { t.counts.contradictionSweeps += 1 }
+        }
+        static func recordReachedOutSweep() {
+            guard let t = current else { return }
+            t.lock.withLock { t.counts.reachedOutSweeps += 1 }
         }
         static func recordNightTimeMapBuild() {
             guard let t = current else { return }
@@ -400,7 +416,9 @@ enum QueueRenderPass {
         // keys the queue will actually render, which is what decides whether the notice may offer to show
         // them (L109, `StageNavigation.opensInQueue` is the same question asked one key at a time).
         let feedBreaks = AppNotices.feedBreaks(
-            FeedBreakEvent.events(among: everyProspect, asOf: EasternDate.today(i.context.now)),
+            // #4106 Step C: the scope's own contradicted set, taken over this same `everyProspect`.
+            FeedBreakEvent.events(among: everyProspect, asOf: EasternDate.today(i.context.now),
+                                  contradicted: scope.contradictedCancellations),
             shownInQueue: { inAStage.contains($0) })
         // #3596: the rows a merge kept that the next sweep did not list. Derived here for the same two
         // reasons as the line above: it is a whole-store question, and this pass already holds both
@@ -441,7 +459,10 @@ enum QueueRenderPass {
                                           runInFlight: i.runInFlight, replyRunAlive: i.replyRunAlive,
                                           // #3738: the table this pass already built, so the pill counts
                                           // read it rather than deciding every show's stages again.
-                                          placement: placement),
+                                          placement: placement,
+                                          // #4106 Step C: the list this pass already built, over the same
+                                          // `inQueue.all` at the same `context.now`.
+                                          reachedOut: reachedOut),
             gmailConnected: i.gmailConnected,
             probeRunning: i.runInFlight == .reachabilityCheck,
             // #3646: each slot's own marker, carried through unchanged, so every surface that greys a

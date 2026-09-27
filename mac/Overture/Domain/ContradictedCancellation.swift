@@ -51,6 +51,7 @@ enum ContradictedCancellation {
     // against the row-by-row answer rather than against a literal, so the index cannot drift from the
     // rule it indexes (L58).
     static func contradictedKeys(among rows: [Prospect]) -> Set<String> {
+        QueueRenderPass.WorkTally.recordContradictionSweep()
         var liveByVenue: [String: [Prospect]] = [:]
         for row in rows where row.missedScoutCount == 0 {
             liveByVenue[canonicalVenue(row.venue), default: []].append(row)
