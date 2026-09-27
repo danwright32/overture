@@ -3339,7 +3339,8 @@ enum QueueModel {
                                       registry: cardKeyRegistry),
                      // Present whenever a sample was taken, so `checked == false` and "agreed" are
                      // different answers rather than one silence (L98).
-                     cardCheck: Scope.CardCheck(ran: !cards.isEmpty, divergence: divergence))
+                     cardCheck: Scope.CardCheck(ran: !cards.isEmpty, divergence: divergence),
+                     contradictedCancellations: contradictedCancellations)
     }
 
     // The whole-corpus tables one build derives from, worked out ONCE and shared by every card it makes.
@@ -3566,6 +3567,10 @@ enum QueueModel {
         // #3654 step 4c: what the in-app check did on this pass. Never optional: "no sample was taken"
         // and "a sample agreed" are different facts and both have to be sayable (L11).
         var cardCheck = CardCheck(ran: false, divergence: nil)
+        // #4106 Step C: the flagged rows the corpus contradicts, as the cards above were built from it.
+        // Published so the pass's feed break check reads this set rather than sweeping the same corpus
+        // for it again (it is taken over `corpus ?? prospects`, which the pass hands the whole store).
+        let contradictedCancellations: Set<String>
 
         struct CardCheck: Equatable, Sendable {
             let ran: Bool

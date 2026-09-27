@@ -78,7 +78,8 @@ enum ReachedOutQueue {
     // soonest first. The view formats the date with timingLabel.
     static func activeWithDates(from prospects: [Prospect], now: Date,
                                 followUpConfig: FollowUpConfig = .init()) -> [(prospect: Prospect, recipient: Recipient, next: Date)] {
-        prospects
+        QueueRenderPass.WorkTally.recordReachedOutSweep()
+        return prospects
             .compactMap { p -> (prospect: Prospect, recipient: Recipient, next: Date)? in
                 // #2126: built from the contacts that still have a reach-out date, so a resolved first
                 // contact cannot take a live colleague's whole row down with it.
@@ -118,8 +119,12 @@ enum ReachedOutQueue {
     // count are the same quantity rather than two that needed reconciling (#1232's note, now removed).
     static func showCount(from prospects: [Prospect], now: Date,
                           followUpConfig: FollowUpConfig = .init()) -> Int {
-        Set(activeWithDates(from: prospects, now: now, followUpConfig: followUpConfig)
-            .map { $0.prospect.naturalKey }).count
+        showCount(of: activeWithDates(from: prospects, now: now, followUpConfig: followUpConfig))
+    }
+
+    // The same count over a list already built, for a caller holding one (#4106 Step C).
+    static func showCount(of rows: [(prospect: Prospect, recipient: Recipient, next: Date)]) -> Int {
+        Set(rows.map { $0.prospect.naturalKey }).count
     }
 
     // #2550: the moment something is actually OWED on this row, which is not what the row sorts by.
