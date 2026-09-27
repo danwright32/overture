@@ -68,8 +68,25 @@ app_module_import_violations() {
     return 2
   fi
   [[ -n "${found}" ]] || return 0
+  # #4106 probe 0c.8: a file OvertureTests shares with the hosted target (mac/project.yml compiles it into
+  # both) imports the app inside `#if OVERTURE_HOSTED_TESTS`, a condition only the hosted target defines,
+  # so the pure suite never compiles that line. Exempt exactly that: the one condition spelled alone, and
+  # not its #else half, which the pure suite does compile. One awk per file that MATCHED, never per file
+  # in the tree, so the fork count above stays one grep.
+  local exempt="" matched
+  matched="$(cut -d: -f1 <<< "${found}" | sort -u)"
+  while IFS= read -r file; do
+    [[ -n "${file}" ]] || continue
+    exempt+="$(awk -v f="${file}" '
+      /^[[:space:]]*#if[[:space:]]/ { c = $0; sub(/^[[:space:]]*#if[[:space:]]+/, "", c); sub(/[[:space:]]+$/, "", c); stack[++n] = c; next }
+      /^[[:space:]]*#(elseif|else)([[:space:]]|$)/ { if (n > 0) stack[n] = "!"; next }
+      /^[[:space:]]*#endif/ { if (n > 0) n--; next }
+      { for (i = 1; i <= n; i++) if (stack[i] == "OVERTURE_HOSTED_TESTS") { print f ":" NR; break } }
+    ' "${file}")"$'\n'
+  done <<< "${matched}"
   while IFS=: read -r file line_number _; do
     [[ -n "${line_number}" ]] || continue
+    grep -xF "${file}:${line_number}" <<< "${exempt}" > /dev/null && continue
     echo "${file}:${line_number}: imports the app as a module, which the pure suite cannot resolve"
   done <<< "${found}"
   return 0
