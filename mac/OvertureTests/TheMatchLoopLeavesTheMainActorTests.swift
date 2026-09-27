@@ -137,7 +137,7 @@ struct TheMatchLoopLeavesTheMainActorTests {
         // Through the SAME shared pieces as the sweep, so the two paths cannot drift about what a
         // classify pass is or what a failed corpus read means (L263).
         let readsTheSharedCorpus =
-            SourceGuardHelper.containsCode("ScoutService.venueBrandCorpus(in: context)", in: source)
+            SourceGuardHelper.containsCode("ScoutService.venueBrandCorpus(in: context", in: source)
         #expect(readsTheSharedCorpus, "the ingest reads the brand corpus some other way than the shared helper")
         let carriesTheDegradedRead =
             SourceGuardHelper.containsCode("degradedReads: corpus.degradedReads", in: source)

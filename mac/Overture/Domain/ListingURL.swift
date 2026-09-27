@@ -46,13 +46,6 @@ enum ListingURL {
         return String(trimmed) + String(raw[cut...])
     }
 
-    // Whether two addresses name one listing. Both sides are folded, which is the whole point: a
-    // comparison that folds one side only is the same defect wearing a helper's name.
-    static func sameListing(_ a: String?, _ b: String?) -> Bool {
-        guard let a, let b else { return false }
-        return fold(a) == fold(b)
-    }
-
     // The folded forms of a set of addresses, for the arms that ask whether two runs share any member.
     static func foldedSet(_ urls: [String]) -> Set<String> {
         Set(urls.map(fold))
