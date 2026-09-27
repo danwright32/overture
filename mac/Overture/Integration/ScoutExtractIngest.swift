@@ -51,6 +51,9 @@ enum ScoutExtractIngest {
                        clients: [DownbeatClient], history: [HistoryRecord], blocked: BlockedCalendar,
                        today: String = QueueModel.easternToday(),
                        now: Date = Date(),
+                       // #4275: how the whole show table is read, injected so a test can count the reads.
+                       // Every read of it this ingest makes goes through here.
+                       readProspectTable: @escaping ScoutLandingStore.Read = ScoutService.readProspectTable,
                        into context: ModelContext) async -> ScoutService.Outcome {
         var outcome = ScoutService.Outcome(found: 0, inserted: 0, updated: 0, skipped: 0)
 
@@ -175,7 +178,7 @@ enum ScoutExtractIngest {
             // The same three steps the scout's own sweep takes (`ScoutService.readNative` and
             // `landNative`), and the same shared pieces, so the two paths cannot drift about what a
             // classify pass is.
-            let corpus = corpusRead ?? ScoutService.venueBrandCorpus(in: context)
+            let corpus = corpusRead ?? ScoutService.venueBrandCorpus(in: context, read: readProspectTable)
             corpusRead = corpus
             let classifiedPass = await ScoutClassify.offTheCallersActor(
                 events: events, clients: clients, history: history,
@@ -187,6 +190,11 @@ enum ScoutExtractIngest {
         }
 
         // #4102: every source lands here, in the order it was read, with no await between them.
+        //
+        // #4275: judged against ONE read of the stored shows, built here after the last await and kept
+        // current as each source lands, rather than two whole table fetches per source and one more for
+        // each event reaching the run URL arm (`ScoutLandingStore`).
+        let landing = ScoutLandingStore(context: context, read: readProspectTable)
         func land(_ pending: Pending) {
             let source = pending.source
             let events = pending.events
@@ -218,6 +226,7 @@ enum ScoutExtractIngest {
                                              structuralGapDates: rejection.structuralGapDates),
                 today: today, sourceIds: [source.sourceId],
                 preClassified: pending.preClassified,
+                landing: landing,
                 into: context)
             outcome.merge(applied)
 
@@ -298,7 +307,9 @@ enum ScoutExtractIngest {
         // but it is not the whole rule, and somebody should know that before assuming it is.
         let reports = outcome.allReports
         if !reports.isEmpty {
-            let allStored = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
+            // The working set, which is the store as it now stands. A read that fails reconciles nothing,
+            // which is what the empty answer this used to fall back to did.
+            let allStored = (try? landing.rows()) ?? []
             FeedReconcile.reconcile(stored: allStored, reports: reports, today: today)
         }
 

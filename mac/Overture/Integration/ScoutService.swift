@@ -168,6 +168,11 @@ enum ScoutService {
         var description: String { "couldn't read \(read.label). (\(underlying))" }
     }
 
+    // #4275: the ONE whole show table read in this file and in `ScoutExtractIngest`. Every read of the
+    // table a scout makes goes through this, or through a caller's injected replacement for it, so a test
+    // can count them (`ScoutLandingReadsOnceTests`), and a scan refuses any other spelling of it.
+    static let readProspectTable: ScoutLandingStore.Read = { try $0.fetch(FetchDescriptor<Prospect>()) }
+
     static func required<T>(_ read: StoreRead, _ fetch: () throws -> [T]) throws -> [T] {
         do { return try fetch() } catch { throw StoreReadFailure(read: read, underlying: error) }
     }
@@ -481,14 +486,18 @@ enum ScoutService {
                          // exactly what it read before, and means a caller that cannot ask (a headless or
                          // scheduled path) never blocks on a question nobody is there to answer, which is
                          // the failure that lost twenty shows in the detached runner.
-                         askReadBudget: (Int) async -> ScoutReadBudget.Choice = { _ in .all })
+                         askReadBudget: (Int) async -> ScoutReadBudget.Choice = { _ in .all },
+                         // #4275: how the whole show table is read. Every such read in this run goes through
+                         // it (the history, the brand corpus, and the landing's working set), so a test can
+                         // count them; nothing else in this file fetches the table.
+                         readProspectTable: @escaping ScoutLandingStore.Read = ScoutService.readProspectTable)
                          async throws -> Outcome {
         let loaded = DownbeatBridge.loadWithHealth(now: now)
         // History the matcher sees = any one-time legacy import + Overture's own activity,
         // so repeat-client recognition stays current as Dan sends and books (#19).
         // #3071: REQUIRED, not swallowed. An empty answer here means a repeat client is not recognised
         // as one, so a show Dan has already shot reads as cold and gets pitched as a stranger.
-        let existing = try required(.repeatClientHistory) { try context.fetch(FetchDescriptor<Prospect>()) }
+        let existing = try required(.repeatClientHistory) { try readProspectTable(context) }
         let history = LocalHistory.forMatching(existing: existing)
         let blocked = blockedCalendar(export: (loaded.bookings, loaded.blockedDates, loaded.health),
                                       context: context)
@@ -539,7 +548,7 @@ enum ScoutService {
         var corpusRead: (brands: ProducerGate.VenueBrands, degradedReads: [StoreRead])?
         func corpus() -> (brands: ProducerGate.VenueBrands, degradedReads: [StoreRead]) {
             if let corpusRead { return corpusRead }
-            let read = venueBrandCorpus(in: context)
+            let read = venueBrandCorpus(in: context, read: readProspectTable)
             corpusRead = read
             return read
         }
@@ -616,6 +625,11 @@ enum ScoutService {
         // checked. Each still saves and reconciles on its own exactly as before, so a source whose save
         // fails carries no report and marks nothing gone (#499, #888), and a source whose read failed
         // lands nothing at all: it was recorded on its row and reported when it was read.
+        //
+        // #4275: and every source judges against ONE read of the stored shows, built here, after the last
+        // await, and kept current as each source lands (`ScoutLandingStore`). It used to be two whole table
+        // fetches per source plus one per source's reconcile.
+        let landing = ScoutLandingStore(context: context, read: readProspectTable)
         for slot in reports {
             switch slot {
             case .checked(let result):
@@ -623,7 +637,7 @@ enum ScoutService {
             case .read(let i):
                 let native = reads[i]
                 let landed = landNative(native, clients: loaded.clients, history: history, blocked: blocked,
-                                        now: now, into: context)
+                                        now: now, landing: landing, into: context)
                 if let hash = native.markReadAs, let source = native.source,
                    let s = landed.sources.first, case .ingested = s.state {
                     source.lastContentHash = hash
@@ -874,7 +888,8 @@ enum ScoutService {
     // Synchronous on purpose, and the caller lands every source of a sweep in one go, with no await
     // between them, so the screen sees the whole run as ONE change rather than one per source.
     private static func landNative(_ native: NativeRead, clients: [DownbeatClient], history: [HistoryRecord],
-                                   blocked: BlockedCalendar, now: Date, into context: ModelContext) -> Outcome {
+                                   blocked: BlockedCalendar, now: Date, landing: ScoutLandingStore,
+                                   into context: ModelContext) -> Outcome {
         let listed: NativeRead.Listed
         switch native.read {
         case .failed(let outcome): return outcome
@@ -916,7 +931,8 @@ enum ScoutService {
             // the extractor's own now-relative upcoming filter only to be dropped again by applySweep
             // against the real day, so a native-feed run was never fully time-controllable.
             today: QueueModel.easternToday(now),
-            sourceIds: [native.sourceId], preClassified: listed.preClassified, into: context)
+            sourceIds: [native.sourceId], preClassified: listed.preClassified, landing: landing,
+            into: context)
 
         // Fold this run into the source's own feed-health state: a full feed re-baselines immediately,
         // and a feed that stays degraded at a stable smaller level across selfHealThreshold scouts
@@ -1211,17 +1227,20 @@ enum ScoutService {
         sourceIds: [String] = [],
         // #3884: passed straight through to `apply`. See `readNative`, which runs it off the actor.
         preClassified: PreClassified? = nil,
+        // #4275: the landing's working set, shared with `apply`. nil reads the store for this sweep alone.
+        landing: ScoutLandingStore? = nil,
         into context: ModelContext
     ) -> Outcome {
+        let landing = landing ?? ScoutLandingStore(context: context)
         var outcome = apply(events: events, clients: clients, history: history, blocked: blocked,
                             feed: feed, today: today, sourceIds: sourceIds,
-                            preClassified: preClassified, into: context)
+                            preClassified: preClassified, landing: landing, into: context)
         if let report = outcome.report {
             // #3071: a reconcile handed an invented empty marks nothing gone and says nothing about it,
             // so a run that could not read its own shows looks exactly like one where none had dropped
             // out. It is skipped and NAMED instead.
             if let allStored = readOrRecord(.reconcileStoredShows, into: &outcome.degradedReads,
-                                            { try context.fetch(FetchDescriptor<Prospect>()) }) {
+                                            { try landing.rows() }) {
                 FeedReconcile.reconcile(stored: allStored, reports: [report], today: today)
             }
         }
@@ -1251,11 +1270,12 @@ enum ScoutService {
     // #3071: a corpus built from an invented empty is a THINNER brand list, so a hall's own brand can
     // raise a fuzzy match it should not. The run still proceeds, because the answer is degraded rather
     // than wrong, but the failed read travels with it.
-    static func venueBrandCorpus(in context: ModelContext)
+    static func venueBrandCorpus(in context: ModelContext,
+                                 read: ScoutLandingStore.Read = ScoutService.readProspectTable)
         -> (brands: ProducerGate.VenueBrands, degradedReads: [StoreRead]) {
         var degraded: [StoreRead] = []
         let brandShows = readOrRecord(.venueBrandCorpus, into: &degraded,
-                                      { try context.fetch(FetchDescriptor<Prospect>()) }) ?? []
+                                      { try read(context) }) ?? []
         let brands = ProducerGate.VenueBrands(
             shows: brandShows.map { ProducerGate.Show(presenter: $0.presenter, venue: $0.venue) },
             overrides: ProducerOverrideEditing.overrides(in: context))
@@ -1281,8 +1301,13 @@ enum ScoutService {
         // #3884: a classify pass the caller already ran OFF the main actor, or nil to run it here. See
         // Phase 1 below for why nil is an instruction and not an absent input.
         preClassified: PreClassified? = nil,
+        // #4275: the stored shows this sweep judges against, shared across every source of one landing and
+        // kept current as each lands (`ScoutLandingStore`). nil builds one for this sweep alone, which is
+        // what a caller landing a single batch (a lead, a test) wants: one read, not one per question.
+        landing: ScoutLandingStore? = nil,
         into context: ModelContext
     ) -> Outcome {
+        let landing = landing ?? ScoutLandingStore(context: context)
         // #1648: the instant this run scores against, derived from the day it was already given rather
         // than from a second clock, so pinning `today` in a test pins this too (LESSONS L39). Used only
         // to decide whether a row's contact answer has aged past its 90 day expiry, where a day's
@@ -1401,7 +1426,8 @@ enum ScoutService {
         // rather than looking like a clean sweep (L42, L11).
         let batchPoisonedTokens: Set<String>
         do {
-            batchPoisonedTokens = try poisonedTokensForBatch(batchRows, in: context)
+            batchPoisonedTokens = try poisonedTokensForBatch(batchRows, storedRows: { try landing.rows() },
+                                                             fold: landing.fold(of:))
         } catch {
             degradedReads.append(.productionTokenCorpus)
             batchPoisonedTokens = Set(batchRows.flatMap {
@@ -1420,12 +1446,12 @@ enum ScoutService {
         // exists to REFUSE joins, so an empty set would license every join it is there to prevent (L42,
         // L215). Fail open for the first, fail closed for the second.
         let storedRowsForBatch = readOrRecord(.reconcileStoredShows, into: &degradedReads,
-                                              { try context.fetch(FetchDescriptor<Prospect>()) })
+                                              { try landing.rows() })
 
         // #4098: how ambiguous each URL this sweep carries is, for the two URL matching arms.
         let batchAmbiguousURLs: AmbiguousURLs
-        if let storedRows = storedRowsForBatch,
-           let measured = try? ambiguousURLsForBatch(batchRows, storedRows: { storedRows }) {
+        if storedRowsForBatch != nil,
+           let measured = try? ambiguousURLsForBatch(batchRows, landing: landing) {
             batchAmbiguousURLs = measured
         } else {
             let everyURL = Set(batchRows.flatMap {
@@ -1561,29 +1587,29 @@ enum ScoutService {
                 byConcert: { try matchByConcertIdentity(enriched.seriesId, groupName: enriched.groupName,
                                                         openingNight: enriched.performanceDate,
                                                         runEndDate: enriched.runEndDate,
-                                                        venue: enriched.venue, in: context) },
+                                                        venue: enriched.venue, landing: landing) },
                 byAnyRunURL: { try matchByAnyRunURL(enriched.runSourceURLs, groupName: enriched.groupName,
                                                     venue: enriched.venue,
                                                     ambiguous: batchAmbiguousURLs.anywhere,
-                                                    in: context) },
+                                                    landing: landing) },
                 byProductionToken: {
                     try matchByProductionToken((enriched.sourceListingURL.map { [$0] } ?? [])
                                                  + enriched.runSourceURLs,
                                                groupName: enriched.groupName,
                                                venue: enriched.venue,
-                                               poisoned: batchPoisonedTokens, in: context)
+                                               poisoned: batchPoisonedTokens, landing: landing)
                 },
                 byStableSource: { try matchByStableSource(url: enriched.sourceListingURL,
                                                           date: enriched.performanceDate,
                                                           venue: enriched.venue,
                                                           groupName: enriched.groupName,
                                                           ambiguous: batchAmbiguousURLs.atAVenue,
-                                                          in: context) },
+                                                          landing: landing) },
                 arrivalNotes: {
                     // ONE fetch, both answers. Two separate closures would walk the store twice for
                     // every genuinely new show, and this arm already runs only when every match arm
                     // above has missed.
-                    let stored = try context.fetch(FetchDescriptor<Prospect>())
+                    let stored = try landing.rows()
                     return ArrivalNotes(
                         lookingLike: LookalikeOnArrival.amongStored(
                             stored.map {
@@ -1742,6 +1768,9 @@ enum ScoutService {
                 // presenter rather than the billing.
                 fresh.arrivedOnAPitchedNight = notes.alreadyPitched
                 context.insert(fresh)
+                // #4275: into the working set too, so the next event of this source, and every later
+                // source of this landing, sees it exactly as a fresh fetch would.
+                landing.inserted(fresh)
                 inserted += 1
             case .storeUnreadable:
                 // The store could not answer whether this key is free, so this row is left alone entirely.
@@ -1854,16 +1883,20 @@ enum ScoutService {
     // #2758: throws, for the reason above.
     private static func matchByAnyRunURL(_ urls: [String], groupName: String, venue: String?,
                                          ambiguous: Set<String> = [],
-                                         in context: ModelContext) throws -> Prospect? {
+                                         landing: ScoutLandingStore) throws -> Prospect? {
         // #4116: folded on BOTH sides, so one member addressed with and without its trailing slash is
         // one member. The fold is `ListingURL`'s, shared with `matchByStableSource` below rather than
         // spelled again here (L370).
         let candidates = ListingURL.foldedSet(urls)
         guard !candidates.isEmpty else { return nil }
-        let all = try context.fetch(FetchDescriptor<Prospect>())
+        // #4275: the landing's working set and its cached folds, rather than a whole table fetch and a
+        // fresh fold of every row for each event that reaches this arm.
+        let all = try landing.rows()
+        let room = venueKey(venue)
         return all.first { p in
-            let sharesURL = (p.sourceListingURL.map { candidates.contains(ListingURL.fold($0)) } ?? false)
-                || !ListingURL.foldedSet(p.runSourceURLs).isDisjoint(with: candidates)
+            let folded = landing.fold(of: p)
+            let sharesURL = (folded.listingFold.map { candidates.contains($0) } ?? false)
+                || !folded.runFolds.isDisjoint(with: candidates)
             guard sharesURL else { return false }
             // #3917: `isSameShowTitle`, not `isConfident`, and the shared URL above is what licenses it.
             // A source that drops or adds a parenthetical keeps publishing the same link, and
@@ -1886,7 +1919,7 @@ enum ScoutService {
             // question repeat client detection asks, which refuses a one word title and anything under
             // 0.6 containment (L93: name what the fallback gives up rather than leaving it to be found).
             let sharedAmbiguousURL = !candidates.isDisjoint(with: ambiguous)
-            guard sameVenue(p.venue, venue) else { return false }
+            guard folded.venueKey == room else { return false }
             return sharedAmbiguousURL
                 ? titleIsTheKeySOwn(p.groupName, groupName)
                 : GroupNameMatch.isSameShowTitle(p.groupName, groupName)
@@ -1964,30 +1997,41 @@ enum ScoutService {
 
     static func ambiguousURLsForBatch(_ incoming: [AssembledProspect],
                                       storedRows: () throws -> [Prospect]) throws -> AmbiguousURLs {
-        var seen: [(url: String, title: String, venue: String)] = []
-        func add(urls: [String], title: String, venue: String?) {
-            let theirTitle = title
-            let theirRoom = ShowLink.foldedVenue(venue)
-            for url in ListingURL.foldedSet(urls) {
-                seen.append((url: url, title: theirTitle, venue: theirRoom))
-            }
-        }
-        for p in try storedRows() {
-            add(urls: (p.sourceListingURL.map { [$0] } ?? []) + p.runSourceURLs,
-                title: p.groupName, venue: p.venue)
-        }
-        for p in incoming {
-            add(urls: (p.sourceListingURL.map { [$0] } ?? []) + p.runSourceURLs,
-                title: p.groupName, venue: p.venue)
-        }
+        let stored = try storedRows().flatMap { ambiguityEntries(of: ScoutLandingStore.Fold($0)) }
+        let seen = stored + ambiguityEntries(of: incoming)
         return AmbiguousURLs(atAVenue: ShowLink.ambiguousURLs(seen, scopedByVenue: true),
                              anywhere: ShowLink.ambiguousURLs(seen, scopedByVenue: false))
     }
 
-    private static func poisonedTokensForBatch(_ incoming: [AssembledProspect],
-                                               in context: ModelContext) throws -> Set<String> {
-        try poisonedTokensForBatch(incoming,
-                                   storedRows: { try context.fetch(FetchDescriptor<Prospect>()) })
+    // #4275: the same answer, continuing from the stored rows' shows the landing has already folded
+    // (`ScoutLandingStore.storedShowsPerURL`) rather than walking every stored row again for each source.
+    // Measured after the working set landed: that walk, and its pairwise title test, was 1.7 s of a 3.3 s
+    // landing at 1x, recomputed identically for each of 39 sources.
+    static func ambiguousURLsForBatch(_ incoming: [AssembledProspect],
+                                      landing: ScoutLandingStore) throws -> AmbiguousURLs {
+        var shows = try landing.storedShowsPerURL()
+        let seen = ambiguityEntries(of: incoming)
+        ShowLink.addShows(seen, scopedByVenue: true, into: &shows.atAVenue)
+        ShowLink.addShows(seen, scopedByVenue: false, into: &shows.anywhere)
+        return AmbiguousURLs(atAVenue: ShowLink.ambiguousKeys(shows.atAVenue, scopedByVenue: true),
+                             anywhere: ShowLink.ambiguousKeys(shows.anywhere, scopedByVenue: false))
+    }
+
+    // What one stored row contributes to the ambiguity walk: each folded URL it carries, with its title as
+    // written and its folded room. ONE builder for both halves of the walk, so the stored rows and the
+    // incoming ones cannot come to be entered differently (L370).
+    nonisolated static func ambiguityEntries(of folded: ScoutLandingStore.Fold)
+        -> [(url: String, title: String, venue: String)] {
+        folded.allURLFolds.map { (url: $0, title: folded.groupName, venue: folded.foldedVenue) }
+    }
+
+    nonisolated static func ambiguityEntries(of incoming: [AssembledProspect])
+        -> [(url: String, title: String, venue: String)] {
+        incoming.flatMap { p -> [(url: String, title: String, venue: String)] in
+            let room = ShowLink.foldedVenue(p.venue)
+            return ListingURL.foldedSet((p.sourceListingURL.map { [$0] } ?? []) + p.runSourceURLs)
+                .map { (url: $0, title: p.groupName, venue: room) }
+        }
     }
 
     // The store is the reader on every shipping path. The seam exists so the FAILED read can be
@@ -1995,16 +2039,17 @@ enum ScoutService {
     // working one proves nothing about the branch that matters most, which is the one that decides
     // whether an unreadable store refuses every token or none (L140). Same reasoning, and the same
     // shape, as `Prospect.keyAvailability(_:lookup:)`.
+    // #4275: `fold` as for `ambiguousURLsForBatch` above.
     static func poisonedTokensForBatch(_ incoming: [AssembledProspect],
-                                       storedRows: () throws -> [Prospect]) throws -> Set<String> {
+                                       storedRows: () throws -> [Prospect],
+                                       fold: (Prospect) -> ScoutLandingStore.Fold = ScoutLandingStore.Fold.init)
+        throws -> Set<String> {
         var seen: [(token: String, title: String, venue: String)] = []
         let stored = try storedRows()
         for p in stored {
-            let urls = (p.sourceListingURL.map { [$0] } ?? []) + p.runSourceURLs
-            let theirTitle = ShowLink.foldedTitle(p.groupName)
-            let theirRoom = ShowLink.foldedVenue(p.venue)
-            for token in urls.compactMap(ProductionToken.inURL) {
-                seen.append((token: token, title: theirTitle, venue: theirRoom))
+            let folded = fold(p)
+            for token in folded.tokens {
+                seen.append((token: token, title: folded.foldedTitle, venue: folded.foldedVenue))
             }
         }
         for p in incoming {
@@ -2020,22 +2065,23 @@ enum ScoutService {
 
     private static func matchByProductionToken(_ urls: [String], groupName: String, venue: String?,
                                                poisoned: Set<String>,
-                                               in context: ModelContext) throws -> Prospect? {
+                                               landing: ScoutLandingStore) throws -> Prospect? {
         let incoming = Set(urls.compactMap(ProductionToken.inURL))
         guard !incoming.isEmpty else { return nil }
         let usable = incoming.subtracting(poisoned)
         guard !usable.isEmpty else { return nil }
-        let all = try context.fetch(FetchDescriptor<Prospect>())
+        let all = try landing.rows()
         let title = ShowLink.foldedTitle(groupName)
+        let room = venueKey(venue)
 
         return all.first { p in
-            let urls = (p.sourceListingURL.map { [$0] } ?? []) + p.runSourceURLs
-            guard !Set(urls.compactMap(ProductionToken.inURL)).isDisjoint(with: usable) else { return false }
+            let folded = landing.fold(of: p)
+            guard !Set(folded.tokens).isDisjoint(with: usable) else { return false }
             // The natural key's OWN fold on both sides, which is what makes this a canonical function
             // rather than a similarity judgement and is why it can join with no human in the loop. It is
             // also what lets "Nihao Broadway" and "Nihao Broadway!" through, since the fold removes the
             // trailing mark, while refusing two different shows that merely share a room.
-            return ShowLink.foldedTitle(p.groupName) == title && sameVenue(p.venue, venue)
+            return folded.foldedTitle == title && folded.venueKey == room
         }
     }
 
@@ -2048,18 +2094,19 @@ enum ScoutService {
     // extract run. A raw compare meant one variance defeated the guard designed for the other: three of
     // the four YNYC pairs on the live store carry the IDENTICAL season-page URL on both rows, so this
     // should have caught every one of them and instead inserted a second card.
-    private static func sameVenue(_ a: String?, _ b: String?) -> Bool {
-        let canon: (String?) -> String = { raw in
-            guard let raw, !raw.trimmingCharacters(in: .whitespaces).isEmpty else { return "" }
-            return VenueNormalization.normalizeForKey(raw)
-        }
-        return canon(a) == canon(b)
+    //
+    // #4275: written as the ONE SIDE of that comparison, so a stored row's half is folded once per
+    // landing (`ScoutLandingStore.Fold.venueKey`) rather than once per event per row, and every arm
+    // compares `venueKey(a) == venueKey(b)`.
+    nonisolated static func venueKey(_ raw: String?) -> String {
+        guard let raw, !raw.trimmingCharacters(in: .whitespaces).isEmpty else { return "" }
+        return VenueNormalization.normalizeForKey(raw)
     }
 
     // #1260 Phase 2: a merged prospect identified by its persisted synthetic concert id, so a re-scout
     // recognizes the SAME merged concert even when its name and every recruiting URL changed (a reorder or
     // refreshed links). Only ever fires for a merged cluster (isMerged gate), and the id already encodes
-    // date+venue, so `sameVenue` is belt-and-braces against a hash-collision, never load-bearing. Fetch-all
+    // date+venue, so the venue test is belt-and-braces against a hash-collision, never load-bearing. Fetch-all
     // + filter, like matchByStableSource; the store is small.
     //
     // #1528: and a REAL feed production id now matches too, which is the whole fix for a run whose opening
@@ -2080,15 +2127,16 @@ enum ScoutService {
     // Friedman drifted) still overlaps its own stored dates. The same production remounted next season
     // does not, so it correctly becomes a new card Dan is asked about rather than silently inheriting an
     // old dismissal and vanishing.
-    // #2758: THROWS rather than swallowing. A `(try? fetch) ?? []` here answers "no match" for a store
-    // that could not answer, which sends the chain to the final insert, the most destructive of the five
-    // arms: it puts a new row on a key another row may already hold.
+    // #2758: THROWS rather than swallowing. A swallowed fetch here, answering an empty array, answers "no
+    // match" for a store that could not answer, which sends the chain to the final insert, the most
+    // destructive of the five arms: it puts a new row on a key another row may already hold.
     private static func matchByConcertIdentity(_ seriesId: String?, groupName: String,
                                                openingNight: String?, runEndDate: String?, venue: String?,
-                                               in context: ModelContext) throws -> Prospect? {
+                                               landing: ScoutLandingStore) throws -> Prospect? {
         guard let seriesId, !seriesId.isEmpty else { return nil }
-        let all = try context.fetch(FetchDescriptor<Prospect>())
-        let sharing = all.filter { $0.seriesId == seriesId && sameVenue($0.venue, venue) }
+        let all = try landing.rows()
+        let room = venueKey(venue)
+        let sharing = all.filter { $0.seriesId == seriesId && landing.fold(of: $0).venueKey == room }
 
         // A synthetic same-date id already encodes date and venue and is minted only for a
         // mergeSameDateVenue source, so it needs no corroboration: recognizing a concert whose NAME
@@ -2196,21 +2244,26 @@ enum ScoutService {
     private static func matchByStableSource(url: String?, date: String?, venue: String?,
                                             groupName: String,
                                             ambiguous: Set<String> = [],
-                                            in context: ModelContext) throws -> Prospect? {
+                                            landing: ScoutLandingStore) throws -> Prospect? {
         guard let url, !url.isEmpty else { return nil }
         // #4098: how ambiguous the page is, asked once rather than per candidate row. Scoped BY VENUE,
         // because this arm demands the venue agrees: what matters here is whether this page carries more
         // than one show IN THIS ROOM, which is exactly the season page shape #4032 was reproduced on.
-        let pageCarriesMoreThanOneShow = ambiguous.contains(ListingURL.fold(url))
-        let all = try context.fetch(FetchDescriptor<Prospect>())
+        let foldedURL = ListingURL.fold(url)
+        let pageCarriesMoreThanOneShow = ambiguous.contains(foldedURL)
+        let all = try landing.rows()
+        let room = venueKey(venue)
         return all.first {
-            // #4116: `ListingURL.sameListing` rather than `==`, so one page addressed with and without
-            // its trailing slash is one page. Measured on the live store 2026-09-21: four stored pairs
+            // #4116: both sides FOLDED rather than compared raw, so one page addressed with and without
+            // its trailing slash is one page. (#4275: the stored side's fold is the landing's cached one,
+            // `Fold.listingFold`, and a stored row with no listing URL folds to nil, which never equals
+            // the incoming page, so two absent addresses still never read as one listing.) Measured on the live store 2026-09-21: four stored pairs
             // share a night and a page and differ only by that slash, and every one is a second billing
             // of one concert. The fold touches the trailing slash and nothing else; the reasoning for
             // each rule NOT adopted is recorded on `ListingURL` rather than here.
-            guard ListingURL.sameListing($0.sourceListingURL, url), $0.performanceDate == date,
-                  sameVenue($0.venue, venue) else { return false }
+            let folded = landing.fold(of: $0)
+            guard folded.listingFold == foldedURL, $0.performanceDate == date,
+                  folded.venueKey == room else { return false }
             // #4032: and the two titles must be the same SHOW. The comment above says the venue is what
             // makes URL plus date safe, and on a single venue's season page that is no protection at
             // all: every show shares one URL and one room, so the predicate is satisfied by two

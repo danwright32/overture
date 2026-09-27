@@ -315,6 +315,16 @@ enum ShowLink {
     static func ambiguousURLs(_ seen: [(url: String, title: String, venue: String)],
                               scopedByVenue: Bool) -> Set<String> {
         var showsPerKey: [String: [String]] = [:]
+        addShows(seen, scopedByVenue: scopedByVenue, into: &showsPerKey)
+        return ambiguousKeys(showsPerKey, scopedByVenue: scopedByVenue)
+    }
+
+    // #4275: the two halves of `ambiguousURLs`, apart, so a caller asking the question once per source over
+    // the same stored rows can fold those rows into shows ONCE and continue from that for each source's own
+    // rows. The walk is order dependent (a title joins the first show it matches), so continuing from the
+    // stored rows' shows with the incoming rows appended is exactly the walk over both in that order.
+    static func addShows(_ seen: [(url: String, title: String, venue: String)], scopedByVenue: Bool,
+                         into showsPerKey: inout [String: [String]]) {
         for one in seen where !one.url.isEmpty {
             let key = scopedByVenue ? one.url + "|" + one.venue : one.url
             var shows = showsPerKey[key] ?? []
@@ -325,7 +335,10 @@ enum ShowLink {
             }
             showsPerKey[key] = shows
         }
-        return Set(showsPerKey.filter { $0.value.count > 1 }.keys.map { key in
+    }
+
+    static func ambiguousKeys(_ showsPerKey: [String: [String]], scopedByVenue: Bool) -> Set<String> {
+        Set(showsPerKey.filter { $0.value.count > 1 }.keys.map { key in
             guard scopedByVenue,
                   let cut = key.range(of: "|", options: .backwards) else { return key }
             return String(key[key.startIndex..<cut.lowerBound])
