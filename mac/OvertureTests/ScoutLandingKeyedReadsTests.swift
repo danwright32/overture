@@ -125,6 +125,25 @@ struct ScoutLandingKeyedReadsTests {
             "a row deleted after the rows were read was still among them"))
     }
 
+    // The member list a read returns is kept between reads, and a row deleted while it is kept must still
+    // drop out of the very next read, as it would from a fresh fetch. Read twice first and insert nothing,
+    // so the list really is the kept one when the deletion happens (the test above inserts, which drops it).
+    @Test func aRowDeletedWhileTheMembersAreKeptDropsOutOfTheNextRead() throws {
+        let ctx = try context()
+        let gone = stored(ctx, "Xi Night", Self.night(10), url: "https://x.example/xi")
+        stored(ctx, "Omicron Night", Self.night(11), url: "https://o.example/omicron")
+        try ctx.save()
+        let landing = ScoutLandingStore(context: ctx)
+        _ = try landing.rows()
+        #expect(try landing.rows().count == 2)
+
+        ctx.delete(gone)
+        let after = try landing.rows()
+        #expect(!after.contains { $0 === gone } && after.count == 1, Comment(rawValue:
+            "a row deleted while the member list was kept was still read back: "
+            + "\(after.map(\.groupName).sorted())"))
+    }
+
     // MARK: a landing, counted
 
     // Stored rows the landing re-lists, plus rows it never touches, which only make the store bigger.
