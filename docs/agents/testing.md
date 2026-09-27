@@ -398,12 +398,19 @@ the measurement it came from lives here. Read the entry before the rule decides 
   The verdict is printed as `optimised build check:` and anything but `VERIFIED` fails the run.
   `UNMEASURED` means no compile line for a module reached the log, which is what a build that planned
   no compile for it looks like, so clean the build folder or touch a source and run again. Switching
-  between Debug and optimised rebuilds everything each way. An optimised run writes no cost or duration
-  record, since those are Debug figures later runs are compared with.
+  between Debug and optimised rebuilds everything each way, and the optimised build is SLOW: measured
+  2026-09-27, the whole module compile of `OvertureTests` was one `swift-frontend` running about 25
+  minutes, holding the shared test lock throughout. xcodebuild's own CPU barely moves meanwhile, so the
+  #3976 stall ending read it as a hang at 1200s and ended it; an optimised run therefore defaults that
+  limit to 3600s (`OPTIMISED_STALL_END_SECONDS`) unless `OVERTURE_TEST_STALL_END_SECONDS` is set, and says
+  so. An optimised run writes no cost or duration record, since those are Debug figures later runs are
+  compared with.
   Before believing an optimised timing, run the fixed microbenchmark both ways and compare the medians:
   `TEST_RUNNER_MEASURE_OPTIMISED_BUILD=1 mac/scripts/run-tests-locked.sh -only-testing:OvertureTests/OptimisedBuildBenchmarkTests`,
   with and without the switch. Each prints `optimised-build-benchmark:` with its median and spread, and
-  the compiled code's own account of how it was built (`_isDebugAssertConfiguration`).
+  the compiled code's own account of how it was built (`_isDebugAssertConfiguration`). The first
+  readings, 2026-09-27: Debug median 176.1 ms (p10 174.6, p90 177.5), optimised median 10.6 ms (p10 10.5,
+  p90 10.6), about 17 times faster.
 
 ## Seeing a guard fail
 

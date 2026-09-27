@@ -34,6 +34,14 @@
 # run is the one outcome this whole thing exists to prevent.
 OPTIMISED_BUILD_MODULES="Overture OvertureTests"
 
+# How long an optimised run may stand still before the #3976 stall ending stops it, when nobody set
+# OVERTURE_TEST_STALL_END_SECONDS. MEASURED, not chosen: on 2026-09-27 the whole module -O compile of
+# OvertureTests (which holds the app's sources as well as every pure test) was ONE swift-frontend running
+# about 25 minutes of CPU, while xcodebuild itself used 0.31s. The stall ending judges by xcodebuild's own
+# CPU, so at its ordinary 1200s it ENDED that healthy build as STALLED. An hour is a little over twice the
+# measured compile. Only an optimised run gets it; an ordinary run keeps 1200s.
+OPTIMISED_STALL_END_SECONDS=3600
+
 # optimised_build_switch. Prints "on" or "off", or prints a refusal on stderr and returns 2.
 optimised_build_switch() {
   case "${OVERTURE_TEST_OPTIMISED:-}" in

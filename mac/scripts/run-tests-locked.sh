@@ -861,6 +861,14 @@ main() {
       build_overrides+=("${override_line}")
     done < <(optimised_build_overrides)
     echo "run-tests-locked.sh: OPTIMISED run (#4106): passing ${build_overrides[*]} to xcodebuild. The build log is checked afterwards, and the run fails unless it shows the code really was compiled that way." >&2
+    # The whole module compile is one long swift-frontend that xcodebuild's own CPU cannot see, so the
+    # ordinary stall limit ends it mid build (measured, see OPTIMISED_STALL_END_SECONDS). A limit the
+    # caller set explicitly still wins. The notice prints the limit IN FORCE, not the constant, so it
+    # cannot claim a limit the guard is not using.
+    if [[ -z "${OVERTURE_TEST_STALL_END_SECONDS:-}" ]]; then
+      TEST_STALL_END_SECONDS="${OPTIMISED_STALL_END_SECONDS}"
+      echo "run-tests-locked.sh: the whole module build takes about 25 minutes and holds the shared test lock throughout, so this run is ended as stalled only after ${TEST_STALL_END_SECONDS}s without progress rather than the usual 1200s." >&2
+    fi
   fi
 
   # #2577: however this script leaves, its watcher goes with it. A watcher that outlived the run

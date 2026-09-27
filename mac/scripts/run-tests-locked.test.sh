@@ -2020,6 +2020,13 @@ assert_equals "the switch adds the optimiser overrides, keeping testability, bef
 assert_contains "an optimised log is VERIFIED" "optimised build check: VERIFIED" "${OPT_VERIFIED_RUN}"
 assert_not_contains "and is not refused" "NOT trusted" "${OPT_VERIFIED_RUN}"
 assert_equals "and the green run stays green" "exit=0" "$(tail -n 1 <<< "${OPT_VERIFIED_RUN}")"
+assert_contains "an optimised run waits longer before calling its build stalled" \
+  "ended as stalled only after 3600s" "${OPT_VERIFIED_RUN}"
+assert_not_contains "an ordinary run keeps the ordinary stall limit" "ended as stalled only after" "${OPT_DEFAULT_RUN}"
+OPT_SET_LIMIT_RUN="$(OVERTURE_TEST_OPTIMISED=1 OVERTURE_TEST_STALL_END_SECONDS=1200 \
+  run_wrapper_with_stub_xcodebuild "${OPT_OPTIMISED_FRONTEND}
+${GREEN_RUN_LOG}" 0)"
+assert_not_contains "and a limit the caller set still wins" "ended as stalled only after" "${OPT_SET_LIMIT_RUN}"
 
 OPT_DEBUG_RUN="$(OVERTURE_TEST_OPTIMISED=1 run_wrapper_with_stub_xcodebuild "${OPT_DEBUG_FRONTEND}
 ${GREEN_RUN_LOG}" 0)"
