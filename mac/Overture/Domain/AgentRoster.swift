@@ -103,7 +103,8 @@ extension AgentInputs {
     static func from(prospects: [Prospect], allProspects: [Prospect], inquiries: [Inquiry] = [],
                      context: StageContext,
                      gmailConnected: Bool, runInFlight: RunKind?, replyRunAlive: Bool,
-                     placement: StageNavigation.Placement? = nil) -> AgentInputs {
+                     placement: StageNavigation.Placement? = nil,
+                     reachedOut: [(prospect: Prospect, recipient: Recipient, next: Date)]? = nil) -> AgentInputs {
         // Counted THROUGH StageNavigation, never alongside it, so a pill's number and the rows its tap
         // lands on come from one predicate and cannot answer the same question differently.
         // #1121: one traversal for every focus (StageNavigation.counts), not one traversal per focus, so
@@ -117,6 +118,9 @@ extension AgentInputs {
         let dueWork = DueWork.counts(prospects: allProspects, inquiries: inquiries, now: context.now,
                                      replyRunAlive: replyRunAlive)
         func count(_ focus: StageFocus) -> Int { focusCounts[focus] ?? 0 }
+        // #4106 Step C: ONE reached-out list for both counts below, the caller's when it has one. The pill's
+        // show count and its due count were two separate walks of the same rows at the same instant.
+        let reachedOutRows = reachedOut ?? ReachedOutQueue.activeWithDates(from: prospects, now: context.now)
         // #1436: inquiries share two of these stages, so a logged inquiry is counted where it renders.
         func inquiryCount(_ focus: StageFocus) -> Int {
             inquiries.filter { StageNavigation.stage(for: $0) == focus }.count
@@ -154,7 +158,7 @@ extension AgentInputs {
             blockedContacts: count(.sendBlocked),
             // #1134: the SAME function the reached-out view lists its rows from, so the pill's count and
             // that list agree by construction (one per contacted recipient still in play).
-            reachedOut: ReachedOutQueue.showCount(from: prospects, now: context.now)   // #1194: shows, not recipients
+            reachedOut: ReachedOutQueue.showCount(of: reachedOutRows)   // #1194: shows, not recipients
                 + inquiryCount(.reachedOut),   // #1436: replied inquiries awaiting a response
             // #2114: how many of those rows are actually due. Counted from the SAME rows the reached-out
             // view lists, and asked the SAME question each of those rows is asked, so the pill's gold and
@@ -183,7 +187,7 @@ extension AgentInputs {
             // flag was the only reading available; now that the answer is its own fact, `replied` stays
             // true for the rest of the conversation and this pill would count a conversation Dan has
             // already answered as still owing him something, on every launch, for ever.
-            reachedOutDue: ReachedOutQueue.activeWithDates(from: prospects, now: context.now)
+            reachedOutDue: reachedOutRows
                 .filter { ReachedOutQueue.isDueNow(for: $0.recipient, of: $0.prospect, now: context.now) }.count
                 + inquiries.filter { StageNavigation.stage(for: $0) == .reachedOut && $0.hasUnhandledReply }.count
         )
