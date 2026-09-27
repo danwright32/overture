@@ -99,6 +99,10 @@ source "${SCRIPT_DIR}/lib/lock-queue.sh"
 source "${SCRIPT_DIR}/lib/sleep-guard.sh"
 DISPLAY_GUARD_PID=""
 
+# #4106 (plan v7 probe 0c.9): the opt in optimised run, and the build log check that proves it was one.
+# shellcheck source=./lib/optimised-build.sh
+source "${SCRIPT_DIR}/lib/optimised-build.sh"
+
 # Given `ps -eo pid=,command=`-style output (one process per line: PID then its full command),
 # returns the PIDs of any resident Debug-configuration Overture.app test host (#632): the one
 # xcodebuild test boots at .../DerivedData/*/Build/Products/Debug/Overture.app/Contents/MacOS/Overture.
@@ -846,6 +850,19 @@ on_signal() {
 main() {
   command -v flock >/dev/null || { echo "flock not found; install it with: brew install flock" >&2; exit 1; }
 
+  # #4106: OVERTURE_TEST_OPTIMISED=1 compiles the suite with Release's optimiser (lib/optimised-build.sh).
+  # Off, the overrides list is EMPTY and every xcodebuild call below receives exactly the arguments it
+  # always did. Read before anything else, so a value that is neither on nor off refuses before a build.
+  local optimised optimised_evidence="" override_line
+  local build_overrides=()
+  optimised="$(optimised_build_switch)" || exit 2
+  if [[ "${optimised}" == "on" ]]; then
+    while IFS= read -r override_line; do
+      build_overrides+=("${override_line}")
+    done < <(optimised_build_overrides)
+    echo "run-tests-locked.sh: OPTIMISED run (#4106): passing ${build_overrides[*]} to xcodebuild. The build log is checked afterwards, and the run fails unless it shows the code really was compiled that way." >&2
+  fi
+
   # #2577: however this script leaves, its watcher goes with it. A watcher that outlived the run
   # would sit printing stall warnings about a temporary file nobody is writing to any more, which is
   # a worse alarm than none: it would be indistinguishable from a real one and always wrong.
@@ -971,7 +988,10 @@ main() {
     #
     # #3976: through run_locked_xcodebuild, so the run can be ENDED when it stalls holding the lock. The
     # exit code comes from `wait` on flock itself rather than PIPESTATUS, which is #1459's hazard gone.
-    run_locked_xcodebuild "${output_file}" yes -scheme Overture -destination 'platform=macOS' test "$@"
+    # #4106: the overrides go in only when the optimised switch is on. The `+` form expands an empty
+    # array to nothing under `set -u` on macOS bash 3.2, where the plain form is an error (L486).
+    run_locked_xcodebuild "${output_file}" yes -scheme Overture -destination 'platform=macOS' \
+      ${build_overrides[@]+"${build_overrides[@]}"} test "$@"
     test_exit_code="${RUN_EXIT_CODE}"
     stall_record="${RUN_STALL_RECORD_TEXT}"
     set -e
@@ -999,6 +1019,11 @@ main() {
     # #2195: kept so the completeness check below can read this attempt's counts. The file itself still
     # goes, since it holds the whole streamed log.
     last_output="$(cat "${output_file}")"
+    # #4106: the compile lines of EVERY attempt, since a retry usually recompiles nothing and its log
+    # alone would say nothing about how the code it ran was built.
+    if [[ "${optimised}" == "on" ]]; then
+      optimised_evidence="${optimised_evidence}"$'\n'"$(optimised_build_evidence "${last_output}")"
+    fi
     # #3276: read BEFORE the scratch file goes, and kept per attempt for the same reason `last_output`
     # is: a retry's reading must be the retry's own.
     last_corpus_file_text="$(cat "${corpus_file}" 2>/dev/null || true)"
@@ -1118,6 +1143,20 @@ main() {
     test_exit_code=1
   fi
 
+  # #4106: an optimised run is believed only once its own build log shows it was one (L188, L416).
+  # Anything short of VERIFIED fails the run, UNMEASURED included, because a timing from a build nobody
+  # can show was optimised is exactly the Debug number this switch exists to replace (L98).
+  if [[ "${optimised}" == "on" ]]; then
+    local optimised_verdict
+    optimised_verdict="$(optimised_build_verdict "${optimised_evidence}")"
+    echo >&2
+    echo "run-tests-locked.sh: optimised build check: ${optimised_verdict}" >&2
+    if [[ "${optimised_verdict}" != VERIFIED:* ]]; then
+      echo "run-tests-locked.sh: this OPTIMISED run is NOT trusted, so it fails whatever its tests did." >&2
+      [[ "${test_exit_code}" -ne 0 ]] || test_exit_code=1
+    fi
+  fi
+
   # #2193/#2232: the suite's shape, every run, pass or fail. It is printed unconditionally because
   # the number's job is to be a reference someone can check a suspicious run against, and the runs
   # worth checking are the odd ones. AGENTS.md used to carry these figures by hand and both had
@@ -1177,7 +1216,9 @@ main() {
   # returns the whole new contents, so an ordinary run comes back unchanged and the last real measurement
   # is preserved rather than stamped over.
   QUEUE_COST_NEXT="$(queue_cost_seen_update "${last_output}" "${QUEUE_COST_TODAY}" "${QUEUE_COST_SEEN}")"
-  if [[ -n "${QUEUE_COST_NEXT}" && "${QUEUE_COST_NEXT}" != "${QUEUE_COST_SEEN}" ]]; then
+  # #4106: never from an optimised run. The record is a Debug figure every later run is compared with,
+  # and an optimised reading written over it would read as the code getting faster.
+  if [[ "${optimised}" == "off" && -n "${QUEUE_COST_NEXT}" && "${QUEUE_COST_NEXT}" != "${QUEUE_COST_SEEN}" ]]; then
     printf '%s\n' "${QUEUE_COST_NEXT}" > "${QUEUE_COST_RECORD}" 2>/dev/null || true
   fi
 
@@ -1194,7 +1235,8 @@ main() {
     "${MAC_DIR}/Overture/Domain/Prospect.swift" "${MAC_DIR}/Overture/Domain/Recipient.swift")"
   echo "run-tests-locked.sh: $(live_store_cost_report "${QUEUE_COST_TODAY}" "${LIVE_COST_SEEN}" "${last_output}" "${LIVE_COST_SHAPE}")" >&2
   LIVE_COST_NEXT="$(live_store_cost_seen_update "${last_output}" "${QUEUE_COST_TODAY}" "${LIVE_COST_SEEN}" "${LIVE_COST_SHAPE}")"
-  if [[ -n "${LIVE_COST_NEXT}" && "${LIVE_COST_NEXT}" != "${LIVE_COST_SEEN}" ]]; then
+  # #4106: never from an optimised run, for the queue cost record's reason just above.
+  if [[ "${optimised}" == "off" && -n "${LIVE_COST_NEXT}" && "${LIVE_COST_NEXT}" != "${LIVE_COST_SEEN}" ]]; then
     printf '%s\n' "${LIVE_COST_NEXT}" > "${LIVE_COST_RECORD}" 2>/dev/null || true
   fi
 
@@ -1210,7 +1252,11 @@ main() {
   # handful of tests and its duration is a handful of seconds, and both would poison the series. A run
   # that could not state a size writes nothing either, decided inside `suite_run_series_append`.
   SUITE_SERIES_RECORD="${OVERTURE_SUITE_RUN_SERIES:-${MAC_DIR}/../.overture-suite-run-series}"
-  if [[ "${scoped}" -eq 0 ]]; then
+  # #4106: nor an OPTIMISED one. The series is Debug durations, so an optimised run would both be judged
+  # against the wrong spread and become a fast outlier every later Debug run is judged against.
+  if [[ "${optimised}" == "on" ]]; then
+    echo "run-tests-locked.sh: this run was OPTIMISED, so its duration and any cost reading it took were not recorded beside the Debug ones." >&2
+  elif [[ "${scoped}" -eq 0 ]]; then
     SUITE_SERIES_TEXT="$(cat "${SUITE_SERIES_RECORD}" 2>/dev/null || true)"
     if [[ -z "${SUITE_SERIES_TEXT}" ]]; then
       SUITE_SERIES_TEXT="# One line per FULL suite run: date, tests, suites, seconds, and why it was retried."
@@ -1361,7 +1407,9 @@ main() {
       start_progress_watch "${pure_output}"
       # #3976: through the same launcher as the main run, so a stall here is ended the same way.
       set +e
-      run_locked_xcodebuild "${pure_output}" no -scheme OvertureCore -destination 'platform=macOS' test
+      # #4106: built the way the main run was, so an optimised run's probe does not quietly rebuild Debug.
+      run_locked_xcodebuild "${pure_output}" no -scheme OvertureCore -destination 'platform=macOS' \
+        ${build_overrides[@]+"${build_overrides[@]}"} test
       pure_code="${RUN_EXIT_CODE}"
       set -e
       stop_progress_watch "${PROGRESS_WATCH_PID}"

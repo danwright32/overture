@@ -454,8 +454,11 @@ esac
 exec /usr/bin/pgrep "\$@"
 STUB
 
+  # #4106: XCODEBUILD_ARGS_FILE records every argument list the runner hands xcodebuild, one call per
+  # line, so a fixture can assert what an ordinary run and an optimised run each PASS. Inert unless set.
   cat > "${bin_dir}/xcodebuild" <<STUB
 #!/usr/bin/env bash
+echo "\$*" >> "\${XCODEBUILD_ARGS_FILE:-/dev/null}"
 cat <<'XCODEBUILD_OUTPUT'
 ${xcodebuild_output}
 XCODEBUILD_OUTPUT
@@ -1982,6 +1985,57 @@ PREFS_RUN="$(OVERTURE_PREFERENCES_DIR="${PREFS_DIR}" run_wrapper_with_stub_xcode
 assert_contains "a run names the files it removed" \
   "removed 1 test defaults file(s) from ~/Library/Preferences" "${PREFS_RUN}"
 rm -rf "${PREFS_DIR}"
+
+echo
+# --- #4106: the OPTIMISED run (plan v7 probe 0c.9) --------------------------------------------------
+#
+# Off by default, and OFF MEANS UNCHANGED: an ordinary run must hand xcodebuild byte for byte the arguments
+# it always has. Asserted against the literal list rather than against "no override present", so an
+# argument added for any other reason on the ordinary path also goes red here.
+OPT_DIR="$(fixture_scratch_dir)"
+OPT_DEBUG_FRONTEND='    builtin-swiftTaskExecution -- /X/usr/bin/swift-frontend -frontend -c -module-name Overture -Onone -enable-testing -D DEBUG
+    builtin-swiftTaskExecution -- /X/usr/bin/swift-frontend -frontend -c -module-name OvertureTests -Onone -enable-testing -D DEBUG'
+OPT_OPTIMISED_FRONTEND='    builtin-swiftTaskExecution -- /X/usr/bin/swift-frontend -frontend -c -module-name Overture -O -enable-testing -D DEBUG
+    builtin-swiftTaskExecution -- /X/usr/bin/swift-frontend -frontend -c -module-name OvertureTests -O -enable-testing -D DEBUG'
+
+: > "${OPT_DIR}/default-args"
+OPT_DEFAULT_RUN="$(OVERTURE_TEST_OPTIMISED= XCODEBUILD_ARGS_FILE="${OPT_DIR}/default-args" \
+  run_wrapper_with_stub_xcodebuild "${OPT_DEBUG_FRONTEND}
+${GREEN_RUN_LOG}" 0)"
+assert_equals "an ordinary run passes xcodebuild exactly the arguments it always has" \
+  "-scheme Overture -destination platform=macOS test" \
+  "$(grep -a ' test' "${OPT_DIR}/default-args" || true)"
+assert_not_contains "an ordinary run says nothing about optimisation" "optimised build check" "${OPT_DEFAULT_RUN}"
+assert_not_contains "and does not refuse a Debug build" "NOT trusted" "${OPT_DEFAULT_RUN}"
+
+: > "${OPT_DIR}/opt-args"
+OPT_VERIFIED_RUN="$(OVERTURE_TEST_OPTIMISED=1 XCODEBUILD_ARGS_FILE="${OPT_DIR}/opt-args" \
+  run_wrapper_with_stub_xcodebuild "${OPT_OPTIMISED_FRONTEND}
+${GREEN_RUN_LOG}" 0)"
+assert_equals "the switch adds the optimiser overrides, keeping testability, before the action" \
+  "-scheme Overture -destination platform=macOS SWIFT_OPTIMIZATION_LEVEL=-O SWIFT_COMPILATION_MODE=wholemodule ENABLE_TESTABILITY=YES test" \
+  "$(grep -a ' test' "${OPT_DIR}/opt-args" || true)"
+assert_contains "an optimised log is VERIFIED" "optimised build check: VERIFIED" "${OPT_VERIFIED_RUN}"
+assert_not_contains "and is not refused" "NOT trusted" "${OPT_VERIFIED_RUN}"
+assert_equals "and the green run stays green" "exit=0" "$(tail -n 1 <<< "${OPT_VERIFIED_RUN}")"
+
+OPT_DEBUG_RUN="$(OVERTURE_TEST_OPTIMISED=1 run_wrapper_with_stub_xcodebuild "${OPT_DEBUG_FRONTEND}
+${GREEN_RUN_LOG}" 0)"
+assert_contains "a Debug log under the switch is REFUSED by name" "optimised build check: REFUSED" "${OPT_DEBUG_RUN}"
+assert_contains "and the green run it came from fails" "exit=1" "${OPT_DEBUG_RUN}"
+
+OPT_EMPTY_RUN="$(OVERTURE_TEST_OPTIMISED=1 run_wrapper_with_stub_xcodebuild "${GREEN_RUN_LOG}" 0)"
+assert_contains "a log with no compile lines is UNMEASURED, never a pass" \
+  "optimised build check: UNMEASURED" "${OPT_EMPTY_RUN}"
+assert_contains "and fails the run" "exit=1" "${OPT_EMPTY_RUN}"
+
+: > "${OPT_DIR}/typo-args"
+OPT_TYPO_RUN="$(OVERTURE_TEST_OPTIMISED=yes XCODEBUILD_ARGS_FILE="${OPT_DIR}/typo-args" \
+  run_wrapper_with_stub_xcodebuild "${OPT_OPTIMISED_FRONTEND}
+${GREEN_RUN_LOG}" 0)"
+assert_contains "a switch value that is neither 1 nor unset is refused" "OVERTURE_TEST_OPTIMISED is 'yes'" "${OPT_TYPO_RUN}"
+assert_equals "and nothing is built" "" "$(grep -a ' test' "${OPT_DIR}/typo-args" || true)"
+rm -rf "${OPT_DIR}"
 
 if [[ "${FAILURES}" -eq 0 ]]; then
   echo "All run-tests-locked.sh stale-host fixtures passed."
