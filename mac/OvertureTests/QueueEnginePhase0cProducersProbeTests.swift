@@ -14,7 +14,7 @@ import SwiftData
 //
 //   The PROPERTY HARNESSES run on every suite run. They read no store: each builds a committed synthetic
 //   fixture of 60 and 300 rows from invented, containment-rich names (no real person, show or venue; every
-//   address is at example.org) through a seeded generator, so a failure names a seed that reproduces it.
+//   address is under the reserved .example TLD, which the domain guard accepts) through a seeded generator, so a failure names a seed that reproduces it.
 //   Their CI settings are small on purpose (plan section 4's 90 s budget); the deep settings are opt in:
 //
 //     TEST_RUNNER_MEASURE_4106_PHASE0C_PRODUCERS_DEEP=1 mac/scripts/run-tests-locked.sh \
@@ -559,7 +559,7 @@ struct Phase0cLedger {
         var overrides: ProducerOverrides? = nil
         var now: Date? = nil
 
-        static func between(_ a: World, _ b: World) -> Changes {
+        static func diff(from a: World, to b: World) -> Changes {
             var c = Changes()
             for pid in Set(a.rows.keys).union(b.rows.keys) where a.rows[pid] != b.rows[pid] {
                 c.rows.append((pid, b.rows[pid]))
@@ -1184,7 +1184,7 @@ enum Phase0cFixtures {
 
     // T5
 
-    static func email(_ stem: String, _ box: String) -> String { "\(box)@\(stem.lowercased()).example.org" }
+    static func email(_ stem: String, _ box: String) -> String { "\(box)@\(stem.lowercased()).example" }
 
     static func t5World(size: Int, _ g: inout SeededGenerator) -> Phase0cLedger.World {
         let stems = stemsFor(size: size)
@@ -1554,7 +1554,7 @@ struct QueueEnginePhase0cProducersProbeTests {
                 step: { Phase0cFixtures.t5Step($0, size: size, &$1) },
                 move: { old, new, at in
                     let before = lastBrute
-                    let changed = proto.apply(Phase0cLedger.Changes.between(old, new))
+                    let changed = proto.apply(Phase0cLedger.Changes.diff(from: old, to: new))
                     let after = Phase0cT5Check.brute(new)
                     lastBrute = after
                     let r = Phase0cT5Check.compare(proto, new, brute: after)
@@ -1883,7 +1883,7 @@ struct QueueEnginePhase0cProducersProbeTests {
                 let old = world.answers[o]
                 let new: Phase0cLedger.Answer? = old == nil
                     ? Phase0cLedger.Answer(result: .emailFound, probedAt: now.addingTimeInterval(-86_400),
-                                           presenterName: "Invented Org", emails: ["booking@invented.example.org"])
+                                           presenterName: "Invented Org", emails: ["booking@invented.example"])
                     : nil
                 if i % stride == 0 {
                     proto.apply(Phase0cLedger.Changes(answers: [(o, new)]))
