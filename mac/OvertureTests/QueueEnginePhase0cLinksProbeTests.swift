@@ -38,6 +38,74 @@ enum Phase0cLinks {
 
     nonisolated static func say(_ line: String) { print("phase0c-links " + line) }
 
+    /// The one minute load average, waited on until it is under `below` or ten minutes pass (a bounded wait,
+    /// L110). `load` is the reading at the end of the wait; a reading at or over `below` makes the replays
+    /// that follow UNMEASURED (see `replayVerdict`).
+    nonisolated static func waitForLoad(below: Double, deadline seconds: Double = 600)
+        -> (load: Double, text: String) {
+        let one = oneMinuteLoad
+        let start = Phase0.now()
+        var waited = 0.0
+        while one() >= below && waited < seconds {
+            Thread.sleep(forTimeInterval: 10)
+            waited = Phase0.ms(since: start) / 1000
+        }
+        let load = one()
+        let verdict = load < below ? "yes" : "NO"
+        return (load, String(format: "one minute load %.2f (under %.0f: ", load, below) + verdict
+                    + String(format: ", waited %.0f s)", waited))
+    }
+
+    nonisolated static func oneMinuteLoad() -> Double {
+        var l = [Double](repeating: 0, count: 3)
+        let taken = getloadavg(&l, 3)
+        return loadReading(samplesTaken: taken, averages: l)
+    }
+
+    /// A load `getloadavg` could not read (it returns -1, leaving the averages at 0) is infinite, so it can
+    /// never pass as quiet: read as 0 it would let a replay on an unmeasured Mac score a PASS (L490).
+    nonisolated static func loadReading(samplesTaken: Int32, averages: [Double]) -> Double {
+        samplesTaken > 0 ? averages[0] : .infinity
+    }
+
+    /// Gate 0c's replay rule as one pure decision (#4106 comment 5860086027). A mismatch is a FAIL whatever
+    /// the load. Otherwise the replays count only if EVERY load reading taken across them (before the first
+    /// kind and after each kind) was under `loadBelow`, and only if every arm the rule prices was measured:
+    /// a Mac that got busy part way through measured the Mac, and an arm with nothing to act on measured
+    /// nothing, so either is UNMEASURED, as is having no reading at all. Only then does a replayed max over
+    /// the stop FAIL, because a slow replay on a busy Mac is the load, not the code (L224, L98).
+    nonisolated static func replayVerdict(mismatches: Int, replayedMax: Double, stop: Double,
+                                          loads: [Double], loadBelow: Double = 8,
+                                          unmeasuredArms: [String] = []) -> String {
+        if mismatches > 0 { return "FAIL" }
+        guard unmeasuredArms.isEmpty, !loads.isEmpty, loads.allSatisfy({ $0 < loadBelow }) else { return "UNMEASURED" }
+        return replayedMax > stop ? "FAIL" : "PASS"
+    }
+
+    /// Every operation kind 0c.2's cost arm prices. A kind the run never recorded measured nothing, so the
+    /// verdict must not read its absence as a fast kind (L98).
+    nonisolated static let contradictionKinds = [
+        "T2 live row touch", "T2 flag a live row", "T2 unflag it", "T2 live row to another room", "T2 and back",
+        "T2 flagged row touch", "T3 third member joining", "T3 and leaving", "T2 to T3 twin appearing",
+        "T2 to T3 and going", "T3 scout accrual, every flagged row up one", "T3 accrual undone",
+        "T3 accrual down, every row above goneThreshold", "T3 accrual down undone",
+        "T3 rollover past a last night", "T3 rollover back",
+    ]
+
+    /// The kinds in `expected` that `recorded` lacks, in `expected`'s order.
+    nonisolated static func unmeasuredKinds(expected: [String], recorded: [String]) -> [String] {
+        let seen = Set(recorded)
+        return expected.filter { !seen.contains($0) }
+    }
+
+    /// The kinds a run recorded that `expected` does not list, in `recorded`'s order. A kind renamed or added
+    /// at a call site without the list following would otherwise leave the list checking a name nothing uses,
+    /// so the run refuses it rather than trusting a hand kept list (L41).
+    nonisolated static func unlistedKinds(expected: [String], recorded: [String]) -> [String] {
+        let listed = Set(expected)
+        return recorded.filter { !listed.contains($0) }
+    }
+
     /// "yyyy-MM-dd" plus `days`, in plain calendar arithmetic (UTC, so no DST can move a day).
     nonisolated static func addDays(_ day: String, _ days: Int) -> String {
         let parts = day.split(separator: "-").compactMap { Int($0) }
@@ -248,14 +316,17 @@ enum Phase0cOp: String, CaseIterable {
     case venueless = "row made venueless"
     case thirdMemberJoin = "third member joining, then leaving"
     case accrualAll = "scout accrual, every flagged row up one"
+    case accrualDown = "scout accrual reversed, every row above goneThreshold down one (stays flagged)"
     case twinAppear = "twin appearing"
+    case flaggedEdit = "contradicted row counted up one with its room, title or dates changed (stays flagged)"
     case rollover = "clock rollover"
 
     static let t1: [Phase0cOp] = [.scoutRenameInto, .scoutRenameOut, .venueRespellSame, .venueRespellOther,
                                   .bridgeNight, .dropNight, .poisonToken, .feedMiss, .dismissFront,
                                   .deleteFront, .merge, .insertNoDate, .rekey]
     static let t2t3: [Phase0cOp] = [.flagAcross, .roomRespell, .dateMove, .titleChange, .deleteTwin, .venueless,
-                                    .thirdMemberJoin, .accrualAll, .twinAppear, .rollover, .rekey, .merge]
+                                    .thirdMemberJoin, .accrualAll, .accrualDown, .flaggedEdit, .twinAppear, .rollover, .rekey,
+                                    .merge]
 
     /// Operations whose plan wording includes their own reversal ("then removed", "and back", "leaving").
     var alwaysUndone: Bool { [.bridgeNight, .poisonToken, .thirdMemberJoin].contains(self) }
@@ -276,8 +347,14 @@ final class Phase0cWorld {
     var asOf = Phase0cFixture.asOf
     private var rng: SeededGenerator
     private var serial = 0
+    /// Which field the next `flaggedEdit` moves. Started from the seed so the three CI seeds at 60 rows begin
+    /// on three different fields: each world applies the edit only once or twice, and a counter shared with
+    /// every other op left the title field unvisited for a whole CI run (#4106 0c.2 re-probe, measured
+    /// 2026-09-28: the skip with its title condition removed SURVIVED).
+    private var flaggedEdits: Int
 
     init(size: Int, seed: UInt64) throws {
+        flaggedEdits = Int(seed % 3)
         container = try TestModelContainer.inMemory([Prospect.self, Recipient.self])
         context = container.mainContext
         rng = SeededGenerator(seed: seed &* 2_654_435_761 &+ 4106)
@@ -321,6 +398,16 @@ final class Phase0cWorld {
     private static func lastNight(_ p: Prospect) -> String { max(p.performanceDate ?? "", p.runEndDate ?? "") }
 
     private static func same(_ a: Prospect, _ b: Prospect) -> Bool { a.persistentModelID == b.persistentModelID }
+
+    /// Half the time, a CONTRADICTED row (by the oracle), else nil. A room or date change on a row that stays
+    /// flagged is exactly what T2's accrual skip must NOT swallow, and a random pick rarely lands on a flagged
+    /// row that has a twin to lose: measured 2026-09-28, the skip with its room or date condition removed
+    /// SURVIVED the harness until the moves were aimed here (#4106 0c.2 re-probe).
+    private func aimedAtContradicted(_ rows: [Prospect], _ ok: (Prospect) -> Bool = { _ in true }) -> Prospect? {
+        guard roll(2) == 0 else { return nil }
+        let hot = ContradictedCancellation.contradictedKeys(among: rows)
+        return pick(rows, { hot.contains($0.naturalKey) && ok($0) })
+    }
 
     /// Performs one operation, unsaved. Nil when the store holds nothing the operation can act on.
     func perform(_ op: Phase0cOp, rows: [Prospect], fronts: Set<String>) -> Phase0cEdit? {
@@ -405,11 +492,20 @@ final class Phase0cWorld {
             let key = "rk-\(next())"
             modify(r, &edit) { $0.naturalKey = key }
         case .flagAcross:
-            guard let r = pick(rows) else { return nil }
+            // Half the time aimed at a row whose flag the contradiction rule actually reads: a contradicted row
+            // or the live twin of a flagged one. A flag crossing the threshold must re-judge its room, and a
+            // random row rarely has anything in that room to re-judge (#4106 0c.2 re-probe).
+            let aimed: Prospect? = roll(2) == 0 ? {
+                let hot = ContradictedCancellation.contradictedKeys(among: rows)
+                let twins = Set(rows.filter(\.disappearedFromFeed)
+                    .compactMap { ContradictedCancellation.liveTwin(of: $0, among: rows)?.persistentModelID })
+                return pick(rows, { hot.contains($0.naturalKey) || twins.contains($0.persistentModelID) })
+            }() : nil
+            guard let r = aimed ?? pick(rows) else { return nil }
             let target = r.missedScoutCount >= FeedReconcile.goneThreshold ? (roll(2) == 0 ? 1 : 0) : 2
             modify(r, &edit) { $0.missedScoutCount = target }
         case .roomRespell:
-            guard let r = pick(rows) else { return nil }
+            guard let r = aimedAtContradicted(rows) ?? pick(rows) else { return nil }
             let choice = roll(3)
             let other = Phase0cFixture.venues[roll(Phase0cFixture.venues.count)]
             modify(r, &edit) {
@@ -420,7 +516,8 @@ final class Phase0cWorld {
                 }
             }
         case .dateMove:
-            guard let r = pick(rows, { $0.performanceDate != nil }) else { return nil }
+            guard let r = aimedAtContradicted(rows, { $0.performanceDate != nil })
+                    ?? pick(rows, { $0.performanceDate != nil }) else { return nil }
             let shift = roll(21) - 10
             let span = roll(4)
             modify(r, &edit) {
@@ -469,6 +566,36 @@ final class Phase0cWorld {
             let flagged = rows.filter(\.disappearedFromFeed)
             guard !flagged.isEmpty else { return nil }
             for f in flagged { modify(f, &edit) { $0.missedScoutCount += 1 } }
+        case .accrualDown:
+            // Only rows that stay flagged move: a count inside the flagged range changing, which is exactly
+            // the change T2's skip (#4106 0c.2 re-probe) re-tests nothing for.
+            let above = rows.filter { $0.missedScoutCount > FeedReconcile.goneThreshold }
+            guard !above.isEmpty else { return nil }
+            for f in above { modify(f, &edit) { $0.missedScoutCount -= 1 } }
+        case .flaggedEdit:
+            // The exact boundary of T2's accrual skip: a row that stays flagged and ALSO moves one of the four
+            // facts the skip must not ignore. One field per edit, cycled by `flaggedEdits` rather than rolled, so a
+            // skip missing any single condition is met within three edits (#4106 0c.2 re-probe: a random mix
+            // let one condition's mutation survive a whole CI run).
+            let hot = ContradictedCancellation.contradictedKeys(among: rows)
+            guard let r = pick(rows, { hot.contains($0.naturalKey) }) ?? pick(rows, { $0.disappearedFromFeed })
+            else { return nil }
+            let field = flaggedEdits % 3
+            flaggedEdits += 1
+            let invented = "Invented Moved Bill \(next())"
+            typealias Room = Phase0cContradictionPatch<Phase0cKey>.Facts
+            let other = Phase0cFixture.venues.compactMap { $0 }
+                .first { Room.room($0) != Room.room(r.venue) } ?? "Invented Far Room"
+            modify(r, &edit) {
+                $0.missedScoutCount += 1
+                switch field {
+                case 0: $0.venue = other
+                case 1: $0.groupName = invented
+                default:
+                    $0.performanceDate = $0.performanceDate.map { Phase0cLinks.addDays($0, 30) } ?? "2027-06-01"
+                    $0.runEndDate = nil
+                }
+            }
         case .twinAppear:
             guard let f = pick(rows, { $0.disappearedFromFeed && $0.performanceDate != nil }) else { return nil }
             insert(Phase0cSnapshot(naturalKey: "ins-\(next())", groupName: f.groupName, venue: f.venue,
@@ -531,6 +658,7 @@ struct Phase0cHarness {
         var failures: [String] = []
         var permutationChecks = 0
         var bruteChecks = 0
+        var accrualPasses = 0
     }
 
     static func t1Facts(_ p: Prospect) -> T1.Facts {
@@ -644,6 +772,23 @@ struct Phase0cHarness {
                 feed(undone)
                 check(step, op.rawValue + " (undo)")
             }
+            // #4106 0c.2 re-probe: an accrual after EVERY operation (up one, or down one where the row stays
+            // flagged), checked and undone, so T2's skip for a count change inside the flagged range is
+            // judged in every state the op mix reaches rather than only where the mix happens to draw it.
+            if terms.contains(.t2) {
+                let accrual: Phase0cOp = world.roll(2) == 0 ? .accrualAll : .accrualDown
+                if let pass = world.perform(accrual, rows: rows, fronts: Set(t1.fronts.keys)) {
+                    outcome.accrualPasses += 1
+                    let changed = try world.commit(pass)
+                    rows = try world.rows()
+                    feed(changed)
+                    check(step, op.rawValue + " then " + accrual.rawValue)
+                    let undone = try world.undo(pass)
+                    rows = try world.rows()
+                    feed(undone)
+                    check(step, op.rawValue + " then " + accrual.rawValue + " (undo)")
+                }
+            }
             if sampled.contains(step) { permutationCheck(step) }
         }
         bruteNow = true
@@ -654,9 +799,13 @@ struct Phase0cHarness {
     /// Every seed at the given settings, both fixture sizes; CI settings unless the deep variable is set.
     static func runAll(terms: Set<Phase0cTerm>, ops: [Phase0cOp]) throws -> (outcome: Outcome, settings: String, ms: Double) {
         let deep = Phase0cLinks.deep
+        // A run holding T2 adds an accrual pass, its check and its undo after EVERY step, so its default steps
+        // are 20 and 8 rather than 40 and 20 to keep the pair near its old runtime (0c.1 and 0c.2 together
+        // 29.6 s, against 24.3 s before #4314). The guard held at these counts: all five mutations of T2's accrual skip, one per condition
+        // plus #4292's venue move, were CAUGHT at them (#4314). The deep variable keeps the long settings.
         let plan: [(size: Int, seeds: Int, steps: Int)] = deep
             ? [(60, 20, 500), (300, 20, 500)]
-            : [(60, 3, 40), (300, 1, 20)]
+            : (terms.contains(.t2) ? [(60, 3, 20), (300, 1, 8)] : [(60, 3, 40), (300, 1, 20)])
         var outcome = Outcome()
         let start = Phase0.now()
         for leg in plan {
@@ -676,7 +825,7 @@ struct Phase0cHarness {
         Phase0cLinks.say("""
             \(name) property harness [\(result.settings)] \(String(format: "%.1f", result.ms / 1000)) s wall: \
             \(o.checks) oracle comparisons (\(o.bruteChecks) also against the brute force), \(o.permutationChecks) permutation checks, \(o.skipped) ops skipped \
-            (nothing to act on), mismatches \(o.failures.count)
+            (nothing to act on), \(o.accrualPasses) accrual passes after an op, mismatches \(o.failures.count)
               ops applied: \(applied)
             """)
         if !o.failures.isEmpty {
@@ -742,9 +891,51 @@ struct QueueEnginePhase0cLinksProbeTests {
             #expect(!t1.hidden.isEmpty, "fixture \(size): nothing collapses, so the collapse is never exercised")
             #expect(poisoned > 0, "fixture \(size): no token is poisoned, so the discard is never exercised")
             #expect(!t2.contradicted.isEmpty, "fixture \(size): nothing is contradicted")
+            // The accrual passes move counts inside the flagged range, and T2 skips those; the skip is only
+            // exercised where a CONTRADICTED row sits above the threshold, so it can move down and stay flagged.
+            #expect(t2.contradicted.contains { (t2.facts[$0]?.missed ?? 0) > FeedReconcile.goneThreshold },
+                    "fixture \(size): no contradicted row sits above goneThreshold, so the accrual skip is never judged")
             #expect(t2.rooms.contains(""), "fixture \(size): no venueless room")
             #expect(!events.isEmpty, "fixture \(size): no feed break event")
         }
+    }
+
+    // 0c.2's cost arm names every kind it prices, so a kind that never ran is UNMEASURED rather than absent.
+    @Test func aContradictionKindThatNeverRanIsUnmeasured() {
+        let all = Phase0cLinks.contradictionKinds
+        #expect(Phase0cLinks.unmeasuredKinds(expected: all, recorded: all).isEmpty)
+        #expect(Phase0cLinks.unmeasuredKinds(expected: all, recorded: all.filter { $0 != "T3 rollover back" })
+                == ["T3 rollover back"])
+        #expect(Set(all).count == all.count, "a kind is listed twice")
+        #expect(Phase0cLinks.unlistedKinds(expected: all, recorded: all).isEmpty)
+        #expect(Phase0cLinks.unlistedKinds(expected: all, recorded: all + ["T3 renamed at its call site"])
+                == ["T3 renamed at its call site"])
+    }
+
+    // A load that could not be read must never read as a quiet Mac.
+    @Test func aLoadThatCouldNotBeReadIsNeverQuiet() {
+        #expect(Phase0cLinks.loadReading(samplesTaken: -1, averages: [0, 0, 0]) == .infinity)
+        #expect(Phase0cLinks.replayVerdict(mismatches: 0, replayedMax: 3, stop: 5,
+                                           loads: [Phase0cLinks.loadReading(samplesTaken: -1, averages: [0, 0, 0])],
+                                           loadBelow: 8) == "UNMEASURED")
+        #expect(Phase0cLinks.loadReading(samplesTaken: 3, averages: [2.5, 3, 4]) == 2.5)
+    }
+
+    // Gate 0c's replay rule, decided by one pure function so each outcome can be produced here (L151):
+    // a mismatch FAILS at any load; a single reading at or over 8 anywhere across the replays, no reading at
+    // all, or an arm with nothing to measure is UNMEASURED; only then does an over-stop max FAIL.
+    @Test func theReplayVerdictNeedsEveryLoadReadingUnderEight() {
+        #expect(Phase0cLinks.replayVerdict(mismatches: 0, replayedMax: 3, stop: 5, loads: [5, 6, 7.9]) == "PASS")
+        #expect(Phase0cLinks.replayVerdict(mismatches: 0, replayedMax: 3, stop: 5, loads: [5, 9, 6]) == "UNMEASURED")
+        #expect(Phase0cLinks.replayVerdict(mismatches: 0, replayedMax: 3, stop: 5, loads: [5, 6, 8]) == "UNMEASURED")
+        #expect(Phase0cLinks.replayVerdict(mismatches: 0, replayedMax: 3, stop: 5, loads: []) == "UNMEASURED")
+        #expect(Phase0cLinks.replayVerdict(mismatches: 0, replayedMax: 6, stop: 5, loads: [9]) == "UNMEASURED")
+        #expect(Phase0cLinks.replayVerdict(mismatches: 0, replayedMax: 6, stop: 5, loads: [5]) == "FAIL")
+        #expect(Phase0cLinks.replayVerdict(mismatches: 0, replayedMax: 3, stop: 5, loads: [5],
+                                           unmeasuredArms: ["accrual down"]) == "UNMEASURED")
+        #expect(Phase0cLinks.replayVerdict(mismatches: 1, replayedMax: 3, stop: 5, loads: [5],
+                                           unmeasuredArms: ["accrual down"]) == "FAIL")
+        #expect(Phase0cLinks.replayVerdict(mismatches: 1, replayedMax: 3, stop: 5, loads: [5]) == "FAIL")
     }
 
     // MARK: 0c.1 cost arm (opt in)
@@ -940,20 +1131,28 @@ struct QueueEnginePhase0cLinksProbeTests {
         let property = try Phase0cHarness.runAll(terms: [.t2, .t3], ops: Phase0cOp.t2t3)
         Phase0cHarness.report("0c.2 T2+T3", property)
         var failures = property.outcome.failures
-        var worst = 0.0
+        var single = 0.0, replayed = 0.0, loads: [Double] = [], unmeasured: [String] = []
         // One pinned instant for the whole probe (L130): today's Eastern day at the moment it started.
         let asOf = EasternDate.today(Date())
         for (label, url) in try corpora("phase0c-2") {
-            worst = max(worst, try contradictionCost(label: label, url: url, asOf: asOf, failures: &failures).max)
+            let cost = try contradictionCost(label: label, url: url, asOf: asOf, failures: &failures)
+            single = max(single, cost.all.max)
+            replayed = max(replayed, cost.replayed)
+            loads += cost.loads
+            unmeasured += cost.unmeasured
         }
-        let verdict = failures.isEmpty && worst <= 5 ? "PASS" : "FAIL"
-        Phase0cLinks.say("0c.2 VERDICT \(verdict): mismatches \(failures.count), max per change over both sizes \(String(format: "%.3f", worst)) ms (stop rule: mismatch, or max over 5 ms)")
+        // Scored under Gate 0c's replay rule (#4106 comment 5860086027): the max is the median of five
+        // replays of each kind's slowest key with load under 8. A single sample is printed and decides
+        // nothing; replays with any load reading at or over 8 are UNMEASURED rather than a PASS.
+        let verdict = Phase0cLinks.replayVerdict(mismatches: failures.count, replayedMax: replayed, stop: 5, loads: loads,
+                                                 unmeasuredArms: unmeasured)
+        Phase0cLinks.say("0c.2 VERDICT \(verdict): mismatches \(failures.count), replayed max over both sizes \(String(format: "%.3f", replayed)) ms, single sample max \(String(format: "%.3f", single)) ms, highest load across the replays \(String(format: "%.2f", loads.max() ?? .nan)) over \(loads.count) readings\(unmeasured.isEmpty ? "" : ", UNMEASURED arms: " + unmeasured.joined(separator: "; ")) (stop rule: mismatch, or max over 5 ms)")
         if !failures.isEmpty { Phase0cLinks.say("0c.2 FAILURES\n  " + failures.prefix(30).joined(separator: "\n  ")) }
         #expect(failures.isEmpty, "0c.2: a prototype disagreed with its oracle or the brute force")
     }
 
     private func contradictionCost(label: String, url: URL, asOf startAsOf: String,
-                                   failures: inout [String]) throws -> Phase0cStats {
+                                   failures: inout [String]) throws -> (all: Phase0cStats, replayed: Double, loads: [Double], unmeasured: [String]) {
         typealias T2 = Phase0cContradictionPatch<Phase0cKey>
         typealias T3 = Phase0cFeedBreakPatch<Phase0cKey>
         let ctx = ModelContext(try Phase0.openContainer(at: url))
@@ -1007,7 +1206,7 @@ struct QueueEnginePhase0cLinksProbeTests {
         func splitText() -> String {
             String(format: "(T2 %.3f ms over %d pair tests, T3 %.3f ms)", lastSplit.t2, lastSplit.tests, lastSplit.t3)
         }
-        func step(_ keys: [Phase0cKey], into stats: inout Phase0cStats) {
+        func run(_ keys: [Phase0cKey]) -> Double {
             let c2 = keys.map { ($0, byKey[$0].map(T2.Facts.init)) }
             let c3 = keys.map { ($0, byKey[$0].map(T3.Facts.init)) }
             var tests = 0
@@ -1020,25 +1219,60 @@ struct QueueEnginePhase0cLinksProbeTests {
             let t3ms = Phase0.time { t3.apply(c3, coveredFlips: flips) }
             lastSplit = (t2ms, t3ms, tests)
             testsMax = max(testsMax, tests)
-            stats.add(t2ms + t3ms)
+            return t2ms + t3ms
+        }
+
+        // Gate 0c's scoring rule (Dan, 2026-09-27, #4106 comment 5860086027): a single sample decides
+        // nothing, because on a shared Mac it measures other agents' builds. Each operation kind keeps its
+        // SLOWEST key with a closure that replays exactly that change from the unchanged state and puts the
+        // state back, and the kind's max is the median of five replays taken with load under 8.
+        var slowest: [String: (ms: Double, replay: () -> Double)] = [:]
+        var kindOrder: [String] = []
+        // Arms that measured nothing on this corpus: a kind run over no keys, or never run at all.
+        var unmeasured: [String] = []
+        func record(_ kind: String, _ ms: Double, _ replay: @escaping () -> Double) {
+            if slowest[kind] == nil { kindOrder.append(kind) }
+            if ms > (slowest[kind]?.ms ?? -1) { slowest[kind] = (ms, replay) }
+        }
+        func touch(_ kind: String, _ keys: [Phase0cKey], into stats: inout Phase0cStats) -> Double {
+            guard !keys.isEmpty else { unmeasured.append("\(kind) on \(label), no key to act on"); return 0 }
+            let ms = run(keys)
+            stats.add(ms)
+            record(kind, ms) { run(keys) }
+            return ms
+        }
+        // A change and its reversal, each timed and each replayable on its own.
+        func pair(_ kind: String, _ backKind: String, _ keys: [Phase0cKey],
+                  into forward: inout Phase0cStats, _ back: inout Phase0cStats,
+                  change: @escaping () -> Void, revert: @escaping () -> Void,
+                  midway: () -> Void = {}) -> (Double, Double) {
+            guard !keys.isEmpty else { unmeasured.append("\(kind) on \(label), no key to act on"); return (0, 0) }
+            change()
+            let there = run(keys)
+            forward.add(there)
+            record(kind, there) { change(); let ms = run(keys); revert(); _ = run(keys); return ms }
+            midway()
+            revert()
+            let home = run(keys)
+            back.add(home)
+            record(backKind, home) { change(); _ = run(keys); revert(); return run(keys) }
+            return (there, home)
         }
         func stride(_ n: Int) -> Int { max(1, n / 6) }
         func firstByID(_ keys: Set<Phase0cKey>) -> Phase0cKey? {
             keys.min { (byKey[$0]?.naturalKey ?? "") < (byKey[$1]?.naturalKey ?? "") }
         }
-        var probeSerial = 0
-        func plant(_ s: Phase0cSnapshot) -> Phase0cKey {
-            probeSerial += 1
+        func plant(_ key: Phase0cKey, _ s: Phase0cSnapshot) {
             let p = s.makeProspect()
             ctx.insert(p)
-            let key = Phase0cKey.probe(probeSerial)
             byKey[key] = p
-            return key
         }
         func unplant(_ key: Phase0cKey) {
             if let p = byKey[key] { ctx.delete(p) }
             byKey[key] = nil
         }
+        var probeSerial = 0
+        func nextProbe() -> Phase0cKey { probeSerial += 1; return .probe(probeSerial) }
 
         let rooms = t2.rooms.sorted()
         let roomSizes = rooms.map { (room: $0, live: t2.live[$0]?.count ?? 0, flagged: t2.flagged[$0]?.count ?? 0) }
@@ -1050,22 +1284,22 @@ struct QueueEnginePhase0cLinksProbeTests {
         for (i, room) in rooms.enumerated() {
             var here = Phase0cStats()
             if let l = firstByID(t2.live[room] ?? []), let p = byKey[l] {
-                step([l], into: &liveTouch); here.add(liveTouch.samples.last ?? 0)
+                here.add(touch("T2 live row touch", [l], into: &liveTouch))
                 let old = p.missedScoutCount
-                p.missedScoutCount = FeedReconcile.goneThreshold
-                step([l], into: &flagOn); here.add(flagOn.samples.last ?? 0)
-                if i % stride(rooms.count) == 0 { verify("room \(i) live row flagged") }
-                p.missedScoutCount = old
-                step([l], into: &flagOff); here.add(flagOff.samples.last ?? 0)
+                let flag = pair("T2 flag a live row", "T2 unflag it", [l], into: &flagOn, &flagOff,
+                                change: { p.missedScoutCount = FeedReconcile.goneThreshold },
+                                revert: { p.missedScoutCount = old },
+                                midway: { if i % stride(rooms.count) == 0 { verify("room \(i) live row flagged") } })
+                here.add(flag.0); here.add(flag.1)
                 let venue = p.venue
-                p.venue = room.isEmpty ? "Phase Zero C Invented Room" : nil
-                step([l], into: &moveOut); here.add(moveOut.samples.last ?? 0)
-                if i % stride(rooms.count) == 1 { verify("room \(i) live row moved") }
-                p.venue = venue
-                step([l], into: &moveBack); here.add(moveBack.samples.last ?? 0)
+                let elsewhere: String? = room.isEmpty ? "Phase Zero C Invented Room" : nil
+                let move = pair("T2 live row to another room", "T2 and back", [l], into: &moveOut, &moveBack,
+                                change: { p.venue = elsewhere }, revert: { p.venue = venue },
+                                midway: { if i % stride(rooms.count) == 1 { verify("room \(i) live row moved") } })
+                here.add(move.0); here.add(move.1)
             }
             if let f = firstByID(t2.flagged[room] ?? []) {
-                step([f], into: &flaggedTouch); here.add(flaggedTouch.samples.last ?? 0)
+                here.add(touch("T2 flagged row touch", [f], into: &flaggedTouch))
             }
             if room.isEmpty { blank = here }
         }
@@ -1086,13 +1320,13 @@ struct QueueEnginePhase0cLinksProbeTests {
         for (i, bucket) in bucketList.enumerated() {
             guard let member = futureBuckets[bucket]?.min(by: { (byKey[$0]?.naturalKey ?? "") < (byKey[$1]?.naturalKey ?? "") }),
                   let m = byKey[member] else { continue }
-            let key = plant(Phase0cSnapshot(naturalKey: "phase0c-joiner-\(i)", groupName: "Phase Zero C Joiner \(i)",
-                                            venue: m.venue, performanceDate: Phase0cLinks.addDays(asOf, 30),
-                                            missedScoutCount: m.missedScoutCount))
-            step([key], into: &join)
-            if i % stride(bucketList.count) == 0 { verify("bucket \(i) joined") }
-            unplant(key)
-            step([key], into: &leave)
+            let key = nextProbe()
+            let joiner = Phase0cSnapshot(naturalKey: "phase0c-joiner-\(i)", groupName: "Phase Zero C Joiner \(i)",
+                                         venue: m.venue, performanceDate: Phase0cLinks.addDays(asOf, 30),
+                                         missedScoutCount: m.missedScoutCount)
+            _ = pair("T3 third member joining", "T3 and leaving", [key], into: &join, &leave,
+                     change: { plant(key, joiner) }, revert: { unplant(key) },
+                     midway: { if i % stride(bucketList.count) == 0 { verify("bucket \(i) joined") } })
         }
         verify("after every bucket joined and left")
         lines.append("T3 third member joining (\(bucketList.count) buckets)                 \(join.text)")
@@ -1106,12 +1340,12 @@ struct QueueEnginePhase0cLinksProbeTests {
             .sorted { (byKey[$0]?.naturalKey ?? "") < (byKey[$1]?.naturalKey ?? "") }
         for (i, f) in flaggedFuture.enumerated() {
             guard let p = byKey[f] else { continue }
-            let key = plant(Phase0cSnapshot(naturalKey: "phase0c-twin-\(i)", groupName: p.groupName, venue: p.venue,
-                                            performanceDate: p.performanceDate, runEndDate: p.runEndDate))
-            step([key], into: &appear)
-            if i % stride(flaggedFuture.count) == 0 { verify("twin \(i) appeared") }
-            unplant(key)
-            step([key], into: &vanish)
+            let key = nextProbe()
+            let twin = Phase0cSnapshot(naturalKey: "phase0c-twin-\(i)", groupName: p.groupName, venue: p.venue,
+                                       performanceDate: p.performanceDate, runEndDate: p.runEndDate)
+            _ = pair("T2 to T3 twin appearing", "T2 to T3 and going", [key], into: &appear, &vanish,
+                     change: { plant(key, twin) }, revert: { unplant(key) },
+                     midway: { if i % stride(flaggedFuture.count) == 0 { verify("twin \(i) appeared") } })
         }
         verify("after every twin appeared and went")
         lines.append("T2 to T3 twin appearing (\(flaggedFuture.count) flagged future rows)      \(appear.text)")
@@ -1119,31 +1353,61 @@ struct QueueEnginePhase0cLinksProbeTests {
         all.merge(appear)
         all.merge(vanish)
 
-        // T3: one scout accrual moving every flagged row up one bucket, and back.
+        // The bulk op the first run of this probe failed on (#4292): one scout accrual moving every flagged
+        // row up one bucket, and back. Then its mirror, every row ABOVE goneThreshold down one, which keeps
+        // every one of them flagged, and back. Neither crosses the threshold, so T2 should re-test nothing.
         var accrual = Phase0cStats(), accrualBack = Phase0cStats()
         let flaggedAll = byKey.filter { $0.value.disappearedFromFeed }.map { $0.key }
-        for key in flaggedAll { byKey[key]?.missedScoutCount += 1 }
-        step(flaggedAll, into: &accrual)
-        let upSplit = splitText()
-        verify("accrual")
-        for key in flaggedAll { byKey[key]?.missedScoutCount -= 1 }
-        step(flaggedAll, into: &accrualBack)
-        let backSplit = splitText()
+        var upSplit = "", backSplit = ""
+        _ = pair("T3 scout accrual, every flagged row up one", "T3 accrual undone", flaggedAll,
+                 into: &accrual, &accrualBack,
+                 change: { for key in flaggedAll { byKey[key]?.missedScoutCount += 1 } },
+                 revert: { for key in flaggedAll { byKey[key]?.missedScoutCount -= 1 } },
+                 midway: { upSplit = splitText(); verify("accrual") })
+        backSplit = splitText()
         verify("accrual undone")
         lines.append("T3 scout accrual, every flagged row (\(flaggedAll.count) rows) up one      \(accrual.text) \(upSplit)")
         lines.append("T3 and back                                               \(accrualBack.text) \(backSplit)")
         all.merge(accrual)
         all.merge(accrualBack)
 
+        var down = Phase0cStats(), downBack = Phase0cStats()
+        let above = byKey.filter { $0.value.missedScoutCount > FeedReconcile.goneThreshold }.map { $0.key }
+        var downSplit = "", downBackSplit = ""
+        if !above.isEmpty {
+            _ = pair("T3 accrual down, every row above goneThreshold", "T3 accrual down undone", above,
+                     into: &down, &downBack,
+                     change: { for key in above { byKey[key]?.missedScoutCount -= 1 } },
+                     revert: { for key in above { byKey[key]?.missedScoutCount += 1 } },
+                     midway: { downSplit = splitText(); verify("accrual down") })
+            downBackSplit = splitText()
+            verify("accrual down undone")
+        }
+        lines.append("T3 accrual down, rows above goneThreshold (\(above.count) rows) down one  \(down.text) \(downSplit)")
+        lines.append("T3 and back                                               \(downBack.text) \(downBackSplit)")
+        all.merge(down)
+        all.merge(downBack)
+
         // T3: the clock rolling past every distinct last night of a flagged future row, and back.
         var roll = Phase0cStats(), rollBack = Phase0cStats()
         let nights = Set(flaggedFuture.compactMap { t3.factsOf($0)?.lastNight }).sorted()
         for (i, night) in nights.enumerated() {
             let past = Phase0cLinks.addDays(night, 1)
-            roll.add(Phase0.time { t3.advance(to: past) })
+            let there = Phase0.time { t3.advance(to: past) }
+            roll.add(there)
+            record("T3 rollover past a last night", there) {
+                let ms = Phase0.time { t3.advance(to: past) }
+                t3.advance(to: startAsOf)
+                return ms
+            }
             asOf = past
             if i % stride(nights.count) == 0 { verify("rollover \(i)") }
-            rollBack.add(Phase0.time { t3.advance(to: startAsOf) })
+            let home = Phase0.time { t3.advance(to: startAsOf) }
+            rollBack.add(home)
+            record("T3 rollover back", home) {
+                t3.advance(to: past)
+                return Phase0.time { t3.advance(to: startAsOf) }
+            }
             asOf = startAsOf
         }
         verify("after every rollover and back", brute: true)
@@ -1152,12 +1416,36 @@ struct QueueEnginePhase0cLinksProbeTests {
         all.merge(roll)
         all.merge(rollBack)
 
+        // The replays, per kind, of that kind's slowest key.
+        // The load is read again after each kind's five replays, so a Mac that got busy part way through
+        // cannot score a PASS on the strength of the reading taken before the first one.
+        for kind in Phase0cLinks.unmeasuredKinds(expected: Phase0cLinks.contradictionKinds, recorded: kindOrder) {
+            unmeasured.append("\(kind) on \(label), never ran")
+        }
+        for kind in Phase0cLinks.unlistedKinds(expected: Phase0cLinks.contradictionKinds, recorded: kindOrder) {
+            unmeasured.append("\(kind) on \(label), recorded but not in contradictionKinds")
+        }
+        let settled = Phase0cLinks.waitForLoad(below: 8)
+        var loads = [settled.load]
+        var replayLines: [String] = []
+        var replayWorst = 0.0
+        for kind in kindOrder {
+            guard let slow = slowest[kind] else { continue }
+            let reading = Phase0.Reading(runs: (0..<5).map { _ in slow.replay() })
+            let after = Phase0cLinks.oneMinuteLoad()
+            loads.append(after)
+            replayWorst = max(replayWorst, reading.median)
+            replayLines.append(kind + String(format: ": single sample %.3f ms, replayed %.3f ms (%.3f to %.3f), load after %.2f",
+                                             slow.ms, reading.median, reading.low, reading.high, after))
+        }
+        verify("after every replay", brute: true)
+
         let sizesText = roomSizes.sorted { ($0.live + $0.flagged) > ($1.live + $1.flagged) }
             .map { "\($0.live)/\($0.flagged)" }.joined(separator: " ")
         let blankRoom = roomSizes.first { $0.room.isEmpty }
         Phase0cLinks.say("""
             0c.2 [\(label)] \(models.count) rows, asOf \(startAsOf), \(rooms.count) rooms, \
-            \(t2.contradicted.count) contradicted, \(bucketList.count) flagged future buckets, \(load)
+            \(t2.contradicted.count) contradicted, \(bucketList.count) flagged future buckets, \(load), Debug build
               today's contradictedKeys (noise floor)                    \(todayT2.text)
               today's FeedBreakEvent.events, contradicted nil           \(todayT3.text)
               prototypes T2 plus T3 cold build                          \(cold.text)
@@ -1167,7 +1455,10 @@ struct QueueEnginePhase0cLinksProbeTests {
               the "" room: \(blankRoom.map { "\($0.live) live, \($0.flagged) flagged" } ?? "absent")
               every room's size, live/flagged, largest first: \(sizesText)
               oracle comparisons \(checks), mismatches \(mismatches)
+              REPLAYS, the slowest key of each kind five times, \(settled.text):
+                \(replayLines.joined(separator: "\n    "))
+              replayed max \(String(format: "%.3f", replayWorst)) ms
             """)
-        return all
+        return (all, replayWorst, loads, unmeasured)
     }
 }

@@ -415,6 +415,7 @@ struct QueueViewAttributionProbeTests {
         +   !   | 20 mach_msg2_trap  (in libsystem_kernel.dylib) + 1  [0xd]
         +   !   | 8 SwiftData.PersistentModel.getValue  (in SwiftData) + 1  [0xe]
         +   !   | 2 AG::Graph::update_attribute  (in AttributeGraph) + 1  [0xb]
+        +   !   |   2 swift_release  (in libswiftCore.dylib) + 1  [0x13]
         +   !   9 static Phase0cView.collectDirty(_:into:)  (in OvertureHostedTests) + 1  [0xf]
         +   !   18 -[NSView displayIfNeeded]  (in AppKit) + 1  [0x10]
         +   !     18 RB::DisplayList::draw  (in RenderBox) + 1  [0x11]
@@ -462,7 +463,10 @@ struct QueueViewAttributionProbeTests {
         #expect(r.owners["QueueRenderPass.WorkTally.measure"] == nil)
         #expect(r.marks["inside a card's body (ProspectRowView, DraftReviewView)"] == 25)
         #expect(r.marks["under the lazy stack (any SwiftUI Lazy frame)"] == 11)
-        #expect(r.runtimeLeaf == 21)
+        // Two of them sit under nothing but AttributeGraph, so only transparency charges them to the graph
+        // (the six graph samples above include them); without it they would read as "other: libswiftCore".
+        #expect(r.kinds.keys.allSatisfy { !$0.hasPrefix("other") })
+        #expect(r.runtimeLeaf == 23)
     }
 
     @Test func aShortSymbolIsTypeAndMember() {
@@ -551,7 +555,7 @@ struct QueueViewAttributionProbeTests {
             let file = dir.appendingPathComponent("\(slug)-r\(round).sample.txt")
             let sampler = LandingSelfSampler(seconds: seconds, file: file)
             do { try await sampler.start() } catch {
-                out.failures.append("round \(round): sampler never attached")
+                out.failures.append("round \(round): sampler never attached (\(String(describing: error).suffix(160)))")
                 continue
             }
             let t0 = Phase0.now()
@@ -746,9 +750,14 @@ struct QueueViewAttributionProbeTests {
             stageNames.append("\(stage.rawValue) \(s.focusedRows.count)")
         }
         _ = registry.takeKeys()
-        let stageKind = await sampled("stage focus change and back", label: label, dir: out) { i in
-            let next = i % 2 == 0 ? stages[(i / 2) % stages.count] : a
-            return rig.read(data: next) { Phase0cView.settle(window, bodyMustRun: true) { feed.data = next } }
+        var stageKind = KindResult(name: "stage focus change and back")
+        if stages.isEmpty {
+            stageKind.failures.append("UNMEASURED: no stage other than Scout to change to")
+        } else {
+            stageKind = await sampled("stage focus change and back", label: label, dir: out) { i in
+                let next = i % 2 == 0 ? stages[(i / 2) % stages.count] : a
+                return rig.read(data: next) { Phase0cView.settle(window, bodyMustRun: true) { feed.data = next } }
+            }
         }
         ViewAttributionProbe.say("\(label) stages served (rows): \(stageNames.joined(separator: ", "))")
 
