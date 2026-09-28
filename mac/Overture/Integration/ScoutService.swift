@@ -1583,7 +1583,7 @@ enum ScoutService {
             // refuses this row instead of falling through to an arm that would re-key or insert onto a key
             // somebody else may hold. The comments on each arm are below, at the point it is acted on.
             let target = upsertTarget(
-                storedByKey: { try Prospect.stored(key: key, in: context) },
+                storedByKey: { try landing.stored(key: key) },
                 byConcert: { try matchByConcertIdentity(enriched.seriesId, groupName: enriched.groupName,
                                                         openingNight: enriched.performanceDate,
                                                         runEndDate: enriched.runEndDate,
@@ -1636,7 +1636,7 @@ enum ScoutService {
                 // be answered).
                 let titleBefore = existing.groupName
                 apply(enriched, to: existing, now: scoutNow,
-                      storedByKey: { try Prospect.stored(key: $0, in: context) })
+                      storedByKey: landing.stored(key:))
                 recordRename(of: existing, from: titleBefore, by: target.matchedArm, at: scoutNow,
                              into: &titleRenames)
                 updated += 1
@@ -1711,15 +1711,16 @@ enum ScoutService {
                 // key beside the kept date left 19 of 1,260 rows (measured 2026-09-17) whose key named a
                 // night their card does not play, repaired at every launch by an unrelated venue pass and
                 // re-created by the next scout. ONE function answers the opening for both writes now.
-                let landing = Self.scoutOpening(fed: enriched.performanceDate, fedNights: enriched.runNights,
-                                                existing: match,
-                                                lookup: { try Prospect.stored(key: $0, in: context) })
+                let openingNight = Self.scoutOpening(fed: enriched.performanceDate,
+                                                     fedNights: enriched.runNights, existing: match,
+                                                     lookup: landing.stored(key:))
                 let anchored = Prospect.makeNaturalKey(groupName: enriched.groupName,
-                                                       performanceDate: landing, venue: enriched.venue)
+                                                       performanceDate: openingNight, venue: enriched.venue)
                 if anchored != key {
                     // The feed's key was proven free above; the landing key was not, so it is asked here,
                     // before any write, with the row itself counting as free.
-                    switch match.keyAvailability(anchored, in: context) {
+                    // #4275: from the landing's key index, like every keyed read on this path.
+                    switch match.keyAvailability(anchored, lookup: landing.stored(key:)) {
                     case .free:
                         break
                     case .unreadable:
@@ -1737,14 +1738,15 @@ enum ScoutService {
                         continue
                     }
                 }
-                match.naturalKey = anchored
+                // #4106 Phase 1a: written only where it differs, as every write reached from a re-land is.
+                match.assign(\.naturalKey, anchored)
                 // Seen under the key it now holds, so the feed reconcile below reads it as present.
                 seenKeys.insert(anchored)
                 // #4147: as above, and this is the arm the harm class actually travels on: a re-key onto
                 // a stored row carries Dan's dismissal, his sent record and his thread id with it.
                 let titleBefore = match.groupName
                 apply(enriched, to: match, now: scoutNow,
-                      storedByKey: { try Prospect.stored(key: $0, in: context) })
+                      storedByKey: landing.stored(key:))
                 recordRename(of: match, from: titleBefore, by: target.matchedArm, at: scoutNow,
                              into: &titleRenames)
                 updated += 1
@@ -2362,7 +2364,7 @@ enum ScoutService {
             incoming: incomingDiscipline, incomingKey: incomingKey)
         // Stamp whenever the value standing is the one this source brought, so "may this source correct
         // what is here" keeps answering yes for the source actually responsible for it.
-        if mergedDiscipline == incomingDiscipline { existing.disciplineGenreSourceKey = incomingKey }
+        if mergedDiscipline == incomingDiscipline { existing.assign(\.disciplineGenreSourceKey, incomingKey) }
         GenreVisibility.write(mergedDiscipline, to: existing)   // #1658
 
         let stored = (production: Production(rawValue: existing.production) ?? .unknown,
@@ -2372,9 +2374,9 @@ enum ScoutService {
         let mergedProducer = GenrePrecedence.mergedProducer(
             stored: stored, storedKey: existing.producerAxisSourceKey,
             incoming: incoming, incomingKey: incomingKey)
-        if mergedProducer == incoming { existing.producerAxisSourceKey = incomingKey }
-        existing.production = mergedProducer.production.rawValue
-        existing.profile = mergedProducer.profile.rawValue
+        if mergedProducer == incoming { existing.assign(\.producerAxisSourceKey, incomingKey) }
+        existing.assign(\.production, mergedProducer.production.rawValue)
+        existing.assign(\.profile, mergedProducer.profile.rawValue)
 
         // #1949: recomputed, never copied from either source, because they are conclusions about the whole
         // classification and the classification may now come from two of them.
@@ -2382,8 +2384,8 @@ enum ScoutService {
                                               production: mergedProducer.production,
                                               profile: mergedProducer.profile,
                                               venue: existing.venue)
-        existing.coverage = derived.coverage.rawValue
-        existing.fitReason = derived.fitReason
+        existing.assign(\.coverage, derived.coverage.rawValue)
+        existing.assign(\.fitReason, derived.fitReason)
     }
 
     // #3001: `storedByKey` is how a night RELEASED to another card is re-checked at fold time. Required
@@ -2427,9 +2429,9 @@ enum ScoutService {
         // DISPLAY groupName when Dan has not overridden it; once he renames a show, his name stands and
         // the scout stops clobbering it. naturalKey is left as-is by the rename, so this row still
         // matched by exact key above (no duplicate).
-        existing.scoutGroupName = p.groupName
+        existing.assign(\.scoutGroupName, p.groupName)
         if !existing.groupNameOverriddenByDan {
-            existing.groupName = p.groupName
+            existing.assign(\.groupName, p.groupName)
         }
         // #2453: a BLANK may not beat real data. Both ingest doors drain a presenter that is only the
         // room's own name (`ExtractedEventGuard.presenterThatIsNotTheRoom`, applied at :546 here and at
@@ -2449,7 +2451,7 @@ enum ScoutService {
             // row's BLANK presenter is a name Overture discarded, and this row's presenter is not blank.
             // Copying this listing's flag onto it would have the card assert an empty field while naming
             // an organisation (L55).
-            existing.presenterWasTheRoom = false
+            existing.assign(\.presenterWasTheRoom, false)
         } else {
             // #1954: and WHICH SOURCE may write it, which is a different question from #2453's above.
             // That one asks whether an ordinary scout re-read may empty a name a sweep, the AI pass or
@@ -2468,11 +2470,11 @@ enum ScoutService {
                 // Stamped where the value standing is the one THIS source brought, exactly as the two
                 // axes are, so "may this source correct what is here" keeps answering yes for whoever is
                 // actually responsible for the name.
-                existing.presenterSourceKey = incomingKey
+                existing.assign(\.presenterSourceKey, incomingKey)
                 // And the explanation travels with the value it explains: `presenterWasTheRoom` says why
                 // THIS listing's presenter is blank, and it belongs only to a row whose presenter came
                 // from this listing (L55, the same reason the branch above it states).
-                existing.presenterWasTheRoom = p.presenterWasTheRoom   // #1788
+                existing.assign(\.presenterWasTheRoom, p.presenterWasTheRoom)   // #1788
             }
             // NOTHING is written on the losing path, not even the value the row already holds. Writing it
             // back would run through `setPresenter(_:from: .scout)`, which stamps `presenterSource`, so a
@@ -2480,12 +2482,12 @@ enum ScoutService {
             // first visit by any other source, and #2453's refusal (which reads that stamp) would stop
             // protecting it. The value and the record of who wrote it are one fact (L544).
         }
-        existing.location = p.location
+        existing.assign(\.location, p.location)
         // #1886: track the listing's own spelling of the room always, the way scoutGroupName tracks the
         // scout's own name above, so the key stays anchored to what this source keeps sending even after
         // #1846's merge relabels the card with the name Dan entered on the watchlist.
-        existing.scoutVenue = p.venue
-        existing.venue = p.venue
+        existing.assign(\.scoutVenue, p.venue)
+        existing.assign(\.venue, p.venue)
         // #2691: the feed's opening night, UNLESS Dan dropped it. Assigning it back would move the card
         // to a night he explicitly said no to, which is the same silent undo the nights subtraction below
         // prevents, one field over. `keeping` answers the feed's own date whenever nothing was dropped,
@@ -2493,21 +2495,21 @@ enum ScoutService {
         //
         // #3324: asked through `scoutOpening`, the same function the `.reKey` arm stores its key from, so
         // the key and this date cannot name different nights.
-        existing.performanceDate = scoutOpening(fed: p.performanceDate, fedNights: p.runNights,
-                                                existing: existing, lookup: storedByKey)
-        existing.sourceListingURL = p.sourceListingURL
-        existing.seriesId = p.seriesId   // #1260 Phase 2: keep the merged-concert identity current
+        existing.assign(\.performanceDate, scoutOpening(fed: p.performanceDate, fedNights: p.runNights,
+                                                         existing: existing, lookup: storedByKey))
+        existing.assign(\.sourceListingURL, p.sourceListingURL)
+        existing.assign(\.seriesId, p.seriesId)   // #1260 Phase 2: keep the merged-concert identity current
         // #1663/#1845: the classification block (discipline, production, profile, coverage, fitReason) all
         // moved OUT of this unconditional refresh and into the arms below. Every one of them comes out of
         // ONE EventClassifier.classify call, so refreshing some here while the arms decide the others let a
         // row keep one source's genre and take another's profile. The score is recomputed from the ROW, so
         // that mixture scored a show neither source ever described. Measured on the live store 2026-08-01:
         // the two readings of one Jalopy show sit 8 points apart, the full width of the queue.
-        existing.possibleMatchSource = p.possibleMatchSource
-        existing.possibleMatchName = p.possibleMatchName
+        existing.assign(\.possibleMatchSource, p.possibleMatchSource)
+        existing.assign(\.possibleMatchName, p.possibleMatchName)
         // #384: scout-owned, refreshed every run like the other scoring inputs. Read by Step B below
         // (via ClassificationOverride.rescored) and by the fresh score in p.
-        existing.passedOnThisShow = p.passedOnThisShow
+        existing.assign(\.passedOnThisShow, p.passedOnThisShow)
         // #901: scout-owned, and refreshed to whatever is true NOW: a vacation Dan cancelled stops
         // flagging the show, and a shoot booked over a week he was merely away re-flags it under a new
         // key, which is a fact he has not seen and so is not covered by anything he cleared.
@@ -2531,17 +2533,17 @@ enum ScoutService {
             // A fresh, confident ORG match outranks a standing performer guess, so it wins and clears
             // the correction. The lock is a guard against silent reversion, never a permanent one-way
             // override.
-            existing.priorRelationship = p.priorRelationship
-            existing.matchedClientName = p.matchedClientName
-            existing.downbeatClientId = p.downbeatClientId
+            existing.assign(\.priorRelationship, p.priorRelationship)
+            existing.assign(\.matchedClientName, p.matchedClientName)
+            existing.assign(\.downbeatClientId, p.downbeatClientId)
             if existing.relationshipCorrectedByPerformerMatch { existing.clearPerformerMatch() }
         } else if existing.hasActivePerformerMatch {
             // The org name still matches nothing (it never did, which is why Prep had to look at the
             // performer at all). Leave Prep's correction exactly as it stands.
         } else {
-            existing.priorRelationship = p.priorRelationship
-            existing.matchedClientName = p.matchedClientName
-            existing.downbeatClientId = p.downbeatClientId
+            existing.assign(\.priorRelationship, p.priorRelationship)
+            existing.assign(\.matchedClientName, p.matchedClientName)
+            existing.assign(\.downbeatClientId, p.downbeatClientId)
         }
 
         // Step B: the score. Runs AFTER Step A, so `existing.priorRelationship` already holds whichever
@@ -2559,9 +2561,9 @@ enum ScoutService {
             // comment above is explicit that the re-score is meant to read his values plus the freshly
             // updated profile and coverage. Written here rather than left above so that intent is visible
             // instead of being an accident of where the line happened to sit.
-            existing.profile = p.profile
-            existing.coverage = p.coverage
-            existing.fitReason = p.fitReason
+            existing.assign(\.profile, p.profile)
+            existing.assign(\.coverage, p.coverage)
+            existing.assign(\.fitReason, p.fitReason)
         } else if existing.hasActivePerformerMatch && !p.orgMatchConfident {
             // The org match found nothing, so Step A left Prep's performer correction standing. Take the
             // scout's fresh discipline and production; the correction lives in priorRelationship, which
@@ -2584,11 +2586,10 @@ enum ScoutService {
         // skipped. Scoring from the row instead makes the write idempotent and keeps the stored score
         // and the stored axes describing the same show.
         let refit = ClassificationOverride.rescored(existing, now: now)
-        existing.fitScore = refit.score
-        existing.tier = refit.tier.rawValue
-        existing.runEndDate = p.runEndDate
-        existing.partOfRelatedRun = p.partOfRelatedRun
-        existing.runSourceURLs = p.runSourceURLs
+        existing.assign(\.fitScore, refit.score)
+        existing.assign(\.tier, refit.tier.rawValue)
+        existing.assign(\.partOfRelatedRun, p.partOfRelatedRun)
+        existing.assign(\.runSourceURLs, p.runSourceURLs)
         // #1523: keep the played nights current, MINUS the ones Dan dropped.
         //
         // #2691: the feed still lists a dropped night on every run, so assigning what it says would put
@@ -2596,20 +2597,24 @@ enum ScoutService {
         // removal recorded against nothing recurs. `DroppedNight.keeping` is the one place that
         // subtraction happens, so the queue and the scout cannot disagree about which nights this run has.
         // #3001: with a lookup, so a night released to another card comes back if that card has gone.
-        existing.runNights = DroppedNight.keeping(p.runNights, on: existing, lookup: storedByKey)
+        let nights = DroppedNight.keeping(p.runNights, on: existing, lookup: storedByKey)
+        existing.assign(\.runNights, nights)
         // And the span has to follow the nights, or a run whose opening night was dropped keeps claiming
         // to start on a date it no longer plays.
-        if !existing.runNights.isEmpty, !DroppedNight.all(on: existing).isEmpty {
-            existing.runEndDate = existing.runNights.max()
-        }
+        //
+        // #4106 Phase 1a: decided ONCE and assigned once. It used to be assigned the feed's end above and
+        // then reassigned here, so a run with a drop wrote the field twice on every re-land, and the first
+        // write was a real change even when the second put the stored value back.
+        let hasDrops = !nights.isEmpty && !DroppedNight.all(on: existing).isEmpty
+        existing.assign(\.runEndDate, hasDrops ? nights.max() : p.runEndDate)
 
         // #1699, Dan's call (2026-08-02): the NEWEST read wins, INCLUDING when it is empty. A feed that
         // stops publishing times costs the card its time, which is the cheap error; a show that gets
         // rescheduled must never keep advertising the old curtain time, which is the error that could
         // actually cost him a shoot. So this assigns rather than merging, unlike sourceIds below.
-        existing.performanceStartTimes = p.startTimes
-        existing.startTimesVary = p.startTimesVary
-        existing.nightStartTimes = p.nightStartTimes
+        existing.assign(\.performanceStartTimes, p.startTimes)
+        existing.assign(\.startTimesVary, p.startTimesVary)
+        existing.assign(\.nightStartTimes, p.nightStartTimes)
 
         // #771: UNION, never replace, and this is the only correct home for it. The chain above
         // deliberately merges the same show arriving from a venue's calendar and from the presenter's
@@ -2618,8 +2623,11 @@ enum ScoutService {
         // from the forgotten source's feed and accrue misses toward disappearedFromFeed on a live show
         // Dan may already have drafted and emailed. Sorted so the stored order is stable rather than
         // whatever the Set happened to hash to.
-        existing.sourceIds = Array(Set(existing.sourceIds).union(p.sourceIds)).sorted()
+        existing.assign(\.sourceIds, Array(Set(existing.sourceIds).union(p.sourceIds)).sorted())
 
+        // #4106 Phase 1a: the one unconditional write left, and deliberately so. It is the named residue
+        // `ScoutReLandWritesNothingTests` allows, until Phase 1b stamps it from the injected clock once per
+        // Eastern day (decision 6(b)).
         existing.ingestedAt = Date()
     }
 

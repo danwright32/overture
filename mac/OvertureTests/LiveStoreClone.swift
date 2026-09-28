@@ -1,4 +1,9 @@
 import Foundation
+// #4106 probe 0c.8: this file is also compiled into the HOSTED target (mac/project.yml), which reaches
+// the app through an import rather than by compiling it in.
+#if OVERTURE_HOSTED_TESTS
+@testable import Overture
+#endif
 
 // #1672: the ONE way a test may read Dan's real store.
 //

@@ -644,6 +644,47 @@ queued_behind_phrase() {
   fi
 }
 
+# #4295: why a claim that a caller holds the directory lock for this run cannot be believed, or nothing at
+# all when it can. dir_lock_claim_problem <claimed holder pid> <this run's pid>
+#
+# The claim is an environment variable, and a variable saying a step already happened is inherited by
+# every process started beneath it, which reads it as true of itself (L169). So it is believed only when
+# three readings that do NOT come from the variable agree with it (L70): the pid is alive, the lock's own
+# owner line (written by take_dir_lock the moment it took the lock) names that pid, and that pid is an
+# ANCESTOR of this run in the process table. The last is what makes the claim unspoofable by an unrelated
+# process that happens to export the variable, and it is also what keeps it true for everything a batch
+# starts: each inner run is serial beneath the holder, so none of them can overlap another.
+#
+# The real /bin/ps by path, because this runner's own fixture puts a stub `ps` on PATH.
+dir_lock_claim_problem() {
+  local claimed="$1" pid="$2" owner hops=0
+  if [[ ! "${claimed}" =~ ^[0-9]+$ ]] || [[ "${claimed}" -le 1 ]]; then
+    echo "that is not a process id"
+    return 0
+  fi
+  if ! /bin/ps -p "${claimed}" >/dev/null 2>&1; then
+    echo "PID ${claimed} is not running"
+    return 0
+  fi
+  if [[ ! -d "${DIR_LOCK}" ]]; then
+    echo "there is no lock at ${DIR_LOCK} at all"
+    return 0
+  fi
+  owner="$(cat "${DIR_LOCK}/owner" 2>/dev/null || true)"
+  if [[ "${owner}" != "overture:${claimed}" ]]; then
+    echo "the lock's owner line reads ${owner:-nothing}, not overture:${claimed}"
+    return 0
+  fi
+  # Bounded, so a process table that loops or cannot be read ends the walk rather than hanging it (L110).
+  while [[ "${pid}" =~ ^[0-9]+$ ]] && [[ "${pid}" -gt 1 && "${hops}" -lt 64 ]]; do
+    pid="$(/bin/ps -o ppid= -p "${pid}" 2>/dev/null | tr -d ' ' || true)"
+    [[ "${pid}" == "${claimed}" ]] && return 0
+    hops=$(( hops + 1 ))
+  done
+  echo "PID ${claimed} is not an ancestor of this run"
+  return 0
+}
+
 # Whether this run may try for the directory lock now: no live waiter is queued ahead of it. Sets
 # LOCK_QUEUE_AHEAD, which take_dir_lock reads to tell "queued behind somebody" from "the lock is held".
 my_turn_for_dir_lock() {
@@ -674,13 +715,28 @@ my_turn_for_dir_lock() {
 # A queued waiter never attempts the stale claim either: a stale lock is the earliest waiter's to clear,
 # and a later one clearing it would take the turn it is queued behind.
 #
+# #4295: unless a CALLER already holds it for this run, which `scripts/mutate.sh --batch` does so that
+# several scoped runs enter the queue once between them instead of once each. See dir_lock_claim_problem.
 # #4244: A MERGE VERIFICATION QUEUES FIRST. OVERTURE_TEST_LOCK_PRIORITY=merge, which only
 # verify-and-merge-branch.sh's run_full_suite sets (and so verify-and-merge-batch.sh, which sources it),
 # joins as a priority waiter: ahead of routine runs, behind the holder and behind any routine run that
 # has already waited the queue's bound. Any other non empty value is refused before the queue is joined,
 # because a misspelt marker would otherwise wait as a routine run while its caller believed otherwise.
+# The held-for-this-run claim is judged FIRST: a run inside a batch never queues, whatever its class.
 take_dir_lock() {
-  local waited_from waited start_table="" ahead_said="" queue_class=""
+  local waited_from waited start_table="" ahead_said="" claim_problem queue_class=""
+  if [[ -n "${OVERTURE_TEST_LOCK_HELD_BY:-}" ]]; then
+    claim_problem="$(dir_lock_claim_problem "${OVERTURE_TEST_LOCK_HELD_BY}" "$$")"
+    if [[ -z "${claim_problem}" ]]; then
+      # DIR_LOCK_HELD stays empty on purpose: the lock is the caller's, so this run's exit and signal
+      # cleanup must leave it where it is (release_dir_lock removes only a lock this run took).
+      echo "run-tests-locked.sh: the shared test lock ${DIR_LOCK} is held for this run by its caller, PID ${OVERTURE_TEST_LOCK_HELD_BY} (#4295), so this run does not queue for it and leaves it held when it ends." >&2
+      return 0
+    fi
+    echo "run-tests-locked.sh: OVERTURE_TEST_LOCK_HELD_BY=${OVERTURE_TEST_LOCK_HELD_BY} says a caller holds ${DIR_LOCK} for this run, but ${claim_problem}. The claim is refused rather than trusted, and not replaced by queueing either: a caller that really held it would be waited for by its own child until the timeout (#4295)." >&2
+    echo "run-tests-locked.sh: NOTHING RAN. This run never got the shared test lock, so no test executed and nothing was verified. It is not a pass, and it says nothing about your change." >&2
+    exit 3
+  fi
   case "${OVERTURE_TEST_LOCK_PRIORITY:-}" in
     "") ;;
     merge)

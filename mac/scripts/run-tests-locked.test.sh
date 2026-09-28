@@ -2006,6 +2006,76 @@ assert_equals "and leaves the queue" "0" "$(queue_tickets)"
 assert_equals "and leaves the holder's lock alone" "other:$$" "$(cat "${QUEUE_LOCK}/owner" 2>/dev/null)"
 rm -rf "${QUEUE_LOCK}" "${QUEUE_LOCK}.queue"
 
+# #4295: A CALLER THAT ALREADY HOLDS THE LOCK FOR THIS RUN. `scripts/mutate.sh --batch` takes the directory
+# lock once and runs several scoped suites inside it, so the queue is entered once per batch rather than
+# once per mutation. Each inner run is told so through OVERTURE_TEST_LOCK_HELD_BY, and believes it only
+# when three independent readings agree: the lock's own owner line names that pid, the pid is alive, and
+# it is an ANCESTOR of this run. The last is what an unrelated process exporting the variable cannot fake,
+# since it reads the process table rather than anything the caller wrote (L70).
+HELD_LOCK="${DIR_LOCK_FIXTURE_DIR}/held.lock"
+mkdir -p "${HELD_LOCK}"
+echo "overture:$$" > "${HELD_LOCK}/owner"
+: > "${WITNESS}"
+HELD_RUN="$(OVERTURE_DIR_LOCK="${HELD_LOCK}" OVERTURE_DIR_LOCK_TIMEOUT=2 OVERTURE_DIR_LOCK_POLL=0.2 \
+  OVERTURE_TEST_LOCK_HELD_BY="$$" FLOCK_STUB_WITNESS="${WITNESS}" \
+  run_wrapper_with_stub_xcodebuild "${GREEN_RUN_LOG}" 0)"
+assert_contains "a run whose ancestor holds the lock for it runs rather than queueing behind it" \
+  "Test run with 4 tests" "${HELD_RUN}"
+assert_contains "and says whose hold it is running under" "held for this run by its caller, PID $$" "${HELD_RUN}"
+assert_not_contains "and never waits for its own caller" "gave up waiting" "${HELD_RUN}"
+assert_contains "its own file lock is still taken inside the held directory lock" \
+  "dir-lock-held" "$(cat "${WITNESS}")"
+assert_equals "and the caller's lock is LEFT held when the run ends, since it is the caller's to release" \
+  "overture:$$" "$(cat "${HELD_LOCK}/owner" 2>/dev/null)"
+
+# #4244 meets #4295: a run inside a batch that ALSO carries the merge marker is still the batch's, so the
+# held claim is judged before the priority lane and it neither queues nor announces a priority wait.
+HELD_MERGE_RUN="$(OVERTURE_DIR_LOCK="${HELD_LOCK}" OVERTURE_DIR_LOCK_TIMEOUT=2 OVERTURE_DIR_LOCK_POLL=0.2 \
+  OVERTURE_TEST_LOCK_HELD_BY="$$" OVERTURE_TEST_LOCK_PRIORITY=merge FLOCK_STUB_WITNESS="${WITNESS}" \
+  run_wrapper_with_stub_xcodebuild "${GREEN_RUN_LOG}" 0)"
+assert_contains "a held run carrying the merge marker still runs under its caller's hold" \
+  "held for this run by its caller, PID $$" "${HELD_MERGE_RUN}"
+assert_not_contains "and does not join the priority lane it has no need of" \
+  "queues ahead of routine runs" "${HELD_MERGE_RUN}"
+assert_equals "and the caller's lock is still left held" "overture:$$" "$(cat "${HELD_LOCK}/owner" 2>/dev/null)"
+
+# The claim refused three ways, each naming what failed, and each leaving the holder's lock alone. A refusal
+# rather than a fallback to queueing: a caller that really does hold the lock would otherwise be waited for
+# by its own child until the timeout.
+/bin/sleep 30 &
+UNRELATED_HOLDER=$!
+echo "overture:${UNRELATED_HOLDER}" > "${HELD_LOCK}/owner"
+NOT_ANCESTOR_RUN="$(OVERTURE_DIR_LOCK="${HELD_LOCK}" OVERTURE_TEST_LOCK_HELD_BY="${UNRELATED_HOLDER}" \
+  OVERTURE_DIR_LOCK_TIMEOUT=2 OVERTURE_DIR_LOCK_POLL=0.2 \
+  run_wrapper_with_stub_xcodebuild "${GREEN_RUN_LOG}" 0)"
+assert_contains "a claim naming a live process this run is not descended from is refused" \
+  "is not an ancestor of this run" "${NOT_ANCESTOR_RUN}"
+assert_contains "as a run that never got the lock, which mutate.sh reads as NOTHING RAN" \
+  $'\nrun-tests-locked.sh: NOTHING RAN.' $'\n'"${NOT_ANCESTOR_RUN}"
+assert_contains "and exits 3, never 0" "exit=3" "${NOT_ANCESTOR_RUN}"
+assert_not_contains "and no test ran" "Test run with 4 tests" "${NOT_ANCESTOR_RUN}"
+assert_not_contains "refused at once, never sent to queue behind a lock it was told it held" \
+  "gave up waiting" "${NOT_ANCESTOR_RUN}"
+assert_equals "and the holder's lock is untouched" "overture:${UNRELATED_HOLDER}" "$(cat "${HELD_LOCK}/owner" 2>/dev/null)"
+kill "${UNRELATED_HOLDER}" 2>/dev/null
+wait "${UNRELATED_HOLDER}" 2>/dev/null
+
+echo "overture:999999" > "${HELD_LOCK}/owner"
+MISMATCH_RUN="$(OVERTURE_DIR_LOCK="${HELD_LOCK}" OVERTURE_TEST_LOCK_HELD_BY="$$" \
+  OVERTURE_DIR_LOCK_TIMEOUT=2 OVERTURE_DIR_LOCK_POLL=0.2 \
+  run_wrapper_with_stub_xcodebuild "${GREEN_RUN_LOG}" 0)"
+assert_contains "a claim the lock's own owner line does not bear out is refused" \
+  "owner line reads overture:999999" "${MISMATCH_RUN}"
+assert_contains "the same way" "exit=3" "${MISMATCH_RUN}"
+rm -rf "${HELD_LOCK}"
+
+ABSENT_RUN="$(OVERTURE_DIR_LOCK="${HELD_LOCK}" OVERTURE_TEST_LOCK_HELD_BY="$$" \
+  OVERTURE_DIR_LOCK_TIMEOUT=2 OVERTURE_DIR_LOCK_POLL=0.2 \
+  run_wrapper_with_stub_xcodebuild "${GREEN_RUN_LOG}" 0)"
+assert_contains "a claim on a lock that is not there at all is refused" "exit=3" "${ABSENT_RUN}"
+assert_equals "and the run does not take the lock itself on the way" "no" \
+  "$([ -d "${HELD_LOCK}" ] && echo yes || echo no)"
+
 # EVERY ACQUIRER QUEUES. The class is "a script that takes the machine wide lock with its own `mkdir`",
 # which would barge past the queue however well this runner behaves. Derived from the tracked tree
 # rather than a list (L96): the only `mkdir` on the directory lock outside a fixture must be the one in
