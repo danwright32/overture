@@ -31,9 +31,9 @@
 #
 #   A waiter leaves the queue the moment it holds the lock, and on every exit.
 #
-# PRIORITY (#4244), an EXTENSION this copy has and Downbeat's and Ovation's do not yet. A run verifying a
-# merge joins with the class "priority", and its ticket is named "<arrival>.priority.<pid>": the same
-# arrival first, the same pid last, the same content. A reader that knows the class serves tickets in
+# PRIORITY (#4244), an EXTENSION this copy has and Downbeat's and Ovation's do not yet (downbeat#527,
+# ovation#598). A run verifying a merge joins with the class "priority", and its ticket is named
+# "<arrival>.priority.<pid>": the same arrival first, the same pid last, the same content. A reader that knows the class serves tickets in
 # two lanes, priority first and each lane in arrival order, and a routine ticket that has waited
 # LOCK_QUEUE_PRIORITY_BOUND_SECONDS (600) is promoted into the priority lane at its own arrival, so a
 # stream of merges delays a routine run by at most the bound and never starves it. Nothing about the
