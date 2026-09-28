@@ -105,6 +105,9 @@ extension QueueEnginePhase0cRowsProbeTests {
         // The same rule over a row change that EDITS the draft, so no lint can be reused: without this arm
         // the reuse would be measured only on changes that skip the expensive path (L102).
         var worstEditReplay: Double? = 0
+        // How many draft edits were replayed. None means the edit arm measured nothing (no slow key had a
+        // draft), so its starting 0 must not stand in the verdict as a measured zero (L90).
+        var editReplaysTaken = 0
         var sumMismatches = 0
         var instantsJudged = 0
         for (label, url) in try corpora("phase0c-rows-5") {
@@ -226,6 +229,7 @@ extension QueueEnginePhase0cRowsProbeTests {
                     proto.apply(changed: [pid], rows: byPID, upstream: up, context: rowCtx)
                     let edit = Phase0.Reading(runs: runs)
                     worstEditReplay = worstEditReplay.map { max($0, edit.median) }
+                    editReplaysTaken += 1
                     editText = String(format: "a draft edit, replay median %.3f (%.3f to %.3f)", edit.median, edit.low, edit.high)
                 }
                 replayLines.append(String(format: "%@: sample %.3f ms, replay median %.3f (%.3f to %.3f) at load %.2f; %@",
@@ -327,6 +331,7 @@ extension QueueEnginePhase0cRowsProbeTests {
                   (b) carried forward on validUntil: \(expiryMismatch.count) instants differ; rows rebuilt per instant \(rebuiltText); \(continuous) rows read the clock continuously; cost \(Phase0cRows.spread(expiryCosts).text)\(expiryMismatch.isEmpty ? "" : "\n    " + expiryMismatch.prefix(5).joined(separator: "\n    "))
                 """)
         }
+        if editReplaysTaken == 0 { worstEditReplay = nil }
         let judged: Double? = worstReplay.flatMap { a in worstEditReplay.map { max(a, $0) } }
         let verdict = Phase0cRows.stopVerdict(mismatches: sumMismatches, replayedMaxMs: judged)
         Phase0cRows.say("0c.5 stop rule (any sum differs at \(instantsJudged) instants over both sizes, or the slowest key's "
