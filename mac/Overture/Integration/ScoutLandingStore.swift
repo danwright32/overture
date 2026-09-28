@@ -22,10 +22,25 @@ import SwiftData
 //     inserted since sits after every row that was already there). Rows deleted from the context drop out
 //     on every read. Nothing in the landing deletes a show today; the filter is there so the day something
 //     does, the working set cannot hand back a row a fresh fetch would not.
-//   - EVERY FOLD is re-derived when the raw fields it came from change. Each read of a row's fold compares
-//     the four raw fields it was built from (title, venue, listing URL, run URLs) against the ones cached,
-//     and folds again on any difference. So an in place write by an earlier source, or by an earlier event
-//     of the same source, is seen without any call site having to remember to announce it.
+//   - EVERY FOLD is re-derived when the raw fields it came from change. A cached fold is compared against
+//     the four raw fields it was built from (title, venue, listing URL, run URLs), and folded again on any
+//     difference. So an in place write by an earlier source, or by an earlier event of the same source, is
+//     seen without any call site having to remember to announce it.
+//   - EVERY KEYED LOOKUP (`stored(key:)`, what `Prospect.stored(key:in:)` answers from the database) is
+//     answered from a natural key index over the same membership, so it takes the landing's inserts, drops
+//     deleted rows, and follows a key moved in place, exactly as the fetch it replaces would.
+//
+// WHICH ROWS ARE RE-CHECKED, and why it is not every row (#4275, second pass). Comparing every cached row
+// on every read was itself about 13% of what was left of a landing (optimised, on a store clone), because
+// `runSourceURLs` is an archived blob that decodes on each comparison, and there is a read per arm per
+// event. Nothing but SwiftData knows which rows were written, so SwiftData is asked: at every read, the
+// context's changed and inserted models (`changedModelsArray`, `insertedModelsArray`) are marked to be
+// re-checked, and so are the ones a save is about to carry off, captured from `ModelContext.willSave` as
+// the save begins, because a save empties both lists and `apply` saves once per source. A row neither list
+// has named since its fold was taken has not been written, so its fold and its key entry still describe it.
+// Per row observation was the other candidate and was rejected: an observation that never fires is never
+// removed, and the main context's rows live as long as the app, so every landing would leave one behind on
+// every row it did not write.
 //
 // It is sound only for a landing, meaning a stretch of main actor work with no `await` in it: nothing else
 // can write the store while it runs, so the landing's own inserts are the only change a fresh fetch could
@@ -40,6 +55,7 @@ import SwiftData
 final class ScoutLandingStore {
     // How the rows are read. The default is the store; a test injects one that counts, or that fails.
     typealias Read = (ModelContext) throws -> [Prospect]
+    typealias ReadKey = (String, ModelContext) throws -> Prospect?
 
     // `.everyRead` answers each question with a fresh fetch and a fresh fold, which is exactly what the
     // code did before #4275. It exists as the REFERENCE the equality tests compare the working set against,
@@ -90,9 +106,27 @@ final class ScoutLandingStore {
 
     private let context: ModelContext
     private let read: Read
+    private let readKey: ReadKey
     let policy: Policy
     private var loaded: [Prospect]?
+    // `loaded` without deleted rows, as the last read found it. Dropped whenever it could have changed: a
+    // row joins, a save begins, or a deletion is pending.
+    private var members: [Prospect]?
     private var folds: [ObjectIdentifier: Fold] = [:]
+    // Rows SwiftData has named as written since their fold, or their key entry, was taken. Two sets because
+    // the two are consumed separately: a fold is re-checked when it is asked for, a key when a key is.
+    private var foldsToCheck: Set<ObjectIdentifier> = []
+    private var keysToCheck: [ObjectIdentifier: Prospect] = [:]
+    // The natural key index, built on the first keyed lookup from the membership and kept in its order, so
+    // two rows holding one key (possible only between an insert and the save that refuses it) answer in the
+    // order a fresh fetch would.
+    private var keyIndex: [String: [Prospect]]?
+    private var indexedKey: [ObjectIdentifier: String] = [:]
+    private var position: [ObjectIdentifier: Int] = [:]
+    private let saveWatch = SaveWatch()
+    // How many cached folds were compared against their row. Counted so a test can pin that it does not
+    // grow with the store (#4275).
+    private(set) var foldValidations = 0
     // Moves whenever any row's folds are (re)computed or a row joins, so a value derived from every row's
     // folds knows when it has to be derived again.
     private var generation = 0
@@ -105,18 +139,60 @@ final class ScoutLandingStore {
     }
 
     init(context: ModelContext, read: @escaping Read = ScoutService.readProspectTable,
+         readKey: @escaping ReadKey = { try Prospect.stored(key: $0, in: $1) },
          policy: Policy = .once) {
         self.context = context
         self.read = read
+        self.readKey = readKey
         self.policy = policy
+        guard policy == .once else { return }
+        // A save empties the context's changed and inserted models, so what it is about to carry off is
+        // noted as it begins. Posted synchronously by `save()` on the saving thread, which for the main
+        // context is this actor.
+        saveWatch.token = NotificationCenter.default.addObserver(
+            forName: ModelContext.willSave, object: context, queue: nil) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.noteWrittenRows()
+                self?.members = nil
+            }
+        }
+    }
+
+    // Removes the save observer when the landing's working set goes, so a landing leaves nothing registered.
+    private final class SaveWatch: @unchecked Sendable {
+        var token: NSObjectProtocol?
+        deinit { if let token { NotificationCenter.default.removeObserver(token) } }
+    }
+
+    // Marks every row SwiftData says has been written, and not yet saved, to be re-checked. Cheap when there
+    // is nothing to say, which is the state right after every source's save.
+    private func noteWrittenRows() {
+        guard loaded != nil, context.hasChanges else { return }
+        for model in context.changedModelsArray + context.insertedModelsArray {
+            guard let p = model as? Prospect else { continue }
+            let id = ObjectIdentifier(p)
+            foldsToCheck.insert(id)
+            keysToCheck[id] = p
+        }
     }
 
     // Every stored show, as a fresh fetch would return it right now. Throws when the store cannot answer.
     func rows() throws -> [Prospect] {
         if policy == .everyRead { return try read(context) }
-        if let loaded { return loaded.filter { !$0.isDeleted } }
+        if let loaded {
+            noteWrittenRows()
+            // Re-filtering every row on every read was, once keyed lookups came here, a larger cost than the
+            // keyed fetch it replaced (measured on the #4275 probe, Debug). So the filtered list is kept, and
+            // used only while no deletion is pending, which is what makes it the answer the filter would give.
+            let deletionPending = context.hasChanges && !context.deletedModelsArray.isEmpty
+            if let members, !deletionPending { return members }
+            let current = loaded.filter { !$0.isDeleted }
+            members = deletionPending ? nil : current
+            return current
+        }
         let fetched = try read(context)
         loaded = fetched
+        members = fetched
         return fetched
     }
 
@@ -125,14 +201,66 @@ final class ScoutLandingStore {
     func inserted(_ p: Prospect) {
         guard policy == .once, loaded != nil else { return }
         loaded?.append(p)
+        members = nil
         generation += 1
+        if keyIndex != nil { index(p, at: (loaded?.count ?? 1) - 1) }
     }
 
-    // This row's folds, re-derived if any field they came from has changed since they were cached.
+    // The stored row holding a natural key, or nil when nobody holds it: what `Prospect.stored(key:in:)`
+    // answers from the database, answered from the working set. Throws when the store cannot answer, as the
+    // fetch does, because "could not read" and "the key is free" are the same nil to every caller and only
+    // one of them is safe to write a unique key on (#2754, L105).
+    func stored(key: String) throws -> Prospect? {
+        if policy == .everyRead { return try readKey(key, context) }
+        // The rows are loaded once; after that only what was written is asked about. A deleted row stays in
+        // the index and is refused below, so no read of every row's `isDeleted` is needed here.
+        if loaded == nil { _ = try rows() } else { noteWrittenRows() }
+        if keyIndex == nil {
+            keyIndex = [:]
+            keysToCheck = [:]
+            for (i, p) in (loaded ?? []).enumerated() { index(p, at: i) }
+        } else {
+            for (id, p) in keysToCheck where indexedKey[id] != nil && indexedKey[id] != p.naturalKey {
+                unindex(p)
+                index(p, at: position[id] ?? Int.max)
+            }
+            keysToCheck = [:]
+        }
+        // Compared as bytes, as the store compares them: Swift's `==` would also match a canonically equal
+        // spelling the database's predicate does not (L273).
+        return keyIndex?[key]?.first { !$0.isDeleted && $0.naturalKey.utf8.elementsEqual(key.utf8) }
+    }
+
+    private func index(_ p: Prospect, at slot: Int) {
+        let id = ObjectIdentifier(p)
+        position[id] = slot
+        indexedKey[id] = p.naturalKey
+        var bucket = keyIndex?[p.naturalKey] ?? []
+        bucket.append(p)
+        bucket.sort { (position[ObjectIdentifier($0)] ?? Int.max) < (position[ObjectIdentifier($1)] ?? Int.max) }
+        keyIndex?[p.naturalKey] = bucket
+    }
+
+    private func unindex(_ p: Prospect) {
+        let id = ObjectIdentifier(p)
+        guard let old = indexedKey[id] else { return }
+        keyIndex?[old]?.removeAll { $0 === p }
+        if keyIndex?[old]?.isEmpty == true { keyIndex?[old] = nil }
+        indexedKey[id] = nil
+    }
+
+    // This row's folds, re-derived if any field they came from has changed since they were cached. Compared
+    // only when SwiftData has named the row as written since the last comparison (`noteWrittenRows`, run by
+    // every read of the rows, which is how every caller came by the row it is asking about).
     func fold(of p: Prospect) -> Fold {
         if policy == .everyRead { return Fold(p) }
         let id = ObjectIdentifier(p)
-        if let cached = folds[id], cached.describes(p) { return cached }
+        let written = foldsToCheck.remove(id) != nil
+        if let cached = folds[id] {
+            if !written { return cached }
+            foldValidations += 1
+            if cached.describes(p) { return cached }
+        }
         let fresh = Fold(p)
         folds[id] = fresh
         generation += 1
@@ -142,7 +270,7 @@ final class ScoutLandingStore {
     // The stored rows folded into shows, walked once and walked again only when a row joined, left, or had
     // a folded field change since. The walk is the expensive half of the ambiguous URL rule (a pairwise
     // title test per URL), and before this it was repeated, identically, for every source of a landing.
-    // Every row's fold is re-checked first, which is what notices an in place write.
+    // Every row's fold is asked for first, which re-folds any row SwiftData named as written since.
     func storedShowsPerURL() throws -> StoredShows {
         let rows = try rows()
         for row in rows { _ = fold(of: row) }

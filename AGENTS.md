@@ -152,6 +152,15 @@ rides along in `scripts/test-all.sh` and reports how close it is, advisory, neve
   judges that each change carries a test (and enforces the style rules); it does NOT itself run
   the suites, so `test-all.sh` is what actually runs the full Mac suite plus the TypeScript side
   that CI would otherwise only surface minutes later. Run it before every push.
+  **The one exception: a branch an AGENT pushes** (a subagent a session dispatched), by Dan's call on
+  2026-09-27 (in chat, "Agents skip the full suite"). Every full run queues for the one test lock this
+  Mac shares with Downbeat and Ovation, and the merge scripts run the full suite again on the combined
+  tree, so each agent change paid for it twice: agents took four hours and more that day, mostly queued.
+  An agent branch runs its own scoped suites through `mac/scripts/run-tests-locked.sh`, `pnpm typecheck
+  && pnpm test`, `scripts/check-pbxproj-fresh.sh`, `scripts/check-pure-suite-imports.sh`, and
+  `scripts/run-shell-fixtures.sh` when it changed a shell script, and its PR body says the full suite is
+  left to the merge. `verify-and-merge-branch.sh` and `-batch.sh` stay the gate, and a red only the full
+  suite finds is then found at merge time, which is the accepted cost.
   Since #2603 it runs in TWO LANES, which changes how to read its output. The Swift suite starts FIRST,
   in the background, and the cheap checks (typecheck, vitest, the shell fixtures, the drift checks) run
   beside it, so the whole command now costs about what the Swift suite costs alone: measured 2026-08-13,

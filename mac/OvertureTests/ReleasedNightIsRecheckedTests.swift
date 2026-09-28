@@ -138,10 +138,12 @@ struct ReleasedNightIsRecheckedTests {
         // #2726: BOTH arms that apply an enriched row, each named. The two calls are identical, so one
         // search was answered by whichever survived, and the arm that re-keys a moved show could have
         // dropped its lookup with this still green (L135).
+        // #4275: the real read is the landing's working set, which answers a key exactly as the store would
+        // (`ScoutLandingKeyedReadsTests`), rather than a fetch per event.
         for arm in ["apply(enriched, to: existing, now: scoutNow, "
-                        + "storedByKey: { try Prospect.stored(key: $0, in: context) })",
+                        + "storedByKey: landing.stored(key:))",
                     "apply(enriched, to: match, now: scoutNow, "
-                        + "storedByKey: { try Prospect.stored(key: $0, in: context) })"] {
+                        + "storedByKey: landing.stored(key:))"] {
             #expect(SourceGuardHelper.containsCode(arm, in: source),
                     "the upsert has to supply a real store read, not a stub")
         }
