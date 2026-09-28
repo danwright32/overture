@@ -96,13 +96,24 @@ targets:
     sources:
       - path: OvertureHostedTests
       - path: TestSupport
+      # #4106 probe 0c.8: the view body probe is HOSTED and reads a clone of the live store and its 4x
+      # copy, so it needs the one sanctioned clone route and the scaled corpus the pure probes use. Both
+      # NAME app types, which is why they are not in TestSupport (a TestSupport file cannot, see
+      # RowsFromStore): they stay declared once, in OvertureTests, and are compiled into this target too,
+      # reaching the app through the conditional import OVERTURE_HOSTED_TESTS switches on. One
+      # declaration in two targets, never a copy (L613).
+      - path: OvertureTests/LiveStoreClone.swift
+      - path: OvertureTests/Phase0Corpus.swift
     dependencies:
       - target: Overture
       - package: ViewInspector
+      # #4106 probe 0c.8: Phase0Corpus.swift builds the 4x corpus through SQLite directly.
+      - sdk: libsqlite3.tbd
     settings:
       base:
         GENERATE_INFOPLIST_FILE: YES
         PRODUCT_BUNDLE_IDENTIFIER: com.danwright.overture.hostedtests
+        SWIFT_ACTIVE_COMPILATION_CONDITIONS: "$(inherited) OVERTURE_HOSTED_TESTS"
         TEST_HOST: "$(BUILT_PRODUCTS_DIR)/Overture.app/Contents/MacOS/Overture"
         BUNDLE_LOADER: "$(TEST_HOST)"
 schemes:
