@@ -1187,10 +1187,15 @@ final class Prospect {
     // A conflict that has GONE takes the clearance with it: a clearance is Dan's answer to one specific
     // clash, so once that clash no longer exists there is nothing left for it to be an answer to, and
     // leaving it behind would silently pre-clear a DIFFERENT conflict that landed on the same show later.
+    //
+    // #4106 Phase 1a: every run, so every field is written only where it differs (see `assign`).
     func setScoutConflict(_ key: String?) {
-        conflictKey = key
-        if key == nil { conflictClearedKey = nil }
-        conflictOpen = key != nil && key != conflictClearedKey
+        assign(\.conflictKey, key)
+        if key == nil { assign(\.conflictClearedKey, nil) }
+        // Spelled as an assignment rather than through `assign`, because `ConflictOpenWritersGuardTests`
+        // derives this flag's writers from `conflictOpen =` in the source and must go on seeing this one.
+        let open = key != nil && key != conflictClearedKey
+        if conflictOpen != open { conflictOpen = open }
     }
 
     // "I can shoot this anyway." His call, recorded against the exact conflict he saw, so a conflict that
@@ -1458,17 +1463,19 @@ final class Prospect {
     // explains this prospect's warm tier with a performer who had nothing to do with it. The single
     // owner of this reset, so the Phase 4 dismiss/revert path reuses it rather than growing a second
     // copy that forgets a field.
+    //
+    // #4106 Phase 1a: reached from every scout re-land, so each field is written only where it differs.
     func clearPerformerMatch() {
-        relationshipCorrectedByPerformerMatch = false
-        matchedPerformerName = nil
-        performerMatchNote = nil
-        performerMatchDismissed = false
-        performerMatchReviewed = false
-        performerMatchPreviousRelationship = nil
-        performerMatchPreviousFitScore = nil
-        performerMatchPreviousTier = nil
-        performerMatchPreviousMatchedClientName = nil
-        performerMatchPreviousDownbeatClientId = nil
+        assign(\.relationshipCorrectedByPerformerMatch, false)
+        assign(\.matchedPerformerName, nil)
+        assign(\.performerMatchNote, nil)
+        assign(\.performerMatchDismissed, false)
+        assign(\.performerMatchReviewed, false)
+        assign(\.performerMatchPreviousRelationship, nil)
+        assign(\.performerMatchPreviousFitScore, nil)
+        assign(\.performerMatchPreviousTier, nil)
+        assign(\.performerMatchPreviousMatchedClientName, nil)
+        assign(\.performerMatchPreviousDownbeatClientId, nil)
     }
 
     // The performer-match correction is live: it was made, Dan hasn't said it was wrong, and so the
@@ -1679,15 +1686,32 @@ final class Prospect {
     // something the row cannot account for. Every write states its source, and the stamp travels with the
     // value: clearing the name clears the stamp too, because a provenance standing over an empty field is
     // a claim that an answer exists.
+    // #4106 Phase 1a: and each half is written only where it differs, because the scout calls this on every
+    // re-land (see `assign`).
     func setPresenter(_ name: String?, from source: PresenterSource) {
         let trimmed = (name ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed.isEmpty {
-            presenter = nil
-            presenterSource = nil
+            assign(\.presenter, nil)
+            assign(\.presenterSource, nil)
         } else {
-            presenter = name
-            presenterSource = source.rawValue
+            assign(\.presenter, name)
+            assign(\.presenterSource, source.rawValue)
         }
+    }
+
+    // #4106 Phase 1a: write a stored property only if the value DIFFERS, and answer whether it wrote.
+    //
+    // SwiftData's generated setter announces a mutation on every ASSIGNMENT and marks the row dirty for the
+    // save to carry, whether or not the value changed. So a writer that restates what a row already holds
+    // (the scout, on every re-land of an unchanged feed) dirties every row it touches and wakes every
+    // observer of every one of them, for no change at all. Every write reached from `ScoutService.apply`
+    // goes through here or a setter that compares first; `ScoutReLandWritesNothingTests` is the gate, and it
+    // watches every stored property rather than trusting this list.
+    @discardableResult
+    func assign<Value: Equatable>(_ keyPath: ReferenceWritableKeyPath<Prospect, Value>, _ value: Value) -> Bool {
+        guard self[keyPath: keyPath] != value else { return false }
+        self[keyPath: keyPath] = value
+        return true
     }
 
     // What `ScoutService.apply` asks before it lets an ordinary re-read empty this field.
