@@ -58,8 +58,14 @@ enum Phase0cLinks {
 
     nonisolated static func oneMinuteLoad() -> Double {
         var l = [Double](repeating: 0, count: 3)
-        getloadavg(&l, 3)
-        return l[0]
+        let taken = getloadavg(&l, 3)
+        return loadReading(samplesTaken: taken, averages: l)
+    }
+
+    /// A load `getloadavg` could not read (it returns -1, leaving the averages at 0) is infinite, so it can
+    /// never pass as quiet: read as 0 it would let a replay on an unmeasured Mac score a PASS (L490).
+    nonisolated static func loadReading(samplesTaken: Int32, averages: [Double]) -> Double {
+        samplesTaken > 0 ? averages[0] : .infinity
     }
 
     /// Gate 0c's replay rule as one pure decision (#4106 comment 5860086027). A mismatch, or a replayed max
@@ -861,6 +867,15 @@ struct QueueEnginePhase0cLinksProbeTests {
             #expect(t2.rooms.contains(""), "fixture \(size): no venueless room")
             #expect(!events.isEmpty, "fixture \(size): no feed break event")
         }
+    }
+
+    // A load that could not be read must never read as a quiet Mac.
+    @Test func aLoadThatCouldNotBeReadIsNeverQuiet() {
+        #expect(Phase0cLinks.loadReading(samplesTaken: -1, averages: [0, 0, 0]) == .infinity)
+        #expect(Phase0cLinks.replayVerdict(mismatches: 0, replayedMax: 3, stop: 5,
+                                           loads: [Phase0cLinks.loadReading(samplesTaken: -1, averages: [0, 0, 0])],
+                                           loadBelow: 8) == "UNMEASURED")
+        #expect(Phase0cLinks.loadReading(samplesTaken: 3, averages: [2.5, 3, 4]) == 2.5)
     }
 
     // Gate 0c's replay rule, decided by one pure function so each outcome can be produced here (L151):
