@@ -1583,7 +1583,7 @@ enum ScoutService {
             // refuses this row instead of falling through to an arm that would re-key or insert onto a key
             // somebody else may hold. The comments on each arm are below, at the point it is acted on.
             let target = upsertTarget(
-                storedByKey: { try Prospect.stored(key: key, in: context) },
+                storedByKey: { try landing.stored(key: key) },
                 byConcert: { try matchByConcertIdentity(enriched.seriesId, groupName: enriched.groupName,
                                                         openingNight: enriched.performanceDate,
                                                         runEndDate: enriched.runEndDate,
@@ -1636,7 +1636,7 @@ enum ScoutService {
                 // be answered).
                 let titleBefore = existing.groupName
                 apply(enriched, to: existing, now: scoutNow,
-                      storedByKey: { try Prospect.stored(key: $0, in: context) })
+                      storedByKey: landing.stored(key:))
                 recordRename(of: existing, from: titleBefore, by: target.matchedArm, at: scoutNow,
                              into: &titleRenames)
                 updated += 1
@@ -1711,15 +1711,16 @@ enum ScoutService {
                 // key beside the kept date left 19 of 1,260 rows (measured 2026-09-17) whose key named a
                 // night their card does not play, repaired at every launch by an unrelated venue pass and
                 // re-created by the next scout. ONE function answers the opening for both writes now.
-                let landing = Self.scoutOpening(fed: enriched.performanceDate, fedNights: enriched.runNights,
-                                                existing: match,
-                                                lookup: { try Prospect.stored(key: $0, in: context) })
+                let openingNight = Self.scoutOpening(fed: enriched.performanceDate,
+                                                     fedNights: enriched.runNights, existing: match,
+                                                     lookup: landing.stored(key:))
                 let anchored = Prospect.makeNaturalKey(groupName: enriched.groupName,
-                                                       performanceDate: landing, venue: enriched.venue)
+                                                       performanceDate: openingNight, venue: enriched.venue)
                 if anchored != key {
                     // The feed's key was proven free above; the landing key was not, so it is asked here,
                     // before any write, with the row itself counting as free.
-                    switch match.keyAvailability(anchored, in: context) {
+                    // #4275: from the landing's key index, like every keyed read on this path.
+                    switch match.keyAvailability(anchored, lookup: landing.stored(key:)) {
                     case .free:
                         break
                     case .unreadable:
@@ -1744,7 +1745,7 @@ enum ScoutService {
                 // a stored row carries Dan's dismissal, his sent record and his thread id with it.
                 let titleBefore = match.groupName
                 apply(enriched, to: match, now: scoutNow,
-                      storedByKey: { try Prospect.stored(key: $0, in: context) })
+                      storedByKey: landing.stored(key:))
                 recordRename(of: match, from: titleBefore, by: target.matchedArm, at: scoutNow,
                              into: &titleRenames)
                 updated += 1

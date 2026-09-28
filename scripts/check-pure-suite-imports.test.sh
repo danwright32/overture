@@ -72,6 +72,38 @@ EOF
 assert_contains "an indented import is caught" \
   "$(app_module_import_violations "${TMP}/indented.swift")" "indented.swift:2"
 
+# #4106 probe 0c.8: a file in OvertureTests that is ALSO compiled into the hosted target (mac/project.yml
+# lists it there) needs the app import in that target only, behind the compilation condition the hosted
+# target alone defines. The pure suite never compiles that block, so it cannot break the pure build.
+cat > "${TMP}/hosted-only.swift" <<'EOF'
+import Foundation
+#if OVERTURE_HOSTED_TESTS
+@testable import Overture
+#endif
+EOF
+assert_empty "an import inside #if OVERTURE_HOSTED_TESTS is not flagged" \
+  "$(app_module_import_violations "${TMP}/hosted-only.swift")"
+
+# The #else half of that block IS compiled by the pure suite, so an import there still breaks it.
+cat > "${TMP}/hosted-else.swift" <<'EOF'
+#if OVERTURE_HOSTED_TESTS
+import Foundation
+#else
+@testable import Overture
+#endif
+EOF
+assert_contains "an import in the #else of that block is still caught" \
+  "$(app_module_import_violations "${TMP}/hosted-else.swift")" "hosted-else.swift:4"
+
+# Only that exact condition exempts: a compound one the pure suite could satisfy does not.
+cat > "${TMP}/hosted-lookalike.swift" <<'EOF'
+#if OVERTURE_HOSTED_TESTS || DEBUG
+@testable import Overture
+#endif
+EOF
+assert_contains "a compound condition the pure suite can meet is still caught" \
+  "$(app_module_import_violations "${TMP}/hosted-lookalike.swift")" "hosted-lookalike.swift:2"
+
 # Prose ABOUT the rule must not be mistaken for the rule being broken. This check's own comments, and
 # every issue reference in a test file, name the banned line: flagging those would make the check
 # unusable and train everyone to ignore it.
