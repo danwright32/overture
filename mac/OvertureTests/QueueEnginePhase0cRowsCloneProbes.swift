@@ -453,6 +453,12 @@ extension QueueEnginePhase0cRowsProbeTests {
                 _ = QueueRenderPass.inquiryRows(t.inquiries, stage: .scout, now: context.now)
             }
             let tStageCounts = Phase0.median5 { _ = StageNavigation.counts(in: placement) }
+            // #4106 view workstream: the masthead's two folds, which the pass takes now.
+            let tMissed = Phase0.median5 {
+                _ = QueueModel.keysMissedByACheck(rows, now: context.now, today: context.today, geo: context.geo)
+            }
+            let missed = QueueModel.keysMissedByACheck(rows, now: context.now, today: context.today, geo: context.geo)
+            let tSummary = Phase0.median5 { _ = QueueModel.summary(visibleRows) }
             let selfBooking = QueueModel.selfBookingIndex(rows)
             let agentInputs = agent()
             func renderData() -> QueueView.RenderData {
@@ -461,7 +467,8 @@ extension QueueEnginePhase0cRowsProbeTests {
                     gmailConnected: false, probeRunning: false, checkRunning: false, prepRunning: false,
                     checkRunSince: nil, checkLookups: nil, reachedOut: reachedOut, reachedOutKeys: reachedKeys,
                     feedBreaks: feedBreaks, mergeSurvivorsDropped: merged,
-                    pendingBookings: QueueModel.pendingBookingCount(rows), fanOutLine: nil, rows: rows,
+                    pendingBookings: QueueModel.pendingBookingCount(rows),
+                    summary: QueueModel.summary(visibleRows), missedByACheckKeys: missed, fanOutLine: nil, rows: rows,
                     visibleRows: visibleRows, cardCheck: scope.cardCheck, focusedRows: focusedRows,
                     dateGroups: dateGroups, inquiryRows: [], stageCounts: [:], geo: context.geo, placement: placement)
             }
@@ -476,7 +483,9 @@ extension QueueEnginePhase0cRowsProbeTests {
                 ("unseen merge survivors", tSurvivors), ("mergeSurvivorsTheFeedDropped", tSurvivorNotices),
                 ("selfBookingIndex", tSelfBooking), ("AgentInputs.from (as the pass calls it)", tAgent),
                 ("pendingBookingCount", tPending), ("fanOutWarning", tFanOut), ("groupByDate", tGroup),
-                ("inquiryRows", tInquiryRows), ("stage counts", tStageCounts), ("RenderData init", tRenderData),
+                ("inquiryRows", tInquiryRows), ("stage counts", tStageCounts),
+                ("keysMissedByACheck (the masthead's offer)", tMissed), ("summary (the masthead's counts)", tSummary),
+                ("RenderData init", tRenderData),
             ]
             let passNamed = passTerms.reduce(0) { $0 + $1.1.median }
             let agentTerms: [(String, Phase0.Reading)] = [
