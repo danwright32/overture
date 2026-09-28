@@ -200,8 +200,9 @@ final class LandingSelfSampler: @unchecked Sendable {
         while process.isRunning && ContinuousClock.now < deadline {
             try? await Task.sleep(for: .milliseconds(200))
         }
-        if process.isRunning { await stop(); return false }
-        pipe.fileHandleForReading.readabilityHandler = nil
+        let ended = !process.isRunning
+        await stop()   // ends it if the window overran, and clears the handler either way
+        guard ended else { return false }
         return process.terminationStatus == 0 && FileManager.default.fileExists(atPath: file.path)
     }
 
