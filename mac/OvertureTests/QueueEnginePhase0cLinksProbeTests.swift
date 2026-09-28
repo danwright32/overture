@@ -39,14 +39,11 @@ enum Phase0cLinks {
     nonisolated static func say(_ line: String) { print("phase0c-links " + line) }
 
     /// The one minute load average, waited on until it is under `below` or ten minutes pass (a bounded wait,
-    /// L110). `under` false means the replays that follow ran on a busy Mac and cannot score a PASS.
+    /// L110). `load` is the reading at the end of the wait; a reading at or over `below` makes the replays
+    /// that follow UNMEASURED (see `replayVerdict`).
     nonisolated static func waitForLoad(below: Double, deadline seconds: Double = 600)
-        -> (under: Bool, text: String) {
-        func one() -> Double {
-            var l = [Double](repeating: 0, count: 3)
-            getloadavg(&l, 3)
-            return l[0]
-        }
+        -> (load: Double, text: String) {
+        let one = oneMinuteLoad
         let start = Phase0.now()
         var waited = 0.0
         while one() >= below && waited < seconds {
@@ -55,8 +52,25 @@ enum Phase0cLinks {
         }
         let load = one()
         let verdict = load < below ? "yes" : "NO"
-        return (load < below, String(format: "one minute load %.2f (under %.0f: ", load, below) + verdict
+        return (load, String(format: "one minute load %.2f (under %.0f: ", load, below) + verdict
                     + String(format: ", waited %.0f s)", waited))
+    }
+
+    nonisolated static func oneMinuteLoad() -> Double {
+        var l = [Double](repeating: 0, count: 3)
+        getloadavg(&l, 3)
+        return l[0]
+    }
+
+    /// Gate 0c's replay rule as one pure decision (#4106 comment 5860086027). A mismatch, or a replayed max
+    /// over the stop, is a FAIL whatever the load. Otherwise the replays count only if EVERY load reading
+    /// taken across them (before the first kind and after each kind) was under `loadBelow`: a Mac that got
+    /// busy part way through measured the Mac, so that is UNMEASURED, and so is having no reading at all.
+    nonisolated static func replayVerdict(mismatches: Int, replayedMax: Double, stop: Double,
+                                          loads: [Double], loadBelow: Double = 8) -> String {
+        if mismatches > 0 || replayedMax > stop { return "FAIL" }
+        guard !loads.isEmpty, loads.allSatisfy({ $0 < loadBelow }) else { return "UNMEASURED" }
+        return "PASS"
     }
 
     /// "yyyy-MM-dd" plus `days`, in plain calendar arithmetic (UTC, so no DST can move a day).
@@ -527,7 +541,7 @@ final class Phase0cWorld {
             for f in above { modify(f, &edit) { $0.missedScoutCount -= 1 } }
         case .flaggedEdit:
             // The exact boundary of T2's accrual skip: a row that stays flagged and ALSO moves one of the four
-            // facts the skip must not ignore. One field per edit, cycled by serial rather than rolled, so a
+            // facts the skip must not ignore. One field per edit, cycled by `flaggedEdits` rather than rolled, so a
             // skip missing any single condition is met within three edits (#4106 0c.2 re-probe: a random mix
             // let one condition's mutation survive a whole CI run).
             let hot = ContradictedCancellation.contradictedKeys(among: rows)
@@ -849,6 +863,18 @@ struct QueueEnginePhase0cLinksProbeTests {
         }
     }
 
+    // Gate 0c's replay rule, decided by one pure function so each outcome can be produced here (L151):
+    // a mismatch or an over-stop max FAILS at any load; a PASS needs every reading under 8, and a single
+    // reading at or over 8 anywhere across the replays, or no reading at all, is UNMEASURED.
+    @Test func theReplayVerdictNeedsEveryLoadReadingUnderEight() {
+        #expect(Phase0cLinks.replayVerdict(mismatches: 0, replayedMax: 3, stop: 5, loads: [5, 6, 7.9]) == "PASS")
+        #expect(Phase0cLinks.replayVerdict(mismatches: 0, replayedMax: 3, stop: 5, loads: [5, 9, 6]) == "UNMEASURED")
+        #expect(Phase0cLinks.replayVerdict(mismatches: 0, replayedMax: 3, stop: 5, loads: [5, 6, 8]) == "UNMEASURED")
+        #expect(Phase0cLinks.replayVerdict(mismatches: 0, replayedMax: 3, stop: 5, loads: []) == "UNMEASURED")
+        #expect(Phase0cLinks.replayVerdict(mismatches: 0, replayedMax: 6, stop: 5, loads: [9]) == "FAIL")
+        #expect(Phase0cLinks.replayVerdict(mismatches: 1, replayedMax: 3, stop: 5, loads: [5]) == "FAIL")
+    }
+
     // MARK: 0c.1 cost arm (opt in)
 
     @Test(.enabled(if: Phase0.liveStoreExists, "no live store on this machine"))
@@ -1042,26 +1068,26 @@ struct QueueEnginePhase0cLinksProbeTests {
         let property = try Phase0cHarness.runAll(terms: [.t2, .t3], ops: Phase0cOp.t2t3)
         Phase0cHarness.report("0c.2 T2+T3", property)
         var failures = property.outcome.failures
-        var single = 0.0, replayed = 0.0, settled = true
+        var single = 0.0, replayed = 0.0, loads: [Double] = []
         // One pinned instant for the whole probe (L130): today's Eastern day at the moment it started.
         let asOf = EasternDate.today(Date())
         for (label, url) in try corpora("phase0c-2") {
             let cost = try contradictionCost(label: label, url: url, asOf: asOf, failures: &failures)
             single = max(single, cost.all.max)
             replayed = max(replayed, cost.replayed)
-            settled = settled && cost.settled
+            loads += cost.loads
         }
         // Scored under Gate 0c's replay rule (#4106 comment 5860086027): the max is the median of five
         // replays of each kind's slowest key with load under 8. A single sample is printed and decides
-        // nothing; a replay taken with load at or over 8 cannot score a PASS, only a FAIL.
-        let verdict = !failures.isEmpty || replayed > 5 ? "FAIL" : (settled ? "PASS" : "UNMEASURED")
-        Phase0cLinks.say("0c.2 VERDICT \(verdict): mismatches \(failures.count), replayed max over both sizes \(String(format: "%.3f", replayed)) ms, single sample max \(String(format: "%.3f", single)) ms (stop rule: mismatch, or max over 5 ms)")
+        // nothing; replays with any load reading at or over 8 are UNMEASURED rather than a PASS.
+        let verdict = Phase0cLinks.replayVerdict(mismatches: failures.count, replayedMax: replayed, stop: 5, loads: loads)
+        Phase0cLinks.say("0c.2 VERDICT \(verdict): mismatches \(failures.count), replayed max over both sizes \(String(format: "%.3f", replayed)) ms, single sample max \(String(format: "%.3f", single)) ms, highest load across the replays \(String(format: "%.2f", loads.max() ?? .nan)) over \(loads.count) readings (stop rule: mismatch, or max over 5 ms)")
         if !failures.isEmpty { Phase0cLinks.say("0c.2 FAILURES\n  " + failures.prefix(30).joined(separator: "\n  ")) }
         #expect(failures.isEmpty, "0c.2: a prototype disagreed with its oracle or the brute force")
     }
 
     private func contradictionCost(label: String, url: URL, asOf startAsOf: String,
-                                   failures: inout [String]) throws -> (all: Phase0cStats, replayed: Double, settled: Bool) {
+                                   failures: inout [String]) throws -> (all: Phase0cStats, replayed: Double, loads: [Double]) {
         typealias T2 = Phase0cContradictionPatch<Phase0cKey>
         typealias T3 = Phase0cFeedBreakPatch<Phase0cKey>
         let ctx = ModelContext(try Phase0.openContainer(at: url))
@@ -1322,15 +1348,20 @@ struct QueueEnginePhase0cLinksProbeTests {
         all.merge(rollBack)
 
         // The replays, per kind, of that kind's slowest key.
+        // The load is read again after each kind's five replays, so a Mac that got busy part way through
+        // cannot score a PASS on the strength of the reading taken before the first one.
         let settled = Phase0cLinks.waitForLoad(below: 8)
+        var loads = [settled.load]
         var replayLines: [String] = []
         var replayWorst = 0.0
         for kind in kindOrder {
             guard let slow = slowest[kind] else { continue }
             let reading = Phase0.Reading(runs: (0..<5).map { _ in slow.replay() })
+            let after = Phase0cLinks.oneMinuteLoad()
+            loads.append(after)
             replayWorst = max(replayWorst, reading.median)
-            replayLines.append(kind + String(format: ": single sample %.3f ms, replayed %.3f ms (%.3f to %.3f)",
-                                             slow.ms, reading.median, reading.low, reading.high))
+            replayLines.append(kind + String(format: ": single sample %.3f ms, replayed %.3f ms (%.3f to %.3f), load after %.2f",
+                                             slow.ms, reading.median, reading.low, reading.high, after))
         }
         verify("after every replay", brute: true)
 
@@ -1353,6 +1384,6 @@ struct QueueEnginePhase0cLinksProbeTests {
                 \(replayLines.joined(separator: "\n    "))
               replayed max \(String(format: "%.3f", replayWorst)) ms
             """)
-        return (all, replayWorst, settled.under)
+        return (all, replayWorst, loads)
     }
 }
