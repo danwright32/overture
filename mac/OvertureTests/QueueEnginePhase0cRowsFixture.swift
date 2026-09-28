@@ -24,6 +24,10 @@ final class Phase0cRowsFixture {
     static let disciplines = ["theater", "dance", "music", "opera"]
     static let larkPresenter = "Lark & Finch Players"
     static let refusableTown = "beacon"
+    // A draft that opens with a greeting, so no greeting hold stands in front of the draft lint, and the
+    // same draft with an unfilled placeholder, which the lint BLOCKS on.
+    static let draft = "Hello,\n\nA short note about the season."
+    static let draftWithSlot = draft + " [VENUE]"
 
     let container: ModelContainer
     let context: ModelContext
@@ -133,7 +137,7 @@ final class Phase0cRowsFixture {
         if chance(0.05) { p.sendError = "refused" }
         if chance(0.08) { p.missedScoutCount = 2 }
         p.firstSeenAt = chance(0.5) ? Self.baseNow.addingTimeInterval(-Double(int(0...40)) * 86_400) : nil
-        if status == .drafted || status == .approved { p.draftBody = "Hello" }
+        if status == .drafted || status == .approved { p.draftBody = Self.draft }
         if chance(0.06) { p.reprepContactsRequested = true }
         context.insert(p)
         let sends = status == .contacted || status == .approved || status == .drafted
@@ -205,7 +209,7 @@ final class Phase0cRowsFixture {
 
     enum Kind: String, CaseIterable {
         case stageMove, dismissToggle, sentAt, reprep, reply, clock, replyRunAlive, geo, presenter, inquiry,
-             collapsedFront, refusal, recipientFlag, insertRow, dateMove, producerOverride
+             collapsedFront, refusal, recipientFlag, insertRow, dateMove, producerOverride, draftEdit
     }
 
     struct Op {
@@ -368,6 +372,17 @@ final class Phase0cRowsFixture {
                 p.sendError = oldError
                 return [pid]
             }
+        case .draftEdit:
+            // A show with a contact still waiting to send, whose draft gains or loses an unfilled
+            // placeholder, which the draft lint BLOCKS on, so the held-contact stage moves and a reused
+            // lint that ignored the text would be seen.
+            let candidates = rows.filter { $0.recipients.contains { $0.sendState == .pending && $0.email != nil } }
+            guard !candidates.isEmpty else { return nil }
+            let row = candidates[draw(candidates.count)]
+            let rpid = row.persistentModelID
+            let old = row.draftBody
+            row.draftBody = old == Self.draft ? Self.draftWithSlot : Self.draft
+            return Op(kind: kind, label: "draft edit", changed: [rpid]) { row.draftBody = old; return [rpid] }
         case .insertRow:
             inserted += 1
             let fresh = makeRow(key: String(format: "row-new-%04d", inserted))

@@ -44,9 +44,33 @@ enum Phase0cRows {
         full + expiry + (baseDiffers ? 1 : 0)
     }
 
-    /// 0c.5's stop rule: any disagreement, or a row over 1 ms.
-    nonisolated static func stopVerdict(mismatches: Int, worstRowMs: Double) -> String {
-        mismatches == 0 && worstRowMs <= 1.0 ? "PASS" : "FAIL"
+    /// 0c.5's stop rule: any disagreement, or the slowest key's REPLAYED median over 1 ms. A maximum is the
+    /// median of five replays of the slowest key taken with the one minute load under 8, and a single sample
+    /// decides nothing (Gate 0c's rule, #4106 comment 5860086027). Nil means no replay could be taken under
+    /// that load, which is UNMEASURED rather than either verdict, unless a disagreement already fails it.
+    nonisolated static func stopVerdict(mismatches: Int, replayedMaxMs: Double?) -> String {
+        if mismatches > 0 { return "FAIL" }
+        guard let replayedMaxMs else { return "UNMEASURED" }
+        return replayedMaxMs <= 1.0 ? "PASS" : "FAIL"
+    }
+
+    nonisolated static let loadCeiling = 8.0
+
+    nonisolated static func oneMinuteLoad() -> Double {
+        var l = [Double](repeating: 0, count: 3)
+        return getloadavg(&l, 3) > 0 ? l[0] : .infinity
+    }
+
+    /// Waits, up to a deadline, for the one minute load to fall under the ceiling, and returns the load it
+    /// last read. A load it could not read is infinite, so it can never pass as quiet.
+    nonisolated static func waitForQuietLoad(deadline seconds: Double = 300, poll: Double = 5) -> Double {
+        let started = Date()
+        var load = oneMinuteLoad()
+        while load >= loadCeiling, Date().timeIntervalSince(started) < seconds {
+            Thread.sleep(forTimeInterval: poll)
+            load = oneMinuteLoad()
+        }
+        return load
     }
 
     /// Max, p99 and median of a set of samples, in milliseconds, with the count.
@@ -110,7 +134,7 @@ struct QueueEnginePhase0cRowsProbeTests {
             // Rows whose relationship order moved while the entry stood: a fact about the store, reported.
             let byPID = fx.rowsByPID
             for (pid, e) in proto.entries {
-                if let p = byPID[pid], p.recipients.map(\.id) != e.contactOrder { result.contactOrderMoved += 1 }
+                if let p = byPID[pid], p.recipients.map(\.id) != e.relationshipOrder { result.contactOrderMoved += 1 }
             }
             result.checks += 1
             let bad = o.mismatches(proto, rowsByKey: fx.rowsByKey)
@@ -191,9 +215,50 @@ struct QueueEnginePhase0cRowsProbeTests {
     @Test func theStopRuleCountsTheClockArmsMismatches() {
         #expect(Phase0cRows.mismatchesJudged(full: 0, expiry: 3, baseDiffers: false) == 3)
         #expect(Phase0cRows.mismatchesJudged(full: 2, expiry: 1, baseDiffers: true) == 4)
-        #expect(Phase0cRows.stopVerdict(mismatches: 3, worstRowMs: 0.2) == "FAIL")
-        #expect(Phase0cRows.stopVerdict(mismatches: 0, worstRowMs: 1.2) == "FAIL")
-        #expect(Phase0cRows.stopVerdict(mismatches: 0, worstRowMs: 0.9) == "PASS")
+        #expect(Phase0cRows.stopVerdict(mismatches: 3, replayedMaxMs: 0.2) == "FAIL")
+        #expect(Phase0cRows.stopVerdict(mismatches: 0, replayedMaxMs: 1.2) == "FAIL")
+        #expect(Phase0cRows.stopVerdict(mismatches: 0, replayedMaxMs: 0.9) == "PASS")
+        #expect(Phase0cRows.stopVerdict(mismatches: 0, replayedMaxMs: nil) == "UNMEASURED")
+        #expect(Phase0cRows.stopVerdict(mismatches: 2, replayedMaxMs: nil) == "FAIL")
+    }
+
+    // The prototype's entries do not depend on the order the relationship hands a show's contacts back
+    // (#4106 comment 5858964900): every entry rebuilt after a save and a refetch into a fresh context, with
+    // nothing changed, equals the one built before. Its positive control (L159) is that today's reduction
+    // over RELATIONSHIP order did move for some row across the same refetch; without that the equality
+    // would prove nothing about order.
+    @Test(arguments: [60, 300])
+    func entriesHoldStillAcrossASaveAndRefetch(size: Int) throws {
+        let fx = try Phase0cRowsFixture(size: size, seed: 4106_5101)
+        let context = fx.rowContext()
+        let up = fx.upstream()
+        struct Built { let entry: Phase0cRowEntry; let order: [String]; let rawFacts: RecipientFacts }
+        func build(_ rows: [Prospect]) -> [String: Built] {
+            Dictionary(rows.map { p in
+                (p.naturalKey, Built(entry: Phase0cRowBuild.entry(p, context: context, upstream: up),
+                                     order: p.recipients.map(\.id),
+                                     rawFacts: RecipientFacts.of(p, contacts: p.recipients)))
+            }, uniquingKeysWith: { a, _ in a })
+        }
+        let before = build(fx.rows)
+        try fx.context.save()
+        let refetched = try ModelContext(fx.container).fetch(FetchDescriptor<Prospect>())
+        let after = build(refetched)
+        var differing: [String] = []
+        var orderMoved = 0
+        var rawFactsMoved = 0
+        for (key, b) in before.sorted(by: { $0.key < $1.key }) {
+            guard let a = after[key] else { continue }
+            if !a.entry.sameOutput(as: b.entry) { differing.append(Phase0b.hash8(key)) }
+            if a.order != b.order { orderMoved += 1 }
+            if a.rawFacts != b.rawFacts { rawFactsMoved += 1 }
+        }
+        Phase0cRows.say("0c.5 contact order [\(size) rows] after a save and a refetch, nothing changed: "
+                        + "\(differing.count) of \(before.count) entries differ; relationship order moved on "
+                        + "\(orderMoved) rows, today's reduction over it differs on \(rawFactsMoved)")
+        #expect(Set(before.keys) == Set(after.keys), "the refetch returned a different set of rows")
+        #expect(differing.isEmpty, "entries moved under unchanged rows: \(differing.prefix(5).joined(separator: " "))")
+        #expect(rawFactsMoved > 0, "the refetch never moved relationship order, so this test saw nothing")
     }
 
     @Test(arguments: [60, 300])
@@ -242,6 +307,7 @@ struct QueueEnginePhase0cRowsProbeTests {
         #expect(total.inheritedMoves > 0, "no operation ever moved an inherited answer")
         #expect((total.oracleMovedByKind["collapsedFront"] ?? 0) > 0, "dismissing a front never changed the output")
         #expect((total.oracleMovedByKind["clock"] ?? 0) > 0, "no clock move ever changed the output")
+        #expect((total.oracleMovedByKind["draftEdit"] ?? 0) > 0, "no draft edit ever changed the output")
         #expect(total.overrideTouchedDrawn > 0, "no drawn row's inherited answer depended on a producer override")
         #expect(total.overrideTouchedDisagreeing == 0, "the oracle's rows ignore overrides the production pass applies")
         #expect(total.productionDisagreeing == 0, "the oracle's rows differ from the production pass")
