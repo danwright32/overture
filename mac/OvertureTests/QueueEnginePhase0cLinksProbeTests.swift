@@ -345,6 +345,16 @@ final class Phase0cWorld {
 
     private static func same(_ a: Prospect, _ b: Prospect) -> Bool { a.persistentModelID == b.persistentModelID }
 
+    /// Half the time, a CONTRADICTED row (by the oracle), else nil. A room or date change on a row that stays
+    /// flagged is exactly what T2's accrual skip must NOT swallow, and a random pick rarely lands on a flagged
+    /// row that has a twin to lose: measured 2026-09-28, the skip with its room or date condition removed
+    /// SURVIVED the harness until the moves were aimed here (#4106 0c.2 re-probe).
+    private func aimedAtContradicted(_ rows: [Prospect], _ ok: (Prospect) -> Bool = { _ in true }) -> Prospect? {
+        guard roll(2) == 0 else { return nil }
+        let hot = ContradictedCancellation.contradictedKeys(among: rows)
+        return pick(rows, { hot.contains($0.naturalKey) && ok($0) })
+    }
+
     /// Performs one operation, unsaved. Nil when the store holds nothing the operation can act on.
     func perform(_ op: Phase0cOp, rows: [Prospect], fronts: Set<String>) -> Phase0cEdit? {
         var edit = Phase0cEdit()
@@ -441,7 +451,7 @@ final class Phase0cWorld {
             let target = r.missedScoutCount >= FeedReconcile.goneThreshold ? (roll(2) == 0 ? 1 : 0) : 2
             modify(r, &edit) { $0.missedScoutCount = target }
         case .roomRespell:
-            guard let r = pick(rows) else { return nil }
+            guard let r = aimedAtContradicted(rows) ?? pick(rows) else { return nil }
             let choice = roll(3)
             let other = Phase0cFixture.venues[roll(Phase0cFixture.venues.count)]
             modify(r, &edit) {
@@ -452,7 +462,8 @@ final class Phase0cWorld {
                 }
             }
         case .dateMove:
-            guard let r = pick(rows, { $0.performanceDate != nil }) else { return nil }
+            guard let r = aimedAtContradicted(rows, { $0.performanceDate != nil })
+                    ?? pick(rows, { $0.performanceDate != nil }) else { return nil }
             let shift = roll(21) - 10
             let span = roll(4)
             modify(r, &edit) {
