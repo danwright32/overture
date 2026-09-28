@@ -551,7 +551,7 @@ struct QueueViewAttributionProbeTests {
             let file = dir.appendingPathComponent("\(slug)-r\(round).sample.txt")
             let sampler = LandingSelfSampler(seconds: seconds, file: file)
             do { try await sampler.start() } catch {
-                out.failures.append("round \(round): sampler never attached")
+                out.failures.append("round \(round): sampler never attached (\(String(describing: error).suffix(160)))")
                 continue
             }
             let t0 = Phase0.now()
