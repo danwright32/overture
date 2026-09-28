@@ -138,6 +138,20 @@ struct StageListsFromThePassTests {
         }
     }
 
+    // The inquiry block is the other stages' list, so Reached out, which draws its inquiries inside
+    // `reachedOutList` instead, carries none of it, while a stage that draws the block carries it.
+    @Test func onlyAStageThatDrawsTheInquiryBlockCarriesIt() throws {
+        let store = try seed(try context())
+        let reached = pass(store, stage: .reachedOut)
+        #expect(!reached.inquiryRows.isEmpty,
+                "the fixture puts no inquiry on Reached out, so nothing below tells a gate from an empty stage")
+        #expect(reached.inquiryGroups.isEmpty && reached.inquiriesByRowID.isEmpty,
+                "the Reached out pass grouped its inquiries for a block that stage never draws")
+        let review = pass(store, stage: .review)
+        #expect(!review.inquiryGroups.isEmpty && !review.inquiriesByRowID.isEmpty,
+                "the Review pass did not build the inquiry block it draws")
+    }
+
     @Test func thePassPublishesTheInquiryBlockTheBodyUsedToGroup() throws {
         let store = try seed(try context())
         let data = pass(store, stage: .review)

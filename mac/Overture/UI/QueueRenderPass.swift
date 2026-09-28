@@ -506,9 +506,12 @@ enum QueueRenderPass {
                                         sourceCalendars: { QueueModel.sourceCalendarIndex(i.sources) })
             : .none
         let stageInquiryRows = inquiryRows(i.inquiries, stage: i.focusedStage, now: context.now)
-        let inquiryGroups = stageInquiryRows.isEmpty
-            ? [] : QueueModel.groupRowsByDate(stageInquiryRows.map { QueueRow.inquiry($0) })
-        let inquiriesByRowID = stageInquiryRows.isEmpty ? [:] : QueueModel.inquiriesByRowID(i.inquiries)
+        // Not for Reached out, which draws `reachedOutList` in place of the inquiry block: that stage's
+        // inquiries are rows of the list above, so grouping them again here would be work nobody reads.
+        let drawsInquiryBlock = i.focusedStage != .reachedOut && !stageInquiryRows.isEmpty
+        let inquiryGroups = drawsInquiryBlock
+            ? QueueModel.groupRowsByDate(stageInquiryRows.map { QueueRow.inquiry($0) }) : []
+        let inquiriesByRowID = drawsInquiryBlock ? QueueModel.inquiriesByRowID(i.inquiries) : [:]
         return QueueView.RenderData(
             cards: scope.cards,
             // #3507: the scope itself, so the render path reads the list this pass already derived rather
