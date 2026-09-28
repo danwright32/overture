@@ -542,6 +542,7 @@ final class Phase0cWorld {
                     $0.runEndDate = nil
                 }
             }
+        case .twinAppear:
             guard let f = pick(rows, { $0.disappearedFromFeed && $0.performanceDate != nil }) else { return nil }
             insert(Phase0cSnapshot(naturalKey: "ins-\(next())", groupName: f.groupName, venue: f.venue,
                                    performanceDate: f.performanceDate, runEndDate: f.runEndDate), &edit)
