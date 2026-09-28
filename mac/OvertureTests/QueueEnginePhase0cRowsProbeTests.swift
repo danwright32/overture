@@ -217,6 +217,16 @@ struct QueueEnginePhase0cRowsProbeTests {
         return result
     }
 
+    // 0c.5's draft edit arm keeps a running maximum that starts at 0, so an arm that replayed no edit (no slow
+    // key had a draft) must judge as UNMEASURED rather than as a measured zero that could pass the rule.
+    @Test func aDraftEditArmThatReplayedNothingIsUnmeasuredNotZero() {
+        #expect(Phase0cRows.judgedReplay(rowChange: 0.4, draftEdit: 0, editsTaken: 0) == nil)
+        #expect(Phase0cRows.stopVerdict(mismatches: 0, replayedMaxMs: Phase0cRows.judgedReplay(rowChange: 0.4, draftEdit: 0, editsTaken: 0)) == "UNMEASURED")
+        #expect(Phase0cRows.judgedReplay(rowChange: 0.4, draftEdit: 0.7, editsTaken: 2) == 0.7)
+        #expect(Phase0cRows.judgedReplay(rowChange: nil, draftEdit: 0.7, editsTaken: 2) == nil)
+        #expect(Phase0cRows.judgedReplay(rowChange: 0.4, draftEdit: nil, editsTaken: 2) == nil)
+    }
+
     // 0c.5's stop rule counts EVERY kind of disagreement it measured. The clock arm (a row carried forward on
     // validUntil) is the patch this probe exists to prove, and it was once left out of the tally, so a
     // broken carry-forward printed PASS beside a detail line showing its mismatches (lessons review, #4291).
@@ -235,14 +245,6 @@ struct QueueEnginePhase0cRowsProbeTests {
     // nothing changed, equals the one built before. Its positive control (L159) is that today's reduction
     // over RELATIONSHIP order did move for some row across the same refetch; without that the equality
     // would prove nothing about order.
-    @Test func aDraftEditArmThatReplayedNothingIsUnmeasuredNotZero() {
-        #expect(Phase0cRows.judgedReplay(rowChange: 0.4, draftEdit: 0, editsTaken: 0) == nil)
-        #expect(Phase0cRows.stopVerdict(mismatches: 0, replayedMaxMs: Phase0cRows.judgedReplay(rowChange: 0.4, draftEdit: 0, editsTaken: 0)) == "UNMEASURED")
-        #expect(Phase0cRows.judgedReplay(rowChange: 0.4, draftEdit: 0.7, editsTaken: 2) == 0.7)
-        #expect(Phase0cRows.judgedReplay(rowChange: nil, draftEdit: 0.7, editsTaken: 2) == nil)
-        #expect(Phase0cRows.judgedReplay(rowChange: 0.4, draftEdit: nil, editsTaken: 2) == nil)
-    }
-
     @Test(arguments: [60, 300])
     func entriesHoldStillAcrossASaveAndRefetch(size: Int) throws {
         let fx = try Phase0cRowsFixture(size: size, seed: 4106_5101)
