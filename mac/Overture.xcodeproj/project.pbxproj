@@ -23,6 +23,7 @@
 		00DBA181E360CDE318E437AE /* SendDelightRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 05DE7641FFFEE13A82F8B727 /* SendDelightRow.swift */; };
 		00E97EF249B799BDE6266590 /* OmniFocusUserNotifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = 255F49E0B20DC11D0532ACD1 /* OmniFocusUserNotifier.swift */; };
 		01879588F050F2127D52E7D9 /* DockPresenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 85DC307C6A1089DBB326D663 /* DockPresenceTests.swift */; };
+		01C3580B8AF0D2E1CD937157 /* Phase0LoadReaderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E55C220CBD86DFC65B2DB2E /* Phase0LoadReaderTests.swift */; };
 		01D14516BC4851B21C46B4AB /* PresenterProvenance.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2271CB0C70E97A486542DFF8 /* PresenterProvenance.swift */; };
 		01E3FB80C6BB5EF9C8962BB9 /* LookalikeOnArrival.swift in Sources */ = {isa = PBXBuildFile; fileRef = 97C00BB8E8E782A2590E11BE /* LookalikeOnArrival.swift */; };
 		0244B38557C7161CDFE4962B /* SendSheetEditableBodyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2A3423E3420FD944471D521 /* SendSheetEditableBodyTests.swift */; };
@@ -3123,6 +3124,7 @@
 		5E04C686094BE565A1DC481A /* RealScrollInvalidationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RealScrollInvalidationTests.swift; sourceTree = "<group>"; };
 		5E14654322D584E1F38BB331 /* ReplyWatchScope.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReplyWatchScope.swift; sourceTree = "<group>"; };
 		5E256295EDDAF95EDB3BFCB5 /* RunKind.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunKind.swift; sourceTree = "<group>"; };
+		5E55C220CBD86DFC65B2DB2E /* Phase0LoadReaderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Phase0LoadReaderTests.swift; sourceTree = "<group>"; };
 		5E7D15D7E6680218D019FE0A /* Experiment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Experiment.swift; sourceTree = "<group>"; };
 		5F15F5EC4A5D72015559C67E /* HandedRowsStayLiveTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HandedRowsStayLiveTests.swift; sourceTree = "<group>"; };
 		5F267420C95172B8B15B335C /* SourcesSheetClose.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourcesSheetClose.swift; sourceTree = "<group>"; };
@@ -5088,6 +5090,7 @@
 				8036947A3653924A28FA441B /* PerformerMatchTests.swift */,
 				596B1D6B5B24880131707307 /* PerformingArtsGenreNameTests.swift */,
 				FEFED13451B5CC028A8802B2 /* Phase0Corpus.swift */,
+				5E55C220CBD86DFC65B2DB2E /* Phase0LoadReaderTests.swift */,
 				0E685277993DE94804F925EC /* Phase1GenericizeTests.swift */,
 				3E136A23A9C767DDDFF8BAEE /* PitchingOtherShowsDismissReasonTests.swift */,
 				2923A0100AC2651ED832823F /* PlayingNightsTests.swift */,
@@ -7943,6 +7946,7 @@
 				B45EF5CF43690A2F5DC86B1D /* PerformerMatchTests.swift in Sources */,
 				FB653EC6391FE1C5817DD71D /* PerformingArtsGenreNameTests.swift in Sources */,
 				87293F7D6295CE988D13BD0D /* Phase0Corpus.swift in Sources */,
+				01C3580B8AF0D2E1CD937157 /* Phase0LoadReaderTests.swift in Sources */,
 				A14519B4C5832EF8A6782221 /* Phase1GenericizeTests.swift in Sources */,
 				C126F3F1BFBB75E8E3E78563 /* PinnedScrollHolder.swift in Sources */,
 				5E643556C119214C001CD256 /* PitchSomeoneElseSheet.swift in Sources */,

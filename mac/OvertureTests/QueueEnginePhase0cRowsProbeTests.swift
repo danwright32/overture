@@ -64,23 +64,6 @@ enum Phase0cRows {
 
     nonisolated static let loadCeiling = 8.0
 
-    nonisolated static func oneMinuteLoad() -> Double {
-        var l = [Double](repeating: 0, count: 3)
-        return getloadavg(&l, 3) > 0 ? l[0] : .infinity
-    }
-
-    /// Waits, up to a deadline, for the one minute load to fall under the ceiling, and returns the load it
-    /// last read. A load it could not read is infinite, so it can never pass as quiet.
-    nonisolated static func waitForQuietLoad(deadline seconds: Double = 300, poll: Double = 5) -> Double {
-        let started = Date()
-        var load = oneMinuteLoad()
-        while load >= loadCeiling, Date().timeIntervalSince(started) < seconds {
-            Thread.sleep(forTimeInterval: poll)
-            load = oneMinuteLoad()
-        }
-        return load
-    }
-
     /// Max, p99 and median of a set of samples, in milliseconds, with the count.
     nonisolated static func spread(_ samples: [Double]) -> (max: Double, p99: Double, median: Double, text: String) {
         guard !samples.isEmpty else { return (0, 0, 0, "no samples") }

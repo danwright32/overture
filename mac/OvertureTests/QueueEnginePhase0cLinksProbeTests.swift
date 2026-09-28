@@ -38,36 +38,6 @@ enum Phase0cLinks {
 
     nonisolated static func say(_ line: String) { print("phase0c-links " + line) }
 
-    /// The one minute load average, waited on until it is under `below` or ten minutes pass (a bounded wait,
-    /// L110). `load` is the reading at the end of the wait; a reading at or over `below` makes the replays
-    /// that follow UNMEASURED (see `replayVerdict`).
-    nonisolated static func waitForLoad(below: Double, deadline seconds: Double = 600)
-        -> (load: Double, text: String) {
-        let one = oneMinuteLoad
-        let start = Phase0.now()
-        var waited = 0.0
-        while one() >= below && waited < seconds {
-            Thread.sleep(forTimeInterval: 10)
-            waited = Phase0.ms(since: start) / 1000
-        }
-        let load = one()
-        let verdict = load < below ? "yes" : "NO"
-        return (load, String(format: "one minute load %.2f (under %.0f: ", load, below) + verdict
-                    + String(format: ", waited %.0f s)", waited))
-    }
-
-    nonisolated static func oneMinuteLoad() -> Double {
-        var l = [Double](repeating: 0, count: 3)
-        let taken = getloadavg(&l, 3)
-        return loadReading(samplesTaken: taken, averages: l)
-    }
-
-    /// A load `getloadavg` could not read (it returns -1, leaving the averages at 0) is infinite, so it can
-    /// never pass as quiet: read as 0 it would let a replay on an unmeasured Mac score a PASS (L490).
-    nonisolated static func loadReading(samplesTaken: Int32, averages: [Double]) -> Double {
-        samplesTaken > 0 ? averages[0] : .infinity
-    }
-
     /// Gate 0c's replay rule as one pure decision (#4106 comment 5860086027). A mismatch is a FAIL whatever
     /// the load. Otherwise the replays count only if EVERY load reading taken across them (before the first
     /// kind and after each kind) was under `loadBelow`, and only if every arm the rule prices was measured:
@@ -914,11 +884,11 @@ struct QueueEnginePhase0cLinksProbeTests {
 
     // A load that could not be read must never read as a quiet Mac.
     @Test func aLoadThatCouldNotBeReadIsNeverQuiet() {
-        #expect(Phase0cLinks.loadReading(samplesTaken: -1, averages: [0, 0, 0]) == .infinity)
+        #expect(Phase0.loadReadings(samplesTaken: -1, averages: [0, 0, 0])[0] == .infinity)
         #expect(Phase0cLinks.replayVerdict(mismatches: 0, replayedMax: 3, stop: 5,
-                                           loads: [Phase0cLinks.loadReading(samplesTaken: -1, averages: [0, 0, 0])],
+                                           loads: [Phase0.loadReadings(samplesTaken: -1, averages: [0, 0, 0])[0]],
                                            loadBelow: 8) == "UNMEASURED")
-        #expect(Phase0cLinks.loadReading(samplesTaken: 3, averages: [2.5, 3, 4]) == 2.5)
+        #expect(Phase0.loadReadings(samplesTaken: 3, averages: [2.5, 3, 4])[0] == 2.5)
     }
 
     // Gate 0c's replay rule, decided by one pure function so each outcome can be produced here (L151):
@@ -1425,14 +1395,16 @@ struct QueueEnginePhase0cLinksProbeTests {
         for kind in Phase0cLinks.unlistedKinds(expected: Phase0cLinks.contradictionKinds, recorded: kindOrder) {
             unmeasured.append("\(kind) on \(label), recorded but not in contradictionKinds")
         }
-        let settled = Phase0cLinks.waitForLoad(below: 8)
+        // The one minute load, waited on until it is under 8 or ten minutes pass (L110), through the one
+        // shared reader (#4315). A reading at or over 8 makes the replays below UNMEASURED (`replayVerdict`).
+        let settled = Phase0.waitForLoad(below: 8, deadline: 600, poll: 10)
         var loads = [settled.load]
         var replayLines: [String] = []
         var replayWorst = 0.0
         for kind in kindOrder {
             guard let slow = slowest[kind] else { continue }
             let reading = Phase0.Reading(runs: (0..<5).map { _ in slow.replay() })
-            let after = Phase0cLinks.oneMinuteLoad()
+            let after = Phase0.oneMinuteLoad()
             loads.append(after)
             replayWorst = max(replayWorst, reading.median)
             replayLines.append(kind + String(format: ": single sample %.3f ms, replayed %.3f ms (%.3f to %.3f), load after %.2f",
