@@ -68,15 +68,18 @@ enum Phase0cLinks {
         samplesTaken > 0 ? averages[0] : .infinity
     }
 
-    /// Gate 0c's replay rule as one pure decision (#4106 comment 5860086027). A mismatch, or a replayed max
-    /// over the stop, is a FAIL whatever the load. Otherwise the replays count only if EVERY load reading
-    /// taken across them (before the first kind and after each kind) was under `loadBelow`: a Mac that got
-    /// busy part way through measured the Mac, so that is UNMEASURED, and so is having no reading at all.
+    /// Gate 0c's replay rule as one pure decision (#4106 comment 5860086027). A mismatch is a FAIL whatever
+    /// the load. Otherwise the replays count only if EVERY load reading taken across them (before the first
+    /// kind and after each kind) was under `loadBelow`, and only if every arm the rule prices was measured:
+    /// a Mac that got busy part way through measured the Mac, and an arm with nothing to act on measured
+    /// nothing, so either is UNMEASURED, as is having no reading at all. Only then does a replayed max over
+    /// the stop FAIL, because a slow replay on a busy Mac is the load, not the code (L224, L98).
     nonisolated static func replayVerdict(mismatches: Int, replayedMax: Double, stop: Double,
-                                          loads: [Double], loadBelow: Double = 8) -> String {
-        if mismatches > 0 || replayedMax > stop { return "FAIL" }
-        guard !loads.isEmpty, loads.allSatisfy({ $0 < loadBelow }) else { return "UNMEASURED" }
-        return "PASS"
+                                          loads: [Double], loadBelow: Double = 8,
+                                          unmeasuredArms: [String] = []) -> String {
+        if mismatches > 0 { return "FAIL" }
+        guard unmeasuredArms.isEmpty, !loads.isEmpty, loads.allSatisfy({ $0 < loadBelow }) else { return "UNMEASURED" }
+        return replayedMax > stop ? "FAIL" : "PASS"
     }
 
     /// "yyyy-MM-dd" plus `days`, in plain calendar arithmetic (UTC, so no DST can move a day).
@@ -879,14 +882,19 @@ struct QueueEnginePhase0cLinksProbeTests {
     }
 
     // Gate 0c's replay rule, decided by one pure function so each outcome can be produced here (L151):
-    // a mismatch or an over-stop max FAILS at any load; a PASS needs every reading under 8, and a single
-    // reading at or over 8 anywhere across the replays, or no reading at all, is UNMEASURED.
+    // a mismatch FAILS at any load; a single reading at or over 8 anywhere across the replays, no reading at
+    // all, or an arm with nothing to measure is UNMEASURED; only then does an over-stop max FAIL.
     @Test func theReplayVerdictNeedsEveryLoadReadingUnderEight() {
         #expect(Phase0cLinks.replayVerdict(mismatches: 0, replayedMax: 3, stop: 5, loads: [5, 6, 7.9]) == "PASS")
         #expect(Phase0cLinks.replayVerdict(mismatches: 0, replayedMax: 3, stop: 5, loads: [5, 9, 6]) == "UNMEASURED")
         #expect(Phase0cLinks.replayVerdict(mismatches: 0, replayedMax: 3, stop: 5, loads: [5, 6, 8]) == "UNMEASURED")
         #expect(Phase0cLinks.replayVerdict(mismatches: 0, replayedMax: 3, stop: 5, loads: []) == "UNMEASURED")
-        #expect(Phase0cLinks.replayVerdict(mismatches: 0, replayedMax: 6, stop: 5, loads: [9]) == "FAIL")
+        #expect(Phase0cLinks.replayVerdict(mismatches: 0, replayedMax: 6, stop: 5, loads: [9]) == "UNMEASURED")
+        #expect(Phase0cLinks.replayVerdict(mismatches: 0, replayedMax: 6, stop: 5, loads: [5]) == "FAIL")
+        #expect(Phase0cLinks.replayVerdict(mismatches: 0, replayedMax: 3, stop: 5, loads: [5],
+                                           unmeasuredArms: ["accrual down"]) == "UNMEASURED")
+        #expect(Phase0cLinks.replayVerdict(mismatches: 1, replayedMax: 3, stop: 5, loads: [5],
+                                           unmeasuredArms: ["accrual down"]) == "FAIL")
         #expect(Phase0cLinks.replayVerdict(mismatches: 1, replayedMax: 3, stop: 5, loads: [5]) == "FAIL")
     }
 
@@ -1083,7 +1091,7 @@ struct QueueEnginePhase0cLinksProbeTests {
         let property = try Phase0cHarness.runAll(terms: [.t2, .t3], ops: Phase0cOp.t2t3)
         Phase0cHarness.report("0c.2 T2+T3", property)
         var failures = property.outcome.failures
-        var single = 0.0, replayed = 0.0, loads: [Double] = []
+        var single = 0.0, replayed = 0.0, loads: [Double] = [], unmeasured: [String] = []
         // One pinned instant for the whole probe (L130): today's Eastern day at the moment it started.
         let asOf = EasternDate.today(Date())
         for (label, url) in try corpora("phase0c-2") {
@@ -1091,18 +1099,20 @@ struct QueueEnginePhase0cLinksProbeTests {
             single = max(single, cost.all.max)
             replayed = max(replayed, cost.replayed)
             loads += cost.loads
+            unmeasured += cost.unmeasured
         }
         // Scored under Gate 0c's replay rule (#4106 comment 5860086027): the max is the median of five
         // replays of each kind's slowest key with load under 8. A single sample is printed and decides
         // nothing; replays with any load reading at or over 8 are UNMEASURED rather than a PASS.
-        let verdict = Phase0cLinks.replayVerdict(mismatches: failures.count, replayedMax: replayed, stop: 5, loads: loads)
-        Phase0cLinks.say("0c.2 VERDICT \(verdict): mismatches \(failures.count), replayed max over both sizes \(String(format: "%.3f", replayed)) ms, single sample max \(String(format: "%.3f", single)) ms, highest load across the replays \(String(format: "%.2f", loads.max() ?? .nan)) over \(loads.count) readings (stop rule: mismatch, or max over 5 ms)")
+        let verdict = Phase0cLinks.replayVerdict(mismatches: failures.count, replayedMax: replayed, stop: 5, loads: loads,
+                                                 unmeasuredArms: unmeasured)
+        Phase0cLinks.say("0c.2 VERDICT \(verdict): mismatches \(failures.count), replayed max over both sizes \(String(format: "%.3f", replayed)) ms, single sample max \(String(format: "%.3f", single)) ms, highest load across the replays \(String(format: "%.2f", loads.max() ?? .nan)) over \(loads.count) readings\(unmeasured.isEmpty ? "" : ", UNMEASURED arms: " + unmeasured.joined(separator: "; ")) (stop rule: mismatch, or max over 5 ms)")
         if !failures.isEmpty { Phase0cLinks.say("0c.2 FAILURES\n  " + failures.prefix(30).joined(separator: "\n  ")) }
         #expect(failures.isEmpty, "0c.2: a prototype disagreed with its oracle or the brute force")
     }
 
     private func contradictionCost(label: String, url: URL, asOf startAsOf: String,
-                                   failures: inout [String]) throws -> (all: Phase0cStats, replayed: Double, loads: [Double]) {
+                                   failures: inout [String]) throws -> (all: Phase0cStats, replayed: Double, loads: [Double], unmeasured: [String]) {
         typealias T2 = Phase0cContradictionPatch<Phase0cKey>
         typealias T3 = Phase0cFeedBreakPatch<Phase0cKey>
         let ctx = ModelContext(try Phase0.openContainer(at: url))
@@ -1319,8 +1329,10 @@ struct QueueEnginePhase0cLinksProbeTests {
 
         var down = Phase0cStats(), downBack = Phase0cStats()
         let above = byKey.filter { $0.value.missedScoutCount > FeedReconcile.goneThreshold }.map { $0.key }
-        var downSplit = "", downBackSplit = ""
-        if !above.isEmpty {
+        var downSplit = "", downBackSplit = "", unmeasured: [String] = []
+        if above.isEmpty {
+            unmeasured.append("T3 accrual down on \(label), no row above goneThreshold")
+        } else {
             _ = pair("T3 accrual down, every row above goneThreshold", "T3 accrual down undone", above,
                      into: &down, &downBack,
                      change: { for key in above { byKey[key]?.missedScoutCount -= 1 } },
@@ -1399,6 +1411,6 @@ struct QueueEnginePhase0cLinksProbeTests {
                 \(replayLines.joined(separator: "\n    "))
               replayed max \(String(format: "%.3f", replayWorst)) ms
             """)
-        return (all, replayWorst, loads)
+        return (all, replayWorst, loads, unmeasured)
     }
 }
