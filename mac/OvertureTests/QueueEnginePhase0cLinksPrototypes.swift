@@ -332,6 +332,19 @@ struct Phase0cContradictionPatch<Key: Hashable> {
         for change in changes {
             let key = change.key
             note(key)
+            // #4106 0c.2 re-probe, the bulk accrual fix. A change that keeps a flagged row flagged and moves
+            // none of its room, title, start or end cannot change which live rows are its twins, so it re-tests
+            // nothing. From the oracle's code: `contradictedKeys` reads a flagged row only through
+            // `disappearedFromFeed` (a Bool), its folded venue, `performanceDate`, `runEndDate` and `groupName`,
+            // and `liveTwin` the same five; a flagged row is never anybody's candidate, because a candidate
+            // needs `missedScoutCount == 0`. Its natural key is read only at output, through `contradictedIDs`,
+            // so storing the new facts is enough. A flag crossing goneThreshold in either direction fails the
+            // `old.flagged, new.flagged` pair and re-judges its room below.
+            if let old = facts[key], let new = change.facts, old.flagged, new.flagged, // phase0c-t2-skip
+               old.room == new.room, old.title == new.title, old.start == new.start, old.end == new.end {
+                facts[key] = new
+                continue
+            }
             if let old = facts[key] {
                 if old.live {
                     let oldRoomFlagged = flagged[old.room] ?? [] // phase0c-t2: the OLD room's flagged rows
