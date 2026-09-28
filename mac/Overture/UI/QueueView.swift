@@ -698,27 +698,13 @@ struct QueueView: View {
     // The rows the Scout stage is currently showing, derived the same way focusedSection derives them,
     // so a ticked date means exactly the shows under that heading and nothing else.
 
-    // #1805: the shows the last check was given and never reached. Read from the same rule the report's
-    // offer is gated on, so the control and the run can never disagree about the set.
-    //
-    // #2598: it TAKES the rows rather than reading `items` itself, and that is the whole of a defect
-    // worth naming. It was a computed property reading `items`, which is a computed property that derives
-    // the WHOLE store, and the masthead reads it while ALREADY HOLDING those rows as a parameter. So every
-    // press built the cards twice: once in the render pass and once here, for a count of how many of them
-    // a check had missed.
-    //
-    // Measured on a hosted QueueView, 2026-09-05: one press built 2,280 cards over a corpus of 1,142,
-    // which is two whole-store passes, and the wait Dan felt was 1,305 ms. Nothing reported it, because
-    // the sweep counter lives INSIDE the pass and this derivation is outside it, and a second pass and a
-    // slow one are the same number of milliseconds to anybody reading only a clock (#2727, L63).
-    //
-    // This is #1121's and #1774's defect exactly, one call site further out: a computed property is
-    // re-run by every reader, and a call site reads as a free field access with nothing at the point of
-    // use saying what it costs (L383).
-    //
-    // #4106: the masthead no longer calls it at all. The pass takes this answer once and publishes it on
-    // `RenderData.missedByACheckKeys`, because the masthead's call, even over rows it was handed, was a
-    // fold of the whole queue on every body evaluation. The only caller left is the action below.
+    // #1805: the shows the last check was given and never reached come from ONE rule,
+    // `QueueModel.keysMissedByACheck`, the same one the report's offer is gated on, so the control and the
+    // run can never disagree about the set. #4106: the render pass takes that answer once and publishes it
+    // on `RenderData.missedByACheckKeys`, because the masthead used to fold every queue row for it on every
+    // body evaluation (L471). #2598 recorded the earlier form of the same cost: a computed property reading
+    // `items` built the whole store once more per press, 2,280 cards over a corpus of 1,142 and a 1,305 ms
+    // wait (2026-09-05), which no counter saw because it ran outside the pass (L383).
 
     // #1805: finish exactly those, through the SAME confirm sheet as every other check, so a run started
     // from a report costs what the sheet says it costs. No re-selection by hand, which is the whole point:
@@ -1279,14 +1265,13 @@ struct QueueView: View {
     }
 
 
-    // #379: visible/items threaded explicitly (not read from self.visible/self.items internally)
-    // so ProspectRowViewLayoutTests-style tests can call this directly with fake data instead of
-    // needing a real populated store, the same prop-threading fix used repeatedly for
-    // FollowUpsView/ArchiveView/QueueView's other retrofits this cycle.
+    // #379: everything the masthead draws is threaded in rather than read from the store, so
+    // ProspectRowViewLayoutTests-style tests can call this directly with fake data instead of needing a
+    // real populated store.
     // #1694: the possible-match fan-out warning, when there is one. Passed IN rather than read from the
     // store here, so the line the masthead draws can be pinned by a test; there is no default, so a call
     // site has to decide what it shows rather than inherit silence.
-    // #1771: agentInputs is threaded in for the same reason visible/items are: the pill strip this draws
+    // #1771: agentInputs is threaded in for the same reason: the pill strip this draws
     // and the focused stage heading are two readers of one build, so the build belongs to the caller.
     // #2204: `notices` is what the app has to say for itself, threaded in for the same reason
     // `fanOutLine` is: the caller decides what is shown rather than this view inheriting silence. It has
