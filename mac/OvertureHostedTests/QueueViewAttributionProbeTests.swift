@@ -750,9 +750,14 @@ struct QueueViewAttributionProbeTests {
             stageNames.append("\(stage.rawValue) \(s.focusedRows.count)")
         }
         _ = registry.takeKeys()
-        let stageKind = await sampled("stage focus change and back", label: label, dir: out) { i in
-            let next = i % 2 == 0 ? stages[(i / 2) % stages.count] : a
-            return rig.read(data: next) { Phase0cView.settle(window, bodyMustRun: true) { feed.data = next } }
+        var stageKind = KindResult(name: "stage focus change and back")
+        if stages.isEmpty {
+            stageKind.failures.append("UNMEASURED: no stage other than Scout to change to")
+        } else {
+            stageKind = await sampled("stage focus change and back", label: label, dir: out) { i in
+                let next = i % 2 == 0 ? stages[(i / 2) % stages.count] : a
+                return rig.read(data: next) { Phase0cView.settle(window, bodyMustRun: true) { feed.data = next } }
+            }
         }
         ViewAttributionProbe.say("\(label) stages served (rows): \(stageNames.joined(separator: ", "))")
 
