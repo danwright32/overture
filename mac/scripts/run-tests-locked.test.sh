@@ -1907,8 +1907,13 @@ done
 assert_equals "both runs queued, so this case measured the ordering" "2" "$(queue_tickets)"
 MERGE_TICKETS="$(ls "${QUEUE_LOCK}.queue" 2>/dev/null | grep -c '\.priority\.' || true)"
 assert_equals "the merge verification's ticket carries its class" "1" "${MERGE_TICKETS}"
-# Two polls of the routine run, so it has had its chance to count the later arrival as ahead.
-sleep 2.2
+# Until the routine run has SEEN the later arrival ahead of it, which is the moment the case is about,
+# rather than a fixed pause that measures the machine's load (L290).
+seen_waited=0
+until [[ "$(cat "${DIR_LOCK_FIXTURE_DIR}/routine.out" 2>/dev/null)" == *"a merge verification that arrived later"* ]] \
+  || [[ "${seen_waited}" -ge 300 ]]; do
+  sleep 0.05; seen_waited=$((seen_waited + 1))
+done
 assert_equals "while the lock is held NEITHER ran, merge verification included" "" \
   "$(cat "${QUEUE_ORDER}" 2>/dev/null)"
 rm -rf "${QUEUE_LOCK}"
