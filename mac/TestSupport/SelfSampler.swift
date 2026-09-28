@@ -81,6 +81,7 @@ final class LandingSelfSampler: @unchecked Sendable {
     private let counters: (Int32) -> SamplingStart.Reading?
     private let readingEvery: Duration
     private let beginTimeout: Duration
+    private let attachTimeout: Duration
     let file: URL
     let seconds: Int
     /// When sampling began (`CLOCK_UPTIME_RAW` nanoseconds, the reading that opened the first sampling
@@ -94,13 +95,15 @@ final class LandingSelfSampler: @unchecked Sendable {
     /// slow cadence) and a minute for a large process's symbol grab.
     init(seconds: Int, file: URL, executable: URL = URL(fileURLWithPath: "/usr/bin/sample"),
          counters: @escaping (Int32) -> SamplingStart.Reading? = SamplingStart.read,
-         readingEvery: Duration = .milliseconds(50), beginTimeout: Duration = .seconds(60)) {
+         readingEvery: Duration = .milliseconds(50), beginTimeout: Duration = .seconds(60),
+         attachTimeout: Duration = .seconds(15)) {
         self.seconds = seconds
         self.file = file
         self.executable = executable
         self.counters = counters
         self.readingEvery = readingEvery
         self.beginTimeout = beginTimeout
+        self.attachTimeout = attachTimeout
     }
 
     /// Milliseconds from the attach line to the first sampling interval: the head a caller starting on the
@@ -111,8 +114,21 @@ final class LandingSelfSampler: @unchecked Sendable {
         return b >= a ? Double(b - a) / 1e6 : 0
     }
 
+    /// Every refusal ends the sampler before it is thrown (the #4318 review): callers catch a failed start and
+    /// carry on, so a sampler left running would outlive the test holding its pipe, still suspending this
+    /// process, and write a file nobody reads (L235, L114).
     @MainActor
     func start() async throws {
+        do {
+            try await attachAndWaitForSampling()
+        } catch {
+            await stop()
+            throw error
+        }
+    }
+
+    @MainActor
+    private func attachAndWaitForSampling() async throws {
         process.executableURL = executable
         process.arguments = [String(getpid()), String(seconds), "1", "-mayDie", "-file", file.path]
         process.standardOutput = pipe
@@ -129,7 +145,7 @@ final class LandingSelfSampler: @unchecked Sendable {
             self.lock.unlock()
         }
         try process.run()
-        let deadline = ContinuousClock.now + .seconds(15)
+        let deadline = ContinuousClock.now + attachTimeout
         while ContinuousClock.now < deadline {
             if isAttached { break }
             if !process.isRunning { break }
@@ -184,10 +200,32 @@ final class LandingSelfSampler: @unchecked Sendable {
         while process.isRunning && ContinuousClock.now < deadline {
             try? await Task.sleep(for: .milliseconds(200))
         }
-        if process.isRunning { process.terminate(); return false }
+        if process.isRunning { await stop(); return false }
         pipe.fileHandleForReading.readabilityHandler = nil
         return process.terminationStatus == 0 && FileManager.default.fileExists(atPath: file.path)
     }
+
+    /// Ends the sampler: terminates it if it is still running, waits for it to exit (5 s, then a kill and one
+    /// more second), and clears the pipe's handler. Returns whether it is gone. Safe on a sampler that never
+    /// launched, since only a running process is signalled.
+    @discardableResult
+    func stop() async -> Bool {
+        if process.isRunning { process.terminate() }
+        var deadline = ContinuousClock.now + .seconds(5)
+        while process.isRunning && ContinuousClock.now < deadline { try? await Task.sleep(for: .milliseconds(20)) }
+        if process.isRunning {
+            kill(process.processIdentifier, SIGKILL)
+            deadline = ContinuousClock.now + .seconds(1)
+            while process.isRunning && ContinuousClock.now < deadline { try? await Task.sleep(for: .milliseconds(20)) }
+        }
+        pipe.fileHandleForReading.readabilityHandler = nil
+        return !process.isRunning
+    }
+
+    /// Whether the sampler process is still running, and whether its output handler has been cleared: what a
+    /// caller (and the wiring test) checks to know nothing was left behind.
+    var isRunning: Bool { process.isRunning }
+    var outputHandlerCleared: Bool { pipe.fileHandleForReading.readabilityHandler == nil }
 
     enum SamplerError: Error { case notAttached(String), neverBegan(String) }
 }

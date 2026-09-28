@@ -113,9 +113,11 @@ final class SelfSamplerStartWaitsForSamplingTests {
         }
     }
 
-    private func stub(exitingAfter seconds: Int) throws -> URL {
+    private func stub(exitingAfter seconds: Int, attaching: Bool = true) throws -> URL {
         let url = try sandboxes.makeFile(named: "sample-stub.sh", inSandboxNamed: "overture-4307-sampler")
-        try "#!/bin/sh\necho \"Sampling process $1 for $2 seconds with 1 millisecond of run time\"\nsleep \(seconds)\n"
+        let line = attaching ? "echo \"Sampling process $1 for $2 seconds with 1 millisecond of run time\"\n" : ""
+        // `exec` so the stub's pid IS the sleep's, and ending the stub leaves no orphaned child behind.
+        try "#!/bin/sh\n\(line)exec sleep \(seconds)\n"
             .write(to: url, atomically: true, encoding: .utf8)
         try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: url.path)
         return url
@@ -131,6 +133,10 @@ final class SelfSamplerStartWaitsForSamplingTests {
         // Two sampling intervals after the reading at 829 means the reading at 1036 had to be taken.
         #expect(script.taken >= 11, "start returned after \(script.taken) counter readings, before sampling began")
         #expect(sampler.beganAt == 829_000_000)
+        // Each test ends the sampler it started, and it must really be gone afterwards.
+        #expect(await sampler.stop(), "the stub sampler was still running after stop")
+        #expect(!sampler.isRunning)
+        #expect(sampler.outputHandlerCleared)
     }
 
     @Test func startRefusesWhenSamplingNeverBegins() async throws {
@@ -145,6 +151,23 @@ final class SelfSamplerStartWaitsForSamplingTests {
         }
         #expect(refused, "start returned although the counters never looked like sampling")
         #expect(sampler.beganAt == nil)
+        // The stub would sleep 3 s more: a refusal must END the sampler, not leave it holding its pipe.
+        #expect(!sampler.isRunning, "a refused start left the sampler running")
+        #expect(sampler.outputHandlerCleared, "a refused start left the sampler's output handler installed")
+    }
+
+    @Test func startRefusesAndEndsTheSamplerWhenItNeverAttaches() async throws {
+        let script = Script(cumulative(manyThreads))
+        let sampler = LandingSelfSampler(seconds: 2, file: try sandboxes.makeFile(named: "out.txt",
+                                                                                    inSandboxNamed: "overture-4307-out"),
+                                         executable: try stub(exitingAfter: 5, attaching: false),
+                                         counters: script.next, readingEvery: .zero,
+                                         attachTimeout: .milliseconds(300))
+        var refused = false
+        do { try await sampler.start() } catch LandingSelfSampler.SamplerError.notAttached { refused = true }
+        #expect(refused, "start returned although the sampler never printed its attach line")
+        #expect(!sampler.isRunning, "a sampler that never attached was left running")
+        #expect(sampler.outputHandlerCleared, "a sampler that never attached kept its output handler")
     }
 
     @Test func startRefusesAtOnceWhenTheSamplerExitsBeforeSampling() async throws {
@@ -156,5 +179,7 @@ final class SelfSamplerStartWaitsForSamplingTests {
         var refused = false
         do { try await sampler.start() } catch LandingSelfSampler.SamplerError.neverBegan { refused = true }
         #expect(refused, "start returned although the sampler exited before sampling began")
+        #expect(!sampler.isRunning)
+        #expect(sampler.outputHandlerCleared, "a sampler that exited before sampling kept its output handler")
     }
 }
