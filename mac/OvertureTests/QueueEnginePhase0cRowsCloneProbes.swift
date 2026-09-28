@@ -237,7 +237,8 @@ extension QueueEnginePhase0cRowsProbeTests {
                 if !b.isEmpty { expiryMismatch.append("instant \(k): " + b.joined(separator: "; ")) }
             }
             instantsJudged += instants.count
-            sumMismatches += fullMismatch.count + expiryMismatch.count + (atBase.isEmpty ? 0 : 1)
+            sumMismatches += Phase0cRows.mismatchesJudged(full: fullMismatch.count, expiry: expiryMismatch.count,
+                                                          baseDiffers: !atBase.isEmpty)
             let rebuiltText = expiryRebuilt.isEmpty ? "none"
                 : "median \(expiryRebuilt.sorted()[expiryRebuilt.count / 2]), max \(expiryRebuilt.max() ?? 0)"
             Phase0cRows.say("""
@@ -259,7 +260,7 @@ extension QueueEnginePhase0cRowsProbeTests {
                   (b) carried forward on validUntil: \(expiryMismatch.count) instants differ; rows rebuilt per instant \(rebuiltText); \(continuous) rows read the clock continuously; cost \(Phase0cRows.spread(expiryCosts).text)\(expiryMismatch.isEmpty ? "" : "\n    " + expiryMismatch.prefix(5).joined(separator: "\n    "))
                 """)
         }
-        let verdict = sumMismatches == 0 && worstRow <= 1.0 ? "PASS" : "FAIL"
+        let verdict = Phase0cRows.stopVerdict(mismatches: sumMismatches, worstRowMs: worstRow)
         Phase0cRows.say("0c.5 stop rule (any sum differs at \(instantsJudged) instants over both sizes, or a row over 1 ms): "
                         + "\(verdict), \(sumMismatches) differing, worst row \(String(format: "%.3f", worstRow)) ms")
     }

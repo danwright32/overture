@@ -38,6 +38,17 @@ enum Phase0cRows {
 
     nonisolated static func say(_ line: String) { print("phase0c-rows " + line) }
 
+    /// 0c.5's disagreements, every kind the probe measures: full rebuild instants, clock carry-forward
+    /// instants, and the base instant. One place, so the verdict cannot leave an arm out again (#4291).
+    nonisolated static func mismatchesJudged(full: Int, expiry: Int, baseDiffers: Bool) -> Int {
+        full + expiry + (baseDiffers ? 1 : 0)
+    }
+
+    /// 0c.5's stop rule: any disagreement, or a row over 1 ms.
+    nonisolated static func stopVerdict(mismatches: Int, worstRowMs: Double) -> String {
+        mismatches == 0 && worstRowMs <= 1.0 ? "PASS" : "FAIL"
+    }
+
     /// Max, p99 and median of a set of samples, in milliseconds, with the count.
     nonisolated static func spread(_ samples: [Double]) -> (max: Double, p99: Double, median: Double, text: String) {
         guard !samples.isEmpty else { return (0, 0, 0, "no samples") }
@@ -172,6 +183,17 @@ struct QueueEnginePhase0cRowsProbeTests {
             result.permutedDisagreements += 1
         }
         return result
+    }
+
+    // 0c.5's stop rule counts EVERY kind of disagreement it measured. The clock arm (a row carried forward on
+    // validUntil) is the patch this probe exists to prove, and it was once left out of the tally, so a
+    // broken carry-forward printed PASS beside a detail line showing its mismatches (lessons review, #4291).
+    @Test func theStopRuleCountsTheClockArmsMismatches() {
+        #expect(Phase0cRows.mismatchesJudged(full: 0, expiry: 3, baseDiffers: false) == 3)
+        #expect(Phase0cRows.mismatchesJudged(full: 2, expiry: 1, baseDiffers: true) == 4)
+        #expect(Phase0cRows.stopVerdict(mismatches: 3, worstRowMs: 0.2) == "FAIL")
+        #expect(Phase0cRows.stopVerdict(mismatches: 0, worstRowMs: 1.2) == "FAIL")
+        #expect(Phase0cRows.stopVerdict(mismatches: 0, worstRowMs: 0.9) == "PASS")
     }
 
     @Test(arguments: [60, 300])
