@@ -425,6 +425,32 @@ the measurement it came from lives here. Read the entry before the rule decides 
   apart, and only the first two are results: CAUGHT, SURVIVED, NOT APPLIED, NOTHING RAN, LANDED
   ELSEWHERE, NOT PROOF, NO RUNNER, DID NOT BUILD, MISPLACED FLAG, PERL VARIABLE, SCOPE MISSED THE FILE
   and, since #3792, UNCOMMITTED.
+  **Several mutations go in ONE batch (#4295): `scripts/mutate.sh --batch <batch-file> [test-scope ...]`.**
+  Each single run queues for the machine wide test lock on its own, and measured 2026-09-27 an agent proving
+  five or six guards per PR spent most of four hours or more in that queue, six deep and 10 to 30 minutes a
+  wait, for a few minutes of builds. A batch enters the queue ONCE. Dan chose this over running tests in
+  parallel (2026-09-27, in chat), so the lock is unchanged: the batch takes it through the runner's own
+  `take_dir_lock`, and every entry is run by the single form as a child, so the verdicts, refusals and kept
+  logs are the same code's. The file holds one entry per block, blocks separated by a blank line, `#` lines
+  ignored, each line a key, a colon and one space, then the value exactly as written:
+  `label:` (optional), `file:` and `perl:` (required, one each), `at:` and `at-regex:` (repeatable), and
+  `breaks-the-build` on a line of its own. The scope is shared and goes on the command line.
+  Three phases. Every entry is CHECKED first with nothing run (`READY`, or its refusal), so a misaimed
+  entry costs seconds rather than a wait, is recorded, and does not stop the others; a batch with nothing
+  ready never queues. The lock is then taken once, ONLY for the Swift runner (a custom
+  `OVERTURE_MUTATE_RUNNER` takes none, so a fixture proof never blocks Downbeat). Each inner run is told
+  through `OVERTURE_TEST_LOCK_HELD_BY` that the batch holds it, and `run-tests-locked.sh` believes that only
+  when the lock's owner line names that pid AND the pid is its ANCESTOR in the process table, so an
+  unrelated process exporting the variable is refused as `NOTHING RAN` rather than let past the queue.
+  Each inner run still takes its own flock and keeps its own stall guard. After every entry the file and
+  its repository's status must be exactly as before, or the batch prints `RESTORE FAILED`, stops, leaves
+  the tree for a person and names an untouched copy. Ctrl-C ends the entry in flight, puts the file back
+  (from the batch's own copy if the entry could not), releases the lock and prints the summary, which
+  lists every entry's verdict and log. Exit 0 all CAUGHT, 1 a SURVIVED among catches, 2 an entry with no
+  result, 3 stopped on a restore, 130 or 143 interrupted. `OVERTURE_MUTATE_LOG` is refused for a batch,
+  since every entry would share it. One cost to know: other runs queue behind the WHOLE batch, and a
+  waiter gives up after `OVERTURE_DIR_LOCK_TIMEOUT` (1800s by default), so keep a batch to what one PR
+  needs rather than a day's worth.
   **COMMIT THE TARGET FIRST.** UNCOMMITTED refuses, before the file is touched, when the target carries
   changes that are not committed, because this script breaks that file and restores it: if a run is
   interrupted the broken copy stays, and the cleanup anybody reaches for is a revert of that file, which

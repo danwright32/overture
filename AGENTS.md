@@ -240,7 +240,8 @@ the subject named below.
   this run verified the SCREENS, and whether the live store invariants measured anything.
 - **Seeing a guard fail** (every guard here is supposed to have been, L1): use `scripts/mutate.sh`,
   never a fresh one liner, which has already lied in both directions. Put `--at` FIRST. It keeps
-  eleven outcomes apart and only the first two are results.
+  eleven outcomes apart and only the first two are results. Several mutations go in ONE
+  `--batch` file, which queues for the shared test lock once rather than once per mutation.
 - **Which test entry points refuse to call an empty run a pass, and which cannot.** Zero subjects
   examined is its own outcome and must never read as everything passed. A raw `xcodebuild` and a
   hand written wait loop watching a log are the two that cannot be gated.
