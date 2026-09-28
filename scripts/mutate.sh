@@ -72,6 +72,7 @@ set -uo pipefail
 usage() {
   cat <<'USAGE'
 usage: scripts/mutate.sh [--at <pattern>] <file> <perl-expression> [test-scope ...]
+       scripts/mutate.sh --batch <batch-file> [test-scope ...]
 
 Applies the perl expression to the file, runs the suite, restores the file, and reports whether the
 mutation was CAUGHT (the suite went red, so the guard is real) or SURVIVED (it stayed green, so the
@@ -96,6 +97,8 @@ guard.
   --breaks-the-build  this mutation is MEANT to stop the code compiling, so the compiler refusing it is
                       the guard firing. Without this, a run that did not build is refused as DID NOT
                       BUILD rather than reported as any verdict.
+  --batch <file>      SEVERAL mutations under ONE hold of the shared test lock, one entry per block of
+                      the batch file (#4295). Run `scripts/mutate.sh --batch` alone for its format.
   <file>              the file to break, relative to the repo root or absolute
   <perl-expression>   passed to `perl -0pi -e`, so it sees the whole file at once
   [test-scope ...]    optional, passed straight through to the test runner
@@ -116,6 +119,16 @@ guard.
                            cannot run refuses the run as NO RUNNER rather than reporting a verdict.
 USAGE
 }
+
+# #4295: several mutations under ONE hold of the shared test lock. Handled here, before anything below reads
+# an argument, so the single form that follows is exactly what it was. Each entry is run BY that single
+# form, as a child, so the verdicts, refusals and kept logs are the same code's (scripts/lib/mutate-batch.sh).
+if [[ "${1:-}" == "--batch" ]]; then
+  shift
+  # shellcheck source=./lib/mutate-batch.sh
+  source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/mutate-batch.sh"
+  mutate_batch_main "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")" "$@"
+fi
 
 # The declared aims, empty when none was given. Read before the positional arguments, so `--at` cannot be
 # mistaken for the file (the fixture proved that first: without this the refusal read "no file at --at").
@@ -675,6 +688,15 @@ if [[ "${#AIMS[@]}" -gt 0 ]]; then
     done
     exit 2
   fi
+fi
+
+# #4295: a batch asks every entry this far, and no further, BEFORE it queues for the shared test lock, so
+# an entry that is refused (not applied, landed elsewhere, a perl variable, a misplaced flag, uncommitted)
+# is found in seconds rather than after the wait. Everything a refusal above needs has been read by now,
+# and the runner has not started. The restore still runs, from the EXIT trap. Set by nothing but the batch.
+if [[ "${OVERTURE_MUTATE_PREFLIGHT_ONLY:-}" == "1" ]]; then
+  echo "READY - the mutation applies where it was aimed. Checked only, so nothing was run (#4295)."
+  exit 0
 fi
 
 # #2755: for the fixture only. There is no way to observe "restored after being killed" from outside

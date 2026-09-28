@@ -112,6 +112,25 @@ the measurement it came from lives here. Read the entry before the rule decides 
   is `mac/scripts/lib/lock-queue.sh`, which must stay identical in behaviour to the `lock-queue.sh`
   in Downbeat's own scripts folder; before it, this runner's one second poll kept beating Downbeat's two second
   one and starved a Downbeat run past its deadline on 2026-09-24.
+  **Since #4244 a MERGE VERIFICATION queues ahead of routine runs**, because on the night of 2026-09-24
+  to 25 no merge landed for about three hours while one sat behind four to seven routine scoped runs.
+  `run_full_suite` in `verify-and-merge-branch.sh` (which `verify-and-merge-batch.sh` sources, so both
+  paths) hands `scripts/test-all.sh` the explicit marker `OVERTURE_TEST_LOCK_PRIORITY=merge`, scoped to
+  that one command, and the runner joins the queue as a priority waiter with a ticket named
+  `<arrival>.priority.<pid>`. Any other value of the marker is refused before the queue is joined. A
+  reader that knows the class serves two lanes, priority first and each lane in arrival order, and a
+  routine ticket that has waited `LOCK_QUEUE_PRIORITY_BOUND_SECONDS` (600) joins the first lane at its
+  own arrival, so a stream of merges can delay a routine run by at most ten minutes and never starve
+  it. Nothing about the HOLDER changes: a merge verification still waits for whichever run holds the
+  lock, and `mkdir` still admits one run at a time, so one xcodebuild at a time holds exactly as before.
+  A routine run waiting behind a later merge says so, rather than calling it an earlier run.
+  Downbeat's and Ovation's copies do not know the class yet (downbeat#527, ovation#598), and they are
+  never worse off than before it: they take the pid from after the last dot and judge liveness from the
+  content, both unchanged, and the arrival still leads the name, so they read a priority ticket as an
+  ordinary ticket in arrival order. The one thing they meet is a later merge verification that does not
+  wait for them, and the two then race on `mkdir` as every runner did before the queue, until the bound
+  puts them first. `lib/lock-queue.test.sh` holds a verbatim copy of the old reader and asserts each of
+  those claims against it.
   That re-run is against CURRENT main, not against the base the branch was cut from (#2353):
   `verify-and-merge-branch.sh` merges `origin/main` into its verify worktree before the suite
   is allowed to judge anything, and refuses (verifying nothing, merging nothing) when that combine

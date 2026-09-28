@@ -24,13 +24,15 @@ enum GenreVisibility {
     // row to the loose DISCIPLINE rule, under which a refused town is still refused).
     static func write(_ discipline: Discipline, to prospect: Prospect) {
         let stored = Discipline(rawValue: prospect.discipline) ?? .other
-        defer { prospect.discipline = discipline.rawValue }
+        // #4106 Phase 1a: both fields are written only where they differ, because the scout reaches this on
+        // every re-land and an assignment of the same value still dirties the row (`Prospect.assign`).
+        defer { prospect.assign(\.discipline, discipline.rawValue) }
         guard stored != discipline else { return }
 
         let wasHidden = GeoRefusals.none.hidesFromQueue(location: prospect.location, discipline: stored)
         let nowHidden = GeoRefusals.none.hidesFromQueue(location: prospect.location, discipline: discipline)
         // Sticky once set. A row that has been kept is kept: a later genre change must not be the thing
         // that finally removes what an earlier one was forbidden to.
-        if !wasHidden && nowHidden { prospect.keptVisibleAfterGenreChange = true }
+        if !wasHidden && nowHidden { prospect.assign(\.keptVisibleAfterGenreChange, true) }
     }
 }
