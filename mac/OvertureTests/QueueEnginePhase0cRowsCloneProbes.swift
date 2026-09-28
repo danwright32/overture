@@ -332,7 +332,7 @@ extension QueueEnginePhase0cRowsProbeTests {
                 """)
         }
         if editReplaysTaken == 0 { worstEditReplay = nil }
-        let judged: Double? = worstReplay.flatMap { a in worstEditReplay.map { max(a, $0) } }
+        let judged = Phase0cRows.judgedReplay(rowChange: worstReplay, draftEdit: worstEditReplay, editsTaken: editReplaysTaken)
         let verdict = Phase0cRows.stopVerdict(mismatches: sumMismatches, replayedMaxMs: judged)
         Phase0cRows.say("0c.5 stop rule (any sum differs at \(instantsJudged) instants over both sizes, or the slowest key's "
                         + "replayed median, a row change or a draft edit, over 1 ms, load under 8): \(verdict), \(sumMismatches) differing, "

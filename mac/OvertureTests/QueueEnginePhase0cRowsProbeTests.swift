@@ -54,6 +54,14 @@ enum Phase0cRows {
         return replayedMaxMs <= 1.0 ? "PASS" : "FAIL"
     }
 
+    /// The maximum 0c.5 judges: the worse of the row change and the draft edit replays. Nil when either arm is
+    /// unmeasured, and the draft edit arm is unmeasured when no edit was replayed at all, because its running
+    /// maximum starts at 0 and would otherwise stand in the verdict as a measured zero (L90).
+    nonisolated static func judgedReplay(rowChange: Double?, draftEdit: Double?, editsTaken: Int) -> Double? {
+        guard editsTaken > 0 else { return nil }
+        return rowChange.flatMap { a in draftEdit.map { max(a, $0) } }
+    }
+
     nonisolated static let loadCeiling = 8.0
 
     nonisolated static func oneMinuteLoad() -> Double {
@@ -227,6 +235,14 @@ struct QueueEnginePhase0cRowsProbeTests {
     // nothing changed, equals the one built before. Its positive control (L159) is that today's reduction
     // over RELATIONSHIP order did move for some row across the same refetch; without that the equality
     // would prove nothing about order.
+    @Test func aDraftEditArmThatReplayedNothingIsUnmeasuredNotZero() {
+        #expect(Phase0cRows.judgedReplay(rowChange: 0.4, draftEdit: 0, editsTaken: 0) == nil)
+        #expect(Phase0cRows.stopVerdict(mismatches: 0, replayedMaxMs: Phase0cRows.judgedReplay(rowChange: 0.4, draftEdit: 0, editsTaken: 0)) == "UNMEASURED")
+        #expect(Phase0cRows.judgedReplay(rowChange: 0.4, draftEdit: 0.7, editsTaken: 2) == 0.7)
+        #expect(Phase0cRows.judgedReplay(rowChange: nil, draftEdit: 0.7, editsTaken: 2) == nil)
+        #expect(Phase0cRows.judgedReplay(rowChange: 0.4, draftEdit: nil, editsTaken: 2) == nil)
+    }
+
     @Test(arguments: [60, 300])
     func entriesHoldStillAcrossASaveAndRefetch(size: Int) throws {
         let fx = try Phase0cRowsFixture(size: size, seed: 4106_5101)
