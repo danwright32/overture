@@ -98,6 +98,14 @@ enum Phase0cLinks {
         return expected.filter { !seen.contains($0) }
     }
 
+    /// The kinds a run recorded that `expected` does not list, in `recorded`'s order. A kind renamed or added
+    /// at a call site without the list following would otherwise leave the list checking a name nothing uses,
+    /// so the run refuses it rather than trusting a hand kept list (L41).
+    nonisolated static func unlistedKinds(expected: [String], recorded: [String]) -> [String] {
+        let listed = Set(expected)
+        return recorded.filter { !listed.contains($0) }
+    }
+
     /// "yyyy-MM-dd" plus `days`, in plain calendar arithmetic (UTC, so no DST can move a day).
     nonisolated static func addDays(_ day: String, _ days: Int) -> String {
         let parts = day.split(separator: "-").compactMap { Int($0) }
@@ -791,6 +799,10 @@ struct Phase0cHarness {
     /// Every seed at the given settings, both fixture sizes; CI settings unless the deep variable is set.
     static func runAll(terms: Set<Phase0cTerm>, ops: [Phase0cOp]) throws -> (outcome: Outcome, settings: String, ms: Double) {
         let deep = Phase0cLinks.deep
+        // A run holding T2 adds an accrual pass, its check and its undo after EVERY step, so its default steps
+        // are 20 and 8 rather than 40 and 20 to keep the pair near its old runtime (0c.1 and 0c.2 together
+        // 29.6 s, against 24.3 s before #4314). The guard held at these counts: all five mutations of T2's accrual skip, one per condition
+        // plus #4292's venue move, were CAUGHT at them (#4314). The deep variable keeps the long settings.
         let plan: [(size: Int, seeds: Int, steps: Int)] = deep
             ? [(60, 20, 500), (300, 20, 500)]
             : (terms.contains(.t2) ? [(60, 3, 20), (300, 1, 8)] : [(60, 3, 40), (300, 1, 20)])
@@ -895,6 +907,9 @@ struct QueueEnginePhase0cLinksProbeTests {
         #expect(Phase0cLinks.unmeasuredKinds(expected: all, recorded: all.filter { $0 != "T3 rollover back" })
                 == ["T3 rollover back"])
         #expect(Set(all).count == all.count, "a kind is listed twice")
+        #expect(Phase0cLinks.unlistedKinds(expected: all, recorded: all).isEmpty)
+        #expect(Phase0cLinks.unlistedKinds(expected: all, recorded: all + ["T3 renamed at its call site"])
+                == ["T3 renamed at its call site"])
     }
 
     // A load that could not be read must never read as a quiet Mac.
@@ -1406,6 +1421,9 @@ struct QueueEnginePhase0cLinksProbeTests {
         // cannot score a PASS on the strength of the reading taken before the first one.
         for kind in Phase0cLinks.unmeasuredKinds(expected: Phase0cLinks.contradictionKinds, recorded: kindOrder) {
             unmeasured.append("\(kind) on \(label), never ran")
+        }
+        for kind in Phase0cLinks.unlistedKinds(expected: Phase0cLinks.contradictionKinds, recorded: kindOrder) {
+            unmeasured.append("\(kind) on \(label), recorded but not in contradictionKinds")
         }
         let settled = Phase0cLinks.waitForLoad(below: 8)
         var loads = [settled.load]
