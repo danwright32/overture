@@ -699,28 +699,25 @@ struct QueueView: View {
     // so a ticked date means exactly the shows under that heading and nothing else.
 
     // #1805: the shows the last check was given and never reached come from ONE rule,
-    // `QueueModel.keysMissedByACheck`, the same one the report's offer is gated on, so the control and the
-    // run can never disagree about the set. #4106: the render pass takes that answer once and publishes it
-    // on `RenderData.missedByACheckKeys`, because the masthead used to fold every queue row for it on every
-    // body evaluation (L471). #2598 recorded the earlier form of the same cost: a computed property reading
-    // `items` built the whole store once more per press, 2,280 cards over a corpus of 1,142 and a 1,305 ms
-    // wait (2026-09-05), which no counter saw because it ran outside the pass (L383).
-
-    // #1805: finish exactly those, through the SAME confirm sheet as every other check, so a run started
-    // from a report costs what the sheet says it costs. No re-selection by hand, which is the whole point:
-    // the app was holding the list while Dan reconstructed it.
-    private func finishShowsACheckMissed() {
-        // An ACTION, so it derives its own: this runs on a press rather than during a render, and there
-        // is no pass in hand to take the rows from.
-        let keys = QueueModel.keysMissedByACheck(items, today: today, geo: geo)
-        guard !keys.isEmpty else { return }
-        // #1616: the same learned pace the selection bar quotes, so two ways into one run cannot name two
-        // different waits.
-        let summary = ProbeSelection.summarizeShowsACheckMissed(
-            count: keys.count, secondsPerRound: ProbeSelection.liveSecondsPerRound())
-        sheets.pendingProbe = ProbeConfirm(keys: keys, dateLabel: "",
-                                    title: ProbeSelectionCopy.multiDateTitle(summary),
-                                    message: ProbeSelectionCopy.finishMissedShowsMessage(summary))
+    // `QueueModel.keysMissedByACheck`. #4106: the render pass takes that answer once and publishes it on
+    // `RenderData.missedByACheckKeys`, because the masthead used to fold every queue row for it on every
+    // body evaluation (L471).
+    //
+    // #4312: and the press RUNS that answer. The masthead hands the pass's set to `AppNotices.servable`,
+    // which serves the report's offer as `.finishTheseShowsACheckMissed(keys:)` carrying it, and this is
+    // handed those keys. So the set that put "Check the rest" on screen is the set the confirm prices and
+    // the run starts over (L16), and a press builds no card and folds no row to find it. It used to derive
+    // its own through the computed `items`, the whole store as full cards at the press's own instant, day
+    // and unresolved refusals: #2598 measured that shape at 2,280 cards over a corpus of 1,142 and a
+    // 1,305 ms wait (2026-09-05), which no counter saw because it ran outside the pass (L383).
+    // `TheMissedShowsPressActsOnThePassTests` holds both halves.
+    //
+    // Through the SAME confirm sheet as every other check, so a run started from a report costs what the
+    // sheet says it costs (#1805), priced at the same learned pace the selection bar quotes (#1616).
+    private func finishShowsACheckMissed(_ keys: [String]) {
+        guard let confirm = ProbeConfirm.finishingShowsACheckMissed(
+            keys: keys, secondsPerRound: ProbeSelection.liveSecondsPerRound()) else { return }
+        sheets.pendingProbe = confirm
     }
 
     // #2268 built a "Check again" link on a finished date, which marked every answered show on it and
@@ -846,7 +843,7 @@ struct QueueView: View {
             QueueScrollHolder(jumpTarget: jumpTarget) {
                 VStack(alignment: .leading, spacing: OVSpacing.xl) {
                     masthead(summary: data.summary,
-                             canFinishMissedShows: !data.missedByACheckKeys.isEmpty,
+                             missedByACheckKeys: data.missedByACheckKeys,
                              fanOutLine: data.fanOutLine,
                              notices: notices + data.feedBreaks + data.mergeSurvivorsDropped,
                              pendingBookings: data.pendingBookings,
@@ -1278,7 +1275,9 @@ struct QueueView: View {
     // no default, so a new call site has to answer the question.
     // #4106 view workstream: handed the pass's two answers rather than the rows to fold them from. Both
     // folds ran here, in the body, over every queue row on every evaluation (L471).
-    func masthead(summary: (total: Int, high: Int), canFinishMissedShows: Bool, fanOutLine: String?,
+    // #4312: the missed set WHOLE, not a yes. It decides whether "Check the rest" is offered, and the
+    // served offer carries it, so the press runs the set that put the control on screen.
+    func masthead(summary: (total: Int, high: Int), missedByACheckKeys: [String], fanOutLine: String?,
                   notices: [AppNotice],
                   // #3653: the pass's own count, not a second derivation of it. `QueueRenderPass` already
                   // walks every row for this once (`QueueRenderPass.swift:252`) and puts it on
@@ -1367,9 +1366,11 @@ struct QueueView: View {
                                              // #2598: never a second derivation of the whole store for
                                              // this. #4106: and never a fold of the rows either; the
                                              // pass's own answer, from `RenderData.missedByACheckKeys`.
-                                             canFinishMissedShows: canFinishMissedShows),
+                                             // #4312: served carrying that answer, so the press below
+                                             // runs it rather than deriving its own.
+                                             missedByACheckKeys: missedByACheckKeys),
                 perform: { action in
-                    if action == .finishShowsACheckMissed { finishShowsACheckMissed() }
+                    if case .finishTheseShowsACheckMissed(let keys) = action { finishShowsACheckMissed(keys) }
                     // #4027: performed here for the same reason the shortfall's offer is: this view owns
                     // the focused list the control enters, and RootView does not.
                     else if case .showShowsOneSweepBroke(let keys) = action { showBrokenShows(keys) }

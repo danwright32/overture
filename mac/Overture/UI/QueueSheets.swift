@@ -38,6 +38,21 @@ struct ProbeConfirm: Identifiable {
     var message: String? = nil
 }
 
+extension ProbeConfirm {
+    // #1805/#4312: the confirm for finishing the shows a check missed, built from the keys the served
+    // offer carries and from nothing else, so the press runs the set the masthead offered and builds no
+    // card to find it. Nil for an empty set: a confirm over no shows would start a paid run over nobody.
+    // #1616: priced at the same learned pace the selection bar quotes, which the caller reads.
+    static func finishingShowsACheckMissed(keys: [String], secondsPerRound: TimeInterval) -> ProbeConfirm? {
+        guard !keys.isEmpty else { return nil }
+        let summary = ProbeSelection.summarizeShowsACheckMissed(count: keys.count,
+                                                               secondsPerRound: secondsPerRound)
+        return ProbeConfirm(keys: keys, dateLabel: "",
+                            title: ProbeSelectionCopy.multiDateTitle(summary),
+                            message: ProbeSelectionCopy.finishMissedShowsMessage(summary))
+    }
+}
+
 // #1219: a committing action (Approve or Re-prep) waiting on the self-booking confirm, so the naming
 // and the action to run stay out of the button wiring and the confirm reads from one place.
 struct SelfBookingGuard: Identifiable {

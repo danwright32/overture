@@ -111,7 +111,7 @@ struct ACostInstrumentEnumeratesItsSubjectsTests {
         // ON THE REDRAW PATH and O(1) or O(a small table beside the store). Each was read rather than
         // assumed: the function is named so the next reader can check the claim instead of trusting it.
         "AgentRoster": "statuses(_:) builds six chips from one AgentInputs value, walking nothing",
-        "AppNotices": "servable(_:canFinishMissedShows:) maps the notice list, which is the handful on screen",
+        "AppNotices": "servable(_:missedByACheckKeys:) maps the notice list, which is the handful on screen",
         "GeoRefusals": "a struct init capturing two town lists, walking no prospect",
         "ScoutStatus": "a struct init over one Date plus a summary string, per masthead",
         "SendDelightTiming": "plan(reduceMotion:) reads one flag and returns four durations",
