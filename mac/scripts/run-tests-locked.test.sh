@@ -15,6 +15,12 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../../scripts/lib/shell-as
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# #4244: a merge verification runs this fixture with OVERTURE_TEST_LOCK_PRIORITY=merge in its
+# environment, and every stubbed run below would inherit it and queue as a merge verification, which
+# turns the routine run in the priority case into a second priority one (L439). Each case that wants the
+# marker sets it on its own command.
+unset OVERTURE_TEST_LOCK_PRIORITY
+
 # shellcheck source=./run-tests-locked.sh
 source "${SCRIPT_DIR}/run-tests-locked.sh"
 set +e
@@ -1875,6 +1881,63 @@ assert_contains "the later run said how many earlier runs it waited for" \
   "waiting for 1 earlier run(s) queued" "$(cat "${DIR_LOCK_FIXTURE_DIR}/second.out")"
 assert_equals "the queue is empty once both have run" "0" "$(queue_tickets)"
 assert_equals "and the lock is free" "no" "$([ -d "${QUEUE_LOCK}" ] && echo yes || echo no)"
+rm -rf "${QUEUE_LOCK}" "${QUEUE_LOCK}.queue"
+
+# #4244: a MERGE VERIFICATION goes ahead of a routine run that arrived before it, and still waits for the
+# holder. The routine run arrives first and polls four times as often, so every advantage but the class
+# is the routine run's: without the class it goes first, which is the case above.
+rm -f "${QUEUE_ORDER}"
+mkdir -p "${QUEUE_LOCK}"; echo "other:$$" > "${QUEUE_LOCK}/owner"   # held by this live shell
+( OVERTURE_DIR_LOCK="${QUEUE_LOCK}" OVERTURE_DIR_LOCK_TIMEOUT=30 OVERTURE_DIR_LOCK_POLL=1 \
+  FLOCK_STUB_ORDER="${QUEUE_ORDER}" FLOCK_STUB_RUN_NAME=routine \
+  run_wrapper_with_stub_xcodebuild "${GREEN_RUN_LOG}" 0 > "${DIR_LOCK_FIXTURE_DIR}/routine.out" 2>&1 ) &
+ROUTINE_RUN=$!
+queue_waited=0
+while [[ "$(queue_tickets)" -lt 1 ]] && [[ "${queue_waited}" -lt 300 ]]; do
+  sleep 0.05; queue_waited=$((queue_waited + 1))
+done
+( OVERTURE_TEST_LOCK_PRIORITY=merge OVERTURE_DIR_LOCK="${QUEUE_LOCK}" OVERTURE_DIR_LOCK_TIMEOUT=30 \
+  OVERTURE_DIR_LOCK_POLL=4 FLOCK_STUB_ORDER="${QUEUE_ORDER}" FLOCK_STUB_RUN_NAME=merge \
+  run_wrapper_with_stub_xcodebuild "${GREEN_RUN_LOG}" 0 > "${DIR_LOCK_FIXTURE_DIR}/merge.out" 2>&1 ) &
+MERGE_RUN=$!
+queue_waited=0
+while [[ "$(queue_tickets)" -lt 2 ]] && [[ "${queue_waited}" -lt 300 ]]; do
+  sleep 0.05; queue_waited=$((queue_waited + 1))
+done
+assert_equals "both runs queued, so this case measured the ordering" "2" "$(queue_tickets)"
+MERGE_TICKETS="$(ls "${QUEUE_LOCK}.queue" 2>/dev/null | grep -c '\.priority\.' || true)"
+assert_equals "the merge verification's ticket carries its class" "1" "${MERGE_TICKETS}"
+# Two polls of the routine run, so it has had its chance to count the later arrival as ahead.
+sleep 2.2
+assert_equals "while the lock is held NEITHER ran, merge verification included" "" \
+  "$(cat "${QUEUE_ORDER}" 2>/dev/null)"
+rm -rf "${QUEUE_LOCK}"
+wait "${ROUTINE_RUN}" "${MERGE_RUN}"
+assert_equals "the merge verification went through the lock first" "merge routine " \
+  "$(tr '\n' ' ' < "${QUEUE_ORDER}" 2>/dev/null)"
+assert_contains "the merge verification said what it is and that the holder still comes first" \
+  "this run verifies a merge, so it queues ahead of routine runs, still behind the run holding" \
+  "$(cat "${DIR_LOCK_FIXTURE_DIR}/merge.out")"
+assert_contains "the routine run said it was waiting for a LATER merge verification, not an earlier run" \
+  "waiting for 1 run(s) queued ahead of it for ${QUEUE_LOCK}, 1 of them a merge verification that arrived later" \
+  "$(cat "${DIR_LOCK_FIXTURE_DIR}/routine.out")"
+assert_equals "the queue is empty once both have run" "0" "$(queue_tickets)"
+assert_equals "and the lock is free" "no" "$([ -d "${QUEUE_LOCK}" ] && echo yes || echo no)"
+rm -rf "${QUEUE_LOCK}" "${QUEUE_LOCK}.queue"
+
+# Only the word `merge` means anything, and anything else is refused before the queue is joined, so a
+# misspelt marker neither jumps the queue nor quietly waits as a routine run while the caller believes it
+# asked for priority.
+: > "${WITNESS}"
+TYPO_RUN="$(OVERTURE_TEST_LOCK_PRIORITY=urgent OVERTURE_DIR_LOCK="${QUEUE_LOCK}" OVERTURE_DIR_LOCK_TIMEOUT=2 \
+  OVERTURE_DIR_LOCK_POLL=1 FLOCK_STUB_WITNESS="${WITNESS}" run_wrapper_with_stub_xcodebuild "${GREEN_RUN_LOG}" 0)"
+assert_contains "an unknown priority marker is refused" "exit=2" "${TYPO_RUN}"
+assert_contains "naming the value and the one value that means anything" \
+  "OVERTURE_TEST_LOCK_PRIORITY is 'urgent', and only 'merge' means anything" "${TYPO_RUN}"
+assert_contains "and says nothing ran" "NOTHING RAN" "${TYPO_RUN}"
+assert_equals "and never reached the test phase" "" "$(cat "${WITNESS}")"
+assert_equals "and joined no queue" "0" "$(queue_tickets)"
+assert_equals "and never created the lock" "no" "$([ -d "${QUEUE_LOCK}" ] && echo yes || echo no)"
 rm -rf "${QUEUE_LOCK}" "${QUEUE_LOCK}.queue"
 
 # Stopped the instant after TAKING the lock, before anything else, a run must still free it. The lock

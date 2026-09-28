@@ -106,6 +106,28 @@ reset_stubs() {
   }
 }
 
+# --- #4244: the suite a merge verification runs is marked as one, explicitly ---
+# The REAL run_full_suite, before any case below replaces it, against a worktree whose two scripts only
+# record the marker they were handed. The runner reads it to queue ahead of routine runs on the shared
+# test lock; nothing infers it from process names. Both merge paths reach the suite through this one
+# function (verify-and-merge-batch.sh sources this file), so this covers both.
+MARKER_DIR="$(mktemp -d "${TMPDIR:-/tmp}/verify-marker.XXXXXX")"
+mkdir -p "${MARKER_DIR}/scripts"
+printf '#!/usr/bin/env bash\necho "suite:${OVERTURE_TEST_LOCK_PRIORITY:-none}" >> "%s/seen"\n' "${MARKER_DIR}" \
+  > "${MARKER_DIR}/scripts/test-all.sh"
+printf '#!/usr/bin/env bash\necho "freshness:${OVERTURE_TEST_LOCK_PRIORITY:-none}" >> "%s/seen"\n' "${MARKER_DIR}" \
+  > "${MARKER_DIR}/scripts/check-pbxproj-fresh.sh"
+chmod +x "${MARKER_DIR}/scripts/test-all.sh" "${MARKER_DIR}/scripts/check-pbxproj-fresh.sh"
+( unset OVERTURE_TEST_LOCK_PRIORITY; run_full_suite "${MARKER_DIR}"
+  echo "after:${OVERTURE_TEST_LOCK_PRIORITY:-none}" >> "${MARKER_DIR}/seen" )
+assert_contains "the merge verification's suite is handed the merge marker" \
+  "$(cat "${MARKER_DIR}/seen" 2>/dev/null)" "suite:merge"
+assert_contains "and the freshness check, which takes no lock, is not" \
+  "$(cat "${MARKER_DIR}/seen" 2>/dev/null)" "freshness:none"
+assert_contains "and the marker is scoped to that one command, never left in the verify shell" \
+  "$(cat "${MARKER_DIR}/seen" 2>/dev/null)" "after:none"
+rm -rf "${MARKER_DIR}"
+
 # --- happy path: a clean suite merges the resolved PR and releases the verify slot ---
 reset_stubs
 resolve_pr() { PR_NUMBER="42"; PR_BRANCH="feature-x"; PR_MERGEABLE="MERGEABLE"; PR_BODY="${COMPLETE_PR_BODY}"; }
