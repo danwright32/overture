@@ -380,10 +380,16 @@ commit_merge_regeneration() {
 # file to a fresh regen, not to itself). It runs again inside test-all.sh, so this is the belt for the
 # merge path's suspenders. Named and extracted so a test can stub it to simulate a clean or failing run
 # without spending minutes on a real xcodebuild invocation.
+#
+# #4244: the suite is handed OVERTURE_TEST_LOCK_PRIORITY=merge, so every run it starts on the shared test
+# lock queues ahead of routine runs (still behind whichever run holds the lock). Scoped to that one
+# command rather than exported, so nothing else this shell starts inherits a claim it did not make. On
+# 2026-09-24 to 25 no merge landed for about three hours while a verification sat behind four to seven
+# routine runs. Both merge paths reach the suite through here: verify-and-merge-batch.sh sources this.
 run_full_suite() {
   local dir="$1"
   "${dir}/scripts/check-pbxproj-fresh.sh" "${dir}"
-  "${dir}/scripts/test-all.sh"
+  OVERTURE_TEST_LOCK_PRIORITY=merge "${dir}/scripts/test-all.sh"
 }
 
 # Releases the verify slot's lock, and nothing else: the worktree, its registration, and its Xcode

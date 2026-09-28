@@ -634,6 +634,16 @@ claim_dir_lock_if_dead() {
   return 1
 }
 
+# Who a waiter that gave up was queued behind, in words true of both kinds of arrival (#4244): a merge
+# verification that arrived later is not an "earlier run".
+queued_behind_phrase() {
+  if [[ "${LOCK_QUEUE_AHEAD_LATER:-0}" -eq 0 ]]; then
+    echo "queued behind ${LOCK_QUEUE_AHEAD} earlier run(s)"
+  else
+    echo "queued behind ${LOCK_QUEUE_AHEAD} run(s), ${LOCK_QUEUE_AHEAD_LATER} of them a merge verification that arrived later"
+  fi
+}
+
 # #4295: why a claim that a caller holds the directory lock for this run cannot be believed, or nothing at
 # all when it can. dir_lock_claim_problem <claimed holder pid> <this run's pid>
 #
@@ -675,7 +685,7 @@ dir_lock_claim_problem() {
   return 0
 }
 
-# Whether this run may try for the directory lock now: no live earlier waiter is queued. Sets
+# Whether this run may try for the directory lock now: no live waiter is queued ahead of it. Sets
 # LOCK_QUEUE_AHEAD, which take_dir_lock reads to tell "queued behind somebody" from "the lock is held".
 my_turn_for_dir_lock() {
   lock_queue_ahead
@@ -707,8 +717,14 @@ my_turn_for_dir_lock() {
 #
 # #4295: unless a CALLER already holds it for this run, which `scripts/mutate.sh --batch` does so that
 # several scoped runs enter the queue once between them instead of once each. See dir_lock_claim_problem.
+# #4244: A MERGE VERIFICATION QUEUES FIRST. OVERTURE_TEST_LOCK_PRIORITY=merge, which only
+# verify-and-merge-branch.sh's run_full_suite sets (and so verify-and-merge-batch.sh, which sources it),
+# joins as a priority waiter: ahead of routine runs, behind the holder and behind any routine run that
+# has already waited the queue's bound. Any other non empty value is refused before the queue is joined,
+# because a misspelt marker would otherwise wait as a routine run while its caller believed otherwise.
+# The held-for-this-run claim is judged FIRST: a run inside a batch never queues, whatever its class.
 take_dir_lock() {
-  local waited_from waited start_table="" ahead_said="" claim_problem
+  local waited_from waited start_table="" ahead_said="" claim_problem queue_class=""
   if [[ -n "${OVERTURE_TEST_LOCK_HELD_BY:-}" ]]; then
     claim_problem="$(dir_lock_claim_problem "${OVERTURE_TEST_LOCK_HELD_BY}" "$$")"
     if [[ -z "${claim_problem}" ]]; then
@@ -721,22 +737,38 @@ take_dir_lock() {
     echo "run-tests-locked.sh: NOTHING RAN. This run never got the shared test lock, so no test executed and nothing was verified. It is not a pass, and it says nothing about your change." >&2
     exit 3
   fi
+  case "${OVERTURE_TEST_LOCK_PRIORITY:-}" in
+    "") ;;
+    merge)
+      queue_class="priority"
+      echo "run-tests-locked.sh: this run verifies a merge, so it queues ahead of routine runs, still behind the run holding ${DIR_LOCK}." >&2
+      ;;
+    *)
+      echo "run-tests-locked.sh: OVERTURE_TEST_LOCK_PRIORITY is '${OVERTURE_TEST_LOCK_PRIORITY}', and only 'merge' means anything. Refusing rather than guessing which queue this run belongs in." >&2
+      echo "run-tests-locked.sh: NOTHING RAN. This run never joined the queue for the shared test lock, so no test executed and nothing was verified. It is not a pass, and it says nothing about your change." >&2
+      exit 2
+      ;;
+  esac
   waited_from="$(date +%s)"
-  if ! lock_queue_join "${DIR_LOCK}" "$$"; then
+  if ! lock_queue_join "${DIR_LOCK}" "$$" "${queue_class}"; then
     echo "run-tests-locked.sh: could not join the queue at ${DIR_LOCK}.queue, so waiting unordered." >&2
   fi
   while ! { my_turn_for_dir_lock && mkdir "${DIR_LOCK}" 2>/dev/null; }; do
     if [[ "${LOCK_QUEUE_AHEAD}" -gt 0 ]]; then
       if [[ "$(( $(date +%s) - waited_from ))" -gt "${DIR_LOCK_TIMEOUT}" ]]; then
-        echo "run-tests-locked.sh: gave up waiting ${DIR_LOCK_TIMEOUT}s for ${DIR_LOCK} (Downbeat's lock), queued behind ${LOCK_QUEUE_AHEAD} earlier run(s)." >&2
+        echo "run-tests-locked.sh: gave up waiting ${DIR_LOCK_TIMEOUT}s for ${DIR_LOCK} (Downbeat's lock), $(queued_behind_phrase)." >&2
         echo "  The queue is ${DIR_LOCK}.queue. A waiter there is judged alive by its pid and start time." >&2
         echo "run-tests-locked.sh: NOTHING RAN. This run never got the shared test lock, so no test executed and nothing was verified. It is not a pass, and it says nothing about your change." >&2
         lock_queue_leave
         exit 3
       fi
-      if [[ "${ahead_said}" != "${LOCK_QUEUE_AHEAD}" ]]; then
-        echo "run-tests-locked.sh: waiting for ${LOCK_QUEUE_AHEAD} earlier run(s) queued for ${DIR_LOCK}..." >&2
-        ahead_said="${LOCK_QUEUE_AHEAD}"
+      if [[ "${ahead_said}" != "${LOCK_QUEUE_AHEAD}.${LOCK_QUEUE_AHEAD_LATER}" ]]; then
+        if [[ "${LOCK_QUEUE_AHEAD_LATER}" -eq 0 ]]; then
+          echo "run-tests-locked.sh: waiting for ${LOCK_QUEUE_AHEAD} earlier run(s) queued for ${DIR_LOCK}..." >&2
+        else
+          echo "run-tests-locked.sh: waiting for ${LOCK_QUEUE_AHEAD} run(s) queued ahead of it for ${DIR_LOCK}, ${LOCK_QUEUE_AHEAD_LATER} of them a merge verification that arrived later and goes before routine runs..." >&2
+        fi
+        ahead_said="${LOCK_QUEUE_AHEAD}.${LOCK_QUEUE_AHEAD_LATER}"
       fi
       sleep "${DIR_LOCK_POLL}"
       continue
