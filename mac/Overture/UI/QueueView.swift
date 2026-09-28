@@ -326,6 +326,13 @@ struct QueueView: View {
         // one finding and carrying the other is a shared name standing in for shared behaviour (L263).
         let mergeSurvivorsDropped: [AppNotice]
         let pendingBookings: Int
+        // #4106 view workstream: the masthead's "N in the queue / M high-fit" and the shows a check
+        // missed, both folds over the whole queue that the masthead used to take in its body on every
+        // evaluation. Taken once by the pass (see `QueueRenderPass.make`) and read here. The missed set
+        // is published whole rather than as a Bool so the equality with the old derivation is a set
+        // comparison a test can make, not a yes that agrees by accident.
+        let summary: (total: Int, high: Int)
+        let missedByACheckKeys: [String]
         // #1774: everything below used to be derived INSIDE the scroll content, so a scroll frame paid for
         // it. The fan-out line is the one that hid: it sweeps every prospect and was written as an
         // argument to the masthead, and an argument evaluates at its call site, so it ran on every pass
@@ -708,9 +715,10 @@ struct QueueView: View {
     // This is #1121's and #1774's defect exactly, one call site further out: a computed property is
     // re-run by every reader, and a call site reads as a free field access with nothing at the point of
     // use saying what it costs (L383).
-    private func missedByACheckKeys(in items: [some QueueScopeFacts]) -> [String] {
-        QueueModel.keysMissedByACheck(items, today: today, geo: geo)
-    }
+    //
+    // #4106: the masthead no longer calls it at all. The pass takes this answer once and publishes it on
+    // `RenderData.missedByACheckKeys`, because the masthead's call, even over rows it was handed, was a
+    // fold of the whole queue on every body evaluation. The only caller left is the action below.
 
     // #1805: finish exactly those, through the SAME confirm sheet as every other check, so a run started
     // from a report costs what the sheet says it costs. No re-selection by hand, which is the whole point:
@@ -718,7 +726,7 @@ struct QueueView: View {
     private func finishShowsACheckMissed() {
         // An ACTION, so it derives its own: this runs on a press rather than during a render, and there
         // is no pass in hand to take the rows from.
-        let keys = missedByACheckKeys(in: items)
+        let keys = QueueModel.keysMissedByACheck(items, today: today, geo: geo)
         guard !keys.isEmpty else { return }
         // #1616: the same learned pace the selection bar quotes, so two ways into one run cannot name two
         // different waits.
@@ -851,7 +859,9 @@ struct QueueView: View {
             // be assembled in QueueView.body on every scroll frame exactly as before.
             QueueScrollHolder(jumpTarget: jumpTarget) {
                 VStack(alignment: .leading, spacing: OVSpacing.xl) {
-                    masthead(visible: data.visibleRows, items: data.rows, fanOutLine: data.fanOutLine,
+                    masthead(summary: data.summary,
+                             canFinishMissedShows: !data.missedByACheckKeys.isEmpty,
+                             fanOutLine: data.fanOutLine,
                              notices: notices + data.feedBreaks + data.mergeSurvivorsDropped,
                              pendingBookings: data.pendingBookings,
                              agentInputs: data.agentInputs)
@@ -1281,7 +1291,9 @@ struct QueueView: View {
     // #2204: `notices` is what the app has to say for itself, threaded in for the same reason
     // `fanOutLine` is: the caller decides what is shown rather than this view inheriting silence. It has
     // no default, so a new call site has to answer the question.
-    func masthead(visible: [some QueueScopeFacts], items: [some QueueScopeFacts], fanOutLine: String?,
+    // #4106 view workstream: handed the pass's two answers rather than the rows to fold them from. Both
+    // folds ran here, in the body, over every queue row on every evaluation (L471).
+    func masthead(summary: (total: Int, high: Int), canFinishMissedShows: Bool, fanOutLine: String?,
                   notices: [AppNotice],
                   // #3653: the pass's own count, not a second derivation of it. `QueueRenderPass` already
                   // walks every row for this once (`QueueRenderPass.swift:252`) and puts it on
@@ -1291,8 +1303,7 @@ struct QueueView: View {
                   // is the whole reason it survived (#3577's shape, one file over).
                   pendingBookings: Int,
                   agentInputs: AgentInputs) -> some View {
-        let summary = QueueModel.summary(visible)
-        return VStack(alignment: .leading, spacing: OVSpacing.sm) {
+        VStack(alignment: .leading, spacing: OVSpacing.sm) {
             HStack(spacing: OVSpacing.xs) {
                 Text("Overture").font(OVType.wordmark).foregroundStyle(OVColor.forestText)
                 #if DEBUG
@@ -1368,9 +1379,10 @@ struct QueueView: View {
             // CAN serve is served here, where the rows are. Everything else goes up to RootView.
             AppNoticeLines(
                 notices: AppNotices.servable(notices,
-                                             // #2598: the rows this masthead was ALREADY handed, not a
-                                             // second derivation of the whole store for a count.
-                                             canFinishMissedShows: !missedByACheckKeys(in: items).isEmpty),
+                                             // #2598: never a second derivation of the whole store for
+                                             // this. #4106: and never a fold of the rows either; the
+                                             // pass's own answer, from `RenderData.missedByACheckKeys`.
+                                             canFinishMissedShows: canFinishMissedShows),
                 perform: { action in
                     if action == .finishShowsACheckMissed { finishShowsACheckMissed() }
                     // #4027: performed here for the same reason the shortfall's offer is: this view owns

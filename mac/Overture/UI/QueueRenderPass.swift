@@ -124,7 +124,8 @@ enum QueueRenderPass {
                               oracleRecipientReaches: 0, nightTimeMapBuilds: 0,
                               stagePlacements: 0, producerIndexes: 0,
                               producerKeyFolds: 0, clientNameMatches: 0,
-                              contradictionSweeps: 0, reachedOutSweeps: 0)
+                              contradictionSweeps: 0, reachedOutSweeps: 0,
+                              wholeQueueFoldRows: 0, candidacyGeographyVerdicts: 0)
 
         // #3654 step 4c: the in-app divergence check is a SECOND WRITER of this tally, and that is
         // settled here rather than discovered in a red run.
@@ -217,6 +218,22 @@ enum QueueRenderPass {
         var contradictionSweeps: Int { lock.withLock { counts.contradictionSweeps } }
         var reachedOutSweeps: Int { lock.withLock { counts.reachedOutSweeps } }
 
+        // #4106 view workstream: how many ROWS the masthead's two whole-queue folds examined, the
+        // high-fit summary and the missed-by-a-check offer. The view attribution probe (#4306) put the
+        // second at 41.6% of the main thread's busy time on a one row dismissal, because the masthead
+        // asked it over every row of the queue on EVERY body evaluation, and a body runs on events that
+        // change no data (L471). The pass now takes both once; a body that takes either again moves this
+        // number, which is what `TheMastheadFoldsNothingPerBodyTests` pins at zero over a served pass.
+        //
+        // ROWS rather than calls, because a call count reads 1 whether the fold looks at ten rows or the
+        // whole store (L63).
+        var wholeQueueFoldRows: Int { lock.withLock { counts.wholeQueueFoldRows } }
+        // And how many GEOGRAPHY verdicts the candidacy rule asked for (`probeIsWorthOffering`). The
+        // verdict is the one part of that rule that can parse a place string, so the missed-by-a-check
+        // fold asks the cheap date test first and pays for geography only on a row a check really missed.
+        // Counted so the ORDER is a fact a test can hold, since the answer is the same either way.
+        var candidacyGeographyVerdicts: Int { lock.withLock { counts.candidacyGeographyVerdicts } }
+
         // What the divergence check itself spent, held apart from every number above so the pass's own
         // pins mean what their names say.
         var oracleCards: Int { lock.withLock { counts.oracleCards } }
@@ -254,6 +271,14 @@ enum QueueRenderPass {
         static func recordReachedOutSweep() {
             guard let t = current else { return }
             t.lock.withLock { t.counts.reachedOutSweeps += 1 }
+        }
+        static func recordWholeQueueFoldRows(_ n: Int) {
+            guard n > 0, let t = current else { return }
+            t.lock.withLock { t.counts.wholeQueueFoldRows += n }
+        }
+        static func recordCandidacyGeographyVerdict() {
+            guard let t = current else { return }
+            t.lock.withLock { t.counts.candidacyGeographyVerdicts += 1 }
         }
         static func recordNightTimeMapBuild() {
             guard let t = current else { return }
@@ -439,6 +464,17 @@ enum QueueRenderPass {
             .map(\.naturalKey)
         let mergeSurvivorsDropped = AppNotices.mergeSurvivorsTheFeedDropped(
             unseenSurvivors, shownInQueue: { inAStage.contains($0) })
+        // #4106 view workstream: the masthead's two whole-queue answers, taken HERE and nowhere else
+        // during a render. The masthead used to fold over every queue row for both on every body
+        // evaluation, and a body runs on events that change no data (L471): the view attribution probe
+        // (#4306) put the missed-by-a-check fold alone at 41.6% of the main thread's busy time on a one
+        // row dismissal. Same inputs the masthead handed it (every row for the offer, the stage's rows
+        // for the summary), at this pass's instant, day and resolved geography, which is a memo of the
+        // same verdict (#1962), so the answer is the one the masthead computed and
+        // `MastheadAnswersFromThePassTests` holds it to that.
+        let missedByACheckKeys = QueueModel.keysMissedByACheck(rows, now: context.now,
+                                                               today: context.today, geo: geo)
+        let summary = QueueModel.summary(visibleRows)
         return QueueView.RenderData(
             cards: scope.cards,
             // #3507: the scope itself, so the render path reads the list this pass already derived rather
@@ -476,6 +512,8 @@ enum QueueRenderPass {
             feedBreaks: feedBreaks,
             mergeSurvivorsDropped: mergeSurvivorsDropped,
             pendingBookings: QueueModel.pendingBookingCount(rows),
+            summary: summary,
+            missedByACheckKeys: missedByACheckKeys,
             fanOutLine: fanOutWarning(inQueue.all),
             rows: rows, visibleRows: visibleRows,
             // #3654 step 4c: what the in-app check found, REPORTED and never written here. This pass may

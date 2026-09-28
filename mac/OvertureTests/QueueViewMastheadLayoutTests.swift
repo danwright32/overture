@@ -43,7 +43,7 @@ struct QueueViewMastheadLayoutTests {
         let view = QueueView(deepLinkedKey: .constant(nil), deepLinkedKeys: .constant(nil), allProspects: [])
         let items = [longshotItem(id: "a"), longshotItem(id: "b")]
 
-        #expect(renderedHeight(view.masthead(visible: items, items: items, fanOutLine: nil, notices: [], pendingBookings: QueueModel.pendingBookingCount(items),
+        #expect(renderedHeight(view.masthead(summary: QueueModel.summary(items), canFinishMissedShows: false, fanOutLine: nil, notices: [], pendingBookings: QueueModel.pendingBookingCount(items),
                                      agentInputs: calmInputs)) > 0)
     }
 
@@ -55,10 +55,10 @@ struct QueueViewMastheadLayoutTests {
         let view = QueueView(deepLinkedKey: .constant(nil), deepLinkedKeys: .constant(nil), allProspects: [])
         let items = [longshotItem(id: "a"), longshotItem(id: "b")]
 
-        let quiet = renderedHeight(view.masthead(visible: items, items: items, fanOutLine: nil, notices: [], pendingBookings: QueueModel.pendingBookingCount(items),
+        let quiet = renderedHeight(view.masthead(summary: QueueModel.summary(items), canFinishMissedShows: false, fanOutLine: nil, notices: [], pendingBookings: QueueModel.pendingBookingCount(items),
                                                  agentInputs: calmInputs))
         let warned = renderedHeight(view.masthead(
-            visible: items, items: items,
+            summary: QueueModel.summary(items), canFinishMissedShows: false,
             fanOutLine: "Carnegie Hall Citywide: Ivalas Quartet is flagged as a possible match on 19 "
                 + "shows, which usually means the match is wrong.",
             notices: [], pendingBookings: QueueModel.pendingBookingCount(items), agentInputs: calmInputs))
@@ -75,9 +75,9 @@ struct QueueViewMastheadLayoutTests {
         let withoutHighFit = [longshotItem(id: "a"), longshotItem(id: "b")]
         let withHighFit = [highFitItem(id: "a"), longshotItem(id: "b")]
 
-        let baseline = renderedHeight(view.masthead(visible: withoutHighFit, items: withoutHighFit,
+        let baseline = renderedHeight(view.masthead(summary: QueueModel.summary(withoutHighFit), canFinishMissedShows: false,
                                                     fanOutLine: nil, notices: [], pendingBookings: QueueModel.pendingBookingCount(withoutHighFit), agentInputs: calmInputs))
-        let withHigh = renderedHeight(view.masthead(visible: withHighFit, items: withHighFit,
+        let withHigh = renderedHeight(view.masthead(summary: QueueModel.summary(withHighFit), canFinishMissedShows: false,
                                                     fanOutLine: nil, notices: [], pendingBookings: QueueModel.pendingBookingCount(withHighFit), agentInputs: calmInputs))
 
         #expect(baseline > 0)
