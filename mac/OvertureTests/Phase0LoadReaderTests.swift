@@ -85,17 +85,15 @@ struct Phase0LoadReaderTests {
         }
     }
 
-    /// Every Swift file in the three places test code lives, repo relative.
+    /// Every Swift file in the three places test code lives, repo relative. Walked through
+    /// `AppSourceWalk`, which refuses when the three roots together come back under its floor, so a
+    /// broken path cannot read as a tree with no stray reader in it (#2311).
     static func testSources() -> [(path: String, source: String)] {
-        let root = RepoRoot.url
-        return ["mac/OvertureTests", "mac/OvertureHostedTests", "mac/TestSupport"].flatMap { dir -> [(path: String, source: String)] in
-            let base = root.appendingPathComponent(dir)
-            let files = FileManager.default.enumerator(at: base, includingPropertiesForKeys: nil)?
-                .compactMap { $0 as? URL }.filter { $0.pathExtension == "swift" } ?? []
-            return files.map { url in
-                (dir + "/" + String(url.path.dropFirst(base.path.count + 1)),
-                 (try? String(contentsOf: url, encoding: .utf8)) ?? "")
-            }
+        let root = RepoRoot.url.standardizedFileURL
+        let roots = ["mac/OvertureTests", "mac/OvertureHostedTests", "mac/TestSupport"]
+            .map { root.appendingPathComponent($0) }
+        return AppSourceWalk.files(underAll: roots, floor: AppSourceWalk.appFloor).map { file in
+            (String(file.url.standardizedFileURL.path.dropFirst(root.path.count + 1)), file.text)
         }
     }
 
