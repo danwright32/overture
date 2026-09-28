@@ -255,7 +255,8 @@ rm -rf "${LOCK}.queue"
 # own ticket, since a priority ticket counts from behind it.
 waiter; OD="${WAITER_PID}"
 sleep 120 & PDOOMED=$!
-TOD="$(join_as "${OD}")"; TPD="$(join_priority_as "${PDOOMED}")"
+TOD="$(join_as "${OD}")"
+TPD="$(join_priority_as "${PDOOMED}")"
 kill "${PDOOMED}"; wait "${PDOOMED}" 2>/dev/null
 assert_equals "a dead merge verification does not hold up a routine run" "0" "$(ahead_of "${TOD}")"
 assert_equals "and its ticket is cleared" "gone" "$(gone_or_there "${LOCK}.queue/${TPD}")"
