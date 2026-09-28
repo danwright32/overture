@@ -38,6 +38,27 @@ enum Phase0cLinks {
 
     nonisolated static func say(_ line: String) { print("phase0c-links " + line) }
 
+    /// The one minute load average, waited on until it is under `below` or ten minutes pass (a bounded wait,
+    /// L110). `under` false means the replays that follow ran on a busy Mac and cannot score a PASS.
+    nonisolated static func waitForLoad(below: Double, deadline seconds: Double = 600)
+        -> (under: Bool, text: String) {
+        func one() -> Double {
+            var l = [Double](repeating: 0, count: 3)
+            getloadavg(&l, 3)
+            return l[0]
+        }
+        let start = Phase0.now()
+        var waited = 0.0
+        while one() >= below && waited < seconds {
+            Thread.sleep(forTimeInterval: 10)
+            waited = Phase0.ms(since: start) / 1000
+        }
+        let load = one()
+        let verdict = load < below ? "yes" : "NO"
+        return (load < below, String(format: "one minute load %.2f (under %.0f: ", load, below) + verdict
+                    + String(format: ", waited %.0f s)", waited))
+    }
+
     /// "yyyy-MM-dd" plus `days`, in plain calendar arithmetic (UTC, so no DST can move a day).
     nonisolated static func addDays(_ day: String, _ days: Int) -> String {
         let parts = day.split(separator: "-").compactMap { Int($0) }
@@ -248,6 +269,7 @@ enum Phase0cOp: String, CaseIterable {
     case venueless = "row made venueless"
     case thirdMemberJoin = "third member joining, then leaving"
     case accrualAll = "scout accrual, every flagged row up one"
+    case accrualDown = "scout accrual reversed, every row above goneThreshold down one (stays flagged)"
     case twinAppear = "twin appearing"
     case rollover = "clock rollover"
 
@@ -255,7 +277,8 @@ enum Phase0cOp: String, CaseIterable {
                                   .bridgeNight, .dropNight, .poisonToken, .feedMiss, .dismissFront,
                                   .deleteFront, .merge, .insertNoDate, .rekey]
     static let t2t3: [Phase0cOp] = [.flagAcross, .roomRespell, .dateMove, .titleChange, .deleteTwin, .venueless,
-                                    .thirdMemberJoin, .accrualAll, .twinAppear, .rollover, .rekey, .merge]
+                                    .thirdMemberJoin, .accrualAll, .accrualDown, .twinAppear, .rollover, .rekey,
+                                    .merge]
 
     /// Operations whose plan wording includes their own reversal ("then removed", "and back", "leaving").
     var alwaysUndone: Bool { [.bridgeNight, .poisonToken, .thirdMemberJoin].contains(self) }
@@ -405,7 +428,16 @@ final class Phase0cWorld {
             let key = "rk-\(next())"
             modify(r, &edit) { $0.naturalKey = key }
         case .flagAcross:
-            guard let r = pick(rows) else { return nil }
+            // Half the time aimed at a row whose flag the contradiction rule actually reads: a contradicted row
+            // or the live twin of a flagged one. A flag crossing the threshold must re-judge its room, and a
+            // random row rarely has anything in that room to re-judge (#4106 0c.2 re-probe).
+            let aimed: Prospect? = roll(2) == 0 ? {
+                let hot = ContradictedCancellation.contradictedKeys(among: rows)
+                let twins = Set(rows.filter(\.disappearedFromFeed)
+                    .compactMap { ContradictedCancellation.liveTwin(of: $0, among: rows)?.persistentModelID })
+                return pick(rows, { hot.contains($0.naturalKey) || twins.contains($0.persistentModelID) })
+            }() : nil
+            guard let r = aimed ?? pick(rows) else { return nil }
             let target = r.missedScoutCount >= FeedReconcile.goneThreshold ? (roll(2) == 0 ? 1 : 0) : 2
             modify(r, &edit) { $0.missedScoutCount = target }
         case .roomRespell:
@@ -469,6 +501,12 @@ final class Phase0cWorld {
             let flagged = rows.filter(\.disappearedFromFeed)
             guard !flagged.isEmpty else { return nil }
             for f in flagged { modify(f, &edit) { $0.missedScoutCount += 1 } }
+        case .accrualDown:
+            // Only rows that stay flagged move: a count inside the flagged range changing, which is exactly
+            // the change T2's skip (#4106 0c.2 re-probe) re-tests nothing for.
+            let above = rows.filter { $0.missedScoutCount > FeedReconcile.goneThreshold }
+            guard !above.isEmpty else { return nil }
+            for f in above { modify(f, &edit) { $0.missedScoutCount -= 1 } }
         case .twinAppear:
             guard let f = pick(rows, { $0.disappearedFromFeed && $0.performanceDate != nil }) else { return nil }
             insert(Phase0cSnapshot(naturalKey: "ins-\(next())", groupName: f.groupName, venue: f.venue,
@@ -531,6 +569,7 @@ struct Phase0cHarness {
         var failures: [String] = []
         var permutationChecks = 0
         var bruteChecks = 0
+        var accrualPasses = 0
     }
 
     static func t1Facts(_ p: Prospect) -> T1.Facts {
@@ -644,6 +683,23 @@ struct Phase0cHarness {
                 feed(undone)
                 check(step, op.rawValue + " (undo)")
             }
+            // #4106 0c.2 re-probe: an accrual after EVERY operation (up one, or down one where the row stays
+            // flagged), checked and undone, so T2's skip for a count change inside the flagged range is
+            // judged in every state the op mix reaches rather than only where the mix happens to draw it.
+            if terms.contains(.t2) {
+                let accrual: Phase0cOp = world.roll(2) == 0 ? .accrualAll : .accrualDown
+                if let pass = world.perform(accrual, rows: rows, fronts: Set(t1.fronts.keys)) {
+                    outcome.accrualPasses += 1
+                    let changed = try world.commit(pass)
+                    rows = try world.rows()
+                    feed(changed)
+                    check(step, op.rawValue + " then " + accrual.rawValue)
+                    let undone = try world.undo(pass)
+                    rows = try world.rows()
+                    feed(undone)
+                    check(step, op.rawValue + " then " + accrual.rawValue + " (undo)")
+                }
+            }
             if sampled.contains(step) { permutationCheck(step) }
         }
         bruteNow = true
@@ -676,7 +732,7 @@ struct Phase0cHarness {
         Phase0cLinks.say("""
             \(name) property harness [\(result.settings)] \(String(format: "%.1f", result.ms / 1000)) s wall: \
             \(o.checks) oracle comparisons (\(o.bruteChecks) also against the brute force), \(o.permutationChecks) permutation checks, \(o.skipped) ops skipped \
-            (nothing to act on), mismatches \(o.failures.count)
+            (nothing to act on), \(o.accrualPasses) accrual passes after an op, mismatches \(o.failures.count)
               ops applied: \(applied)
             """)
         if !o.failures.isEmpty {
@@ -742,6 +798,10 @@ struct QueueEnginePhase0cLinksProbeTests {
             #expect(!t1.hidden.isEmpty, "fixture \(size): nothing collapses, so the collapse is never exercised")
             #expect(poisoned > 0, "fixture \(size): no token is poisoned, so the discard is never exercised")
             #expect(!t2.contradicted.isEmpty, "fixture \(size): nothing is contradicted")
+            // The accrual passes move counts inside the flagged range, and T2 skips those; the skip is only
+            // exercised where a CONTRADICTED row sits above the threshold, so it can move down and stay flagged.
+            #expect(t2.contradicted.contains { (t2.facts[$0]?.missed ?? 0) > FeedReconcile.goneThreshold },
+                    "fixture \(size): no contradicted row sits above goneThreshold, so the accrual skip is never judged")
             #expect(t2.rooms.contains(""), "fixture \(size): no venueless room")
             #expect(!events.isEmpty, "fixture \(size): no feed break event")
         }
@@ -940,20 +1000,26 @@ struct QueueEnginePhase0cLinksProbeTests {
         let property = try Phase0cHarness.runAll(terms: [.t2, .t3], ops: Phase0cOp.t2t3)
         Phase0cHarness.report("0c.2 T2+T3", property)
         var failures = property.outcome.failures
-        var worst = 0.0
+        var single = 0.0, replayed = 0.0, settled = true
         // One pinned instant for the whole probe (L130): today's Eastern day at the moment it started.
         let asOf = EasternDate.today(Date())
         for (label, url) in try corpora("phase0c-2") {
-            worst = max(worst, try contradictionCost(label: label, url: url, asOf: asOf, failures: &failures).max)
+            let cost = try contradictionCost(label: label, url: url, asOf: asOf, failures: &failures)
+            single = max(single, cost.all.max)
+            replayed = max(replayed, cost.replayed)
+            settled = settled && cost.settled
         }
-        let verdict = failures.isEmpty && worst <= 5 ? "PASS" : "FAIL"
-        Phase0cLinks.say("0c.2 VERDICT \(verdict): mismatches \(failures.count), max per change over both sizes \(String(format: "%.3f", worst)) ms (stop rule: mismatch, or max over 5 ms)")
+        // Scored under Gate 0c's replay rule (#4106 comment 5860086027): the max is the median of five
+        // replays of each kind's slowest key with load under 8. A single sample is printed and decides
+        // nothing; a replay taken with load at or over 8 cannot score a PASS, only a FAIL.
+        let verdict = !failures.isEmpty || replayed > 5 ? "FAIL" : (settled ? "PASS" : "UNMEASURED")
+        Phase0cLinks.say("0c.2 VERDICT \(verdict): mismatches \(failures.count), replayed max over both sizes \(String(format: "%.3f", replayed)) ms, single sample max \(String(format: "%.3f", single)) ms (stop rule: mismatch, or max over 5 ms)")
         if !failures.isEmpty { Phase0cLinks.say("0c.2 FAILURES\n  " + failures.prefix(30).joined(separator: "\n  ")) }
         #expect(failures.isEmpty, "0c.2: a prototype disagreed with its oracle or the brute force")
     }
 
     private func contradictionCost(label: String, url: URL, asOf startAsOf: String,
-                                   failures: inout [String]) throws -> Phase0cStats {
+                                   failures: inout [String]) throws -> (all: Phase0cStats, replayed: Double, settled: Bool) {
         typealias T2 = Phase0cContradictionPatch<Phase0cKey>
         typealias T3 = Phase0cFeedBreakPatch<Phase0cKey>
         let ctx = ModelContext(try Phase0.openContainer(at: url))
@@ -1007,7 +1073,7 @@ struct QueueEnginePhase0cLinksProbeTests {
         func splitText() -> String {
             String(format: "(T2 %.3f ms over %d pair tests, T3 %.3f ms)", lastSplit.t2, lastSplit.tests, lastSplit.t3)
         }
-        func step(_ keys: [Phase0cKey], into stats: inout Phase0cStats) {
+        func run(_ keys: [Phase0cKey]) -> Double {
             let c2 = keys.map { ($0, byKey[$0].map(T2.Facts.init)) }
             let c3 = keys.map { ($0, byKey[$0].map(T3.Facts.init)) }
             var tests = 0
@@ -1020,25 +1086,56 @@ struct QueueEnginePhase0cLinksProbeTests {
             let t3ms = Phase0.time { t3.apply(c3, coveredFlips: flips) }
             lastSplit = (t2ms, t3ms, tests)
             testsMax = max(testsMax, tests)
-            stats.add(t2ms + t3ms)
+            return t2ms + t3ms
+        }
+
+        // Gate 0c's scoring rule (Dan, 2026-09-27, #4106 comment 5860086027): a single sample decides
+        // nothing, because on a shared Mac it measures other agents' builds. Each operation kind keeps its
+        // SLOWEST key with a closure that replays exactly that change from the unchanged state and puts the
+        // state back, and the kind's max is the median of five replays taken with load under 8.
+        var slowest: [String: (ms: Double, replay: () -> Double)] = [:]
+        var kindOrder: [String] = []
+        func record(_ kind: String, _ ms: Double, _ replay: @escaping () -> Double) {
+            if slowest[kind] == nil { kindOrder.append(kind) }
+            if ms > (slowest[kind]?.ms ?? -1) { slowest[kind] = (ms, replay) }
+        }
+        func touch(_ kind: String, _ keys: [Phase0cKey], into stats: inout Phase0cStats) -> Double {
+            let ms = run(keys)
+            stats.add(ms)
+            record(kind, ms) { run(keys) }
+            return ms
+        }
+        // A change and its reversal, each timed and each replayable on its own.
+        func pair(_ kind: String, _ backKind: String, _ keys: [Phase0cKey],
+                  into forward: inout Phase0cStats, _ back: inout Phase0cStats,
+                  change: @escaping () -> Void, revert: @escaping () -> Void,
+                  between: () -> Void = {}) -> (Double, Double) {
+            change()
+            let there = run(keys)
+            forward.add(there)
+            record(kind, there) { change(); let ms = run(keys); revert(); _ = run(keys); return ms }
+            between()
+            revert()
+            let home = run(keys)
+            back.add(home)
+            record(backKind, home) { change(); _ = run(keys); revert(); return run(keys) }
+            return (there, home)
         }
         func stride(_ n: Int) -> Int { max(1, n / 6) }
         func firstByID(_ keys: Set<Phase0cKey>) -> Phase0cKey? {
             keys.min { (byKey[$0]?.naturalKey ?? "") < (byKey[$1]?.naturalKey ?? "") }
         }
-        var probeSerial = 0
-        func plant(_ s: Phase0cSnapshot) -> Phase0cKey {
-            probeSerial += 1
+        func plant(_ key: Phase0cKey, _ s: Phase0cSnapshot) {
             let p = s.makeProspect()
             ctx.insert(p)
-            let key = Phase0cKey.probe(probeSerial)
             byKey[key] = p
-            return key
         }
         func unplant(_ key: Phase0cKey) {
             if let p = byKey[key] { ctx.delete(p) }
             byKey[key] = nil
         }
+        var probeSerial = 0
+        func nextProbe() -> Phase0cKey { probeSerial += 1; return .probe(probeSerial) }
 
         let rooms = t2.rooms.sorted()
         let roomSizes = rooms.map { (room: $0, live: t2.live[$0]?.count ?? 0, flagged: t2.flagged[$0]?.count ?? 0) }
@@ -1050,22 +1147,22 @@ struct QueueEnginePhase0cLinksProbeTests {
         for (i, room) in rooms.enumerated() {
             var here = Phase0cStats()
             if let l = firstByID(t2.live[room] ?? []), let p = byKey[l] {
-                step([l], into: &liveTouch); here.add(liveTouch.samples.last ?? 0)
+                here.add(touch("T2 live row touch", [l], into: &liveTouch))
                 let old = p.missedScoutCount
-                p.missedScoutCount = FeedReconcile.goneThreshold
-                step([l], into: &flagOn); here.add(flagOn.samples.last ?? 0)
-                if i % stride(rooms.count) == 0 { verify("room \(i) live row flagged") }
-                p.missedScoutCount = old
-                step([l], into: &flagOff); here.add(flagOff.samples.last ?? 0)
+                let flag = pair("T2 flag a live row", "T2 unflag it", [l], into: &flagOn, &flagOff,
+                                change: { p.missedScoutCount = FeedReconcile.goneThreshold },
+                                revert: { p.missedScoutCount = old },
+                                between: { if i % stride(rooms.count) == 0 { verify("room \(i) live row flagged") } })
+                here.add(flag.0); here.add(flag.1)
                 let venue = p.venue
-                p.venue = room.isEmpty ? "Phase Zero C Invented Room" : nil
-                step([l], into: &moveOut); here.add(moveOut.samples.last ?? 0)
-                if i % stride(rooms.count) == 1 { verify("room \(i) live row moved") }
-                p.venue = venue
-                step([l], into: &moveBack); here.add(moveBack.samples.last ?? 0)
+                let elsewhere: String? = room.isEmpty ? "Phase Zero C Invented Room" : nil
+                let move = pair("T2 live row to another room", "T2 and back", [l], into: &moveOut, &moveBack,
+                                change: { p.venue = elsewhere }, revert: { p.venue = venue },
+                                between: { if i % stride(rooms.count) == 1 { verify("room \(i) live row moved") } })
+                here.add(move.0); here.add(move.1)
             }
             if let f = firstByID(t2.flagged[room] ?? []) {
-                step([f], into: &flaggedTouch); here.add(flaggedTouch.samples.last ?? 0)
+                here.add(touch("T2 flagged row touch", [f], into: &flaggedTouch))
             }
             if room.isEmpty { blank = here }
         }
@@ -1086,13 +1183,13 @@ struct QueueEnginePhase0cLinksProbeTests {
         for (i, bucket) in bucketList.enumerated() {
             guard let member = futureBuckets[bucket]?.min(by: { (byKey[$0]?.naturalKey ?? "") < (byKey[$1]?.naturalKey ?? "") }),
                   let m = byKey[member] else { continue }
-            let key = plant(Phase0cSnapshot(naturalKey: "phase0c-joiner-\(i)", groupName: "Phase Zero C Joiner \(i)",
-                                            venue: m.venue, performanceDate: Phase0cLinks.addDays(asOf, 30),
-                                            missedScoutCount: m.missedScoutCount))
-            step([key], into: &join)
-            if i % stride(bucketList.count) == 0 { verify("bucket \(i) joined") }
-            unplant(key)
-            step([key], into: &leave)
+            let key = nextProbe()
+            let joiner = Phase0cSnapshot(naturalKey: "phase0c-joiner-\(i)", groupName: "Phase Zero C Joiner \(i)",
+                                         venue: m.venue, performanceDate: Phase0cLinks.addDays(asOf, 30),
+                                         missedScoutCount: m.missedScoutCount)
+            _ = pair("T3 third member joining", "T3 and leaving", [key], into: &join, &leave,
+                     change: { plant(key, joiner) }, revert: { unplant(key) },
+                     between: { if i % stride(bucketList.count) == 0 { verify("bucket \(i) joined") } })
         }
         verify("after every bucket joined and left")
         lines.append("T3 third member joining (\(bucketList.count) buckets)                 \(join.text)")
@@ -1106,12 +1203,12 @@ struct QueueEnginePhase0cLinksProbeTests {
             .sorted { (byKey[$0]?.naturalKey ?? "") < (byKey[$1]?.naturalKey ?? "") }
         for (i, f) in flaggedFuture.enumerated() {
             guard let p = byKey[f] else { continue }
-            let key = plant(Phase0cSnapshot(naturalKey: "phase0c-twin-\(i)", groupName: p.groupName, venue: p.venue,
-                                            performanceDate: p.performanceDate, runEndDate: p.runEndDate))
-            step([key], into: &appear)
-            if i % stride(flaggedFuture.count) == 0 { verify("twin \(i) appeared") }
-            unplant(key)
-            step([key], into: &vanish)
+            let key = nextProbe()
+            let twin = Phase0cSnapshot(naturalKey: "phase0c-twin-\(i)", groupName: p.groupName, venue: p.venue,
+                                       performanceDate: p.performanceDate, runEndDate: p.runEndDate)
+            _ = pair("T2 to T3 twin appearing", "T2 to T3 and going", [key], into: &appear, &vanish,
+                     change: { plant(key, twin) }, revert: { unplant(key) },
+                     between: { if i % stride(flaggedFuture.count) == 0 { verify("twin \(i) appeared") } })
         }
         verify("after every twin appeared and went")
         lines.append("T2 to T3 twin appearing (\(flaggedFuture.count) flagged future rows)      \(appear.text)")
@@ -1119,31 +1216,61 @@ struct QueueEnginePhase0cLinksProbeTests {
         all.merge(appear)
         all.merge(vanish)
 
-        // T3: one scout accrual moving every flagged row up one bucket, and back.
+        // The bulk op the first run of this probe failed on (#4292): one scout accrual moving every flagged
+        // row up one bucket, and back. Then its mirror, every row ABOVE goneThreshold down one, which keeps
+        // every one of them flagged, and back. Neither crosses the threshold, so T2 should re-test nothing.
         var accrual = Phase0cStats(), accrualBack = Phase0cStats()
         let flaggedAll = byKey.filter { $0.value.disappearedFromFeed }.map { $0.key }
-        for key in flaggedAll { byKey[key]?.missedScoutCount += 1 }
-        step(flaggedAll, into: &accrual)
-        let upSplit = splitText()
-        verify("accrual")
-        for key in flaggedAll { byKey[key]?.missedScoutCount -= 1 }
-        step(flaggedAll, into: &accrualBack)
-        let backSplit = splitText()
+        var upSplit = "", backSplit = ""
+        _ = pair("T3 scout accrual, every flagged row up one", "T3 accrual undone", flaggedAll,
+                 into: &accrual, &accrualBack,
+                 change: { for key in flaggedAll { byKey[key]?.missedScoutCount += 1 } },
+                 revert: { for key in flaggedAll { byKey[key]?.missedScoutCount -= 1 } },
+                 between: { upSplit = splitText(); verify("accrual") })
+        backSplit = splitText()
         verify("accrual undone")
         lines.append("T3 scout accrual, every flagged row (\(flaggedAll.count) rows) up one      \(accrual.text) \(upSplit)")
         lines.append("T3 and back                                               \(accrualBack.text) \(backSplit)")
         all.merge(accrual)
         all.merge(accrualBack)
 
+        var down = Phase0cStats(), downBack = Phase0cStats()
+        let above = byKey.filter { $0.value.missedScoutCount > FeedReconcile.goneThreshold }.map { $0.key }
+        var downSplit = "", downBackSplit = ""
+        if !above.isEmpty {
+            _ = pair("T3 accrual down, every row above goneThreshold", "T3 accrual down undone", above,
+                     into: &down, &downBack,
+                     change: { for key in above { byKey[key]?.missedScoutCount -= 1 } },
+                     revert: { for key in above { byKey[key]?.missedScoutCount += 1 } },
+                     between: { downSplit = splitText(); verify("accrual down") })
+            downBackSplit = splitText()
+            verify("accrual down undone")
+        }
+        lines.append("T3 accrual down, rows above goneThreshold (\(above.count) rows) down one  \(down.text) \(downSplit)")
+        lines.append("T3 and back                                               \(downBack.text) \(downBackSplit)")
+        all.merge(down)
+        all.merge(downBack)
+
         // T3: the clock rolling past every distinct last night of a flagged future row, and back.
         var roll = Phase0cStats(), rollBack = Phase0cStats()
         let nights = Set(flaggedFuture.compactMap { t3.factsOf($0)?.lastNight }).sorted()
         for (i, night) in nights.enumerated() {
             let past = Phase0cLinks.addDays(night, 1)
-            roll.add(Phase0.time { t3.advance(to: past) })
+            let there = Phase0.time { t3.advance(to: past) }
+            roll.add(there)
+            record("T3 rollover past a last night", there) {
+                let ms = Phase0.time { t3.advance(to: past) }
+                t3.advance(to: startAsOf)
+                return ms
+            }
             asOf = past
             if i % stride(nights.count) == 0 { verify("rollover \(i)") }
-            rollBack.add(Phase0.time { t3.advance(to: startAsOf) })
+            let home = Phase0.time { t3.advance(to: startAsOf) }
+            rollBack.add(home)
+            record("T3 rollover back", home) {
+                t3.advance(to: past)
+                return Phase0.time { t3.advance(to: startAsOf) }
+            }
             asOf = startAsOf
         }
         verify("after every rollover and back", brute: true)
@@ -1152,12 +1279,25 @@ struct QueueEnginePhase0cLinksProbeTests {
         all.merge(roll)
         all.merge(rollBack)
 
+        // The replays, per kind, of that kind's slowest key.
+        let settled = Phase0cLinks.waitForLoad(below: 8)
+        var replayLines: [String] = []
+        var replayWorst = 0.0
+        for kind in kindOrder {
+            guard let slow = slowest[kind] else { continue }
+            let reading = Phase0.Reading(runs: (0..<5).map { _ in slow.replay() })
+            replayWorst = max(replayWorst, reading.median)
+            replayLines.append(kind + String(format: ": single sample %.3f ms, replayed %.3f ms (%.3f to %.3f)",
+                                             slow.ms, reading.median, reading.low, reading.high))
+        }
+        verify("after every replay", brute: true)
+
         let sizesText = roomSizes.sorted { ($0.live + $0.flagged) > ($1.live + $1.flagged) }
             .map { "\($0.live)/\($0.flagged)" }.joined(separator: " ")
         let blankRoom = roomSizes.first { $0.room.isEmpty }
         Phase0cLinks.say("""
             0c.2 [\(label)] \(models.count) rows, asOf \(startAsOf), \(rooms.count) rooms, \
-            \(t2.contradicted.count) contradicted, \(bucketList.count) flagged future buckets, \(load)
+            \(t2.contradicted.count) contradicted, \(bucketList.count) flagged future buckets, \(load), Debug build
               today's contradictedKeys (noise floor)                    \(todayT2.text)
               today's FeedBreakEvent.events, contradicted nil           \(todayT3.text)
               prototypes T2 plus T3 cold build                          \(cold.text)
@@ -1167,7 +1307,10 @@ struct QueueEnginePhase0cLinksProbeTests {
               the "" room: \(blankRoom.map { "\($0.live) live, \($0.flagged) flagged" } ?? "absent")
               every room's size, live/flagged, largest first: \(sizesText)
               oracle comparisons \(checks), mismatches \(mismatches)
+              REPLAYS, the slowest key of each kind five times, \(settled.text):
+                \(replayLines.joined(separator: "\n    "))
+              replayed max \(String(format: "%.3f", replayWorst)) ms
             """)
-        return all
+        return (all, replayWorst, settled.under)
     }
 }
