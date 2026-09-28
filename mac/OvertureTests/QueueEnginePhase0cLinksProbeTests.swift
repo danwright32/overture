@@ -1230,13 +1230,13 @@ struct QueueEnginePhase0cLinksProbeTests {
         func pair(_ kind: String, _ backKind: String, _ keys: [Phase0cKey],
                   into forward: inout Phase0cStats, _ back: inout Phase0cStats,
                   change: @escaping () -> Void, revert: @escaping () -> Void,
-                  between: () -> Void = {}) -> (Double, Double) {
+                  midway: () -> Void = {}) -> (Double, Double) {
             guard !keys.isEmpty else { unmeasured.append("\(kind) on \(label), no key to act on"); return (0, 0) }
             change()
             let there = run(keys)
             forward.add(there)
             record(kind, there) { change(); let ms = run(keys); revert(); _ = run(keys); return ms }
-            between()
+            midway()
             revert()
             let home = run(keys)
             back.add(home)
@@ -1274,13 +1274,13 @@ struct QueueEnginePhase0cLinksProbeTests {
                 let flag = pair("T2 flag a live row", "T2 unflag it", [l], into: &flagOn, &flagOff,
                                 change: { p.missedScoutCount = FeedReconcile.goneThreshold },
                                 revert: { p.missedScoutCount = old },
-                                between: { if i % stride(rooms.count) == 0 { verify("room \(i) live row flagged") } })
+                                midway: { if i % stride(rooms.count) == 0 { verify("room \(i) live row flagged") } })
                 here.add(flag.0); here.add(flag.1)
                 let venue = p.venue
                 let elsewhere: String? = room.isEmpty ? "Phase Zero C Invented Room" : nil
                 let move = pair("T2 live row to another room", "T2 and back", [l], into: &moveOut, &moveBack,
                                 change: { p.venue = elsewhere }, revert: { p.venue = venue },
-                                between: { if i % stride(rooms.count) == 1 { verify("room \(i) live row moved") } })
+                                midway: { if i % stride(rooms.count) == 1 { verify("room \(i) live row moved") } })
                 here.add(move.0); here.add(move.1)
             }
             if let f = firstByID(t2.flagged[room] ?? []) {
@@ -1311,7 +1311,7 @@ struct QueueEnginePhase0cLinksProbeTests {
                                          missedScoutCount: m.missedScoutCount)
             _ = pair("T3 third member joining", "T3 and leaving", [key], into: &join, &leave,
                      change: { plant(key, joiner) }, revert: { unplant(key) },
-                     between: { if i % stride(bucketList.count) == 0 { verify("bucket \(i) joined") } })
+                     midway: { if i % stride(bucketList.count) == 0 { verify("bucket \(i) joined") } })
         }
         verify("after every bucket joined and left")
         lines.append("T3 third member joining (\(bucketList.count) buckets)                 \(join.text)")
@@ -1330,7 +1330,7 @@ struct QueueEnginePhase0cLinksProbeTests {
                                        performanceDate: p.performanceDate, runEndDate: p.runEndDate)
             _ = pair("T2 to T3 twin appearing", "T2 to T3 and going", [key], into: &appear, &vanish,
                      change: { plant(key, twin) }, revert: { unplant(key) },
-                     between: { if i % stride(flaggedFuture.count) == 0 { verify("twin \(i) appeared") } })
+                     midway: { if i % stride(flaggedFuture.count) == 0 { verify("twin \(i) appeared") } })
         }
         verify("after every twin appeared and went")
         lines.append("T2 to T3 twin appearing (\(flaggedFuture.count) flagged future rows)      \(appear.text)")
@@ -1348,7 +1348,7 @@ struct QueueEnginePhase0cLinksProbeTests {
                  into: &accrual, &accrualBack,
                  change: { for key in flaggedAll { byKey[key]?.missedScoutCount += 1 } },
                  revert: { for key in flaggedAll { byKey[key]?.missedScoutCount -= 1 } },
-                 between: { upSplit = splitText(); verify("accrual") })
+                 midway: { upSplit = splitText(); verify("accrual") })
         backSplit = splitText()
         verify("accrual undone")
         lines.append("T3 scout accrual, every flagged row (\(flaggedAll.count) rows) up one      \(accrual.text) \(upSplit)")
@@ -1364,7 +1364,7 @@ struct QueueEnginePhase0cLinksProbeTests {
                      into: &down, &downBack,
                      change: { for key in above { byKey[key]?.missedScoutCount -= 1 } },
                      revert: { for key in above { byKey[key]?.missedScoutCount += 1 } },
-                     between: { downSplit = splitText(); verify("accrual down") })
+                     midway: { downSplit = splitText(); verify("accrual down") })
             downBackSplit = splitText()
             verify("accrual down undone")
         }
