@@ -555,16 +555,17 @@ struct QueueViewAttributionProbeTests {
             let file = dir.appendingPathComponent("\(slug)-r\(round).sample.txt")
             let sampler = LandingSelfSampler(seconds: seconds, file: file)
             do { try await sampler.start() } catch {
-                out.failures.append("round \(round): sampler never attached (\(String(describing: error).suffix(160)))")
+                out.failures.append("round \(round): sampler never began sampling (\(String(describing: error).suffix(160)))")
                 continue
             }
             let t0 = Phase0.now()
             var mine: [Reading] = []
             var i = 0
-            // Readings until the sampler says its window is OVER, never for its nominal duration from the
-            // attach line: the pilot run did the latter, and every sample in every file was the main thread
-            // idle after the readings had finished (the attach line can precede the first sample by
-            // seconds). A bound of the window plus 60 s, so a sampler that never reports cannot hang this.
+            // `start` returned once sampling really began (#4307), so the first reading is sampled. Readings
+            // then run until the sampler says its window is OVER, never for its nominal duration: the pilot
+            // run timed that from the attach line, and every sample in every file was the main thread idle
+            // after the readings had finished (the attach line can precede the first sample by seconds). A
+            // bound of the window plus 60 s, so a sampler that never reports cannot hang this.
             while !sampler.samplingFinished && Phase0.ms(since: t0) < Double(seconds + 60) * 1000 {
                 mine.append(reading(i)); i += 1
             }

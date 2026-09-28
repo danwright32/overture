@@ -27,7 +27,9 @@ import AppKit
 //                  derivation count goes quiet, as the app's run loop would draw it
 //
 // Each measured landing is SAMPLED: `/usr/bin/sample` is pointed at this test process for the landing and
-// its settle, and the main thread's call tree is written to `<dir>`. The classifier that reads those files
+// its settle, and the main thread's call tree is written to `<dir>`. The landing starts only once sampling has
+// really begun (#4307), never on the sampler's attach line, which can come well before the first sample; each
+// round's line says how long after the attach line sampling began. The classifier that reads those files
 // (which app frame owns each sample) is posted on #4275 with the results, not kept in the repository.
 // A counter only sees the sites somebody instrumented; a sampler sees every frame the main thread was in.
 //
@@ -192,6 +194,8 @@ struct ScoutLandingAttributionProbeTests {
         var sampler: LandingSelfSampler?
         if let sampleSeconds, let sampleFile {
             let s = LandingSelfSampler(seconds: sampleSeconds, file: sampleFile)
+            // Returns only once the sampler is really SAMPLING, not merely attached (#4307), so the landing
+            // below cannot begin in the unsampled gap between the two.
             try await s.start()
             sampler = s
         }
@@ -222,7 +226,12 @@ struct ScoutLandingAttributionProbeTests {
         }
         var sampled = "not sampled"
         if let sampler {
-            sampled = await sampler.finish() ? "sampled for \(sampler.seconds) s to \(sampler.file.lastPathComponent)"
+            // #4307: how long after the attach line sampling really began, which is the head this probe left
+            // unsampled while it started the landing on that line.
+            let began = sampler.attachToBeganMs.map { "sampling began \(LandingProbe.f1($0)) ms after the attach line" }
+                ?? "sampling start UNMEASURED"
+            sampled = await sampler.finish()
+                ? "sampled for \(sampler.seconds) s to \(sampler.file.lastPathComponent), \(began)"
                 : "SAMPLER FAILED: \(sampler.output.prefix(200))"
         }
         var landed = Landing(ingestMs: ingestMs, settleMs: settleMs, derivations: derivations,
