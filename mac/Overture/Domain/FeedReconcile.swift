@@ -272,7 +272,12 @@ enum FeedReconcile {
             let listed = isStillListed(p, seenKeys: seenKeys, seenSourceURLs: seenSourceURLs,
                                        gapDates: gapDates)
             if listed {
-                p.missedScoutCount = 0                                  // listed somewhere: definitely live
+                // Listed somewhere: definitely live. #4106 Phase 1a: written only where there is a count to
+                // clear, for the reason `answerAnyMergeSurvivorQuestion` gives below: almost every row is
+                // listed and already reads zero, and assigning zero over zero dirties the whole store on
+                // every sweep. The `+= 1` below stays an unconditional write because it always changes the
+                // value, and FeedBreakEvent buckets flagged rows by it.
+                if p.missedScoutCount != 0 { p.missedScoutCount = 0 }
             } else if isFuture(p, today: today), everyOwnerWasAskedAndNoneHasIt(p, believable: believable) {
                 p.missedScoutCount += 1
             }
