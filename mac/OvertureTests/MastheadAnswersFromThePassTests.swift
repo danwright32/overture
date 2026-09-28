@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #4106 view workstream: the masthead's two whole-queue answers, the high-fit summary and whether a check
 // missed any show, are taken ONCE by the render pass and published on RenderData, and the masthead reads
