@@ -271,13 +271,14 @@ enum Phase0cOp: String, CaseIterable {
     case accrualAll = "scout accrual, every flagged row up one"
     case accrualDown = "scout accrual reversed, every row above goneThreshold down one (stays flagged)"
     case twinAppear = "twin appearing"
+    case flaggedEdit = "contradicted row counted up one with its room, title or dates changed (stays flagged)"
     case rollover = "clock rollover"
 
     static let t1: [Phase0cOp] = [.scoutRenameInto, .scoutRenameOut, .venueRespellSame, .venueRespellOther,
                                   .bridgeNight, .dropNight, .poisonToken, .feedMiss, .dismissFront,
                                   .deleteFront, .merge, .insertNoDate, .rekey]
     static let t2t3: [Phase0cOp] = [.flagAcross, .roomRespell, .dateMove, .titleChange, .deleteTwin, .venueless,
-                                    .thirdMemberJoin, .accrualAll, .accrualDown, .twinAppear, .rollover, .rekey,
+                                    .thirdMemberJoin, .accrualAll, .accrualDown, .flaggedEdit, .twinAppear, .rollover, .rekey,
                                     .merge]
 
     /// Operations whose plan wording includes their own reversal ("then removed", "and back", "leaving").
@@ -518,7 +519,29 @@ final class Phase0cWorld {
             let above = rows.filter { $0.missedScoutCount > FeedReconcile.goneThreshold }
             guard !above.isEmpty else { return nil }
             for f in above { modify(f, &edit) { $0.missedScoutCount -= 1 } }
-        case .twinAppear:
+        case .flaggedEdit:
+            // The exact boundary of T2's accrual skip: a row that stays flagged and ALSO moves one of the four
+            // facts the skip must not ignore. One field per edit, cycled by serial rather than rolled, so a
+            // skip missing any single condition is met within three edits (#4106 0c.2 re-probe: a random mix
+            // let one condition's mutation survive a whole CI run).
+            let hot = ContradictedCancellation.contradictedKeys(among: rows)
+            guard let r = pick(rows, { hot.contains($0.naturalKey) }) ?? pick(rows, { $0.disappearedFromFeed })
+            else { return nil }
+            let field = next() % 3
+            let invented = "Invented Moved Bill \(serial)"
+            typealias Room = Phase0cContradictionPatch<Phase0cKey>.Facts
+            let other = Phase0cFixture.venues.compactMap { $0 }
+                .first { Room.room($0) != Room.room(r.venue) } ?? "Invented Far Room"
+            modify(r, &edit) {
+                $0.missedScoutCount += 1
+                switch field {
+                case 0: $0.venue = other
+                case 1: $0.groupName = invented
+                default:
+                    $0.performanceDate = $0.performanceDate.map { Phase0cLinks.addDays($0, 30) } ?? "2027-06-01"
+                    $0.runEndDate = nil
+                }
+            }
             guard let f = pick(rows, { $0.disappearedFromFeed && $0.performanceDate != nil }) else { return nil }
             insert(Phase0cSnapshot(naturalKey: "ins-\(next())", groupName: f.groupName, venue: f.venue,
                                    performanceDate: f.performanceDate, runEndDate: f.runEndDate), &edit)
@@ -723,7 +746,7 @@ struct Phase0cHarness {
         let deep = Phase0cLinks.deep
         let plan: [(size: Int, seeds: Int, steps: Int)] = deep
             ? [(60, 20, 500), (300, 20, 500)]
-            : [(60, 3, 40), (300, 1, 20)]
+            : (terms.contains(.t2) ? [(60, 3, 20), (300, 1, 8)] : [(60, 3, 40), (300, 1, 20)])
         var outcome = Outcome()
         let start = Phase0.now()
         for leg in plan {
