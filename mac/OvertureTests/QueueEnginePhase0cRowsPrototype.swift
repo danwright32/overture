@@ -17,13 +17,14 @@ import SwiftData
 // input sort can reach.
 //
 // WHERE IT SHARES A MECHANISM WITH ITS ORACLE, said rather than hidden (L70). Each entry is built by
-// calling today's per-row pieces on ONE row (`placements(in: [p])`, `DueWork.counts(prospects: [p])`,
-// `nextReachOut` per contact), so what the comparison proves is the AGGREGATION and the PATCHING: that
-// the whole equals the sum of per-row parts, and that after an operation, rebuilding only the rows the
-// operation and its upstream hand-offs name leaves every total equal to a full rebuild. It cannot find a
-// per-row predicate that is wrong in both, and does not claim to. The one exception is the Reached out
-// entry, whose one-show rule (whoever replied, else the soonest) the prototype states itself over its
-// canonical contact order, so there the oracle is a second implementation rather than the same one.
+// calling today's per-row pieces on ONE row (`DueWork.counts(prospects: [p])`, `nextReachOut` per
+// contact), so what the comparison proves is the AGGREGATION and the PATCHING: that the whole equals the
+// sum of per-row parts, and that after an operation, rebuilding only the rows the operation and its
+// upstream hand-offs name leaves every total equal to a full rebuild. It cannot find a per-row predicate
+// that is wrong in both, and does not claim to. There are two exceptions, where the prototype states a
+// rule itself and the oracle is therefore a second implementation rather than the same one: the Reached
+// out entry's one-show rule (whoever replied, else the soonest) over its canonical contact order, and a
+// row's counted stages (`focuses`), a second statement of the private `StageNavigation.matches`.
 //
 // CONTACT ORDER. Every contact-derived value in an entry is built from ONE walk of the contacts, sorted
 // by `Recipient.id` then persistentModelID, so an unchanged row rebuilds to an equal entry after a save
@@ -208,6 +209,8 @@ enum Phase0cRowBuild {
         let now = context.stage.now
         let alive = context.replyRunAlive
         // ONE walk of the contacts, in the canonical order, and every contact-derived value below reads it.
+        // `countedRecipients` is `recipients` unfiltered, in the same order: the accessor only records a
+        // `WorkTally` reach (Prospect.swift), so every contact reader below sees every contact.
         let relationshipOrder = p.countedRecipients
         let contacts = canonicalContacts(relationshipOrder)
         let nextReach = contacts.map { ReachedOutQueue.nextReachOut(for: $0, of: p, now: now) }
