@@ -237,7 +237,7 @@ extension QueueEnginePhase0cRowsProbeTests {
                 if !b.isEmpty { expiryMismatch.append("instant \(k): " + b.joined(separator: "; ")) }
             }
             instantsJudged += instants.count
-            sumMismatches += fullMismatch.count + (atBase.isEmpty ? 0 : 1)
+            sumMismatches += fullMismatch.count + expiryMismatch.count + (atBase.isEmpty ? 0 : 1)
             let rebuiltText = expiryRebuilt.isEmpty ? "none"
                 : "median \(expiryRebuilt.sorted()[expiryRebuilt.count / 2]), max \(expiryRebuilt.max() ?? 0)"
             Phase0cRows.say("""
