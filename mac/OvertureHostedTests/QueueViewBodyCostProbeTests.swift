@@ -62,21 +62,29 @@ enum Phase0cView {
     static let stopMs = 50.0
     static let budgetMs = 30.0
 
-    // The Release app's saved main window frame, READ from its own defaults domain and never written.
-    // "x y w h screenX screenY screenW screenH", which AppKit writes for a frame autosave name.
-    static let fallbackSize = NSSize(width: 860, height: 720)
+    // Dan's main window frame. NOT read from the app's defaults domain: a test building a defaults suite
+    // reaches real shared state (TestsCannotReachSharedStateTests, #3774), so the frame is passed in as
+    // `TEST_RUNNER_MEASURE_4106_PHASE0C_VIEW_FRAME=<w>x<h>`, and its default is the one measured from
+    // the Release app's saved `NSWindow Frame main` on 2026-09-27 (1728x980). Printed with its source.
+    static let measuredFrame = NSSize(width: 1728, height: 980)
+
+    static func windowFrame(_ env: [String: String]) -> (frame: NSSize, source: String) {
+        guard let raw = env["MEASURE_4106_PHASE0C_VIEW_FRAME"] else {
+            return (measuredFrame, "Dan's saved frame as measured 2026-09-27")
+        }
+        let parts = raw.lowercased().split(separator: "x").compactMap { Double($0) }
+        guard parts.count == 2, parts[0] > 100, parts[1] > 100 else {
+            return (measuredFrame, "UNREADABLE frame '\(raw)', so Dan's saved frame as measured 2026-09-27")
+        }
+        return (NSSize(width: parts[0], height: parts[1]), "the frame passed in (\(raw))")
+    }
 
     static func dansWindow() -> (content: NSSize, source: String) {
-        let raw = UserDefaults(suiteName: "com.danwright.overture")?.string(forKey: "NSWindow Frame main")
-        let parts = (raw ?? "").split(separator: " ").compactMap { Double($0) }
-        guard parts.count >= 4, parts[2] > 100, parts[3] > 100 else {
-            return (fallbackSize, "FALLBACK: no saved frame in com.danwright.overture, so the app's "
-                    + "defaultSize \(Int(fallbackSize.width))x\(Int(fallbackSize.height)) is used")
-        }
-        let frame = NSRect(x: 0, y: 0, width: parts[2], height: parts[3])
+        let (size, source) = windowFrame(ProcessInfo.processInfo.environment)
+        let frame = NSRect(x: 0, y: 0, width: size.width, height: size.height)
         let content = NSWindow.contentRect(forFrameRect: frame,
                                            styleMask: [.titled, .closable, .miniaturizable, .resizable])
-        return (content.size, "saved frame \(Int(parts[2]))x\(Int(parts[3])) in com.danwright.overture, "
+        return (content.size, "frame \(Int(size.width))x\(Int(size.height)) from \(source), "
                 + "content \(Int(content.width))x\(Int(content.height)) under a standard title bar "
                 + "(the toolbar and RootView's banners are NOT subtracted, so this is an upper bound on "
                 + "the queue's height and on the rows it realizes)")
@@ -252,6 +260,15 @@ enum Phase0cView {
 @MainActor
 @Suite("#4106 Phase 0c.8: the queue body plus layout over a served RenderData (opt in)")
 struct QueueViewBodyCostProbeTests {
+    // The frame parsing, on every push: a passed frame wins, an unreadable one falls back AND says so.
+    @Test func theWindowFrameIsPassedInNeverReadFromTheApp() {
+        #expect(Phase0cView.windowFrame([:]).frame == Phase0cView.measuredFrame)
+        #expect(Phase0cView.windowFrame(["MEASURE_4106_PHASE0C_VIEW_FRAME": "1200x800"]).frame == NSSize(width: 1200, height: 800))
+        let bad = Phase0cView.windowFrame(["MEASURE_4106_PHASE0C_VIEW_FRAME": "wide"])
+        #expect(bad.frame == Phase0cView.measuredFrame)
+        #expect(bad.source.contains("UNREADABLE"))
+    }
+
 
     private let sandboxes = TemporarySandboxes()
 
