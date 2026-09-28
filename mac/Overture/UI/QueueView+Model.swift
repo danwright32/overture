@@ -1415,7 +1415,8 @@ enum QueueModel {
     // Reached out and Follow-ups resolve their links against the same table the queue card does rather
     // than a second copy of it.
     static func sourceCalendarIndex(_ sources: [WatchedSource]) -> [String: String] {
-        Dictionary(
+        QueueRenderPass.WorkTally.recordSourceCalendarIndexBuild()
+        return Dictionary(
             sources.compactMap { s -> (String, String)? in
                 guard let u = s.listingsURL, !u.isEmpty else { return nil }
                 return (s.sourceId, u)
@@ -1978,6 +1979,7 @@ enum QueueModel {
     // about, and inventing a date would put a row under a heading that lies about it.
     static func reachedOutEntries(prospects: [(prospect: Prospect, recipient: Recipient, next: Date)],
                                   inquiries: [Inquiry], now: Date) -> [ReachedOutEntry] {
+        QueueRenderPass.WorkTally.recordStageListRows(prospects.count + inquiries.count)
         let prospectEntries = prospects.map {
             ReachedOutEntry.prospect(prospect: $0.prospect, recipient: $0.recipient, next: $0.next)
         }
@@ -1995,6 +1997,7 @@ enum QueueModel {
 
 
     static func reachOutDateGroups<Row>(_ rows: [Row], reachDate: (Row) -> Date) -> [ReachOutDateGroup<Row>] {
+        QueueRenderPass.WorkTally.recordStageListRows(rows.count)
         let cal = easternCalendar
         var order: [String] = []
         var buckets: [String: [Row]] = [:]
@@ -2358,6 +2361,7 @@ enum QueueModel {
     // itself). Buckets appear in the order the rows arrive, so a caller wanting date order hands over
     // rows already in it.
     static func groupRowsByDate(_ rows: [QueueRow]) -> [RowDateGroup] {
+        QueueRenderPass.WorkTally.recordStageListRows(rows.count)
         var order: [String] = []
         var buckets: [String: [QueueRow]] = [:]
         for row in rows {

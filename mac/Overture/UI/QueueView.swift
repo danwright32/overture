@@ -941,6 +941,9 @@ struct QueueView: View {
     // an inquiry has no equivalent for.
     @ViewBuilder private func inquirySection(_ rows: [InquiryRow]) -> some View {
         if !rows.isEmpty {
+            #if DEBUG
+            let _ = QueueRenderCounter.recordStageListBody(QueueRenderCounter.inquiryList)
+            #endif
             let byId = Dictionary(inquiries.map { (String(describing: $0.persistentModelID), $0) },
                                   uniquingKeysWith: { first, _ in first })
             ForEach(QueueModel.groupRowsByDate(rows.map { QueueRow.inquiry($0) })) { group in
@@ -1466,6 +1469,9 @@ struct QueueView: View {
     }
 
     @ViewBuilder private func reachedOutList(_ dated: [(prospect: Prospect, recipient: Recipient, next: Date)]) -> some View {
+        #if DEBUG
+        let _ = QueueRenderCounter.recordStageListBody(QueueRenderCounter.reachedOutList)
+        #endif
         let entries = reachedOutEntries(dated)
         if entries.isEmpty {
             VStack(spacing: OVSpacing.xs) {
@@ -2438,6 +2444,16 @@ enum QueueRenderCounter {
     nonisolated(unsafe) private static var cardBodies: [String: Int] = [:]
     static func recordCardBody(_ key: String) { cardBodies[key, default: 0] += 1 }
     static func cardBodyCounts() -> [String: Int] { cardBodies }
+
+    // #4311: how many times each STAGE LIST's own builder ran, the Reached out list and a stage's inquiry
+    // block. A test pinning that such a list derives nothing in a body needs proof the list was DRAWN,
+    // or a zero is a branch that never ran rather than one that did no work (L159). Counts only, no log
+    // line, for the card counter's reason above.
+    static let reachedOutList = "reachedOutList"
+    static let inquiryList = "inquiryList"
+    nonisolated(unsafe) private static var stageListBodies: [String: Int] = [:]
+    static func recordStageListBody(_ list: String) { stageListBodies[list, default: 0] += 1 }
+    static func stageListBodyCount(_ list: String) -> Int { stageListBodies[list] ?? 0 }
 
     // Which inputs moved. Pure, so the rule this diagnostic reports by is itself tested rather than being
     // one more thing taken on trust while it is used to judge everything else.

@@ -262,17 +262,27 @@ enum Phase0cView {
 // builds them.
 @MainActor
 enum Phase0cViewRig {
+    // #4311: the queue's own focused stage is `@State` and cannot be set from outside, so a served pass
+    // for another stage draws under the Scout branch. The Reached out list is its OWN branch, reached
+    // only when that state says so, and the one route that moves it from outside is the production one:
+    // a deep link to a show, which focuses the stage holding it (`QueueView.navigateToLead`). This box is
+    // that channel, so a rig can put the real view on the Reached out stage the way an OmniFocus link does.
+    @Observable
+    final class DeepLinkChannel {
+        var key: LeadDeepLink?
+    }
+
     struct Harness: View {
         let rows: [Prospect]
         let feed: Phase0cServedFeed
-        @State private var deepLinkedKey: LeadDeepLink?
+        @Bindable var link: DeepLinkChannel
         @State private var deepLinkedKeys: LeadsDeepLink?
         @State private var feedback = ActionFeedback()
         @State private var dayOff = DayOffOfferRequest()
         @State private var undo = QueueUndoStack()
 
         var body: some View {
-            QueueView(deepLinkedKey: $deepLinkedKey, deepLinkedKeys: $deepLinkedKeys,
+            QueueView(deepLinkedKey: $link.key, deepLinkedKeys: $deepLinkedKeys,
                       allProspects: rows, renderDataProvider: feed)
                 .environment(feedback)
                 .environment(dayOff)
@@ -282,11 +292,11 @@ enum Phase0cViewRig {
 
     // Hosts the harness in a borderless window of `size`, never ordered front (#3480).
     static func host(_ container: ModelContainer, rows: [Prospect], feed: Phase0cServedFeed,
-                     size: NSSize) -> NSWindow {
+                     size: NSSize, link: DeepLinkChannel = DeepLinkChannel()) -> NSWindow {
         let window = NSWindow(contentRect: NSRect(origin: .zero, size: size),
                               styleMask: [.borderless], backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false
-        let hosting = NSHostingView(rootView: AnyView(Harness(rows: rows, feed: feed)
+        let hosting = NSHostingView(rootView: AnyView(Harness(rows: rows, feed: feed, link: link)
             .modelContainer(container)))
         hosting.frame = window.contentLayoutRect
         hosting.autoresizingMask = [.width, .height]

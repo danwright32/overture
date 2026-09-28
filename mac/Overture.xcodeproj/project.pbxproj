@@ -384,6 +384,7 @@
 		277215CD247E72C05F6A69AA /* ScoutReadAsk.swift in Sources */ = {isa = PBXBuildFile; fileRef = CDE3C95FB7FD4D5ADD18D261 /* ScoutReadAsk.swift */; };
 		277F165CDA86EC541F68793F /* ReplyClassifyRunSummaryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5CB0523213D49948BAEA94FE /* ReplyClassifyRunSummaryTests.swift */; };
 		27CC03EA061523BE1605F3CF /* ShowListingReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = C150A1DE62FC5533619A097C /* ShowListingReader.swift */; };
+		281AD20C452EBB488C6D2062 /* TheMissedShowsPressActsOnThePassTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2E2030B3F7CDA27CD9527D2B /* TheMissedShowsPressActsOnThePassTests.swift */; };
 		28397D591B297388E5B3D090 /* RunGrouping.swift in Sources */ = {isa = PBXBuildFile; fileRef = 97DF326E45BD8893672AD58C /* RunGrouping.swift */; };
 		28402EE2E46610CB80CB44CA /* PresenterWithheldRecheck.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4610A4CDB05BF68255CCDF6A /* PresenterWithheldRecheck.swift */; };
 		288B045D2335F9CBA36F5CCF /* PrepGroupCredit.swift in Sources */ = {isa = PBXBuildFile; fileRef = 72B71EBE4F35C78E3151DE82 /* PrepGroupCredit.swift */; };
@@ -1150,6 +1151,7 @@
 		789DD43260EAF3982FC09D77 /* JudgedPair.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5983811891409F149D22A95D /* JudgedPair.swift */; };
 		78A3274359E6C9DD09A0C2E2 /* ClientWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC9037B6E167C13379D8DD67 /* ClientWindow.swift */; };
 		78A97D7D205B12284E901DB3 /* GmailSignatureService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 81906511A2A06D2C689FD640 /* GmailSignatureService.swift */; };
+		78ADBEF154CAEA7631F4D696 /* AStageListDerivesNothingPerBodyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6AE3722E133519C6E19B4A7B /* AStageListDerivesNothingPerBodyTests.swift */; };
 		78B280D1431AF2BBA82F6984 /* EveryOverrideHasAReaderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F61E801393EE83ECA3816ED8 /* EveryOverrideHasAReaderTests.swift */; };
 		78B72D987F7222A94824F7BF /* ReachedOutQueue.swift in Sources */ = {isa = PBXBuildFile; fileRef = 06CDC4E814516BA0EF92C56D /* ReachedOutQueue.swift */; };
 		78D87D3C2A035B7FEC180A6C /* LeadIntakeModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 339B896F9807D141E21CA7B0 /* LeadIntakeModelTests.swift */; };
@@ -2775,6 +2777,7 @@
 		2D8DC497023024AC09BA88A7 /* ContactFieldCopy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContactFieldCopy.swift; sourceTree = "<group>"; };
 		2D9834539BA47D783475B28C /* ProspectRowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProspectRowView.swift; sourceTree = "<group>"; };
 		2DF6FD6CCBA9E2C5315F4DD0 /* OneWordPerCountedThingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OneWordPerCountedThingTests.swift; sourceTree = "<group>"; };
+		2E2030B3F7CDA27CD9527D2B /* TheMissedShowsPressActsOnThePassTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TheMissedShowsPressActsOnThePassTests.swift; sourceTree = "<group>"; };
 		2E649F19B043FD3E5C318084 /* AStallSaysWhatTheRunLoopWasDoingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AStallSaysWhatTheRunLoopWasDoingTests.swift; sourceTree = "<group>"; };
 		2E72BB44F88E4022A76846AF /* LiveRunLabelViewStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveRunLabelViewStateTests.swift; sourceTree = "<group>"; };
 		2E9658B5B6212F50195FCDA6 /* ReplyTriageDue.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReplyTriageDue.swift; sourceTree = "<group>"; };
@@ -3223,6 +3226,7 @@
 		69E9BE251ED385513D31E21F /* AppModals.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModals.swift; sourceTree = "<group>"; };
 		6A2675478B29E365B1F0F2A1 /* OneWaitingOnDanRuleTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OneWaitingOnDanRuleTests.swift; sourceTree = "<group>"; };
 		6AE0653AFD6DD5DA3BD1EA79 /* LeadIntakeReconcileTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LeadIntakeReconcileTests.swift; sourceTree = "<group>"; };
+		6AE3722E133519C6E19B4A7B /* AStageListDerivesNothingPerBodyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AStageListDerivesNothingPerBodyTests.swift; sourceTree = "<group>"; };
 		6AEFF6EC8D64C1453FACB334 /* DraftLintSendGateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DraftLintSendGateTests.swift; sourceTree = "<group>"; };
 		6B4B07AEBF70B38D0A2CD8E1 /* FormOutreach.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FormOutreach.swift; sourceTree = "<group>"; };
 		6B55EFAAF85FC82E70E846E4 /* SmallVenueReportTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SmallVenueReportTests.swift; sourceTree = "<group>"; };
@@ -4381,6 +4385,7 @@
 				053EE1CF649C937114DE6B52 /* ArchiveViewSendStateTests.swift */,
 				75DD5AF292CBA14663A379F4 /* AScoutRunDerivesTheQueueOnceTests.swift */,
 				694987E32016052B9F16E8A7 /* AServedRenderDataIsWhatTheQueueDrawsTests.swift */,
+				6AE3722E133519C6E19B4A7B /* AStageListDerivesNothingPerBodyTests.swift */,
 				14F963BC5F2B121603379493 /* BringingTheQueueUpTests.swift */,
 				7E07F9DFB7890D8CE160F5F7 /* CardAddressAttributionOnScreenTests.swift */,
 				EF7F9F259F38F69FB87A4C4C /* ConfirmBackdropRendersTests.swift */,
@@ -5611,6 +5616,7 @@
 				DF071E8CC57B29B1988BF50D /* TheFreezeLogSaysWhereItsWindowEndsTests.swift */,
 				121399223656FF662F05B903 /* TheMatchLoopLeavesTheMainActorTests.swift */,
 				1CE7CADF0428B1F66C603052 /* TheMissedCheckSentenceIsTrueOfBothCausesTests.swift */,
+				2E2030B3F7CDA27CD9527D2B /* TheMissedShowsPressActsOnThePassTests.swift */,
 				580226451EC4DF68FED31CFF /* TheOracleIsCountedApartTests.swift */,
 				4BF62783E61E789B9C7CD436 /* TheSendPreviewDoesNotWriteToTheShowTests.swift */,
 				91D0CA6C40659F5E63AA075E /* TheWatchdogCanSeeTheBarTests.swift */,
@@ -6970,6 +6976,7 @@
 				2310AE25BC9512A98CCCD6A1 /* AMovedCardIsNeverAnimatedAcrossItsNeighboursTests.swift in Sources */,
 				0877C4CFC26F730FCA1D2DA0 /* AScoutRunDerivesTheQueueOnceTests.swift in Sources */,
 				E83123B0DD2E7F1B42192844 /* AServedRenderDataIsWhatTheQueueDrawsTests.swift in Sources */,
+				78ADBEF154CAEA7631F4D696 /* AStageListDerivesNothingPerBodyTests.swift in Sources */,
 				F7143B3D916A5D82EE0EE7B5 /* AgentInstructionDocs.swift in Sources */,
 				83832F883F299684B5DDAD31 /* AppNoticeLinesOnScreenTests.swift in Sources */,
 				CBE17D0C0927264923D1B026 /* AppSourceWalk.swift in Sources */,
@@ -8704,6 +8711,7 @@
 				276397FEA8A9F186A6155907 /* TheFreezeLogSaysWhereItsWindowEndsTests.swift in Sources */,
 				15E6F02EAA446A65DE8A9331 /* TheMatchLoopLeavesTheMainActorTests.swift in Sources */,
 				A1C02463F2F9E167348A7119 /* TheMissedCheckSentenceIsTrueOfBothCausesTests.swift in Sources */,
+				281AD20C452EBB488C6D2062 /* TheMissedShowsPressActsOnThePassTests.swift in Sources */,
 				AB4E72AB61A16E9890E3B1F4 /* TheOracleIsCountedApartTests.swift in Sources */,
 				9D284987AA39D5FA8FEB1E9B /* TheSendPreviewDoesNotWriteToTheShowTests.swift in Sources */,
 				7A653C549B2CB77776D8B6BA /* TheWatchdogCanSeeTheBarTests.swift in Sources */,

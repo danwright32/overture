@@ -125,7 +125,8 @@ enum QueueRenderPass {
                               stagePlacements: 0, producerIndexes: 0,
                               producerKeyFolds: 0, clientNameMatches: 0,
                               contradictionSweeps: 0, reachedOutSweeps: 0,
-                              wholeQueueFoldRows: 0, candidacyGeographyVerdicts: 0)
+                              wholeQueueFoldRows: 0, candidacyGeographyVerdicts: 0,
+                              stageListRows: 0, sourceCalendarIndexBuilds: 0)
 
         // #3654 step 4c: the in-app divergence check is a SECOND WRITER of this tally, and that is
         // settled here rather than discovered in a red run.
@@ -234,6 +235,18 @@ enum QueueRenderPass {
         // Counted so the ORDER is a fact a test can hold, since the answer is the same either way.
         var candidacyGeographyVerdicts: Int { lock.withLock { counts.candidacyGeographyVerdicts } }
 
+        // #4311: how many ROWS a stage list's own derivation examined: the Reached out merge of shows and
+        // inquiries (`QueueModel.reachedOutEntries`), its reach out date grouping (`reachOutDateGroups`),
+        // and a stage's inquiry grouping (`groupRowsByDate`). Each used to run inside a view body on every
+        // evaluation, and a body runs on events that change no data (L471). The pass now takes them once;
+        // a body that takes one again moves this number, which `AStageListDerivesNothingPerBodyTests` pins
+        // at zero over a served pass. Rows rather than calls, for the reason `wholeQueueFoldRows` gives.
+        var stageListRows: Int { lock.withLock { counts.stageListRows } }
+        // #4311: and how many times the watchlist's calendar table was BUILT. Each build walks every
+        // watched source, and the Reached out list built one per body evaluation. Builds rather than
+        // sources walked, because a build is one walk whatever the watchlist holds, as `producerIndexes`.
+        var sourceCalendarIndexBuilds: Int { lock.withLock { counts.sourceCalendarIndexBuilds } }
+
         // What the divergence check itself spent, held apart from every number above so the pass's own
         // pins mean what their names say.
         var oracleCards: Int { lock.withLock { counts.oracleCards } }
@@ -275,6 +288,14 @@ enum QueueRenderPass {
         static func recordWholeQueueFoldRows(_ n: Int) {
             guard n > 0, let t = current else { return }
             t.lock.withLock { t.counts.wholeQueueFoldRows += n }
+        }
+        static func recordStageListRows(_ n: Int) {
+            guard n > 0, let t = current else { return }
+            t.lock.withLock { t.counts.stageListRows += n }
+        }
+        static func recordSourceCalendarIndexBuild() {
+            guard let t = current else { return }
+            t.lock.withLock { t.counts.sourceCalendarIndexBuilds += 1 }
         }
         static func recordCandidacyGeographyVerdict() {
             guard let t = current else { return }
