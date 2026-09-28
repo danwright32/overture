@@ -415,6 +415,7 @@ struct QueueViewAttributionProbeTests {
         +   !   | 20 mach_msg2_trap  (in libsystem_kernel.dylib) + 1  [0xd]
         +   !   | 8 SwiftData.PersistentModel.getValue  (in SwiftData) + 1  [0xe]
         +   !   | 2 AG::Graph::update_attribute  (in AttributeGraph) + 1  [0xb]
+        +   !   |   2 swift_release  (in libswiftCore.dylib) + 1  [0x13]
         +   !   9 static Phase0cView.collectDirty(_:into:)  (in OvertureHostedTests) + 1  [0xf]
         +   !   18 -[NSView displayIfNeeded]  (in AppKit) + 1  [0x10]
         +   !     18 RB::DisplayList::draw  (in RenderBox) + 1  [0x11]
@@ -462,7 +463,10 @@ struct QueueViewAttributionProbeTests {
         #expect(r.owners["QueueRenderPass.WorkTally.measure"] == nil)
         #expect(r.marks["inside a card's body (ProspectRowView, DraftReviewView)"] == 25)
         #expect(r.marks["under the lazy stack (any SwiftUI Lazy frame)"] == 11)
-        #expect(r.runtimeLeaf == 21)
+        // Two of them sit under nothing but AttributeGraph, so only transparency charges them to the graph
+        // (the six graph samples above include them); without it they would read as "other: libswiftCore".
+        #expect(r.kinds.keys.allSatisfy { !$0.hasPrefix("other") })
+        #expect(r.runtimeLeaf == 23)
     }
 
     @Test func aShortSymbolIsTypeAndMember() {
