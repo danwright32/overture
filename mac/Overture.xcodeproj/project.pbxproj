@@ -1364,6 +1364,7 @@
 		90C7C836848F0B7986788C4E /* ShowSearchFieldGuardTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E8756FC6C0288732BE6DA264 /* ShowSearchFieldGuardTests.swift */; };
 		90CA73A27C4A3C68277252B5 /* DraftReviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D782E08C651DE5D0AA3A899 /* DraftReviewView.swift */; };
 		90E8DB3B6250783B011184EE /* OVSearchField.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7B4A2776E300238324E47BF /* OVSearchField.swift */; };
+		90FF41045F36BF47D2EBD6D3 /* ScoutLandingKeyedReadsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3601C150CB69ABC1C6C82F32 /* ScoutLandingKeyedReadsTests.swift */; };
 		910A505CC0C7A7D7EA96AA00 /* ReservedSeriesIdNamespaceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 892B4CDFFF5D3A027659CFA3 /* ReservedSeriesIdNamespaceTests.swift */; };
 		912AC4BBC825ECAA918B5D3F /* AgentInstructionDocs.swift in Sources */ = {isa = PBXBuildFile; fileRef = 030EC101DF1BEBC517E1B1BC /* AgentInstructionDocs.swift */; };
 		9141F2E1C44CF1F0417AE235 /* SharedStateTestLockTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 08042E6922E8E89046D26E5B /* SharedStateTestLockTests.swift */; };
@@ -2801,6 +2802,7 @@
 		356E8DE7BCC991CE3630DD97 /* QueueRenderPass.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QueueRenderPass.swift; sourceTree = "<group>"; };
 		35A5F71943676BDD3495EB3C /* OvertureDeepLinkTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OvertureDeepLinkTests.swift; sourceTree = "<group>"; };
 		35F6A280CEB97ABFA5673233 /* ScoutExtractProgress.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScoutExtractProgress.swift; sourceTree = "<group>"; };
+		3601C150CB69ABC1C6C82F32 /* ScoutLandingKeyedReadsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScoutLandingKeyedReadsTests.swift; sourceTree = "<group>"; };
 		3607A005C89247CFA5831D24 /* ScoutWarningCopy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScoutWarningCopy.swift; sourceTree = "<group>"; };
 		36246C1C57DD077B77DE261E /* InquirySendProblemsOnScreenTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InquirySendProblemsOnScreenTests.swift; sourceTree = "<group>"; };
 		365BBD4D3EDE7039FA3C4328 /* SearchScope.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchScope.swift; sourceTree = "<group>"; };
@@ -5378,6 +5380,7 @@
 				CAC9D247A008ECFC97CF33CF /* ScoutFailureTests.swift */,
 				62152453D7AF19843B3B3F9D /* ScoutFairnessClockTests.swift */,
 				F4C5EE99655F1AC46E7FEF37 /* ScoutLandingAttributionProbeTests.swift */,
+				3601C150CB69ABC1C6C82F32 /* ScoutLandingKeyedReadsTests.swift */,
 				1ECFB3B94E443F96B9695597 /* ScoutLandingReadsOnceTests.swift */,
 				7284CAE7DAF274A72C08D0ED /* ScoutLandingWorkingSetTests.swift */,
 				A9F977AAC23433642848CAC4 /* ScoutOneSourceTests.swift */,
@@ -8362,6 +8365,7 @@
 				97DCA8924C3656DB65531CD8 /* ScoutFailureTests.swift in Sources */,
 				3DFB6E887A9CA160DB782C99 /* ScoutFairnessClockTests.swift in Sources */,
 				C312B4CCFABEBD1F2D9DB89C /* ScoutLandingAttributionProbeTests.swift in Sources */,
+				90FF41045F36BF47D2EBD6D3 /* ScoutLandingKeyedReadsTests.swift in Sources */,
 				D27E3F3A8CA623B9D0109D05 /* ScoutLandingReadsOnceTests.swift in Sources */,
 				1F84B64A67695D51D86FD34E /* ScoutLandingStore.swift in Sources */,
 				DE3687F8B969B98757557E5C /* ScoutLandingWorkingSetTests.swift in Sources */,
