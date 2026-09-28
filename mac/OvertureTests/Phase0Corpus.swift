@@ -46,10 +46,55 @@ enum Phase0 {
         Reading(runs: (0..<5).map { _ in time(work) })
     }
 
-    nonisolated static func load() -> String {
+    // THE load average reader every probe shares (#4315). It used to be three copies, one per probe
+    // family, and they disagreed on a failed read: one read it as 0, a quiet Mac, which could let a
+    // replay on an unmeasured Mac score a PASS (fixed on #4314). The next probe copies whichever one it
+    // finds first (L263, L370), so there is one, and `Phase0LoadReaderTests` fails on a second call to
+    // the system reader anywhere in the test targets.
+
+    /// The one, five and fifteen minute averages. `getloadavg` returns how many it filled, -1 on failure,
+    /// and leaves the rest at whatever the buffer held, so a reading it did not fill is INFINITE: it can
+    /// never pass as quiet, where read as 0 it would (L490).
+    nonisolated static func loadReadings(samplesTaken: Int32, averages: [Double]) -> [Double] {
+        (0..<3).map { i in i < Int(samplesTaken) && i < averages.count ? averages[i] : .infinity }
+    }
+
+    nonisolated static func loadAverages() -> [Double] {
         var l = [Double](repeating: 0, count: 3)
-        getloadavg(&l, 3)
-        return String(format: "load %.2f %.2f %.2f", l[0], l[1], l[2])
+        let taken = getloadavg(&l, 3)
+        return loadReadings(samplesTaken: taken, averages: l)
+    }
+
+    nonisolated static func oneMinuteLoad() -> Double { loadAverages()[0] }
+
+    /// The line printed beside every timed block (L356).
+    nonisolated static func loadText(_ readings: [Double]) -> String {
+        String(format: "load %.2f %.2f %.2f", readings[0], readings[1], readings[2])
+    }
+
+    nonisolated static func load() -> String { loadText(loadAverages()) }
+
+    /// Waits for the one minute load to fall under `below`, bounded by `deadline` seconds (L110), polling
+    /// every `poll`. `load` is the last reading; one at or over `below` means the wait ran out, and a load
+    /// that could not be read is infinite, so it never ends the wait early as quiet. The reader, the sleep
+    /// and the clock are parameters so a test can drive every outcome without waiting (L524).
+    nonisolated static func waitForLoad(
+        below: Double, deadline seconds: Double, poll: Double,
+        read: () -> Double = { Phase0.oneMinuteLoad() },
+        sleep: (Double) -> Void = { Thread.sleep(forTimeInterval: $0) },
+        clock: () -> Double = { Double(Phase0.now()) / 1_000_000_000 }
+    ) -> (load: Double, waited: Double, text: String) {
+        let start = clock()
+        var waited = 0.0
+        var load = read()
+        while load >= below && waited < seconds {
+            sleep(poll)
+            waited = clock() - start
+            load = read()
+        }
+        let verdict = load < below ? "yes" : "NO"
+        return (load, waited, String(format: "one minute load %.2f (under %.0f: ", load, below) + verdict
+                    + String(format: ", waited %.0f s)", waited))
     }
 
     nonisolated static func say(_ line: String) { print("phase0 " + line) }

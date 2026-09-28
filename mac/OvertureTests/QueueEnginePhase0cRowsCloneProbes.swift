@@ -183,7 +183,9 @@ extension QueueEnginePhase0cRowsProbeTests {
             for i in perRow.indices.sorted(by: { perRow[$0] > perRow[$1] }).prefix(5) {
                 let p = every[i]
                 let pid = p.persistentModelID
-                let quiet = Phase0cRows.waitForQuietLoad()
+                // Up to five minutes for the load to fall under the ceiling, through the one shared reader
+                // (#4315); a load it could not read is infinite, so it never passes as quiet.
+                let quiet = Phase0.waitForLoad(below: Phase0cRows.loadCeiling, deadline: 300, poll: 5).load
                 let shape = "key \(Phase0b.hash8(p.naturalKey)) \(p.statusRaw)/\(p.recipients.count) contacts"
                 guard quiet < Phase0cRows.loadCeiling else {
                     worstReplay = nil
