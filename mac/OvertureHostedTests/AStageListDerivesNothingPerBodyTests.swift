@@ -81,6 +81,18 @@ final class AStageListDerivesNothingPerBodyTests {
                 try ctx.fetch(FetchDescriptor<WatchedSource>()))
     }
 
+    // Close the window and turn the run loop past the deep link's own 2.5 s highlight timer, so nothing
+    // this test built is still observing its container when the next test saves into another one. The
+    // first version only closed the window, and the host died in the NEXT test's save, in a
+    // `_SwiftData_SwiftUI` notification observer (#3874's signature, L86).
+    private func release(_ window: NSWindow?) {
+        window?.close()
+        let until = Date().addingTimeInterval(3)
+        while Date() < until {
+            autoreleasepool { _ = RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.05)) }
+        }
+    }
+
     private func pass(_ t: (shows: [Prospect], inquiries: [Inquiry], sources: [WatchedSource]),
                       stage: StageFocus) -> QueueView.RenderData {
         QueueRenderPass.make(QueueRenderPass.Inputs(
@@ -107,7 +119,7 @@ final class AStageListDerivesNothingPerBodyTests {
         let feed = Phase0cServedFeed(served)
         let link = Phase0cViewRig.DeepLinkChannel()
         var window: NSWindow?
-        defer { window?.close() }
+        defer { release(window) }
         _ = Phase0cView.settle(bodyMustRun: true) {
             let w = Phase0cViewRig.host(c, rows: t.shows, feed: feed, size: NSSize(width: 1000, height: 800),
                                         link: link)
@@ -155,7 +167,7 @@ final class AStageListDerivesNothingPerBodyTests {
         // branch every stage but Reached out shares.
         let feed = Phase0cServedFeed(served)
         var window: NSWindow?
-        defer { window?.close() }
+        defer { release(window) }
         let other = pass(t, stage: .review)
         let listBefore = QueueRenderCounter.stageListBodyCount(QueueRenderCounter.inquiryList)
         var bodies = 0

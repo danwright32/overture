@@ -496,6 +496,19 @@ enum QueueRenderPass {
         let missedByACheckKeys = QueueModel.keysMissedByACheck(rows, now: context.now,
                                                                today: context.today, geo: geo)
         let summary = QueueModel.summary(visibleRows)
+        // #4311: the focused stage's own lists, taken HERE rather than in the view's body, which derived
+        // them on every evaluation (L471). The Reached out list only for the stage that draws it, from the
+        // `reachedOut` above at this pass's instant; the inquiry block's grouping and its row to model
+        // lookup only when the stage has an inquiry to draw. `StageListsFromThePassTests` holds both to
+        // the derivations the body used to make.
+        let reachedOutList = i.focusedStage == .reachedOut
+            ? QueueModel.reachedOutList(reachedOut, inquiries: i.inquiries, now: context.now,
+                                        sourceCalendars: { QueueModel.sourceCalendarIndex(i.sources) })
+            : .none
+        let stageInquiryRows = inquiryRows(i.inquiries, stage: i.focusedStage, now: context.now)
+        let inquiryGroups = stageInquiryRows.isEmpty
+            ? [] : QueueModel.groupRowsByDate(stageInquiryRows.map { QueueRow.inquiry($0) })
+        let inquiriesByRowID = stageInquiryRows.isEmpty ? [:] : QueueModel.inquiriesByRowID(i.inquiries)
         return QueueView.RenderData(
             cards: scope.cards,
             // #3507: the scope itself, so the render path reads the list this pass already derived rather
@@ -543,7 +556,10 @@ enum QueueRenderPass {
             cardCheck: scope.cardCheck,
             focusedRows: focusedRows,
             dateGroups: QueueModel.groupByDate(focusedRows),
-            inquiryRows: inquiryRows(i.inquiries, stage: i.focusedStage, now: context.now),
+            inquiryRows: stageInquiryRows,
+            inquiryGroups: inquiryGroups,
+            inquiriesByRowID: inquiriesByRowID,
+            reachedOutList: reachedOutList,
             // #3738: read by the empty-stage card, which pointed Dan at the next stage with work by
             // counting every show again inside a SwiftUI body. One derivation, two readers (L16).
             stageCounts: StageNavigation.counts(in: placement),

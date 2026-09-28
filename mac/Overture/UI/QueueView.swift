@@ -354,6 +354,13 @@ struct QueueView: View {
         let focusedRows: [QueueScopeRow]
         let dateGroups: [QueueModel.DateGroup]
         let inquiryRows: [InquiryRow]
+        // #4311: the stage's inquiry block as it draws, grouped by date, and each row's inquiry for the
+        // controls on it. Both used to be derived inside the block's body on every evaluation (L471).
+        let inquiryGroups: [RowDateGroup]
+        let inquiriesByRowID: [String: Inquiry]
+        // #4311: the Reached out list as it draws (rows, day headings, the calendar table its links
+        // resolve against), derived by the pass for that stage and empty on every other.
+        let reachedOutList: QueueModel.ReachedOutList
         // #3738: what each stage pill counts, from the pass's own placement table. The empty-stage card
         // reads it rather than deciding every show's stages a second time inside a body.
         let stageCounts: [StageFocus: Int]
@@ -878,7 +885,7 @@ struct QueueView: View {
             // "Grouped by when to reach out next" caption governs every date heading in the stage. They
             // used to be two blocks whose headings looked identical and meant different things (event
             // date above, reach-out date below).
-            reachedOutList(data.reachedOut)
+            reachedOutList(data.reachedOutList)
         } else {
             // #1774: already resolved in makeRenderData, above the scroll boundary. Re-derived here it
             // cost a StageNavigation.focusedKeys sweep of every prospect on every scroll frame.
@@ -924,7 +931,7 @@ struct QueueView: View {
                     // queue at once and trade this issue's cost for a worse one.
                     QueueDateGroups(groups: data.dateGroups, sendState: sendState) {
                         // #1436: un-replied inquiries (the to-send stage) surface with the shows.
-                        inquirySection(inquiryRows)
+                        inquirySection(data)
                     } content: { group, departing, departingCards in
                         dateSection(group, data: data, departing: departing,
                                     departingCards: departingCards)
@@ -939,14 +946,14 @@ struct QueueView: View {
     // rows so the prospect rendering is untouched; whether they interleave between shows by date is a
     // walk-time refinement. The source tag and lifecycle state stand in for a prospect's fit/geo, which
     // an inquiry has no equivalent for.
-    @ViewBuilder private func inquirySection(_ rows: [InquiryRow]) -> some View {
-        if !rows.isEmpty {
+    // #4311: grouped and resolved by the pass (`RenderData.inquiryGroups`, `inquiriesByRowID`), never here.
+    @ViewBuilder private func inquirySection(_ data: RenderData) -> some View {
+        if !data.inquiryGroups.isEmpty {
             #if DEBUG
             let _ = QueueRenderCounter.recordStageListBody(QueueRenderCounter.inquiryList)
             #endif
-            let byId = Dictionary(inquiries.map { (String(describing: $0.persistentModelID), $0) },
-                                  uniquingKeysWith: { first, _ in first })
-            ForEach(QueueModel.groupRowsByDate(rows.map { QueueRow.inquiry($0) })) { group in
+            let byId = data.inquiriesByRowID
+            ForEach(data.inquiryGroups) { group in
                 VStack(alignment: .leading, spacing: OVSpacing.sm) {
                     HStack(alignment: .firstTextBaseline, spacing: OVSpacing.sm) {
                         if !group.weekday.isEmpty {
@@ -1244,7 +1251,8 @@ struct QueueView: View {
         // #4062: resolved against the list the stage actually DRAWS. Reached out groups by reach out date,
         // so a performance date group id named nothing there and the jump was dropped.
         jumpTarget = QueueModel.jumpScrollGroupID(for: key, onStage: focusedStage, items: items,
-                                                  reachedOut: reachedOutEntries(reachedOut))
+                                                  reachedOut: QueueModel.reachedOutStageEntries(
+                                                      reachedOut, inquiries: inquiries, now: Date()))
             .map(QueueJumpRequest.init(group:))
         // Stage two: once that group is on screen its rows are realized, so nudge the row itself to the
         // top. If this runs before the layout settles it simply no-ops, leaving Dan on the right date,
@@ -1460,20 +1468,16 @@ struct QueueView: View {
     // times appears twice, each labeled with that contact's own timing. #661: a lightweight row
     // (group name, this one contact, timing, and the state control), not the entire show card, so
     // two contacts due on the same show don't render as two large, nearly-identical cards.
-    // #4062: the Reached out list's rows, built in ONE place, so the list and a deep link resolving its
-    // group against that list can never be looking at two different sets of rows.
-    private func reachedOutEntries(_ dated: [(prospect: Prospect, recipient: Recipient, next: Date)]) -> [ReachedOutEntry] {
-        QueueModel.reachedOutEntries(prospects: dated,
-                                     inquiries: inquiries.filter { StageNavigation.stage(for: $0) == .reachedOut },
-                                     now: Date())
-    }
-
-    @ViewBuilder private func reachedOutList(_ dated: [(prospect: Prospect, recipient: Recipient, next: Date)]) -> some View {
+    // #4062: the Reached out list's rows come from ONE declaration, `QueueModel.reachedOutStageEntries`, so
+    // the list and a deep link resolving its group against it can never be looking at two sets of rows.
+    // #4311: and the list reads them from the render pass (`RenderData.reachedOutList`), with its day
+    // headings and its calendar table, rather than deriving all three in this body on every evaluation
+    // (L471). `AStageListDerivesNothingPerBodyTests` pins that the body derives none of them.
+    @ViewBuilder private func reachedOutList(_ list: QueueModel.ReachedOutList) -> some View {
         #if DEBUG
         let _ = QueueRenderCounter.recordStageListBody(QueueRenderCounter.reachedOutList)
         #endif
-        let entries = reachedOutEntries(dated)
-        if entries.isEmpty {
+        if list.entries.isEmpty {
             VStack(spacing: OVSpacing.xs) {
                 Text("No one to follow up with").font(OVType.dateHeading).foregroundStyle(OVColor.ink)
                 // #2396: SHOWS, not people. This said "the people you are waiting to hear back from" while
@@ -1489,9 +1493,9 @@ struct QueueView: View {
         } else {
             let now = Date()
             // #2816: built ONCE for the whole list, on the #1121 rule, rather than walking the watchlist
-            // per row on every scroll frame.
-            let sourceCalendars = QueueModel.sourceCalendarIndex(watchedSources)
-            let groups = QueueModel.reachOutDateGroups(entries, reachDate: { $0.next })
+            // per row on every scroll frame. #4311: by the pass, not by this body.
+            let sourceCalendars = list.sourceCalendars
+            let groups = list.groups
             VStack(alignment: .leading, spacing: OVSpacing.md) {
                 // #1233/#1232: the date headers below are REACH-OUT dates (Dan's call), so say so once here
                 // rather than let them read like the performance-date headers on every other stage.

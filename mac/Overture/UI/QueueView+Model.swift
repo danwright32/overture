@@ -1996,6 +1996,47 @@ enum QueueModel {
     }
 
 
+    // #4311: the Reached out stage's rows, both kinds: the pass's shows and the inquiries ON that stage.
+    // One declaration for the list and the deep link that resolves a group against it (#4062), so the two
+    // cannot merge different sets.
+    static func reachedOutStageEntries(_ dated: [(prospect: Prospect, recipient: Recipient, next: Date)],
+                                       inquiries: [Inquiry], now: Date) -> [ReachedOutEntry] {
+        reachedOutEntries(prospects: dated,
+                          inquiries: inquiries.filter { StageNavigation.stage(for: $0) == .reachedOut },
+                          now: now)
+    }
+
+    // #4311: everything the Reached out list draws, derived ONCE by the render pass and read by the view.
+    // It used to be derived inside the list's body on every evaluation, and a body runs on events that
+    // change no data (L471). The calendar table is built only when there is a row to resolve a link for,
+    // as the body did (#2816).
+    struct ReachedOutList {
+        let entries: [ReachedOutEntry]
+        let groups: [ReachOutDateGroup<ReachedOutEntry>]
+        let sourceCalendars: [String: String]
+
+        // What every stage but Reached out carries: nothing, because only that stage draws it.
+        static var none: ReachedOutList { ReachedOutList(entries: [], groups: [], sourceCalendars: [:]) }
+    }
+
+    // `sourceCalendars` is asked only when there is a row, so an empty stage builds no table.
+    static func reachedOutList(_ dated: [(prospect: Prospect, recipient: Recipient, next: Date)],
+                               inquiries: [Inquiry], now: Date,
+                               sourceCalendars: () -> [String: String]) -> ReachedOutList {
+        let entries = reachedOutStageEntries(dated, inquiries: inquiries, now: now)
+        guard !entries.isEmpty else { return .none }
+        return ReachedOutList(entries: entries, groups: reachOutDateGroups(entries, reachDate: { $0.next }),
+                              sourceCalendars: sourceCalendars())
+    }
+
+    // #4311: a stage's inquiry rows resolved back to their models, keyed by the row's id, which is what
+    // the inquiry block's buttons act on. Built by the pass rather than in the block's body.
+    static func inquiriesByRowID(_ inquiries: [Inquiry]) -> [String: Inquiry] {
+        QueueRenderPass.WorkTally.recordStageListRows(inquiries.count)
+        return Dictionary(inquiries.map { (String(describing: $0.persistentModelID), $0) },
+                          uniquingKeysWith: { first, _ in first })
+    }
+
     static func reachOutDateGroups<Row>(_ rows: [Row], reachDate: (Row) -> Date) -> [ReachOutDateGroup<Row>] {
         QueueRenderPass.WorkTally.recordStageListRows(rows.count)
         let cal = easternCalendar
