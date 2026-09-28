@@ -300,8 +300,14 @@ final class Phase0cWorld {
     var asOf = Phase0cFixture.asOf
     private var rng: SeededGenerator
     private var serial = 0
+    /// Which field the next `flaggedEdit` moves. Started from the seed so the three CI seeds at 60 rows begin
+    /// on three different fields: each world applies the edit only once or twice, and a counter shared with
+    /// every other op left the title field unvisited for a whole CI run (#4106 0c.2 re-probe, measured
+    /// 2026-09-28: the skip with its title condition removed SURVIVED).
+    private var flaggedEdits: Int
 
     init(size: Int, seed: UInt64) throws {
+        flaggedEdits = Int(seed % 3)
         container = try TestModelContainer.inMemory([Prospect.self, Recipient.self])
         context = container.mainContext
         rng = SeededGenerator(seed: seed &* 2_654_435_761 &+ 4106)
@@ -527,8 +533,9 @@ final class Phase0cWorld {
             let hot = ContradictedCancellation.contradictedKeys(among: rows)
             guard let r = pick(rows, { hot.contains($0.naturalKey) }) ?? pick(rows, { $0.disappearedFromFeed })
             else { return nil }
-            let field = next() % 3
-            let invented = "Invented Moved Bill \(serial)"
+            let field = flaggedEdits % 3
+            flaggedEdits += 1
+            let invented = "Invented Moved Bill \(next())"
             typealias Room = Phase0cContradictionPatch<Phase0cKey>.Facts
             let other = Phase0cFixture.venues.compactMap { $0 }
                 .first { Room.room($0) != Room.room(r.venue) } ?? "Invented Far Room"
