@@ -82,6 +82,22 @@ enum Phase0cLinks {
         return replayedMax > stop ? "FAIL" : "PASS"
     }
 
+    /// Every operation kind 0c.2's cost arm prices. A kind the run never recorded measured nothing, so the
+    /// verdict must not read its absence as a fast kind (L98).
+    nonisolated static let contradictionKinds = [
+        "T2 live row touch", "T2 flag a live row", "T2 unflag it", "T2 live row to another room", "T2 and back",
+        "T2 flagged row touch", "T3 third member joining", "T3 and leaving", "T2 to T3 twin appearing",
+        "T2 to T3 and going", "T3 scout accrual, every flagged row up one", "T3 accrual undone",
+        "T3 accrual down, every row above goneThreshold", "T3 accrual down undone",
+        "T3 rollover past a last night", "T3 rollover back",
+    ]
+
+    /// The kinds in `expected` that `recorded` lacks, in `expected`'s order.
+    nonisolated static func unmeasuredKinds(expected: [String], recorded: [String]) -> [String] {
+        let seen = Set(recorded)
+        return expected.filter { !seen.contains($0) }
+    }
+
     /// "yyyy-MM-dd" plus `days`, in plain calendar arithmetic (UTC, so no DST can move a day).
     nonisolated static func addDays(_ day: String, _ days: Int) -> String {
         let parts = day.split(separator: "-").compactMap { Int($0) }
@@ -872,6 +888,15 @@ struct QueueEnginePhase0cLinksProbeTests {
         }
     }
 
+    // 0c.2's cost arm names every kind it prices, so a kind that never ran is UNMEASURED rather than absent.
+    @Test func aContradictionKindThatNeverRanIsUnmeasured() {
+        let all = Phase0cLinks.contradictionKinds
+        #expect(Phase0cLinks.unmeasuredKinds(expected: all, recorded: all).isEmpty)
+        #expect(Phase0cLinks.unmeasuredKinds(expected: all, recorded: all.filter { $0 != "T3 rollover back" })
+                == ["T3 rollover back"])
+        #expect(Set(all).count == all.count, "a kind is listed twice")
+    }
+
     // A load that could not be read must never read as a quiet Mac.
     @Test func aLoadThatCouldNotBeReadIsNeverQuiet() {
         #expect(Phase0cLinks.loadReading(samplesTaken: -1, averages: [0, 0, 0]) == .infinity)
@@ -1188,11 +1213,14 @@ struct QueueEnginePhase0cLinksProbeTests {
         // state back, and the kind's max is the median of five replays taken with load under 8.
         var slowest: [String: (ms: Double, replay: () -> Double)] = [:]
         var kindOrder: [String] = []
+        // Arms that measured nothing on this corpus: a kind run over no keys, or never run at all.
+        var unmeasured: [String] = []
         func record(_ kind: String, _ ms: Double, _ replay: @escaping () -> Double) {
             if slowest[kind] == nil { kindOrder.append(kind) }
             if ms > (slowest[kind]?.ms ?? -1) { slowest[kind] = (ms, replay) }
         }
         func touch(_ kind: String, _ keys: [Phase0cKey], into stats: inout Phase0cStats) -> Double {
+            guard !keys.isEmpty else { unmeasured.append("\(kind) on \(label), no key to act on"); return 0 }
             let ms = run(keys)
             stats.add(ms)
             record(kind, ms) { run(keys) }
@@ -1203,6 +1231,7 @@ struct QueueEnginePhase0cLinksProbeTests {
                   into forward: inout Phase0cStats, _ back: inout Phase0cStats,
                   change: @escaping () -> Void, revert: @escaping () -> Void,
                   between: () -> Void = {}) -> (Double, Double) {
+            guard !keys.isEmpty else { unmeasured.append("\(kind) on \(label), no key to act on"); return (0, 0) }
             change()
             let there = run(keys)
             forward.add(there)
@@ -1329,10 +1358,8 @@ struct QueueEnginePhase0cLinksProbeTests {
 
         var down = Phase0cStats(), downBack = Phase0cStats()
         let above = byKey.filter { $0.value.missedScoutCount > FeedReconcile.goneThreshold }.map { $0.key }
-        var downSplit = "", downBackSplit = "", unmeasured: [String] = []
-        if above.isEmpty {
-            unmeasured.append("T3 accrual down on \(label), no row above goneThreshold")
-        } else {
+        var downSplit = "", downBackSplit = ""
+        if !above.isEmpty {
             _ = pair("T3 accrual down, every row above goneThreshold", "T3 accrual down undone", above,
                      into: &down, &downBack,
                      change: { for key in above { byKey[key]?.missedScoutCount -= 1 } },
@@ -1377,6 +1404,9 @@ struct QueueEnginePhase0cLinksProbeTests {
         // The replays, per kind, of that kind's slowest key.
         // The load is read again after each kind's five replays, so a Mac that got busy part way through
         // cannot score a PASS on the strength of the reading taken before the first one.
+        for kind in Phase0cLinks.unmeasuredKinds(expected: Phase0cLinks.contradictionKinds, recorded: kindOrder) {
+            unmeasured.append("\(kind) on \(label), never ran")
+        }
         let settled = Phase0cLinks.waitForLoad(below: 8)
         var loads = [settled.load]
         var replayLines: [String] = []
