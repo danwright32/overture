@@ -103,6 +103,20 @@ enum CanonicalOracle {
                                            overrides: .none, refusals: .none, heldKeys: [], now: now)
     }
 
+    // #4106 Phase 0c.4: the same wrapper with every input the pass hands the ledger. T5's neighbourhood
+    // includes refusals, holds and overrides (plan v7 facts 2 and 3), and a wrapper that fixes them at
+    // `.none` can never see a patch get one of them wrong. Same canonical orders as the wrapper above, on
+    // lines of their own so either can be mutated alone.
+    static func inheritedAnswers(_ answers: [OrgReachabilityAnswer], corpus: [Prospect],
+                                 overrides: ProducerOverrides, refusals: ContactRefusal.Ledger,
+                                 heldKeys: Set<String>, now: Date) -> [String: OrgAnswerLedger.Inherited] {
+        let canonicalFullLedgerAnswers = answers.sorted(by: answerOrder)
+        let canonicalFullLedgerCorpus = corpus.sorted(by: byNaturalKey)
+        return QueueModel.inheritedAnswers(canonicalFullLedgerAnswers, corpus: canonicalFullLedgerCorpus,
+                                           overrides: overrides, refusals: refusals, heldKeys: heldKeys,
+                                           now: now)
+    }
+
     @discardableResult
     static func reconcileBooked(_ prospects: [Prospect], bookings: [OvertureBooking], now: Date) -> Int {
         let canonicalBookingRows = prospects.sorted(by: byNaturalKey)
