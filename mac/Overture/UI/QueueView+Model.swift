@@ -1415,7 +1415,8 @@ enum QueueModel {
     // Reached out and Follow-ups resolve their links against the same table the queue card does rather
     // than a second copy of it.
     static func sourceCalendarIndex(_ sources: [WatchedSource]) -> [String: String] {
-        Dictionary(
+        QueueRenderPass.WorkTally.recordSourceCalendarIndexBuild()
+        return Dictionary(
             sources.compactMap { s -> (String, String)? in
                 guard let u = s.listingsURL, !u.isEmpty else { return nil }
                 return (s.sourceId, u)
@@ -1978,6 +1979,7 @@ enum QueueModel {
     // about, and inventing a date would put a row under a heading that lies about it.
     static func reachedOutEntries(prospects: [(prospect: Prospect, recipient: Recipient, next: Date)],
                                   inquiries: [Inquiry], now: Date) -> [ReachedOutEntry] {
+        QueueRenderPass.WorkTally.recordStageListRows(prospects.count + inquiries.count)
         let prospectEntries = prospects.map {
             ReachedOutEntry.prospect(prospect: $0.prospect, recipient: $0.recipient, next: $0.next)
         }
@@ -1994,7 +1996,54 @@ enum QueueModel {
     }
 
 
+    // #4311: the Reached out stage's rows, both kinds: the pass's shows and the inquiries ON that stage.
+    // One declaration for the list and the deep link that resolves a group against it (#4062), so the two
+    // cannot merge different sets.
+    static func reachedOutStageEntries(_ dated: [(prospect: Prospect, recipient: Recipient, next: Date)],
+                                       inquiries: [Inquiry], now: Date) -> [ReachedOutEntry] {
+        reachedOutEntries(prospects: dated,
+                          inquiries: inquiries.filter { StageNavigation.stage(for: $0) == .reachedOut },
+                          now: now)
+    }
+
+    // #4311: everything the Reached out list draws, derived ONCE by the render pass and read by the view.
+    // It used to be derived inside the list's body on every evaluation, and a body runs on events that
+    // change no data (L471). The calendar table is built only when there is a row to resolve a link for,
+    // as the body did (#2816).
+    struct ReachedOutList {
+        let entries: [ReachedOutEntry]
+        let groups: [ReachOutDateGroup<ReachedOutEntry>]
+        let sourceCalendars: [String: String]
+        // #4320: the instant the rows were derived at, which is the one the rows draw their times from, so
+        // a row's clock moves when the pass's does and not on every evaluation of the body.
+        let now: Date
+
+        // What every stage but Reached out carries: nothing, because only that stage draws it.
+        static var none: ReachedOutList {
+            ReachedOutList(entries: [], groups: [], sourceCalendars: [:], now: .distantPast)
+        }
+    }
+
+    // `sourceCalendars` is asked only when there is a row, so an empty stage builds no table.
+    static func reachedOutList(_ dated: [(prospect: Prospect, recipient: Recipient, next: Date)],
+                               inquiries: [Inquiry], now: Date,
+                               sourceCalendars: () -> [String: String]) -> ReachedOutList {
+        let entries = reachedOutStageEntries(dated, inquiries: inquiries, now: now)
+        guard !entries.isEmpty else { return .none }
+        return ReachedOutList(entries: entries, groups: reachOutDateGroups(entries, reachDate: { $0.next }),
+                              sourceCalendars: sourceCalendars(), now: now)
+    }
+
+    // #4311: a stage's inquiry rows resolved back to their models, keyed by the row's id, which is what
+    // the inquiry block's buttons act on. Built by the pass rather than in the block's body.
+    static func inquiriesByRowID(_ inquiries: [Inquiry]) -> [String: Inquiry] {
+        QueueRenderPass.WorkTally.recordStageListRows(inquiries.count)
+        return Dictionary(inquiries.map { (String(describing: $0.persistentModelID), $0) },
+                          uniquingKeysWith: { first, _ in first })
+    }
+
     static func reachOutDateGroups<Row>(_ rows: [Row], reachDate: (Row) -> Date) -> [ReachOutDateGroup<Row>] {
+        QueueRenderPass.WorkTally.recordStageListRows(rows.count)
         let cal = easternCalendar
         var order: [String] = []
         var buckets: [String: [Row]] = [:]
@@ -2358,6 +2407,7 @@ enum QueueModel {
     // itself). Buckets appear in the order the rows arrive, so a caller wanting date order hands over
     // rows already in it.
     static func groupRowsByDate(_ rows: [QueueRow]) -> [RowDateGroup] {
+        QueueRenderPass.WorkTally.recordStageListRows(rows.count)
         var order: [String] = []
         var buckets: [String: [QueueRow]] = [:]
         for row in rows {
@@ -2408,7 +2458,8 @@ enum QueueModel {
     // the past show, the late reply on a reached-out lead, moved to QueueShowableIsOneFilterTests.
 
     static func summary(_ items: [some QueueScopeFacts]) -> (total: Int, high: Int) {
-        (items.count, items.filter { $0.tier == "high" }.count)
+        QueueRenderPass.WorkTally.recordWholeQueueFoldRows(items.count)
+        return (items.count, items.filter { $0.tier == "high" }.count)
     }
 
     static func pendingBookingCount(_ items: [some QueueScopeFacts]) -> Int {
@@ -2588,9 +2639,10 @@ enum QueueModel {
     // the marker would then claim a date had been checked because the candidacy rule had dropped it for
     // some entirely different reason.
     private static func probeIsWorthOffering(_ i: some QueueScopeFacts, today: String, geo: GeoRefusals) -> Bool {
-        OpenForDecision.isOpen(status: i.status, performanceDate: i.performanceDate,
-                               isBooked: i.isBooked, sentAt: i.sentAt, today: today)
-            && !geo.hidesFromQueue(location: i.location,
+        guard OpenForDecision.isOpen(status: i.status, performanceDate: i.performanceDate,
+                                     isBooked: i.isBooked, sentAt: i.sentAt, today: today) else { return false }
+        QueueRenderPass.WorkTally.recordCandidacyGeographyVerdict()
+        return !geo.hidesFromQueue(location: i.location,
                                    discipline: Discipline(rawValue: i.discipline) ?? .other)
     }
 
@@ -2630,11 +2682,16 @@ enum QueueModel {
     static func keysMissedByACheck(_ items: [some QueueScopeFacts], now: Date = Date(),
                                    today: String = QueueModel.easternToday(),
                                    geo: GeoRefusals = .none) -> [String] {
-        items.filter { i in
-            probeIsWorthOffering(i, today: today, geo: geo)
-                // #2621: one definition of "a check missed this row", shared with the per-card offer.
-                && Reachability.wasMissedByACheck(probedAt: i.reachabilityProbedAt,
-                                                  unansweredAt: i.reachabilityUnansweredAt, now: now)
+        QueueRenderPass.WorkTally.recordWholeQueueFoldRows(items.count)
+        // #4106: the date test FIRST. It rejected every row on the live clone and on the 4x corpus, and
+        // the candidacy rule behind it can parse a place string for its geography verdict, so asking it
+        // second means a row no check missed never pays for that. The answer is the same either way (an
+        // AND of two pure tests); `MastheadAnswersFromThePassTests` counts the verdicts to hold the order.
+        return items.filter { i in
+            // #2621: one definition of "a check missed this row", shared with the per-card offer.
+            Reachability.wasMissedByACheck(probedAt: i.reachabilityProbedAt,
+                                           unansweredAt: i.reachabilityUnansweredAt, now: now)
+                && probeIsWorthOffering(i, today: today, geo: geo)
         }.map(\.id)
     }
 
@@ -2721,6 +2778,67 @@ enum QueueModel {
                        && hasFreshReachabilityAnswer($0, now: now) }
             .compactMap(reachabilityAnswerDate)
             .min()
+    }
+
+    // #4317: everything a date heading asks about reachability, as ONE value per date, taken by the render
+    // pass rather than by the heading's body. The heading used to ask `probeKeysForTickedDate` for its tick
+    // box and hand its rows to `ReachabilityProbeControl`, which asked the candidacy rule twice more, all
+    // inside the body with the view's own UNRESOLVED `geo`, so every drawn Scout heading paid geography
+    // verdicts that can parse a place string on events that change no data (L471). The four answers are
+    // the same four functions the heading and the control called, over the same rows, so the value cannot
+    // say anything those functions would not; `DateProbeHeadingsFromThePassTests` holds it to them.
+    struct DateProbeHeading: Equatable {
+        // What ticking the date adds to a check, and so whether the tick box appears at all (#2371).
+        let tickKeys: [String]
+        // The shows the Check button would run over, empty where it does not appear (#1308).
+        let candidateKeys: [String]
+        // The finished date's quiet marker and the day it names (#1617, #2374).
+        let fullyChecked: Bool
+        let checkedOn: Date?
+
+        // A date the pass has no heading for: no tick box, no button, no marker. The one way to reach it
+        // is a night drawn only for a departing card, whose show has just been sent and so is past the
+        // keep-or-dismiss moment, where the four functions answer exactly this.
+        static let none = DateProbeHeading(tickKeys: [], candidateKeys: [], fullyChecked: false, checkedOn: nil)
+
+        init(tickKeys: [String], candidateKeys: [String], fullyChecked: Bool, checkedOn: Date?) {
+            self.tickKeys = tickKeys
+            self.candidateKeys = candidateKeys
+            self.fullyChecked = fullyChecked
+            self.checkedOn = checkedOn
+        }
+
+        init(_ items: [some QueueScopeFacts], now: Date = Date(), today: String = QueueModel.easternToday(),
+             geo: GeoRefusals = .none) {
+            // ONE candidate sweep per date, and the other three answers are derived from what it found rather
+            // than asked again. The pass answers every date of the stage, not only the ones on screen, so a
+            // second sweep here is paid once per date on every pass (#4321 review).
+            let candidates = QueueModel.reachabilityProbeCandidateKeys(items, now: now, today: today, geo: geo)
+            self.candidateKeys = candidates
+            guard candidates.isEmpty else {
+                // `probeKeysForTickedDate` answers the candidates themselves, and `dateReachabilityIsFullyChecked`
+                // is false by its own first guard, so nothing more is asked of a date still offering a check.
+                self.tickKeys = candidates
+                self.fullyChecked = false
+                self.checkedOn = nil
+                return
+            }
+            // With nothing outstanding, the tick box re-offers the answered, still open shows, and the date is
+            // finished exactly when there is one: `dateReachabilityIsFullyChecked` is "no candidates, and some
+            // show is worth offering with a fresh answer", which is `keysToReofferForRecheck` being non-empty.
+            let reoffer = QueueModel.keysToReofferForRecheck(items, now: now, today: today, geo: geo)
+            self.tickKeys = reoffer
+            self.fullyChecked = !reoffer.isEmpty
+            self.checkedOn = reoffer.isEmpty
+                ? nil : QueueModel.dateReachabilityCheckedOn(items, now: now, today: today, geo: geo)
+        }
+    }
+
+    // One heading per date group, keyed by the group's id, which is the key the body looks it up by.
+    static func dateProbeHeadings(_ groups: [DateGroup], now: Date, today: String,
+                                  geo: GeoRefusals) -> [String: DateProbeHeading] {
+        Dictionary(groups.map { ($0.id, DateProbeHeading($0.items, now: now, today: today, geo: geo)) },
+                   uniquingKeysWith: { first, _ in first })
     }
 
     // The date of the answer actually IN FORCE, in the same order `hasFreshReachabilityAnswer` accepts

@@ -48,6 +48,11 @@ enum AppNoticeAction: Equatable, Sendable {
     // is the offer to finish exactly those, rather than leaving Dan to work out which dates they sit on
     // and re-select them by hand while the app holds the list.
     case finishShowsACheckMissed
+    // #4312: the same offer SERVED, carrying the shows it will run. The report above names no rows,
+    // because its writer has none; `AppNotices.servable` turns it into this where the rows are, from the
+    // render pass's own `missedByACheckKeys`, so the control Dan sees and the run it starts read one
+    // answer (L16), exactly as `showShowsOneSweepBroke` carries its keys for the same reason.
+    case finishTheseShowsACheckMissed(keys: [String])
     // #2478: re-read Downbeat's export now, so the line reporting a broken one clears the moment a good
     // one lands rather than waiting for the next reconcile tick.
     case recheckDownbeatExport
@@ -101,7 +106,8 @@ enum AppNoticeAction: Equatable, Sendable {
         case .recheckShootHistory: return "I've run the import"
         // Deliberately not "Retry". A Prep run's shortfall genuinely re-queues itself, and this does not:
         // it starts a new paid run over a set of shows, through the same confirmation as any other check.
-        case .finishShowsACheckMissed: return "Check the rest"
+        // #4312: the request and the served offer are one control, so one label.
+        case .finishShowsACheckMissed, .finishTheseShowsACheckMissed: return "Check the rest"
         }
     }
 }
@@ -153,13 +159,17 @@ enum AppNotices {
     // worse than none at all (L44).
     //
     // Scoped to that one action by name, so this can never quietly disarm an unrelated control.
-    static func servable(_ notices: [AppNotice], canFinishMissedShows: Bool) -> [AppNotice] {
-        guard !canFinishMissedShows else { return notices }
-        return notices.map { notice in
+    //
+    // #4312: and where the offer CAN be served, it is served carrying the set, so the press runs exactly
+    // the shows that decided the control should be on screen. `missedByACheckKeys` is the render pass's
+    // own answer; the press used to derive a second one from the whole store at its own instant.
+    static func servable(_ notices: [AppNotice], missedByACheckKeys: [String]) -> [AppNotice] {
+        notices.map { notice in
             guard notice.action == .finishShowsACheckMissed else { return notice }
-            var stripped = notice
-            stripped.action = nil
-            return stripped
+            var served = notice
+            served.action = missedByACheckKeys.isEmpty
+                ? nil : .finishTheseShowsACheckMissed(keys: missedByACheckKeys)
+            return served
         }
     }
 

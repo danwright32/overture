@@ -326,6 +326,13 @@ struct QueueView: View {
         // one finding and carrying the other is a shared name standing in for shared behaviour (L263).
         let mergeSurvivorsDropped: [AppNotice]
         let pendingBookings: Int
+        // #4106 view workstream: the masthead's "N in the queue / M high-fit" and the shows a check
+        // missed, both folds over the whole queue that the masthead used to take in its body on every
+        // evaluation. Taken once by the pass (see `QueueRenderPass.make`) and read here. The missed set
+        // is published whole rather than as a Bool so the equality with the old derivation is a set
+        // comparison a test can make, not a yes that agrees by accident.
+        let summary: (total: Int, high: Int)
+        let missedByACheckKeys: [String]
         // #1774: everything below used to be derived INSIDE the scroll content, so a scroll frame paid for
         // it. The fan-out line is the one that hid: it sweeps every prospect and was written as an
         // argument to the masthead, and an argument evaluates at its call site, so it ran on every pass
@@ -347,6 +354,17 @@ struct QueueView: View {
         let focusedRows: [QueueScopeRow]
         let dateGroups: [QueueModel.DateGroup]
         let inquiryRows: [InquiryRow]
+        // #4311: the stage's inquiry block as it draws, grouped by date, and each row's inquiry for the
+        // controls on it. Both used to be derived inside the block's body on every evaluation (L471).
+        let inquiryGroups: [RowDateGroup]
+        let inquiriesByRowID: [String: Inquiry]
+        // #4311: the Reached out list as it draws (rows, day headings, the calendar table its links
+        // resolve against), derived by the pass for that stage and empty on every other.
+        let reachedOutList: QueueModel.ReachedOutList
+        // #4317: each date heading's reachability answers (its tick box, its Check button, its finished
+        // marker), keyed by the date group's id. The heading's body used to ask them itself, per realised
+        // group per evaluation, through the view's unresolved geography (L471).
+        let dateProbeHeadings: [String: QueueModel.DateProbeHeading]
         // #3738: what each stage pill counts, from the pass's own placement table. The empty-stage card
         // reads it rather than deciding every show's stages a second time inside a body.
         let stageCounts: [StageFocus: Int]
@@ -691,42 +709,26 @@ struct QueueView: View {
     // The rows the Scout stage is currently showing, derived the same way focusedSection derives them,
     // so a ticked date means exactly the shows under that heading and nothing else.
 
-    // #1805: the shows the last check was given and never reached. Read from the same rule the report's
-    // offer is gated on, so the control and the run can never disagree about the set.
+    // #1805: the shows the last check was given and never reached come from ONE rule,
+    // `QueueModel.keysMissedByACheck`. #4106: the render pass takes that answer once and publishes it on
+    // `RenderData.missedByACheckKeys`, because the masthead used to fold every queue row for it on every
+    // body evaluation (L471).
     //
-    // #2598: it TAKES the rows rather than reading `items` itself, and that is the whole of a defect
-    // worth naming. It was a computed property reading `items`, which is a computed property that derives
-    // the WHOLE store, and the masthead reads it while ALREADY HOLDING those rows as a parameter. So every
-    // press built the cards twice: once in the render pass and once here, for a count of how many of them
-    // a check had missed.
+    // #4312: and the press RUNS that answer. The masthead hands the pass's set to `AppNotices.servable`,
+    // which serves the report's offer as `.finishTheseShowsACheckMissed(keys:)` carrying it, and this is
+    // handed those keys. So the set that put "Check the rest" on screen is the set the confirm prices and
+    // the run starts over (L16), and a press builds no card and folds no row to find it. It used to derive
+    // its own through the computed `items`, the whole store as full cards at the press's own instant, day
+    // and unresolved refusals: #2598 measured that shape at 2,280 cards over a corpus of 1,142 and a
+    // 1,305 ms wait (2026-09-05), which no counter saw because it ran outside the pass (L383).
+    // `TheMissedShowsPressActsOnThePassTests` holds both halves.
     //
-    // Measured on a hosted QueueView, 2026-09-05: one press built 2,280 cards over a corpus of 1,142,
-    // which is two whole-store passes, and the wait Dan felt was 1,305 ms. Nothing reported it, because
-    // the sweep counter lives INSIDE the pass and this derivation is outside it, and a second pass and a
-    // slow one are the same number of milliseconds to anybody reading only a clock (#2727, L63).
-    //
-    // This is #1121's and #1774's defect exactly, one call site further out: a computed property is
-    // re-run by every reader, and a call site reads as a free field access with nothing at the point of
-    // use saying what it costs (L383).
-    private func missedByACheckKeys(in items: [some QueueScopeFacts]) -> [String] {
-        QueueModel.keysMissedByACheck(items, today: today, geo: geo)
-    }
-
-    // #1805: finish exactly those, through the SAME confirm sheet as every other check, so a run started
-    // from a report costs what the sheet says it costs. No re-selection by hand, which is the whole point:
-    // the app was holding the list while Dan reconstructed it.
-    private func finishShowsACheckMissed() {
-        // An ACTION, so it derives its own: this runs on a press rather than during a render, and there
-        // is no pass in hand to take the rows from.
-        let keys = missedByACheckKeys(in: items)
-        guard !keys.isEmpty else { return }
-        // #1616: the same learned pace the selection bar quotes, so two ways into one run cannot name two
-        // different waits.
-        let summary = ProbeSelection.summarizeShowsACheckMissed(
-            count: keys.count, secondsPerRound: ProbeSelection.liveSecondsPerRound())
-        sheets.pendingProbe = ProbeConfirm(keys: keys, dateLabel: "",
-                                    title: ProbeSelectionCopy.multiDateTitle(summary),
-                                    message: ProbeSelectionCopy.finishMissedShowsMessage(summary))
+    // Through the SAME confirm sheet as every other check, so a run started from a report costs what the
+    // sheet says it costs (#1805), priced at the same learned pace the selection bar quotes (#1616).
+    private func finishShowsACheckMissed(_ keys: [String]) {
+        guard let confirm = ProbeConfirm.finishingShowsACheckMissed(
+            keys: keys, secondsPerRound: ProbeSelection.liveSecondsPerRound()) else { return }
+        sheets.pendingProbe = confirm
     }
 
     // #2268 built a "Check again" link on a finished date, which marked every answered show on it and
@@ -851,7 +853,9 @@ struct QueueView: View {
             // be assembled in QueueView.body on every scroll frame exactly as before.
             QueueScrollHolder(jumpTarget: jumpTarget) {
                 VStack(alignment: .leading, spacing: OVSpacing.xl) {
-                    masthead(visible: data.visibleRows, items: data.rows, fanOutLine: data.fanOutLine,
+                    masthead(summary: data.summary,
+                             missedByACheckKeys: data.missedByACheckKeys,
+                             fanOutLine: data.fanOutLine,
                              notices: notices + data.feedBreaks + data.mergeSurvivorsDropped,
                              pendingBookings: data.pendingBookings,
                              agentInputs: data.agentInputs)
@@ -885,7 +889,7 @@ struct QueueView: View {
             // "Grouped by when to reach out next" caption governs every date heading in the stage. They
             // used to be two blocks whose headings looked identical and meant different things (event
             // date above, reach-out date below).
-            reachedOutList(data.reachedOut)
+            reachedOutList(data.reachedOutList)
         } else {
             // #1774: already resolved in makeRenderData, above the scroll boundary. Re-derived here it
             // cost a StageNavigation.focusedKeys sweep of every prospect on every scroll frame.
@@ -931,7 +935,7 @@ struct QueueView: View {
                     // queue at once and trade this issue's cost for a worse one.
                     QueueDateGroups(groups: data.dateGroups, sendState: sendState) {
                         // #1436: un-replied inquiries (the to-send stage) surface with the shows.
-                        inquirySection(inquiryRows)
+                        inquirySection(data)
                     } content: { group, departing, departingCards in
                         dateSection(group, data: data, departing: departing,
                                     departingCards: departingCards)
@@ -946,11 +950,14 @@ struct QueueView: View {
     // rows so the prospect rendering is untouched; whether they interleave between shows by date is a
     // walk-time refinement. The source tag and lifecycle state stand in for a prospect's fit/geo, which
     // an inquiry has no equivalent for.
-    @ViewBuilder private func inquirySection(_ rows: [InquiryRow]) -> some View {
-        if !rows.isEmpty {
-            let byId = Dictionary(inquiries.map { (String(describing: $0.persistentModelID), $0) },
-                                  uniquingKeysWith: { first, _ in first })
-            ForEach(QueueModel.groupRowsByDate(rows.map { QueueRow.inquiry($0) })) { group in
+    // #4311: grouped and resolved by the pass (`RenderData.inquiryGroups`, `inquiriesByRowID`), never here.
+    @ViewBuilder private func inquirySection(_ data: RenderData) -> some View {
+        if !data.inquiryGroups.isEmpty {
+            #if DEBUG
+            let _ = QueueRenderCounter.recordStageListBody(QueueRenderCounter.inquiryList)
+            #endif
+            let byId = data.inquiriesByRowID
+            ForEach(data.inquiryGroups) { group in
                 VStack(alignment: .leading, spacing: OVSpacing.sm) {
                     HStack(alignment: .firstTextBaseline, spacing: OVSpacing.sm) {
                         if !group.weekday.isEmpty {
@@ -997,6 +1004,9 @@ struct QueueView: View {
                              departing: [String: DepartureReason],
                              departingCards: [String: QueueItem]) -> some View {
         VStack(alignment: .leading, spacing: OVSpacing.sm) {
+            #if DEBUG
+            let _ = QueueRenderCounter.recordStageListBody(QueueRenderCounter.dateHeading)
+            #endif
             HStack(alignment: .firstTextBaseline, spacing: OVSpacing.sm) {
                 if !group.weekday.isEmpty {
                     Text(group.weekday.uppercased()).font(.system(size: 11, weight: .semibold))
@@ -1053,12 +1063,17 @@ struct QueueView: View {
                 // means "check this one again" and carries that date's answered shows. Asked through the
                 // SAME function the selection prices, so the box can never appear on a date it would then
                 // add nothing for.
-                if focusedStage == .scout, !QueueModel.probeKeysForTickedDate(group.items, geo: geo).isEmpty {
+                // #4317: and asked ONCE, by the pass, at its resolved geography (`RenderData.dateProbeHeadings`),
+                // never here. This heading asked the candidacy rule three times over its rows, per drawn
+                // heading, per body evaluation, through the view's unresolved `geo` (L471). A night the pass
+                // drew no heading for exists only for a departing card, a show just sent, whose heading
+                // offers nothing (`DateProbeHeading.none`).
+                let probeHeading = data.dateProbeHeadings[group.id] ?? .none
+                if focusedStage == .scout, !probeHeading.tickKeys.isEmpty {
                     ProbeDateCheckbox(groupID: group.id, selection: probeSelection)
                 }
                 ReachabilityProbeControl(
-                    items: group.items, dateLabel: group.monthDay,
-                    geo: geo,
+                    heading: probeHeading, dateLabel: group.monthDay,
                     isRunning: data.checkRunning,
                     onTap: { keys, label in sheets.pendingProbe = ProbeConfirm(keys: keys, dateLabel: label) })
             }
@@ -1248,7 +1263,8 @@ struct QueueView: View {
         // #4062: resolved against the list the stage actually DRAWS. Reached out groups by reach out date,
         // so a performance date group id named nothing there and the jump was dropped.
         jumpTarget = QueueModel.jumpScrollGroupID(for: key, onStage: focusedStage, items: items,
-                                                  reachedOut: reachedOutEntries(reachedOut))
+                                                  reachedOut: QueueModel.reachedOutStageEntries(
+                                                      reachedOut, inquiries: inquiries, now: Date()))
             .map(QueueJumpRequest.init(group:))
         // Stage two: once that group is on screen its rows are realized, so nudge the row itself to the
         // top. If this runs before the layout settles it simply no-ops, leaving Dan on the right date,
@@ -1269,19 +1285,22 @@ struct QueueView: View {
     }
 
 
-    // #379: visible/items threaded explicitly (not read from self.visible/self.items internally)
-    // so ProspectRowViewLayoutTests-style tests can call this directly with fake data instead of
-    // needing a real populated store, the same prop-threading fix used repeatedly for
-    // FollowUpsView/ArchiveView/QueueView's other retrofits this cycle.
+    // #379: everything the masthead draws is threaded in rather than read from the store, so
+    // ProspectRowViewLayoutTests-style tests can call this directly with fake data instead of needing a
+    // real populated store.
     // #1694: the possible-match fan-out warning, when there is one. Passed IN rather than read from the
     // store here, so the line the masthead draws can be pinned by a test; there is no default, so a call
     // site has to decide what it shows rather than inherit silence.
-    // #1771: agentInputs is threaded in for the same reason visible/items are: the pill strip this draws
+    // #1771: agentInputs is threaded in for the same reason: the pill strip this draws
     // and the focused stage heading are two readers of one build, so the build belongs to the caller.
     // #2204: `notices` is what the app has to say for itself, threaded in for the same reason
     // `fanOutLine` is: the caller decides what is shown rather than this view inheriting silence. It has
     // no default, so a new call site has to answer the question.
-    func masthead(visible: [some QueueScopeFacts], items: [some QueueScopeFacts], fanOutLine: String?,
+    // #4106 view workstream: handed the pass's two answers rather than the rows to fold them from. Both
+    // folds ran here, in the body, over every queue row on every evaluation (L471).
+    // #4312: the missed set WHOLE, not a yes. It decides whether "Check the rest" is offered, and the
+    // served offer carries it, so the press runs the set that put the control on screen.
+    func masthead(summary: (total: Int, high: Int), missedByACheckKeys: [String], fanOutLine: String?,
                   notices: [AppNotice],
                   // #3653: the pass's own count, not a second derivation of it. `QueueRenderPass` already
                   // walks every row for this once (`QueueRenderPass.swift:252`) and puts it on
@@ -1291,8 +1310,7 @@ struct QueueView: View {
                   // is the whole reason it survived (#3577's shape, one file over).
                   pendingBookings: Int,
                   agentInputs: AgentInputs) -> some View {
-        let summary = QueueModel.summary(visible)
-        return VStack(alignment: .leading, spacing: OVSpacing.sm) {
+        VStack(alignment: .leading, spacing: OVSpacing.sm) {
             HStack(spacing: OVSpacing.xs) {
                 Text("Overture").font(OVType.wordmark).foregroundStyle(OVColor.forestText)
                 #if DEBUG
@@ -1368,11 +1386,14 @@ struct QueueView: View {
             // CAN serve is served here, where the rows are. Everything else goes up to RootView.
             AppNoticeLines(
                 notices: AppNotices.servable(notices,
-                                             // #2598: the rows this masthead was ALREADY handed, not a
-                                             // second derivation of the whole store for a count.
-                                             canFinishMissedShows: !missedByACheckKeys(in: items).isEmpty),
+                                             // #2598: never a second derivation of the whole store for
+                                             // this. #4106: and never a fold of the rows either; the
+                                             // pass's own answer, from `RenderData.missedByACheckKeys`.
+                                             // #4312: served carrying that answer, so the press below
+                                             // runs it rather than deriving its own.
+                                             missedByACheckKeys: missedByACheckKeys),
                 perform: { action in
-                    if action == .finishShowsACheckMissed { finishShowsACheckMissed() }
+                    if case .finishTheseShowsACheckMissed(let keys) = action { finishShowsACheckMissed(keys) }
                     // #4027: performed here for the same reason the shortfall's offer is: this view owns
                     // the focused list the control enters, and RootView does not.
                     else if case .showShowsOneSweepBroke(let keys) = action { showBrokenShows(keys) }
@@ -1459,17 +1480,16 @@ struct QueueView: View {
     // times appears twice, each labeled with that contact's own timing. #661: a lightweight row
     // (group name, this one contact, timing, and the state control), not the entire show card, so
     // two contacts due on the same show don't render as two large, nearly-identical cards.
-    // #4062: the Reached out list's rows, built in ONE place, so the list and a deep link resolving its
-    // group against that list can never be looking at two different sets of rows.
-    private func reachedOutEntries(_ dated: [(prospect: Prospect, recipient: Recipient, next: Date)]) -> [ReachedOutEntry] {
-        QueueModel.reachedOutEntries(prospects: dated,
-                                     inquiries: inquiries.filter { StageNavigation.stage(for: $0) == .reachedOut },
-                                     now: Date())
-    }
-
-    @ViewBuilder private func reachedOutList(_ dated: [(prospect: Prospect, recipient: Recipient, next: Date)]) -> some View {
-        let entries = reachedOutEntries(dated)
-        if entries.isEmpty {
+    // #4062: the Reached out list's rows come from ONE declaration, `QueueModel.reachedOutStageEntries`, so
+    // the list and a deep link resolving its group against it can never be looking at two sets of rows.
+    // #4311: and the list reads them from the render pass (`RenderData.reachedOutList`), with its day
+    // headings and its calendar table, rather than deriving all three in this body on every evaluation
+    // (L471). `AStageListDerivesNothingPerBodyTests` pins that the body derives none of them.
+    @ViewBuilder private func reachedOutList(_ list: QueueModel.ReachedOutList) -> some View {
+        #if DEBUG
+        let _ = QueueRenderCounter.recordStageListBody(QueueRenderCounter.reachedOutList)
+        #endif
+        if list.entries.isEmpty {
             VStack(spacing: OVSpacing.xs) {
                 Text("No one to follow up with").font(OVType.dateHeading).foregroundStyle(OVColor.ink)
                 // #2396: SHOWS, not people. This said "the people you are waiting to hear back from" while
@@ -1483,11 +1503,16 @@ struct QueueView: View {
             .padding(.vertical, OVSpacing.hero)
             .padding(.horizontal, OVSpacing.xl)
         } else {
-            let now = Date()
+            // #4320: the PASS's instant, never a fresh `Date()`. A row redraws only when something it draws
+            // changed (see `ReachedOutRowInputs`), and the clock is one of those things, so it has to be an
+            // input that moves when the pass moves rather than a value that differs on every evaluation and
+            // would redraw every row every time. The pass's instant trails the wall clock by at most the
+            // render memo's two seconds (`ScopeMemo.staleAfterSeconds`).
+            let now = list.now
             // #2816: built ONCE for the whole list, on the #1121 rule, rather than walking the watchlist
-            // per row on every scroll frame.
-            let sourceCalendars = QueueModel.sourceCalendarIndex(watchedSources)
-            let groups = QueueModel.reachOutDateGroups(entries, reachDate: { $0.next })
+            // per row on every scroll frame. #4311: by the pass, not by this body.
+            let sourceCalendars = list.sourceCalendars
+            let groups = list.groups
             VStack(alignment: .leading, spacing: OVSpacing.md) {
                 // #1233/#1232: the date headers below are REACH-OUT dates (Dan's call), so say so once here
                 // rather than let them read like the performance-date headers on every other stage.
@@ -1515,8 +1540,20 @@ struct QueueView: View {
                                 // clock.
                                 // #4062: and the row carries the SHOW's key and the jump mark, so a deep
                                 // link to it can scroll here and mark it as it does on every other stage.
+                                // #4320: and it redraws only when something it draws changed. Its content
+                                // closure is new on every evaluation of this body, which SwiftUI can never
+                                // find equal to the last one, so every row used to re-run its body and
+                                // re-read its show and contact from the store on every change to ANY show.
+                                // The row's `Equatable` conformance compares what the closure is drawn FROM
+                                // instead (SwiftUI applies it on its own, measured: the pin still passes
+                                // without `.equatable()`, which is here to say so at the call site); a change
+                                // to the show or contact themselves reaches the row through the models' own
+                                // observation, which is attributed to the row's body that read them.
                                 ReachedOutSendAwareRow(sendState: sendState,
-                                                       key: prospect.naturalKey) { sendingSince, departure, highlighted in
+                                                       key: prospect.naturalKey,
+                                                       redrawsOn: ReachedOutRowInputs(
+                                                           show: prospect, contact: recipient, next: next,
+                                                           now: now, sourceCalendars: sourceCalendars)) { sendingSince, departure, highlighted in
                                     Group {
                                         if let departure, !departure.reason.showsSendDelight {
                                             ClosedOutDepartureRow(item: departure.item)
@@ -1528,6 +1565,7 @@ struct QueueView: View {
                                     }
                                     .jumpMark(key: prospect.naturalKey, highlighted: highlighted)
                                 }
+                                .equatable()
                             case .inquiry(let inquiry, let row, _):
                                 // #1513: the same row shape as a show, so the two read as one list. The
                                 // source capsule and lifecycle line stay, because they say what an
@@ -1599,6 +1637,13 @@ struct QueueView: View {
         // `DriftedRunMerge` and `ContactRefusal` throughout), so a captured model read at press time is a
         // crash rather than a stale row.
         let identity = ReachedOutSnapshot(show: p, contact: r, next: pair.next)
+        #if DEBUG
+        // #4320: what this row drew, for the pin that a skipped body is never a stale one. Two of the facts
+        // it draws, one from the show and one from the contact, spelled as the lines below spell them.
+        QueueRenderCounter.recordReachedOutRowBody(p.naturalKey, drew: [p.groupName,
+                                                   SendFailureLine.text(for: r.sendError) ?? ""]
+                                                   .joined(separator: " | "))
+        #endif
         return HStack(alignment: .top, spacing: OVSpacing.md) {
             VStack(alignment: .leading, spacing: 3) {
                 Text(p.groupName).font(OVType.groupName).foregroundStyle(OVColor.ink)
@@ -2441,6 +2486,32 @@ enum QueueRenderCounter {
     static func recordCardBody(_ key: String) { cardBodies[key, default: 0] += 1 }
     static func cardBodyCounts() -> [String: Int] { cardBodies }
 
+    // #4311: how many times each STAGE LIST's own builder ran, the Reached out list and a stage's inquiry
+    // block. A test pinning that such a list derives nothing in a body needs proof the list was DRAWN,
+    // or a zero is a branch that never ran rather than one that did no work (L159). Counts only, no log
+    // line, for the card counter's reason above.
+    static let reachedOutList = "reachedOutList"
+    static let inquiryList = "inquiryList"
+    // #4317: and each performance date heading drawn, so a pin that the headings ask nothing can prove
+    // headings were drawn at all.
+    static let dateHeading = "dateHeading"
+    nonisolated(unsafe) private static var stageListBodies: [String: Int] = [:]
+    static func recordStageListBody(_ list: String) { stageListBodies[list, default: 0] += 1 }
+    static func stageListBodyCount(_ list: String) -> Int { stageListBodies[list] ?? 0 }
+
+    // #4320: each Reached out row's own body evaluations, keyed by the show, and what the last one drew.
+    // A row that skips its body is only a saving while it is not a STALE row (L14), so the pin needs both:
+    // how often each row redrew, and whether the redraw carried the fact that changed. Counts only, no log
+    // line, for the card counter's reason above.
+    nonisolated(unsafe) private static var reachedOutRowBodies: [String: Int] = [:]
+    nonisolated(unsafe) private static var reachedOutRowDrawn: [String: String] = [:]
+    static func recordReachedOutRowBody(_ key: String, drew: String) {
+        reachedOutRowBodies[key, default: 0] += 1
+        reachedOutRowDrawn[key] = drew
+    }
+    static func reachedOutRowBodyCounts() -> [String: Int] { reachedOutRowBodies }
+    static func reachedOutRowDrew(_ key: String) -> String? { reachedOutRowDrawn[key] }
+
     // Which inputs moved. Pure, so the rule this diagnostic reports by is itself tested rather than being
     // one more thing taken on trust while it is used to judge everything else.
     static func reason(for inputs: [String: String], since previous: [String: String],
@@ -2589,21 +2660,37 @@ struct QueueScrollHolder<Content: View>: View {
 // been saying it twice (#843). A tap reports the candidate keys up so QueueView opens the confirm sheet;
 // it never runs on its own.
 struct ReachabilityProbeControl: View {
-    // #3654: ROWS. Everything this control asks (which shows on this night a paid check could still be
-    // about) is answerable from one, so a date heading offering the check does not force a card for every
-    // show under it.
-    let items: [QueueScopeRow]
+    // #4317: the date's answers as ONE value the render pass took (`QueueModel.DateProbeHeading`), so this
+    // body asks nothing. It used to take the night's rows and ask the candidacy rule itself, up to three
+    // times per evaluation, which on the queue meant a geography verdict per show per drawn heading every
+    // time the body ran (L471). #1609's refusals are applied where the value is built: the pass hands in
+    // its own resolved geography, and `init(items:geo:)` below the one a caller names.
+    let heading: QueueModel.DateProbeHeading
     let dateLabel: String
-    // #1609: Dan's geography refusals, so the control never offers a PAID check on a show somewhere he
-    // has refused to travel. Defaulted to none so a preview or a test that does not care is unchanged.
-    var geo: GeoRefusals = .none
     // #1323: a probe and a normal Prep share the single detached-run slot, so the Check action greys out
     // while any run is already in flight rather than failing after the tap with alreadyRunning.
     let isRunning: Bool
     let onTap: (_ keys: [String], _ dateLabel: String) -> Void
 
+    init(heading: QueueModel.DateProbeHeading, dateLabel: String, isRunning: Bool,
+         onTap: @escaping (_ keys: [String], _ dateLabel: String) -> Void) {
+        self.heading = heading
+        self.dateLabel = dateLabel
+        self.isRunning = isRunning
+        self.onTap = onTap
+    }
+
+    // #3654: ROWS, for a surface holding a night's rows rather than a pass (a preview, a test). The value
+    // is built by the same initialiser the pass uses, so the two cannot answer differently about a night.
+    // #1609: geography defaulted to none, so a caller that does not care is unchanged.
+    init(items: [QueueScopeRow], dateLabel: String, geo: GeoRefusals = .none, isRunning: Bool,
+         onTap: @escaping (_ keys: [String], _ dateLabel: String) -> Void) {
+        self.init(heading: QueueModel.DateProbeHeading(items, geo: geo), dateLabel: dateLabel,
+                  isRunning: isRunning, onTap: onTap)
+    }
+
     var body: some View {
-        let keys = QueueModel.reachabilityProbeCandidateKeys(items, geo: geo)
+        let keys = heading.candidateKeys
         if !keys.isEmpty {
             HStack(spacing: 0) {
                 Spacer(minLength: OVSpacing.sm)
@@ -2621,15 +2708,14 @@ struct ReachabilityProbeControl: View {
                 .disabled(isRunning)
                 .help(isRunning ? ReachabilityProbeCopy.controlBusyHelp : "")
             }
-        } else if QueueModel.dateReachabilityIsFullyChecked(items, geo: geo) {
+        } else if heading.fullyChecked {
             // #1617: the finished date, in the slot the button held a moment ago. Quiet on purpose (no
             // capsule, no icon, faint): it is a resting state Dan walks past, not a thing to act on, and
             // the #1595 cutback of this control was about exactly that. It appears only on a date whose
             // shows were really answered, so it stays rare rather than joining the 169.
             HStack(spacing: OVSpacing.xs) {
                 Spacer(minLength: OVSpacing.sm)
-                Text(ReachabilityProbeCopy.dateCheckedMarker(
-                    checkedOn: QueueModel.dateReachabilityCheckedOn(items, geo: geo)))
+                Text(ReachabilityProbeCopy.dateCheckedMarker(checkedOn: heading.checkedOn))
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(OVColor.inkFaint)
                 // #2268 put a "Check again" link here, answering Dan's "is there a way to re-check an

@@ -95,7 +95,8 @@ struct RowSourceListingLinkWiringTests {
     // check that either file mentions the call, which would pass on a view that kept the query and a pass
     // that never used it.
     private static let surfaces = [
-        (view: "Overture/UI/QueueView.swift", buildsTheTableIn: "Overture/UI/QueueView.swift"),
+        // #4311: the Reached out list's table is built by the render pass now, for Follow-ups' reason.
+        (view: "Overture/UI/QueueView.swift", buildsTheTableIn: "Overture/UI/QueueRenderPass.swift"),
         (view: "Overture/UI/FollowUpsView.swift", buildsTheTableIn: "Overture/UI/FollowUpsRenderPass.swift"),
     ]
 

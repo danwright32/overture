@@ -117,9 +117,13 @@ struct TickAlreadyCheckedDateTests {
 struct ProbeTickBoxGateTests {
     private var queueView: String { SourceGuardHelper.source("Overture/UI/QueueView.swift") }
 
+    // #4317: the question is now answered by the render pass, once per date, and the heading reads it. The
+    // gate is still what ticking would contribute: `DateProbeHeading.tickKeys` is `probeKeysForTickedDate`'s
+    // answer, which `DateProbeHeadingsFromThePassTests` holds it to over every date the pass draws.
     @Test func theCheckboxIsGatedOnWhatTickingWouldContribute() {
         #expect(!queueView.isEmpty)
-        #expect(queueView.contains("!QueueModel.probeKeysForTickedDate(group.items, geo: geo).isEmpty"))
+        #expect(queueView.contains("!probeHeading.tickKeys.isEmpty"),
+                "the tick box must be gated on what ticking the date would contribute")
     }
 
     // #2375: the date heading writes nothing to the store any more. The per-CARD "Check again" still

@@ -332,11 +332,13 @@ enum NaturalKeyVenueMigration {
         // The survivor is about to stand for a show the feed IS listing, so it must not keep a miss count
         // earned by a key the feed stopped matching, or it goes on rendering as "may be cancelled" on a
         // live show. The same write DriftedRunMerge makes, for the reason its own comment gives.
-        survivor.missedScoutCount = 0
+        // #4106 Phase 1a: each written only where it differs, so a launch that finds nothing to carry writes
+        // nothing (`Prospect.assign`).
+        survivor.assign(\.missedScoutCount, 0)
         guard live !== survivor else { return nil }
-        survivor.sourceListingURL = live.sourceListingURL
-        survivor.runSourceURLs = live.runSourceURLs
-        survivor.sourceIds = live.sourceIds
+        survivor.assign(\.sourceListingURL, live.sourceListingURL)
+        survivor.assign(\.runSourceURLs, live.runSourceURLs)
+        survivor.assign(\.sourceIds, live.sourceIds)
         return live.naturalKey
     }
 

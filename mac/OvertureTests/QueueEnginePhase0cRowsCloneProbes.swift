@@ -99,6 +99,15 @@ extension QueueEnginePhase0cRowsProbeTests {
         if skip("0c.5") { return }
         let export = try scratchExport()
         var worstRow = 0.0
+        // Gate 0c's rule for a maximum (#4106 comment 5860086027): the median of five replays of the slowest
+        // key with the one minute load under 8. Nil once any replay could not be taken under that load.
+        var worstReplay: Double? = 0
+        // The same rule over a row change that EDITS the draft, so no lint can be reused: without this arm
+        // the reuse would be measured only on changes that skip the expensive path (L102).
+        var worstEditReplay: Double? = 0
+        // How many draft edits were replayed. None means the edit arm measured nothing (no slow key had a
+        // draft), so its starting 0 must not stand in the verdict as a measured zero (L90).
+        var editReplaysTaken = 0
         var sumMismatches = 0
         var instantsJudged = 0
         for (label, url) in try corpora("phase0c-rows-5") {
@@ -168,6 +177,68 @@ extension QueueEnginePhase0cRowsProbeTests {
                 "\($0.statusRaw)/\($0.recipients.count) contacts"
             }.joined(separator: ", ")
             worstRow = max(worstRow, rowStats.max)
+            // The slowest sampled keys, each replayed five times with the entry's parts timed (the tail
+            // attribution). Five keys rather than one, so a key that sampled low but replays high is not missed.
+            var replayLines: [String] = []
+            for i in perRow.indices.sorted(by: { perRow[$0] > perRow[$1] }).prefix(5) {
+                let p = every[i]
+                let pid = p.persistentModelID
+                // Up to five minutes for the load to fall under the ceiling, through the one shared reader
+                // (#4315); a load it could not read is infinite, so it never passes as quiet.
+                let quiet = Phase0.waitForLoad(below: Phase0cRows.loadCeiling, deadline: 300, poll: 5).load
+                let shape = "key \(Phase0b.hash8(p.naturalKey)) \(p.statusRaw)/\(p.recipients.count) contacts"
+                guard quiet < Phase0cRows.loadCeiling else {
+                    worstReplay = nil
+                    worstEditReplay = nil
+                    replayLines.append("\(shape): UNMEASURED, one minute load \(String(format: "%.2f", quiet)) never fell under 8")
+                    continue
+                }
+                let replay = Phase0.median5 { _ = proto.apply(changed: [pid], rows: byPID, upstream: up, context: rowCtx) }
+                var lapRuns: [[(name: String, ms: Double)]] = []
+                for _ in 0..<5 {
+                    let laps = Phase0cLaps()
+                    _ = Phase0cRowBuild.entry(p, context: rowCtx, upstream: up, previous: proto.entries[pid], laps: laps)
+                    lapRuns.append(laps.laps)
+                }
+                let parts = lapRuns[0].indices.map { j -> String in
+                    let median = lapRuns.map { $0[j].ms }.sorted()[lapRuns.count / 2]
+                    return "\(lapRuns[0][j].name) \(String(format: "%.3f", median))"
+                }
+                // Inside `placements`, the public pieces its predicates call, so the placement lap is
+                // attributed too: the held-contact count and, under it, the draft lint and the greeting hold
+                // for each contact, the send-half rule and the prep rule.
+                func ms(_ work: () -> Void) -> String { String(format: "%.3f", Phase0.median5(work).median) }
+                let pending = p.recipients.filter { $0.sendState == .pending }.count
+                let placementParts = [
+                    "blockedContactCount \(ms { _ = p.blockedContactCount })",
+                    "of which draft lint over every contact \(ms { for r in p.recipients { _ = r.draftLintBlockers } })",
+                    "greeting hold over every contact \(ms { for r in p.recipients { _ = r.isBlockedByGreeting } })",
+                    "hasEnteredSendHalf \(ms { _ = p.hasEnteredSendHalf })",
+                    "needsPrepEligible \(ms { _ = PrepQueueBuilder.needsPrepEligible(p, today: rowCtx.stage.today) })",
+                    "\(pending) of \(p.recipients.count) contacts pending",
+                ]
+                worstReplay = worstReplay.map { max($0, replay.median) }
+                // A real edit of this show's draft on the clone copy (never saved): a character appended,
+                // five times, then the text put back and the entry rebuilt over it.
+                var editText = "no draft to edit"
+                if let body = p.draftBody {
+                    var runs: [Double] = []
+                    for k in 1...5 {
+                        p.draftBody = body + String(repeating: " ", count: k)
+                        runs.append(Phase0.time { _ = proto.apply(changed: [pid], rows: byPID, upstream: up, context: rowCtx) })
+                    }
+                    p.draftBody = body
+                    proto.apply(changed: [pid], rows: byPID, upstream: up, context: rowCtx)
+                    let edit = Phase0.Reading(runs: runs)
+                    worstEditReplay = worstEditReplay.map { max($0, edit.median) }
+                    editReplaysTaken += 1
+                    editText = String(format: "a draft edit, replay median %.3f (%.3f to %.3f)", edit.median, edit.low, edit.high)
+                }
+                replayLines.append(String(format: "%@: sample %.3f ms, replay median %.3f (%.3f to %.3f) at load %.2f; %@",
+                                          shape, perRow[i], replay.median, replay.low, replay.high, quiet, editText)
+                                   + "\n      parts (median of five): " + parts.joined(separator: ", ")
+                                   + "\n      inside placements (median of five): " + placementParts.joined(separator: ", "))
+            }
             // Per-row noise: five fixed rows, each rebuilt five times.
             let fixed = stride(from: 0, to: every.count, by: max(every.count / 5, 1)).prefix(5).map { every[$0] }
             let fixedSpread = fixed.map { p -> String in
@@ -250,6 +321,8 @@ extension QueueEnginePhase0cRowsProbeTests {
                   oracle rows against the production pass (overrides applied): \(disagreeing.count) of \(common.count) common rows differ; \(overrideControl)
                   a row change, every real row                      \(rowStats.text)
                   rows over 1 ms (\(slow.count)): \(slowShape)
+                  the five slowest keys, replayed:
+                    \(replayLines.joined(separator: "\n    "))
                   per-row noise, five fixed rows x5                 \(fixedSpread.joined(separator: " | "))
                   hidden flip, every hidden row (\(hiddenCosts.count))          \(Phase0cRows.spread(hiddenCosts).text)
                   inherited move, every inheriting row (\(inheritedCosts.count))  \(Phase0cRows.spread(inheritedCosts).text)
@@ -260,9 +333,14 @@ extension QueueEnginePhase0cRowsProbeTests {
                   (b) carried forward on validUntil: \(expiryMismatch.count) instants differ; rows rebuilt per instant \(rebuiltText); \(continuous) rows read the clock continuously; cost \(Phase0cRows.spread(expiryCosts).text)\(expiryMismatch.isEmpty ? "" : "\n    " + expiryMismatch.prefix(5).joined(separator: "\n    "))
                 """)
         }
-        let verdict = Phase0cRows.stopVerdict(mismatches: sumMismatches, worstRowMs: worstRow)
-        Phase0cRows.say("0c.5 stop rule (any sum differs at \(instantsJudged) instants over both sizes, or a row over 1 ms): "
-                        + "\(verdict), \(sumMismatches) differing, worst row \(String(format: "%.3f", worstRow)) ms")
+        if editReplaysTaken == 0 { worstEditReplay = nil }
+        let judged = Phase0cRows.judgedReplay(rowChange: worstReplay, draftEdit: worstEditReplay, editsTaken: editReplaysTaken)
+        let verdict = Phase0cRows.stopVerdict(mismatches: sumMismatches, replayedMaxMs: judged)
+        Phase0cRows.say("0c.5 stop rule (any sum differs at \(instantsJudged) instants over both sizes, or the slowest key's "
+                        + "replayed median, a row change or a draft edit, over 1 ms, load under 8): \(verdict), \(sumMismatches) differing, "
+                        + "worst replay \(worstReplay.map { String(format: "%.3f", $0) + " ms" } ?? "UNMEASURED"), "
+                        + "worst draft edit replay \(worstEditReplay.map { String(format: "%.3f", $0) + " ms" } ?? "UNMEASURED"); "
+                        + "worst single sample \(String(format: "%.3f", worstRow)) ms, reported and deciding nothing")
     }
 
     // MARK: - 0c.6 the unattributed remainder, the published copies and the verifier's snapshot
@@ -373,10 +451,22 @@ extension QueueEnginePhase0cRowsProbeTests {
             let tFanOut = Phase0.median5 { _ = QueueRenderPass.fanOutWarning(inQueue) }
             let tGroup = Phase0.median5 { _ = QueueModel.groupByDate(focusedRows) }
             let dateGroups = QueueModel.groupByDate(focusedRows)
+            // #4317: each heading's reachability answers, which the pass takes now.
+            let tHeadings = Phase0.median5 {
+                _ = QueueModel.dateProbeHeadings(dateGroups, now: context.now, today: context.today, geo: context.geo)
+            }
+            let headings = QueueModel.dateProbeHeadings(dateGroups, now: context.now, today: context.today,
+                                                        geo: context.geo)
             let tInquiryRows = Phase0.median5 {
                 _ = QueueRenderPass.inquiryRows(t.inquiries, stage: .scout, now: context.now)
             }
             let tStageCounts = Phase0.median5 { _ = StageNavigation.counts(in: placement) }
+            // #4106 view workstream: the masthead's two folds, which the pass takes now.
+            let tMissed = Phase0.median5 {
+                _ = QueueModel.keysMissedByACheck(rows, now: context.now, today: context.today, geo: context.geo)
+            }
+            let missed = QueueModel.keysMissedByACheck(rows, now: context.now, today: context.today, geo: context.geo)
+            let tSummary = Phase0.median5 { _ = QueueModel.summary(visibleRows) }
             let selfBooking = QueueModel.selfBookingIndex(rows)
             let agentInputs = agent()
             func renderData() -> QueueView.RenderData {
@@ -385,9 +475,12 @@ extension QueueEnginePhase0cRowsProbeTests {
                     gmailConnected: false, probeRunning: false, checkRunning: false, prepRunning: false,
                     checkRunSince: nil, checkLookups: nil, reachedOut: reachedOut, reachedOutKeys: reachedKeys,
                     feedBreaks: feedBreaks, mergeSurvivorsDropped: merged,
-                    pendingBookings: QueueModel.pendingBookingCount(rows), fanOutLine: nil, rows: rows,
+                    pendingBookings: QueueModel.pendingBookingCount(rows),
+                    summary: QueueModel.summary(visibleRows), missedByACheckKeys: missed, fanOutLine: nil, rows: rows,
                     visibleRows: visibleRows, cardCheck: scope.cardCheck, focusedRows: focusedRows,
-                    dateGroups: dateGroups, inquiryRows: [], stageCounts: [:], geo: context.geo, placement: placement)
+                    dateGroups: dateGroups, inquiryRows: [], inquiryGroups: [], inquiriesByRowID: [:],
+                    reachedOutList: .none, dateProbeHeadings: headings, stageCounts: [:], geo: context.geo,
+                    placement: placement)
             }
             let tRenderData = Phase0.median5 { _ = renderData() }
             let passTerms: [(String, Phase0.Reading)] = [
@@ -400,7 +493,10 @@ extension QueueEnginePhase0cRowsProbeTests {
                 ("unseen merge survivors", tSurvivors), ("mergeSurvivorsTheFeedDropped", tSurvivorNotices),
                 ("selfBookingIndex", tSelfBooking), ("AgentInputs.from (as the pass calls it)", tAgent),
                 ("pendingBookingCount", tPending), ("fanOutWarning", tFanOut), ("groupByDate", tGroup),
-                ("inquiryRows", tInquiryRows), ("stage counts", tStageCounts), ("RenderData init", tRenderData),
+                ("inquiryRows", tInquiryRows), ("stage counts", tStageCounts),
+                ("dateProbeHeadings (each heading's reachability answers)", tHeadings),
+                ("keysMissedByACheck (the masthead's offer)", tMissed), ("summary (the masthead's counts)", tSummary),
+                ("RenderData init", tRenderData),
             ]
             let passNamed = passTerms.reduce(0) { $0 + $1.1.median }
             let agentTerms: [(String, Phase0.Reading)] = [

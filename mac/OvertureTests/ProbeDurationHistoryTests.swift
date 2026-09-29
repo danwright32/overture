@@ -300,9 +300,17 @@ struct ProbePaceWiringGuardTests {
         // #2543: the call as CODE, not as the two lines it is currently wrapped into. This is the exact
         // shape #1900 hit, where adding an argument re-wrapped a call and turned its guard red for
         // formatting while nothing was unwired.
+        // #4312: the finish-the-missed-shows confirm is built by `ProbeConfirm.finishingShowsACheckMissed`
+        // now, so the learned pace is pinned where each half lives: the press ASKS for it, and the builder
+        // HANDS what it was given to the summary. Either half alone is satisfied by the other being broken
+        // (a press passing the pace to a builder that quotes the default, or the reverse).
+        // `TheMissedShowsPressActsOnThePassTests` holds the behaviour: the quoted wait moves with the pace.
         #expect(SourceGuardHelper.containsCode(
-            "summarizeShowsACheckMissed( count: keys.count, secondsPerRound: ProbeSelection.liveSecondsPerRound())",
+            "ProbeConfirm.finishingShowsACheckMissed( keys: keys, secondsPerRound: ProbeSelection.liveSecondsPerRound())",
             in: queue))
+        #expect(SourceGuardHelper.containsCode(
+            "summarizeShowsACheckMissed(count: keys.count, secondsPerRound: secondsPerRound)",
+            in: source("Overture/UI/QueueSheets.swift")))
         // #2726: the line above already pins the multi-date call as CODE. This one was a bare repeat of
         // its tail, answered by that very call, so it added nothing and could not go red on its own. It
         // names the OTHER entry point instead, the per-card Check again, which nothing else pinned.

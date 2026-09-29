@@ -257,6 +257,106 @@ enum Phase0cView {
     static func verdict(_ maxMs: Double, limit: Double) -> String { maxMs > limit ? "FAIL" : "PASS" }
 }
 
+// The rig 0c.8 and the view attribution probe beside it share, declared once (L613): the harness that
+// hosts the real QueueView over a served feed, the window it lives in, and the pass's inputs as the app
+// builds them.
+@MainActor
+enum Phase0cViewRig {
+    // #4311: the queue's own focused stage is `@State` and cannot be set from outside, so a served pass
+    // for another stage draws under the Scout branch. The Reached out list is its OWN branch, reached
+    // only when that state says so, and the one route that moves it from outside is the production one:
+    // a deep link to a show, which focuses the stage holding it (`QueueView.navigateToLead`). This box is
+    // that channel, so a rig can put the real view on the Reached out stage the way an OmniFocus link does.
+    @Observable
+    final class DeepLinkChannel {
+        var key: LeadDeepLink?
+    }
+
+    struct Harness: View {
+        let rows: [Prospect]
+        let feed: Phase0cServedFeed
+        @Bindable var link: DeepLinkChannel
+        @State private var deepLinkedKeys: LeadsDeepLink?
+        @State private var feedback = ActionFeedback()
+        @State private var dayOff = DayOffOfferRequest()
+        @State private var undo = QueueUndoStack()
+
+        var body: some View {
+            QueueView(deepLinkedKey: $link.key, deepLinkedKeys: $deepLinkedKeys,
+                      allProspects: rows, renderDataProvider: feed)
+                .environment(feedback)
+                .environment(dayOff)
+                .environment(undo)
+        }
+    }
+
+    // Hosts the harness in a borderless window of `size`, never ordered front (#3480).
+    static func host(_ container: ModelContainer, rows: [Prospect], feed: Phase0cServedFeed,
+                     size: NSSize, link: DeepLinkChannel = DeepLinkChannel()) -> NSWindow {
+        let window = NSWindow(contentRect: NSRect(origin: .zero, size: size),
+                              styleMask: [.borderless], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        let hosting = NSHostingView(rootView: AnyView(Harness(rows: rows, feed: feed, link: link)
+            .modelContainer(container)))
+        hosting.frame = window.contentLayoutRect
+        hosting.autoresizingMask = [.width, .height]
+        window.contentView?.addSubview(hosting)
+        return window
+    }
+
+    struct Tables {
+        let rows: [Prospect]
+        let inquiries: [Inquiry]
+        let answers: [OrgReachabilityAnswer]
+        let sources: [WatchedSource]
+        let refusals: ContactRefusal.Ledger
+        let overrides: ProducerOverrides
+        let geo: GeoRefusals
+        let clients: ClientWindow
+    }
+
+    // The pass's inputs as the app builds them, from one context: the same reads probe 0b.2 takes.
+    static func tables(_ ctx: ModelContext, export: URL) throws -> Tables {
+        let rows = try ctx.fetch(FetchDescriptor<Prospect>())
+        for r in rows { _ = r.recipients.count }
+        let sources = try ctx.fetch(FetchDescriptor<WatchedSource>())
+        let clients = DownbeatBridge.loadWithHealth(from: export, now: Date()).clients
+        return Tables(
+            rows: rows,
+            inquiries: try ctx.fetch(FetchDescriptor<Inquiry>()),
+            answers: try ctx.fetch(FetchDescriptor<OrgReachabilityAnswer>()),
+            sources: sources,
+            refusals: ContactRefusal.ledger(from: try ctx.fetch(FetchDescriptor<RefusedContactAddress>())),
+            overrides: ProducerOverrides(promotedRows: try ctx.fetch(FetchDescriptor<PromotedProducer>()),
+                                         demotedRows: try ctx.fetch(FetchDescriptor<DemotedHouse>())),
+            geo: GeoRefusals(userExcludedTowns: Set(try ctx.fetch(FetchDescriptor<ExcludedTown>()).map(\.town)),
+                             allowedSeedTowns: Set(try ctx.fetch(FetchDescriptor<AllowedSeedTown>()).map(\.town))),
+            clients: ClientWindow(sources: sources, clients: clients))
+    }
+
+    // Every card prebuilt (`requestedCardKeys: nil`) unless `cards` names a narrower set, so a per-change
+    // reading is the VIEW's cost and a card build lands in it only where the reading says so.
+    static func servedPass(_ t: Tables, now: Date, stage: StageFocus, cards: Set<String>? = nil,
+                           registry: QueueModel.CardKeyRegistry) -> QueueView.RenderData {
+        QueueRenderPass.make(QueueRenderPass.Inputs(
+            allProspects: QueueRenderPass.Corpus(t.rows), inquiries: t.inquiries, orgAnswers: t.answers,
+            sources: t.sources, refusals: t.refusals, overrides: t.overrides,
+            context: StageContext(now: now, geo: t.geo, clients: t.clients),
+            focusedStage: stage, focusedKeys: nil, requestedCardKeys: cards, cardKeyRegistry: registry))
+    }
+
+    // The Downbeat export copied into a sandbox, so the pass reads the clients the app would without the
+    // probe ever opening the real file for writing.
+    static func scratchExport(_ sandboxes: TemporarySandboxes) throws -> URL {
+        let dir = try sandboxes.make(named: "phase0c-view-export")
+        let out = dir.appendingPathComponent("downbeat-export.json")
+        if FileManager.default.fileExists(atPath: DownbeatBridge.defaultURL.path) {
+            try FileManager.default.copyItem(at: DownbeatBridge.defaultURL, to: out)
+        }
+        return out
+    }
+}
+
 @MainActor
 @Suite("#4106 Phase 0c.8: the queue body plus layout over a served RenderData (opt in)")
 struct QueueViewBodyCostProbeTests {
@@ -271,38 +371,6 @@ struct QueueViewBodyCostProbeTests {
 
 
     private let sandboxes = TemporarySandboxes()
-
-    private struct Harness: View {
-        let rows: [Prospect]
-        let feed: Phase0cServedFeed
-        @State private var deepLinkedKey: LeadDeepLink?
-        @State private var deepLinkedKeys: LeadsDeepLink?
-        @State private var feedback = ActionFeedback()
-        @State private var dayOff = DayOffOfferRequest()
-        @State private var undo = QueueUndoStack()
-
-        var body: some View {
-            QueueView(deepLinkedKey: $deepLinkedKey, deepLinkedKeys: $deepLinkedKeys,
-                      allProspects: rows, renderDataProvider: feed)
-                .environment(feedback)
-                .environment(dayOff)
-                .environment(undo)
-        }
-    }
-
-    // Hosts the harness in a borderless window of `size`, never ordered front (#3480).
-    private func host(_ container: ModelContainer, rows: [Prospect], feed: Phase0cServedFeed,
-                      size: NSSize) -> NSWindow {
-        let window = NSWindow(contentRect: NSRect(origin: .zero, size: size),
-                              styleMask: [.borderless], backing: .buffered, defer: false)
-        window.isReleasedWhenClosed = false
-        let hosting = NSHostingView(rootView: AnyView(Harness(rows: rows, feed: feed)
-            .modelContainer(container)))
-        hosting.frame = window.contentLayoutRect
-        hosting.autoresizingMask = [.width, .height]
-        window.contentView?.addSubview(hosting)
-        return window
-    }
 
     // MARK: - The rig, on every push, no clock
 
@@ -354,7 +422,7 @@ struct QueueViewBodyCostProbeTests {
         // this counter also counts, and those builds are outside the clock by design.
         var derivedWhileDrawing = 0
         var derivations0 = QueueRenderCounter.derivations
-        let window = host(c, rows: rows, feed: feed, size: NSSize(width: 1000, height: 800))
+        let window = Phase0cViewRig.host(c, rows: rows, feed: feed, size: NSSize(width: 1000, height: 800))
         defer { window.close() }
         let first = Phase0cView.settle(window, bodyMustRun: true) {}
         let drawnFirst = registry.takeKeys()
@@ -445,56 +513,6 @@ struct QueueViewBodyCostProbeTests {
             + (k.note.isEmpty ? "" : " | \(k.note)") + never
     }
 
-    private struct Tables {
-        let rows: [Prospect]
-        let inquiries: [Inquiry]
-        let answers: [OrgReachabilityAnswer]
-        let sources: [WatchedSource]
-        let refusals: ContactRefusal.Ledger
-        let overrides: ProducerOverrides
-        let geo: GeoRefusals
-        let clients: ClientWindow
-    }
-
-    // The pass's inputs as the app builds them, from one context: the same reads probe 0b.2 takes.
-    private func tables(_ ctx: ModelContext, export: URL) throws -> Tables {
-        let rows = try ctx.fetch(FetchDescriptor<Prospect>())
-        for r in rows { _ = r.recipients.count }
-        let sources = try ctx.fetch(FetchDescriptor<WatchedSource>())
-        let clients = DownbeatBridge.loadWithHealth(from: export, now: Date()).clients
-        return Tables(
-            rows: rows,
-            inquiries: try ctx.fetch(FetchDescriptor<Inquiry>()),
-            answers: try ctx.fetch(FetchDescriptor<OrgReachabilityAnswer>()),
-            sources: sources,
-            refusals: ContactRefusal.ledger(from: try ctx.fetch(FetchDescriptor<RefusedContactAddress>())),
-            overrides: ProducerOverrides(promotedRows: try ctx.fetch(FetchDescriptor<PromotedProducer>()),
-                                         demotedRows: try ctx.fetch(FetchDescriptor<DemotedHouse>())),
-            geo: GeoRefusals(userExcludedTowns: Set(try ctx.fetch(FetchDescriptor<ExcludedTown>()).map(\.town)),
-                             allowedSeedTowns: Set(try ctx.fetch(FetchDescriptor<AllowedSeedTown>()).map(\.town))),
-            clients: ClientWindow(sources: sources, clients: clients))
-    }
-
-    // Every card prebuilt (`requestedCardKeys: nil`) unless `cards` names a narrower set, so a per-change
-    // reading is the VIEW's cost and a card build lands in it only where the reading says so.
-    private func servedPass(_ t: Tables, now: Date, stage: StageFocus, cards: Set<String>? = nil,
-                            registry: QueueModel.CardKeyRegistry) -> QueueView.RenderData {
-        QueueRenderPass.make(QueueRenderPass.Inputs(
-            allProspects: QueueRenderPass.Corpus(t.rows), inquiries: t.inquiries, orgAnswers: t.answers,
-            sources: t.sources, refusals: t.refusals, overrides: t.overrides,
-            context: StageContext(now: now, geo: t.geo, clients: t.clients),
-            focusedStage: stage, focusedKeys: nil, requestedCardKeys: cards, cardKeyRegistry: registry))
-    }
-
-    private func scratchExport() throws -> URL {
-        let dir = try sandboxes.make(named: "phase0c-view-export")
-        let out = dir.appendingPathComponent("downbeat-export.json")
-        if FileManager.default.fileExists(atPath: DownbeatBridge.defaultURL.path) {
-            try FileManager.default.copyItem(at: DownbeatBridge.defaultURL, to: out)
-        }
-        return out
-    }
-
     @Test(.enabled(if: Phase0.liveStoreExists, "no live store on this machine"))
     func probe0c8BodyPlusLayoutOverAServedPass() throws {
         guard Phase0cView.enabled else {
@@ -510,25 +528,25 @@ struct QueueViewBodyCostProbeTests {
             throw LiveStoreClone.Refusal.backupFailed("no live store on this machine")
         }
         let big = try Phase0.scaledCopy(of: base, factor: 4, in: dir)
-        let export = try scratchExport()
+        let export = try Phase0cViewRig.scratchExport(sandboxes)
 
         var verdicts: [String] = []
         for (label, url) in [("live clone", base), ("4x", big)] {
             let container = try Phase0.openContainer(at: url)
             container.mainContext.autosaveEnabled = false
-            let t = try tables(container.mainContext, export: export)
+            let t = try Phase0cViewRig.tables(container.mainContext, export: export)
             let now = Date()
             print("0c.8 \(label) corpus: \(Phase0.shape(t.rows)) | \(Phase0.load())")
 
             let registry = QueueModel.CardKeyRegistry()
-            let a = servedPass(t, now: now, stage: .scout, registry: registry)
+            let a = Phase0cViewRig.servedPass(t, now: now, stage: .scout, registry: registry)
             print("0c.8 \(label) served Scout pass: \(a.focusedRows.count) rows on the stage, "
                   + "\(a.dateGroups.count) date groups, \(a.cards.builtCount) cards prebuilt")
 
             // MARK: first draw, cards prebuilt: a fresh window each sample.
             var firstPre = Kind(name: "first draw, cards prebuilt")
             var realized: [Int] = []
-            let floorWindow = host(container, rows: t.rows, feed: Phase0cServedFeed(a), size: size)
+            let floorWindow = Phase0cViewRig.host(container, rows: t.rows, feed: Phase0cServedFeed(a), size: size)
             _ = Phase0cView.settle(floorWindow, bodyMustRun: true) {}   // warm the host once, untimed
             floorWindow.close()
             _ = registry.takeKeys()
@@ -536,7 +554,7 @@ struct QueueViewBodyCostProbeTests {
             for _ in 0..<5 {
                 var w: NSWindow?
                 let s = Phase0cView.settle(bodyMustRun: true) {
-                    let made = host(container, rows: t.rows, feed: Phase0cServedFeed(a), size: size)
+                    let made = Phase0cViewRig.host(container, rows: t.rows, feed: Phase0cServedFeed(a), size: size)
                     w = made
                     return made
                 }
@@ -556,9 +574,9 @@ struct QueueViewBodyCostProbeTests {
             var firstCold = Kind(name: "first draw, cards built in the body")
             cpus = []; walls = []
             for _ in 0..<5 {
-                let cold = servedPass(t, now: now, stage: .scout, cards: [], registry: registry)
+                let cold = Phase0cViewRig.servedPass(t, now: now, stage: .scout, cards: [], registry: registry)
                 _ = registry.takeKeys()
-                let w = host(container, rows: t.rows, feed: Phase0cServedFeed(cold), size: size)
+                let w = Phase0cViewRig.host(container, rows: t.rows, feed: Phase0cServedFeed(cold), size: size)
                 let s = Phase0cView.settle(w, bodyMustRun: true) {}
                 firstCold.take(s, cpu: &cpus, wall: &walls)
                 _ = registry.takeKeys()
@@ -569,7 +587,7 @@ struct QueueViewBodyCostProbeTests {
 
             // One window for every per-change kind, drawn once and settled before anything is timed.
             let feed = Phase0cServedFeed(a)
-            let window = host(container, rows: t.rows, feed: feed, size: size)
+            let window = Phase0cViewRig.host(container, rows: t.rows, feed: feed, size: size)
             defer { window.close() }
             _ = Phase0cView.settle(window, bodyMustRun: true) {}
             let drawnOnA = registry.takeKeys()
@@ -593,7 +611,7 @@ struct QueueViewBodyCostProbeTests {
                 guard let show = byKey[key] else { continue }
                 let was = show.status
                 show.status = .dismissed
-                let b = servedPass(t, now: now, stage: .scout, registry: registry)
+                let b = Phase0cViewRig.servedPass(t, now: now, stage: .scout, registry: registry)
                 show.status = was
                 var kc: [Double] = [], kw: [Double] = []
                 for _ in 0..<5 {
@@ -612,7 +630,7 @@ struct QueueViewBodyCostProbeTests {
             var stagesDone: [String] = []
             for stage in StageFocus.allCases where stage != .scout && stage != .followUps
                 && stage != .reachedOut {
-                let s = servedPass(t, now: now, stage: stage, registry: registry)
+                let s = Phase0cViewRig.servedPass(t, now: now, stage: stage, registry: registry)
                 stagesDone.append("\(stage.rawValue) \(s.focusedRows.count)")
                 var kc: [Double] = [], kw: [Double] = []
                 for _ in 0..<5 {

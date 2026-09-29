@@ -792,6 +792,9 @@ struct RootView: View {
                       // mean the queue passed it up rather than serving it, so do nothing rather than
                       // start a run over a set this view cannot compute.
                       case .finishShowsACheckMissed: break
+                      // #4312: the served form of the line above, which carries its shows. QueueView
+                      // performs it; reaching here means the queue passed it up, so do nothing.
+                      case .finishTheseShowsACheckMissed: break
                       // #4027: same shape as the line above. The focused list this enters belongs to
                       // QueueView, which serves it there; reaching here means the queue passed it up, so
                       // do nothing rather than half-perform a navigation this view cannot make.

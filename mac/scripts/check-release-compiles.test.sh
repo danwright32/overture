@@ -13,6 +13,9 @@ set -uo pipefail
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../../scripts/lib/shell-assertions.sh"
 
 SCRIPT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/check-release-compiles.sh"
+# #4244: a merge verification runs this with OVERTURE_TEST_LOCK_PRIORITY=merge in its environment, which
+# would make every stubbed run below queue as one (L439). None of these cases is about priority.
+unset OVERTURE_TEST_LOCK_PRIORITY
 FAILURES=0
 WORK="$(fixture_scratch_dir)"
 trap 'rm -rf "${WORK}"' EXIT

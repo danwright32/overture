@@ -15,7 +15,7 @@ import AppKit
 //     -only-testing:OvertureTests/ScoutLandingAttributionProbeTests
 //
 // Optional: TEST_RUNNER_MEASURE_4275_SIZES=1,2,4 (store multiples), TEST_RUNNER_MEASURE_4275_ROUNDS=3,
-// TEST_RUNNER_MEASURE_4275_ARMS=noview,queue. A 4x run holds one test for over 20 minutes, so give it
+// TEST_RUNNER_MEASURE_4275_ARMS=noview,queue (add `fields` for #4106 Phase 1a's per field write count). A 4x run holds one test for over 20 minutes, so give it
 // OVERTURE_TEST_STALL_END_SECONDS=3300 or the runner's stall guard ends it as hung (measured, #4275).
 //
 // WHAT IT DOES. At each store size it lands the recorded scout extract results through the app's own
@@ -27,7 +27,9 @@ import AppKit
 //                  derivation count goes quiet, as the app's run loop would draw it
 //
 // Each measured landing is SAMPLED: `/usr/bin/sample` is pointed at this test process for the landing and
-// its settle, and the main thread's call tree is written to `<dir>`. The classifier that reads those files
+// its settle, and the main thread's call tree is written to `<dir>`. The landing starts only once sampling has
+// really begun (#4307), never on the sampler's attach line, which can come well before the first sample; each
+// round's line says how long after the attach line sampling began. The classifier that reads those files
 // (which app frame owns each sample) is posted on #4275 with the results, not kept in the repository.
 // A counter only sees the sites somebody instrumented; a sampler sees every frame the main thread was in.
 //
@@ -61,62 +63,6 @@ enum LandingProbe {
         }
     }
     nonisolated static func f1(_ v: Double) -> String { String(format: "%.1f", v) }
-}
-
-/// `/usr/bin/sample` pointed at THIS process. It prints its "Sampling process" line once attached, which is
-/// what `start` waits on (bounded), so the landing never begins before the sampler is looking.
-final class LandingSelfSampler: @unchecked Sendable {
-    private let process = Process()
-    private let pipe = Pipe()
-    private let lock = NSLock()
-    private var attached = false
-    private var said = ""
-    let file: URL
-    let seconds: Int
-
-    init(seconds: Int, file: URL) {
-        self.seconds = seconds
-        self.file = file
-    }
-
-    func start() async throws {
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/sample")
-        process.arguments = [String(getpid()), String(seconds), "1", "-mayDie", "-file", file.path]
-        process.standardOutput = pipe
-        process.standardError = pipe
-        pipe.fileHandleForReading.readabilityHandler = { [weak self] h in
-            let text = String(decoding: h.availableData, as: UTF8.self)
-            guard let self else { return }
-            self.lock.lock()
-            self.said += text
-            if self.said.contains("Sampling process") { self.attached = true }
-            self.lock.unlock()
-        }
-        try process.run()
-        let deadline = ContinuousClock.now + .seconds(15)
-        while ContinuousClock.now < deadline {
-            if isAttached { return }
-            if !process.isRunning { break }
-            try? await Task.sleep(for: .milliseconds(20))
-        }
-        throw SamplerError.notAttached(output)
-    }
-
-    private var isAttached: Bool { lock.lock(); defer { lock.unlock() }; return attached }
-    var output: String { lock.lock(); defer { lock.unlock() }; return said }
-
-    /// Waits for the sampler to finish its window and write its file, bounded by its own duration plus 60 s.
-    func finish() async -> Bool {
-        let deadline = ContinuousClock.now + .seconds(seconds + 60)
-        while process.isRunning && ContinuousClock.now < deadline {
-            try? await Task.sleep(for: .milliseconds(200))
-        }
-        if process.isRunning { process.terminate(); return false }
-        pipe.fileHandleForReading.readabilityHandler = nil
-        return process.terminationStatus == 0 && FileManager.default.fileExists(atPath: file.path)
-    }
-
-    enum SamplerError: Error { case notAttached(String) }
 }
 
 /// Main thread waits measured from off the main thread, as `Phase0bMainTurnMonitor` does, keeping every wait
@@ -239,6 +185,8 @@ struct ScoutLandingAttributionProbeTests {
         let outcome: ScoutService.Outcome
         let saves: Int
         let sampled: String
+        // #4106 Phase 1a: the Prospect rows the landing's saves carried as UPDATED, counted by identifier.
+        var rowsWritten = 0
     }
 
     private func land(_ inputs: Inputs, into ctx: ModelContext, hosting: NSView?, saves: Phase0SaveLog,
@@ -246,6 +194,8 @@ struct ScoutLandingAttributionProbeTests {
         var sampler: LandingSelfSampler?
         if let sampleSeconds, let sampleFile {
             let s = LandingSelfSampler(seconds: sampleSeconds, file: sampleFile)
+            // Returns only once the sampler is really SAMPLING, not merely attached (#4307), so the landing
+            // below cannot begin in the unsampled gap between the two.
             try await s.start()
             sampler = s
         }
@@ -266,21 +216,36 @@ struct ScoutLandingAttributionProbeTests {
         }
         let settleMs = Phase0.ms(since: t1)
         let turns = monitor.stop()
-        let saveCount = saves.take().count
+        let taken = saves.take()
+        let saveCount = taken.count
+        var written = Set<PersistentIdentifier>()
+        for entry in taken where entry.fromMain {
+            for (key, ids) in entry.identifiers where key.lowercased().contains("update") {
+                written.formUnion(ids.filter { $0.entityName == "Prospect" })
+            }
+        }
         var sampled = "not sampled"
         if let sampler {
-            sampled = await sampler.finish() ? "sampled for \(sampler.seconds) s to \(sampler.file.lastPathComponent)"
+            // #4307: how long after the attach line sampling really began, which is the head this probe left
+            // unsampled while it started the landing on that line.
+            let began = sampler.attachToBeganMs.map { "sampling began \(LandingProbe.f1($0)) ms after the attach line" }
+                ?? "sampling start UNMEASURED"
+            sampled = await sampler.finish()
+                ? "sampled for \(sampler.seconds) s to \(sampler.file.lastPathComponent), \(began)"
                 : "SAMPLER FAILED: \(sampler.output.prefix(200))"
         }
-        return Landing(ingestMs: ingestMs, settleMs: settleMs, derivations: derivations, worst: turns.worst,
-                       stalls: turns.stalls, summedStall: turns.summed, outcome: outcome, saves: saveCount,
-                       sampled: sampled)
+        var landed = Landing(ingestMs: ingestMs, settleMs: settleMs, derivations: derivations,
+                             worst: turns.worst, stalls: turns.stalls, summedStall: turns.summed, outcome: outcome,
+                             saves: saveCount, sampled: sampled)
+        landed.rowsWritten = written.count
+        return landed
     }
 
     private func describe(_ l: Landing) -> String {
         "ingest \(LandingProbe.f1(l.ingestMs)) ms, settle \(LandingProbe.f1(l.settleMs)) ms, "
             + "largest main wait \(LandingProbe.f1(l.worst)) ms, \(l.stalls) waits of 100 ms or more summing "
             + "\(LandingProbe.f1(l.summedStall)) ms, queue derivations \(l.derivations), saves \(l.saves), "
+            + "rows written \(l.rowsWritten), "
             + "outcome inserted \(l.outcome.inserted) updated \(l.outcome.updated) skipped \(l.outcome.skipped); "
             + l.sampled
     }
@@ -338,6 +303,11 @@ struct ScoutLandingAttributionProbeTests {
             let settleDeadline = 60 * factor + 60
 
             for arm in LandingProbe.arms {
+                if arm == "fields" {
+                    try await fieldsArm(inputs, into: ctx, saves: saves, factor: factor,
+                                        settleDeadline: settleDeadline)
+                    continue
+                }
                 var window: NSWindow?
                 var hosting: NSView?
                 if arm == "queue" {
@@ -368,6 +338,45 @@ struct ScoutLandingAttributionProbeTests {
             }
         }
     }
+    // #4106 Phase 1a: which STORED FIELDS a re-land writes, and which it really changes. Observation is armed
+    // on every stored property of every show (`ScopeFields`, held to the schema), one tracking per field so a
+    // fire names its field, and a value snapshot before and after says which fires changed anything. Its own
+    // arm (`TEST_RUNNER_MEASURE_4275_ARMS=...,fields`) because the observers would perturb the timed arms.
+    // Field names and counts only, never a value (L222).
+    private func fieldsArm(_ inputs: Inputs, into ctx: ModelContext, saves: Phase0SaveLog, factor: Int,
+                           settleDeadline: Int) async throws {
+        let rows = try ctx.fetch(FetchDescriptor<Prospect>())
+        let before = Dictionary(uniqueKeysWithValues: rows.map { ($0.persistentModelID, phase0Values($0)) })
+        let fires = ScoutReLandWritesNothingTests.Fires()
+        var seen = Set<ObjectIdentifier>()
+        for p in rows {
+            ScoutReLandWritesNothingTests.arm(p, label: "\(p.persistentModelID.hashValue)", into: fires,
+                                              seen: &seen)
+        }
+        let l = try await land(inputs, into: ctx, hosting: nil, saves: saves, sampleSeconds: nil, sampleFile: nil,
+                               settleDeadline: settleDeadline)
+        var byField: [String: Int] = [:]
+        for fields in fires.byRow.values { for f in fields { byField[f, default: 0] += 1 } }
+        // The same order `phase0Values` lists them in, so a changed position names its field.
+        let names = Prospect.scopeFields.map(\.keyPath).filter { $0 != \Prospect.recipients as AnyKeyPath }
+            .map(ScoutReLandWritesNothingTests.fieldName)
+        var changedByField: [String: Int] = [:]
+        var changed = 0
+        for p in rows {
+            let now = phase0Values(p)
+            guard let was = before[p.persistentModelID], was != now else { continue }
+            changed += 1
+            for (i, name) in names.enumerated() where i < was.count && i < now.count && was[i] != now[i] {
+                changedByField[name, default: 0] += 1
+            }
+        }
+        func list(_ d: [String: Int]) -> String { d.keys.sorted().map { "\($0) \(d[$0]!)" }.joined(separator: ", ") }
+        LandingProbe.say("x\(factor) fields: " + describe(l) + "; rows firing \(fires.byRow.count), rows really "
+                         + "changed \(changed); fired by field: " + list(byField)
+                         + "; changed by field: " + list(changedByField) + ", " + Phase0.load())
+        withExtendedLifetime(rows) {}
+    }
+
     // The unit the landing's samples are dominated by, timed on its own: one whole-store Prospect fetch on a
     // main context that already holds every row registered (as the landing's context does by then), and the
     // two folds `poisonedTokensForBatch` and `ambiguousURLsForBatch` apply to every stored row. Medians of
