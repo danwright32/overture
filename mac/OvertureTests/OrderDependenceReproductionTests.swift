@@ -541,16 +541,29 @@ final class OrderDependenceReproductionTests {
         return rows
     }
 
-    @Test func todayBookingTieIsClaimedByTheFirstInInputOrder() {
-        let forward = bookingRows(into: ModelContext(container))
-        DownbeatBooking.reconcileBooked(prospects: forward, clients: [], bookings: [sharedBooking],
-                                        health: .ok, now: now)
-        let backward = bookingRows(into: ModelContext(container))
-        DownbeatBooking.reconcileBooked(prospects: backward.reversed(), clients: [], bookings: [sharedBooking],
-                                        health: .ok, now: now)
-        #expect(forward.filter { $0.outcome == .booked }.count == 1)
-        #expect(OracleRendering.booked(forward) != OracleRendering.booked(backward),
-                "the booking tie no longer follows input order; retire this test (L373)")
+    // #4350, plan v7 Step T: `todayBookingTieIsClaimedByTheFirstInInputOrder` stood here and was CONSUMED when
+    // the product sort gained its natural key tie-break, so it is inverted rather than kept (L373). The
+    // product function with no wrapper now gives one answer over 100 orders, the canonical oracle's: the
+    // smallest key claims the booking, and a re-key that moves another show to the front moves the claim.
+    @Test(arguments: [false, true])
+    func productBookingsAreTheCanonicalAnswerOverEveryOrder(rekeyed: Bool) {
+        func fixture() -> [Prospect] {
+            let rows = bookingRows(into: ModelContext(container))
+            if rekeyed { rows.first { $0.naturalKey == "bk-3" }?.naturalKey = "bk-0" }
+            return rows
+        }
+        let seed: UInt64 = 4350_01
+        let canonical = fixture()
+        CanonicalOracle.reconcileBooked(canonical, bookings: [sharedBooking], now: now)
+        let oracle = OracleRendering.booked(canonical)
+        let distinct = distinctAnswers({ order in
+            let rows = fixture()
+            DownbeatBooking.reconcileBooked(prospects: order.map { rows[$0] }, clients: [], bookings: [sharedBooking],
+                                            health: .ok, now: now)
+            return OracleRendering.booked(rows)
+        }, size: 3, seed: seed)
+        #expect(distinct == [oracle], report("DownbeatBooking.reconcileBooked, product", distinct, seed: seed))
+        #expect(canonical.filter { $0.outcome == .booked }.map(\.naturalKey) == [rekeyed ? "bk-0" : "bk-1"])
     }
 
     @Test func canonicalBookingsAreOneAnswerOverEveryOrder() {
