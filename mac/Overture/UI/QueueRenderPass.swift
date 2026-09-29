@@ -512,6 +512,12 @@ enum QueueRenderPass {
         let inquiryGroups = drawsInquiryBlock
             ? QueueModel.groupRowsByDate(stageInquiryRows.map { QueueRow.inquiry($0) }) : []
         let inquiriesByRowID = drawsInquiryBlock ? QueueModel.inquiriesByRowID(i.inquiries) : [:]
+        // #4317: the stage's date groups, and each one's reachability answers for its heading, taken HERE at
+        // this pass's instant, day and RESOLVED geography rather than by every drawn heading's body through
+        // the view's unresolved one. `DateProbeHeadingsFromThePassTests` holds them to the old derivation.
+        let dateGroups = QueueModel.groupByDate(focusedRows)
+        let dateProbeHeadings = QueueModel.dateProbeHeadings(dateGroups, now: context.now,
+                                                             today: context.today, geo: geo)
         return QueueView.RenderData(
             cards: scope.cards,
             // #3507: the scope itself, so the render path reads the list this pass already derived rather
@@ -558,11 +564,12 @@ enum QueueRenderPass {
             // does the recording, exactly as it reads the Gmail connection and hands that in.
             cardCheck: scope.cardCheck,
             focusedRows: focusedRows,
-            dateGroups: QueueModel.groupByDate(focusedRows),
+            dateGroups: dateGroups,
             inquiryRows: stageInquiryRows,
             inquiryGroups: inquiryGroups,
             inquiriesByRowID: inquiriesByRowID,
             reachedOutList: reachedOutList,
+            dateProbeHeadings: dateProbeHeadings,
             // #3738: read by the empty-stage card, which pointed Dan at the next stage with work by
             // counting every show again inside a SwiftUI body. One derivation, two readers (L16).
             stageCounts: StageNavigation.counts(in: placement),

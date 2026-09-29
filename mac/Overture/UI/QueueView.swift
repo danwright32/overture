@@ -361,6 +361,10 @@ struct QueueView: View {
         // #4311: the Reached out list as it draws (rows, day headings, the calendar table its links
         // resolve against), derived by the pass for that stage and empty on every other.
         let reachedOutList: QueueModel.ReachedOutList
+        // #4317: each date heading's reachability answers (its tick box, its Check button, its finished
+        // marker), keyed by the date group's id. The heading's body used to ask them itself, per realised
+        // group per evaluation, through the view's unresolved geography (L471).
+        let dateProbeHeadings: [String: QueueModel.DateProbeHeading]
         // #3738: what each stage pill counts, from the pass's own placement table. The empty-stage card
         // reads it rather than deciding every show's stages a second time inside a body.
         let stageCounts: [StageFocus: Int]
@@ -1000,6 +1004,9 @@ struct QueueView: View {
                              departing: [String: DepartureReason],
                              departingCards: [String: QueueItem]) -> some View {
         VStack(alignment: .leading, spacing: OVSpacing.sm) {
+            #if DEBUG
+            let _ = QueueRenderCounter.recordStageListBody(QueueRenderCounter.dateHeading)
+            #endif
             HStack(alignment: .firstTextBaseline, spacing: OVSpacing.sm) {
                 if !group.weekday.isEmpty {
                     Text(group.weekday.uppercased()).font(.system(size: 11, weight: .semibold))
@@ -1607,6 +1614,13 @@ struct QueueView: View {
         // `DriftedRunMerge` and `ContactRefusal` throughout), so a captured model read at press time is a
         // crash rather than a stale row.
         let identity = ReachedOutSnapshot(show: p, contact: r, next: pair.next)
+        #if DEBUG
+        // #4320: what this row drew, for the pin that a skipped body is never a stale one. Two of the facts
+        // it draws, one from the show and one from the contact, spelled as the lines below spell them.
+        QueueRenderCounter.recordReachedOutRowBody(p.naturalKey, drew: [p.groupName,
+                                                   SendFailureLine.text(for: r.sendError) ?? ""]
+                                                   .joined(separator: " | "))
+        #endif
         return HStack(alignment: .top, spacing: OVSpacing.md) {
             VStack(alignment: .leading, spacing: 3) {
                 Text(p.groupName).font(OVType.groupName).foregroundStyle(OVColor.ink)
@@ -2455,9 +2469,25 @@ enum QueueRenderCounter {
     // line, for the card counter's reason above.
     static let reachedOutList = "reachedOutList"
     static let inquiryList = "inquiryList"
+    // #4317: and each performance date heading drawn, so a pin that the headings ask nothing can prove
+    // headings were drawn at all.
+    static let dateHeading = "dateHeading"
     nonisolated(unsafe) private static var stageListBodies: [String: Int] = [:]
     static func recordStageListBody(_ list: String) { stageListBodies[list, default: 0] += 1 }
     static func stageListBodyCount(_ list: String) -> Int { stageListBodies[list] ?? 0 }
+
+    // #4320: each Reached out row's own body evaluations, keyed by the show, and what the last one drew.
+    // A row that skips its body is only a saving while it is not a STALE row (L14), so the pin needs both:
+    // how often each row redrew, and whether the redraw carried the fact that changed. Counts only, no log
+    // line, for the card counter's reason above.
+    nonisolated(unsafe) private static var reachedOutRowBodies: [String: Int] = [:]
+    nonisolated(unsafe) private static var reachedOutRowDrawn: [String: String] = [:]
+    static func recordReachedOutRowBody(_ key: String, drew: String) {
+        reachedOutRowBodies[key, default: 0] += 1
+        reachedOutRowDrawn[key] = drew
+    }
+    static func reachedOutRowBodyCounts() -> [String: Int] { reachedOutRowBodies }
+    static func reachedOutRowDrew(_ key: String) -> String? { reachedOutRowDrawn[key] }
 
     // Which inputs moved. Pure, so the rule this diagnostic reports by is itself tested rather than being
     // one more thing taken on trust while it is used to judge everything else.
