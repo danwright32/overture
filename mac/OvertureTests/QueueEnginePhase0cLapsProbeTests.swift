@@ -624,6 +624,9 @@ extension Phase0cLapsWorld {
 
         // Conflicts first, because a sweep op must be judged before its writes reach the index.
         if sweeps {
+            // #4324: the op's sweep ran before this check, through `reapplyAll`'s own `try?` save, so it is
+            // saved here as well, for the reason given in the branch below.
+            try context.save()
             let intended = conflicts.judge(inputs())
             let changed = sync(from: before, conflictsToo: false)
             let current = rows()
@@ -644,7 +647,9 @@ extension Phase0cLapsWorld {
             ConflictSweep.reapplyAll(export: export, in: context)
             // #4324: saved here, exactly as the world's setup saves after its own sweep. `reapplyAll` saves only
             // through `try?` and only when it changed something, so a failed save there left the sweep's writes
-            // pending, and the real laps below would roll them back as if they were their own.
+            // pending, and the real laps below would stop on their precondition rather than judge anything.
+            // Measured: with `reapplyAll`'s own save removed and neither of these, the harness crashed on
+            // "settleReal would roll back an unsaved change"; with both, it does not depend on that save.
             try context.save()
             let real = Phase0cLapOracle.written(before: prior, after: current)
             if intended != dry {
