@@ -2810,15 +2810,27 @@ enum QueueModel {
 
         init(_ items: [some QueueScopeFacts], now: Date = Date(), today: String = QueueModel.easternToday(),
              geo: GeoRefusals = .none) {
+            // ONE candidate sweep per date, and the other three answers are derived from what it found rather
+            // than asked again. The pass answers every date of the stage, not only the ones on screen, so a
+            // second sweep here is paid once per date on every pass (#4321 review).
             let candidates = QueueModel.reachabilityProbeCandidateKeys(items, now: now, today: today, geo: geo)
             self.candidateKeys = candidates
-            // `probeKeysForTickedDate` is exactly "the candidates, or the re-offer set when there are none",
-            // so it is asked in that form rather than recomputing the candidates a second time.
-            self.tickKeys = candidates.isEmpty
-                ? QueueModel.keysToReofferForRecheck(items, now: now, today: today, geo: geo) : candidates
-            self.fullyChecked = QueueModel.dateReachabilityIsFullyChecked(items, now: now, today: today, geo: geo)
-            self.checkedOn = fullyChecked
-                ? QueueModel.dateReachabilityCheckedOn(items, now: now, today: today, geo: geo) : nil
+            guard candidates.isEmpty else {
+                // `probeKeysForTickedDate` answers the candidates themselves, and `dateReachabilityIsFullyChecked`
+                // is false by its own first guard, so nothing more is asked of a date still offering a check.
+                self.tickKeys = candidates
+                self.fullyChecked = false
+                self.checkedOn = nil
+                return
+            }
+            // With nothing outstanding, the tick box re-offers the answered, still open shows, and the date is
+            // finished exactly when there is one: `dateReachabilityIsFullyChecked` is "no candidates, and some
+            // show is worth offering with a fresh answer", which is `keysToReofferForRecheck` being non-empty.
+            let reoffer = QueueModel.keysToReofferForRecheck(items, now: now, today: today, geo: geo)
+            self.tickKeys = reoffer
+            self.fullyChecked = !reoffer.isEmpty
+            self.checkedOn = reoffer.isEmpty
+                ? nil : QueueModel.dateReachabilityCheckedOn(items, now: now, today: today, geo: geo)
         }
     }
 

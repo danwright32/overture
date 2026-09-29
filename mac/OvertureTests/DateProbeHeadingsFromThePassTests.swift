@@ -110,6 +110,29 @@ struct DateProbeHeadingsFromThePassTests {
         }
     }
 
+    // THE COST. The pass answers EVERY date of the stage, not only the ones on screen, so each heading asks
+    // the candidacy rule over its rows as few times as the four answers allow (#4321 review): once for a
+    // date still offering a check, three times for a finished one (candidates, the re-offer set, the day),
+    // and a second candidate sweep is the defect. Counted as geography verdicts, which the rule records one
+    // per show still open for a decision (L63).
+    @Test func eachHeadingAsksTheCandidacyRuleAsFewTimesAsItsAnswersNeed() throws {
+        let data = pass(try seed(try context()))
+        let byDate = Dictionary(uniqueKeysWithValues: data.dateGroups.map { ($0.id, $0) })
+        let offer = try #require(byDate[offering]), done = try #require(byDate[checked])
+        let asking = QueueRenderPass.WorkTally.measure {
+            _ = QueueModel.DateProbeHeading(offer.items, now: now, today: today, geo: geo)
+        }
+        #expect(asking.candidacyGeographyVerdicts == offer.items.count, Comment(rawValue:
+            "a date offering a check over \(offer.items.count) open shows asked "
+            + "\(asking.candidacyGeographyVerdicts) geography verdicts; one candidate sweep answers it"))
+        let finished = QueueRenderPass.WorkTally.measure {
+            _ = QueueModel.DateProbeHeading(done.items, now: now, today: today, geo: geo)
+        }
+        #expect(finished.candidacyGeographyVerdicts == 3 * done.items.count, Comment(rawValue:
+            "a finished date over \(done.items.count) open shows asked \(finished.candidacyGeographyVerdicts) "
+            + "geography verdicts; the candidates, the re-offer set and the day need three sweeps"))
+    }
+
     // THE POSITIVE CONTROL. The comparison above would pass on a pass that ignored geography only if the
     // fixture could not tell; with the refusal dropped, the refused show must come back as a candidate.
     @Test func theComparisonCanSeeAHeadingThatIgnoredGeography() throws {
