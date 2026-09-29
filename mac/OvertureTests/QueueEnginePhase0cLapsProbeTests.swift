@@ -12,8 +12,13 @@ import SwiftData
 //    (L130, L155). After EVERY operation and every undo, each prototype's answer must equal the dry run's,
 //    and the dry run's must equal the real lap's: settle over every row then rolled back, the two retirements
 //    then rolled back, and a real conflict sweep (or the hand edit's own sweep, diffed). A failure names the
-//    seed, the step, the operation and 8 hex digit hashes, never a name. CI settings are two seeds of 40
-//    operations per fixture; `TEST_RUNNER_MEASURE_4106_PHASE0C_LAPS_DEEP=1` runs 20 seeds of 500.
+//    seed, the step, the operation and 8 hex digit hashes, never a name. CI settings (`Phase0cTickLaps.ciPlan`):
+//    1 seed of 40 operations at 60 rows, 1 seed of 12 operations at 300 rows.
+//    `TEST_RUNNER_MEASURE_4106_PHASE0C_LAPS_DEEP=1` runs `Phase0cTickLaps.deepPlan`:
+//    20 seeds of 500 operations at 60 rows, 20 seeds of 500 operations at 300 rows.
+//    #4324: those two sentences are checked against the constants by
+//    `theHeaderStatesThePlanTheHarnessRuns`, because this header said "two seeds of 40 per fixture" for a
+//    plan that never ran that (L32, L407).
 //
 // 2. The CLONE PROBE is opt in (`TEST_RUNNER_MEASURE_4106_PHASE0C_LAPS=1`), like every #4106 probe before it
 //    and for the same reasons: it clones Dan's store, and a stopwatch on a shared Mac measures the Mac (L224).
@@ -35,6 +40,19 @@ enum Phase0cTickLaps {
     }
 
     nonisolated static func say(_ line: String) { print("phase0c7 " + line) }
+
+    typealias Plan = [(size: Int, seeds: [UInt64], ops: Int)]
+
+    // CI settings are sized against plan section 4's harness budget (measured 2026-09-27: two seeds of 40
+    // on both fixtures took 84 s, too much of the 90 s every harness shares).
+    nonisolated static let ciPlan: Plan = [(60, [11], 40), (300, [29], 12)]
+    nonisolated static let deepPlan: Plan = [(60, Array(1...20), 500), (300, Array(1...20), 500)]
+
+    /// A plan in the words the header states it in, so the header can be held to the constant.
+    nonisolated static func describe(_ plan: Plan) -> String {
+        plan.map { "\($0.seeds.count) seed\($0.seeds.count == 1 ? "" : "s") of \($0.ops) operations at \($0.size) rows" }
+            .joined(separator: ", ") + "."
+    }
 
     /// max, p99 and median of a set of per-key costs, in ms.
     struct Spread {
@@ -591,7 +609,10 @@ extension Phase0cLapsWorld {
     // MARK: the per-step comparison
 
     /// Every disagreement found after one step, described by counts and hashes only.
-    func check(step: Int, label: String, sweeps: Bool, before: [Phase0cPID: String]) -> [String] {
+    ///
+    /// THROWS when a store write it depends on did not land: the real sweep's save below, or either real lap's
+    /// hand restore (#4324). A comparison made after one of those failed would judge a store nobody committed.
+    func check(step: Int, label: String, sweeps: Bool, before: [Phase0cPID: String]) throws -> [String] {
         var problems: [String] = []
         let where_ = "seed \(seed) size \(size) step \(step) op \(label)"
         func keys(_ set: Set<Phase0cPID>, _ rows: [Prospect]) -> [String] {
@@ -621,6 +642,10 @@ extension Phase0cLapsWorld {
             let dry = Phase0cLapOracle.conflictDryRun(current, export: export, context: context)
             let prior = Phase0cLapOracle.conflictKeys(current)
             ConflictSweep.reapplyAll(export: export, in: context)
+            // #4324: saved here, exactly as the world's setup saves after its own sweep. `reapplyAll` saves only
+            // through `try?` and only when it changed something, so a failed save there left the sweep's writes
+            // pending, and the real laps below would roll them back as if they were their own.
+            try context.save()
             let real = Phase0cLapOracle.written(before: prior, after: current)
             if intended != dry {
                 problems.append("\(where_): conflict index intended \(intended.count) writes (\(Phase0cTickLaps.hash(keys(intended, current)))), "
@@ -635,7 +660,7 @@ extension Phase0cLapsWorld {
         let current = rows()
         settle.advance(to: now)
         let settleDry = Phase0cLapOracle.settleDryRun(current, now: now)
-        let settleReal = Phase0cLapOracle.settleReal(current, now: now, context: context)
+        let settleReal = try Phase0cLapOracle.settleReal(current, now: now, context: context)
         if settle.due != settleDry {
             problems.append("\(where_): settle due set \(settle.due.count) (\(Phase0cTickLaps.hash(keys(settle.due, current)))) "
                             + "against the dry run \(settleDry.count) (\(Phase0cTickLaps.hash(keys(settleDry, current))))")
@@ -646,7 +671,7 @@ extension Phase0cLapsWorld {
 
         let candidates = retire.candidates(today: today)
         let retireDry = Phase0cLapOracle.retireDryRun(context: context, today: today)
-        let retireReal = Phase0cLapOracle.retireReal(context: context, today: today)
+        let retireReal = try Phase0cLapOracle.retireReal(context: context, today: today)
         if candidates.wentBy != retireDry.wentBy || candidates.passedKept != retireDry.passedKept {
             problems.append("\(where_): retirement index \(candidates.wentBy.count)+\(candidates.passedKept.count) "
                             + "(\(Phase0cTickLaps.hash(keys(candidates.wentBy.union(candidates.passedKept), current)))) against the dry run "
@@ -672,7 +697,7 @@ final class QueueEnginePhase0cLapsProbeTests {
     private func drive(size: Int, seed: UInt64, ops: Int) throws -> (steps: Int, problems: [String], kinds: Set<String>,
                                                                       dueSeen: Int, retireSeen: Int, writesSeen: Int) {
         let world = try Phase0cLapsWorld(size: size, seed: seed, dir: try sandboxes.make(named: "phase0c7-world"))
-        var problems = world.check(step: 0, label: "build", sweeps: false, before: world.signatures())
+        var problems = try world.check(step: 0, label: "build", sweeps: false, before: world.signatures())
         var steps = 1
         var kinds = Set<String>()
         var dueSeen = 0, retireSeen = 0, writesSeen = 0
@@ -696,7 +721,7 @@ final class QueueEnginePhase0cLapsProbeTests {
             guard let step else { continue }
             kinds.insert(step.label)
             let dueBefore = world.settle.due.count
-            problems += world.check(step: steps, label: step.label, sweeps: step.sweeps, before: before)
+            problems += try world.check(step: steps, label: step.label, sweeps: step.sweeps, before: before)
             dueSeen += max(dueBefore, world.settle.due.count) > 0 ? 1 : 0
             let c = world.retire.candidates(today: world.today)
             retireSeen += c.wentBy.count + c.passedKept.count > 0 ? 1 : 0
@@ -707,11 +732,7 @@ final class QueueEnginePhase0cLapsProbeTests {
     }
 
     @Test func candidateIndexesEqualTodaysLapsAfterEveryOperationAndUndo() throws {
-        // CI settings are sized against plan section 4's harness budget (measured 2026-09-27: two seeds of 40
-        // on both fixtures took 84 s, too much of the 90 s every harness shares). Deep is 20 seeds of 500.
-        let plan: [(size: Int, seeds: [UInt64], ops: Int)] = Phase0cTickLaps.deep
-            ? [(60, Array(1...20), 500), (300, Array(1...20), 500)]
-            : [(60, [11], 40), (300, [29], 12)]
+        let plan = Phase0cTickLaps.deep ? Phase0cTickLaps.deepPlan : Phase0cTickLaps.ciPlan
         let start = Phase0.now()
         var lines: [String] = []
         var problems: [String] = []
@@ -743,6 +764,55 @@ final class QueueEnginePhase0cLapsProbeTests {
     /// Fact 8's clock half: the due set equals settle's changed set at every instant on either side of every
     /// expiry crossing in the fixture (one millisecond before, the computed crossing itself, one after), plus
     /// 50 evenly spaced instants, with no write in between.
+    // #4324: the header states the plan the harness runs, read from the constants rather than trusted. The
+    // header is joined into one line first, so rewrapping it cannot fail this and cannot satisfy it either.
+    @Test func theHeaderStatesThePlanTheHarnessRuns() throws {
+        let source = try String(contentsOf: URL(fileURLWithPath: #filePath), encoding: .utf8)
+        let header = try #require(source.components(separatedBy: "\nenum Phase0cTickLaps").first)
+        let prose = header.split(separator: "\n")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { $0.hasPrefix("//") }
+            .map { String($0.dropFirst(2)).trimmingCharacters(in: .whitespaces) }
+            .joined(separator: " ")
+        #expect(prose.count > 500, "the header was not found, so nothing was compared")
+        #expect(prose.contains(Phase0cTickLaps.describe(Phase0cTickLaps.ciPlan)),
+                "the header no longer states the CI plan: \(Phase0cTickLaps.describe(Phase0cTickLaps.ciPlan))")
+        #expect(prose.contains(Phase0cTickLaps.describe(Phase0cTickLaps.deepPlan)),
+                "the header no longer states the deep plan: \(Phase0cTickLaps.describe(Phase0cTickLaps.deepPlan))")
+    }
+
+    private struct SaveRefused: Error {}
+
+    // #4324: a real lap whose hand restore cannot be saved THROWS, naming its lap, rather than reading as a
+    // restore that landed. Each lap is driven to an instant where it really writes, or the save it is meant
+    // to fail would never be reached and the test would pass on a restore that never ran (L159).
+    @Test func aSettleRestoreThatFailsToSaveThrows() throws {
+        let world = try Phase0cLapsWorld(size: 60, seed: 11, dir: try sandboxes.make(named: "phase0c7-restore-settle"))
+        let rows = world.rows()
+        let instant = try #require((0...400).lazy.map { world.now.addingTimeInterval(Double($0) * 86_400) }
+            .first { !Phase0cLapOracle.settleDryRun(rows, now: $0).isEmpty },
+            "no instant in 400 days where settle writes anything, so the restore is never reached")
+        let leaksBefore = Phase0cLapOracle.rollbackLeaks
+        let error = #expect(throws: Phase0cLapOracle.RestoreNotSaved.self) {
+            _ = try Phase0cLapOracle.settleReal(rows, now: instant, context: world.context,
+                                                save: { _ in throw SaveRefused() })
+        }
+        #expect(error?.lap == "settle")
+        #expect(Phase0cLapOracle.rollbackLeaks > leaksBefore, "the settle restore wrote nothing, so no save was asked")
+    }
+
+    @Test func aRetirementRestoreThatFailsToSaveThrows() throws {
+        let world = try Phase0cLapsWorld(size: 60, seed: 11, dir: try sandboxes.make(named: "phase0c7-restore-retire"))
+        let day = try #require((0...400).lazy.map { QueueModel.easternToday(world.now.addingTimeInterval(Double($0) * 86_400)) }
+            .first { let d = Phase0cLapOracle.retireDryRun(context: world.context, today: $0)
+                     return !d.wentBy.isEmpty || !d.passedKept.isEmpty },
+            "no day in 400 where a retirement dismisses anything, so the restore is never reached")
+        let error = #expect(throws: Phase0cLapOracle.RestoreNotSaved.self) {
+            _ = try Phase0cLapOracle.retireReal(context: world.context, today: day, save: { _ in throw SaveRefused() })
+        }
+        #expect(error?.lap == "retirement")
+    }
+
     @Test func settleDueSetEqualsSettleAtEveryExpiryCrossing() throws {
         var lines: [String] = []
         var problems: [String] = []
@@ -765,7 +835,7 @@ final class QueueEnginePhase0cLapsProbeTests {
             for instant in instants.filter({ $0 >= world.now }).sorted() {
                 index.advance(to: instant)
                 let dry = Phase0cLapOracle.settleDryRun(rows, now: instant)
-                let real = Phase0cLapOracle.settleReal(rows, now: instant, context: world.context)
+                let real = try Phase0cLapOracle.settleReal(rows, now: instant, context: world.context)
                 dueMax = max(dueMax, dry.count)
                 if index.due != dry { problems.append("size \(size): due set \(index.due.count) against dry run \(dry.count) at +\(instant.timeIntervalSince(world.now)) s") }
                 if dry != real { problems.append("size \(size): dry run \(dry.count) against real settle \(real.count) at +\(instant.timeIntervalSince(world.now)) s") }
@@ -921,7 +991,7 @@ final class QueueEnginePhase0cLapsProbeTests {
         for instant in instants.filter({ $0 >= now }).sorted() {
             check.advance(to: instant)
             let dry = Phase0cLapOracle.settleDryRun(live, now: instant)
-            let real = Phase0cLapOracle.settleReal(live, now: instant, context: ctx)
+            let real = try Phase0cLapOracle.settleReal(live, now: instant, context: ctx)
             dueMost = max(dueMost, dry.count)
             if check.due != dry { indexMismatch += 1 }
             if dry != real { mirrorMismatch += 1 }
@@ -980,7 +1050,12 @@ final class QueueEnginePhase0cLapsProbeTests {
         let rows = try ctx.fetch(FetchDescriptor<Prospect>())
         for p in rows { _ = p.recipients.count }
         let today = QueueModel.easternToday(now)
-        let whole = Phase0.median5 { _ = Phase0cLapOracle.retireReal(context: ctx, today: today) }
+        // #4324: a restore that failed to save ends the block rather than being timed as if it had not.
+        var restoreFailure: Error?
+        let whole = Phase0.median5 {
+            do { _ = try Phase0cLapOracle.retireReal(context: ctx, today: today) } catch { restoreFailure = error }
+        }
+        if let restoreFailure { throw restoreFailure }
         let wentFetch = Phase0.median5 {
             _ = try? ctx.fetch(FetchDescriptor<Prospect>(predicate: #Predicate { $0.statusRaw == "new" }))
         }
@@ -1002,7 +1077,7 @@ final class QueueEnginePhase0cLapsProbeTests {
             most = max(most, dry.wentBy.count + dry.passedKept.count)
             if c.wentBy != dry.wentBy || c.passedKept != dry.passedKept { indexMismatch += 1 }
             if label == "live clone" || k % 5 == 0 {
-                let real = Phase0cLapOracle.retireReal(context: ctx, today: day)
+                let real = try Phase0cLapOracle.retireReal(context: ctx, today: day)
                 mirrorChecked += 1
                 if real.wentBy != dry.wentBy || real.passedKept != dry.passedKept { mirrorMismatch += 1 }
             }
