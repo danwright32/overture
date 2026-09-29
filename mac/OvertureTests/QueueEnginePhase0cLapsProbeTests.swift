@@ -648,8 +648,9 @@ extension Phase0cLapsWorld {
             // #4324: saved here, exactly as the world's setup saves after its own sweep. `reapplyAll` saves only
             // through `try?` and only when it changed something, so a failed save there left the sweep's writes
             // pending, and the real laps below would stop on their precondition rather than judge anything.
-            // Measured: with `reapplyAll`'s own save removed and neither of these, the harness crashed on
-            // "settleReal would roll back an unsaved change"; with both, it does not depend on that save.
+            // Measured with `reapplyAll`'s own save removed (scripts/mutate.sh, 2026-09-29): with only this save,
+            // the harness crashed on "settleReal would roll back an unsaved change" after a sweep op; with this
+            // one and the sweep branch's above, it passed, so the probe no longer rests on that `try?`.
             try context.save()
             let real = Phase0cLapOracle.written(before: prior, after: current)
             if intended != dry {
