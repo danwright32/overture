@@ -93,7 +93,9 @@ enum VoiceFeedbackBuilder {
     // nil. The drafted body is shared across recipients, so there is still exactly one pair per show;
     // this only attributes the win so the distiller knows which contact the lesson landed through.
     static func outcomeRecipient(_ p: Prospect) -> String? {
-        let recipients = p.recipients
+        // #4352: in the canonical contact order, so two booked or two replied contacts attribute the
+        // lesson to the same one on every run rather than to whichever the relationship listed first.
+        let recipients = Recipient.inCanonicalOrder(p.recipients)
         if let booked = recipients.first(where: { $0.resolution == .booked }) { return booked.id }
         if let replied = recipients.first(where: { $0.replied }) { return replied.id }
         return nil

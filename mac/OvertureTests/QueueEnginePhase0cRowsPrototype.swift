@@ -209,10 +209,11 @@ enum Phase0cRowBuild {
         let now = context.stage.now
         let alive = context.replyRunAlive
         // ONE walk of the contacts, in the canonical order, and every contact-derived value below reads it.
-        // `countedRecipients` is `recipients` unfiltered, in the same order: the accessor only records a
-        // `WorkTally` reach (Prospect.swift), so every contact reader below sees every contact.
-        let relationshipOrder = p.countedRecipients
-        let contacts = canonicalContacts(relationshipOrder)
+        // Since #4352 `countedRecipients` IS that order (`Recipient.inCanonicalOrder`), unfiltered, so every
+        // contact reader below sees every contact. The relationship's own order is kept beside it only for
+        // the probe's report of how often the store moved it under an unchanged row.
+        let relationshipOrder = p.recipients
+        let contacts = p.countedRecipients
         let nextReach = contacts.map { ReachedOutQueue.nextReachOut(for: $0, of: p, now: now) }
         laps?.mark("contacts, canonical order, nextReachOut each")
         let due = DueWork.counts(prospects: [p], inquiries: [], now: now, replyRunAlive: alive)
@@ -277,12 +278,10 @@ enum Phase0cRowBuild {
 
     /// The canonical contact order: `Recipient.id`, then persistentModelID, because one address can sit on
     /// two contacts of a show and `id` alone would leave those two in whatever order the relationship
-    /// handed back. The prototype builds every entry in this order; the product change that gives every
-    /// per-row reader the same order is Step T's (#4106 comment 5858964900).
+    /// handed back. Since #4352 it is the PRODUCT's order (`Recipient.inCanonicalOrder`), which every
+    /// per-row reader takes through `countedRecipients`, so the prototype names that one definition.
     static func canonicalContacts(_ contacts: [Recipient]) -> [Recipient] {
-        contacts.sorted {
-            $0.id != $1.id ? $0.id < $1.id : $0.persistentModelID < $1.persistentModelID
-        }
+        Recipient.inCanonicalOrder(contacts)
     }
 
     /// The oracle side's contact facts: today's reduction over the contacts in the canonical order.
