@@ -22,7 +22,7 @@ struct CancelledShootMigrationDryRunTests {
         let tmpDir = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("cancelled-shoot-dryrun-\(UUID().uuidString)")
         try fm.createDirectory(at: tmpDir, withIntermediateDirectories: true)
-        defer { try? fm.removeItem(at: tmpDir) }
+        defer { FileStores.remove(tmpDir) }
 
         // Through the ONE shared clone, which copies via SQLite's online backup rather than racing file
         // copies against a live writer, and through MigrationRehearsal, which SAYS when it rehearsed
@@ -41,7 +41,7 @@ struct CancelledShootMigrationDryRunTests {
             let oldModels = AppSchema.models.filter {
                 ObjectIdentifier($0) != ObjectIdentifier(CancelledShoot.self)
             }
-            let oldContainer = try ModelContainer(for: Schema(oldModels),
+            let oldContainer = try FileStores.container(for: Schema(oldModels),
                                                   configurations: [ModelConfiguration(url: copy)])
             let ctx = ModelContext(oldContainer)
             prospects = try ctx.fetch(FetchDescriptor<Prospect>()).count
@@ -49,7 +49,7 @@ struct CancelledShootMigrationDryRunTests {
         }
 
         // Migrate: the same clone under the NEW schema.
-        let container = try ModelContainer(for: AppSchema.schema,
+        let container = try FileStores.container(for: AppSchema.schema,
                                            configurations: [ModelConfiguration(url: copy)])
         let ctx = ModelContext(container)
         #expect(try ctx.fetch(FetchDescriptor<Prospect>()).count == prospects)

@@ -40,7 +40,7 @@ struct FollowUpsCostTests {
             throw LiveStoreClone.Refusal.backupFailed("no live store on this machine")
         }
         let schema = Schema([Prospect.self, Recipient.self, WatchedSource.self])
-        let ctx = ModelContext(try ModelContainer(
+        let ctx = ModelContext(try FileStores.container(
             for: schema,
             configurations: [ModelConfiguration(schema: schema, url: clone, cloudKitDatabase: .none)]))
         return try ctx.fetch(FetchDescriptor<Prospect>())
@@ -106,7 +106,7 @@ struct FollowUpsCostTests {
             let dir = fm.temporaryDirectory
                 .appendingPathComponent("follow-ups-cost-\(UUID().uuidString)", isDirectory: true)
             try fm.createDirectory(at: dir, withIntermediateDirectories: true)
-            defer { try? fm.removeItem(at: dir) }
+            defer { FileStores.remove(dir) }
 
             let prospects = try liveProspects(in: dir)
             let recipients = prospects.reduce(0) { $0 + $1.recipients.count }

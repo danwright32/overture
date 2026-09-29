@@ -29,7 +29,7 @@ struct ShowLinkCorpusShapeTests {
 
     private func container(at url: URL) throws -> ModelContainer {
         let schema = Schema([Prospect.self, Recipient.self])
-        return try ModelContainer(for: schema,
+        return try FileStores.container(for: schema,
                                   configurations: [ModelConfiguration(schema: schema, url: url,
                                                                       cloudKitDatabase: .none)])
     }
@@ -113,7 +113,9 @@ struct ShowLinkCorpusShapeTests {
             // that is really five dismissed rows (#3772, claim 3).
             #expect(distinctGroups(queueGroups) <= distinctGroups(wholeStore))
 
-            try? FileManager.default.removeItem(at: clone)
+            // #4061: the clone is released inside the lock, where every other real store step runs; the
+            // sandbox removes the directory once the test ends.
+            FileStores.close(under: dir)
             await RealStoreTestLock.shared.release()
         } catch {
             await RealStoreTestLock.shared.release()
@@ -196,7 +198,9 @@ struct ShowLinkCorpusShapeTests {
                     \(unexplained.map { $0.sorted() }.prefix(3))
                     """)
 
-            try? FileManager.default.removeItem(at: clone)
+            // #4061: the clone is released inside the lock, where every other real store step runs; the
+            // sandbox removes the directory once the test ends.
+            FileStores.close(under: dir)
             await RealStoreTestLock.shared.release()
         } catch {
             await RealStoreTestLock.shared.release()
@@ -304,7 +308,9 @@ struct ShowLinkCorpusShapeTests {
                             + "against \(String(format: "%.1f", neighbour.median)) ms for the pass built "
                             + "beside it over the same rows"))
 
-            try? FileManager.default.removeItem(at: clone)
+            // #4061: the clone is released inside the lock, where every other real store step runs; the
+            // sandbox removes the directory once the test ends.
+            FileStores.close(under: dir)
             await RealStoreTestLock.shared.release()
         } catch {
             await RealStoreTestLock.shared.release()

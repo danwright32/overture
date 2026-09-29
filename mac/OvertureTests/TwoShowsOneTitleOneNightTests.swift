@@ -36,7 +36,7 @@ struct TwoShowsOneTitleOneNightTests {
 
     private func container(at url: URL) throws -> ModelContainer {
         let schema = Schema([Prospect.self, Recipient.self])
-        return try ModelContainer(for: schema,
+        return try FileStores.container(for: schema,
                                   configurations: [ModelConfiguration(schema: schema, url: url,
                                                                       cloudKitDatabase: .none)])
     }
@@ -218,7 +218,9 @@ struct TwoShowsOneTitleOneNightTests {
                 \(unjudged.map { "  " + $0.line + "\n    verdict key: " + JudgedPair.of($0.a, $0.b, night: $0.night).description }.joined(separator: "\n"))
                 """))
 
-            try? FileManager.default.removeItem(at: clone)
+            // #4061: the clone is released inside the lock, where every other real store step runs; the
+            // sandbox removes the directory once the test ends.
+            FileStores.close(under: dir)
             await RealStoreTestLock.shared.release()
         } catch {
             await RealStoreTestLock.shared.release()

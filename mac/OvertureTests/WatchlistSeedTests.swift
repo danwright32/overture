@@ -124,7 +124,7 @@ struct WatchlistSeedTests {
 
             #expect(summary.added == ["The Sebastians", "TENET"])
 
-            let reopened = ModelContext(try ModelContainer(
+            let reopened = ModelContext(try FileStores.container(
                 for: Schema([Prospect.self, Recipient.self, WatchedSource.self, DayOff.self]),
                 configurations: [ModelConfiguration(url: storeURL)]))
             #expect(try reopened.fetch(FetchDescriptor<WatchedSource>()).count == 2)
@@ -153,7 +153,7 @@ struct WatchlistSeedTests {
             #expect(second.added.isEmpty)
             #expect(second.duplicates == ["TENET"])
 
-            let reopened = ModelContext(try ModelContainer(
+            let reopened = ModelContext(try FileStores.container(
                 for: Schema([Prospect.self, Recipient.self, WatchedSource.self, DayOff.self]),
                 configurations: [ModelConfiguration(url: storeURL)]))
             #expect(try reopened.fetch(FetchDescriptor<WatchedSource>()).count == 1)

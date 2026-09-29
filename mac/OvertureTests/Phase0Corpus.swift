@@ -100,7 +100,7 @@ enum Phase0 {
     nonisolated static func say(_ line: String) { print("phase0 " + line) }
 
     nonisolated static func openContainer(at url: URL) throws -> ModelContainer {
-        try ModelContainer(for: AppSchema.schema, configurations: [
+        try FileStores.container(for: AppSchema.schema, configurations: [
             ModelConfiguration(schema: AppSchema.schema, url: url, cloudKitDatabase: .none)])
     }
 

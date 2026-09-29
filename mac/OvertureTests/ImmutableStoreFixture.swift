@@ -65,7 +65,7 @@ enum ImmutableStoreFixture {
         // regression gets waved through.
         func tearDown() {
             for suffix in ["", "-wal", "-shm"] { _ = chflags(storeURL.path + suffix, 0) }
-            try? FileManager.default.removeItem(at: dir)
+            FileStores.remove(dir)
             recorder?.steps.append(.toreDown)
         }
         do {
@@ -73,7 +73,7 @@ enum ImmutableStoreFixture {
             // The containers live inside this inner scope ONLY, so they and their coordinators are gone
             // before the flags come off and long before the lock is released.
             let result: T = try await {
-                let seedContext = ModelContext(try ModelContainer(
+                let seedContext = ModelContext(try FileStores.container(
                     for: schema, configurations: [ModelConfiguration(url: storeURL)]))
                 try seed(seedContext)
                 try seedContext.save()
@@ -82,7 +82,7 @@ enum ImmutableStoreFixture {
                     _ = chflags(storeURL.path + suffix, UInt32(UF_IMMUTABLE))
                 }
 
-                let context = ModelContext(try ModelContainer(
+                let context = ModelContext(try FileStores.container(
                     for: schema, configurations: [ModelConfiguration(url: storeURL)]))
                 return try await body(context)
             }()

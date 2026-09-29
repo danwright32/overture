@@ -35,7 +35,7 @@ struct HouseListLiveStoreTests {
 
     private func openContainer(at url: URL) throws -> ModelContainer {
         let schema = Schema([Prospect.self, Recipient.self])
-        return try ModelContainer(for: schema,
+        return try FileStores.container(for: schema,
                                   configurations: [ModelConfiguration(schema: schema,
                                                                       url: url, cloudKitDatabase: .none)])
     }
@@ -52,7 +52,7 @@ struct HouseListLiveStoreTests {
         // Deliberately NO overrides. Dan's corrections are a separate, tested input (they travel through
         // ProducerOverrides and are pinned in the unit suite); pinning them here would make these verdicts
         // depend on what he happened to have corrected on the day.
-        return (ProducerGate.houses(shows: shows), shows, { try? fm.removeItem(at: scratch) })
+        return (ProducerGate.houses(shows: shows), shows, { FileStores.remove(scratch) })
     }
 
     // LIVE-STORE-CLAIM verified=2026-07-29 measure="for each organisation named below, whether ProducerGate.houses puts it on the house list, computed over every prospect in the live store"

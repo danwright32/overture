@@ -13,7 +13,7 @@ struct QueueItemSnapshotTests {
     private func makeContainer() throws -> ModelContainer {
         let schema = Schema([Prospect.self, Recipient.self])
         let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
-        return try ModelContainer(for: schema, configurations: [config])
+        return try FileStores.container(for: schema, configurations: [config])
     }
 
     // #394: the queue item exposes whether the performance can still send, so the Send button persists

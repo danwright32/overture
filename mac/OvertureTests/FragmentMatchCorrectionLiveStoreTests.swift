@@ -48,7 +48,7 @@ struct FragmentMatchCorrectionLiveStoreTests {
 
     private func open(_ store: URL) throws -> ModelContext {
         let schema = Schema([Prospect.self, Recipient.self, DayOff.self])
-        return ModelContext(try ModelContainer(
+        return ModelContext(try FileStores.container(
             for: schema,
             configurations: [ModelConfiguration(schema: schema, url: store, cloudKitDatabase: .none)]))
     }
@@ -125,7 +125,7 @@ struct FragmentMatchCorrectionLiveStoreTests {
             let dir = fm.temporaryDirectory
                 .appendingPathComponent("fragment-2565-\(UUID().uuidString)", isDirectory: true)
             try fm.createDirectory(at: dir, withIntermediateDirectories: true)
-            defer { try? fm.removeItem(at: dir) }
+            defer { FileStores.remove(dir) }
 
             // A nil clone here is a FAILURE, not an absence. This test is gated on the live store
             // existing, so reaching this line means the COPY failed, and returning quietly would report
@@ -166,7 +166,7 @@ struct FragmentMatchCorrectionLiveStoreTests {
             let dir = fm.temporaryDirectory
                 .appendingPathComponent("fragment-2565-backups-\(UUID().uuidString)", isDirectory: true)
             try fm.createDirectory(at: dir, withIntermediateDirectories: true)
-            defer { try? fm.removeItem(at: dir) }
+            defer { FileStores.remove(dir) }
 
             let backups = LiveStoreClone.launchBackupStores
             #expect(!backups.isEmpty,

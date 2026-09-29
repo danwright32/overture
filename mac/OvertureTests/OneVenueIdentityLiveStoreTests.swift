@@ -54,7 +54,7 @@ final class OneVenueIdentityLiveStoreTests {
             throw LiveStoreClone.Refusal.backupFailed("no live store on this machine")
         }
         let schema = Schema([Prospect.self, Recipient.self])
-        return ModelContext(try ModelContainer(
+        return ModelContext(try FileStores.container(
             for: schema, configurations: [ModelConfiguration(schema: schema, url: url, cloudKitDatabase: .none)]))
     }
 

@@ -62,7 +62,7 @@ final class StoreColumnCensusTests {
     // Writes `count` shows, setting a send mode on the first `withMode` of them.
     private func makeStore(count: Int, withMode: Int) throws -> WrittenStore {
         let url = try tempStoreURL()
-        let container = try ModelContainer(for: AppSchema.schema,
+        let container = try FileStores.container(for: AppSchema.schema,
                                            configurations: [ModelConfiguration(url: url)])
         let ctx = ModelContext(container)
         for i in 0..<count {
@@ -103,7 +103,7 @@ final class StoreColumnCensusTests {
 
         // Reopen and set the mode on EVERY row, which is the shape of the failure the rehearsal guards:
         // a migration default reaches all of them at once.
-        let ctx = ModelContext(try ModelContainer(for: AppSchema.schema,
+        let ctx = ModelContext(try FileStores.container(for: AppSchema.schema,
                                                   configurations: [ModelConfiguration(url: store.url)]))
         for p in try ctx.fetch(FetchDescriptor<Prospect>()) { p.sendsTogetherOverride = true }
         try ctx.save()
@@ -122,7 +122,7 @@ final class StoreColumnCensusTests {
         let store = try makeStore(count: 3, withMode: 0)
 
         // Held open deliberately: nothing checkpoints the sidecar into the store while this container lives.
-        let container = try ModelContainer(for: AppSchema.schema,
+        let container = try FileStores.container(for: AppSchema.schema,
                                            configurations: [ModelConfiguration(url: store.url)])
         let ctx = ModelContext(container)
         for p in try ctx.fetch(FetchDescriptor<Prospect>()) { p.sendsTogetherOverride = true }

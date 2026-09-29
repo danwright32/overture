@@ -125,7 +125,7 @@ final class ScoutStageCardLoadLiveStoreTests {
         }
         let schema = Schema([Prospect.self, Recipient.self, WatchedSource.self,
                              ExcludedTown.self, AllowedSeedTown.self])
-        let ctx = ModelContext(try ModelContainer(
+        let ctx = ModelContext(try FileStores.container(
             for: schema,
             configurations: [ModelConfiguration(schema: schema, url: clone, cloudKitDatabase: .none)]))
 

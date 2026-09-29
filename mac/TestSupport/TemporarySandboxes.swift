@@ -89,9 +89,13 @@ final class TemporarySandboxes {
     /// `try?` per entry rather than around the loop: one directory that cannot be removed (a test that
     /// already removed it itself, a permission the test changed) must not abandon the ones after it. A
     /// `deinit` has nowhere to throw to in any case.
+    ///
+    /// #4061: through `FileStores.remove`, which releases any store a test opened in the directory first
+    /// and leaves the directory in place, saying so, while a file under it is still open. Removing it
+    /// then is the SQLite API violation that aborted xctest on 2026-09-29.
     deinit {
         for url in created {
-            try? fileManager.removeItem(at: url)
+            FileStores.remove(url, fileManager: fileManager)
         }
     }
 }
