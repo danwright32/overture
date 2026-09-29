@@ -451,6 +451,12 @@ extension QueueEnginePhase0cRowsProbeTests {
             let tFanOut = Phase0.median5 { _ = QueueRenderPass.fanOutWarning(inQueue) }
             let tGroup = Phase0.median5 { _ = QueueModel.groupByDate(focusedRows) }
             let dateGroups = QueueModel.groupByDate(focusedRows)
+            // #4317: each heading's reachability answers, which the pass takes now.
+            let tHeadings = Phase0.median5 {
+                _ = QueueModel.dateProbeHeadings(dateGroups, now: context.now, today: context.today, geo: context.geo)
+            }
+            let headings = QueueModel.dateProbeHeadings(dateGroups, now: context.now, today: context.today,
+                                                        geo: context.geo)
             let tInquiryRows = Phase0.median5 {
                 _ = QueueRenderPass.inquiryRows(t.inquiries, stage: .scout, now: context.now)
             }
@@ -473,7 +479,8 @@ extension QueueEnginePhase0cRowsProbeTests {
                     summary: QueueModel.summary(visibleRows), missedByACheckKeys: missed, fanOutLine: nil, rows: rows,
                     visibleRows: visibleRows, cardCheck: scope.cardCheck, focusedRows: focusedRows,
                     dateGroups: dateGroups, inquiryRows: [], inquiryGroups: [], inquiriesByRowID: [:],
-                    reachedOutList: .none, stageCounts: [:], geo: context.geo, placement: placement)
+                    reachedOutList: .none, dateProbeHeadings: headings, stageCounts: [:], geo: context.geo,
+                    placement: placement)
             }
             let tRenderData = Phase0.median5 { _ = renderData() }
             let passTerms: [(String, Phase0.Reading)] = [
@@ -487,6 +494,7 @@ extension QueueEnginePhase0cRowsProbeTests {
                 ("selfBookingIndex", tSelfBooking), ("AgentInputs.from (as the pass calls it)", tAgent),
                 ("pendingBookingCount", tPending), ("fanOutWarning", tFanOut), ("groupByDate", tGroup),
                 ("inquiryRows", tInquiryRows), ("stage counts", tStageCounts),
+                ("dateProbeHeadings (each heading's reachability answers)", tHeadings),
                 ("keysMissedByACheck (the masthead's offer)", tMissed), ("summary (the masthead's counts)", tSummary),
                 ("RenderData init", tRenderData),
             ]

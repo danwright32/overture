@@ -138,7 +138,11 @@ struct QueueJumpLandsOnEveryStageTests {
         let state = SendProgressState()
         var seen: [String: Bool] = [:]
         func render(_ key: String) {
-            _ = ReachedOutSendAwareRow(sendState: state, key: key) { _, _, highlighted in
+            // #4320: what the row is drawn from, which this test does not vary. Any object stands in for
+            // the show and contact, since the mark is read from the send state alone.
+            let inputs = ReachedOutRowInputs(show: ObjectIdentifier(state), contact: ObjectIdentifier(state),
+                                             next: .distantPast, now: .distantPast, sourceCalendars: [:])
+            _ = ReachedOutSendAwareRow(sendState: state, key: key, redrawsOn: inputs) { _, _, highlighted in
                 seen[key] = highlighted
                 return EmptyView()
             }.body

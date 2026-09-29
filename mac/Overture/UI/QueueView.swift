@@ -361,6 +361,10 @@ struct QueueView: View {
         // #4311: the Reached out list as it draws (rows, day headings, the calendar table its links
         // resolve against), derived by the pass for that stage and empty on every other.
         let reachedOutList: QueueModel.ReachedOutList
+        // #4317: each date heading's reachability answers (its tick box, its Check button, its finished
+        // marker), keyed by the date group's id. The heading's body used to ask them itself, per realised
+        // group per evaluation, through the view's unresolved geography (L471).
+        let dateProbeHeadings: [String: QueueModel.DateProbeHeading]
         // #3738: what each stage pill counts, from the pass's own placement table. The empty-stage card
         // reads it rather than deciding every show's stages a second time inside a body.
         let stageCounts: [StageFocus: Int]
@@ -1000,6 +1004,9 @@ struct QueueView: View {
                              departing: [String: DepartureReason],
                              departingCards: [String: QueueItem]) -> some View {
         VStack(alignment: .leading, spacing: OVSpacing.sm) {
+            #if DEBUG
+            let _ = QueueRenderCounter.recordStageListBody(QueueRenderCounter.dateHeading)
+            #endif
             HStack(alignment: .firstTextBaseline, spacing: OVSpacing.sm) {
                 if !group.weekday.isEmpty {
                     Text(group.weekday.uppercased()).font(.system(size: 11, weight: .semibold))
@@ -1056,12 +1063,17 @@ struct QueueView: View {
                 // means "check this one again" and carries that date's answered shows. Asked through the
                 // SAME function the selection prices, so the box can never appear on a date it would then
                 // add nothing for.
-                if focusedStage == .scout, !QueueModel.probeKeysForTickedDate(group.items, geo: geo).isEmpty {
+                // #4317: and asked ONCE, by the pass, at its resolved geography (`RenderData.dateProbeHeadings`),
+                // never here. This heading asked the candidacy rule three times over its rows, per drawn
+                // heading, per body evaluation, through the view's unresolved `geo` (L471). A night the pass
+                // drew no heading for exists only for a departing card, a show just sent, whose heading
+                // offers nothing (`DateProbeHeading.none`).
+                let probeHeading = data.dateProbeHeadings[group.id] ?? .none
+                if focusedStage == .scout, !probeHeading.tickKeys.isEmpty {
                     ProbeDateCheckbox(groupID: group.id, selection: probeSelection)
                 }
                 ReachabilityProbeControl(
-                    items: group.items, dateLabel: group.monthDay,
-                    geo: geo,
+                    heading: probeHeading, dateLabel: group.monthDay,
                     isRunning: data.checkRunning,
                     onTap: { keys, label in sheets.pendingProbe = ProbeConfirm(keys: keys, dateLabel: label) })
             }
@@ -1491,7 +1503,12 @@ struct QueueView: View {
             .padding(.vertical, OVSpacing.hero)
             .padding(.horizontal, OVSpacing.xl)
         } else {
-            let now = Date()
+            // #4320: the PASS's instant, never a fresh `Date()`. A row redraws only when something it draws
+            // changed (see `ReachedOutRowInputs`), and the clock is one of those things, so it has to be an
+            // input that moves when the pass moves rather than a value that differs on every evaluation and
+            // would redraw every row every time. The pass's instant trails the wall clock by at most the
+            // render memo's two seconds (`ScopeMemo.staleAfterSeconds`).
+            let now = list.now
             // #2816: built ONCE for the whole list, on the #1121 rule, rather than walking the watchlist
             // per row on every scroll frame. #4311: by the pass, not by this body.
             let sourceCalendars = list.sourceCalendars
@@ -1523,8 +1540,20 @@ struct QueueView: View {
                                 // clock.
                                 // #4062: and the row carries the SHOW's key and the jump mark, so a deep
                                 // link to it can scroll here and mark it as it does on every other stage.
+                                // #4320: and it redraws only when something it draws changed. Its content
+                                // closure is new on every evaluation of this body, which SwiftUI can never
+                                // find equal to the last one, so every row used to re-run its body and
+                                // re-read its show and contact from the store on every change to ANY show.
+                                // The row's `Equatable` conformance compares what the closure is drawn FROM
+                                // instead (SwiftUI applies it on its own, measured: the pin still passes
+                                // without `.equatable()`, which is here to say so at the call site); a change
+                                // to the show or contact themselves reaches the row through the models' own
+                                // observation, which is attributed to the row's body that read them.
                                 ReachedOutSendAwareRow(sendState: sendState,
-                                                       key: prospect.naturalKey) { sendingSince, departure, highlighted in
+                                                       key: prospect.naturalKey,
+                                                       redrawsOn: ReachedOutRowInputs(
+                                                           show: prospect, contact: recipient, next: next,
+                                                           now: now, sourceCalendars: sourceCalendars)) { sendingSince, departure, highlighted in
                                     Group {
                                         if let departure, !departure.reason.showsSendDelight {
                                             ClosedOutDepartureRow(item: departure.item)
@@ -1536,6 +1565,7 @@ struct QueueView: View {
                                     }
                                     .jumpMark(key: prospect.naturalKey, highlighted: highlighted)
                                 }
+                                .equatable()
                             case .inquiry(let inquiry, let row, _):
                                 // #1513: the same row shape as a show, so the two read as one list. The
                                 // source capsule and lifecycle line stay, because they say what an
@@ -1607,6 +1637,13 @@ struct QueueView: View {
         // `DriftedRunMerge` and `ContactRefusal` throughout), so a captured model read at press time is a
         // crash rather than a stale row.
         let identity = ReachedOutSnapshot(show: p, contact: r, next: pair.next)
+        #if DEBUG
+        // #4320: what this row drew, for the pin that a skipped body is never a stale one. Two of the facts
+        // it draws, one from the show and one from the contact, spelled as the lines below spell them.
+        QueueRenderCounter.recordReachedOutRowBody(p.naturalKey, drew: [p.groupName,
+                                                   SendFailureLine.text(for: r.sendError) ?? ""]
+                                                   .joined(separator: " | "))
+        #endif
         return HStack(alignment: .top, spacing: OVSpacing.md) {
             VStack(alignment: .leading, spacing: 3) {
                 Text(p.groupName).font(OVType.groupName).foregroundStyle(OVColor.ink)
@@ -2455,9 +2492,25 @@ enum QueueRenderCounter {
     // line, for the card counter's reason above.
     static let reachedOutList = "reachedOutList"
     static let inquiryList = "inquiryList"
+    // #4317: and each performance date heading drawn, so a pin that the headings ask nothing can prove
+    // headings were drawn at all.
+    static let dateHeading = "dateHeading"
     nonisolated(unsafe) private static var stageListBodies: [String: Int] = [:]
     static func recordStageListBody(_ list: String) { stageListBodies[list, default: 0] += 1 }
     static func stageListBodyCount(_ list: String) -> Int { stageListBodies[list] ?? 0 }
+
+    // #4320: each Reached out row's own body evaluations, keyed by the show, and what the last one drew.
+    // A row that skips its body is only a saving while it is not a STALE row (L14), so the pin needs both:
+    // how often each row redrew, and whether the redraw carried the fact that changed. Counts only, no log
+    // line, for the card counter's reason above.
+    nonisolated(unsafe) private static var reachedOutRowBodies: [String: Int] = [:]
+    nonisolated(unsafe) private static var reachedOutRowDrawn: [String: String] = [:]
+    static func recordReachedOutRowBody(_ key: String, drew: String) {
+        reachedOutRowBodies[key, default: 0] += 1
+        reachedOutRowDrawn[key] = drew
+    }
+    static func reachedOutRowBodyCounts() -> [String: Int] { reachedOutRowBodies }
+    static func reachedOutRowDrew(_ key: String) -> String? { reachedOutRowDrawn[key] }
 
     // Which inputs moved. Pure, so the rule this diagnostic reports by is itself tested rather than being
     // one more thing taken on trust while it is used to judge everything else.
@@ -2607,21 +2660,37 @@ struct QueueScrollHolder<Content: View>: View {
 // been saying it twice (#843). A tap reports the candidate keys up so QueueView opens the confirm sheet;
 // it never runs on its own.
 struct ReachabilityProbeControl: View {
-    // #3654: ROWS. Everything this control asks (which shows on this night a paid check could still be
-    // about) is answerable from one, so a date heading offering the check does not force a card for every
-    // show under it.
-    let items: [QueueScopeRow]
+    // #4317: the date's answers as ONE value the render pass took (`QueueModel.DateProbeHeading`), so this
+    // body asks nothing. It used to take the night's rows and ask the candidacy rule itself, up to three
+    // times per evaluation, which on the queue meant a geography verdict per show per drawn heading every
+    // time the body ran (L471). #1609's refusals are applied where the value is built: the pass hands in
+    // its own resolved geography, and `init(items:geo:)` below the one a caller names.
+    let heading: QueueModel.DateProbeHeading
     let dateLabel: String
-    // #1609: Dan's geography refusals, so the control never offers a PAID check on a show somewhere he
-    // has refused to travel. Defaulted to none so a preview or a test that does not care is unchanged.
-    var geo: GeoRefusals = .none
     // #1323: a probe and a normal Prep share the single detached-run slot, so the Check action greys out
     // while any run is already in flight rather than failing after the tap with alreadyRunning.
     let isRunning: Bool
     let onTap: (_ keys: [String], _ dateLabel: String) -> Void
 
+    init(heading: QueueModel.DateProbeHeading, dateLabel: String, isRunning: Bool,
+         onTap: @escaping (_ keys: [String], _ dateLabel: String) -> Void) {
+        self.heading = heading
+        self.dateLabel = dateLabel
+        self.isRunning = isRunning
+        self.onTap = onTap
+    }
+
+    // #3654: ROWS, for a surface holding a night's rows rather than a pass (a preview, a test). The value
+    // is built by the same initialiser the pass uses, so the two cannot answer differently about a night.
+    // #1609: geography defaulted to none, so a caller that does not care is unchanged.
+    init(items: [QueueScopeRow], dateLabel: String, geo: GeoRefusals = .none, isRunning: Bool,
+         onTap: @escaping (_ keys: [String], _ dateLabel: String) -> Void) {
+        self.init(heading: QueueModel.DateProbeHeading(items, geo: geo), dateLabel: dateLabel,
+                  isRunning: isRunning, onTap: onTap)
+    }
+
     var body: some View {
-        let keys = QueueModel.reachabilityProbeCandidateKeys(items, geo: geo)
+        let keys = heading.candidateKeys
         if !keys.isEmpty {
             HStack(spacing: 0) {
                 Spacer(minLength: OVSpacing.sm)
@@ -2639,15 +2708,14 @@ struct ReachabilityProbeControl: View {
                 .disabled(isRunning)
                 .help(isRunning ? ReachabilityProbeCopy.controlBusyHelp : "")
             }
-        } else if QueueModel.dateReachabilityIsFullyChecked(items, geo: geo) {
+        } else if heading.fullyChecked {
             // #1617: the finished date, in the slot the button held a moment ago. Quiet on purpose (no
             // capsule, no icon, faint): it is a resting state Dan walks past, not a thing to act on, and
             // the #1595 cutback of this control was about exactly that. It appears only on a date whose
             // shows were really answered, so it stays rare rather than joining the 169.
             HStack(spacing: OVSpacing.xs) {
                 Spacer(minLength: OVSpacing.sm)
-                Text(ReachabilityProbeCopy.dateCheckedMarker(
-                    checkedOn: QueueModel.dateReachabilityCheckedOn(items, geo: geo)))
+                Text(ReachabilityProbeCopy.dateCheckedMarker(checkedOn: heading.checkedOn))
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(OVColor.inkFaint)
                 // #2268 put a "Check again" link here, answering Dan's "is there a way to re-check an

@@ -2014,9 +2014,14 @@ enum QueueModel {
         let entries: [ReachedOutEntry]
         let groups: [ReachOutDateGroup<ReachedOutEntry>]
         let sourceCalendars: [String: String]
+        // #4320: the instant the rows were derived at, which is the one the rows draw their times from, so
+        // a row's clock moves when the pass's does and not on every evaluation of the body.
+        let now: Date
 
         // What every stage but Reached out carries: nothing, because only that stage draws it.
-        static var none: ReachedOutList { ReachedOutList(entries: [], groups: [], sourceCalendars: [:]) }
+        static var none: ReachedOutList {
+            ReachedOutList(entries: [], groups: [], sourceCalendars: [:], now: .distantPast)
+        }
     }
 
     // `sourceCalendars` is asked only when there is a row, so an empty stage builds no table.
@@ -2026,7 +2031,7 @@ enum QueueModel {
         let entries = reachedOutStageEntries(dated, inquiries: inquiries, now: now)
         guard !entries.isEmpty else { return .none }
         return ReachedOutList(entries: entries, groups: reachOutDateGroups(entries, reachDate: { $0.next }),
-                              sourceCalendars: sourceCalendars())
+                              sourceCalendars: sourceCalendars(), now: now)
     }
 
     // #4311: a stage's inquiry rows resolved back to their models, keyed by the row's id, which is what
@@ -2773,6 +2778,67 @@ enum QueueModel {
                        && hasFreshReachabilityAnswer($0, now: now) }
             .compactMap(reachabilityAnswerDate)
             .min()
+    }
+
+    // #4317: everything a date heading asks about reachability, as ONE value per date, taken by the render
+    // pass rather than by the heading's body. The heading used to ask `probeKeysForTickedDate` for its tick
+    // box and hand its rows to `ReachabilityProbeControl`, which asked the candidacy rule twice more, all
+    // inside the body with the view's own UNRESOLVED `geo`, so every drawn Scout heading paid geography
+    // verdicts that can parse a place string on events that change no data (L471). The four answers are
+    // the same four functions the heading and the control called, over the same rows, so the value cannot
+    // say anything those functions would not; `DateProbeHeadingsFromThePassTests` holds it to them.
+    struct DateProbeHeading: Equatable {
+        // What ticking the date adds to a check, and so whether the tick box appears at all (#2371).
+        let tickKeys: [String]
+        // The shows the Check button would run over, empty where it does not appear (#1308).
+        let candidateKeys: [String]
+        // The finished date's quiet marker and the day it names (#1617, #2374).
+        let fullyChecked: Bool
+        let checkedOn: Date?
+
+        // A date the pass has no heading for: no tick box, no button, no marker. The one way to reach it
+        // is a night drawn only for a departing card, whose show has just been sent and so is past the
+        // keep-or-dismiss moment, where the four functions answer exactly this.
+        static let none = DateProbeHeading(tickKeys: [], candidateKeys: [], fullyChecked: false, checkedOn: nil)
+
+        init(tickKeys: [String], candidateKeys: [String], fullyChecked: Bool, checkedOn: Date?) {
+            self.tickKeys = tickKeys
+            self.candidateKeys = candidateKeys
+            self.fullyChecked = fullyChecked
+            self.checkedOn = checkedOn
+        }
+
+        init(_ items: [some QueueScopeFacts], now: Date = Date(), today: String = QueueModel.easternToday(),
+             geo: GeoRefusals = .none) {
+            // ONE candidate sweep per date, and the other three answers are derived from what it found rather
+            // than asked again. The pass answers every date of the stage, not only the ones on screen, so a
+            // second sweep here is paid once per date on every pass (#4321 review).
+            let candidates = QueueModel.reachabilityProbeCandidateKeys(items, now: now, today: today, geo: geo)
+            self.candidateKeys = candidates
+            guard candidates.isEmpty else {
+                // `probeKeysForTickedDate` answers the candidates themselves, and `dateReachabilityIsFullyChecked`
+                // is false by its own first guard, so nothing more is asked of a date still offering a check.
+                self.tickKeys = candidates
+                self.fullyChecked = false
+                self.checkedOn = nil
+                return
+            }
+            // With nothing outstanding, the tick box re-offers the answered, still open shows, and the date is
+            // finished exactly when there is one: `dateReachabilityIsFullyChecked` is "no candidates, and some
+            // show is worth offering with a fresh answer", which is `keysToReofferForRecheck` being non-empty.
+            let reoffer = QueueModel.keysToReofferForRecheck(items, now: now, today: today, geo: geo)
+            self.tickKeys = reoffer
+            self.fullyChecked = !reoffer.isEmpty
+            self.checkedOn = reoffer.isEmpty
+                ? nil : QueueModel.dateReachabilityCheckedOn(items, now: now, today: today, geo: geo)
+        }
+    }
+
+    // One heading per date group, keyed by the group's id, which is the key the body looks it up by.
+    static func dateProbeHeadings(_ groups: [DateGroup], now: Date, today: String,
+                                  geo: GeoRefusals) -> [String: DateProbeHeading] {
+        Dictionary(groups.map { ($0.id, DateProbeHeading($0.items, now: now, today: today, geo: geo)) },
+                   uniquingKeysWith: { first, _ in first })
     }
 
     // The date of the answer actually IN FORCE, in the same order `hasFreshReachabilityAnswer` accepts
