@@ -140,6 +140,10 @@ main() {
   fi
 
   local runner="${wt}/mac/scripts/run-tests-locked.sh" suite="OvertureTests/LandingOracleTests" log status
+  # Each of the up to three runs below queues for the one test lock this Mac shares, and the runner's own
+  # default of 1800s gave up on the first real recording while six runs were ahead of it (measured
+  # 2026-09-29, NOTHING RAN). The wait is bounded, just by something sized for a queue this deep (L110).
+  export OVERTURE_DIR_LOCK_TIMEOUT="${OVERTURE_DIR_LOCK_TIMEOUT:-14400}"
   log="${scratch}/run.log"
 
   # 1. The synthetic arm. Its passing run IS the proof the overlay compiles against the old app.
