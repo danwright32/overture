@@ -117,6 +117,20 @@ struct TheMissedShowsPressActsOnThePassTests {
         #expect(AppNotices.servable([other], missedByACheckKeys: []).first?.action == .retryOmniFocusSync)
     }
 
+    // #1616: the confirm quotes the wait at the pace it is HANDED, which the press reads from the learned
+    // history (`ProbeSelection.liveSecondsPerRound()`), never the builder's own default. Two paces far enough
+    // apart to change the quoted wait, so a builder that dropped the argument would quote the same for both.
+    @Test func theConfirmQuotesTheWaitAtThePaceItIsHanded() throws {
+        let keys = (0..<40).map { "missed-\($0)" }
+        let slow = try #require(ProbeConfirm.finishingShowsACheckMissed(keys: keys, secondsPerRound: 1_800))
+        let fast = try #require(ProbeConfirm.finishingShowsACheckMissed(keys: keys, secondsPerRound: 30))
+        let expected = ProbeSelectionCopy.finishMissedShowsMessage(
+            ProbeSelection.summarizeShowsACheckMissed(count: keys.count, secondsPerRound: 1_800))
+        #expect(slow.message == expected, "the confirm quotes a wait other than the one at the pace it was handed")
+        #expect(slow.message != fast.message,
+                "two different paces quote the same wait, so the pace never reaches the sentence")
+    }
+
     // The view's half, which no value test can reach: the press is HANDED the keys and derives none. A
     // source guard because the press lives on a private function of a SwiftUI view.
     @Test func thePressInTheQueueIsHandedTheKeysAndDerivesNone() throws {
