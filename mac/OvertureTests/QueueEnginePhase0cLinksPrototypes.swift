@@ -505,7 +505,12 @@ struct Phase0cFeedBreakPatch<Key: Hashable> {
             events[bucket] = nil
             return
         }
-        events[bucket] = FeedBreakEvent.Event(venue: first.facts.label,
+        // #4348: the product's label rule, the most common spelling with ties to the smallest key's.
+        var spellings: [String: Int] = [:]
+        for member in members { spellings[member.facts.label, default: 0] += 1 }
+        let top = spellings.values.max() ?? 0
+        let label = members.first { spellings[$0.facts.label] == top }?.facts.label ?? first.facts.label
+        events[bucket] = FeedBreakEvent.Event(venue: label,
                                               missedScoutCount: first.facts.missed,
                                               memberKeys: members.map { $0.facts.id },
                                               coveredByAnotherCard: members.filter { covered.contains($0.key) }.count)
