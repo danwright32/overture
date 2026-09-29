@@ -96,6 +96,11 @@ assert_empty "a push with no refs at all is not a violation" "$(printf '' | prot
 #
 # The function above could be perfect and guard nothing if the hook did not call it, so this drives the
 # real file the way git does: refs on stdin, remote name and URL as arguments.
+#
+# #4328: the hook also walks every commit a push carries for a real-arm file, and refuses, closed, any sha it
+# cannot read. So the refs below name a REAL commit of this checkout on both sides (a push with nothing new
+# in it), run from inside this checkout, which leaves the push-target decision as the only thing judged.
+HEAD_SHA="$(git -C "${REPO_ROOT}" rev-parse HEAD)"
 
 if [[ -x "${HOOK}" ]]; then
   echo "ok - the pre-push hook exists and is executable"
@@ -104,8 +109,8 @@ else
   FAILURES=$((FAILURES + 1))
 fi
 
-hook_output="$(printf 'refs/heads/main %s refs/heads/main %s\n' "abc123" "def456" \
-  | "${HOOK}" origin https://github.com/danwright32/overture.git 2>&1)"
+hook_output="$(printf 'refs/heads/main %s refs/heads/main %s\n' "${HEAD_SHA}" "${HEAD_SHA}" \
+  | (cd "${REPO_ROOT}" && "${HOOK}" origin https://github.com/danwright32/overture.git) 2>&1)"
 hook_status=$?
 if [[ ${hook_status} -ne 0 ]]; then
   echo "ok - the hook refuses a push to main"
@@ -116,8 +121,8 @@ fi
 assert_contains "and says which branch it refused" "${hook_output}" "main"
 assert_contains "and names the way through" "${hook_output}" "ALLOW_PUSH_TO_MAIN"
 
-hook_output="$(printf 'refs/heads/2291-guard %s refs/heads/2291-guard %s\n' "abc123" "def456" \
-  | "${HOOK}" origin https://github.com/danwright32/overture.git 2>&1)"
+hook_output="$(printf 'refs/heads/2291-guard %s refs/heads/2291-guard %s\n' "${HEAD_SHA}" "${HEAD_SHA}" \
+  | (cd "${REPO_ROOT}" && "${HOOK}" origin https://github.com/danwright32/overture.git) 2>&1)"
 if [[ $? -eq 0 ]]; then
   echo "ok - the hook lets an ordinary branch push through"
 else
@@ -128,8 +133,8 @@ fi
 
 # The override exists so a deliberate direct push is possible, and it is deliberately loud: the whole
 # failure this guards against was invisible in the push output.
-hook_output="$(printf 'refs/heads/main %s refs/heads/main %s\n' "abc123" "def456" \
-  | ALLOW_PUSH_TO_MAIN=1 "${HOOK}" origin https://github.com/danwright32/overture.git 2>&1)"
+hook_output="$(printf 'refs/heads/main %s refs/heads/main %s\n' "${HEAD_SHA}" "${HEAD_SHA}" \
+  | (cd "${REPO_ROOT}" && ALLOW_PUSH_TO_MAIN=1 "${HOOK}" origin https://github.com/danwright32/overture.git) 2>&1)"
 if [[ $? -eq 0 ]]; then
   echo "ok - ALLOW_PUSH_TO_MAIN=1 lets a deliberate push to main through"
 else

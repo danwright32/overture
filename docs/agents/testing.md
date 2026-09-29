@@ -873,3 +873,43 @@ the measurement it came from lives here. Read the entry before the rule decides 
   instead of one undifferentiated red. `PureSchemeExcludesTheAppTests` fails if the app is ever put
   back into that scheme.
 
+
+## The scout landing oracle, and the real-arm files it must never publish
+
+- **Is the store a scout landing leaves still the store 6d3453d8 left (#4328, step A1 of #4275's plan)?**
+  `LandingOracleTests` lands a committed corpus of about sixty INVENTED shows over six sources
+  (`LandingOracleCorpus.swift`) and compares the result, row by row and field by field, with
+  `fixtures/landing-oracle/synthetic-6d3453d8.txt`. That file is GENERATED, never edited: `scripts/landing-oracle.sh`
+  makes its own detached worktree of 6d3453d8, copies ONLY the three oracle test files onto it (it refuses any
+  path that is not test code under `mac/OvertureTests/`, and any the commit already has, so the overlay can
+  add and never replace), regenerates the project there, runs the dump through that worktree's own
+  `run-tests-locked.sh`, and removes the worktree. A passing run there is the proof the overlay compiles
+  against the old app, and the only way the expected values can be 6d3453d8's rather than the new code
+  agreeing with itself (L70, L58). It never checks out anything in the checkout it is run from (L731).
+  Three things about what it compares. It reads through a FRESH `ModelContext` after one explicit save, so it
+  records what 6d3453d8 intends autosave to reach, the last source's health writes and ingest's final
+  FeedReconcile writes included; A6 and #4325 must leave it EQUAL. It EXCLUDES every clock-derived field
+  (`LandingOracle.clockDerived`, each with its reason), and
+  `everyFieldThatDiffersBetweenTwoLandingsIsAClockField` derives that list by landing twice and failing on
+  any other field that moved. And the corpus shape test measures, through the app's own functions, that the
+  corpus still holds a poisoned token, a non-transitive title triple whose arrival order changes a URL's
+  show count, an ambiguous URL, a spelling decision and the stripped-key case.
+- **The REAL arm** lands the recorded scout extract results on the frozen 1x and 4x inputs of #4327 step 0.0,
+  opt in (`TEST_RUNNER_MEASURE_4275=1`, `_INPUTS`, `_OUT`, `TEST_RUNNER_LANDING_ORACLE_MODE=record|compare`).
+  Its recording holds a HASH per field and never a value, its first line is the real-arm marker, and it is
+  refused anywhere inside a git work tree. A mismatch prints the entity, the row's position, the field and
+  two short hashes, never a title, venue or presenter (L445), which
+  `aRealArmMismatchNamesNoTitleVenueOrPresenter` holds; so every failure text quoted in a PR comes from the
+  SYNTHETIC arm. The frozen archive is written once by `scripts/landing-oracle.sh --freeze`, outside every
+  checkout, read only, with a MANIFEST of content hashes that every run checks before it copies the archive
+  afresh (`UNMEASURED: inputs differ from the oracle's (<file>)` otherwise).
+- **A real-arm file can never be pushed.** Its FIRST LINE is exactly the marker, and nothing else counts, so
+  every file that talks about the marker builds it from two halves and pushes cleanly (L245, L673).
+  `scripts/hooks/pre-push` walks every commit a push carries and refuses one that adds or modifies a marked
+  file, even when a later commit deletes it (L489); unlike the push-target check it fails CLOSED, refusing
+  by name when `scripts/lib/real-arm-guard.sh` is missing or a commit cannot be read. CI's `real-arm-scan`
+  job runs `scripts/real-arm-scan.sh` over every commit of the pull request, because a hook can be skipped,
+  and `scripts/test-all.sh` scans the tree as a second layer. Every worktree runs the PRIMARY checkout's
+  hook, so `scripts/lib/real-arm-guard.test.sh` drives the hook file from its own tree against a throwaway
+  clone rather than trusting whatever the hooks path points at.
+
