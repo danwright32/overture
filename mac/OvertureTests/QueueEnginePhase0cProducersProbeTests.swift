@@ -845,7 +845,8 @@ enum Phase0cT5Check {
 /// the titles a change touches (its old and its new), under either chain rule of decision 18:
 /// (a) today's, a row joins when within `RunGrouping.gapDays` of the last night of the row appended LAST;
 /// (b) the answered one, measured from the cluster's LATEST last night so far.
-/// Rows sort by (date, natural key), which is the canonical wrapper's order. Dates are pre-folded to day
+/// Rows sort by (date, run end, room, natural key), the product's own total order since plan v7 Step T
+/// (#4346), so the prototype walks the rows in the order the product does. Dates are pre-folded to day
 /// ordinals once per row, so a rebuild does no calendar work.
 struct Phase0cEngagement {
     enum Rule: String, CaseIterable {
@@ -859,6 +860,7 @@ struct Phase0cEngagement {
         let venue: String?
         let venueCanon: String
         let date: String?
+        let runEnd: String?
         let dateOrd: Int?
         let lastOrd: Int?
         let drawn: Bool
@@ -883,7 +885,7 @@ struct Phase0cEngagement {
         let last = EasternDate.runLastNight(runEndDate: s.runEnd, performanceDate: s.date)
         return Slice(key: s.key, title: GroupNameMatch.normalize(s.groupName), venue: s.venue,
                      venueCanon: (s.venue ?? "").lowercased().trimmingCharacters(in: .whitespaces),
-                     date: s.date, dateOrd: s.date.flatMap { EasternDate.daysUntil(from: anchor, to: $0) },
+                     date: s.date, runEnd: s.runEnd, dateOrd: s.date.flatMap { EasternDate.daysUntil(from: anchor, to: $0) },
                      lastOrd: last.flatMap { EasternDate.daysUntil(from: anchor, to: $0) }, drawn: s.drawn)
     }
 
@@ -907,7 +909,10 @@ struct Phase0cEngagement {
     /// Each row's cluster, as its members' pids, for one title (used to count membership differences).
     func clusters(_ title: String) -> [[Int]] {
         let members = (byTitle[title] ?? []).map { ($0, rows[$0]!) }
-            .sorted { ($0.1.date!, $0.1.key) < ($1.1.date!, $1.1.key) }
+            .sorted {
+                ($0.1.date!, $0.1.runEnd ?? "", $0.1.venue ?? "", $0.1.key)
+                    < ($1.1.date!, $1.1.runEnd ?? "", $1.1.venue ?? "", $1.1.key)
+            }
         var clusters: [[(Int, Slice)]] = []
         var latest: Int? = nil
         for m in members {
@@ -1005,7 +1010,10 @@ enum Phase0cT6Check {
         var out: [String: [EngagementLink.Member]] = [:]
         for title in Set(dated.map { GroupNameMatch.normalize($0.groupName) }) {
             let ordered = dated.filter { GroupNameMatch.normalize($0.groupName) == title }
-                .sorted { ($0.performanceDate!, $0.id) < ($1.performanceDate!, $1.id) }
+                .sorted {
+                    ($0.performanceDate!, $0.runEndDate ?? "", $0.venue ?? "", $0.id)
+                        < ($1.performanceDate!, $1.runEndDate ?? "", $1.venue ?? "", $1.id)
+                }
             var clusters: [[EngagementLink.Row]] = []
             for r in ordered {
                 let latest = clusters.last?.compactMap(lastNight).max()
@@ -1028,7 +1036,10 @@ enum Phase0cT6Check {
 
     static func truth(_ rule: Phase0cEngagement.Rule, _ drawn: [EngagementLink.Row]) -> [String: [EngagementLink.Member]] {
         switch rule {
-        case .lastAppended: return CanonicalOracle.engagementLink(drawn)
+        // #4347: the product runs rule (b) now, so rule (a) is judged against its restatement in the 0c.10
+        // probe, over the product's own total order, and (b) against the brute force below. The product
+        // itself is held to the brute force in `t6EngagementPatchMatchesBothRules`.
+        case .lastAppended: return Phase0cOrders.engagement(drawn, canonicalSort: true, rule: .lastAppended)
         case .clusterLatest: return bruteClusterLatest(drawn)
         }
     }
@@ -1615,8 +1626,19 @@ struct QueueEnginePhase0cProducersProbeTests {
                     end: { w, at in
                         // The canonical oracle is order independent: reversed input gives the same answer.
                         let rows = Phase0cT6Check.drawnRows(w)
-                        return Phase0cT6Check.truth(rule, rows) == Phase0cT6Check.truth(rule, rows.reversed())
+                        var bad = Phase0cT6Check.truth(rule, rows) == Phase0cT6Check.truth(rule, rows.reversed())
                             ? [] : ["\(at): the \(rule.rawValue) truth depends on input order"]
+                        // #4347: the PRODUCT is rule (b), so its membership must be the brute force's.
+                        if rule == .clusterLatest {
+                            let product = EngagementLink.group(rows)
+                            let brute = Phase0cT6Check.bruteClusterLatest(rows)
+                            let differing = Set(product.keys).union(brute.keys)
+                                .filter { Set(product[$0] ?? []) != Set(brute[$0] ?? []) }
+                            if !differing.isEmpty {
+                                bad.append("\(at): the product disagrees with rule (b) on \(differing.count) rows")
+                            }
+                        }
+                        return bad
                     })
                 F.say("0c.4 T6 harness \(rule.rawValue) [\(size) rows] \(run.transitions) transitions checked in "
                       + String(format: "%.0f ms", Phase0.ms(since: started)) + ", failures \(run.failures.count), "

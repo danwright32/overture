@@ -228,8 +228,11 @@ extension QueueEnginePhase0cRowsProbeTests {
         // Decision 18: EngagementLink's chain rule, over the rows the pass links (the queue scope).
         let linkRows = inQueueToday.map(EngagementLink.Row.init)
         let production = EngagementLink.group(linkRows)
-        let replica = Phase0cOrders.engagement(linkRows, canonicalSort: false, rule: .lastAppended)
-        let replicaAgrees = replica == production
+        // Since #4347 the product measures the chain from the cluster's latest night (decision 18(b)). Compared
+        // as MEMBERSHIP, because the restatement walks equal nights in a total order the product may not.
+        let replica = Phase0cOrders.engagement(linkRows, canonicalSort: true, rule: .latestNight)
+        let replicaAgrees = Set(replica.keys) == Set(production.keys)
+            && replica.keys.allSatisfy { Set(replica[$0]!) == Set(production[$0] ?? []) }
         let canonicalToday = Phase0cOrders.engagement(linkRows, canonicalSort: true, rule: .lastAppended)
         let canonicalLatest = Phase0cOrders.engagement(linkRows, canonicalSort: true, rule: .latestNight)
         func differ(_ a: [String: [EngagementLink.Member]], _ b: [String: [EngagementLink.Member]],
