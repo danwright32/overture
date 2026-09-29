@@ -21,6 +21,11 @@ import SwiftData
 //      and the rows inside them, cards built and contacts reached inside the body (WorkTally), and the
 //      ForEach identities the list hands SwiftUI to diff.
 //
+// #4311 added a fourth kind, the Reached out stage (one of its shows closed and back), which the stage
+// change skips because that list is its own branch of the view: the window is put on the stage by a deep
+// link first, the production route. Its count line says how many stage list rows and calendar tables the
+// BODY derived per reading, which is the cost that issue moved into the pass.
+//
 // And a third reading that neither of those can give on its own: the first draw at three WINDOW HEIGHTS
 // on one corpus. Going from the live clone to the 4x corpus multiplies the stage's rows AND the rows
 // realised by four at once, so a cost proportional to either reads identically (L209). Holding the
@@ -490,6 +495,11 @@ struct QueueViewAttributionProbeTests {
         var dateGroups = 0          // the outer ForEach's identities
         var queueRows = 0           // every row of the queue, which the masthead folds over
         var missedRows = 0          // rows a check missed: the cheap half of keysMissedByACheck's test
+        // #4311: what a stage list's own derivation did during the reading (WorkTally), which is zero
+        // once the pass takes it, and the Reached out list's rows for scale.
+        var stageListRows = 0
+        var calendarTables = 0
+        var reachedOutRows = 0
     }
 
     private struct Reading {
@@ -524,6 +534,9 @@ struct QueueViewAttributionProbeTests {
             c.groupsRealised = groups.count
             c.rowsInRealisedGroups = groups.reduce(0) { $0 + data.dateGroups[$1].items.count }
             c.cardsBuiltInBody = tally.queueItems
+            c.stageListRows = tally.stageListRows
+            c.calendarTables = tally.sourceCalendarIndexBuilds
+            c.reachedOutRows = data.reachedOut.count
             c.recipientReaches = tally.recipientReaches
             c.stageRows = data.focusedRows.count
             c.dateGroups = data.dateGroups.count
@@ -607,7 +620,9 @@ struct QueueViewAttributionProbeTests {
               + "(\(c.map(\.stageRows).max() ?? 0)), outer ForEach identities (date groups) "
               + "\(P.medianInt(c.map(\.dateGroups))) (\(c.map(\.dateGroups).max() ?? 0)), queue rows the masthead "
               + "folds over \(P.medianInt(c.map(\.queueRows))), of which a check missed "
-              + "\(P.medianInt(c.map(\.missedRows)))")
+              + "\(P.medianInt(c.map(\.missedRows))), stage list rows derived in the body "
+              + "\(P.medianInt(c.map(\.stageListRows))), calendar tables built in the body "
+              + "\(P.medianInt(c.map(\.calendarTables))), Reached out rows \(P.medianInt(c.map(\.reachedOutRows)))")
         guard !k.rounds.isEmpty else { return }
         let busy = k.rounds.map { Double($0.busy) }
         P.say("\(label) \(k.name) samples per round (median): busy \(P.f(P.median(busy))), idle "
@@ -762,7 +777,46 @@ struct QueueViewAttributionProbeTests {
         }
         ViewAttributionProbe.say("\(label) stages served (rows): \(stageNames.joined(separator: ", "))")
 
-        for k in [first, dismissKind, stageKind] { report(k, label: label) }
+        // MARK: #4311, the Reached out stage: one of its shows closed and back, drawn ON that stage.
+        //
+        // The stage change above skips Reached out because it is its own branch of the view, taken only
+        // when the view's own stage says so, and a served pass cannot move that. A deep link can, the same
+        // way an OmniFocus link does, so this window is put on the stage by one before anything is sampled.
+        // The change is a dismissal of one Reached out show, so the list really changes under the body.
+        let reachedA = Phase0cViewRig.servedPass(t, now: now, stage: .reachedOut, registry: registry)
+        var reachedKind = KindResult(name: "Reached out: one show closed and back")
+        if let closing = reachedA.reachedOut.first?.prospect {
+            let was = closing.status
+            closing.status = .dismissed
+            let reachedB = Phase0cViewRig.servedPass(t, now: now, stage: .reachedOut, registry: registry)
+            closing.status = was
+            let link = Phase0cViewRig.DeepLinkChannel()
+            let reachedFeed = Phase0cServedFeed(reachedA)
+            let reachedWindow = Phase0cViewRig.host(container, rows: t.rows, feed: reachedFeed, size: size,
+                                                    link: link)
+            defer { reachedWindow.close() }
+            _ = Phase0cView.settle(reachedWindow, bodyMustRun: true) {}
+            let listed = QueueRenderCounter.stageListBodyCount(QueueRenderCounter.reachedOutList)
+            _ = Phase0cView.settle(reachedWindow, bodyMustRun: true) {
+                link.key = LeadDeepLink(key: closing.naturalKey)
+            }
+            _ = registry.takeKeys()
+            if QueueRenderCounter.stageListBodyCount(QueueRenderCounter.reachedOutList) == listed {
+                reachedKind.failures.append("UNMEASURED: the deep link did not bring the window onto Reached out")
+            } else {
+                reachedKind = await sampled("Reached out: one show closed and back", label: label, dir: out) { i in
+                    let next = i % 2 == 0 ? reachedB : reachedA
+                    return rig.read(data: next) {
+                        Phase0cView.settle(reachedWindow, bodyMustRun: true) { reachedFeed.data = next }
+                    }
+                }
+            }
+        } else {
+            reachedKind.failures.append("UNMEASURED: the corpus has no show on Reached out")
+        }
+        ViewAttributionProbe.say("\(label) Reached out served rows: \(reachedA.reachedOut.count)")
+
+        for k in [first, dismissKind, stageKind, reachedKind] { report(k, label: label) }
         ViewAttributionProbe.say("\(label) raw samples in \(out.path)")
     }
 

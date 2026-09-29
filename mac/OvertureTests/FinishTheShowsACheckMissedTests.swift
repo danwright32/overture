@@ -125,12 +125,13 @@ struct UnservableOfferIsStrippedTests {
     }
 
     @Test func theOfferStandsWhileThereAreShowsToFinish() {
-        let out = AppNotices.servable([notice(.finishShowsACheckMissed)], canFinishMissedShows: true)
-        #expect(out.first?.action == .finishShowsACheckMissed)
+        let out = AppNotices.servable([notice(.finishShowsACheckMissed)], missedByACheckKeys: ["missed"])
+        // #4312: served carrying the set, so the press runs what the offer was decided on.
+        #expect(out.first?.action == .finishTheseShowsACheckMissed(keys: ["missed"]))
     }
 
     @Test func theOfferIsStrippedWhenNothingIsLeftToFinish() {
-        let out = AppNotices.servable([notice(.finishShowsACheckMissed)], canFinishMissedShows: false)
+        let out = AppNotices.servable([notice(.finishShowsACheckMissed)], missedByACheckKeys: [])
         #expect(out.first?.action == nil)
         // The sentence itself stays: what the run did is still true and still worth reading.
         #expect(out.first?.text.contains("never got an answer") == true)
@@ -140,7 +141,7 @@ struct UnservableOfferIsStrippedTests {
     @Test func anotherActionIsNeverStripped() {
         let out = AppNotices.servable([AppNotice(text: "OmniFocus sync failing", tone: .warning,
                                                  action: .retryOmniFocusSync)],
-                                      canFinishMissedShows: false)
+                                      missedByACheckKeys: [])
         #expect(out.first?.action == .retryOmniFocusSync)
     }
 }

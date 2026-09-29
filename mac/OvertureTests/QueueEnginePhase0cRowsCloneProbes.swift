@@ -472,7 +472,8 @@ extension QueueEnginePhase0cRowsProbeTests {
                     pendingBookings: QueueModel.pendingBookingCount(rows),
                     summary: QueueModel.summary(visibleRows), missedByACheckKeys: missed, fanOutLine: nil, rows: rows,
                     visibleRows: visibleRows, cardCheck: scope.cardCheck, focusedRows: focusedRows,
-                    dateGroups: dateGroups, inquiryRows: [], stageCounts: [:], geo: context.geo, placement: placement)
+                    dateGroups: dateGroups, inquiryRows: [], inquiryGroups: [], inquiriesByRowID: [:],
+                    reachedOutList: .none, stageCounts: [:], geo: context.geo, placement: placement)
             }
             let tRenderData = Phase0.median5 { _ = renderData() }
             let passTerms: [(String, Phase0.Reading)] = [

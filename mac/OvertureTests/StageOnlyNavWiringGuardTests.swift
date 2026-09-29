@@ -24,7 +24,8 @@ struct StageOnlyNavWiringGuardTests {
             Issue.record("expected focusedSection's body"); return
         }
         #expect(body.contains("if focusedStage == .reachedOut"))
-        #expect(body.contains("reachedOutList(data.reachedOut)"))
+        // #4311: the list the render pass derived, not the rows to derive it from.
+        #expect(body.contains("reachedOutList(data.reachedOutList)"))
     }
 
     // #1129: the Prep stage view shows the discoverable button (gated by the tested PrepQueueButton) and

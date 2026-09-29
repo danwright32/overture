@@ -354,6 +354,13 @@ struct QueueView: View {
         let focusedRows: [QueueScopeRow]
         let dateGroups: [QueueModel.DateGroup]
         let inquiryRows: [InquiryRow]
+        // #4311: the stage's inquiry block as it draws, grouped by date, and each row's inquiry for the
+        // controls on it. Both used to be derived inside the block's body on every evaluation (L471).
+        let inquiryGroups: [RowDateGroup]
+        let inquiriesByRowID: [String: Inquiry]
+        // #4311: the Reached out list as it draws (rows, day headings, the calendar table its links
+        // resolve against), derived by the pass for that stage and empty on every other.
+        let reachedOutList: QueueModel.ReachedOutList
         // #3738: what each stage pill counts, from the pass's own placement table. The empty-stage card
         // reads it rather than deciding every show's stages a second time inside a body.
         let stageCounts: [StageFocus: Int]
@@ -699,28 +706,25 @@ struct QueueView: View {
     // so a ticked date means exactly the shows under that heading and nothing else.
 
     // #1805: the shows the last check was given and never reached come from ONE rule,
-    // `QueueModel.keysMissedByACheck`, the same one the report's offer is gated on, so the control and the
-    // run can never disagree about the set. #4106: the render pass takes that answer once and publishes it
-    // on `RenderData.missedByACheckKeys`, because the masthead used to fold every queue row for it on every
-    // body evaluation (L471). #2598 recorded the earlier form of the same cost: a computed property reading
-    // `items` built the whole store once more per press, 2,280 cards over a corpus of 1,142 and a 1,305 ms
-    // wait (2026-09-05), which no counter saw because it ran outside the pass (L383).
-
-    // #1805: finish exactly those, through the SAME confirm sheet as every other check, so a run started
-    // from a report costs what the sheet says it costs. No re-selection by hand, which is the whole point:
-    // the app was holding the list while Dan reconstructed it.
-    private func finishShowsACheckMissed() {
-        // An ACTION, so it derives its own: this runs on a press rather than during a render, and there
-        // is no pass in hand to take the rows from.
-        let keys = QueueModel.keysMissedByACheck(items, today: today, geo: geo)
-        guard !keys.isEmpty else { return }
-        // #1616: the same learned pace the selection bar quotes, so two ways into one run cannot name two
-        // different waits.
-        let summary = ProbeSelection.summarizeShowsACheckMissed(
-            count: keys.count, secondsPerRound: ProbeSelection.liveSecondsPerRound())
-        sheets.pendingProbe = ProbeConfirm(keys: keys, dateLabel: "",
-                                    title: ProbeSelectionCopy.multiDateTitle(summary),
-                                    message: ProbeSelectionCopy.finishMissedShowsMessage(summary))
+    // `QueueModel.keysMissedByACheck`. #4106: the render pass takes that answer once and publishes it on
+    // `RenderData.missedByACheckKeys`, because the masthead used to fold every queue row for it on every
+    // body evaluation (L471).
+    //
+    // #4312: and the press RUNS that answer. The masthead hands the pass's set to `AppNotices.servable`,
+    // which serves the report's offer as `.finishTheseShowsACheckMissed(keys:)` carrying it, and this is
+    // handed those keys. So the set that put "Check the rest" on screen is the set the confirm prices and
+    // the run starts over (L16), and a press builds no card and folds no row to find it. It used to derive
+    // its own through the computed `items`, the whole store as full cards at the press's own instant, day
+    // and unresolved refusals: #2598 measured that shape at 2,280 cards over a corpus of 1,142 and a
+    // 1,305 ms wait (2026-09-05), which no counter saw because it ran outside the pass (L383).
+    // `TheMissedShowsPressActsOnThePassTests` holds both halves.
+    //
+    // Through the SAME confirm sheet as every other check, so a run started from a report costs what the
+    // sheet says it costs (#1805), priced at the same learned pace the selection bar quotes (#1616).
+    private func finishShowsACheckMissed(_ keys: [String]) {
+        guard let confirm = ProbeConfirm.finishingShowsACheckMissed(
+            keys: keys, secondsPerRound: ProbeSelection.liveSecondsPerRound()) else { return }
+        sheets.pendingProbe = confirm
     }
 
     // #2268 built a "Check again" link on a finished date, which marked every answered show on it and
@@ -846,7 +850,7 @@ struct QueueView: View {
             QueueScrollHolder(jumpTarget: jumpTarget) {
                 VStack(alignment: .leading, spacing: OVSpacing.xl) {
                     masthead(summary: data.summary,
-                             canFinishMissedShows: !data.missedByACheckKeys.isEmpty,
+                             missedByACheckKeys: data.missedByACheckKeys,
                              fanOutLine: data.fanOutLine,
                              notices: notices + data.feedBreaks + data.mergeSurvivorsDropped,
                              pendingBookings: data.pendingBookings,
@@ -881,7 +885,7 @@ struct QueueView: View {
             // "Grouped by when to reach out next" caption governs every date heading in the stage. They
             // used to be two blocks whose headings looked identical and meant different things (event
             // date above, reach-out date below).
-            reachedOutList(data.reachedOut)
+            reachedOutList(data.reachedOutList)
         } else {
             // #1774: already resolved in makeRenderData, above the scroll boundary. Re-derived here it
             // cost a StageNavigation.focusedKeys sweep of every prospect on every scroll frame.
@@ -927,7 +931,7 @@ struct QueueView: View {
                     // queue at once and trade this issue's cost for a worse one.
                     QueueDateGroups(groups: data.dateGroups, sendState: sendState) {
                         // #1436: un-replied inquiries (the to-send stage) surface with the shows.
-                        inquirySection(inquiryRows)
+                        inquirySection(data)
                     } content: { group, departing, departingCards in
                         dateSection(group, data: data, departing: departing,
                                     departingCards: departingCards)
@@ -942,11 +946,14 @@ struct QueueView: View {
     // rows so the prospect rendering is untouched; whether they interleave between shows by date is a
     // walk-time refinement. The source tag and lifecycle state stand in for a prospect's fit/geo, which
     // an inquiry has no equivalent for.
-    @ViewBuilder private func inquirySection(_ rows: [InquiryRow]) -> some View {
-        if !rows.isEmpty {
-            let byId = Dictionary(inquiries.map { (String(describing: $0.persistentModelID), $0) },
-                                  uniquingKeysWith: { first, _ in first })
-            ForEach(QueueModel.groupRowsByDate(rows.map { QueueRow.inquiry($0) })) { group in
+    // #4311: grouped and resolved by the pass (`RenderData.inquiryGroups`, `inquiriesByRowID`), never here.
+    @ViewBuilder private func inquirySection(_ data: RenderData) -> some View {
+        if !data.inquiryGroups.isEmpty {
+            #if DEBUG
+            let _ = QueueRenderCounter.recordStageListBody(QueueRenderCounter.inquiryList)
+            #endif
+            let byId = data.inquiriesByRowID
+            ForEach(data.inquiryGroups) { group in
                 VStack(alignment: .leading, spacing: OVSpacing.sm) {
                     HStack(alignment: .firstTextBaseline, spacing: OVSpacing.sm) {
                         if !group.weekday.isEmpty {
@@ -1244,7 +1251,8 @@ struct QueueView: View {
         // #4062: resolved against the list the stage actually DRAWS. Reached out groups by reach out date,
         // so a performance date group id named nothing there and the jump was dropped.
         jumpTarget = QueueModel.jumpScrollGroupID(for: key, onStage: focusedStage, items: items,
-                                                  reachedOut: reachedOutEntries(reachedOut))
+                                                  reachedOut: QueueModel.reachedOutStageEntries(
+                                                      reachedOut, inquiries: inquiries, now: Date()))
             .map(QueueJumpRequest.init(group:))
         // Stage two: once that group is on screen its rows are realized, so nudge the row itself to the
         // top. If this runs before the layout settles it simply no-ops, leaving Dan on the right date,
@@ -1278,7 +1286,9 @@ struct QueueView: View {
     // no default, so a new call site has to answer the question.
     // #4106 view workstream: handed the pass's two answers rather than the rows to fold them from. Both
     // folds ran here, in the body, over every queue row on every evaluation (L471).
-    func masthead(summary: (total: Int, high: Int), canFinishMissedShows: Bool, fanOutLine: String?,
+    // #4312: the missed set WHOLE, not a yes. It decides whether "Check the rest" is offered, and the
+    // served offer carries it, so the press runs the set that put the control on screen.
+    func masthead(summary: (total: Int, high: Int), missedByACheckKeys: [String], fanOutLine: String?,
                   notices: [AppNotice],
                   // #3653: the pass's own count, not a second derivation of it. `QueueRenderPass` already
                   // walks every row for this once (`QueueRenderPass.swift:252`) and puts it on
@@ -1367,9 +1377,11 @@ struct QueueView: View {
                                              // #2598: never a second derivation of the whole store for
                                              // this. #4106: and never a fold of the rows either; the
                                              // pass's own answer, from `RenderData.missedByACheckKeys`.
-                                             canFinishMissedShows: canFinishMissedShows),
+                                             // #4312: served carrying that answer, so the press below
+                                             // runs it rather than deriving its own.
+                                             missedByACheckKeys: missedByACheckKeys),
                 perform: { action in
-                    if action == .finishShowsACheckMissed { finishShowsACheckMissed() }
+                    if case .finishTheseShowsACheckMissed(let keys) = action { finishShowsACheckMissed(keys) }
                     // #4027: performed here for the same reason the shortfall's offer is: this view owns
                     // the focused list the control enters, and RootView does not.
                     else if case .showShowsOneSweepBroke(let keys) = action { showBrokenShows(keys) }
@@ -1456,17 +1468,16 @@ struct QueueView: View {
     // times appears twice, each labeled with that contact's own timing. #661: a lightweight row
     // (group name, this one contact, timing, and the state control), not the entire show card, so
     // two contacts due on the same show don't render as two large, nearly-identical cards.
-    // #4062: the Reached out list's rows, built in ONE place, so the list and a deep link resolving its
-    // group against that list can never be looking at two different sets of rows.
-    private func reachedOutEntries(_ dated: [(prospect: Prospect, recipient: Recipient, next: Date)]) -> [ReachedOutEntry] {
-        QueueModel.reachedOutEntries(prospects: dated,
-                                     inquiries: inquiries.filter { StageNavigation.stage(for: $0) == .reachedOut },
-                                     now: Date())
-    }
-
-    @ViewBuilder private func reachedOutList(_ dated: [(prospect: Prospect, recipient: Recipient, next: Date)]) -> some View {
-        let entries = reachedOutEntries(dated)
-        if entries.isEmpty {
+    // #4062: the Reached out list's rows come from ONE declaration, `QueueModel.reachedOutStageEntries`, so
+    // the list and a deep link resolving its group against it can never be looking at two sets of rows.
+    // #4311: and the list reads them from the render pass (`RenderData.reachedOutList`), with its day
+    // headings and its calendar table, rather than deriving all three in this body on every evaluation
+    // (L471). `AStageListDerivesNothingPerBodyTests` pins that the body derives none of them.
+    @ViewBuilder private func reachedOutList(_ list: QueueModel.ReachedOutList) -> some View {
+        #if DEBUG
+        let _ = QueueRenderCounter.recordStageListBody(QueueRenderCounter.reachedOutList)
+        #endif
+        if list.entries.isEmpty {
             VStack(spacing: OVSpacing.xs) {
                 Text("No one to follow up with").font(OVType.dateHeading).foregroundStyle(OVColor.ink)
                 // #2396: SHOWS, not people. This said "the people you are waiting to hear back from" while
@@ -1482,9 +1493,9 @@ struct QueueView: View {
         } else {
             let now = Date()
             // #2816: built ONCE for the whole list, on the #1121 rule, rather than walking the watchlist
-            // per row on every scroll frame.
-            let sourceCalendars = QueueModel.sourceCalendarIndex(watchedSources)
-            let groups = QueueModel.reachOutDateGroups(entries, reachDate: { $0.next })
+            // per row on every scroll frame. #4311: by the pass, not by this body.
+            let sourceCalendars = list.sourceCalendars
+            let groups = list.groups
             VStack(alignment: .leading, spacing: OVSpacing.md) {
                 // #1233/#1232: the date headers below are REACH-OUT dates (Dan's call), so say so once here
                 // rather than let them read like the performance-date headers on every other stage.
@@ -2437,6 +2448,16 @@ enum QueueRenderCounter {
     nonisolated(unsafe) private static var cardBodies: [String: Int] = [:]
     static func recordCardBody(_ key: String) { cardBodies[key, default: 0] += 1 }
     static func cardBodyCounts() -> [String: Int] { cardBodies }
+
+    // #4311: how many times each STAGE LIST's own builder ran, the Reached out list and a stage's inquiry
+    // block. A test pinning that such a list derives nothing in a body needs proof the list was DRAWN,
+    // or a zero is a branch that never ran rather than one that did no work (L159). Counts only, no log
+    // line, for the card counter's reason above.
+    static let reachedOutList = "reachedOutList"
+    static let inquiryList = "inquiryList"
+    nonisolated(unsafe) private static var stageListBodies: [String: Int] = [:]
+    static func recordStageListBody(_ list: String) { stageListBodies[list, default: 0] += 1 }
+    static func stageListBodyCount(_ list: String) -> Int { stageListBodies[list] ?? 0 }
 
     // Which inputs moved. Pure, so the rule this diagnostic reports by is itself tested rather than being
     // one more thing taken on trust while it is used to judge everything else.

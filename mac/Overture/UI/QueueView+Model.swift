@@ -1415,7 +1415,8 @@ enum QueueModel {
     // Reached out and Follow-ups resolve their links against the same table the queue card does rather
     // than a second copy of it.
     static func sourceCalendarIndex(_ sources: [WatchedSource]) -> [String: String] {
-        Dictionary(
+        QueueRenderPass.WorkTally.recordSourceCalendarIndexBuild()
+        return Dictionary(
             sources.compactMap { s -> (String, String)? in
                 guard let u = s.listingsURL, !u.isEmpty else { return nil }
                 return (s.sourceId, u)
@@ -1978,6 +1979,7 @@ enum QueueModel {
     // about, and inventing a date would put a row under a heading that lies about it.
     static func reachedOutEntries(prospects: [(prospect: Prospect, recipient: Recipient, next: Date)],
                                   inquiries: [Inquiry], now: Date) -> [ReachedOutEntry] {
+        QueueRenderPass.WorkTally.recordStageListRows(prospects.count + inquiries.count)
         let prospectEntries = prospects.map {
             ReachedOutEntry.prospect(prospect: $0.prospect, recipient: $0.recipient, next: $0.next)
         }
@@ -1994,7 +1996,49 @@ enum QueueModel {
     }
 
 
+    // #4311: the Reached out stage's rows, both kinds: the pass's shows and the inquiries ON that stage.
+    // One declaration for the list and the deep link that resolves a group against it (#4062), so the two
+    // cannot merge different sets.
+    static func reachedOutStageEntries(_ dated: [(prospect: Prospect, recipient: Recipient, next: Date)],
+                                       inquiries: [Inquiry], now: Date) -> [ReachedOutEntry] {
+        reachedOutEntries(prospects: dated,
+                          inquiries: inquiries.filter { StageNavigation.stage(for: $0) == .reachedOut },
+                          now: now)
+    }
+
+    // #4311: everything the Reached out list draws, derived ONCE by the render pass and read by the view.
+    // It used to be derived inside the list's body on every evaluation, and a body runs on events that
+    // change no data (L471). The calendar table is built only when there is a row to resolve a link for,
+    // as the body did (#2816).
+    struct ReachedOutList {
+        let entries: [ReachedOutEntry]
+        let groups: [ReachOutDateGroup<ReachedOutEntry>]
+        let sourceCalendars: [String: String]
+
+        // What every stage but Reached out carries: nothing, because only that stage draws it.
+        static var none: ReachedOutList { ReachedOutList(entries: [], groups: [], sourceCalendars: [:]) }
+    }
+
+    // `sourceCalendars` is asked only when there is a row, so an empty stage builds no table.
+    static func reachedOutList(_ dated: [(prospect: Prospect, recipient: Recipient, next: Date)],
+                               inquiries: [Inquiry], now: Date,
+                               sourceCalendars: () -> [String: String]) -> ReachedOutList {
+        let entries = reachedOutStageEntries(dated, inquiries: inquiries, now: now)
+        guard !entries.isEmpty else { return .none }
+        return ReachedOutList(entries: entries, groups: reachOutDateGroups(entries, reachDate: { $0.next }),
+                              sourceCalendars: sourceCalendars())
+    }
+
+    // #4311: a stage's inquiry rows resolved back to their models, keyed by the row's id, which is what
+    // the inquiry block's buttons act on. Built by the pass rather than in the block's body.
+    static func inquiriesByRowID(_ inquiries: [Inquiry]) -> [String: Inquiry] {
+        QueueRenderPass.WorkTally.recordStageListRows(inquiries.count)
+        return Dictionary(inquiries.map { (String(describing: $0.persistentModelID), $0) },
+                          uniquingKeysWith: { first, _ in first })
+    }
+
     static func reachOutDateGroups<Row>(_ rows: [Row], reachDate: (Row) -> Date) -> [ReachOutDateGroup<Row>] {
+        QueueRenderPass.WorkTally.recordStageListRows(rows.count)
         let cal = easternCalendar
         var order: [String] = []
         var buckets: [String: [Row]] = [:]
@@ -2358,6 +2402,7 @@ enum QueueModel {
     // itself). Buckets appear in the order the rows arrive, so a caller wanting date order hands over
     // rows already in it.
     static func groupRowsByDate(_ rows: [QueueRow]) -> [RowDateGroup] {
+        QueueRenderPass.WorkTally.recordStageListRows(rows.count)
         var order: [String] = []
         var buckets: [String: [QueueRow]] = [:]
         for row in rows {
