@@ -420,16 +420,36 @@ final class OrderDependenceReproductionTests {
         return fillerShows(12) + [target, first, second]
     }
 
-    @Test func todayLaterLookalikesBreakNilFirstSeenTiesByInputPosition() throws {
+    // #4349, plan v7 Step T: `todayLaterLookalikesBreakNilFirstSeenTiesByInputPosition` stood here and was
+    // CONSUMED when equal sightings gained a natural key tie-break, so it is inverted rather than kept (L373).
+    // The product, called with no wrapper, now gives one answer over 100 orders, the canonical oracle's, and
+    // the card names the smaller key's title; a re-key that moves the other row to the front of the key
+    // order moves the named title with it (L419).
+    @Test(arguments: [false, true])
+    func productLaterLookalikesAreTheCanonicalAnswerOverEveryOrder(rekeyed: Bool) throws {
         let rows = lookalikeRows()
+        if rekeyed { rows.first { $0.naturalKey == "ll-b" }?.naturalKey = "ll-0" }
         let keys = rows.map(\.naturalKey)
-        let forward = CanonicalOracle.lookalikeTitlesByCard(QueueModel.scope(from: rows, now: now, today: today),
-                                                            keys: keys)
-        try #require(forward["ll-t"]?.count == 2, "fixture: the target card must name both later lookalikes")
-        let reversed = CanonicalOracle.lookalikeTitlesByCard(
-            QueueModel.scope(from: rows.reversed(), now: now, today: today), keys: keys)
-        #expect(OracleRendering.keyed(forward) != OracleRendering.keyed(reversed),
-                "laterLookalikes no longer break nil ties by position; retire this test (L373)")
+        let seed: UInt64 = 4349_01
+        let oracle = OracleRendering.keyed(CanonicalOracle.laterLookalikes(rows, now: now, today: today))
+        let distinct = distinctAnswers({ order in
+            OracleRendering.keyed(CanonicalOracle.lookalikeTitlesByCard(
+                QueueModel.scope(from: order.map { rows[$0] }, now: now, today: today), keys: keys))
+        }, size: rows.count, seed: seed)
+        #expect(distinct == [oracle], report("laterLookalikes, product", distinct, seed: seed))
+        let titles = CanonicalOracle.lookalikeTitlesByCard(QueueModel.scope(from: rows, now: now, today: today),
+                                                           keys: keys)
+        try #require(titles["ll-t"]?.count == 2, "fixture: the target card must name both later lookalikes")
+        #expect(titles["ll-t"]?.first == (rekeyed ? "Harbor Lights Encore Gala" : "Harbor Lights Encore"))
+    }
+
+    // The sighting still decides first: a stamped row is named ahead of an unstamped one whatever the keys.
+    @Test func productLaterLookalikesStillNameTheNewestSightingFirst() throws {
+        let rows = lookalikeRows()
+        rows.first { $0.naturalKey == "ll-b" }?.firstSeenAt = now
+        let titles = CanonicalOracle.lookalikeTitlesByCard(QueueModel.scope(from: rows, now: now, today: today),
+                                                           keys: rows.map(\.naturalKey))
+        #expect(titles["ll-t"]?.first == "Harbor Lights Encore Gala")
     }
 
     @Test func canonicalLaterLookalikesAreOneAnswerOverEveryOrder() {
