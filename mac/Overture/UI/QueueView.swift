@@ -1544,7 +1544,9 @@ struct QueueView: View {
                                 // closure is new on every evaluation of this body, which SwiftUI can never
                                 // find equal to the last one, so every row used to re-run its body and
                                 // re-read its show and contact from the store on every change to ANY show.
-                                // `.equatable()` compares what the closure is drawn FROM instead; a change
+                                // The row's `Equatable` conformance compares what the closure is drawn FROM
+                                // instead (SwiftUI applies it on its own, measured: the pin still passes
+                                // without `.equatable()`, which is here to say so at the call site); a change
                                 // to the show or contact themselves reaches the row through the models' own
                                 // observation, which is attributed to the row's body that read them.
                                 ReachedOutSendAwareRow(sendState: sendState,
