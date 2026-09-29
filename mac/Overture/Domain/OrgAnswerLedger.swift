@@ -80,7 +80,9 @@ enum OrgAnswerLedger {
             guard !Reachability.probeIsStale(probedAt: answer.probedAt, now: now) else { continue }
             // Newest wins if a store somehow holds two rows for one organisation; the unique constraint
             // makes that impossible, and a tie broken silently the wrong way would be worse than either.
-            if let existing = usable[answer.orgKey], existing.probedAt >= answer.probedAt { continue }
+            // #4351 (plan v7 Step T): so an EQUAL `probedAt` is broken by the organisation's name as it was
+            // asked, then by the addresses, rather than by whichever answer the fetch returned first.
+            if let existing = usable[answer.orgKey], !supersedes(answer, existing) { continue }
             usable[answer.orgKey] = answer
         }
         guard !usable.isEmpty else { return [:] }
@@ -89,7 +91,12 @@ enum OrgAnswerLedger {
         // asked used to walk every show again, twice, inside a pass that already walks every show.
         let corpus = prebuilt
             ?? ProducerGate.Corpus(shows.map { ProducerGate.Show(presenter: $0.presenter, venue: $0.venue) })
-        var verdictByOrg: [String: Bool] = [:]
+        // #4351 (plan v7 decision 7(a)): the producer verdict is remembered per PRODUCER KEY, the key the
+        // verdict is actually about. It used to be remembered per orgKey, and two spellings can fold to one
+        // orgKey and to two producer keys (`&amp;` is decoded by the org fold and not by the producer fold),
+        // so every show under that orgKey took the verdict of whichever spelling the loop met first.
+        var verdictByProducerKey: [String: Bool] = [:]
+        var producerKeyByPresenter: [String: String?] = [:]
         // #1965: and the org key per distinct presenter NAME rather than per show. Folding it is a string
         // walk, and the live store's 700-odd rows carry far fewer distinct presenters between them.
         var orgKeyByPresenter: [String: String?] = [:]
@@ -107,13 +114,29 @@ enum OrgAnswerLedger {
             }()
             guard let orgKey = cachedKey,
                   let answer = usable[orgKey] else { continue }
-            let qualifies = verdictByOrg[orgKey]
-                ?? ProducerGate.qualifies(presenter, in: corpus, overrides: overrides)
-            verdictByOrg[orgKey] = qualifies
+            let producerKey = producerKeyByPresenter[presenter] ?? {
+                let key = ProducerGate.key(presenter)
+                producerKeyByPresenter[presenter] = key
+                return key
+            }()
+            // A name with no producer key never qualifies, which is `ProducerGate.qualifies`'s own answer.
+            guard let producerKey else { continue }
+            let qualifies = verdictByProducerKey[producerKey]
+                ?? ProducerGate.qualifies(presenterKey: producerKey, in: corpus, overrides: overrides)
+            verdictByProducerKey[producerKey] = qualifies
             guard qualifies else { continue }
             out[show.key] = Inherited(result: answer.result, probedAt: answer.probedAt,
                                       organisation: answer.presenterName, emails: answer.emails)
         }
         return out
+    }
+
+    // #4351: whether `candidate` replaces `existing` as one organisation's usable answer. The newer probe
+    // wins; at one instant the smaller name, then the smaller address list, so the answer is a function of
+    // the answers themselves and never of the order they arrived in.
+    static func supersedes(_ candidate: Answer, _ existing: Answer) -> Bool {
+        if candidate.probedAt != existing.probedAt { return candidate.probedAt > existing.probedAt }
+        if candidate.presenterName != existing.presenterName { return candidate.presenterName < existing.presenterName }
+        return candidate.emails.joined(separator: "\n") < existing.emails.joined(separator: "\n")
     }
 }

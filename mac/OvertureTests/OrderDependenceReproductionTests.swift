@@ -469,39 +469,66 @@ final class OrderDependenceReproductionTests {
     // Two stored answers for one organisation at the same instant. The unique constraint on orgKey makes
     // this impossible in a saved store; the ledger's own comment names it anyway, and the plan's canonical
     // order includes it, so the fixture holds it directly.
-    @Test func todayLedgerEqualProbedAtKeepsTheFirstAnswerSeen() {
+    //
+    // #4351, plan v7 Step T: `todayLedgerEqualProbedAtKeepsTheFirstAnswerSeen` stood here and was CONSUMED
+    // when an equal `probedAt` gained its (orgKey, presenterName) tie-break, so it is inverted rather than
+    // kept (L373): either order, the smaller name's answer, and its address.
+    @Test func productLedgerEqualProbedAtKeepsTheSmallerName() {
         let corpus = qualifyingCorpus()
-        let answers = [answer(presenter: "Lark & Finch Players", email: "box@example.org"),
-                       answer(presenter: "Lark and Finch Players", email: "desk@example.org")]
-        let forward = QueueModel.inheritedAnswers(answers, corpus: corpus, overrides: .none, refusals: .none,
-                                                  heldKeys: [], now: now)
-        let reversed = QueueModel.inheritedAnswers(answers.reversed(), corpus: corpus, overrides: .none,
-                                                   refusals: .none, heldKeys: [], now: now)
-        #expect(!forward.isEmpty)
-        #expect(OracleRendering.inherited(forward) != OracleRendering.inherited(reversed),
-                "the ledger no longer keeps the first equal probedAt answer; retire this test (L373)")
+        let answers = [answer(presenter: "Lark and Finch Players", email: "desk@example.org"),
+                       answer(presenter: "Lark & Finch Players", email: "box@example.org")]
+        let renders = Set([answers, answers.reversed()].map {
+            OracleRendering.inherited(QueueModel.inheritedAnswers($0, corpus: corpus, overrides: .none,
+                                                                  refusals: .none, heldKeys: [], now: now))
+        })
+        #expect(renders.count == 1, "the equal probedAt answer still follows input order")
+        let one = QueueModel.inheritedAnswers(answers, corpus: corpus, overrides: .none, refusals: .none,
+                                              heldKeys: [], now: now)
+        #expect(!one.isEmpty)
+        #expect(one.values.allSatisfy { $0.organisation == "Lark & Finch Players" && $0.emails == ["box@example.org"] })
     }
 
     // Two spellings of one organisation that fold to ONE orgKey but to two producer keys: `&amp;` is
     // decoded by `OrgKey`'s canonicalize and not by `ProducerGate.key`. One spelling plays two rooms and
-    // qualifies; the other plays one and does not. The memo keeps the verdict of whichever show came first.
+    // qualifies; the other plays one and does not. The memo used to keep the verdict of whichever show came
+    // first; #4351 (decision 7(a)) keys it by producer key, so each show takes its OWN spelling's verdict.
     private func memoCorpus() -> [Prospect] {
         qualifyingCorpus() + [presented("lg-3", by: "Lark &amp; Finch Players", at: "Harbor Hall")]
     }
 
-    @Test func todayLedgerVerdictMemoFollowsTheFirstPresenterMet() throws {
+    // #4351: `todayLedgerVerdictMemoFollowsTheFirstPresenterMet` stood here and was CONSUMED, so it is
+    // inverted (L373): either corpus order, the two shows of the qualifying spelling inherit and the show of
+    // the one room spelling does not.
+    @Test func productLedgerVerdictIsPerProducerKeyInEitherOrder() throws {
         try #require(OrgKey.stored(for: "Lark & Finch Players") == orgKey)
         try #require(OrgKey.stored(for: "Lark &amp; Finch Players") == orgKey)
         try #require(ProducerGate.key("Lark & Finch Players") != ProducerGate.key("Lark &amp; Finch Players"),
                      "fixture: the two spellings must be two producer keys")
         let corpus = memoCorpus()
         let answers = [answer(presenter: "Lark & Finch Players", email: "box@example.org")]
-        let qualifyingFirst = QueueModel.inheritedAnswers(answers, corpus: corpus, overrides: .none,
-                                                          refusals: .none, heldKeys: [], now: now)
-        let lonelyFirst = QueueModel.inheritedAnswers(answers, corpus: corpus.reversed(), overrides: .none,
-                                                      refusals: .none, heldKeys: [], now: now)
-        #expect(OracleRendering.inherited(qualifyingFirst) != OracleRendering.inherited(lonelyFirst),
-                "the verdict memo no longer follows show order; retire this test (L373)")
+        for order in [corpus, corpus.reversed()] {
+            let inherited = QueueModel.inheritedAnswers(answers, corpus: order, overrides: .none,
+                                                        refusals: .none, heldKeys: [], now: now)
+            #expect(Set(inherited.keys) == ["lg-1", "lg-2"], "inherited \(inherited.keys.sorted())")
+        }
+    }
+
+    // The product with no wrapper, over 100 orders of both the corpus and the answers: one answer, the
+    // canonical oracle's (plan section 6).
+    @Test func productLedgerIsTheCanonicalAnswerOverEveryOrder() {
+        let corpus = memoCorpus()
+        let answers = [answer(presenter: "Lark & Finch Players", email: "box@example.org"),
+                       answer(presenter: "Lark and Finch Players", email: "desk@example.org")]
+        let oracle = OracleRendering.inherited(CanonicalOracle.inheritedAnswers(answers, corpus: corpus, now: now))
+        let seed: UInt64 = 4351_01
+        var generator = SeededGenerator(seed: seed)
+        var distinct: Set<String> = []
+        for _ in 0..<permutationCount {
+            distinct.insert(OracleRendering.inherited(QueueModel.inheritedAnswers(
+                answers.shuffled(using: &generator), corpus: corpus.shuffled(using: &generator), overrides: .none,
+                refusals: .none, heldKeys: [], now: now)))
+        }
+        #expect(distinct == [oracle], report("OrgAnswerLedger, product", distinct, seed: seed))
     }
 
     @Test func canonicalLedgerIsOneAnswerOverEveryOrder() {
