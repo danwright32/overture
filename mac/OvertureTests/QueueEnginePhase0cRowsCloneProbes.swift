@@ -273,6 +273,9 @@ extension QueueEnginePhase0cRowsProbeTests {
             for town in towns { townCounts[town, default: 0] += 1 }
             let busiest = townCounts.max { $0.value < $1.value }?.key
             var geoCost = 0.0, geoRebuilt = 0, geoScan = 0.0
+            // #4368: the refusal read again by Gate 0c's rule, the median of five replays with the one minute
+            // load under 8 at both ends. A single sample (128.6 ms at 4x on 2026-09-29) decides nothing.
+            var geoReplayText = "no town on this store"
             if let busiest {
                 var refused = t.geo
                 refused.userExcludedTowns.insert(busiest)
@@ -283,6 +286,17 @@ extension QueueEnginePhase0cRowsProbeTests {
                     for p in every where p.statusRaw != "dismissed" { _ = geoCtx.stage.geo.hidesFromQueue(p) }
                 }
                 proto.apply(changed: [], rows: byPID, upstream: up, context: rowCtx)
+                let quiet = Phase0.waitForLoad(below: Phase0cRows.loadCeiling, deadline: 300, poll: 5)
+                var runs: [Double] = []
+                var rebuilt: [Int] = []
+                for _ in 0..<5 {
+                    runs.append(Phase0.time { _ = proto.apply(changed: [], rows: byPID, upstream: up, context: geoCtx) })
+                    rebuilt.append(proto.lastRebuilt)
+                    proto.apply(changed: [], rows: byPID, upstream: up, context: rowCtx)
+                }
+                let after = Phase0.oneMinuteLoad()
+                let replay = Phase0.Reading(runs: runs)
+                geoReplayText = Phase0cRows.geoReplayLine(replay, rebuilt: rebuilt, loadBefore: quiet.load, loadAfter: after)
             }
 
             // 50 instants, including each DueWork deadline crossing: (a) a full rebuild of every entry, whose
@@ -295,6 +309,14 @@ extension QueueEnginePhase0cRowsProbeTests {
             var expiryRebuilt: [Int] = []
             var continuous = 0
             for e in proto.entries.values where e.validUntil <= e.builtAt { continuous += 1 }
+            // #4368, a stand-in for plan v7's TimeProbe: at each instant, the rows whose output REALLY moved
+            // since the instant before (the full rebuild's entry against the previous full rebuild's, by
+            // `sameOutput`), against the rows the carried-forward prototype rebuilds, and what building only
+            // the moved rows costs. A perfect TimeProbe could rebuild no fewer than the moved rows, so this is
+            // the floor the clock kind could reach, not a design for reaching it.
+            var previousFull = Phase0cRowEntries(rows: every, context: t.rowContext(base), upstream: t.upstream(base))
+            var needed: [Int] = []
+            var neededCosts: [Double] = []
             for (k, at) in instants.enumerated() {
                 let oracle = t.oracle(at)
                 let atUp = t.upstream(at)
@@ -302,6 +324,15 @@ extension QueueEnginePhase0cRowsProbeTests {
                 let full = Phase0cRowEntries(rows: every, context: atCtx, upstream: atUp)
                 let a = oracle.mismatches(full, rowsByKey: byKey)
                 if !a.isEmpty { fullMismatch.append("instant \(k): " + a.joined(separator: "; ")) }
+                let moved = Phase0cRows.movedRows(from: previousFull.entries, to: full.entries)
+                needed.append(moved.count)
+                neededCosts.append(Phase0.time {
+                    for pid in moved {
+                        guard let p = byPID[pid] else { continue }
+                        _ = Phase0cRowBuild.entry(p, context: atCtx, upstream: atUp, previous: previousFull.entries[pid])
+                    }
+                })
+                previousFull = full
                 expiryCosts.append(Phase0.time { _ = proto.apply(changed: [], rows: byPID, upstream: atUp, context: atCtx) })
                 expiryRebuilt.append(proto.lastRebuilt)
                 let b = oracle.mismatches(proto, rowsByKey: byKey)
@@ -328,9 +359,12 @@ extension QueueEnginePhase0cRowsProbeTests {
                   inherited move, every inheriting row (\(inheritedCosts.count))  \(Phase0cRows.spread(inheritedCosts).text)
                   reply run flag flipped                            \(String(format: "%.2f", aliveCost)) ms, \(aliveRebuilt) rows rebuilt
                   geography refusal of the busiest town             \(String(format: "%.2f", geoCost)) ms, \(geoRebuilt) rows rebuilt (the re-ask scan alone \(String(format: "%.2f", geoScan)) ms)
+                  geography refusal, replayed                       \(geoReplayText)
                   50 instants: \(instants.count) distinct, \(crossings) DueWork deadline crossings bracketed
                   (a) full per-row rebuild, sums against AgentInputs.from and the rest: \(fullMismatch.count) instants differ\(fullMismatch.isEmpty ? "" : "\n    " + fullMismatch.prefix(5).joined(separator: "\n    "))
                   (b) carried forward on validUntil: \(expiryMismatch.count) instants differ; rows rebuilt per instant \(rebuiltText); \(continuous) rows read the clock continuously; cost \(Phase0cRows.spread(expiryCosts).text)\(expiryMismatch.isEmpty ? "" : "\n    " + expiryMismatch.prefix(5).joined(separator: "\n    "))
+                  (c) TimeProbe stand-in, rows whose output really moved per instant: \(Phase0cRows.countText(needed)) (rebuilt: \(rebuiltText)); building only those \(Phase0cRows.spread(neededCosts).text)
+                      per instant, moved/rebuilt: \(zip(needed, expiryRebuilt).map { "\($0)/\($1)" }.joined(separator: " "))
                 """)
         }
         if editReplaysTaken == 0 { worstEditReplay = nil }
@@ -688,6 +722,115 @@ extension QueueEnginePhase0cRowsProbeTests {
                             + "\(r > 10 ? "FAIL" : "PASS"), remainder \(String(format: "%.1f", r)) ms at 4x")
         } else {
             Phase0cRows.say("0c.6 stop rule: UNMEASURED, the 4x corpus was not built")
+        }
+    }
+}
+
+// MARK: - 0c.5's untested case, on the synthetic fixture (#4368)
+
+extension QueueEnginePhase0cRowsProbeTests {
+
+    /// Every contacted show in a fixture of the clone's size, given one more contact still waiting to send
+    /// and a draft, so a draft edit reaches the draft lint (#4310's 1.752 ms case). Today's clone has no such
+    /// show, which is why the clone arm cannot exercise it (the posted table, 2026-09-29).
+    static func pendingContactDraftShows(_ fx: Phase0cRowsFixture) -> [Prospect] {
+        let contacted = fx.rows.filter { $0.status == .contacted && $0.sentAt != nil }
+        for (i, p) in contacted.enumerated() {
+            let id = "\(p.naturalKey)-waiting-\(i)@example.org"
+            let waiting = Recipient(id: id, email: id, provenance: .act)
+            p.setRecipients(p.recipients + [waiting])
+            p.draftBody = Phase0cRowsFixture.draft
+        }
+        return contacted
+    }
+
+    // Runs on every push, cheaply: the fixture really builds the case the probe below times, and a draft edit
+    // there really reaches the lint (L102: an arm that skips the expensive path measures the skip).
+    @Test func thePendingContactDraftEditCaseReachesTheLint() throws {
+        let fx = try Phase0cRowsFixture(size: 60, seed: 4368)
+        let shows = Self.pendingContactDraftShows(fx)
+        try #require(!shows.isEmpty, "the fixture holds no contacted show, so the case cannot be built")
+        var proto = Phase0cRowEntries(rows: fx.rows, context: fx.rowContext(), upstream: fx.upstream())
+        let p = shows[0]
+        let pid = p.persistentModelID
+        #expect(p.recipients.contains { $0.sendState == .pending && $0.email != nil })
+        p.draftBody = Phase0cRowsFixture.draftWithSlot
+        proto.apply(changed: [pid], rows: fx.rowsByPID, upstream: fx.upstream(), context: fx.rowContext())
+        #expect(proto.entries[pid]?.lint?.body == Phase0cRowsFixture.draftWithSlot,
+                "the edit did not reach the draft lint, so timing it would time the skip")
+        #expect(fx.oracle().mismatches(proto, rowsByKey: fx.rowsByKey).isEmpty)
+    }
+
+    // The TimeProbe stand-in's count, on every push: two builds at one instant move nothing, and a changed row
+    // is counted (L159: the positive case in the same fixture as the empty one).
+    @Test func theTimeProbeStandInCountsOnlyRowsWhoseOutputMoved() throws {
+        let fx = try Phase0cRowsFixture(size: 60, seed: 4368)
+        let a = Phase0cRowEntries(rows: fx.rows, context: fx.rowContext(), upstream: fx.upstream())
+        let b = Phase0cRowEntries(rows: fx.rows, context: fx.rowContext(), upstream: fx.upstream())
+        #expect(Phase0cRows.movedRows(from: a.entries, to: b.entries).isEmpty)
+        let p = try #require(fx.rows.first { $0.status == .new })
+        p.status = .dismissed
+        let c = Phase0cRowEntries(rows: fx.rows, context: fx.rowContext(), upstream: fx.upstream())
+        let moved = Phase0cRows.movedRows(from: a.entries, to: c.entries)
+        #expect(moved.contains(p.persistentModelID))
+        #expect(moved.count < fx.rows.count / 2, "a one row change moved \(moved.count) rows")
+    }
+
+    // The refusal replay is scored only under the load rule (#4368), on every push.
+    @Test func aRefusalReplayTakenAtLoadEightOrOverDecidesNothing() {
+        let r = Phase0.Reading(runs: [3, 1, 2, 5, 4])
+        #expect(!Phase0cRows.geoReplayLine(r, rebuilt: [9], loadBefore: 2, loadAfter: 7.9).contains("UNMEASURED"))
+        #expect(Phase0cRows.geoReplayLine(r, rebuilt: [9], loadBefore: 8, loadAfter: 2).hasPrefix("UNMEASURED"))
+        #expect(Phase0cRows.geoReplayLine(r, rebuilt: [9], loadBefore: 2, loadAfter: .infinity).hasPrefix("UNMEASURED"))
+    }
+
+    /// The draft edit on a contacted show with a contact waiting, timed on the synthetic fixture by Gate 0c's
+    /// rule: every such show edited once, then the five slowest replayed five times each with the one minute
+    /// load under 8, the median of the slowest key deciding. Opt in with the other 0c.5 probes.
+    @Test func probe0c5PendingContactDraftEditOnTheFixture() throws {
+        if skip("0c.5 pending contact draft edit") { return }
+        for size in [1_350, 5_400] {
+            let fx = try Phase0cRowsFixture(size: size, seed: 4368)
+            let shows = Self.pendingContactDraftShows(fx)
+            var proto = Phase0cRowEntries(rows: fx.rows, context: fx.rowContext(), upstream: fx.upstream())
+            let byPID = fx.rowsByPID
+            let up = proto.upstream, ctx = proto.context
+            func edit(_ p: Prospect) -> Double {
+                let pid = p.persistentModelID
+                p.draftBody = p.draftBody == Phase0cRowsFixture.draft ? Phase0cRowsFixture.draftWithSlot
+                    : Phase0cRowsFixture.draft
+                return Phase0.time { _ = proto.apply(changed: [pid], rows: byPID, upstream: up, context: ctx) }
+            }
+            let samples = shows.map { edit($0) }
+            let mismatches = fx.oracle().mismatches(proto, rowsByKey: fx.rowsByKey)
+            #expect(mismatches.isEmpty, "the prototype disagrees with the oracle after the edits [\(size)]")
+            var replays: [String] = []
+            var worst: Double? = 0
+            for i in samples.indices.sorted(by: { samples[$0] > samples[$1] }).prefix(5) {
+                let p = shows[i]
+                let quiet = Phase0.waitForLoad(below: Phase0cRows.loadCeiling, deadline: 300, poll: 5)
+                let reading = Phase0.Reading(runs: (0..<5).map { _ in edit(p) })
+                let after = Phase0.oneMinuteLoad()
+                let shape = "key \(Phase0b.hash8(p.naturalKey)) \(p.recipients.count) contacts, "
+                    + "\(p.recipients.filter { $0.sendState == .pending }.count) pending"
+                guard quiet.load < Phase0cRows.loadCeiling && after < Phase0cRows.loadCeiling else {
+                    worst = nil
+                    replays.append(shape + String(format: ": UNMEASURED, load %.2f before and %.2f after", quiet.load, after))
+                    continue
+                }
+                worst = worst.map { max($0, reading.median) }
+                replays.append(shape + String(format: ": sample %.3f ms, replay median %.3f (%.3f to %.3f), load %.2f before, %.2f after",
+                                              samples[i], reading.median, reading.low, reading.high, quiet.load, after))
+            }
+            let verdict = worst.map { $0 <= 1.0 ? "PASS" : "FAIL" } ?? "UNMEASURED"
+            Phase0cRows.say("""
+                0c.5 pending contact draft edit [synthetic \(size) rows, seed 4368] \(shows.count) contacted shows given a waiting contact, \(Phase0.load()), Debug build
+                  every such show edited once                         \(Phase0cRows.spread(samples).text)
+                  oracle after the edits                              \(mismatches.count) mismatches
+                  the five slowest keys, replayed:
+                    \(replays.joined(separator: "\n    "))
+                  stop (the slowest key's replayed median over 1 ms, load under 8): \(verdict)\(worst.map { String(format: ", %.3f ms", $0) } ?? "")
+                """)
         }
     }
 }

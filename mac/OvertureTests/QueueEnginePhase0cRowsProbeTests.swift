@@ -64,6 +64,40 @@ enum Phase0cRows {
 
     nonisolated static let loadCeiling = 8.0
 
+    /// The rows whose entry a reader would see differently in `to` than in `from`, including rows present on
+    /// one side only. What a TimeProbe that knew exactly who reads the clock could not avoid rebuilding (#4368).
+    static func movedRows(from: [PersistentIdentifier: Phase0cRowEntry],
+                          to: [PersistentIdentifier: Phase0cRowEntry]) -> Set<PersistentIdentifier> {
+        var out = Set<PersistentIdentifier>()
+        for pid in Set(from.keys).union(to.keys) {
+            switch (from[pid], to[pid]) {
+            case let (a?, b?): if !a.sameOutput(as: b) { out.insert(pid) }
+            default: out.insert(pid)
+            }
+        }
+        return out
+    }
+
+    /// Median and max of a set of counts, for the report.
+    static func countText(_ counts: [Int]) -> String {
+        guard !counts.isEmpty else { return "none" }
+        let s = counts.sorted()
+        return "median \(s[s.count / 2]), max \(s.last!), total \(s.reduce(0, +)) over \(s.count) instants"
+    }
+
+    /// The refusal replay's line, carrying its own verdict on the load rule: a replay whose load was 8 or more
+    /// at either end, or unreadable, is UNMEASURED and its number decides nothing.
+    static func geoReplayLine(_ r: Phase0.Reading, rebuilt: [Int], loadBefore: Double,
+                              loadAfter: Double) -> String {
+        let loads = String(format: "load %.2f before, %.2f after", loadBefore, loadAfter)
+        let numbers = String(format: "median %.2f ms (%.2f to %.2f)", r.median, r.low, r.high)
+            + ", rows rebuilt \(rebuilt.map(String.init).joined(separator: ", "))"
+        guard loadBefore < loadCeiling && loadAfter < loadCeiling else {
+            return "UNMEASURED (\(loads), the rule needs under 8): \(numbers), deciding nothing"
+        }
+        return "\(numbers), \(loads)"
+    }
+
     /// Max, p99 and median of a set of samples, in milliseconds, with the count.
     nonisolated static func spread(_ samples: [Double]) -> (max: Double, p99: Double, median: Double, text: String) {
         guard !samples.isEmpty else { return (0, 0, 0, "no samples") }
