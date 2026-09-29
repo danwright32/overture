@@ -25,7 +25,7 @@ import SwiftData
 // every pending expiry crossing for the clock, every playing night, weekday, booking id and row for the
 // calendar. Where a key can be timed more than once without moving state, its cost is the median of three.
 
-enum Phase0cLaps {
+enum Phase0cTickLaps {
     nonisolated static var enabled: Bool {
         ProcessInfo.processInfo.environment["MEASURE_4106_PHASE0C_LAPS"] != nil
     }
@@ -610,8 +610,8 @@ extension Phase0cLapsWorld {
             var observed: [Phase0cPID: String?] = [:]
             for p in current where changed.contains(p.persistentModelID) { observed[p.persistentModelID] = .some(p.conflictKey) }
             if intended != observed {
-                problems.append("\(where_): conflict index intended \(intended.count) writes (\(Phase0cLaps.hash(keys(intended, current)))), "
-                                + "the real sweep wrote \(observed.count) (\(Phase0cLaps.hash(keys(observed, current))))")
+                problems.append("\(where_): conflict index intended \(intended.count) writes (\(Phase0cTickLaps.hash(keys(intended, current)))), "
+                                + "the real sweep wrote \(observed.count) (\(Phase0cTickLaps.hash(keys(observed, current))))")
             }
             feedConflicts(changed)
         } else {
@@ -623,8 +623,8 @@ extension Phase0cLapsWorld {
             ConflictSweep.reapplyAll(export: export, in: context)
             let real = Phase0cLapOracle.written(before: prior, after: current)
             if intended != dry {
-                problems.append("\(where_): conflict index intended \(intended.count) writes (\(Phase0cLaps.hash(keys(intended, current)))), "
-                                + "the dry run \(dry.count) (\(Phase0cLaps.hash(keys(dry, current))))")
+                problems.append("\(where_): conflict index intended \(intended.count) writes (\(Phase0cTickLaps.hash(keys(intended, current)))), "
+                                + "the dry run \(dry.count) (\(Phase0cTickLaps.hash(keys(dry, current))))")
             }
             if dry != real {
                 problems.append("\(where_): conflict dry run \(dry.count) writes, the real sweep \(real.count): the mirror is wrong")
@@ -637,8 +637,8 @@ extension Phase0cLapsWorld {
         let settleDry = Phase0cLapOracle.settleDryRun(current, now: now)
         let settleReal = Phase0cLapOracle.settleReal(current, now: now, context: context)
         if settle.due != settleDry {
-            problems.append("\(where_): settle due set \(settle.due.count) (\(Phase0cLaps.hash(keys(settle.due, current)))) "
-                            + "against the dry run \(settleDry.count) (\(Phase0cLaps.hash(keys(settleDry, current))))")
+            problems.append("\(where_): settle due set \(settle.due.count) (\(Phase0cTickLaps.hash(keys(settle.due, current)))) "
+                            + "against the dry run \(settleDry.count) (\(Phase0cTickLaps.hash(keys(settleDry, current))))")
         }
         if settleDry != settleReal {
             problems.append("\(where_): settle dry run \(settleDry.count), the real settle \(settleReal.count): the mirror is wrong")
@@ -649,9 +649,9 @@ extension Phase0cLapsWorld {
         let retireReal = Phase0cLapOracle.retireReal(context: context, today: today)
         if candidates.wentBy != retireDry.wentBy || candidates.passedKept != retireDry.passedKept {
             problems.append("\(where_): retirement index \(candidates.wentBy.count)+\(candidates.passedKept.count) "
-                            + "(\(Phase0cLaps.hash(keys(candidates.wentBy.union(candidates.passedKept), current)))) against the dry run "
+                            + "(\(Phase0cTickLaps.hash(keys(candidates.wentBy.union(candidates.passedKept), current)))) against the dry run "
                             + "\(retireDry.wentBy.count)+\(retireDry.passedKept.count) "
-                            + "(\(Phase0cLaps.hash(keys(retireDry.wentBy.union(retireDry.passedKept), current))))")
+                            + "(\(Phase0cTickLaps.hash(keys(retireDry.wentBy.union(retireDry.passedKept), current))))")
         }
         if retireDry.wentBy != retireReal.wentBy || retireDry.passedKept != retireReal.passedKept {
             problems.append("\(where_): retirement dry run \(retireDry.wentBy.count)+\(retireDry.passedKept.count), "
@@ -709,7 +709,7 @@ final class QueueEnginePhase0cLapsProbeTests {
     @Test func candidateIndexesEqualTodaysLapsAfterEveryOperationAndUndo() throws {
         // CI settings are sized against plan section 4's harness budget (measured 2026-09-27: two seeds of 40
         // on both fixtures took 84 s, too much of the 90 s every harness shares). Deep is 20 seeds of 500.
-        let plan: [(size: Int, seeds: [UInt64], ops: Int)] = Phase0cLaps.deep
+        let plan: [(size: Int, seeds: [UInt64], ops: Int)] = Phase0cTickLaps.deep
             ? [(60, Array(1...20), 500), (300, Array(1...20), 500)]
             : [(60, [11], 40), (300, [29], 12)]
         let start = Phase0.now()
@@ -727,15 +727,15 @@ final class QueueEnginePhase0cLapsProbeTests {
             }
         }
         let missing = Phase0cLapsOp.allCases.map(\.rawValue).filter { !kinds.contains($0) }
-        Phase0cLaps.say("""
-            property harness (\(Phase0cLaps.deep ? "deep" : "CI") settings: \(plan.map { "\($0.seeds.count) seeds of \($0.ops) ops at \($0.size) rows" }.joined(separator: ", "))) \
+        Phase0cTickLaps.say("""
+            property harness (\(Phase0cTickLaps.deep ? "deep" : "CI") settings: \(plan.map { "\($0.seeds.count) seeds of \($0.ops) ops at \($0.size) rows" }.joined(separator: ", "))) \
             in \(String(format: "%.1f", Phase0.ms(since: start) / 1000)) s
               \(lines.joined(separator: "\n  "))
               operation kinds exercised \(kinds.filter { !$0.hasPrefix("undo") }.count) of \(Phase0cLapsOp.allCases.count), \
             undo kinds \(kinds.filter { $0.hasPrefix("undo") }.count); rows rollback() left holding a real lap's writes, \
             put back by hand \(Phase0cLapOracle.rollbackLeaks)\(missing.isEmpty ? "" : "; never drawn: " + missing.joined(separator: ","))
             """)
-        for p in problems.prefix(10) { Phase0cLaps.say("MISMATCH " + p) }
+        for p in problems.prefix(10) { Phase0cTickLaps.say("MISMATCH " + p) }
         #expect(problems.isEmpty, "0c.7: \(problems.count) disagreements; first: \(problems.first ?? "")")
         #expect(missing.isEmpty, "0c.7: operation kinds never drawn: \(missing)")
     }
@@ -755,7 +755,7 @@ final class QueueEnginePhase0cLapsProbeTests {
             }).filter { $0 > world.now && $0 <= horizon }
             // Every crossing at 60 rows; at 300, twenty spread across them unless deep, for the harness budget.
             let ordered = crossings.sorted()
-            let chosen = size == 60 || Phase0cLaps.deep || ordered.count <= 20 ? ordered
+            let chosen = size == 60 || Phase0cTickLaps.deep || ordered.count <= 20 ? ordered
                 : (0..<20).map { ordered[$0 * ordered.count / 20] }
             var instants = Set<Date>()
             for c in chosen { for d in [-0.001, 0, 0.001] { instants.insert(c.addingTimeInterval(d)) } }
@@ -772,7 +772,7 @@ final class QueueEnginePhase0cLapsProbeTests {
             }
             lines.append("size \(size): \(chosen.count) of \(crossings.count) expiry crossings, \(instants.count) instants, most rows due at one instant \(dueMax)")
         }
-        Phase0cLaps.say("settle due set at every expiry crossing\n  " + lines.joined(separator: "\n  ")
+        Phase0cTickLaps.say("settle due set at every expiry crossing\n  " + lines.joined(separator: "\n  ")
                         + "\n  rows rollback() left holding the real lap's writes, put back by hand so far: \(Phase0cLapOracle.rollbackLeaks)")
         #expect(problems.isEmpty, "0c.7 settle: \(problems.count) disagreements; first: \(problems.first ?? "")")
     }
@@ -806,7 +806,7 @@ final class QueueEnginePhase0cLapsProbeTests {
 
     @Test(.enabled(if: Phase0.liveStoreExists, "no live store on this machine"))
     func probe0c7TickLapsOnTheClone() throws {
-        guard Phase0cLaps.enabled else {
+        guard Phase0cTickLaps.enabled else {
             print("phase0c7 clone probe: not measured. Set TEST_RUNNER_MEASURE_4106_PHASE0C_LAPS=1 to run it.")
             return
         }
@@ -823,7 +823,7 @@ final class QueueEnginePhase0cLapsProbeTests {
             verdicts += try conflictsBlock(label: label, ctx: ctx, exportURL: exportURL, now: now)
             closingReadBlock(label: label, ctx: ctx, now: now)
         }
-        Phase0cLaps.say("0c.7 stop rule verdicts\n  " + verdicts.joined(separator: "\n  "))
+        Phase0cTickLaps.say("0c.7 stop rule verdicts\n  " + verdicts.joined(separator: "\n  "))
     }
 
     // MARK: bookings: attribution, then settle's due set and expiry index
@@ -885,11 +885,11 @@ final class QueueEnginePhase0cLapsProbeTests {
         // contacted row, median of three.
         var perContacted: [Double] = []
         for e in sorted {
-            perContacted.append(Phase0cLaps.median3 {
+            perContacted.append(Phase0cTickLaps.median3 {
                 if BookingMatch.classify(entity: e, bookings: loaded.bookings) == .none { _ = orgMatch(e) }
             })
         }
-        let contactedSpread = Phase0cLaps.Spread(samples: perContacted)
+        let contactedSpread = Phase0cTickLaps.Spread(samples: perContacted)
         let reconcile = Phase0.median5 {
             _ = DownbeatBooking.reconcileBooked(entities: entities, clients: loaded.clients, bookings: loaded.bookings,
                                                 health: loaded.health, now: now)
@@ -930,7 +930,7 @@ final class QueueEnginePhase0cLapsProbeTests {
         var perRow: [Double] = []
         for p in live {
             let pid = p.persistentModelID
-            perRow.append(Phase0cLaps.median3 { index.update(pid, Phase0cSettleFacts.extract(p)) })
+            perRow.append(Phase0cTickLaps.median3 { index.update(pid, Phase0cSettleFacts.extract(p)) })
         }
         // Clock: advance across each pending crossing in turn, one sample each (the state moves).
         var perCrossing: [Double] = []
@@ -941,9 +941,9 @@ final class QueueEnginePhase0cLapsProbeTests {
             perCrossing.append(Phase0.time { moving.advance(to: c.addingTimeInterval(0.001)) })
             rowsPerCrossing.append(moving.judged)
         }
-        let rowSpread = Phase0cLaps.Spread(samples: perRow), clockSpread = Phase0cLaps.Spread(samples: perCrossing)
+        let rowSpread = Phase0cTickLaps.Spread(samples: perRow), clockSpread = Phase0cTickLaps.Spread(samples: perCrossing)
         let equal = indexMismatch == 0 && mirrorMismatch == 0
-        Phase0cLaps.say("""
+        Phase0cTickLaps.say("""
             bookings [\(label)] \(live.count) shows, \(entities.count) booking entities, \(contacted.count) contacted, \
             \(loaded.bookings.count) bookings, export \(loaded.health), \(Phase0.load())
               today's whole lap (reconcileBookings)                 \(whole.text)
@@ -997,7 +997,7 @@ final class QueueEnginePhase0cLapsProbeTests {
         for k in 0..<50 {
             let day = QueueModel.easternToday(now.addingTimeInterval(Double(k) * 86_400))
             var c: (wentBy: Set<Phase0cPID>, passedKept: Set<Phase0cPID>) = ([], [])
-            queries.append(Phase0cLaps.median3 { c = index.candidates(today: day) })
+            queries.append(Phase0cTickLaps.median3 { c = index.candidates(today: day) })
             let dry = Phase0cLapOracle.retireDryRun(context: ctx, today: day)
             most = max(most, dry.wentBy.count + dry.passedKept.count)
             if c.wentBy != dry.wentBy || c.passedKept != dry.passedKept { indexMismatch += 1 }
@@ -1010,10 +1010,10 @@ final class QueueEnginePhase0cLapsProbeTests {
         var perRow: [Double] = []
         for p in rows {
             let pid = p.persistentModelID
-            perRow.append(Phase0cLaps.median3 { index.update(pid, Phase0cRetireFacts.extract(p)) })
+            perRow.append(Phase0cTickLaps.median3 { index.update(pid, Phase0cRetireFacts.extract(p)) })
         }
-        let rowSpread = Phase0cLaps.Spread(samples: perRow), querySpread = Phase0cLaps.Spread(samples: queries)
-        Phase0cLaps.say("""
+        let rowSpread = Phase0cTickLaps.Spread(samples: perRow), querySpread = Phase0cTickLaps.Spread(samples: queries)
+        Phase0cTickLaps.say("""
             retirement [\(label)] \(rows.count) shows, \(index.filed) filed (untriaged \(index.untriaged.rowCount) \
             under \(index.untriaged.keys.count) opening nights, kept unpitched \(index.kept.rowCount) under \
             \(index.kept.keys.count) last nights), \(Phase0.load())
@@ -1159,14 +1159,14 @@ final class QueueEnginePhase0cLapsProbeTests {
             case .spanOnly(let o, let l): moved.playing = .spanOnly(opening: shift(o), lastNight: shift(l))
             case .undated: continue
             }
-            dateMove.append(Phase0cLaps.median3 {
+            dateMove.append(Phase0cTickLaps.median3 {
                 index.update(pid, moved)
                 _ = index.judge(inputs)
                 index.update(pid, f)
                 _ = index.judge(inputs)
             } / 2)
         }
-        let kinds: [(String, Phase0cLaps.Spread)] = [
+        let kinds: [(String, Phase0cTickLaps.Spread)] = [
             ("day off added (DayOff.swift:153)", .init(samples: dayOffAdd)),
             ("day off removed (DayOff.swift:161)", .init(samples: dayOffRemove)),
             ("weekly rule added (WeeklyDayOff.swift:140)", .init(samples: weeklyAdd)),
@@ -1182,7 +1182,7 @@ final class QueueEnginePhase0cLapsProbeTests {
         let calendarKinds = kinds.prefix(10)
         let worst = calendarKinds.map(\.1.max).max() ?? 0
         let firstEqual = firstJudge.isEmpty && dryFirst == realFirst
-        Phase0cLaps.say("""
+        Phase0cTickLaps.say("""
             conflicts [\(label)] \(rows.count) shows, \(withKey) holding a conflict key, \(nights.count) playing nights indexed \
             (largest night \(index.largestNight) rows), \(loaded.bookings.count) bookings, \(Phase0.load())
               first real sweep of the copy: dry run \(dryFirst.count) writes, real \(realFirst.count), same \(dryFirst == realFirst); \
@@ -1233,7 +1233,7 @@ final class QueueEnginePhase0cLapsProbeTests {
         var perRow: [Double] = []
         for p in rows.prospects {
             let pid = p.persistentModelID
-            perRow.append(Phase0cLaps.median3 { totals.update(pid, p) })
+            perRow.append(Phase0cTickLaps.median3 { totals.update(pid, p) })
         }
         var mismatches = 0, comparisons = 0, refreshed: [Int] = []
         var detail: [String] = []
@@ -1252,8 +1252,8 @@ final class QueueEnginePhase0cLapsProbeTests {
                 }
             }
         }
-        let rowSpread = Phase0cLaps.Spread(samples: perRow)
-        Phase0cLaps.say("""
+        let rowSpread = Phase0cTickLaps.Spread(samples: perRow)
+        Phase0cTickLaps.say("""
             closing read [\(label)] \(rows.prospects.count) shows, \(rows.inquiries.count) inquiries, \(Phase0.load())
               today's DueReading.derive on main                     \(whole.text)
                 of which: replied filter                            \(replied.text)
