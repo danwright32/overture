@@ -174,17 +174,22 @@ struct ReachabilityProbeCandidateTests {
     // pass Dan's real refusals silently gets no gate at all, which is exactly the bug this issue is. Three
     // places ask the question in the live view, and a SwiftUI body cannot be asserted on, so the wiring is
     // pinned at the source.
+    //
+    // #4317: the heading no longer asks; the render pass answers every date once and the heading reads the
+    // value. So the call site that must carry the refusals is the PASS's, and the heading must not ask at
+    // all, since a question asked there is asked through the view's unresolved refusals on every body.
     @Test func everyLiveCallSitePassesDansRealRefusals() throws {
         let source = try String(contentsOf: RepoRoot.mac
             .appendingPathComponent("Overture/UI/QueueView.swift"), encoding: .utf8)
-        // #2371: the tick box asks `probeKeysForTickedDate`, which wraps the candidate rule so a finished
-        // date can still be ticked. Same claim, at whichever of the two the heading actually calls: a
-        // bare call is a call with the gate defaulted off.
-        #expect(!source.contains("reachabilityProbeCandidateKeys(group.items)"),
-                "the per-date tick box must ask with the refusals applied")
-        #expect(!source.contains("probeKeysForTickedDate(group.items)"),
-                "the per-date tick box must ask with the refusals applied")
-        #expect(source.contains("probeKeysForTickedDate(group.items, geo: geo)"))
-        #expect(source.contains("geo: geo,"), "the date control must be handed the refusals too")
+        let pass = try String(contentsOf: RepoRoot.mac
+            .appendingPathComponent("Overture/UI/QueueRenderPass.swift"), encoding: .utf8)
+        #expect(!source.contains("reachabilityProbeCandidateKeys(group.items"),
+                "the date heading must read the pass's answer, never ask the candidate rule itself")
+        #expect(!source.contains("probeKeysForTickedDate(group.items"),
+                "the date heading must read the pass's answer, never ask the tick rule itself")
+        #expect(source.contains("heading: probeHeading,"), "the date control must be handed the pass's answer")
+        #expect(pass.contains("QueueModel.dateProbeHeadings(dateGroups, now: context.now,")
+                    && pass.contains("today: context.today, geo: geo)"),
+                "the pass must answer every date heading with Dan's refusals applied")
     }
 }

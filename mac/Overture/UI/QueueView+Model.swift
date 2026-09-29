@@ -2014,9 +2014,14 @@ enum QueueModel {
         let entries: [ReachedOutEntry]
         let groups: [ReachOutDateGroup<ReachedOutEntry>]
         let sourceCalendars: [String: String]
+        // #4320: the instant the rows were derived at, which is the one the rows draw their times from, so
+        // a row's clock moves when the pass's does and not on every evaluation of the body.
+        let now: Date
 
         // What every stage but Reached out carries: nothing, because only that stage draws it.
-        static var none: ReachedOutList { ReachedOutList(entries: [], groups: [], sourceCalendars: [:]) }
+        static var none: ReachedOutList {
+            ReachedOutList(entries: [], groups: [], sourceCalendars: [:], now: .distantPast)
+        }
     }
 
     // `sourceCalendars` is asked only when there is a row, so an empty stage builds no table.
@@ -2026,7 +2031,7 @@ enum QueueModel {
         let entries = reachedOutStageEntries(dated, inquiries: inquiries, now: now)
         guard !entries.isEmpty else { return .none }
         return ReachedOutList(entries: entries, groups: reachOutDateGroups(entries, reachDate: { $0.next }),
-                              sourceCalendars: sourceCalendars())
+                              sourceCalendars: sourceCalendars(), now: now)
     }
 
     // #4311: a stage's inquiry rows resolved back to their models, keyed by the row's id, which is what

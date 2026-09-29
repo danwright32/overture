@@ -75,10 +75,26 @@ struct QueueDateGroups<Header: View, Content: View>: View {
 // It reads sendState here and hands finished values into a closure, rather than taking a built view,
 // for the same reason QueueDateGroups does: a view built at the call site is assembled inside QueueView's
 // body, which is the cost that arrangement exists to remove.
-struct ReachedOutSendAwareRow<Content: View>: View {
+//
+// #4320: and it is EQUATABLE, on what its content is drawn from, because the content is a closure and
+// SwiftUI can never find a closure equal to the last one. Before this, every row on the list re-ran its
+// body on every evaluation of the queue's, re-reading its show's and contact's fields from the store (8.3 ms
+// of a 27 ms reading on the live clone, 2026-09-28). The equality is only safe because of what it leaves
+// OUT: the show and contact themselves, whose fields reach this body through their own observation (the
+// content closure runs inside this body, so every field it reads is tracked here), and the three transient
+// facts below, read from `sendState` inside this body and observed the same way. What observation cannot see
+// is everything else the closure captured, and that is `redrawsOn`.
+struct ReachedOutSendAwareRow<Content: View>: View, Equatable {
     let sendState: SendProgressState
     let key: String
+    // No default, deliberately: a caller that leaves this out must say what its row is drawn from, or its
+    // row would redraw on nothing but a model change and go stale on the clock (L168).
+    let redrawsOn: ReachedOutRowInputs
     @ViewBuilder let content: (_ sendingSince: Date?, _ departure: Departure?, _ highlighted: Bool) -> Content
+
+    nonisolated static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.sendState === rhs.sendState && lhs.key == rhs.key && lhs.redrawsOn == rhs.redrawsOn
+    }
 
     var body: some View {
         // The pairing itself lives on SendProgressState, where a test can reach it: putting the snapshot
@@ -87,6 +103,39 @@ struct ReachedOutSendAwareRow<Content: View>: View {
         // #4062: and whether a jump is marking THIS row, the third transient fact, read here with the
         // other two rather than by a second wrapper. Without it no mark could ever be drawn on this list.
         content(sendState.sendingSince(key), sendState.departure(key), sendState.highlighted == key)
+    }
+}
+
+// #4320: what a Reached out row's content is drawn from that neither the models' own observation nor
+// `sendState` can see, which is exactly what decides whether the row has to redraw.
+//
+// Every value the content closure captures from its call site is here or is observed. WHICH show and contact
+// (their instances, since the closure holds those very objects and reads their fields live: a merge or a
+// refetch that hands the list a different object must redraw so the closure captures that one), the reach
+// out date the row was sorted by, the calendar table its source link resolves against, and the clock, to
+// the MINUTE. The clock is the one that has to be chosen: the row's due label, countdown and action are
+// decided from it, and nothing in a model changes when it moves. To the minute because the smallest thing
+// the row draws from it is a due-now flip or an "in N days", and a finer grain would redraw every row on
+// every pass for a label that cannot have changed, which is the cost this exists to remove.
+struct ReachedOutRowInputs: Equatable {
+    let show: ObjectIdentifier
+    let contact: ObjectIdentifier
+    let next: Date
+    let clockMinute: Int
+    let sourceCalendars: [String: String]
+
+    init(show: ObjectIdentifier, contact: ObjectIdentifier, next: Date, now: Date,
+         sourceCalendars: [String: String]) {
+        self.show = show
+        self.contact = contact
+        self.next = next
+        self.clockMinute = Int((now.timeIntervalSinceReferenceDate / 60).rounded(.down))
+        self.sourceCalendars = sourceCalendars
+    }
+
+    init(show: Prospect, contact: Recipient, next: Date, now: Date, sourceCalendars: [String: String]) {
+        self.init(show: ObjectIdentifier(show), contact: ObjectIdentifier(contact), next: next, now: now,
+                  sourceCalendars: sourceCalendars)
     }
 }
 

@@ -94,7 +94,8 @@ struct QueueInvalidationGuardTests {
         }
         // The sweeps are paid once, there, into the snapshot.
         #expect(body.contains("fanOutLine: fanOutWarning("))
-        #expect(body.contains("dateGroups: QueueModel.groupByDate("))
+        // #4317: grouped once into a local, which both the snapshot and each heading's answers read.
+        #expect(body.contains("let dateGroups = QueueModel.groupByDate(") && body.contains("dateGroups: dateGroups,"))
         #expect(body.contains("StageNavigation.focusedKeys(stage: i.focusedStage"))
         #expect(queueView.contains("let fanOutLine: String?"))
         #expect(queueView.contains("let dateGroups: [QueueModel.DateGroup]"))
@@ -176,7 +177,7 @@ struct QueueInvalidationGuardTests {
         let views = SourceGuardHelper.source("Overture/UI/QueueSendAwareViews.swift")
         #expect(!views.isEmpty)
         guard let row = SourceGuardHelper.propertyBody(
-                "struct ReachedOutSendAwareRow<Content: View>: View {", in: views) else {
+                "struct ReachedOutSendAwareRow<Content: View>: View, Equatable {", in: views) else {
             Issue.record("expected to find ReachedOutSendAwareRow")
             return
         }
