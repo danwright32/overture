@@ -206,7 +206,7 @@ struct QueueInvalidationGuardTests {
         #expect(!views.isEmpty)
         guard let groups = SourceGuardHelper.propertyBody(
                 "struct QueueDateGroups<Header: View, Content: View>: View {", in: views),
-              let row = SourceGuardHelper.propertyBody("struct QueueSendAwareRow<Content: View>: View {",
+              let row = SourceGuardHelper.propertyBody("struct QueueSendAwareRow<Content: View>: View, Equatable {",
                                                        in: views) else {
             Issue.record("expected to find both send-aware views")
             return

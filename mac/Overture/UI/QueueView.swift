@@ -34,7 +34,10 @@ struct QueueView: View {
     // Read from HERE only by the action handlers, which run on a press rather than during a render. The
     // render path takes `data.queueScope`, which the pass derives once (`QueueRenderPass.make`), because
     // this property walks the whole store on every access and one of its call sites is per row.
-    private var prospects: [Prospect] { QueueModel.queueScope(allProspects) }
+    // #4322: through `liveProspects`, never `allProspects` directly, because an action closure can outlive
+    // the body that built it (see `LiveProspects`).
+    private var prospects: [Prospect] { QueueModel.queueScope(liveProspects.rows) }
+    @State private var liveProspects = LiveProspects()
 
     // #1598 Phase 5: the organisation answer ledger, and EVERY prospect including the dismissed ones the
     // query above filters out. Both are @Query on the #990/#991 excluded-towns precedent, so a check
@@ -376,6 +379,9 @@ struct QueueView: View {
         // `focusedRows` and the masthead's membership are all projections of it inside `make`; the probe
         // selection bar's rows are the fourth, and it was the one asking from a body.
         let placement: StageNavigation.Placement
+        // #4322: the instant this pass was derived at, which a card's clock reads are drawn against, so a
+        // card redraws when the pass's minute moves and not on every evaluation of the body.
+        let now: Date
 
         // #4121: the rows a reachability check could be run over, projected from the placement above.
         //
@@ -662,6 +668,8 @@ struct QueueView: View {
         #if DEBUG
         _ = QueueRenderCounter.recordRender(surface: QueueRenderCounter.queueBodySurface)
         #endif
+        // #4322: before anything is drawn, so every action closure reads the shows this body was given.
+        let _ = liveProspects.adopt(allProspects)
         let buildsBefore = renderMemo.builds
         let data = makeRenderData()
         // #3654 step 4c: recorded here, where the pass's answer arrives, rather than inside the pass.
@@ -1891,7 +1899,16 @@ struct QueueView: View {
                 // #1922: the send's own state is read INSIDE QueueSendAwareRow, not here. Read at this
                 // call site it would be read during QueueView's body, and every "Sending…" would re-derive
                 // the whole store; read there, a send redraws the cards on screen and nothing else.
-                QueueSendAwareRow(key: item.id, sendState: sendState) { highlightedKey, sendingSince, replySince, isAddressStruck in
+                // #4322: equatable on what the card is drawn from, so a served change that moves nothing
+                // this card draws skips its body. See `ScoutCardInputs`.
+                let offeredEarly = QueueModel.saysOfferedEarlyAsAClient(item, stage: focusedStage)
+                let towns = (excluded: userExcludedTowns, allowed: allowedSeedTowns)
+                QueueSendAwareRow(key: item.id, sendState: sendState, redrawsOn: ScoutCardInputs(
+                    item: item, today: today, now: data.now, gmailConnected: data.gmailConnected,
+                    checkRunning: data.checkRunning, probeRunning: data.probeRunning,
+                    checkRunSince: data.checkRunSince, checkLookups: data.checkLookups,
+                    offeredEarlyAsAClient: offeredEarly, userExcludedTowns: towns.excluded,
+                    allowedSeedTowns: towns.allowed)) { highlightedKey, sendingSince, replySince, isAddressStruck in
                     // #3690: the LIVE list, in a closure, so it is derived on a press and never during a
                     // render. `prospects` here is the property at the top of this file whose own comment
                     // says it is "read from HERE only by the action handlers, which run on a press rather
@@ -1934,9 +1951,10 @@ struct QueueView: View {
                                           offeredEarlyAsAClient: QueueModel.saysOfferedEarlyAsAClient(
                                               item, stage: focusedStage),
                                           showingTooFar: false,
-                                          userExcludedTowns: userExcludedTowns,
-                                          allowedSeedTowns: allowedSeedTowns)
+                                          userExcludedTowns: towns.excluded,
+                                          allowedSeedTowns: towns.allowed)
                 }
+                .equatable()
             }
         }
     }
@@ -2483,8 +2501,15 @@ enum QueueRenderCounter {
     // log line, because a card evaluates far more often than the queue does and a line each would bury
     // the log the queue's derivations are read from.
     nonisolated(unsafe) private static var cardBodies: [String: Int] = [:]
-    static func recordCardBody(_ key: String) { cardBodies[key, default: 0] += 1 }
+    // #4322: and the title each card last DREW, so a pin that an unchanged card skips its body can also
+    // prove a changed card redrew with its new facts rather than an old one (L14).
+    nonisolated(unsafe) private static var cardDrawn: [String: String] = [:]
+    static func recordCardBody(_ key: String, drew: String = "") {
+        cardBodies[key, default: 0] += 1
+        cardDrawn[key] = drew
+    }
     static func cardBodyCounts() -> [String: Int] { cardBodies }
+    static func cardDrew(_ key: String) -> String? { cardDrawn[key] }
 
     // #4311: how many times each STAGE LIST's own builder ran, the Reached out list and a stage's inquiry
     // block. A test pinning that such a list derives nothing in a body needs proof the list was DRAWN,
