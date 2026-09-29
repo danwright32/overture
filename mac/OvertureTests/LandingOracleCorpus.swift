@@ -35,8 +35,9 @@ enum LandingOracleCorpus {
     static let ambiguousVenue = "Lantern Hall"
     static let tripleURL = "https://fenwickchapel.example/winter-light"
     static let tripleVenue = "Fenwick Chapel"
-    static let tripleMiddle = "Winter Light"                 // matches both ends
-    static let tripleEnds = ["Winter Light: Part One", "Winter Light: Encore Night"]
+    // No colon: a colon's subtitle is stripped before titles are compared, which would make the ends match.
+    static let tripleMiddle = "Winter Light"                 // a prefix of both ends, so it matches both
+    static let tripleEnds = ["Winter Light Vespers", "Winter Light Carols"]
     static let spellingSource = "oracle-marlow"
     static let spellingStored = "Marlow Theatre"
     static let spellingIncoming = "Marlow Theater"
@@ -132,6 +133,14 @@ enum LandingOracleCorpus {
                       "https://harborstage.example/brass-weather"),
                 event("Common Ground Songbook", "Harbor Stage Collective", "Harbor Stage", "2026-12-04",
                       "https://harborstage.example/songbook"),
+                event("Driftwood Sonatas", "Harbor Stage Collective", "Harbor Stage", "2026-10-27",
+                      "https://harborstage.example/driftwood"),
+                event("Lighthouse Keeper's Daughter", "Harbor Stage Collective", "Harbor Stage", "2026-11-10",
+                      "https://harborstage.example/lighthouse"),
+                event("Undertow", "Harbor Stage Collective", "Harbor Stage", "2026-11-28",
+                      "https://harborstage.example/undertow"),
+                event("Signal Flags", "Harbor Stage Collective", "Harbor Stage", "2026-12-12",
+                      "https://harborstage.example/signal-flags"),
                ]),
         Source(id: "oracle-lantern", org: "Lantern Hall Players", listingsURL: ambiguousURL,
                events: [
@@ -145,6 +154,14 @@ enum LandingOracleCorpus {
                       "https://lanternhall.example/map-of-rain"),
                 event("Hearth Songs", "Lantern Hall Players", ambiguousVenue, "2026-12-11",
                       "https://lanternhall.example/hearth-songs"),
+                event("The Ninth Lantern", "Lantern Hall Players", ambiguousVenue, "2026-10-24",
+                      "https://lanternhall.example/ninth-lantern"),
+                event("Coal and Honey", "Lantern Hall Players", ambiguousVenue, "2026-11-01",
+                      "https://lanternhall.example/coal-honey"),
+                event("Porch Light Stories", "Lantern Hall Players", ambiguousVenue, "2026-11-20",
+                      "https://lanternhall.example/porch-light"),
+                event("Winter Almanac", "Lantern Hall Players", ambiguousVenue, "2026-12-05",
+                      "https://lanternhall.example/winter-almanac"),
                ]),
         Source(id: spellingSource, org: "Marlow Theatre Company", listingsURL: "https://marlowtheatre.example/on-stage",
                events: [
@@ -158,6 +175,14 @@ enum LandingOracleCorpus {
                       "https://marlowtheatre.example/weir-keeper"),
                 event("Slow Comet", "Marlow Theatre Company", spellingIncoming, "2026-12-03",
                       "https://marlowtheatre.example/slow-comet"),
+                event("Borrowed Summer", "Marlow Theatre Company", spellingIncoming, "2026-10-30",
+                      "https://marlowtheatre.example/borrowed-summer"),
+                event("A Room Without Clocks", "Marlow Theatre Company", spellingIncoming, "2026-11-05",
+                      "https://marlowtheatre.example/no-clocks"),
+                event("The Glassblower", "Marlow Theatre Company", spellingIncoming, "2026-11-26",
+                      "https://marlowtheatre.example/glassblower"),
+                event("Paper Crowns", "Marlow Theatre Company", spellingIncoming, "2026-12-09",
+                      "https://marlowtheatre.example/paper-crowns"),
                ]),
         Source(id: "oracle-fenwick-a", org: "Fenwick Chapel Concerts", listingsURL: "https://fenwickchapel.example/a",
                events: [
@@ -166,6 +191,14 @@ enum LandingOracleCorpus {
                       "https://fenwickchapel.example/lauds"),
                 event("The Quiet Organ", "Fenwick Chapel Concerts", tripleVenue, "2026-11-22",
                       "https://fenwickchapel.example/quiet-organ"),
+                event("Matins for Strings", "Fenwick Chapel Concerts", tripleVenue, "2026-10-31",
+                      "https://fenwickchapel.example/matins"),
+                event("Plainchant Evening", "Fenwick Chapel Concerts", tripleVenue, "2026-11-08",
+                      "https://fenwickchapel.example/plainchant"),
+                event("Bells Over Water", "Fenwick Chapel Concerts", tripleVenue, "2026-11-29",
+                      "https://fenwickchapel.example/bells-water"),
+                event("Organ Marathon", "Fenwick Chapel Concerts", tripleVenue, "2026-12-13",
+                      "https://fenwickchapel.example/organ-marathon"),
                ]),
         Source(id: "oracle-fenwick-b", org: "Fenwick Chapel Friends", listingsURL: "https://fenwickchapel.example/b",
                events: [
@@ -174,6 +207,14 @@ enum LandingOracleCorpus {
                       "https://fenwickchapel.example/candlemas"),
                 event("Vesper Strings", "Fenwick Chapel Friends", tripleVenue, "2026-11-15",
                       "https://fenwickchapel.example/vesper-strings"),
+                event("Advent Lessons", "Fenwick Chapel Friends", tripleVenue, "2026-11-30",
+                      "https://fenwickchapel.example/advent-lessons"),
+                event("Choral Evensong", "Fenwick Chapel Friends", tripleVenue, "2026-11-09",
+                      "https://fenwickchapel.example/evensong"),
+                event("Recorder Consort", "Fenwick Chapel Friends", tripleVenue, "2026-10-26",
+                      "https://fenwickchapel.example/recorder-consort"),
+                event("Brass at Twilight", "Fenwick Chapel Friends", tripleVenue, "2026-12-14",
+                      "https://fenwickchapel.example/brass-twilight"),
                ]),
         Source(id: "oracle-quarry", org: "Delta Loft Presents", listingsURL: "https://deltaloft.example/calendar",
                events: [
@@ -188,6 +229,14 @@ enum LandingOracleCorpus {
                       "https://deltaloft.example/small-hours"),
                 event("Juniper Static", "Delta Loft Presents", strippedBatchVenue, "2026-12-10",
                       "https://deltaloft.example/juniper-static"),
+                event("Static Garden", "Delta Loft Presents", strippedBatchVenue, "2026-10-31",
+                      "https://deltaloft.example/static-garden"),
+                event("Neon Psalter", "Delta Loft Presents", strippedBatchVenue, "2026-11-14",
+                      "https://deltaloft.example/neon-psalter"),
+                event("Salt Flats Radio Hour", "Delta Loft Presents", strippedBatchVenue, "2026-11-21",
+                      "https://deltaloft.example/salt-flats"),
+                event("Tape Loop Waltz", "Delta Loft Presents", strippedBatchVenue, "2026-12-12",
+                      "https://deltaloft.example/tape-loop"),
                ]),
     ]
 

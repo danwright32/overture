@@ -123,7 +123,7 @@ struct LandingOracleTests {
     @Test func theSyntheticLandingEqualsTheOracleRecordedFromMain() async throws {
         let container = try await LandingOracleCorpus.land()
         let snapshot = try LandingOracle.snapshot(of: container)
-        #expect((snapshot.counts["Prospect"] ?? 0) >= 40, Comment(rawValue:
+        #expect((snapshot.counts["Prospect"] ?? 0) >= 50, Comment(rawValue:
             "the synthetic landing left \(snapshot.counts["Prospect"] ?? 0) shows, far fewer than the corpus "
             + "holds, so it is not landing what it claims to"))
 
