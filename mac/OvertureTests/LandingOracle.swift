@@ -161,13 +161,17 @@ enum LandingOracle {
     }
 
     /// The short form a mismatch prints: enough to tell two hashes apart, too short to be a lookup key.
-    static func short(_ fullHash: String) -> String { "sha256:" + fullHash.prefix(12) }
+    static func short(_ cellHash: String) -> String { "sha256:" + cellHash.prefix(12) }
 
     // MARK: the two file forms
 
-    /// One line per field. The synthetic arm writes the VALUE, the real arm the value's HASH, so a real-arm
-    /// file never holds a title, a venue or a presenter even on this Mac.
+    /// One line per ROW, under one `fields` line per entity naming the columns: a line per field made the
+    /// committed synthetic file 300 KB, too large for anybody to review. The synthetic arm writes each VALUE
+    /// (`=` then the escaped text), the real arm each value's HASH (`h` then the first 16 hex digits of its
+    /// sha256), so a real-arm file never holds a title, a venue or a presenter even on this Mac.
     enum Form { case values, hashes }
+
+    static func cellHash(_ value: String) -> String { String(hash(value).prefix(16)) }
 
     static func lines(of snapshot: Snapshot, form: Form) -> [String] {
         var out: [String] = []
@@ -175,13 +179,15 @@ enum LandingOracle {
             out.append("count\t\(entity)\t\(snapshot.counts[entity] ?? 0)")
         }
         var position: [String: Int] = [:]
+        var named = Set<String>()
         for row in snapshot.rows {
+            if named.insert(row.entity).inserted {
+                out.append((["fields", row.entity] + row.fields.map(\.name)).joined(separator: "\t"))
+            }
             let index = position[row.entity, default: 0]
             position[row.entity] = index + 1
-            for field in row.fields {
-                let cell = form == .values ? escape(field.value) : "sha256:" + hash(field.value)
-                out.append("\(row.entity)\t\(index)\t\(field.name)\t\(cell)")
-            }
+            let cells = row.fields.map { form == .values ? "=" + escape($0.value) : "h" + cellHash($0.value) }
+            out.append((["row", row.entity, String(index)] + cells).joined(separator: "\t"))
         }
         return out
     }
@@ -244,28 +250,36 @@ enum LandingOracle {
 
     static func parse(_ text: String) -> Recording {
         var r = Recording()
+        var columns: [String: [String]] = [:]
         for line in text.split(separator: "\n", omittingEmptySubsequences: true) {
             if line.hasPrefix("#") || line == realArmMarker { continue }
-            let parts = line.split(separator: "\t", maxSplits: 3, omittingEmptySubsequences: false).map(String.init)
-            if parts.count == 3, parts[0] == "count" {
+            let parts = line.split(separator: "\t", omittingEmptySubsequences: false).map(String.init)
+            switch parts.first ?? "" {
+            case "count" where parts.count == 3:
                 r.counts[parts[1]] = Int(parts[2]) ?? -1
+            case "fields" where parts.count >= 2:
+                columns[parts[1]] = Array(parts.dropFirst(2))
+            case "row" where parts.count >= 3:
+                guard let index = Int(parts[2]), let names = columns[parts[1]] else { continue }
+                let entity = parts[1]
+                // Mutated in place through the dictionary, never copied out and back: a 4x recording has
+                // thousands of rows, and a copy per row is quadratic.
+                if r.hashes[entity] == nil { r.hashes[entity] = [] }
+                while r.hashes[entity]!.count <= index { r.hashes[entity]!.append([:]) }
+                for (name, cell) in zip(names, parts.dropFirst(3)) {
+                    if cell.hasPrefix("h") {
+                        r.hashes[entity]![index][name] = String(cell.dropFirst())
+                    } else {
+                        let value = unescape(String(cell.dropFirst()))
+                        r.hashes[entity]![index][name] = cellHash(value)
+                        if r.values[entity] == nil { r.values[entity] = [] }
+                        while r.values[entity]!.count <= index { r.values[entity]!.append([:]) }
+                        r.values[entity]![index][name] = value
+                    }
+                }
+            default:
                 continue
             }
-            guard parts.count == 4, let index = Int(parts[1]) else { continue }
-            let (entity, field, cell) = (parts[0], parts[2], parts[3])
-            var rows = r.hashes[entity] ?? []
-            while rows.count <= index { rows.append([:]) }
-            if cell.hasPrefix("sha256:") {
-                rows[index][field] = String(cell.dropFirst("sha256:".count))
-            } else {
-                let value = unescape(cell)
-                rows[index][field] = hash(value)
-                var shown = r.values[entity] ?? []
-                while shown.count <= index { shown.append([:]) }
-                shown[index][field] = value
-                r.values[entity] = shown
-            }
-            r.hashes[entity] = rows
         }
         return r
     }
