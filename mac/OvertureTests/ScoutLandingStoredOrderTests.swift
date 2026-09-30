@@ -70,6 +70,35 @@ struct ScoutLandingStoredOrderTests {
             "the every read landing holds the read's order, not key order: \(everyRead)"))
     }
 
+    // The working set (`.once`) and the reference it is proved equivalent to (`.everyRead`, which fetches afresh
+    // every time) must hold the rows in the SAME order after the landing has written, or the equivalence tests
+    // compare two orders and a first match can differ between them. Found by the lessons review of this change:
+    // the first cut sorted `.everyRead` by each row's CURRENT key, so a row re-keyed mid landing, or a row the
+    // landing inserted, moved there and stayed put in `.once`.
+    @Test func theWorkingSetAndAFreshReadHoldTheSameOrderAfterAnInsertAndAReKey() throws {
+        func landing(_ policy: ScoutLandingStore.Policy) throws -> [String] {
+            let container = try TestModelContainer.inMemory(AppSchema.models)
+            let ctx = container.mainContext
+            for key in ["k-07", "k-02", "k-11", "k-05", "k-01"] { ctx.insert(Self.stored(key)) }
+            try ctx.save()
+            let landing = ScoutLandingStore(context: ctx, policy: policy)
+            _ = try landing.rows()
+            // A row the landing inserts, keyed to sort FIRST, and a stored row re-keyed to sort first too.
+            let fresh = Self.stored("a-00")
+            ctx.insert(fresh)
+            landing.inserted(fresh)
+            let moved = try #require(try landing.rows().first { $0.naturalKey == "k-11" })
+            moved.naturalKey = "a-50"
+            return try landing.rows().map(\.naturalKey)
+        }
+        let once = try landing(.once)
+        let everyRead = try landing(.everyRead)
+        #expect(once == everyRead, Comment(rawValue:
+            "the working set holds \(once) and a fresh read holds \(everyRead) after the same writes"))
+        #expect(once == ["k-01", "k-02", "k-05", "a-50", "k-07", "a-00"], Comment(rawValue:
+            "the landing did not keep the first read's key order with its inserts after it: \(once)"))
+    }
+
     // MARK: two landings of the same shows, stored in different orders, leave the same store
 
     // `pairs` shows are each stored TWICE at one venue on different nights, both rows carrying the same run URL,
@@ -148,12 +177,19 @@ struct ScoutLandingStoredOrderTests {
         for (key, status) in [("h-3", "booked"), ("h-1", "passed"), ("h-2", "booked"), ("h-4", "passed")] {
             let p = Self.stored(key)
             if status == "booked" { p.showOutcomeRaw = ShowOutcome.booked.rawValue }
+            if status == "passed" {
+                p.statusRaw = ReviewStatus.dismissed.rawValue
+                p.showOutcomeRaw = ShowOutcome.dontWantToShoot.rawValue
+            }
             ctx.insert(p)
             shows.append(p)
         }
         let forward = LocalHistory.records(from: shows)
         let backward = LocalHistory.records(from: shows.reversed())
-        #expect(!forward.isEmpty, Comment(rawValue: "no history records came back, so order was not measured"))
+        let kinds = Set(forward.compactMap(\.status))
+        #expect(kinds == ["booked", "passed"] && forward.count == 4, Comment(rawValue:
+            "the history held \(forward.count) records of kinds \(kinds.sorted()), not the four booked and passed "
+            + "ones, so order was measured over fewer records than it claims"))
         #expect(forward == backward, Comment(rawValue:
             "the history records follow the order the shows were read in, and `history.first(where:)` picks the "
             + "first of them"))
