@@ -851,32 +851,25 @@ extension QueueEnginePhase0cRowsProbeTests {
             let buildOracle = Self.agentFields(fx.oracle().agent)
             let buildDiffering = buildFields.keys.filter { buildFields[$0] != buildOracle[$0] }.sorted()
                 .map { "\($0) \(buildFields[$0] ?? "-") against \(buildOracle[$0] ?? "-")" }
-            var firstBreak = "none"
-            var samples: [Double] = []
-            for (n, p) in shows.enumerated() {
-                samples.append(edit(p))
-                guard firstBreak == "none" else { continue }
-                let now = fx.oracle()
-                guard Self.disagreement(fx, proto) != buildDisagreement else { continue }
-                let mine = Self.agentFields(String(describing: proto.agentInputs))
-                let theirs = Self.agentFields(now.agent)
-                let differing = mine.keys.filter { mine[$0] != theirs[$0] }.sorted()
-                    .map { "\($0) \(mine[$0] ?? "-") against \(theirs[$0] ?? "-")" }
-                firstBreak = "edit \(n + 1) of \(shows.count) (key \(Phase0b.hash8(p.naturalKey)) \(p.recipients.count) contacts, "
-                    + "\(p.recipients.filter { $0.sendState == .pending }.count) pending, draft "
-                    + "\(p.draftBody == Phase0cRowsFixture.draftWithSlot ? "with" : "without") the slot): "
-                    + "prototype against oracle \(differing.joined(separator: "; "))"
-            }
+            // The oracle is judged once, after every edit, never between edits: at 5,400 rows one oracle costs
+            // about a second, and one per edit held the shared test lock for twenty minutes (2026-09-30).
+            let samples = shows.map { edit($0) }
+            let afterDisagreement = Self.disagreement(fx, proto)
+            let added = afterDisagreement.subtracting(buildDisagreement).sorted()
+            let firstBreak = added.isEmpty ? "none" : added.joined(separator: ", ")
             let mismatches = fx.oracle().mismatches(proto, rowsByKey: fx.rowsByKey)
             // The build's own disagreement is the finding and FAILS the stop rule below; what this asserts is
             // that the edits add none.
-            #expect(Self.disagreement(fx, proto) == buildDisagreement,
+            #expect(afterDisagreement == buildDisagreement,
                     "the draft edits changed how the prototype disagrees with the oracle [\(size)]")
             var replays: [String] = []
             var worst: Double? = 0
+            // One bounded wait for the whole replay block, then the load read beside each key: a wait per key
+            // could outlast the runner's twenty minute stall limit on a busy Mac.
+            _ = Phase0.waitForLoad(below: Phase0cRows.loadCeiling, deadline: 300, poll: 5)
             for i in samples.indices.sorted(by: { samples[$0] > samples[$1] }).prefix(5) {
                 let p = shows[i]
-                let quiet = Phase0.waitForLoad(below: Phase0cRows.loadCeiling, deadline: 300, poll: 5)
+                let quiet = (load: Phase0.oneMinuteLoad(), text: "")
                 let reading = Phase0.Reading(runs: (0..<5).map { _ in edit(p) })
                 let after = Phase0.oneMinuteLoad()
                 let shape = "key \(Phase0b.hash8(p.naturalKey)) \(p.recipients.count) contacts, "
@@ -898,7 +891,7 @@ extension QueueEnginePhase0cRowsProbeTests {
                 0c.5 pending contact draft edit [synthetic \(size) rows, seed 4368] \(shows.count) contacted shows given a waiting contact, \(Phase0.load()), Debug build
                   every such show edited once                         \(Phase0cRows.spread(samples).text)
                   oracle at build, before any edit                    \(atBuild.isEmpty ? "0 mismatches" : "prototype against oracle " + buildDiffering.joined(separator: "; "))
-                  oracle after the edits                              \(mismatches.count) mismatches; first edit that changed the disagreement: \(firstBreak)
+                  oracle after the edits                              \(mismatches.count) mismatches; disagreement the edits added: \(firstBreak)
                   the five slowest keys, replayed:
                     \(replays.joined(separator: "\n    "))
                   stop (any disagreement with the oracle, or the slowest key's replayed median over 1 ms, load under 8): \(verdict)\(worst.map { String(format: ", %.3f ms", $0) } ?? "")
