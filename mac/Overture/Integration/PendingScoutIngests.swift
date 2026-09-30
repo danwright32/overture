@@ -43,23 +43,45 @@ struct PendingScoutIngests {
     }
 
     private func folder(_ hash: String) -> URL { directory.appendingPathComponent(hash, isDirectory: true) }
-    func resultsURL(_ hash: String) -> URL { folder(hash).appendingPathComponent("results.json") }
-    private func entryURL(_ hash: String) -> URL { folder(hash).appendingPathComponent("entry.json") }
+    func resultsURL(_ hash: String) -> URL { folder(hash).appendingPathComponent(Self.resultsName) }
+    private func entryURL(_ hash: String) -> URL { folder(hash).appendingPathComponent(Self.entryName) }
 
-    // Writes the copy first and the entry second, so an entry never exists without the bytes it names.
+    // L617: written WHOLE or not at all. Both files go into a temporary folder (`.incoming-<uuid>`) that is
+    // then renamed into place in one step, so a crash can never leave a folder holding the results and no
+    // entry. A temporary folder a crash left behind is recovered by `list()` rather than stranded.
     // Re-recording the same bytes keeps the EARLIER entry (the older sequence), because it is the same run.
     @discardableResult
     func record(_ data: Data, sequence: Int, now: Date) throws -> Entry {
         let hash = Self.contentHash(of: data)
-        let fm = FileManager.default
-        try fm.createDirectory(at: folder(hash), withIntermediateDirectories: true)
         if let existing = try? entry(hash) { return existing }
-        try data.write(to: resultsURL(hash), options: .atomic)
-        let entry = Entry(contentHash: hash, sequence: sequence, recordedAt: now)
+        let fm = FileManager.default
+        try fm.createDirectory(at: directory, withIntermediateDirectories: true)
+        let incoming = directory.appendingPathComponent(".incoming-\(UUID().uuidString)", isDirectory: true)
+        try fm.createDirectory(at: incoming, withIntermediateDirectories: false)
+        defer { try? fm.removeItem(at: incoming) }   // gone already once it has been moved into place
+        try data.write(to: incoming.appendingPathComponent(Self.resultsName), options: .atomic)
+        try Self.encoded(Entry(contentHash: hash, sequence: sequence, recordedAt: now))
+            .write(to: incoming.appendingPathComponent(Self.entryName), options: .atomic)
+        try moveIntoPlace(incoming, hash: hash)
+        return try entry(hash)
+    }
+
+    private static let resultsName = "results.json"
+    private static let entryName = "entry.json"
+
+    private static func encoded(_ entry: Entry) throws -> Data {
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
-        try encoder.encode(entry).write(to: entryURL(hash), options: .atomic)
-        return entry
+        return try encoder.encode(entry)
+    }
+
+    // A folder already at the destination holds no readable entry (`record` returns early when it does),
+    // so it is the leftover of a crash and the finished copy replaces it.
+    private func moveIntoPlace(_ incoming: URL, hash: String) throws {
+        let fm = FileManager.default
+        let destination = folder(hash)
+        if fm.fileExists(atPath: destination.path) { try fm.removeItem(at: destination) }
+        try fm.moveItem(at: incoming, to: destination)
     }
 
     func entry(_ hash: String) throws -> Entry {
@@ -84,10 +106,16 @@ struct PendingScoutIngests {
     func list() throws -> [Listed] {
         let fm = FileManager.default
         guard fm.fileExists(atPath: directory.path) else { return [] }
+        // L617: first, anything a crash left half done. Recovery can fail too, and then the folder is
+        // reported by name below rather than skipped.
+        for name in try fm.contentsOfDirectory(atPath: directory.path) where name.hasPrefix(".incoming-") {
+            recoverIncoming(directory.appendingPathComponent(name, isDirectory: true))
+        }
         let names = try fm.contentsOfDirectory(atPath: directory.path).filter { !$0.hasPrefix(".") }.sorted()
         let listed: [Listed] = names.map { name in
-            do { return .entry(try entry(name)) } catch {
-                return .unreadable(path: entryURL(name).path, why: String(describing: error))
+            if let found = try? entry(name) { return .entry(found) }
+            do { return .entry(try recoverEntry(name)) } catch {
+                return .unreadable(path: folder(name).path, why: String(describing: error))
             }
         }
         return listed.sorted { a, b in
@@ -98,6 +126,37 @@ struct PendingScoutIngests {
             case (.unreadable(let x, _), .unreadable(let y, _)): return x < y
             }
         }
+    }
+
+    // A temporary folder a crash left before it was moved into place. With its results in it, it is moved
+    // into place (its entry recovered below if it never got one); with none, there is nothing to lose.
+    private func recoverIncoming(_ incoming: URL) {
+        let fm = FileManager.default
+        guard let data = try? Data(contentsOf: incoming.appendingPathComponent(Self.resultsName)) else {
+            try? fm.removeItem(at: incoming)
+            return
+        }
+        let hash = Self.contentHash(of: data)
+        if (try? entry(hash)) != nil {
+            try? fm.removeItem(at: incoming)
+            return
+        }
+        try? moveIntoPlace(incoming, hash: hash)
+    }
+
+    // A folder with its results and no readable entry. The run's sequence was never recorded, so it is
+    // recovered as the OLDEST reading there can be (sequence 0): the re-validation then sets it aside for
+    // any source a run has landed since, and it can never land over newer data. Its time is the results
+    // file's own. The folder's name must be the hash of the bytes in it, or it is not recovered.
+    private func recoverEntry(_ hash: String) throws -> Entry {
+        let data = try Data(contentsOf: resultsURL(hash))
+        guard Self.contentHash(of: data) == hash else {
+            throw CocoaError(.fileReadCorruptFile, userInfo: [NSFilePathErrorKey: resultsURL(hash).path])
+        }
+        let modified = (try? FileManager.default.attributesOfItem(atPath: resultsURL(hash).path))?[.modificationDate]
+        let recovered = Entry(contentHash: hash, sequence: 0, recordedAt: (modified as? Date) ?? Date())
+        try Self.encoded(recovered).write(to: entryURL(hash), options: .atomic)
+        return try entry(hash)
     }
 
     // The floor a new landing sequence is minted above. A pending entry from a session that has ended can

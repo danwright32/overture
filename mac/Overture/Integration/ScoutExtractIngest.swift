@@ -220,6 +220,9 @@ enum ScoutExtractIngest {
             token = try await landings.begin(entryPoint: .scoutExtractIngest, priority: priority,
                                              deadline: LandingSingleFlight.Deadline.scoutExtractIngest,
                                              onWait: { onWait(sequence) })
+        } catch is CancellationError {
+            outcome.notLandedYet = LandingWaitCopy.ingestCancelled
+            return outcome
         } catch {
             outcome.notLandedYet = String(describing: error)
             return outcome

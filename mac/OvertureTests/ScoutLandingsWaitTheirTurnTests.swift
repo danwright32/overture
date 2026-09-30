@@ -500,11 +500,71 @@ struct ScoutLandingsWaitTheirTurnTests {
         let offered = await ScoutExtractLanding.offerPending(clients: [], history: [], blocked: .empty, now: now,
                                                             landings: flight, pending: pending, into: ctx)
         #expect(offered.stuck == 1)
+        #expect(offered.stuckAfter == ScoutSchedule.defaultInterval)
         #expect(offered.stillWaiting == 1)
         #expect(offered.landed.isEmpty)
         #expect(try pending.list().count == 2, "a refused offer lost its copy")
-        #expect(LandingWaitCopy.offered(landed: 0, stillWaiting: 1, stuck: 1)?.contains("stuck") == true)
+        #expect(LandingWaitCopy.offered(landed: 0, stillWaiting: 1, stuck: 1,
+                                        stuckAfter: offered.stuckAfter)?.contains("stuck") == true)
         holder.end()
+    }
+
+    // L617: a copy is written whole or not at all, so nothing half written is left behind.
+    @Test func recordingACopyLeavesOnlyTheFinishedFolder() throws {
+        let dir = try sandboxes.make(named: "pending-atomic")
+        let pending = PendingScoutIngests(directory: dir)
+        let data = try JSONEncoder().encode(Self.results("whole"))
+        let entry = try pending.record(data, sequence: 4, now: now)
+        let names = try FileManager.default.contentsOfDirectory(atPath: dir.path)
+        #expect(names == [entry.contentHash], Comment(rawValue: "left behind: \(names)"))
+        #expect(try pending.list() == [.entry(entry)])
+    }
+
+    // A folder holding the results and no entry (a crash between the two writes, before this was atomic)
+    // is recovered and offered, never stranded as unreadable on every sweep. It is recovered as the OLDEST
+    // reading there can be (sequence 0), since its real sequence was never recorded, so it can never land
+    // over a source any run has landed since.
+    @Test func aCopyWhoseEntryWasNeverWrittenIsRecoveredAndOffered() async throws {
+        let c = try container()
+        let ctx = c.mainContext
+        htmlSource(in: ctx)
+        try ctx.save()
+        let dir = try sandboxes.make(named: "pending-orphan")
+        let pending = PendingScoutIngests(directory: dir)
+        let data = try JSONEncoder().encode(Self.results("orphan"))
+        let hash = PendingScoutIngests.contentHash(of: data)
+        try FileManager.default.createDirectory(at: dir.appendingPathComponent(hash), withIntermediateDirectories: true)
+        try data.write(to: pending.resultsURL(hash))
+
+        let listed = try pending.list()
+        guard case .entry(let recovered) = listed.first, listed.count == 1 else {
+            Issue.record("a results-only folder was not recovered: \(listed)")
+            return
+        }
+        #expect(recovered.contentHash == hash)
+        #expect(recovered.sequence == 0)
+
+        let flight = LandingSingleFlight(sleep: { _ in })
+        let offered = await ScoutExtractLanding.offerPending(clients: [], history: [], blocked: .empty, now: now,
+                                                            landings: flight, pending: pending, into: ctx)
+        #expect(offered.landed.count == 1)
+        #expect(try titles(ctx).filter { $0.contains("orphan") }.count == 2)
+        #expect(try pending.list().isEmpty)
+    }
+
+    // A copy written in full into its temporary folder and never moved into place is moved, not lost.
+    @Test func aCopyLeftInItsTemporaryFolderIsMovedIntoPlace() throws {
+        let dir = try sandboxes.make(named: "pending-incoming")
+        let staging = try sandboxes.make(named: "pending-incoming-staging")
+        let data = try JSONEncoder().encode(Self.results("staged"))
+        let entry = try PendingScoutIngests(directory: staging).record(data, sequence: 9, now: now)
+        try FileManager.default.moveItem(at: staging.appendingPathComponent(entry.contentHash),
+                                         to: dir.appendingPathComponent(".incoming-interrupted"))
+        let pending = PendingScoutIngests(directory: dir)
+
+        #expect(try pending.list() == [.entry(entry)])
+        let names = try FileManager.default.contentsOfDirectory(atPath: dir.path)
+        #expect(names == [entry.contentHash], Comment(rawValue: "left behind: \(names)"))
     }
 
     @Test func aNewSequenceIsMintedAboveEveryKeptCopy() throws {

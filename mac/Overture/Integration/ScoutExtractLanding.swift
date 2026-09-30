@@ -84,6 +84,8 @@ enum ScoutExtractLanding {
         var stuck = 0
         var unreadable: [String] = []
         var copiesLeftBehind: [String] = []
+        // The age past which a copy counted as stuck, carried so the sentence says the same interval.
+        var stuckAfter: TimeInterval = ScoutSchedule.defaultInterval
 
         var isEmpty: Bool {
             landed.isEmpty && stillWaiting == 0 && stuck == 0 && unreadable.isEmpty && copiesLeftBehind.isEmpty
@@ -100,7 +102,7 @@ enum ScoutExtractLanding {
                              pending: PendingScoutIngests = .live,
                              saveClosing: (ModelContext) throws -> Void = { try $0.save() },
                              into context: ModelContext) async -> Offered {
-        var offered = Offered()
+        var offered = Offered(stuckAfter: stuckAfter)
         let listed: [PendingScoutIngests.Listed]
         do {
             listed = try pending.list()

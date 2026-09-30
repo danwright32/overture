@@ -135,8 +135,13 @@ final class LandingSingleFlight {
     // Holds a place and waits. Returns at once when nothing holds the store. `onWait` runs only when the
     // caller actually has to wait, before it starts to, which is where a caller acknowledges the wait or
     // (the ingest, L665) keeps a copy of what it is holding.
+    //
+    // A caller whose task is CANCELLED leaves the queue at once and is never granted the store (it gets a
+    // `CancellationError`): RootView's Retry abandons a run by cancelling it, and a waiter granted after
+    // that would land an older reading and hold the token ahead of the run that replaced it.
     func begin(entryPoint: EntryPoint, priority: Priority, deadline: Duration,
                onWait: () -> Void = {}) async throws -> Token {
+        try Task.checkCancellation()
         if holder == nil && waiters.isEmpty {
             let token = Token(entryPoint: entryPoint, priority: priority, flight: self)
             holder = token
@@ -146,17 +151,37 @@ final class LandingSingleFlight {
         let order = nextOrder
         nextOrder += 1
         let since = now()
-        return try await withCheckedThrowingContinuation { continuation in
-            waiters.append(Waiter(order: order, entryPoint: entryPoint, priority: priority,
-                                  continuation: continuation, deadlineTask: nil, since: since))
-            let sleep = self.sleep
-            let task = Task { @MainActor [weak self] in
-                await sleep(deadline)
-                guard !Task.isCancelled else { return }
-                self?.expire(order)
+        let granted = try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                waiters.append(Waiter(order: order, entryPoint: entryPoint, priority: priority,
+                                      continuation: continuation, deadlineTask: nil, since: since))
+                let sleep = self.sleep
+                let task = Task { @MainActor [weak self] in
+                    await sleep(deadline)
+                    guard !Task.isCancelled else { return }
+                    self?.expire(order)
+                }
+                if let i = waiters.firstIndex(where: { $0.order == order }) { waiters[i].deadlineTask = task }
             }
-            if let i = waiters.firstIndex(where: { $0.order == order }) { waiters[i].deadlineTask = task }
+        } onCancel: {
+            // Runs on whatever thread cancelled; the queue is main actor state, so the leaving happens there,
+            // after the waiter has joined (the operation above appends synchronously first).
+            Task { @MainActor [weak self] in self?.leave(order) }
         }
+        // The cancellation can arrive in the same turn as the grant, before the leaving above runs. A task
+        // cancelled by the time it resumes hands the store straight on rather than landing with it.
+        if Task.isCancelled {
+            granted.end()
+            throw CancellationError()
+        }
+        return granted
+    }
+
+    private func leave(_ order: Int) {
+        guard let i = waiters.firstIndex(where: { $0.order == order }) else { return }
+        let waiter = waiters.remove(at: i)
+        waiter.deadlineTask?.cancel()
+        waiter.continuation.resume(throwing: CancellationError())
     }
 
     private func expire(_ order: Int) {
@@ -236,6 +261,20 @@ enum LandingWaitCopy {
         }
     }
 
+    // An interval in words: whole days as days, otherwise whole hours.
+    static func span(_ interval: TimeInterval) -> String {
+        let hours = max(1, Int((interval / 3_600).rounded()))
+        if hours % 24 == 0 {
+            let days = hours / 24
+            return days == 1 ? "a day" : "\(days) days"
+        }
+        return hours == 1 ? "an hour" : "\(hours) hours"
+    }
+
+    // The ingest's landing was stopped (its task cancelled) while it waited, so it never landed.
+    static let ingestCancelled = "The calendar results have not landed yet, because their landing was stopped "
+        + "while it waited for the store. Overture kept a copy of them and will offer them again."
+
     // The ingest was refused AND its copy could not be written, so the sentence above would be false.
     static func ingestRefusedWithoutACopy(_ why: String) -> String {
         "The calendar results have not landed yet, because another landing was still saving to the store, "
@@ -254,7 +293,9 @@ enum LandingWaitCopy {
     }
 
     // What the sweep of kept copies says, when it did anything at all. nil when it had nothing to report.
-    static func offered(landed: Int, stillWaiting: Int, stuck: Int) -> String? {
+    // L720: `stuckAfter` is the SAME value the sweep judged stuck by, so the sentence names what was measured.
+    static func offered(landed: Int, stillWaiting: Int, stuck: Int, stuckAfter: TimeInterval) -> String? {
+        let over = span(stuckAfter)
         var parts: [String] = []
         if landed > 0 {
             parts.append(landed == 1 ? "Calendar results that had been waiting for the store have landed."
@@ -266,8 +307,8 @@ enum LandingWaitCopy {
         }
         if stuck > 0 {
             parts.append(stuck == 1
-                ? "One set of calendar results has been stuck for over a day without landing. It is kept, and Overture will keep offering it."
-                : "\(stuck) sets of calendar results have been stuck for over a day without landing. They are kept, and Overture will keep offering them.")
+                ? "One set of calendar results has been stuck for over \(over) without landing. It is kept, and Overture will keep offering it."
+                : "\(stuck) sets of calendar results have been stuck for over \(over) without landing. They are kept, and Overture will keep offering them.")
         }
         return parts.isEmpty ? nil : parts.joined(separator: " ")
     }

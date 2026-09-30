@@ -168,6 +168,60 @@ struct LandingSingleFlightTests {
         token.end()
     }
 
+    // A waiter whose task is cancelled (RootView's Retry abandons a run that way) leaves the queue at once
+    // and is never granted the store: granted later, it would land an older reading and hold the token
+    // ahead of the run that replaced it.
+    @Test func aCancelledWaiterLeavesTheQueueAndIsNeverGranted() async throws {
+        let deadlines = ManualDeadlines()
+        let flight = LandingSingleFlight(sleep: { await deadlines.sleep($0) })
+        let holder = try await flight.begin(entryPoint: .runScoutLanding, priority: .scout, deadline: .seconds(1))
+        let abandoned = Task { @MainActor in
+            try await flight.begin(entryPoint: .runScoutLanding, priority: .danAction, deadline: .seconds(1))
+        }
+        await waitFor(flight, queued: 1)
+        abandoned.cancel()
+        await waitUntil("the cancelled waiter left the queue") { flight.queue.isEmpty }
+        do {
+            _ = try await abandoned.value
+            Issue.record("a cancelled waiter was granted the store")
+        } catch is CancellationError {
+        }
+        holder.end()
+        #expect(!flight.isHeld, "the store was handed to a waiter that had been cancelled")
+        let fresh = try await flight.begin(entryPoint: .runScoutLanding, priority: .danAction, deadline: .seconds(1))
+        #expect(flight.holder === fresh)
+        fresh.end()
+        deadlines.passAll()
+    }
+
+    @Test func aTaskCancelledBeforeItAsksNeverJoinsTheQueue() async throws {
+        let flight = LandingSingleFlight(sleep: { _ in })
+        let holder = try await flight.begin(entryPoint: .runScoutLanding, priority: .scout, deadline: .seconds(1))
+        let late = Task { @MainActor in
+            withUnsafeCurrentTask { $0?.cancel() }
+            return try await flight.begin(entryPoint: .runScoutLanding, priority: .danAction, deadline: .seconds(1))
+        }
+        do {
+            _ = try await late.value
+            Issue.record("a cancelled task was granted the store")
+        } catch is CancellationError {
+        }
+        #expect(flight.queue.isEmpty)
+        holder.end()
+        #expect(!flight.isHeld)
+    }
+
+    // L720: the stuck sentence names the interval it was judged by, from the same value.
+    @Test func theStuckSentenceSaysTheIntervalItWasJudgedBy() {
+        func line(_ after: TimeInterval) -> String {
+            LandingWaitCopy.offered(landed: 0, stillWaiting: 0, stuck: 1, stuckAfter: after) ?? ""
+        }
+        #expect(line(ScoutSchedule.defaultInterval).contains("stuck for over a day"))
+        #expect(line(2 * 86_400).contains("stuck for over 2 days"), Comment(rawValue: line(2 * 86_400)))
+        #expect(line(6 * 3_600).contains("stuck for over 6 hours"), Comment(rawValue: line(6 * 3_600)))
+        #expect(line(3_600).contains("stuck for over an hour"))
+    }
+
     @Test func theSequenceClimbsAboveTheStoreAndAboveEverythingMintedBefore() {
         let flight = LandingSingleFlight(sleep: { _ in })
         #expect(flight.mintSequence(above: 0) == 1)

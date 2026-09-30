@@ -2340,7 +2340,7 @@ struct RootView: View {
             pending: pending, into: context)
         let problems = offered.unreadable + offered.copiesLeftBehind
         if let line = LandingWaitCopy.offered(landed: offered.landed.count, stillWaiting: offered.stillWaiting,
-                                              stuck: offered.stuck) {
+                                              stuck: offered.stuck, stuckAfter: offered.stuckAfter) {
             status.set(([line] + problems).joined(separator: " "),
                        priority: offered.stuck > 0 || !problems.isEmpty ? .warning : .info)
         } else if !problems.isEmpty {
