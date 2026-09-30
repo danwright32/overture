@@ -99,23 +99,34 @@ final class FailurePathRevertProbeTests {
         return Seeded(store: RefusingStore(url: url), committed: committed)
     }
 
-    // Every stored field of every show, contact and watched source, keyed by identity, relationships as the
-    // sorted identities of their members. Read through whatever context is passed: a fresh one reads the
-    // store, the landing's own reads what a save from it would write.
+    // Every stored field of every show, contact and watched source, keyed by the row's own identity, with
+    // relationships as the sorted identities of their members. Read through whatever context is passed: a
+    // fresh one reads the store, the landing's own reads what a save from it would write. Keyed by the
+    // fixture's natural identities (natural key, contact id, source id) rather than `persistentModelID`,
+    // whose printed form differs between two containers opened on the same file (measured: every row read
+    // as present in only one of the two snapshots, with no field differing).
     static func snapshot(_ ctx: ModelContext) throws -> [String: [String]] {
         var out: [String: [String]] = [:]
+        func identity(_ model: any PersistentModel) -> String {
+            switch model {
+            case let p as Prospect: return "Prospect " + p.naturalKey
+            case let r as Recipient: return "Recipient " + r.id
+            case let w as WatchedSource: return "WatchedSource " + w.sourceId
+            default: return "\(type(of: model)) \(model.persistentModelID)"
+            }
+        }
         func render(_ value: Any?) -> String {
             guard let value else { return "nil" }
-            if let members = value as? any RevertModelArray {
-                return members.memberIDs.map { "\($0)" }.sorted().joined(separator: ",")
+            if let members = value as? [any PersistentModel] {
+                return members.map(identity).sorted().joined(separator: ",")
             }
-            if let member = value as? any RevertOptionalModel { return member.memberID.map { "\($0)" } ?? "nil" }
-            if let model = value as? any PersistentModel { return "\(model.persistentModelID)" }
+            if let model = value as? any PersistentModel { return identity(model) }
+            if value is any RevertOptionalModel { return "nil" }
             return String(describing: value)
         }
         func add<M: ScopeObserved>(_: M.Type) throws {
             for row in try ctx.fetch(FetchDescriptor<M>()) {
-                out["\(M.self) \(row.persistentModelID)"] = M.scopeFields.map { render(row[keyPath: $0.keyPath]) }
+                out[identity(row)] = M.scopeFields.map { render(row[keyPath: $0.keyPath]) }
             }
         }
         try add(Prospect.self)
