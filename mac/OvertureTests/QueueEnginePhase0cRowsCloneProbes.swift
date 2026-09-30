@@ -275,6 +275,9 @@ extension QueueEnginePhase0cRowsProbeTests {
             var geoCost = 0.0, geoRebuilt = 0, geoScan = 0.0
             // #4368: the refusal read again by Gate 0c's rule, the median of five replays with the one minute
             // load under 8 at both ends. A single sample (128.6 ms at 4x on 2026-09-29) decides nothing.
+            // REPORT ONLY here: a town refusal is judged against the plan's 100 ms per-change kind budget on
+            // the gate table, not against 0c.5's 1 ms per-row stop, so it deliberately does not feed
+            // `worstReplay`, which would fail 0c.5 for a different question.
             var geoReplayText = "no town on this store"
             if let busiest {
                 var refused = t.geo

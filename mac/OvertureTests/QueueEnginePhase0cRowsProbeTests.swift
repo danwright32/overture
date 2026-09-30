@@ -93,7 +93,7 @@ enum Phase0cRows {
         let numbers = String(format: "median %.2f ms (%.2f to %.2f)", r.median, r.low, r.high)
             + ", rows rebuilt \(rebuilt.map(String.init).joined(separator: ", "))"
         guard loadBefore < loadCeiling && loadAfter < loadCeiling else {
-            return "UNMEASURED (\(loads), the rule needs under 8): \(numbers), deciding nothing"
+            return "UNMEASURED (\(loads), the rule needs under \(String(format: "%.0f", loadCeiling))): \(numbers), deciding nothing"
         }
         return "\(numbers), \(loads)"
     }
