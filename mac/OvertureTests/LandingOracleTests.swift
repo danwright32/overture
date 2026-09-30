@@ -263,11 +263,13 @@ final class LandingOracleTests {
     }
 
     // An empty list of strings is an empty list, and a list of related rows is a count: the cast from `Any` to a
-    // list of models succeeds for EVERY empty array, so the render has to ask the array's type instead.
+    // list of models succeeds for EVERY empty array, so only a non-empty one may be read as related rows.
     @Test func anEmptyListRendersAsAListAndRelatedRowsAsACount() throws {
         #expect(LandingOracle.render([String]()) == "[]")
         #expect(LandingOracle.render(["a"]) == "[\"a\"]")
-        #expect(LandingOracle.render([Recipient]()) == "0 related")
+        #expect(LandingOracle.render([Recipient]()) == "[]")
+        let one = Recipient(id: "oracle-render", email: "render@example.invalid", provenance: .manual)
+        #expect(LandingOracle.render([one]) == "1 related")
     }
 
     // MARK: where a real-arm file may go, and what it starts with
@@ -376,6 +378,16 @@ final class LandingOracleTests {
 
     private func realArm(size: String) async throws {
         guard let frozen = frozen() else { return }
+        // Measured 2026-09-30: two processes landing the SAME frozen inputs through the SAME app code (6d3453d8
+        // recording, this branch comparing) disagreed on a handful of rows at 1x and at 4x, a window of rows
+        // shifting by one position, which is a Set or Dictionary order leaking into a decision (L1002, the
+        // plan's 0.5 hypothesis (b)). So the real arm is recorded AND compared with Swift's hash seed fixed,
+        // and refuses to run without it rather than reporting that drift as a regression. The synthetic arm
+        // has matched across every process so far and runs without it.
+        guard Self.env["SWIFT_DETERMINISTIC_HASHING"] == "1" else {
+            Issue.record("UNMEASURED: the real arm needs TEST_RUNNER_SWIFT_DETERMINISTIC_HASHING=1, because the landing is not the same across processes without it")
+            return
+        }
         guard let today = frozen.manifest.facts["today"], let nowText = frozen.manifest.facts["now"],
               let now = ISO8601DateFormatter().date(from: nowText) else {
             Issue.record("UNMEASURED: the MANIFEST does not pin today and now")
@@ -428,7 +440,7 @@ final class LandingOracleTests {
             try FileManager.default.createDirectory(at: frozen.out, withIntermediateDirectories: true)
             try LandingOracle.realArmFile(snapshot, header: [
                 "#4328 real arm, recorded from the frozen inputs. REAL DATA HASHED: never commit, never post.",
-                "inputs today \(today) now \(nowText)",
+                "inputs today \(today) now \(nowText); Swift hash seed fixed (SWIFT_DETERMINISTIC_HASHING=1)",
             ]).write(to: file, atomically: true, encoding: .utf8)
             print("landing-oracle: RECORDED real arm " + summary)
             return

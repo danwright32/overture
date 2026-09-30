@@ -196,12 +196,13 @@ main() {
     echo "landing-oracle: froze $(grep -c '^[0-9a-f]\{64\}  ' "${freeze}/MANIFEST") files to ${freeze}, read only"
   fi
 
-  # 3. The real arm on the frozen inputs.
+  # 3. The real arm on the frozen inputs, with Swift's hash seed fixed: without it two processes landing the
+  #    same inputs through the same code disagree on a few rows (measured 2026-09-30, LandingOracleTests).
   if [ -n "${inputs}" ]; then
     mkdir -p "${out}"
     OVERTURE_TEST_STALL_END_SECONDS="${OVERTURE_TEST_STALL_END_SECONDS:-3300}" \
     TEST_RUNNER_MEASURE_4275=1 TEST_RUNNER_MEASURE_4275_INPUTS="${inputs}" TEST_RUNNER_MEASURE_4275_OUT="${out}" \
-    TEST_RUNNER_LANDING_ORACLE_MODE=record \
+    TEST_RUNNER_LANDING_ORACLE_MODE=record TEST_RUNNER_SWIFT_DETERMINISTIC_HASHING=1 \
       "${runner}" "-only-testing:${suite}/realArmAt1x()" "-only-testing:${suite}/realArmAt4x()" 2>&1 | tee "${log}"
     status="${PIPESTATUS[0]}"
     local size marker
