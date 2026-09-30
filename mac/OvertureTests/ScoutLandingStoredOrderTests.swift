@@ -95,7 +95,7 @@ struct ScoutLandingStoredOrderTests {
         let everyRead = try landing(.everyRead)
         #expect(once == everyRead, Comment(rawValue:
             "the working set holds \(once) and a fresh read holds \(everyRead) after the same writes"))
-        #expect(once == ["k-01", "k-02", "k-05", "a-50", "k-07", "a-00"], Comment(rawValue:
+        #expect(once == ["k-01", "k-02", "k-05", "k-07", "a-50", "a-00"], Comment(rawValue:
             "the landing did not keep the first read's key order with its inserts after it: \(once)"))
     }
 
