@@ -23,8 +23,10 @@ enum Phase0cOrders {
         }
         var out: [String: [EngagementLink.Member]] = [:]
         for (_, titleRows) in byTitle {
-            // The product's own total order since #4346 (date, run end, venue, naturalKey). #4347 retired the
-            // date only arm, which priced the Step T sort before it shipped and could only ever read 0 after.
+            // The total order #4346 gives the product (date, run end, venue, naturalKey). Until #4346 is on main
+            // the product still walks equal nights by date alone, which is why the replica below is compared
+            // as MEMBERSHIP. #4347 retired the date only arm here, which priced the Step T sort before it
+            // shipped and reads 0 once it has.
             let sorted = titleRows.sorted {
                 ($0.performanceDate ?? "", $0.runEndDate ?? "", $0.venue ?? "", $0.id)
                     < ($1.performanceDate ?? "", $1.runEndDate ?? "", $1.venue ?? "", $1.id)
