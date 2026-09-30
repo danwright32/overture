@@ -41,7 +41,9 @@ enum CardDivergenceReport {
         // only the stamp got this wrong: after saying a divergence once, the next launch fell through to
         // "nothing has ever looked" while holding the record that proves otherwise. The stamp exists for
         // the case where there is nothing else to go on, which is an EMPTY file (L11).
-        guard found.records.isEmpty else { return nil }
+        // #4354: a CARD divergence is that proof; the queue engine's other kinds say nothing about whether
+        // the card check ran, so a file holding only those falls through to the stamp.
+        guard !found.records.contains(where: { $0.kind == .cardDivergence }) else { return nil }
         // Said ONCE per install rather than on every launch with nothing to report. A notice carrying no
         // action, delivered every time, is what teaches a person to skip the whole surface.
         guard defaults.object(forKey: CardDivergenceLog.lastRanKey) == nil,

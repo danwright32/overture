@@ -440,15 +440,21 @@ enum CardDivergenceLog {
     // a repeat and writes nothing. Returns whether a line was written.
     @discardableResult
     static func append(_ record: CardDivergenceRecord, to url: URL, through cooldown: inout Cooldown) -> Bool {
-        switch cooldown.admit(kind: record.kind, source: record.source, at: record.at) {
+        // Admitted on a copy and committed only once the line is written: a failed write that still opened
+        // the window would suppress every repeat for its length and lose the count it carried (L368).
+        var proposed = cooldown
+        switch proposed.admit(kind: record.kind, source: record.source, at: record.at) {
         case .suppressed:
+            cooldown = proposed
             return false
         case .write(let suppressedRepeats):
             let carried = CardDivergenceRecord(session: record.session, sequence: record.sequence, at: record.at,
                                                fields: record.fields, cardsBuilt: record.cardsBuilt,
                                                stage: record.stage, kind: record.kind, source: record.source,
                                                suppressedRepeats: suppressedRepeats)
-            return write(carried, to: url)
+            guard write(carried, to: url) else { return false }
+            cooldown = proposed
+            return true
         }
     }
 

@@ -183,6 +183,38 @@ struct TheDivergenceLogKeysOnKindAndSourceTests {
         #expect(lines.map(\.suppressedRepeats) == [0, 10])
     }
 
+    // A write that FAILS must not consume the window: the record was never written, so marking its pair as
+    // written would suppress every repeat for ten minutes and lose the count it carried (L368).
+    @Test func aFailedWriteLeavesTheCooldownAsItFoundIt() throws {
+        let dir = try sandboxes.make(named: "d8-append-fails")
+        let unwritable = dir.appendingPathComponent("no-such-folder/card-divergence.ndjson")
+        let url = CardDivergenceLog.url(in: dir)
+        var cooldown = CardDivergenceLog.Cooldown()
+        let t0 = Date(timeIntervalSince1970: 1_800_000_000)
+        func at(_ s: Int) -> CardDivergenceRecord {
+            CardDivergenceRecord(session: "s", sequence: s, at: t0 + Double(s), fields: [], cardsBuilt: 0,
+                                 stage: nil, kind: .noOpDirty, source: .reconcile)
+        }
+        #expect(CardDivergenceLog.append(at(0), to: url, through: &cooldown))
+        #expect(!CardDivergenceLog.append(at(1), to: url, through: &cooldown))
+        #expect(!CardDivergenceLog.append(at(2), to: url, through: &cooldown))
+        let before = cooldown
+        // After the window: the write is attempted, fails, and the window and its count are kept.
+        #expect(!CardDivergenceLog.append(at(700), to: unwritable, through: &cooldown))
+        #expect(cooldown == before, "a failed write consumed the cooldown window")
+        #expect(CardDivergenceLog.append(at(701), to: url, through: &cooldown))
+        #expect(CardDivergenceLog.read(at: url).records.map(\.suppressedRepeats) == [0, 2])
+    }
+
+    // "The file proves the check ran" is a statement about the CARD check, so only a card divergence can
+    // make it: a file holding the engine's records alone must not silence the never-ran notice (L11, L98).
+    @Test func otherKindsDoNotProveTheCardCheckRan() throws {
+        let dir = try sandboxes.make(named: "d8-never-ran")
+        try write([record(1, kind: .noOpDirty, source: .reconcile, fields: [])], to: CardDivergenceLog.url(in: dir))
+        let defaults = try #require(UserDefaults(suiteName: "d8-never-ran-\(UUID().uuidString)"))
+        #expect(CardDivergenceReport.newlyReported(in: dir, defaults: defaults) == CardDivergenceCopy.neverRan)
+    }
+
     // THE READER. Dan is told about WRONG CARDS, and a no-op dirty is not one: counted as one, a thousand of
     // them would read as a thousand cards built wrongly (L11). The other kinds are the verifier's to say
     // (#4358); here they are never said as cards.
