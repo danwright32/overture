@@ -14,7 +14,8 @@
 # owner skips scripts/install-git-hooks.sh, which is not worth a paid plan on a solo private repo. See
 # AGENTS.md for the full reasoning; this is a decision, not an outstanding to-do.
 #
-# Degrade-safe in one direction only: if the decision helper is missing this exits 0 rather than blocking
+# Degrade-safe in one direction only (the push-target check; the real-arm check below is the opposite and
+# fails closed, see #4328): if the decision helper is missing this exits 0 rather than blocking
 # a push it cannot judge, because a hook that fails a push over its own missing file would be worse than
 # the gap it closes. It never degrades the other way, into allowing main silently: the refusal below is
 # the only path that says nothing when it lets a push through.
@@ -22,13 +23,43 @@ set -uo pipefail
 
 HOOK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 GUARD="${HOOK_DIR}/../lib/push-target-guard.sh"
+REAL_ARM_GUARD="${HOOK_DIR}/../lib/real-arm-guard.sh"
 PROTECTED="main"
+
+# git hands the refs on stdin ONCE, and two guards read them.
+PUSHED_REFS="$(cat)"
+
+# #4328: no commit being pushed may carry a real-arm file (a hashed snapshot of Dan's real data, marked by
+# its first line). This one fails CLOSED, the opposite of the push-target guard below, because it protects
+# people rather than a workflow: a helper that is missing or unreadable refuses the push by name (L42,
+# L490), and so does any question it cannot answer. Checked FIRST, so a push that is also going to main is
+# still told about the data it carries. There is no override: rewrite the branch instead.
+if [ ! -r "${REAL_ARM_GUARD}" ]; then
+  echo "pre-push: REFUSED: ${REAL_ARM_GUARD} is missing or unreadable, so this push cannot be checked for" >&2
+  echo "  a real-arm file and is refused rather than let through unchecked (#4328)." >&2
+  exit 1
+fi
+# shellcheck source=../lib/real-arm-guard.sh
+source "${REAL_ARM_GUARD}"
+real_arm_found="$(printf '%s\n' "${PUSHED_REFS}" | real_arm_push_violations "${1:-origin}")"
+real_arm_status=$?
+if [ "${real_arm_status}" -ne 0 ]; then
+  echo "pre-push: REFUSED: the commits in this push could not be checked for a real-arm file (#4328)," >&2
+  echo "  and this check refuses what it cannot read rather than letting it through." >&2
+  exit 1
+fi
+if [ -n "${real_arm_found}" ]; then
+  echo "pre-push: REFUSED: a commit in this push carries a real-arm file (#4328):" >&2
+  echo "${real_arm_found}" | sed 's/^/    /' >&2
+  real_arm_refusal_text >&2
+  exit 1
+fi
 
 [ -r "${GUARD}" ] || exit 0
 # shellcheck source=../lib/push-target-guard.sh
 source "${GUARD}"
 
-violations="$(protected_push_violations "${PROTECTED}")"
+violations="$(printf '%s\n' "${PUSHED_REFS}" | protected_push_violations "${PROTECTED}")"
 [ -n "${violations}" ] || exit 0
 
 # The override is loud on purpose. The failure this exists to catch was invisible in the push output, so a

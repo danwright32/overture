@@ -91,6 +91,27 @@ jobs:
 
       - run: pnpm test
 
+  # #4328: no commit in a pull request may carry a real-arm file (a hashed snapshot of Dan's real data, marked
+  # by its first line; see scripts/lib/real-arm-guard.sh). The local pre-push hook refuses one, but a hook
+  # can be skipped with --no-verify and this repository is PUBLIC, so the same check runs here over EVERY
+  # commit in the pull request's range, not the merged tree: a file added in one commit and deleted in the
+  # next is gone from the tree and still in the history (L489). Full history is fetched because the range
+  # is walked commit by commit.
+  real-arm-scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Refuse a real-arm file in any commit of this pull request
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: scripts/real-arm-scan.sh "$BASE_SHA" "$HEAD_SHA"
+
   # The name is load bearing: a branch ruleset keys on it and cannot be found by searching this repo
   # (L305). It is deliberately the same `swift-tests` the self-hosted job used, so any ruleset written
   # against the old one starts being satisfied again rather than silently naming nothing.

@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
@@ -106,6 +106,27 @@ describe("the CI workflow's triggers", () => {
     expect(macJob, "the macOS job never compiles the Release configuration").toMatch(
       /run:\s*mac\/scripts\/check-release-compiles\.sh/,
     );
+  });
+
+  it("scans every commit of a pull request for a real-arm file, over full history (#4328)", () => {
+    // A real-arm file is a hashed snapshot of Dan's real data. The pre-push hook refuses one, but a hook can
+    // be skipped with --no-verify and this repository is public, so CI walks the pull request's COMMITS,
+    // which needs the full history: a shallow checkout would leave the range unreadable, and the scan
+    // refuses that as unmeasured rather than passing it.
+    expect(source, "no job runs scripts/real-arm-scan.sh over the pull request's base and head").toMatch(
+      /run:\s*scripts\/real-arm-scan\.sh\s+"\$BASE_SHA"\s+"\$HEAD_SHA"/,
+    );
+    expect(source).toMatch(/BASE_SHA:\s*\$\{\{\s*github\.event\.pull_request\.base\.sha\s*\}\}/);
+    expect(source).toMatch(/HEAD_SHA:\s*\$\{\{\s*github\.event\.pull_request\.head\.sha\s*\}\}/);
+    const lines = source.split("\n");
+    const at = lines.findIndex((l) => /^\s{2}real-arm-scan:\s*$/.test(l));
+    expect(at, "no real-arm-scan job").toBeGreaterThanOrEqual(0);
+    const after = lines.slice(at + 1);
+    const next = after.findIndex((l) => /^\s{2}\S[^:]*:\s*$/.test(l) || /^\S/.test(l));
+    const job = (next === -1 ? after : after.slice(0, next)).join("\n");
+    expect(job, "the real-arm scan checks out a shallow history").toMatch(/fetch-depth:\s*0\b/);
+    // The job names a script, and a pointer to a missing file runs nothing (L1004).
+    expect(existsSync(join(repoRoot, "scripts", "real-arm-scan.sh"))).toBe(true);
   });
 
   it("keeps the job on a GitHub hosted runner, never a self hosted one", () => {
