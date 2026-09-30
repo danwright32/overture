@@ -378,12 +378,11 @@ final class LandingOracleTests {
 
     private func realArm(size: String) async throws {
         guard let frozen = frozen() else { return }
-        // Measured 2026-09-30: two processes landing the SAME frozen inputs through the SAME app code (6d3453d8
-        // recording, this branch comparing) disagreed on a handful of rows at 1x and at 4x, a window of rows
-        // shifting by one position, which is a Set or Dictionary order leaking into a decision (L1002, the
-        // plan's 0.5 hypothesis (b)). So the real arm is recorded AND compared with Swift's hash seed fixed,
-        // and refuses to run without it rather than reporting that drift as a regression. The synthetic arm
-        // has matched across every process so far and runs without it.
+        // Measured 2026-09-30, all with the same app code (#4397). With Swift's hash seed fixed, 1x run ALONE in
+        // its own process matched the 6d3453d8 recording; 1x run after 104 other tests in one process did not;
+        // and 4x run alone differed in each of three runs. So the seed is fixed as one controlled condition (it
+        // removes a variable, it did NOT make 4x stable), the real arm runs only in a process of its own (the
+        // oracle script runs nothing else beside it), and no equality claim rests on 4x until #4397 closes.
         guard Self.env["SWIFT_DETERMINISTIC_HASHING"] == "1" else {
             Issue.record("UNMEASURED: the real arm needs TEST_RUNNER_SWIFT_DETERMINISTIC_HASHING=1, because the landing is not the same across processes without it")
             return

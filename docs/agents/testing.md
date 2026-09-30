@@ -902,7 +902,10 @@ the measurement it came from lives here. Read the entry before the rule decides 
   `aRealArmMismatchNamesNoTitleVenueOrPresenter` holds; so every failure text quoted in a PR comes from the
   SYNTHETIC arm. The frozen archive is written once by `scripts/landing-oracle.sh --freeze`, outside every
   checkout, read only, with a MANIFEST of content hashes that every run checks before it copies the archive
-  afresh (`UNMEASURED: inputs differ from the oracle's (<file>)` otherwise).
+  afresh (`UNMEASURED: inputs differ from the oracle's (<file>)` otherwise). Run the real arm in a test process
+  of its own, with `TEST_RUNNER_SWIFT_DETERMINISTIC_HASHING=1` (it refuses without it): measured 2026-09-30,
+  1x reproduces the recording only alone, and 4x differs run to run even so, which is #4397 and blocks any
+  equality claim on 4x until it closes.
 - **A real-arm file can never be pushed.** Its FIRST LINE is exactly the marker, and nothing else counts, so
   every file that talks about the marker builds it from two halves and pushes cleanly (L245, L673).
   `scripts/hooks/pre-push` walks every commit a push carries and refuses one that adds or modifies a marked

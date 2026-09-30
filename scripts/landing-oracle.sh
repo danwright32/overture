@@ -196,8 +196,8 @@ main() {
     echo "landing-oracle: froze $(grep -c '^[0-9a-f]\{64\}  ' "${freeze}/MANIFEST") files to ${freeze}, read only"
   fi
 
-  # 3. The real arm on the frozen inputs, with Swift's hash seed fixed: without it two processes landing the
-  #    same inputs through the same code disagree on a few rows (measured 2026-09-30, LandingOracleTests).
+  # 3. The real arm on the frozen inputs, in a process running nothing else, with Swift's hash seed fixed.
+  #    Measured 2026-09-30 (#4397): 1x reproduces only in its own process, and 4x varies run to run even so.
   if [ -n "${inputs}" ]; then
     mkdir -p "${out}"
     OVERTURE_TEST_STALL_END_SECONDS="${OVERTURE_TEST_STALL_END_SECONDS:-3300}" \
