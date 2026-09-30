@@ -69,8 +69,11 @@ struct FileStoresTests {
         do {
             let sandboxes = TemporarySandboxes()
             let made = try sandboxes.make(named: "file-stores-sandbox")
-            _ = try openStoreWithAPendingChange(in: made)
-            #expect(!FileStores.openFiles(under: made).isEmpty)
+            // Held through the positive check: the registry holds containers weakly.
+            let context = try openStoreWithAPendingChange(in: made)
+            withExtendedLifetime(context) {
+                #expect(!FileStores.openFiles(under: made).isEmpty)
+            }
             dir = made
         }
         let gone = try #require(dir)
