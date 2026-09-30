@@ -41,8 +41,11 @@ struct ShowLinkCorpusShapeTests {
         // container (#2190/#2195). THREE paths, and the early return when there is no live store to
         // clone is the one a do/catch alone does not cover.
         await RealStoreTestLock.shared.acquire()
+        // #4061: the directory whose store is released inside the lock on BOTH paths, success and throw.
+        var opened: URL?
         do {
             let dir = try sandboxes.make(named: "showlink-corpus-shape")
+            opened = dir
             guard let clone = try LiveStoreClone.makeClone(in: dir) else {
                 await RealStoreTestLock.shared.release()
                 return
@@ -118,6 +121,7 @@ struct ShowLinkCorpusShapeTests {
             FileStores.close(under: dir)
             await RealStoreTestLock.shared.release()
         } catch {
+            if let opened { FileStores.close(under: opened) }
             await RealStoreTestLock.shared.release()
             throw error
         }
@@ -148,8 +152,11 @@ struct ShowLinkCorpusShapeTests {
     @Test(.enabled(if: liveStoreExists, "no live store on this machine"))
     func theScriptAndTheShippedRuleAgreeOrTheDifferenceIsExplainedByAKnownBlindSpot() async throws {
         await RealStoreTestLock.shared.acquire()
+        // #4061: the directory whose store is released inside the lock on BOTH paths, success and throw.
+        var opened: URL?
         do {
             let dir = try sandboxes.make(named: "showlink-two-derivations")
+            opened = dir
             guard let clone = try LiveStoreClone.makeClone(in: dir) else {
                 await RealStoreTestLock.shared.release()
                 return
@@ -203,6 +210,7 @@ struct ShowLinkCorpusShapeTests {
             FileStores.close(under: dir)
             await RealStoreTestLock.shared.release()
         } catch {
+            if let opened { FileStores.close(under: opened) }
             await RealStoreTestLock.shared.release()
             throw error
         }
@@ -281,8 +289,11 @@ struct ShowLinkCorpusShapeTests {
     @Test(.enabled(if: liveStoreExists, "no live store on this machine"))
     func theGroupingCostsNoMoreThanThePassBesideIt() async throws {
         await RealStoreTestLock.shared.acquire()
+        // #4061: the directory whose store is released inside the lock on BOTH paths, success and throw.
+        var opened: URL?
         do {
             let dir = try sandboxes.make(named: "showlink-cost")
+            opened = dir
             guard let clone = try LiveStoreClone.makeClone(in: dir) else {
                 await RealStoreTestLock.shared.release()
                 return
@@ -313,6 +324,7 @@ struct ShowLinkCorpusShapeTests {
             FileStores.close(under: dir)
             await RealStoreTestLock.shared.release()
         } catch {
+            if let opened { FileStores.close(under: opened) }
             await RealStoreTestLock.shared.release()
             throw error
         }
