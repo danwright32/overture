@@ -32,7 +32,7 @@ struct ScaledCorpusKeepsListingsDistinctTests {
         do {
             let fm = FileManager.default
             let dir = fm.temporaryDirectory.appendingPathComponent("scaled-urls-\(UUID().uuidString)", isDirectory: true)
-            defer { try? fm.removeItem(at: dir) }
+            defer { FileStores.remove(dir) }
             try fm.createDirectory(at: dir, withIntermediateDirectories: true)
             guard let clone = try LiveStoreClone.makeClone(in: dir) else {
                 throw LiveStoreClone.Refusal.backupFailed("no live store on this machine")

@@ -8,13 +8,14 @@ import SwiftData
 // going out of scope) while the container over it still held the SQLite files open. SQLite logs
 // `BUG IN CLIENT OF libsqlite3.dylib: database integrity compromised by API violation: vnode unlinked
 // while in use` for every file, and that is the mild outcome. On 2026-09-29 the Phase 0c rows probe
-// left a context with UNSAVED changes over its 0c.5 store; SwiftData's autosave timer fired during
+// left a context with UNSAVED changes over its 0c.5 store; a SwiftData run loop timer fired during
 // 0c.6, faulted a row from the deleted file, threw `NSInternalInconsistencyException` and aborted
 // xctest, so a run whose readings were complete reported TEST FAILED.
 //
 // WHY RELEASING THE REFERENCES IS NOT ENOUGH, measured rather than assumed (a standalone SwiftData
-// program, 2026-09-29, on the macOS these tests run on). A `ModelContext(container)` AUTOSAVES by
-// default, and the container and context both stayed alive after every reference to them went out of
+// program, 2026-09-29, on the macOS these tests run on). In that program a `ModelContext(container)`
+// autosaved (inside xctest it does not, and a container's `mainContext` always does), and the container
+// and context both stayed alive after every reference to them went out of
 // scope and after two seconds of run loop, with the store's three files still open. Removing the
 // directory then and running the loop for eight seconds reproduced the abort exactly. What closes the
 // files is `deleteAllData()`: 0 files open straight after it, and eight seconds of run loop with the
@@ -57,6 +58,20 @@ enum FileStores {
             }
             held.removeAll { c in mine.contains { $0 === c } }
             return mine
+        }
+        // The main context autosaves by default, and one left holding unsaved changes over a destroyed
+        // store logs "No DataStores were found on the ModelContainer but ModelContext has changes" on every
+        // autosave tick for the rest of the process (measured 2026-09-29: 634 lines in seven minutes of a
+        // full suite run). Its changes are dropped first where that is legal, on the main thread; a context a
+        // test made itself is out of reach here and, built with `ModelContext(container)` inside a test
+        // process, does not autosave (measured the same day).
+        if Thread.isMainThread {
+            MainActor.assumeIsolated {
+                for container in closing {
+                    container.mainContext.autosaveEnabled = false
+                    container.mainContext.rollback()
+                }
+            }
         }
         if #available(macOS 15, *) {
             for container in closing { container.deleteAllData() }
