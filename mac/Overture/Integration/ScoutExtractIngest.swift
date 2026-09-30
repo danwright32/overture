@@ -54,6 +54,12 @@ enum ScoutExtractIngest {
                        // #4275: how the whole show table is read, injected so a test can count the reads.
                        // Every read of it this ingest makes goes through here.
                        readProspectTable: @escaping ScoutLandingStore.Read = ScoutService.readProspectTable,
+                       // #4327 step 0.7: handed the working set's cumulative counters after each LANDED source
+                       // (labelled with its source id) and once more after the reconcile's read (labelled
+                       // `Counters.afterReconcile`, and only when a reconcile ran, so a landing that reconciled
+                       // nothing never reports a reconcile), so a probe can say what each source cost. Counting only;
+                       // nil, which every shipping caller passes, reports nothing.
+                       onLandingStep: ((String, ScoutLandingStore.Counters) -> Void)? = nil,
                        into context: ModelContext) async -> ScoutService.Outcome {
         var outcome = ScoutService.Outcome(found: 0, inserted: 0, updated: 0, skipped: 0)
 
@@ -283,7 +289,9 @@ enum ScoutExtractIngest {
         for slot in slots {
             switch slot {
             case .settled(let settled): outcome.merge(settled)
-            case .pending(let pending): land(pending)
+            case .pending(let pending):
+                land(pending)
+                onLandingStep?(pending.source.sourceId, landing.counters)
             }
         }
 
@@ -310,8 +318,12 @@ enum ScoutExtractIngest {
             // The working set, which is the store as it now stands. A read that fails reconciles nothing,
             // which is what the empty answer this used to fall back to did.
             let allStored = (try? landing.rows()) ?? []
-            FeedReconcile.reconcile(stored: allStored, reports: reports, today: today)
+            landing.noteReconcile(FeedReconcile.reconcile(stored: allStored, reports: reports, today: today))
+            onLandingStep?(ScoutLandingStore.Counters.afterReconcile, landing.counters)
         }
+        // #4325: the reconcile's writes, and every source's bookkeeping above, saved before the landing
+        // returns, through the one closing save the native sweep uses. Nothing saved them before this.
+        if !ScoutService.saveLanding(landing, into: context) { outcome.saveFailed = true }
 
         return outcome
     }

@@ -97,14 +97,47 @@ enum ReachedOutQueue {
                 // replied wins, since that is the person Dan is answering and the row names them; with
                 // nobody having replied there is no such person, so it speaks for the contact due soonest,
                 // which is the one the row's own action is about.
-                let representative = live.first(where: { $0.recipient.replied }) ?? live.min { $0.next < $1.next }
+                //
+                // #4345 (plan v7 Step T, decision 13(ii)): a TOTAL order in each branch, because the first
+                // replied contact or the first at the soonest date was whichever `p.recipients` handed back
+                // first, and SwiftData hands that relationship back in a different order after a save and a
+                // refetch (Step T0 measured it). Among repliers the earliest reply, then the address, then
+                // the store's own identifier; with nobody having replied the soonest date, then the address,
+                // then the identifier. So the person the row names, and whether its pill counts it as due,
+                // no longer change between launches on unchanged data.
+                let representative = live.filter { $0.recipient.replied }.min(by: Self.earlierReplier)
+                    ?? live.min(by: Self.dueSooner)
                 guard let representative else { return nil }
                 // The DATE is the soonest across the whole show, not the representative's own, so a show
                 // cannot sit lower in the list than its most urgent contact deserves.
                 guard let soonest = live.map(\.next).min() else { return nil }
                 return (prospect: p, recipient: representative.recipient, next: soonest)
             }
-            .sorted { $0.next < $1.next }
+            // #4345: equal dates by the show's natural key, so two shows due at one moment keep one order
+            // rather than the order the rows arrived in.
+            .sorted { ($0.next, $0.prospect.naturalKey) < ($1.next, $1.prospect.naturalKey) }
+    }
+
+    // #4345: the representative's two orders, named so each branch reads as the rule it is. An address a
+    // form contact lacks sorts as empty; the identifier is last and only separates two contacts carrying
+    // one address, which is the case an address alone would leave to the relationship's order.
+    private static func earlierReplier(_ a: (recipient: Recipient, next: Date),
+                                       _ b: (recipient: Recipient, next: Date)) -> Bool {
+        let (ra, rb) = (a.recipient.replyArrivedAt ?? .distantFuture, b.recipient.replyArrivedAt ?? .distantFuture)
+        if ra != rb { return ra < rb }
+        return addressThenIdentifier(a.recipient, b.recipient)
+    }
+
+    private static func dueSooner(_ a: (recipient: Recipient, next: Date),
+                                  _ b: (recipient: Recipient, next: Date)) -> Bool {
+        if a.next != b.next { return a.next < b.next }
+        return addressThenIdentifier(a.recipient, b.recipient)
+    }
+
+    private static func addressThenIdentifier(_ a: Recipient, _ b: Recipient) -> Bool {
+        let (ea, eb) = (a.email ?? "", b.email ?? "")
+        if ea != eb { return ea < eb }
+        return a.persistentModelID < b.persistentModelID
     }
 
     // Contacted recipients with outreach still active, soonest next-reach-out first.

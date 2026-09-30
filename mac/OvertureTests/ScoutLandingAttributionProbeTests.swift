@@ -15,7 +15,8 @@ import AppKit
 //     -only-testing:OvertureTests/ScoutLandingAttributionProbeTests
 //
 // Optional: TEST_RUNNER_MEASURE_4275_SIZES=1,2,4 (store multiples), TEST_RUNNER_MEASURE_4275_ROUNDS=3,
-// TEST_RUNNER_MEASURE_4275_ARMS=noview,queue (add `fields` for #4106 Phase 1a's per field write count). A 4x run holds one test for over 20 minutes, so give it
+// TEST_RUNNER_MEASURE_4275_ARMS=noview,queue (add `fields` for #4106 Phase 1a's per field write count,
+// or `carry,carrysaved` for #4327 step 0.5's pending writes between rounds, with autosave off). A 4x run holds one test for over 20 minutes, so give it
 // OVERTURE_TEST_STALL_END_SECONDS=3300 or the runner's stall guard ends it as hung (measured, #4275).
 //
 // WHAT IT DOES. At each store size it lands the recorded scout extract results through the app's own
@@ -308,6 +309,11 @@ struct ScoutLandingAttributionProbeTests {
                                         settleDeadline: settleDeadline)
                     continue
                 }
+                if arm == "carry" || arm == "carrysaved" {
+                    try await carryArm(inputs, into: ctx, saves: saves, factor: factor,
+                                       saveBetweenRounds: arm == "carrysaved", settleDeadline: settleDeadline)
+                    continue
+                }
                 var window: NSWindow?
                 var hosting: NSView?
                 if arm == "queue" {
@@ -338,6 +344,39 @@ struct ScoutLandingAttributionProbeTests {
             }
         }
     }
+    // #4327 step 0.5: why identical 4x re-lands wrote 819 rows on some rounds and 214 on others. The
+    // hypothesis (c) is that the landing's closing FeedReconcile writes (#4325) are left unsaved, so the next
+    // round's first save carries them INSIDE its window unless an autosave flushed them between rounds. With
+    // autosave OFF the carry cannot be flushed by chance, so it is read directly: whether the context holds
+    // changes, and how many Prospect rows are pending, at each round's end and at the next round's start.
+    // `carrysaved` is the control the plan names: an explicit save OUTSIDE the window after each round, which
+    // must make the carry vanish if (c) is the cause. Counts only (L222).
+    private func carryArm(_ inputs: Inputs, into ctx: ModelContext, saves: Phase0SaveLog, factor: Int,
+                          saveBetweenRounds: Bool, settleDeadline: Int) async throws {
+        let arm = saveBetweenRounds ? "carrysaved" : "carry"
+        let wasAutosaving = ctx.autosaveEnabled
+        ctx.autosaveEnabled = false
+        defer { ctx.autosaveEnabled = wasAutosaving }
+        func pending() -> String {
+            let prospects = ctx.changedModelsArray.filter { $0 is Prospect }.count
+            let sources = ctx.changedModelsArray.filter { $0 is WatchedSource }.count
+            return "hasChanges \(ctx.hasChanges), pending Prospect rows \(prospects), pending WatchedSource rows "
+                + "\(sources), pending inserts \(ctx.insertedModelsArray.count)"
+        }
+        for round in 0...LandingProbe.rounds {
+            let name = round == 0 ? "warm up" : "round \(round)"
+            LandingProbe.say("x\(factor) \(arm) \(name) start: " + pending())
+            let l = try await land(inputs, into: ctx, hosting: nil, saves: saves, sampleSeconds: nil,
+                                   sampleFile: nil, settleDeadline: settleDeadline)
+            LandingProbe.say("x\(factor) \(arm) \(name): saves \(l.saves), rows written \(l.rowsWritten), "
+                             + "saveFailed \(l.outcome.saveFailed); end: " + pending())
+            if saveBetweenRounds && ctx.hasChanges {
+                try ctx.save()
+                LandingProbe.say("x\(factor) \(arm) \(name) saved outside the window: " + pending())
+            }
+        }
+    }
+
     // #4106 Phase 1a: which STORED FIELDS a re-land writes, and which it really changes. Observation is armed
     // on every stored property of every show (`ScopeFields`, held to the schema), one tracking per field so a
     // fire names its field, and a value snapshot before and after says which fires changed anything. Its own
@@ -375,6 +414,124 @@ struct ScoutLandingAttributionProbeTests {
                          + "changed \(changed); fired by field: " + list(byField)
                          + "; changed by field: " + list(changedByField) + ", " + Phase0.load())
         withExtendedLifetime(rows) {}
+    }
+
+    // #4327 step 0.7 (RC4): the working set's counters PER SOURCE, on a pure re-land and on a landing that
+    // INSERTS, so A4 is sized from counts rather than from a reading of `ScoutLandingStore`. OPT IN, with its
+    // own switch because it takes no samples and holds no view:
+    //
+    //   TEST_RUNNER_MEASURE_4275=1 TEST_RUNNER_MEASURE_4327_COUNTERS=1 TEST_RUNNER_MEASURE_4275_SIZES=1,4 \
+    //     mac/scripts/run-tests-locked.sh -only-testing:OvertureTests/ScoutLandingAttributionProbeTests
+    //
+    // Optional: TEST_RUNNER_MEASURE_4327_NEW_SHARE=0.1 (the share of each source's events added as NEW shows).
+    //
+    // The inserting variant is built HERE, in memory, and never written anywhere: for each source, a stated
+    // share of its own events is copied with a synthetic title and a synthetic link, keeping the event's real
+    // venue, night and presenter, so every new show lands at a real venue in a real listing. The titles and
+    // links carry the round, so a second round inserts again rather than re-landing the first round's rows.
+    // Sources are named by their position in the results file, never by id (L222).
+    @Test(.enabled(if: Phase0.liveStoreExists, "no live store on this machine"))
+    func workingSetCountersPerSource() async throws {
+        guard LandingProbe.enabled, LandingProbe.env["MEASURE_4327_COUNTERS"] != nil else {
+            print("probe4327: not measured. Set TEST_RUNNER_MEASURE_4275=1 TEST_RUNNER_MEASURE_4327_COUNTERS=1.")
+            return
+        }
+        let share = Double(LandingProbe.env["MEASURE_4327_NEW_SHARE"] ?? "") ?? 0.1
+        let handoff = StoreLocation.handoffDirectory(appSupport: StoreLocation.appSupport, isDebugBuild: false)
+        let inputsDir = try sandboxes.make(named: "probe4327-inputs")
+        func copied(_ name: String) -> URL {
+            let to = inputsDir.appendingPathComponent(name)
+            try? FileManager.default.copyItem(at: handoff.appendingPathComponent(name), to: to)
+            return to
+        }
+        let resultsCopy = copied("overture-scout-extract-results.json")
+        let exportCopy = copied("downbeat-export.json")
+        let historyCopy = copied("overture-history.json")
+        guard let data = try? Data(contentsOf: resultsCopy),
+              let results = try? ScoutExtractResultsDecoder.decode(data) else {
+            LandingProbe.say("counters UNMEASURED: no readable scout extract results on this machine")
+            return
+        }
+        let dir = try sandboxes.make(named: "probe4327-stores")
+        guard let base = try LiveStoreClone.makeClone(in: dir) else {
+            throw LiveStoreClone.Refusal.backupFailed("no live store on this machine")
+        }
+        let position = Dictionary(uniqueKeysWithValues: results.results.enumerated().map { ($1.sourceId, $0 + 1) })
+        let eventsBySource = Dictionary(uniqueKeysWithValues: results.results.map { ($0.sourceId, $0.events.count) })
+
+        for factor in LandingProbe.sizes {
+            let url = factor == 1 ? base : try Phase0.scaledCopy(of: base, factor: factor, in: dir)
+            let container = try Phase0.openContainer(at: url)
+            defer { withExtendedLifetime(container) {} }
+            let ctx = container.mainContext
+            let existing = try ctx.fetch(FetchDescriptor<Prospect>())
+            let loaded = DownbeatBridge.loadWithHealth(from: exportCopy, now: Date())
+            let inputs = Inputs(
+                results: results, clients: loaded.clients,
+                history: LocalHistory.forMatching(existing: existing, importedFrom: historyCopy),
+                blocked: ScoutService.blockedCalendar(export: (loaded.bookings, loaded.blockedDates, loaded.health),
+                                                      context: ctx))
+            LandingProbe.say("counters x\(factor): \(existing.count) shows, \(results.results.count) sources, "
+                             + Phase0.load())
+            // Warm up, unreported: the recorded results were already landed once into the live store, and this
+            // makes every landing below a RE-LAND of the same file, as the attribution arms are.
+            _ = await ScoutExtractIngest.ingest(results, clients: inputs.clients, history: inputs.history,
+                                                blocked: inputs.blocked, into: ctx)
+            try? ctx.save()
+
+            for (variant, landed) in [("reland", results), ("inserting", Self.inserting(results, share: share,
+                                                                                         round: factor))] {
+                let wait = Phase0.waitForLoad(below: 8, deadline: 1800, poll: 5)
+                var steps: [(String, ScoutLandingStore.Counters, Double)] = []
+                let t0 = Phase0.now()
+                let outcome = await ScoutExtractIngest.ingest(
+                    landed, clients: inputs.clients, history: inputs.history, blocked: inputs.blocked,
+                    onLandingStep: { steps.append(($0, $1, Phase0.ms(since: t0))) }, into: ctx)
+                let total = Phase0.ms(since: t0)
+                try? ctx.save()
+                let added = landed.results.reduce(0) { $0 + $1.events.count }
+                    - results.results.reduce(0) { $0 + $1.events.count }
+                LandingProbe.say("counters x\(factor) \(variant): \(landed.results.count) sources, \(added) synthetic "
+                                 + "new-show events added, outcome inserted \(outcome.inserted) updated "
+                                 + "\(outcome.updated) skipped \(outcome.skipped), ingest \(LandingProbe.f1(total)) ms; "
+                                 + wait.text + ", " + Phase0.load())
+                var previous = ScoutLandingStore.Counters()
+                var previousMs = 0.0
+                // The landing loop begins after the read phase; the first step's time includes that read.
+                for (label, counters, ms) in steps {
+                    let d = counters - previous
+                    let name = label == ScoutLandingStore.Counters.afterReconcile
+                        ? "after the reconcile" : "source \(position[label] ?? 0), \(eventsBySource[label] ?? 0) recorded events"
+                    LandingProbe.say("counters x\(factor) \(variant) \(name): +\(LandingProbe.f1(ms - previousMs)) ms; "
+                                     + d.description)
+                    previous = counters
+                    previousMs = ms
+                }
+                LandingProbe.say("counters x\(factor) \(variant) TOTAL: " + previous.description)
+            }
+        }
+    }
+
+    // The inserting variant of a results file: per source, `share` of its events (rounded, at least one where
+    // the source has any) copied as new shows at the same venue, night and presenter, with a title and a link
+    // no stored show carries. In memory only.
+    static func inserting(_ results: ScoutExtractResults, share: Double, round: Int) -> ScoutExtractResults {
+        var out = results
+        for (s, result) in results.results.enumerated() where !result.events.isEmpty {
+            let n = max(1, Int((Double(result.events.count) * share).rounded()))
+            let stride = max(1, result.events.count / n)
+            var added: [ScoutExtractEvent] = []
+            for i in 0..<n {
+                var e = result.events[(i * stride) % result.events.count]
+                let tag = "\(round)s\(s)e\(i)"
+                e.title = "Probe Synthetic Recital \(tag)"
+                e.sourceUrl = e.sourceUrl.map { $0 + ($0.hasSuffix("/") ? "" : "/") + "probe4327-\(tag)" }
+                e.seriesId = nil
+                added.append(e)
+            }
+            out.results[s].events += added
+        }
+        return out
     }
 
     // The unit the landing's samples are dominated by, timed on its own: one whole-store Prospect fetch on a

@@ -221,8 +221,10 @@ struct Phase0cProducerTables {
     private(set) var venuesByPresenter: [String: [String: Int]] = [:]
     private var venueWordSet: [String: Set<String>] = [:]
     private var presenterWordSet: [String: Set<String>] = [:]
-    private var venueWords: [String: Set<String>] = [:]
-    private var presenterWords: [String: Set<String>] = [:]
+    // #4353 (Step W): the product's own word candidate function, one instance per side. The word SETS
+    // above stay, because the subset test in `sameRoom` needs them; they are built from the same split.
+    private var venueWords = ProducerGate.WordPostings()
+    private var presenterWords = ProducerGate.WordPostings()
     private(set) var witnesses: [String: Set<String>] = [:]
     private(set) var witnessedBy: [String: Set<String>] = [:]
     private(set) var brand: Set<String> = []
@@ -291,7 +293,7 @@ struct Phase0cProducerTables {
     }
 
     private static func wordSet(_ key: String) -> Set<String> {
-        Set(key.split(separator: " ").map(String.init))
+        Set(ProducerGate.WordPostings.words(of: key).map(String.init))
     }
 
     /// `containsAsWords` in either direction, behind the necessary condition that the needle's words are a
@@ -303,10 +305,8 @@ struct Phase0cProducerTables {
 
     private func findWitnesses(_ p: String, tests: inout Int) -> Set<String> {
         guard let pw = presenterWordSet[p] else { return [] }
-        var candidates = Set<String>()
-        for w in pw { if let hits = venueWords[w] { candidates.formUnion(hits) } }
         var found = Set<String>()
-        for v in candidates {
+        for v in venueWords.keys(sharingAWordWith: p) {
             tests += 1
             if Self.sameRoom(p, pw, v, venueWordSet[v]!) { found.insert(v) }
         }
@@ -316,28 +316,22 @@ struct Phase0cProducerTables {
     private mutating func addVenueWords(_ v: String) {
         let ws = Self.wordSet(v)
         venueWordSet[v] = ws
-        for w in ws { venueWords[w, default: []].insert(v) }
+        venueWords.insert(v)
     }
 
     private mutating func removeVenueWords(_ v: String) {
-        for w in venueWordSet[v] ?? [] {
-            venueWords[w]?.remove(v)
-            if venueWords[w]?.isEmpty == true { venueWords[w] = nil }
-        }
+        venueWords.remove(v)
         venueWordSet[v] = nil
     }
 
     private mutating func addPresenterWords(_ p: String) {
         let ws = Self.wordSet(p)
         presenterWordSet[p] = ws
-        for w in ws { presenterWords[w, default: []].insert(p) }
+        presenterWords.insert(p)
     }
 
     private mutating func removePresenterWords(_ p: String) {
-        for w in presenterWordSet[p] ?? [] {
-            presenterWords[w]?.remove(p)
-            if presenterWords[w]?.isEmpty == true { presenterWords[w] = nil }
-        }
+        presenterWords.remove(p)
         presenterWordSet[p] = nil
     }
 
@@ -427,9 +421,7 @@ struct Phase0cProducerTables {
         // A venue key that APPEARS is tested ONCE against each presenter sharing a word with it.
         for v in newVenues {
             let vw = venueWordSet[v]!
-            var candidates = Set<String>()
-            for w in vw { if let hits = presenterWords[w] { candidates.formUnion(hits) } }
-            for p in candidates where !newPresenters.contains(p) {
+            for p in presenterWords.keys(sharingAWordWith: v) where !newPresenters.contains(p) {
                 tests += 1
                 guard Self.sameRoom(p, presenterWordSet[p]!, v, vw) else { continue }
                 witnesses[p, default: []].insert(v)
@@ -843,9 +835,11 @@ enum Phase0cT5Check {
 
 /// A TEST-ONLY prototype of plan v7 T6: `titleKey -> Set<PID>` over drawn, dated rows, re-clustering only
 /// the titles a change touches (its old and its new), under either chain rule of decision 18:
-/// (a) today's, a row joins when within `RunGrouping.gapDays` of the last night of the row appended LAST;
-/// (b) the answered one, measured from the cluster's LATEST last night so far.
-/// Rows sort by (date, natural key), which is the canonical wrapper's order. Dates are pre-folded to day
+/// (a) the rule before #4347, a row joins when within `RunGrouping.gapDays` of the last night of the row
+/// appended LAST; (b) the answered one the product runs since #4347, measured from the cluster's LATEST last
+/// night so far.
+/// Rows sort by (date, run end, room, natural key), the product's own total order since plan v7 Step T
+/// (#4346), so the prototype walks the rows in the order the product does. Dates are pre-folded to day
 /// ordinals once per row, so a rebuild does no calendar work.
 struct Phase0cEngagement {
     enum Rule: String, CaseIterable {
@@ -859,6 +853,7 @@ struct Phase0cEngagement {
         let venue: String?
         let venueCanon: String
         let date: String?
+        let runEnd: String?
         let dateOrd: Int?
         let lastOrd: Int?
         let drawn: Bool
@@ -883,7 +878,7 @@ struct Phase0cEngagement {
         let last = EasternDate.runLastNight(runEndDate: s.runEnd, performanceDate: s.date)
         return Slice(key: s.key, title: GroupNameMatch.normalize(s.groupName), venue: s.venue,
                      venueCanon: (s.venue ?? "").lowercased().trimmingCharacters(in: .whitespaces),
-                     date: s.date, dateOrd: s.date.flatMap { EasternDate.daysUntil(from: anchor, to: $0) },
+                     date: s.date, runEnd: s.runEnd, dateOrd: s.date.flatMap { EasternDate.daysUntil(from: anchor, to: $0) },
                      lastOrd: last.flatMap { EasternDate.daysUntil(from: anchor, to: $0) }, drawn: s.drawn)
     }
 
@@ -907,7 +902,10 @@ struct Phase0cEngagement {
     /// Each row's cluster, as its members' pids, for one title (used to count membership differences).
     func clusters(_ title: String) -> [[Int]] {
         let members = (byTitle[title] ?? []).map { ($0, rows[$0]!) }
-            .sorted { ($0.1.date!, $0.1.key) < ($1.1.date!, $1.1.key) }
+            .sorted {
+                ($0.1.date!, $0.1.runEnd ?? "", $0.1.venue ?? "", $0.1.key)
+                    < ($1.1.date!, $1.1.runEnd ?? "", $1.1.venue ?? "", $1.1.key)
+            }
         var clusters: [[(Int, Slice)]] = []
         var latest: Int? = nil
         for m in members {
@@ -1005,7 +1003,10 @@ enum Phase0cT6Check {
         var out: [String: [EngagementLink.Member]] = [:]
         for title in Set(dated.map { GroupNameMatch.normalize($0.groupName) }) {
             let ordered = dated.filter { GroupNameMatch.normalize($0.groupName) == title }
-                .sorted { ($0.performanceDate!, $0.id) < ($1.performanceDate!, $1.id) }
+                .sorted {
+                    ($0.performanceDate!, $0.runEndDate ?? "", $0.venue ?? "", $0.id)
+                        < ($1.performanceDate!, $1.runEndDate ?? "", $1.venue ?? "", $1.id)
+                }
             var clusters: [[EngagementLink.Row]] = []
             for r in ordered {
                 let latest = clusters.last?.compactMap(lastNight).max()
@@ -1028,7 +1029,11 @@ enum Phase0cT6Check {
 
     static func truth(_ rule: Phase0cEngagement.Rule, _ drawn: [EngagementLink.Row]) -> [String: [EngagementLink.Member]] {
         switch rule {
-        case .lastAppended: return CanonicalOracle.engagementLink(drawn)
+        // #4347: the product runs rule (b) now, so rule (a) is judged against its restatement in the 0c.10
+        // probe, over the product's own total order, and (b) against the brute force below. The PRODUCT is
+        // held to (b)'s brute force as membership at the end of every harness run (t6EngagementPatchMatchesBothRules),
+        // now that #4346's total order and #4347's rule are both on main; EngagementLinkTests holds its cases.
+        case .lastAppended: return Phase0cOrders.engagement(drawn, rule: .lastAppended)
         case .clusterLatest: return bruteClusterLatest(drawn)
         }
     }
@@ -1133,7 +1138,7 @@ enum Phase0cFixtures {
         case 10:
             // A venue spelled from the corpus's commonest words, so it shares a word with nearly everyone.
             var freq: [String: Int] = [:]
-            for s in w.shows.values { for word in (ProducerGate.key(s.venue) ?? "").split(separator: " ") { freq[String(word), default: 0] += 1 } }
+            for s in w.shows.values { for word in ProducerGate.WordPostings.words(of: ProducerGate.key(s.venue) ?? "") { freq[String(word), default: 0] += 1 } }
             let common = freq.sorted { $0.value != $1.value ? $0.value > $1.value : $0.key < $1.key }.prefix(5).map(\.key)
             next.shows[next.nextPid] = ProducerGate.Show(presenter: w.shows[anyPid()]!.presenter,
                                                          venue: common.joined(separator: " "))
@@ -1615,8 +1620,18 @@ struct QueueEnginePhase0cProducersProbeTests {
                     end: { w, at in
                         // The canonical oracle is order independent: reversed input gives the same answer.
                         let rows = Phase0cT6Check.drawnRows(w)
-                        return Phase0cT6Check.truth(rule, rows) == Phase0cT6Check.truth(rule, rows.reversed())
+                        var bad = Phase0cT6Check.truth(rule, rows) == Phase0cT6Check.truth(rule, rows.reversed())
                             ? [] : ["\(at): the \(rule.rawValue) truth depends on input order"]
+                        // The PRODUCT is held to rule (b)'s brute force as membership, now that #4346's total
+                        // order and #4347's rule are both on main (the follow-up #4347's PR recorded).
+                        if rule == .clusterLatest {
+                            let product = EngagementLink.group(rows)
+                            let brute = Phase0cT6Check.truth(.clusterLatest, rows)
+                            let differing = Set(product.keys).union(brute.keys)
+                                .filter { Set(product[$0] ?? []) != Set(brute[$0] ?? []) }.count
+                            if differing > 0 { bad.append("\(at): EngagementLink.group differs from rule (b)'s brute force on \(differing) titles") }
+                        }
+                        return bad
                     })
                 F.say("0c.4 T6 harness \(rule.rawValue) [\(size) rows] \(run.transitions) transitions checked in "
                       + String(format: "%.0f ms", Phase0.ms(since: started)) + ", failures \(run.failures.count), "
@@ -1751,7 +1766,7 @@ struct QueueEnginePhase0cProducersProbeTests {
             // The adversarial venue (the corpus's six commonest venue words, weighted by rows), and one venue
             // key added and removed twenty times running.
             var freq: [String: Int] = [:]
-            for v in venueKeys { for w in v.split(separator: " ") { freq[String(w), default: 0] += pidsByVenue[v]!.count } }
+            for v in venueKeys { for w in ProducerGate.WordPostings.words(of: v) { freq[String(w), default: 0] += pidsByVenue[v]!.count } }
             let adversarial = freq.sorted { $0.value != $1.value ? $0.value > $1.value : $0.key < $1.key }
                 .prefix(6).map(\.key).joined(separator: " ")
             let somePresenter = world[firstPidOf.values.min()!]!.presenter

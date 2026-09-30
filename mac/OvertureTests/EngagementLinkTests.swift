@@ -60,6 +60,34 @@ struct EngagementLinkTests {
         #expect(out["1"] == [EngagementLink.Member(venue: "Venue B", date: "2026-07-06")])
     }
 
+    // #4347, plan v7 decision 18(b): a one-night show nested inside a long run no longer pulls the
+    // engagement's end back to its own night. The room three weeks into the run is measured from the RUN's
+    // closing night, the latest the engagement has reached, so it joins. Under the old rule it was measured
+    // from the nested show (eighteen days back, past the gap) and was split off while falling inside the run.
+    @Test func aRoomInsideALongRunJoinsAfterANestedOneNightShow() {
+        let out = EngagementLink.group([
+            row("run", "Tour", "2026-07-01", venue: "Venue A", runEndDate: "2026-07-30"),
+            row("nested", "Tour", "2026-07-02", venue: "Venue B"),
+            row("inside", "Tour", "2026-07-20", venue: "Venue C"),
+        ])
+        #expect(Set(out["inside"] ?? []) == Set([
+            EngagementLink.Member(venue: "Venue A", date: "2026-07-01"),
+            EngagementLink.Member(venue: "Venue B", date: "2026-07-02"),
+        ]))
+        #expect(out["run"]?.count == 2)
+    }
+
+    // And the latest night is still the only anchor: past the gap from it, a row starts a new engagement.
+    @Test func aRoomPastTheRunsLatestNightStillStartsAnew() {
+        let out = EngagementLink.group([
+            row("run", "Tour", "2026-07-01", venue: "Venue A", runEndDate: "2026-07-10"),
+            row("nested", "Tour", "2026-07-02", venue: "Venue B"),
+            row("after", "Tour", "2026-07-14", venue: "Venue C"),
+        ])
+        #expect(out["after"] == nil)
+        #expect(Set(out["run"] ?? []) == [EngagementLink.Member(venue: "Venue B", date: "2026-07-02")])
+    }
+
     // Separate runs of the same act at the SAME venue are RunGrouping's existing job
     // (partOfRelatedRun); EngagementLink must stay out of that case, not double-report it.
     @Test func doesNotReportASingleVenueClusterEvenWithinTheGap() {

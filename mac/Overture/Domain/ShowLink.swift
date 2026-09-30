@@ -368,7 +368,12 @@ enum ShowLink {
             }
             var byRoot: [String: [Row]] = [:]
             for row in members { byRoot[find.root(row.id), default: []].append(row) }
-            out.append(contentsOf: byRoot.values)
+            // #4344 (plan v7 Step T, decision 13(vii)): each cluster's members in natural key order, so
+            // `group`'s member lists and `collapse`'s front member lists no longer follow the order the
+            // rows arrived in. Membership never depended on it (the closure is the same whatever the walk
+            // order); only the arrays did, and Step T0 reproduced exactly that. Invisible: the one reader
+            // of each counts or sets them (plan fact 11), which is why no copy changes.
+            out.append(contentsOf: byRoot.values.map { cluster in cluster.sorted { $0.id < $1.id } })
         }
         return out
     }

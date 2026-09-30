@@ -164,9 +164,18 @@ struct ScoutReLandWritesNothingTests {
     // What every save of `ctx` carried, by identifier, so the dirty set is read from the store's own
     // account of the writes rather than from the observation it is checking.
     final class SaveTap: @unchecked Sendable {
+        // #4327 step 0.3: one entry per save, in order, so a probe can say WHICH save carried a row, and
+        // whether each key was present at all rather than reading an absent key as an empty set (L98).
+        struct Save {
+            let inserted: [PersistentIdentifier]
+            let updated: [PersistentIdentifier]
+            let deleted: [PersistentIdentifier]
+            let keysPresent: Set<String>
+        }
         private let lock = NSLock()
         private var ids: Set<PersistentIdentifier> = []
         private var others = 0
+        private var entries: [Save] = []
         private var token: NSObjectProtocol?
         init(_ ctx: ModelContext) {
             token = NotificationCenter.default.addObserver(forName: ModelContext.didSave, object: ctx,
@@ -178,14 +187,17 @@ struct ScoutReLandWritesNothingTests {
                     as? [PersistentIdentifier] ?? []
                 let deleted = info[ModelContext.NotificationKey.deletedIdentifiers.rawValue]
                     as? [PersistentIdentifier] ?? []
-                self?.add(updated, others: inserted.count + deleted.count)
+                let keys = Set(info.keys.map { String(describing: $0) })
+                self?.add(updated, others: inserted.count + deleted.count,
+                          entry: Save(inserted: inserted, updated: updated, deleted: deleted, keysPresent: keys))
             }
         }
-        private func add(_ updated: [PersistentIdentifier], others count: Int) {
-            lock.lock(); ids.formUnion(updated); others += count; lock.unlock()
+        private func add(_ updated: [PersistentIdentifier], others count: Int, entry: Save) {
+            lock.lock(); ids.formUnion(updated); others += count; entries.append(entry); lock.unlock()
         }
         var updated: Set<PersistentIdentifier> { lock.lock(); defer { lock.unlock() }; return ids }
         var insertedOrDeleted: Int { lock.lock(); defer { lock.unlock() }; return others }
+        var saves: [Save] { lock.lock(); defer { lock.unlock() }; return entries }
         func stop() { if let token { NotificationCenter.default.removeObserver(token) } }
     }
 
@@ -309,6 +321,148 @@ struct ScoutReLandWritesNothingTests {
         #expect(count == 1 && beyond.values.first == ["location"], Comment(rawValue:
             "a changed location should fire exactly one field beyond the residue, fired: " + Self.describe(beyond)
             + " (armed \(fires.armed), every fire: " + Self.describe(fires.byRow) + ")"))
+    }
+
+    // #4327 step 0.3: does `didSave` carry identifier SETS under a landing on this SDK?
+    //
+    // WHY IT IS ASKED. Several later steps of the scout landing plan (discussion #4326, revision 5) read a
+    // landing's writes from what each save carried rather than from observation: A5's revert set, A12's write
+    // set, D4's remap. All of them assume `didSave` names every inserted, updated and deleted row by identifier,
+    // under a landing that is not the steady re-land the tests above run: several sources, a row deleted while
+    // the landing is between sources, and a lead pasted mid landing through `LeadIntakeModel.importAll`, which
+    // saves through the same context on a route of its own. Phase C splits the landing across main actor
+    // yields, and those two interleavings are exactly what a yield lets in.
+    //
+    // THE LANDING, in the order it runs: source A lands with one NEW show (so a landing save carries an
+    // insert), a lead is pasted and imported (its own save, its own insert), a show source A lists is deleted,
+    // source B lands (its save is the one that must carry the delete), and the reconcile's writes go in one
+    // closing save. The identifiers the saves named are then compared against the rows the store really holds.
+    //
+    // SEEN RED WHEN THE DELETE IS REMOVED: the deleted set is asserted to be exactly the deleted show, so a run
+    // without the `ctx.delete` fails on it, which is what proves this reads the deleted key rather than an
+    // empty list that would satisfy a weaker check (L159, L98).
+    @Test func aMultiSourceLandingsSavesNameEveryRowTheyInsertUpdateAndDelete() async throws {
+        let (container, ctx) = try Self.seeded()
+        defer { withExtendedLifetime(container) {} }
+        // This test AWAITS (the paste), so an autosave could land inside it and add a save nobody made; every
+        // save counted below must be one the landing or the paste made itself (#3874's timer, 14.5 s in 0.2).
+        ctx.autosaveEnabled = false
+        let saves = SaveTap(ctx)
+        defer { saves.stop() }
+
+        let landing = ScoutLandingStore(context: ctx)
+        var reports: [FeedReconcile.SourceReport] = []
+
+        // Source A, with one show the store has never held.
+        let fresh = Self.event("Fresh Evening", "2026-11-22")
+        let a = ScoutService.apply(events: Self.sourceA() + [fresh], clients: [Self.client], history: [],
+                                   blocked: Self.blocked, feed: Self.feed("src-a"), today: Self.today,
+                                   sourceIds: ["src-a"], landing: landing, into: ctx)
+        reports += a.allReports
+        let afterA = saves.saves.count
+
+        // A lead pasted mid landing, through the real paste path with only its network and reader faked.
+        let lead = ScoutExtractEvent(title: "Birchwood Consort", presenter: "Birchwood Consort",
+                                     venue: "Orchard Street Hall", performanceDate: "2026-11-25",
+                                     sourceUrl: "https://example.test/birchwood/2026-11-25")
+        let paste = LeadIntakeModel(
+            defaults: ScratchDefaults.make("ScoutReLandWritesNothingTests-0.3"),
+            fetch: { url in
+                FetchedPage(normalizedHTML: "<p>November 25: Birchwood Consort at Orchard Street Hall</p>",
+                            finalURL: url.absoluteString, contentHash: "h")
+            },
+            pin: { _, _ in URL(fileURLWithPath: "/dev/null") },
+            launch: { _ in },
+            readResults: { id in
+                ScoutExtractResults(version: 1, generatedAt: "2026-09-29T00:00:00Z",
+                                    results: [ScoutExtractResult(sourceId: id, verdict: .upcomingListings,
+                                                                 events: [lead], note: nil)])
+            },
+            isRunAlive: { false })
+        paste.urlText = "https://example.test/birchwood"
+        await paste.start(into: ctx, now: Date(), today: Self.today, sleep: { _ in })
+        let afterPaste = saves.saves.count
+
+        // A show source A lists, deleted while the landing is between sources.
+        let doomed = try #require(try ctx.fetch(FetchDescriptor<Prospect>()).first { $0.scoutGroupName == "Cleared Evening" })
+        let doomedID = doomed.persistentModelID
+        ctx.delete(doomed)
+
+        let b = ScoutService.apply(events: Self.sourceB, clients: [Self.client], history: [], blocked: Self.blocked,
+                                   feed: Self.feed("src-b"), today: Self.today, sourceIds: ["src-b"],
+                                   landing: landing, into: ctx)
+        reports += b.allReports
+        let afterB = saves.saves.count
+
+        // The working set after a delete a save has carried off, and after an insert it was never told about.
+        let working = try landing.rows()
+        let resurfaced = working.contains { $0 === doomed }
+        let workingHasLead = working.contains { $0.scoutGroupName == "Birchwood Consort" }
+        // PINNED 2026-09-29, a FINDING rather than the rule: once the save that carried a delete has run, the
+        // working set hands the deleted row back. `rows()` filters on `isDeleted`, which is true only while the
+        // delete is pending, and after the save the instance reads false again. Nothing on today's landing path
+        // deletes, which is why nothing has hit it; A5's revert deletes pending inserts and is the first that
+        // will, and its `discarded(_:)` purge is what must turn this line around (L373: invert it in that PR).
+        // The reconcile is skipped here while it holds, because it would read a row the store no longer has.
+        #expect(resurfaced, Comment(rawValue: "PINNED 2026-09-29: the working set handed back a row deleted "
+                + "and saved mid landing. It no longer does, so A5's purge (or something else) fixed it: invert "
+                + "this pin and run the reconcile"))
+        if !resurfaced {
+            FeedReconcile.reconcile(stored: working, reports: reports, today: Self.today)
+        }
+        try ctx.save()
+
+        let all = saves.saves
+        let stored = try ctx.fetch(FetchDescriptor<Prospect>())
+        let freshID = try #require(stored.first { $0.scoutGroupName == "Fresh Evening" }?.persistentModelID,
+                                   "source A did not insert its new show, so the insert half is untested")
+        let leadID = try #require(stored.first { $0.scoutGroupName == "Birchwood Consort" }?.persistentModelID,
+                                  "the pasted lead did not land, so the importAll half is untested")
+        let deleted = all.flatMap(\.deleted)
+        let inserted = all.flatMap(\.inserted)
+        let updated = Set(all.flatMap(\.updated))
+        func which(_ id: PersistentIdentifier, in key: KeyPath<SaveTap.Save, [PersistentIdentifier]>) -> [Int] {
+            all.indices.filter { all[$0][keyPath: key].contains(id) }
+        }
+        let keys = ["inserted", "updated", "deleted"]
+        let everySaveHadEveryKey = all.allSatisfy { save in
+            keys.allSatisfy { k in save.keysPresent.contains { $0.localizedCaseInsensitiveContains(k) } }
+        }
+
+        let perSave = all.enumerated().map { i, s -> String in
+            let byEntity = Dictionary(grouping: s.inserted + s.updated + s.deleted) { $0.entityName }
+                .map { "\($0.key) \($0.value.count)" }.sorted().joined(separator: ", ")
+            return "#\(i) \(s.inserted.count)/\(s.updated.count)/\(s.deleted.count) [\(byEntity)]"
+        }.joined(separator: "; ")
+        let keysSeen = Set(all.flatMap { $0.keysPresent }).sorted().joined(separator: ", ")
+        let deletedBy = which(doomedID, in: \.deleted)
+        let freshBy = which(freshID, in: \.inserted)
+        let leadBy = which(leadID, in: \.inserted)
+
+        print("""
+        step-0.3 didSave under a multi source landing with a mid landing delete and an importAll insert
+          saves: \(all.count) (source A \(afterA), after the paste \(afterPaste), after source B \(afterB), closing \(all.count - afterB))
+          per save (inserted/updated/deleted, by entity): \(perSave)
+          every save carried all three keys: \(everySaveHadEveryKey), keys seen \(keysSeen)
+          deleted show named as deleted by saves \(deletedBy), deleted identifiers in all \(deleted.count)
+          source A's new show named as inserted by saves \(freshBy)
+          the pasted lead named as inserted by saves \(leadBy)
+          distinct updated identifiers \(updated.count), of \(stored.count) shows now stored
+          working set after the delete's save: deleted row handed back \(resurfaced); holds the pasted lead \(workingHasLead) (a fresh fetch does)
+        """)
+
+        #expect(everySaveHadEveryKey, "a save's userInfo lacked one of the three identifier keys")
+        // The delete: exactly the one show, carried by source B's save, the first save after it was made.
+        #expect(deleted == [doomedID], Comment(rawValue:
+            "the saves named \(deleted.count) deleted rows, expected exactly the one deleted mid landing"))
+        #expect(deletedBy == [afterB - 1], "the delete was not carried by source B's save")
+        // Each insert named once, by its PERMANENT identifier, by the save that carried it.
+        #expect(freshBy == [afterA - 1], "source A's insert was not named by source A's save")
+        #expect(leadBy.count == 1 && (afterA..<afterPaste).contains(leadBy[0]),
+                "the pasted lead's insert was not named by the paste's own save")
+        #expect(Set(inserted).count == inserted.count, "an insert was named by more than one save")
+        // Updates: every row the landing restamped is named, and no deleted row is named as updated after it.
+        #expect(!updated.isEmpty && !which(doomedID, in: \.updated).contains { $0 >= afterB - 1 })
     }
 }
 

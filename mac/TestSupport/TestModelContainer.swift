@@ -35,4 +35,19 @@ enum TestModelContainer {
         made.mainContext.autosaveEnabled = false
         return made
     }
+
+    /// #4327 steps 0.2 and 0.9: the same container on a FILE at `url`, autosave off the same way.
+    ///
+    /// For a hosted probe that has to write a row underneath the context through SQLite, which an
+    /// in-memory store cannot take: a row the context was never told about is what makes a `@Query`
+    /// refetch visible, because only a fetch that really reached the store can return it. A probe that
+    /// wants autosave on switches it on itself, explicitly, and off again before its window closes.
+    @MainActor
+    static func onDisk(_ types: [any PersistentModel.Type], at url: URL) throws -> ModelContainer {
+        let schema = Schema(types)
+        let made = try ModelContainer(for: schema, configurations: [
+            ModelConfiguration(schema: schema, url: url, cloudKitDatabase: .none)])
+        made.mainContext.autosaveEnabled = false
+        return made
+    }
 }

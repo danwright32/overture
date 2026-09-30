@@ -257,8 +257,13 @@ enum FeedReconcile {
     // #3596: `now` is injected rather than read inside, so a test can pin the instant the finding is
     // stamped with. Defaulted because every shipping caller means "now" and a required argument here
     // would be answered `Date()` at each of them, which is the same value with more places to get wrong.
+    //
+    // #4325: returns the rows it WROTE, each with the values it held before, so a landing whose closing save
+    // fails can put them back (`Writes.revert`). `missedScoutCount += 1` is not idempotent: left pending after
+    // a failed save, a retried landing would add its own miss on top and the next save would record two.
+    @discardableResult
     static func reconcile(stored: [Prospect], reports: [SourceReport], today: String,
-                          now: Date = Date()) {
+                          now: Date = Date()) -> Writes {
         let seenKeys = reports.reduce(into: Set<String>()) { $0.formUnion($1.seenKeys) }
         let seenSourceURLs = reports.reduce(into: Set<String>()) { $0.formUnion($1.seenSourceURLs) }
         // #1469: kept PER SOURCE rather than pooled, unlike the two sets above. See SourceReport.
@@ -268,7 +273,11 @@ enum FeedReconcile {
         }
         let believable = Set(reports.filter(\.absenceIsEvidence).map(\.sourceId))
 
+        var writes = Writes()
         for p in stored {
+            let before = Writes.Entry(show: p, missedScoutCount: p.missedScoutCount,
+                                      survivedMergeAt: p.survivedMergeAt,
+                                      mergeSurvivorUnseenAt: p.mergeSurvivorUnseenAt)
             let listed = isStillListed(p, seenKeys: seenKeys, seenSourceURLs: seenSourceURLs,
                                        gapDates: gapDates)
             if listed {
@@ -285,6 +294,39 @@ enum FeedReconcile {
             // checked, and a show nobody claims are all cases where absence proves nothing.
             answerAnyMergeSurvivorQuestion(p, listed: listed, believable: believable, today: today,
                                            now: now)
+            if !before.stillDescribes(p) { writes.entries.append(before) }
+        }
+        return writes
+    }
+
+    // #4325: every row one reconcile changed, with the three fields as they stood before it. The three are
+    // every field `reconcile` writes: `missedScoutCount` in the loop above, and the two merge survivor fields
+    // in `answerAnyMergeSurvivorQuestion`. A fourth written field must join them, or its revert is missing.
+    struct Writes {
+        struct Entry {
+            let show: Prospect
+            let missedScoutCount: Int
+            let survivedMergeAt: Date?
+            let mergeSurvivorUnseenAt: Date?
+
+            func stillDescribes(_ p: Prospect) -> Bool {
+                p.missedScoutCount == missedScoutCount && p.survivedMergeAt == survivedMergeAt
+                    && p.mergeSurvivorUnseenAt == mergeSurvivorUnseenAt
+            }
+        }
+        var entries: [Entry] = []
+        var isEmpty: Bool { entries.isEmpty }
+
+        // Puts every changed row back as it stood before this reconcile, assigning only what differs, so a
+        // revert dirties nothing the reconcile did not.
+        func revert() {
+            for e in entries.reversed() {
+                if e.show.missedScoutCount != e.missedScoutCount { e.show.missedScoutCount = e.missedScoutCount }
+                if e.show.survivedMergeAt != e.survivedMergeAt { e.show.survivedMergeAt = e.survivedMergeAt }
+                if e.show.mergeSurvivorUnseenAt != e.mergeSurvivorUnseenAt {
+                    e.show.mergeSurvivorUnseenAt = e.mergeSurvivorUnseenAt
+                }
+            }
         }
     }
 
