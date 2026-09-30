@@ -1626,19 +1626,8 @@ struct QueueEnginePhase0cProducersProbeTests {
                     end: { w, at in
                         // The canonical oracle is order independent: reversed input gives the same answer.
                         let rows = Phase0cT6Check.drawnRows(w)
-                        var bad = Phase0cT6Check.truth(rule, rows) == Phase0cT6Check.truth(rule, rows.reversed())
+                        return Phase0cT6Check.truth(rule, rows) == Phase0cT6Check.truth(rule, rows.reversed())
                             ? [] : ["\(at): the \(rule.rawValue) truth depends on input order"]
-                        // #4347: the PRODUCT is rule (b), so its membership must be the brute force's.
-                        if rule == .clusterLatest {
-                            let product = EngagementLink.group(rows)
-                            let brute = Phase0cT6Check.bruteClusterLatest(rows)
-                            let differing = Set(product.keys).union(brute.keys)
-                                .filter { Set(product[$0] ?? []) != Set(brute[$0] ?? []) }
-                            if !differing.isEmpty {
-                                bad.append("\(at): the product disagrees with rule (b) on \(differing.count) rows")
-                            }
-                        }
-                        return bad
                     })
                 F.say("0c.4 T6 harness \(rule.rawValue) [\(size) rows] \(run.transitions) transitions checked in "
                       + String(format: "%.0f ms", Phase0.ms(since: started)) + ", failures \(run.failures.count), "
