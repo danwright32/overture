@@ -122,8 +122,10 @@ struct ShowLinkCorpusShapeTests {
             }.count
             print("ShowLink near misses over the store: \(forwardMisses.count) refused pair(s); "
                   + "\(moved) in a different position and \(turned) turned round when the rows arrive reversed")
-            #expect(forwardMisses == reversedMisses,
-                    "ShowLink.nearMisses depends on row order, see the printed counts")
+            // Compared into a Bool first: a failing `#expect` renders its operands, and these hold the live
+            // store's natural keys, which are real show names (L155, L445).
+            let sameEitherWay = forwardMisses == reversedMisses
+            #expect(sameEitherWay, "ShowLink.nearMisses depends on row order, see the printed counts")
 
             // The queue is a SUBSET of the store, so it can never find a group the store does not.
             // This is what would have caught the plan sending somebody to screenshot a queue group
