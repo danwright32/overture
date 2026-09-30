@@ -191,14 +191,30 @@ final class OrderDependenceReproductionTests {
         return rows + [first, second, third]
     }
 
-    @Test func todayReachedOutListBreaksEqualDatesByInputPosition() throws {
+    // #4345, plan v7 Step T: `todayReachedOutListBreaksEqualDatesByInputPosition` stood here and was CONSUMED
+    // when the product list gained its (next, naturalKey) order, so it is inverted rather than kept (L373).
+    // The product function with no wrapper now gives one list over 100 orders, the canonical oracle's, and
+    // again after a re-key that moves one of the three tied shows to the front of the key order (L419).
+    private func reachedOutRowsRekeyed() -> [Prospect] {
         let rows = reachedOutRows()
+        rows.first { $0.naturalKey == "ro-c" }?.naturalKey = "ro-0"
+        return rows
+    }
+
+    @Test(arguments: [false, true])
+    func productReachedOutListIsTheCanonicalAnswerOverEveryOrder(rekeyed: Bool) throws {
+        let rows = rekeyed ? reachedOutRowsRekeyed() : reachedOutRows()
         let forward = ReachedOutQueue.activeWithDates(from: rows, now: now)
         try #require(forward.count == 3, "fixture: all three contacted shows must be live")
         try #require(Set(forward.map(\.next)).count == 1, "fixture: the three rows must tie on next")
-        let reversed = ReachedOutQueue.activeWithDates(from: rows.reversed(), now: now)
-        #expect(OracleRendering.reachedOut(forward) != OracleRendering.reachedOut(reversed),
-                "ReachedOutQueue no longer breaks equal dates by position; retire this test (L373)")
+        let seed: UInt64 = 4345_01
+        let oracle = OracleRendering.reachedOut(CanonicalOracle.reachedOut(rows, now: now))
+        let distinct = distinctAnswers({ order in
+            OracleRendering.reachedOut(ReachedOutQueue.activeWithDates(from: order.map { rows[$0] }, now: now))
+        }, size: rows.count, seed: seed)
+        #expect(distinct == [oracle], report("ReachedOutQueue list, product", distinct, seed: seed))
+        #expect(forward.map(\.prospect.naturalKey) == forward.map(\.prospect.naturalKey).sorted(),
+                "equal dates must fall back to the natural key")
     }
 
     @Test func canonicalReachedOutListIsOneAnswerOverEveryOrder() {
@@ -212,8 +228,9 @@ final class OrderDependenceReproductionTests {
 
     // MARK: ReachedOutQueue representative (relationship order, judged by tie class)
 
-    // One show whose two contacts tie in both branches the representative rule has: `replied` picks the
-    // first replied contact, and the no reply branch picks the first at the minimum `next`.
+    // One show whose contacts tie on every key the representative rule compares EXCEPT the address: in the
+    // replied branch none carries a reply time, and in the no reply branch all were sent at one instant, so
+    // since #4345 the address decides (earliest reply or soonest `next`, then address, then identifier).
     private func representativeFixture(order: [String], replied: Bool,
                                        into ctx: ModelContext) -> Prospect {
         let p = show("rep-show", title: "Juniper Choral Society", status: .contacted, into: ctx)
@@ -227,46 +244,55 @@ final class OrderDependenceReproductionTests {
 
     private let tiedContacts = ["hazel@example.org", "rowan@example.org"]
 
-    // The function itself: handed the relationship in two orders, it names two different people.
+    // #4345, plan v7 Step T: the two `todayRepresentative...` reproductions that stood here were CONSUMED when
+    // the representative gained a total order in each branch, and are inverted rather than kept (L373).
+    //
+    // The function itself, handed the relationship in EVERY order of three tied contacts: one person, and it
+    // is the one the rule names (earliest reply, then address, then identifier; with no reply the soonest
+    // date, then address, then identifier). The relationship's order is controllable here because an
+    // unsaved relationship keeps the order it was assigned, which the first `#require` confirms.
+    private let threeTiedContacts = ["rowan@example.org", "hazel@example.org", "yarrow@example.org"]
+
     @Test(arguments: [false, true])
-    func todayRepresentativeFollowsRecipientArrayOrder(replied: Bool) throws {
-        let forward = representativeFixture(order: tiedContacts, replied: replied, into: ModelContext(container))
-        let backward = representativeFixture(order: tiedContacts.reversed(), replied: replied,
-                                             into: ModelContext(container))
-        try #require(forward.recipients.map(\.id) == tiedContacts,
-                     "fixture: an unsaved relationship keeps the order it was assigned")
-        #expect(representative(of: forward) != representative(of: backward),
-                "the representative no longer follows p.recipients order; retire this test (L373)")
+    func productRepresentativeIsOnePersonOverEveryRelationshipOrder(replied: Bool) throws {
+        var named: Set<String> = []
+        for order in CanonicalOracle.permutations(threeTiedContacts, count: 12, seed: 4345_02) {
+            let p = representativeFixture(order: order, replied: replied, into: ModelContext(container))
+            try #require(p.recipients.map(\.id) == order,
+                         "fixture: an unsaved relationship keeps the order it was assigned")
+            named.insert(representative(of: p) ?? "nil")
+        }
+        #expect(named == ["hazel@example.org"],
+                "the representative follows the relationship order again: \(named.sorted())")
     }
 
-    // What production actually meets: the relationship as the STORE hands it back after a save. Whether
-    // insertion order survives that round trip is SwiftData's to decide, so this measures rather than
-    // assumes, and says UNMEASURED when the store returned one order for both insertions.
+    // What production actually meets: the relationship as the STORE hands it back after a save, which Step
+    // T0 measured coming back in a different order across runs. Whatever order comes back, one person.
     @Test(arguments: [false, true])
-    func todayRepresentativeAfterAStoreRoundTrip(replied: Bool) throws {
-        func roundTrip(_ order: [String]) throws -> (order: [String], representative: String?) {
+    func productRepresentativeSurvivesAStoreRoundTrip(replied: Bool) throws {
+        func roundTrip(_ order: [String]) throws -> String? {
             let store = try TestModelContainer.inMemory([Prospect.self, Recipient.self])
             let writer = ModelContext(store)
             representativeFixture(order: order, replied: replied, into: writer)
             try writer.save()
-            let reader = ModelContext(store)
-            let fetched = try #require(try reader.fetch(FetchDescriptor<Prospect>()).first)
-            return (fetched.recipients.map(\.id), representative(of: fetched))
+            let fetched = try #require(try ModelContext(store).fetch(FetchDescriptor<Prospect>()).first)
+            return representative(of: fetched)
         }
-        let forward = try roundTrip(tiedContacts)
-        let backward = try roundTrip(tiedContacts.reversed())
-        let branch = replied ? "replied branch" : "no reply branch"
-        if forward.order == backward.order {
-            print("UNMEASURED: ReachedOutQueue representative, \(branch), after a store round trip:"
-                  + " the store returned \(forward.order) for both insertion orders, so this fixture cannot"
-                  + " make relationship order differ; the dependence is real in the function (see"
-                  + " todayRepresentativeFollowsRecipientArrayOrder) but not shown through a fetch here")
-            return
+        let named = Set(try [tiedContacts, tiedContacts.reversed()].map { try roundTrip($0) ?? "nil" })
+        #expect(named == ["hazel@example.org"], "named \(named.sorted()) across two insertion orders")
+    }
+
+    // The replied branch orders by the REPLY first: the contact who wrote earliest is named even when the
+    // address alone would pick the other, so the address is a tie-break and not the rule.
+    @Test func productRepresentativeAmongRepliersIsTheEarliestReply() throws {
+        for order in [tiedContacts, tiedContacts.reversed()] {
+            let p = representativeFixture(order: order, replied: true, into: ModelContext(container))
+            for r in p.recipients {
+                r.repliedAt = r.id == "rowan@example.org" ? sentAt.addingTimeInterval(3_600)
+                    : sentAt.addingTimeInterval(7_200)
+            }
+            #expect(representative(of: p) == "rowan@example.org")
         }
-        print("REPRODUCED: ReachedOutQueue representative, \(branch), after a store round trip: orders"
-              + " \(forward.order) and \(backward.order) named \(forward.representative ?? "nil")"
-              + " and \(backward.representative ?? "nil")")
-        #expect(forward.representative != backward.representative)
     }
 
     // Plan section 6, second bullet: the representative is correct when it is a MEMBER of the oracle's tie
