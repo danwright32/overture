@@ -843,8 +843,9 @@ enum Phase0cT5Check {
 
 /// A TEST-ONLY prototype of plan v7 T6: `titleKey -> Set<PID>` over drawn, dated rows, re-clustering only
 /// the titles a change touches (its old and its new), under either chain rule of decision 18:
-/// (a) today's, a row joins when within `RunGrouping.gapDays` of the last night of the row appended LAST;
-/// (b) the answered one, measured from the cluster's LATEST last night so far.
+/// (a) the rule before #4347, a row joins when within `RunGrouping.gapDays` of the last night of the row
+/// appended LAST; (b) the answered one the product runs since #4347, measured from the cluster's LATEST last
+/// night so far.
 /// Rows sort by (date, run end, room, natural key), the product's own total order since plan v7 Step T
 /// (#4346), so the prototype walks the rows in the order the product does. Dates are pre-folded to day
 /// ordinals once per row, so a rebuild does no calendar work.
@@ -1038,8 +1039,9 @@ enum Phase0cT6Check {
         switch rule {
         // #4347: the product runs rule (b) now, so rule (a) is judged against its restatement in the 0c.10
         // probe, over the product's own total order, and (b) against the brute force below. The PRODUCT is
-        // not compared with either here yet: until #4346's total sort is on main it walks equal nights in
-        // date only order, which the brute force does not, so its rule is held by EngagementLinkTests.
+        // not compared with either here yet: #4346's total sort is on main, so it walks the same order as the
+        // brute force, and holding the product to it is the follow-up recorded in #4347's PR. Until that
+        // lands its rule is held by EngagementLinkTests.
         case .lastAppended: return Phase0cOrders.engagement(drawn, rule: .lastAppended)
         case .clusterLatest: return bruteClusterLatest(drawn)
         }
