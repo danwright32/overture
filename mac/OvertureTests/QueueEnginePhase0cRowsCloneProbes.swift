@@ -811,16 +811,22 @@ extension QueueEnginePhase0cRowsProbeTests {
                     : Phase0cRowsFixture.draft
                 return Phase0.time { _ = proto.apply(changed: [pid], rows: byPID, upstream: up, context: ctx) }
             }
-            // Whether the prototype agrees BEFORE any edit, and, if an edit breaks it, which edit first and
-            // which AgentInputs fields (counts only, field names and numbers, L222).
+            // Whether the prototype agrees BEFORE any edit, and, if an edit changes the disagreement, which edit
+            // first and which AgentInputs fields (counts only, field names and numbers, L222). Measured
+            // 2026-09-29: it disagrees at BUILD, on `reachedOutDue`, once a contacted show carries a waiting
+            // contact, so the edits are judged against the build's disagreement rather than against none.
             let atBuild = fx.oracle().mismatches(proto, rowsByKey: fx.rowsByKey)
+            let buildFields = Self.agentFields(String(describing: proto.agentInputs))
+            let buildOracle = Self.agentFields(fx.oracle().agent)
+            let buildDiffering = buildFields.keys.filter { buildFields[$0] != buildOracle[$0] }.sorted()
+                .map { "\($0) \(buildFields[$0] ?? "-") against \(buildOracle[$0] ?? "-")" }
             var firstBreak = "none"
             var samples: [Double] = []
             for (n, p) in shows.enumerated() {
                 samples.append(edit(p))
                 guard firstBreak == "none" else { continue }
                 let now = fx.oracle()
-                guard !now.mismatches(proto, rowsByKey: fx.rowsByKey).isEmpty else { continue }
+                guard now.mismatches(proto, rowsByKey: fx.rowsByKey) != atBuild else { continue }
                 let mine = Self.agentFields(String(describing: proto.agentInputs))
                 let theirs = Self.agentFields(now.agent)
                 let differing = mine.keys.filter { mine[$0] != theirs[$0] }.sorted()
@@ -850,15 +856,16 @@ extension QueueEnginePhase0cRowsProbeTests {
                 replays.append(shape + String(format: ": sample %.3f ms, replay median %.3f (%.3f to %.3f), load %.2f before, %.2f after",
                                               samples[i], reading.median, reading.low, reading.high, quiet.load, after))
             }
-            let verdict = worst.map { $0 <= 1.0 ? "PASS" : "FAIL" } ?? "UNMEASURED"
+            // 0c.5's own stop rule: any disagreement fails it, whatever the timing says.
+            let verdict = Phase0cRows.stopVerdict(mismatches: mismatches.count, replayedMaxMs: worst)
             Phase0cRows.say("""
                 0c.5 pending contact draft edit [synthetic \(size) rows, seed 4368] \(shows.count) contacted shows given a waiting contact, \(Phase0.load()), Debug build
                   every such show edited once                         \(Phase0cRows.spread(samples).text)
-                  oracle at build, before any edit                    \(atBuild.isEmpty ? "0 mismatches" : atBuild.joined(separator: "; "))
-                  oracle after the edits                              \(mismatches.count) mismatches; first break: \(firstBreak)
+                  oracle at build, before any edit                    \(atBuild.isEmpty ? "0 mismatches" : "prototype against oracle " + buildDiffering.joined(separator: "; "))
+                  oracle after the edits                              \(mismatches.count) mismatches; first edit that changed the disagreement: \(firstBreak)
                   the five slowest keys, replayed:
                     \(replays.joined(separator: "\n    "))
-                  stop (the slowest key's replayed median over 1 ms, load under 8): \(verdict)\(worst.map { String(format: ", %.3f ms", $0) } ?? "")
+                  stop (any disagreement with the oracle, or the slowest key's replayed median over 1 ms, load under 8): \(verdict)\(worst.map { String(format: ", %.3f ms", $0) } ?? "")
                 """)
         }
     }
