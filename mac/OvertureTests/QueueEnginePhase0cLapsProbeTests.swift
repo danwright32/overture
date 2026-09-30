@@ -1064,6 +1064,9 @@ final class QueueEnginePhase0cLapsProbeTests {
         // #4324: a restore that failed to save ends the block rather than being timed as if it had not.
         var restoreFailure: Error?
         let whole = Phase0.median5 {
+            // Once a restore has failed its writes are still pending, and the next call would stop on
+            // `retireReal`'s precondition before this block could report the failure, so it stops here.
+            guard restoreFailure == nil else { return }
             do { _ = try Phase0cLapOracle.retireReal(context: ctx, today: today) } catch { restoreFailure = error }
         }
         if let restoreFailure { throw restoreFailure }
