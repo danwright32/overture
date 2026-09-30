@@ -330,8 +330,8 @@ final class OrderDependenceReproductionTests {
 
     // MARK: FeedBreakEvent label and tie order
 
-    // Three flagged rows at one room written two ways (the fold makes them one source), so the event's
-    // label is whichever spelling the first member carried.
+    // Three flagged rows at one room written two ways (the fold makes them one source). Since #4348 the
+    // event's label is the spelling most of them carry, with a tie going to the smallest key's spelling.
     private func flagged(_ key: String, venue: String, missed: Int) -> Prospect {
         let p = show(key, title: "Willow Song Cycle \(key)", venue: venue, date: "2027-02-20")
         p.missedScoutCount = missed
