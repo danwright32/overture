@@ -462,7 +462,7 @@ struct ScoutLandingAttributionProbeTests {
                 for (label, counters, ms) in steps {
                     let d = counters - previous
                     let name = label == ScoutLandingStore.Counters.afterReconcile
-                        ? label : "source \(position[label] ?? 0), \(eventsBySource[label] ?? 0) recorded events"
+                        ? "after the reconcile" : "source \(position[label] ?? 0), \(eventsBySource[label] ?? 0) recorded events"
                     LandingProbe.say("counters x\(factor) \(variant) \(name): +\(LandingProbe.f1(ms - previousMs)) ms; "
                                      + d.description)
                     previous = counters

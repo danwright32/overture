@@ -172,3 +172,14 @@ struct ScoutLandingCountersTests {
         #expect(observed == plain && observed.count == 4)
     }
 }
+
+// How the landing attribution probe prints a snapshot. Here rather than beside the counters, because a
+// sentence in the app's source is copy to `docs/copy-inventory.md`, and this one is only ever read in a log.
+extension ScoutLandingStore.Counters: CustomStringConvertible {
+    var description: String {
+        "builds \(storedShowsBuilds), cache hits \(storedShowsCacheHits), generation moves \(generationMoves) "
+            + "(first fold \(generationMovesFirstFold), fold changed \(generationMovesFoldChanged), inserted "
+            + "\(generationMovesInserted)), fold validations \(foldValidations), rows read \(rowsRead), "
+            + "rows handed out \(rowsHandedOut), rows walked \(rowsWalked)"
+    }
+}

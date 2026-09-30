@@ -1,26 +1,28 @@
 import Testing
 import Foundation
-import SQLite3
+import Darwin
 import SwiftData
 
 // #4327 step 0.8: the failure path revert, candidate (ii) only (decision 2), and its correctness cases, each a
 // test (L246, L574). The revert itself is `FailurePathRevert`, beside this file.
 //
-// THE FAILURE IS REAL, AND IT CAN BE SWITCHED OFF. Every failed save here is a genuine SwiftData save
-// failure raised by the store: the store file carries SQLite triggers that abort any insert, update or delete
-// on the show, contact and watched source tables while a one row switch table is set, so the source's own
-// `ScoutService.apply` save throws and the source reports `saveFailed`. Clearing the switch, from a separate
-// connection, is what lets "a LATER save succeeds" be asserted on the SAME context. The two cheaper ways were
-// measured first and neither can do that: a duplicate natural key does not fail a save (SwiftData upserts
-// it), and an immutable store file (`ImmutableStoreFixture`, #617) opens the connection read only for the
-// container's whole life, so clearing its flags leaves every later save failing too.
+// THE FAILURE IS REAL. Every failed save here is a genuine SwiftData save failure: the store file is flagged
+// immutable before the landing's container opens it (as `ImmutableStoreFixture` does, #617), so the source's
+// own `ScoutService.apply` save throws and the source reports `saveFailed`. The entry flush (A3/A5) is
+// modelled by what it does: the pre-landing edit is SAVED before the store starts refusing, so it is
+// committed when the failed turn begins. Without the flush the same edit is made, unsaved, in the landing's
+// own context.
 //
-// The entry flush (A3/A5) is modelled by what it does: the pre-landing edit is SAVED before the store starts
-// refusing, so it is committed when the failed turn begins. Without the flush the same edit is made, unsaved,
-// in the landing's own context.
-//
-// What each case asserts is read through a FRESH context after that later save, so it is what the store
-// holds, and through the instance the landing already held, which is the thing `rollback()` gets wrong.
+// WHAT "A LATER SAVE" MEANS HERE, and why it is not a second save. A refusal that can be switched OFF on the
+// same context was looked for and not found, each measured on 2026-09-29: a duplicate natural key does not
+// fail a save at all (SwiftData upserts it); an immutable store opens its connection read only for the
+// container's whole life, so clearing the flags leaves every later save failing too; and a SQLite trigger
+// that aborts writes makes Core Data read the abort as an optimistic locking failure it cannot resolve, and
+// it ends the PROCESS ("fatal: Unable to recover from optimistic locking failure"), never throws. So each
+// case asserts on what a later save would carry: the context read through ITSELF (every row as the context
+// holds it, unsaved values included, unsaved inserts included) against the committed store read through a
+// fresh context. Equal means a later save writes nothing of the failed turn and keeps what was committed.
+// The instances the landing already held are checked too, which is the thing `rollback()` gets wrong.
 @MainActor
 @Suite("The failure path revert restores what a failed save carried (#4327 step 0.8)", .serialized)
 final class FailurePathRevertProbeTests {
@@ -29,41 +31,17 @@ final class FailurePathRevertProbeTests {
     private static let night = "2099-10-01"
     private static let url = "https://src-a.example/rondo"
 
-    // MARK: a store that refuses saves, and then stops refusing
+    // MARK: a store that refuses saves
 
     final class RefusingStore {
-        enum Failure: Error { case sql(String) }
         let url: URL
         private(set) var container: ModelContainer?
         init(url: URL) { self.url = url }
 
-        private func exec(_ sql: String) throws {
-            var db: OpaquePointer?
-            guard sqlite3_open_v2(url.path, &db, SQLITE_OPEN_READWRITE, nil) == SQLITE_OK else {
-                sqlite3_close(db)
-                throw Failure.sql("open failed")
-            }
-            defer { sqlite3_close(db) }
-            sqlite3_busy_timeout(db, 5000)
-            var err: UnsafeMutablePointer<CChar>?
-            guard sqlite3_exec(db, sql, nil, nil, &err) == SQLITE_OK else {
-                let message = err.map { String(cString: $0) } ?? "unknown"
-                sqlite3_free(err)
-                throw Failure.sql(message)
-            }
-        }
-
-        /// Installs the switch and its triggers, turns the refusal ON, and opens the container the landing
-        /// runs on, autosave off.
+        /// Flags the store immutable, then opens the container the landing runs on, autosave off, so every
+        /// save it attempts fails.
         @MainActor func openRefusing() throws -> ModelContext {
-            var sql = "CREATE TABLE IF NOT EXISTS PROBEREFUSE (on_ INTEGER);"
-            for table in ["ZPROSPECT", "ZRECIPIENT", "ZWATCHEDSOURCE"] {
-                for op in ["INSERT", "UPDATE", "DELETE"] {
-                    sql += "CREATE TRIGGER IF NOT EXISTS PROBEREFUSE_\(table)_\(op) BEFORE \(op) ON \(table) "
-                        + "WHEN EXISTS (SELECT 1 FROM PROBEREFUSE) BEGIN SELECT RAISE(ABORT, 'probe refuses'); END;"
-                }
-            }
-            try exec(sql + "DELETE FROM PROBEREFUSE; INSERT INTO PROBEREFUSE VALUES (1);")
+            for suffix in ["", "-wal", "-shm"] { _ = chflags(url.path + suffix, UInt32(UF_IMMUTABLE)) }
             let c = try ModelContainer(for: AppSchema.schema,
                                        configurations: [ModelConfiguration(schema: AppSchema.schema, url: url)])
             container = c
@@ -71,9 +49,9 @@ final class FailurePathRevertProbeTests {
             return c.mainContext
         }
 
-        /// Turns the refusal off, so the next save is accepted.
-        func allowSaves() {
-            try? exec("DELETE FROM PROBEREFUSE;")
+        /// Takes the flags off, so the sandbox can be removed.
+        func release() {
+            for suffix in ["", "-wal", "-shm"] { _ = chflags(url.path + suffix, 0) }
         }
     }
 
@@ -122,7 +100,8 @@ final class FailurePathRevertProbeTests {
     }
 
     // Every stored field of every show, contact and watched source, keyed by identity, relationships as the
-    // sorted identities of their members. Read through whatever context is passed.
+    // sorted identities of their members. Read through whatever context is passed: a fresh one reads the
+    // store, the landing's own reads what a save from it would write.
     static func snapshot(_ ctx: ModelContext) throws -> [String: [String]] {
         var out: [String: [String]] = [:]
         func render(_ value: Any?) -> String {
@@ -145,13 +124,23 @@ final class FailurePathRevertProbeTests {
         return out
     }
 
+    private static func differences(_ a: [String: [String]], _ b: [String: [String]]) -> String {
+        let rows = Set(a.keys).symmetricDifference(b.keys).count
+        let fields = a.filter { b[$0.key] != nil && b[$0.key] != $0.value }.count
+        return "\(rows) rows present in only one, \(fields) rows whose fields differ"
+    }
+
     private func held<M: PersistentModel>(_ ctx: ModelContext, _: M.Type) throws -> [M] {
         try ctx.fetch(FetchDescriptor<M>())
     }
 
+    private func committedRow(_ ctx: ModelContext, _ key: String) throws -> Prospect? {
+        try ModelContext(ctx.container).fetch(FetchDescriptor<Prospect>()).first { $0.naturalKey == key }
+    }
+
     // THE FAILED TURN. Written through the real `apply` (a re-list of the stored show plus one new show), with
     // the writes apply does not make written by hand in the same turn: a contact removed, a contact added,
-    // a run URL appended, the source's archived dropped-show labels rewritten. Then apply's own save fails.
+    // a run URL appended, the source's dropped-show labels rewritten. Then apply's own save fails.
     private struct Turn { let outcome: ScoutService.Outcome; let writeSet: FailurePathRevert.WriteSet }
 
     private func failedTurn(_ ctx: ModelContext) throws -> Turn {
@@ -178,24 +167,27 @@ final class FailurePathRevertProbeTests {
 
     // MARK: the revert restores everything, relationships and archived blobs included
 
-    @Test func aFailedSourceIsRevertedFieldForFieldAndALaterSaveSucceeds() throws {
+    @Test func aFailedSourceIsRevertedFieldForField() throws {
         let seeded = try seed("whole")
-        defer { seeded.store.allowSaves() }
+        defer { seeded.store.release() }
         let ctx = try seeded.store.openRefusing()
         let turn = try failedTurn(ctx)
         #expect(turn.outcome.saveFailed, "the store did not refuse the save, so nothing here failed")
-        #expect(turn.outcome.updated + turn.outcome.inserted >= 2, Comment(rawValue:
+        #expect(turn.outcome.updated >= 1 && turn.outcome.inserted >= 1, Comment(rawValue:
             "the source did not both touch the stored show and insert one: \(turn.outcome.updated) updated, "
             + "\(turn.outcome.inserted) inserted"))
         // After the failed save the context still holds what it carried; the revert depends on that.
         let after = FailurePathRevert.WriteSet.pending(in: ctx)
         #expect(after.changed.count == turn.writeSet.changed.count
-                && after.inserted.count == turn.writeSet.inserted.count, Comment(rawValue:
+                && after.inserted.count == turn.writeSet.inserted.count && after.changed.count >= 3, Comment(rawValue:
             "a failed save changed the pending set: \(turn.writeSet.count) at the save, \(after.count) after it"))
+        // Before the revert the context differs from the store, so the equality below measures the revert.
+        #expect(try Self.snapshot(ctx) != seeded.committed)
 
         let report = FailurePathRevert.revert(turn.writeSet, in: ctx)
         #expect(report.notRestorable.isEmpty, Comment(rawValue: "not restorable: \(report.notRestorable)"))
-        #expect(report.insertsDeleted >= 2, Comment(rawValue: "inserts deleted: \(report.insertsDeleted)"))
+        #expect(report.insertsDeleted >= 2 && ctx.insertedModelsArray.isEmpty, Comment(rawValue:
+            "inserts deleted: \(report.insertsDeleted), still inserted \(ctx.insertedModelsArray.count)"))
 
         // The instances the landing held read the committed values, which is what rollback() gets wrong.
         let rondo = try #require(try held(ctx, Prospect.self).first { $0.naturalKey == "rondo-key" })
@@ -203,14 +195,9 @@ final class FailurePathRevertProbeTests {
             "the held show's contacts are \(rondo.recipients.map(\.id).sorted())"))
         #expect(rondo.runSourceURLs == [Self.url], Comment(rawValue: "the held run URLs are \(rondo.runSourceURLs)"))
         #expect(try held(ctx, WatchedSource.self).first?.lastDroppedShowLabelsRaw == "Old Label")
-
-        seeded.store.allowSaves()
-        try ctx.save()
-        let now = try Self.snapshot(ModelContext(ctx.container))
+        let now = try Self.snapshot(ctx)
         #expect(now == seeded.committed, Comment(rawValue:
-            "after the revert and a later save the store differs from before the turn in "
-            + "\(Set(now.keys).symmetricDifference(seeded.committed.keys).count) rows present and "
-            + "\(now.filter { seeded.committed[$0.key] != nil && seeded.committed[$0.key] != $0.value }.count) rows' fields"))
+            "after the revert the context differs from the store: " + Self.differences(now, seeded.committed)))
     }
 
     // MARK: the four correctness cases
@@ -225,19 +212,19 @@ final class FailurePathRevertProbeTests {
             row.status = .queued
         }
         let seeded = try seed("edit-\(flushed)", flushed: flushed ? edit : { _ in })
-        defer { seeded.store.allowSaves() }
+        defer { seeded.store.release() }
         let ctx = try seeded.store.openRefusing()
         if !flushed { try edit(ctx) }
         let turn = try failedTurn(ctx)
         #expect(turn.outcome.saveFailed && turn.outcome.updated >= 1)
         let report = FailurePathRevert.revert(turn.writeSet, in: ctx)
         #expect(report.notRestorable.isEmpty)
-        seeded.store.allowSaves()
-        try ctx.save()
-        let status = try ModelContext(ctx.container).fetch(FetchDescriptor<Prospect>())
-            .first { $0.naturalKey == "rondo-key" }?.status
+        let status = try held(ctx, Prospect.self).first { $0.naturalKey == "rondo-key" }?.status
+        let committedStatus = try committedRow(ctx, "rondo-key")?.status
         if flushed {
-            #expect(status == .queued, Comment(rawValue: "a flushed edit did not survive the revert: \(String(describing: status))"))
+            #expect(status == .queued && committedStatus == .queued, Comment(rawValue:
+                "a flushed edit did not survive the revert: \(String(describing: status))"))
+            #expect(try Self.snapshot(ctx) == seeded.committed)
         } else {
             #expect(status != .queued, "without the entry flush the revert was expected to take the edit back")
         }
@@ -251,16 +238,13 @@ final class FailurePathRevertProbeTests {
             row.missedScoutCount += 1
         }
         let seeded = try seed("missed-\(flushed)", flushed: flushed ? increment : { _ in })
-        defer { seeded.store.allowSaves() }
+        defer { seeded.store.release() }
         let ctx = try seeded.store.openRefusing()
         if !flushed { try increment(ctx) }
         let turn = try failedTurn(ctx)
         #expect(turn.outcome.saveFailed && turn.outcome.updated >= 1)
         _ = FailurePathRevert.revert(turn.writeSet, in: ctx)
-        seeded.store.allowSaves()
-        try ctx.save()
-        let missed = try ModelContext(ctx.container).fetch(FetchDescriptor<Prospect>())
-            .first { $0.naturalKey == "rondo-key" }?.missedScoutCount
+        let missed = try held(ctx, Prospect.self).first { $0.naturalKey == "rondo-key" }?.missedScoutCount
         #expect(missed == (flushed ? 1 : 0), Comment(rawValue:
             "flushed \(flushed): the increment reads \(String(describing: missed)) after the revert"))
     }
@@ -274,28 +258,26 @@ final class FailurePathRevertProbeTests {
             row.status = .queued
         }
         let seeded = try seed("unrelated-\(flushed)", flushed: flushed ? edit : { _ in })
-        defer { seeded.store.allowSaves() }
+        defer { seeded.store.release() }
         let ctx = try seeded.store.openRefusing()
         if !flushed { try edit(ctx) }
         let turn = try failedTurn(ctx)
         #expect(turn.outcome.saveFailed)
         _ = FailurePathRevert.revert(turn.writeSet, in: ctx)
-        seeded.store.allowSaves()
-        try ctx.save()
-        let status = try ModelContext(ctx.container).fetch(FetchDescriptor<Prospect>())
-            .first { $0.naturalKey == "elsewhere-key" }?.status
+        let status = try held(ctx, Prospect.self).first { $0.naturalKey == "elsewhere-key" }?.status
         #expect((status == .queued) == flushed, Comment(rawValue:
             "flushed \(flushed): the unrelated edit reads \(String(describing: status)) after the revert"))
     }
 
     // (4) A failed CLOSING save, reverted over the closing save's write set, leaves `missedScoutCount` at its
     // committed value, so a recovery that re-runs the reconcile moves it exactly once. The reconcile's write is
-    // made by hand here (the increment #4325 describes); the recovery is the same increment, saved. Without
-    // the revert the count moves twice, which is the double apply A12 warns of, and that arm asserts it.
+    // made by hand here (the increment #4325 describes); the recovery is the same increment, which is what the
+    // recovery's save would then carry. Without the revert the count moves twice, the double apply A12 warns
+    // of, and that arm asserts it.
     @Test(arguments: [true, false])
     func aFailedClosingSaveRevertedLeavesTheMissCountToMoveExactlyOnce(reverted: Bool) throws {
         let seeded = try seed("closing-\(reverted)")
-        defer { seeded.store.allowSaves() }
+        defer { seeded.store.release() }
         let ctx = try seeded.store.openRefusing()
         let rondo = try #require(try held(ctx, Prospect.self).first { $0.naturalKey == "rondo-key" })
         rondo.missedScoutCount += 1
@@ -308,14 +290,11 @@ final class FailurePathRevertProbeTests {
             #expect(report.notRestorable.isEmpty && rondo.missedScoutCount == 0, Comment(rawValue:
                 "the held row reads \(rondo.missedScoutCount) after the revert: \(report)"))
         }
-        // Recovery: the store accepts saves again and the reconcile runs once more.
-        seeded.store.allowSaves()
+        // Recovery: the reconcile runs once more.
         rondo.missedScoutCount += 1
-        try ctx.save()
-        let missed = try ModelContext(ctx.container).fetch(FetchDescriptor<Prospect>())
-            .first { $0.naturalKey == "rondo-key" }?.missedScoutCount
-        #expect(missed == (reverted ? 1 : 2), Comment(rawValue:
-            "reverted \(reverted): the miss count is \(String(describing: missed)) after recovery"))
+        #expect(try committedRow(ctx, "rondo-key")?.missedScoutCount == 0)
+        #expect(rondo.missedScoutCount == (reverted ? 1 : 2), Comment(rawValue:
+            "reverted \(reverted): recovery would save a miss count of \(rondo.missedScoutCount)"))
     }
 
     // MARK: what (ii) cannot restore
@@ -325,7 +304,7 @@ final class FailurePathRevertProbeTests {
     // that true or solve this first.
     @Test func aDeletedCommittedRowIsReportedNotRestorable() throws {
         let seeded = try seed("deleted")
-        defer { seeded.store.allowSaves() }
+        defer { seeded.store.release() }
         let ctx = try seeded.store.openRefusing()
         let gone = try #require(try held(ctx, Prospect.self).first { $0.naturalKey == "elsewhere-key" })
         ctx.delete(gone)
@@ -333,6 +312,7 @@ final class FailurePathRevertProbeTests {
         #expect(throws: (any Error).self) { try ctx.save() }
         let report = FailurePathRevert.revert(set, in: ctx)
         #expect(report.notRestorable.count == 1, Comment(rawValue: "not restorable: \(report.notRestorable)"))
+        #expect(try Self.snapshot(ctx) != seeded.committed, "the deleted row came back, which (ii) cannot do")
     }
 
     // MARK: the cost, on the hardest real source at 4x (opt in)
@@ -343,7 +323,7 @@ final class FailurePathRevertProbeTests {
     // Lands ONE real source (the one with the most recorded events, or TEST_RUNNER_MEASURE_4327_REVERT_SOURCE
     // by position) on a 4x scaled clone whose file refuses saves, captures what the failed save carried, and
     // times the revert. Three rounds, each landing the source again onto the reverted context. Each round also
-    // counts the reverted rows whose fields differ from a fresh read of the store, which must be zero.
+    // counts the reverted shows whose fields differ from a fresh read of the store, which must be zero.
     @Test(.enabled(if: Phase0.liveStoreExists, "no live store on this machine"))
     func revertCostOnTheHardestSourceAt4x() async throws {
         guard LandingProbe.enabled, LandingProbe.env["MEASURE_4327_REVERT"] != nil else {
@@ -376,7 +356,7 @@ final class FailurePathRevertProbeTests {
         let url = try Phase0.scaledCopy(of: base, factor: 4, in: dir)
         let loaded = DownbeatBridge.loadWithHealth(from: exportCopy, now: Date())
         let store = RefusingStore(url: url)
-        defer { store.allowSaves() }
+        defer { store.release() }
         let ctx = try store.openRefusing()
         let existing = try ctx.fetch(FetchDescriptor<Prospect>())
         let history = LocalHistory.forMatching(existing: existing, importedFrom: historyCopy)
@@ -384,6 +364,7 @@ final class FailurePathRevertProbeTests {
                                                    context: ctx)
         LandingProbe.say("revert x4: \(existing.count) shows, source \(chosen + 1) of \(results.results.count) with "
                          + "\(results.results[chosen].events.count) recorded events, " + Phase0.load())
+        var timings: [Double] = []
         for round in 1...3 {
             let wait = Phase0.waitForLoad(below: 8, deadline: 1800, poll: 5)
             let capture = FailurePathRevert.SaveCapture(ctx)
@@ -395,6 +376,7 @@ final class FailurePathRevertProbeTests {
             let set = FailurePathRevert.WriteSet.pending(in: ctx)
             var report = FailurePathRevert.Report()
             let ms = Phase0.time { report = FailurePathRevert.revert(set, in: ctx) }
+            timings.append(ms)
             let fresh = ModelContext(ctx.container)
             var differing = 0
             for model in set.changed {
@@ -410,5 +392,6 @@ final class FailurePathRevertProbeTests {
                              + "\(LandingProbe.f1(ms)) ms: \(report); shows still differing from the store \(differing); "
                              + wait.text + ", " + Phase0.load())
         }
+        LandingProbe.say("revert x4 median of \(timings.count): " + Phase0.Reading(runs: timings).text)
     }
 }

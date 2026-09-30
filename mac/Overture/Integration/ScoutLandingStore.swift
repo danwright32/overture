@@ -128,9 +128,9 @@ final class ScoutLandingStore {
     // the cache for the second source onwards is a measurement and not a reading of this file. Cumulative
     // over the landing; the difference of two snapshots is what the work between them cost, which is how the
     // landing attribution probe reports each source. Counting only: nothing here reads a counter.
-    struct Counters: Equatable, Sendable, CustomStringConvertible {
+    struct Counters: Equatable, Sendable {
         // The label an ingest reports its last snapshot under, taken after the reconcile's read.
-        static let afterReconcile = "after the reconcile"
+        static let afterReconcile = "reconcile"
         // `storedShowsPerURL` walked every row into shows again, and when it answered from its cache.
         var storedShowsBuilds = 0
         var storedShowsCacheHits = 0
@@ -162,13 +162,6 @@ final class ScoutLandingStore {
                      rowsRead: a.rowsRead - b.rowsRead,
                      rowsHandedOut: a.rowsHandedOut - b.rowsHandedOut,
                      rowsWalked: a.rowsWalked - b.rowsWalked)
-        }
-
-        var description: String {
-            "builds \(storedShowsBuilds), cache hits \(storedShowsCacheHits), generation moves \(generationMoves) "
-                + "(first fold \(generationMovesFirstFold), fold changed \(generationMovesFoldChanged), inserted "
-                + "\(generationMovesInserted)), fold validations \(foldValidations), rows read \(rowsRead), "
-                + "rows handed out \(rowsHandedOut), rows walked \(rowsWalked)"
         }
     }
     private(set) var counters = Counters()
