@@ -272,6 +272,13 @@ final class LandingOracleTests {
         #expect(LandingOracle.render([one]) == "1 related")
     }
 
+    // The snapshot walks the models that can name their fields (`ScopeObserved`). One that could not would be
+    // left out of every recording and read EQUAL whatever a landing did to it.
+    @Test func everyModelInTheSchemaIsSnapshotted() {
+        let missed = AppSchema.models.filter { !($0 is any ScopeObserved.Type) }.map { String(describing: $0) }
+        #expect(missed.isEmpty, Comment(rawValue: "models the landing oracle never records: \(missed)"))
+    }
+
     // MARK: where a real-arm file may go, and what it starts with
 
     @Test func aRealArmFileIsRefusedInsideAGitWorkTreeAndWhenGitCannotAnswer() throws {

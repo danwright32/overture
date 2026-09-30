@@ -92,6 +92,9 @@ enum LandingOracle {
         let fresh = ModelContext(container)
         var rows: [Row] = []
         for type in AppSchema.models {
+            // Every model is ScopeObserved (ScopeFieldsMatchTheSchemaTests), so nothing is skipped here today;
+            // `everyModelInTheSchemaIsSnapshotted` fails the day one is not, rather than this reading EQUAL
+            // over a model it never looked at (L96).
             guard let observed = type as? any ScopeObserved.Type else { continue }
             rows += try snapshotRows(observed, in: fresh)
         }
