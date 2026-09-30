@@ -95,6 +95,27 @@ struct TheDivergenceLogKeysOnKindAndSourceTests {
         #expect(r.suppressedRepeats == 2)
     }
 
+    // A file holding a later build's record is never REWRITTEN by this one: the rewrite would re-encode the
+    // spelling as "unrecognised" for good and key every such record as one (L650). Left untouched instead,
+    // byte for byte, and said as a refusal rather than as nothing to do.
+    @Test func aFileHoldingALaterBuildsRecordIsLeftUntouched() throws {
+        let dir = try sandboxes.make(named: "d8-later-build")
+        let url = CardDivergenceLog.url(in: dir)
+        let newer = #"{"at":"2026-09-20T12:00:00Z","cardsBuilt":0,"fields":[],"kind":"someLaterKind","sequence":0,"session":"t","suppressedRepeats":0}"#
+        let common = (1...12).compactMap { CardDivergenceLog.line(for: record($0, fields: ["venue"])) }
+        let text = ([newer] + common).joined(separator: "\n") + "\n"
+        try text.write(to: url, atomically: true, encoding: .utf8)
+        let archive = CardDivergenceLog.archiveURL(besideLogAt: url)
+        try text.write(to: archive, atomically: true, encoding: .utf8)
+
+        let done = CardDivergenceLog.housekeeping(at: url, cap: 10)
+
+        #expect(done.compaction == .refusedUnrecognised(records: 1))
+        #expect(done.prune == .refusedUnrecognised(records: 1))
+        #expect(try String(contentsOf: url, encoding: .utf8) == text, "the live file was rewritten")
+        #expect(try String(contentsOf: archive, encoding: .utf8) == text, "the archive was rewritten")
+    }
+
     // EVERY NEW KIND HAS A COOLDOWN. The card divergence keeps today's none, because its reader counts
     // records as cards and a suppressed repeat would read as a card that was never built wrongly.
     @Test func everyKindButTheCardCheckHasATenMinuteCooldown() {

@@ -139,6 +139,9 @@ struct CardDivergenceRecord: Codable, Equatable, Sendable {
     }
 
     var compactionKey: CompactionKey { CompactionKey(kind: kind, source: source, fields: fields) }
+
+    // A kind or source this build could not name, which only a later build writes.
+    var isFromALaterBuild: Bool { kind == .unrecognised || source == .unrecognised }
 }
 
 // The file, and the rules for reading, capping and appending it. Modelled on `FreezeLog` deliberately:
@@ -268,6 +271,11 @@ enum CardDivergenceLog {
         // The archive could not be written, so the live file was deliberately left OVER its cap rather
         // than trimmed.
         case archiveFailed
+        // #4354: the file holds records a LATER build wrote, whose kind or source this build reads as
+        // `.unrecognised`. Rewriting it would re-encode each as "unrecognised", losing the spelling for
+        // good, and would key every such record as one. So it is left untouched, over its cap if need be,
+        // until a build that knows those spellings runs (L650, L1013).
+        case refusedUnrecognised(records: Int)
     }
 
     static func compacted(_ records: [CardDivergenceRecord], cap: Int = fileCap) -> Compacted {
@@ -313,6 +321,8 @@ enum CardDivergenceLog {
     static func compact(at url: URL, cap: Int = fileCap) -> CompactionOutcome {
         let read = read(at: url)
         guard !read.fileWasAbsent else { return .nothingToArchive }
+        let unrecognised = read.records.filter(\.isFromALaterBuild).count
+        guard unrecognised == 0 else { return .refusedUnrecognised(records: unrecognised) }
         let result = compacted(read.records, cap: cap)
         guard result.dropped > 0 else { return .nothingToArchive }
         guard archive(result.droppedRecords, besideLogAt: url) else { return .archiveFailed }
@@ -343,6 +353,8 @@ enum CardDivergenceLog {
         // counting it, and a file half written by a process killed mid-append is the ordinary case here
         // rather than a rare one (L211, L105).
         case refused(unreadableLines: Int)
+        // #4354: the same refusal as the live file's, for the same reason.
+        case refusedUnrecognised(records: Int)
     }
 
     // ONE EXAMPLE OF EACH DISTINCT KEY (#4354: kind, source and field set), and NOT a retention window,
@@ -380,6 +392,8 @@ enum CardDivergenceLog {
         // No archive is the ordinary state: most installs have never compacted. Nothing to report.
         guard !read.fileWasAbsent else { return .nothingToRemove }
         guard read.unreadableLines == 0 else { return .refused(unreadableLines: read.unreadableLines) }
+        let unrecognised = read.records.filter(\.isFromALaterBuild).count
+        guard unrecognised == 0 else { return ArchivePrune.refusedUnrecognised(records: unrecognised) }
 
         let result = prunedArchive(read.records)
         guard result.dropped > 0 else { return .nothingToRemove }
