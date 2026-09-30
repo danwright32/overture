@@ -57,6 +57,12 @@ struct ScoutWarnings: Equatable, Sendable {
     // had four writers in ScoutService and no reader at all until now (L46).
     var storeUnreadableKeys: [String] = []
 
+    // #4330 (A13): the calendar results that waited for the store past their deadline and were kept to be
+    // offered again, in the sentence the refusal already carries (one wording, `LandingWaitCopy`).
+    var notLandedYet: String? = nil
+    // #4330: the sources a later run had already landed, so this run set its older reading aside.
+    var supersededSources: [ScoutService.SourceResult] = []
+
     static func from(native: ScoutService.Outcome, extract: ScoutService.Outcome?,
                      finishedEmpty: String?) -> ScoutWarnings {
         // Union the per-source failures from both halves and dedupe by id: html verdict failures reach
@@ -91,6 +97,13 @@ struct ScoutWarnings: Equatable, Sendable {
             dedupedKeys.append(key)
         }
 
+        var seenSuperseded = Set<String>()
+        var superseded: [ScoutService.SourceResult] = []
+        for r in native.supersededSources + (extract?.supersededSources ?? [])
+        where seenSuperseded.insert(r.sourceId).inserted {
+            superseded.append(r)
+        }
+
         return ScoutWarnings(
             saveFailed: native.saveFailed || (extract?.saveFailed ?? false),
             extractLaunchFailure: native.extractLaunchFailure ?? extract?.extractLaunchFailure,
@@ -107,7 +120,9 @@ struct ScoutWarnings: Equatable, Sendable {
             // count is a tally of REFUSALS and a show refused in both halves was refused twice; this is
             // the list of SHOWS, and naming one twice would read as two shows (the same rule the failures
             // and the empties above follow).
-            storeUnreadableKeys: dedupedKeys)
+            storeUnreadableKeys: dedupedKeys,
+            notLandedYet: native.notLandedYet ?? extract?.notLandedYet,
+            supersededSources: superseded)
     }
 
     // #1190: deferred venues make a run NOT clean even when nothing failed. A run that checked 20 of 38
@@ -124,11 +139,15 @@ struct ScoutWarnings: Equatable, Sendable {
         // #3074: the keys ride WITH the count rather than in a section of their own, because they are
         // the detail of one fact and a second section would ask Dan to join two boxes up himself.
         case storeUnreadable(Int, [String])
+        // #4330: app level like the two above: nothing is wrong with any calendar.
+        case notLandedYet(String)
         case extractLaunchFailure(String)
         case readerFinishedEmpty(String)
         case failures([ScoutService.SourceResult])
         case unqueued([String])
         case silentlyEmptyFeed([ScoutService.SourceResult])
+        // #4330: informational, after the empties: the newer reading is in the store.
+        case superseded([ScoutService.SourceResult])
         case pastClientList(String)
     }
 
@@ -147,6 +166,8 @@ struct ScoutWarnings: Equatable, Sendable {
             return count == 1
                 ? "A show was left out this run because the local store stopped answering. Run the scout again."
                 : "\(count) shows were left out this run because the local store stopped answering. Run the scout again."
+        case .notLandedYet:
+            return "The calendar results have not landed yet. Overture kept them and will offer them again."
         case .extractLaunchFailure:
             return "Some changed calendars couldn't be read this run."
         case .readerFinishedEmpty:
@@ -163,6 +184,10 @@ struct ScoutWarnings: Equatable, Sendable {
             return empties.count == 1
                 ? "\(empties[0].orgName) has listed shows before and came back empty this run."
                 : "\(empties.count) established calendars came back empty this run."
+        case .superseded(let set):
+            return set.count == 1
+                ? "\(set[0].orgName) was superseded by a later run, so this run's older reading was set aside."
+                : "\(set.count) calendars were superseded by a later run, so this run's older readings were set aside."
         case .pastClientList(let message):
             return message
         }
@@ -174,11 +199,13 @@ struct ScoutWarnings: Equatable, Sendable {
         if storeUnreadableCount > 0 {
             out.append(.storeUnreadable(storeUnreadableCount, storeUnreadableKeys))
         }
+        if let notLandedYet { out.append(.notLandedYet(notLandedYet)) }
         if let extractLaunchFailure { out.append(.extractLaunchFailure(extractLaunchFailure)) }
         if let extractRunFinishedEmpty { out.append(.readerFinishedEmpty(extractRunFinishedEmpty)) }
         if !failedSources.isEmpty { out.append(.failures(failedSources)) }
         if !unqueuedIds.isEmpty { out.append(.unqueued(unqueuedIds)) }
         if !silentlyEmptySources.isEmpty { out.append(.silentlyEmptyFeed(silentlyEmptySources)) }
+        if !supersededSources.isEmpty { out.append(.superseded(supersededSources)) }
         if let clientListWarning { out.append(.pastClientList(clientListWarning)) }
         return out
     }

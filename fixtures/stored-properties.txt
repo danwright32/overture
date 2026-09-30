@@ -390,6 +390,7 @@ WatchedSource.lastPlacedCount
 WatchedSource.lastReadableCount
 WatchedSource.lastStructuralGapCount
 WatchedSource.lastSucceededAt
+WatchedSource.lastTouchedSequence
 WatchedSource.lastUnreadableCount
 WatchedSource.lastUnreadableTitleCount
 WatchedSource.listingsURL

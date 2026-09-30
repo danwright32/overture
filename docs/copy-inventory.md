@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1645 sentences**.
+Every sentence Overture can say to Dan: **1667 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -14,7 +14,7 @@ What is not, and why:
   sentences under tokens nobody reads.
 - **Nothing, if it is written as two literals joined with `+`.** Those ARE joined here, into the
   one sentence the running app says (#3155). What is still only part of what Dan reads is a
-  sentence carrying a VALUE: 603 of the 1645 below hold a
+  sentence carrying a VALUE: 618 of the 1667 below hold a
   `\(...)` where a number or a name goes, so what is printed is the template. They are counted
   here rather than listed again, because the hole is visible in the line itself; what was missing
   was any statement of how much of this document is templates.
@@ -375,6 +375,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/PrepRunSummary.swift`
 ", so a performer who is a past client may have read as cold"
     `Persistence/PrepImporter.swift`
+". Nothing was lost."
+    `Domain/ScoutWarningCopy.swift`
 "1 client set aside"
     `Domain/ClientCoverage.swift`
 "1 contact named a way in and gave none, and the run never once said it found no route"
@@ -667,6 +669,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ClientCoverage.swift`
 "Calendar page"
     `UI/AddLeadSheet.swift`
+"Calendar results that had been waiting for the store have landed."
+    `Domain/LandingSingleFlight.swift`
 "Came back empty \(runs) \(runWord) in a row, and hasn't listed a show for \(days) \(dayWord). Check the link."
     `Domain/SourceAttention.swift`
 "Came back empty \(runs) \(runWord) in a row. Check the link."
@@ -1162,6 +1166,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/OnboardingView.swift`
 "Kept as companies"
     `UI/OrganisationsView.swift`
+"Kept calendar results landed, but their copy could not be removed (\(why)), so Overture will offer them again."
+    `Domain/LandingSingleFlight.swift`
 "LONG SHOT"
     `UI/QueueView+Model.swift`
 "Last checked \(formatter.string(from: last))"
@@ -1562,6 +1568,10 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/ActionFeedback.swift`
 "One of the addresses is blank. Nothing was saved"
     `App/ActionFeedback.swift`
+"One set of calendar results has been stuck for over a day without landing. It is kept, and Overture will keep offering it."
+    `Domain/LandingSingleFlight.swift`
+"One set of calendar results is still waiting for the store."
+    `Domain/LandingSingleFlight.swift`
 "One show was left out of this run. The local store stopped answering, so Overture could not tell whether it was a new show or a card you have already decided on, and it would rather skip it than write over one. Run the scout again to pick it up."
     `Domain/ScoutWarningCopy.swift`
 "One source couldn't be checked."
@@ -1634,6 +1644,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/StoreShrinkCheck.swift`
 "Overture could not open its data file to check it at \(path). Nothing has been opened or changed. The file may be in use by another program, or its permissions may have changed. Check that file before reopening Overture."
     `App/StoreSchemaGuard.swift`
+"Overture could not read kept calendar results at \(path) (\(why))."
+    `Domain/LandingSingleFlight.swift`
 "Overture could not save the record of what this run searched for, so it will be lost when the next run starts: \(reason)"
     `App/PrepRunArchive.swift`
 "Overture could not save the records of what this run searched for on each show, so they will be lost when the next run starts: \(reason)"
@@ -2322,6 +2334,12 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/FreezeReport.swift`
 "The calendar reader ran but produced nothing this run."
     `Domain/ScoutWarnings.swift`
+"The calendar results have not landed yet, because another landing was still saving to the store after \(span). Overture kept a copy of them and will offer them again."
+    `Domain/LandingSingleFlight.swift`
+"The calendar results have not landed yet, because another landing was still saving to the store, and Overture could not keep a copy of them (\(why)). They are still in the reader's results file until the next read replaces it."
+    `Domain/LandingSingleFlight.swift`
+"The calendar results have not landed yet. Overture kept them and will offer them again."
+    `Domain/ScoutWarnings.swift`
 "The calendars Overture re-checks on every scout, and how each one is doing"
     `Domain/SourceAttention.swift`
 "The calendars Overture re-checks on every scout."
@@ -2418,6 +2436,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ScoutResultAudit.swift`
 "The scheduled scout couldn't run. It'll try again later."
     `Domain/ScoutFailure.swift`
+"The scout could not land the shows it found, because another landing was still saving to the store after \(span). None of them were applied, and the next scout reads these calendars again."
+    `Domain/LandingSingleFlight.swift`
 "The scout couldn't read \(labels.count) parts of its own store (\(list)), so this run judged against less than Overture actually holds. Nothing was lost. Run it again to get the full picture."
     `Domain/ScoutWarningCopy.swift`
 "The scout couldn't read \(list), so this run judged against less than Overture actually holds. Nothing was lost. Run it again to get the full picture."
@@ -2428,6 +2448,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ScoutWarnings.swift`
 "The scout ran but couldn't save its results. Run it again; if this keeps happening, something's wrong with the local store."
     `Domain/ScoutWarningCopy.swift`
+"The scout saved the shows it found but could not finish, because another landing was still saving to the store after \(span). The changed pages were not handed over to be read, and the next scout picks them up."
+    `Domain/LandingSingleFlight.swift`
 "The scout started reading the calendars that changed, but the run finished without producing anything. Those pages have NOT been read, and it will try them again on the next scout."
     `Domain/DetachedRunOutcome.swift`
 "The service replied, so this is not a connection problem: what came back was not what Overture expected. One bad answer is normal and says nothing here; this line appears only once several in a row have failed, and it clears as soon as one is readable again."
@@ -2687,6 +2709,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/VoiceGuidanceView.swift`
 "Wait for the previous sync to finish, then sync again."
     `Domain/OmniFocusFailureKind.swift`
+"Waiting for the landing in progress to finish"
+    `Domain/ScoutSweepStep.swift`
 "Waiting for your answer (\(elapsed))"
     `Domain/RunProgress.swift`
 "Waiting to be checked again."
@@ -2888,6 +2912,10 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/InquiryCopy.swift`
 "Your reply went out, but Gmail didn't tell Overture which conversation it landed in, so an answer to it won't be spotted automatically. Watch your inbox for this one and mark it here yourself."
     `Domain/InquiryCopy.swift`
+"Your scout did not start, because another landing was still saving to the store after \(span). Nothing was changed. Run the scout again once it has finished."
+    `Domain/LandingSingleFlight.swift`
+"Your scout will start as soon as the landing in progress finishes."
+    `Domain/LandingSingleFlight.swift`
 "Your shoot history is \(days) days old, so rooms you've photographed since then won't be mentioned in a pitch. Re-export your Shoots calendar and run the import again."
     `Domain/ShootHistory.swift`
 "Zankel Hall"
@@ -3104,6 +3132,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/EasternDate.swift`
 "\(label)… \(elapsed)"
     `Domain/RunProgress.swift`
+"\(landed) sets of calendar results that had been waiting for the store have landed."
+    `Domain/LandingSingleFlight.swift`
 "\(lead) It has happened \(howMany). \(evidence)"
     `Domain/RunBoundaryViolations.swift`
 "\(lines) earlier records could not be read, which is what force quitting Overture while it is frozen leaves behind."
@@ -3127,6 +3157,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "\(min(progress.completed, progress.total)) of \(progress.total)"
     `Domain/ReplyClassifyProgress.swift`
     `Domain/ScoutExtractProgress.swift`
+"\(minutes) minutes"
+    `Domain/LandingSingleFlight.swift`
 "\(months[month - 1]) \(year)"
     `UI/LeadIntakeModel.swift`
 "\(n) \(shows(n)) sent, but a later nudge will arrive as a new email, not a reply"
@@ -3165,10 +3197,14 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/OrganisationListing.swift`
 "\(name) won't hold that night any more"
     `Domain/CancelledShootCopy.swift`
+"\(names.count) calendars were superseded by a later run, which read them after this one and landed first, so this run's older readings of them were set aside: "
+    `Domain/ScoutWarningCopy.swift`
 "\(names.count) new booking\(names.count == 1 ? "" : "s") (\(names.joined(separator: ", ")))"
     `Domain/OutreachEventPhrasing.swift`
 "\(names.count) new repl\(names.count == 1 ? "y" : "ies") (\(names.joined(separator: ", ")))"
     `Domain/OutreachEventPhrasing.swift`
+"\(names[0]) was superseded by a later run, which read it after this one and landed first, so this run's older reading was set aside. Nothing was lost."
+    `Domain/ScoutWarningCopy.swift`
 "\(night) \($0)"
     `Integration/ScoutService.swift`
 "\(nightDismissed(count: count, reason: reason, dateLabel: dateLabel)). \(tail)"
@@ -3311,6 +3347,10 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ExperimentReport.swift`
 "\(sends) sends in, enough for the rate to mean something"
     `Domain/ExperimentReport.swift`
+"\(set.count) calendars were superseded by a later run, so this run's older readings were set aside."
+    `Domain/ScoutWarnings.swift`
+"\(set[0].orgName) was superseded by a later run, so this run's older reading was set aside."
+    `Domain/ScoutWarnings.swift`
 "\(shortMonth(c.month ?? 1)) \(c.day ?? 0)"
     `UI/QueueView+Model.swift`
 "\(shortMonth(cal.component(.month, from: d))) \(cal.component(.day, from: d))"
@@ -3347,8 +3387,12 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/QueueView+Model.swift`
 "\(status.name): \(status.detail)"
     `UI/QueueView.swift`
+"\(stillWaiting) sets of calendar results are still waiting for the store."
+    `Domain/LandingSingleFlight.swift`
 "\(structuralGaps) of \(total) listings named no venue, so Overture left \(left) out of the queue."
     `Domain/SourceReadability.swift`
+"\(stuck) sets of calendar results have been stuck for over a day without landing. They are kept, and Overture will keep offering them."
+    `Domain/LandingSingleFlight.swift`
 "\(subject) a look: failing, never read at all, empty run after run, or can't mark shows as gone until it reads its calendar properly again"
     `Domain/SourceAttention.swift`
 "\(subject) you to stop still \(verb) on calendars you watch: \(who). Nothing was added and nothing will go out to them."

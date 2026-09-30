@@ -23,8 +23,12 @@ struct ScoutExtractWatchGuardTests {
         #expect(rootView.contains("await watchScoutExtractRun("))
     }
 
+    // #4330: through `ScoutExtractLanding`, which keeps a copy of the results if the landing has to wait
+    // for the store, and which is itself the one caller of the ingest.
     @Test func whatTheRunReadIsActuallyIngested() async {
-        #expect(rootView.contains("await ScoutExtractIngest.ingest("))
+        #expect(rootView.contains("await ScoutExtractLanding.land("))
+        let landing = SourceGuardHelper.source("Overture/Integration/ScoutExtractLanding.swift")
+        #expect(landing.contains("await ScoutExtractIngest.ingest("))
     }
 
     // A run that finishes without producing anything is the one shape of failure that would otherwise be

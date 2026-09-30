@@ -247,6 +247,14 @@ enum ScoutService {
         // twelve working websites.
         var extractLaunchFailure: String? = nil
 
+        // #4330 (A13): an ingest that waited for the store past its deadline and was refused, in the sentence
+        // that says why and that nothing was lost (`LandingWaitCopy`). Nothing from it landed; its results
+        // are kept and offered again (`PendingScoutIngests`).
+        var notLandedYet: String? = nil
+
+        // #4330: the sources this run set aside because a later run had already landed them.
+        var supersededSources: [SourceResult] { sources.filter { $0.state == .superseded } }
+
         // #888 part B: what THIS source swept, carried home so the caller can reconcile every source it
         // landed in ONE pass. Nil when this apply had no feed to report on (the lead path), which is
         // what keeps a pasted lead structurally unable to mark anything gone (#826).
@@ -284,7 +292,8 @@ enum ScoutService {
             // queued) is shown alongside, not masked by, the failures, because both can happen in one run.
             // #3071: alongside the two above rather than instead of either, because all three can
             // happen in one run and each names a different thing that went wrong.
-            let parts = [failureWarning, unqueuedWarning, degradedReadWarning].compactMap { $0 }
+            let parts = [notLandedYet, failureWarning, unqueuedWarning, degradedReadWarning,
+                         supersededWarning].compactMap { $0 }
             if !parts.isEmpty { return parts.joined(separator: "\n\n") }
             if !silentlyEmptySources.isEmpty {
                 return ScoutWarningCopy.silentlyEmptyFeed(sources: silentlyEmptySources.map { ($0.orgName, $0.droppedRowCount) })
@@ -302,6 +311,14 @@ enum ScoutService {
 
         // #3071: the reads that could not answer, in Dan's words. This is the READER that stops
         // `degradedReads` being a field written and never read (L46).
+        // #4330: the reader of `.superseded`, so a set aside reading is said rather than left looking like a
+        // source that was never checked.
+        private var supersededWarning: String? {
+            let set = supersededSources
+            guard !set.isEmpty else { return nil }
+            return ScoutWarningCopy.superseded(set.map(\.orgName))
+        }
+
         private var degradedReadWarning: String? {
             guard !degradedReads.isEmpty else { return nil }
             return ScoutWarningCopy.degradedReads(degradedReads.map(\.label))
@@ -347,6 +364,7 @@ enum ScoutService {
             // #4147's renames, which this used to drop, so a run built by merging one Outcome per source
             // reported none however many it made (`ScoutReadsLandTogetherTests`).
             titleRenames.append(contentsOf: other.titleRenames)
+            notLandedYet = notLandedYet ?? other.notLandedYet
             // #888 part B: reports ACCUMULATE across a merge rather than the last one winning. That is
             // the whole point: a caller that landed six sources must be able to hand all six to one
             // reconcile, or "every owner was asked" can never be true of a co-listed show.
@@ -395,6 +413,11 @@ enum ScoutService {
             // this page WAS read and its emptiness accepted). Its own case so a future count of one can
             // never be quietly mistaken for the other.
             case confirmedEmpty
+            // #4330 (A13): a later run read this source after this run did and landed it first
+            // (`WatchedSource.lastTouchedSequence`), so this run's older reading was set aside unlanded. Not a
+            // failure (the later run's reading is in the store) and not `.unchanged` (the page may well
+            // have changed): its own case, so the report says what happened.
+            case superseded
 
             var isFailure: Bool { if case .failed = self { return true }; return false }
 
@@ -490,7 +513,17 @@ enum ScoutService {
                          // #4275: how the whole show table is read. Every such read in this run goes through
                          // it (the history, the brand corpus, and the landing's working set), so a test can
                          // count them; nothing else in this file fetches the table.
-                         readProspectTable: @escaping ScoutLandingStore.Read = ScoutService.readProspectTable)
+                         readProspectTable: @escaping ScoutLandingStore.Read = ScoutService.readProspectTable,
+                         // #4330 (A13): the one queue every landing waits its turn in. The sweep runs WITHOUT
+                         // it; only the landing block and the tail take a token. Injected so a test can hold
+                         // the store across a suspension without making every other test's landing wait.
+                         landings: LandingSingleFlight = .shared,
+                         // A run Dan pressed is a Dan action, and waits ahead of every scout landing; the
+                         // scheduled run is a scout landing.
+                         landingPriority: LandingSingleFlight.Priority = .scout,
+                         // The floor the run's landing sequence is minted above, besides the store's own:
+                         // the pending ingest copies, which can hold a number no landing ever saved.
+                         sequenceFloor: () -> Int = { PendingScoutIngests.live.highestSequence })
                          async throws -> Outcome {
         let loaded = DownbeatBridge.loadWithHealth(now: now)
         // History the matcher sees = any one-time legacy import + Overture's own activity,
@@ -506,6 +539,12 @@ enum ScoutService {
         // nothing and reports an ordinary quiet run (L98).
         let watchlist = try required(.sourceWatchlist) { try context.fetch(FetchDescriptor<WatchedSource>()) }
         let plan = SourceSchedule.plan(sources: watchlist, depth: depth, only: only, budget: budget, now: now)
+
+        // #4330 (A13): this run's landing sequence, minted as its read phase starts, which writes nothing to
+        // the store and so needs no token. Every source the landing block below lands or settles is
+        // stamped with it, and a source a LATER run has already stamped higher is set aside (see there).
+        let sequence = landings.mintSequence(
+            above: max(sequenceFloor(), watchlist.map(\.lastTouchedSequence).max() ?? 0))
 
         // The real paginating fetch, built PER SOURCE, unless a test injected its own. A known client's own
         // calendar (or a source Dan tagged as a client's) is read a full year forward to catch a returning
@@ -541,7 +580,7 @@ enum ScoutService {
         //
         // `reports` keeps the order each source was CHECKED in, so a read that lands later still sits in
         // the report where it was checked rather than at the end.
-        enum ReportSlot { case read(Int), checked(SourceResult) }
+        enum ReportSlot { case read(Int), checked(SourceResult, WatchedSource) }
         var reads: [NativeRead] = []
         var reports: [ReportSlot] = []
         // Read at the first free source rather than per source, and not at all on a run that has none.
@@ -612,7 +651,7 @@ enum ScoutService {
                                               // Marked read only once its shows have landed (#4102).
                                               markReadAs: page.contentHash))
             } else {
-                reports.append(.checked(result))
+                reports.append(.checked(result, source))
                 if let page { toRead.append((source, page)) }
             }
             // #1034: the native-phase heartbeat. Fired for every fetched source, changed or not, so the
@@ -629,13 +668,39 @@ enum ScoutService {
         // #4275: and every source judges against ONE read of the stored shows, built here, after the last
         // await, and kept current as each source lands (`ScoutLandingStore`). It used to be two whole table
         // fetches per source plus one per source's reconcile.
+        //
+        // #4330 (A13): the store is taken HERE, after the last await of the read phase, and released
+        // straight after this block's save, so the sweep above and the read budget question below never
+        // hold it. A refusal at the deadline throws before anything below is applied; the pages this run
+        // read keep their unread state, so the next scout reads them again.
+        let landingToken = try await landings.begin(
+            entryPoint: .runScoutLanding, priority: landingPriority,
+            deadline: LandingSingleFlight.Deadline.runScoutLanding,
+            onWait: { onNativeStep(.waitingForTheLandingInProgress) })
+        defer { landingToken.end() }
+        // The first thing done under the token: re-validation. A source whose `lastTouchedSequence` is now
+        // above this run's was landed by a later run after this one read it, so this run's reading of it is
+        // the older one. It is set aside whole: its shows are not applied and its page hash is not
+        // promoted, so nothing is lost and the next scout reads the page again. Before A12 the read phase
+        // still writes a checked source's own bookkeeping directly (its fetch health and pending hash), so
+        // what is set aside here is what this block would have written; A12 captures the rest.
+        func supersededSinceRead(_ source: WatchedSource?) -> Bool {
+            (source?.lastTouchedSequence ?? 0) > sequence
+        }
         let landing = ScoutLandingStore(context: context, read: readProspectTable)
         for slot in reports {
             switch slot {
-            case .checked(let result):
+            case .checked(let result, let source):
+                if !supersededSinceRead(source) { source.lastTouchedSequence = sequence }
                 outcome.sources.append(result)
             case .read(let i):
                 let native = reads[i]
+                if supersededSinceRead(native.source), let source = native.source {
+                    outcome.sources.append(SourceResult(sourceId: source.sourceId, orgName: source.orgName,
+                                                        state: .superseded, listingsURL: source.listingsURL))
+                    continue
+                }
+                native.source?.lastTouchedSequence = sequence
                 let landed = landNative(native, clients: loaded.clients, history: history, blocked: blocked,
                                         now: now, landing: landing, into: context)
                 if let hash = native.markReadAs, let source = native.source,
@@ -648,6 +713,9 @@ enum ScoutService {
         }
         // #4325: the last source's reconcile, and its feed health, saved here rather than left to autosave.
         if !saveLanding(landing, into: context) { outcome.saveFailed = true }
+        // #4330: released here, before the read budget question, which can wait on Dan for as long as he
+        // leaves it open.
+        landingToken.end()
 
         // ONE batched detached run for every page that changed, never N subprocesses: one hung source
         // must not be able to block the marker guard or leave a bare indefinite spinner. Only reachable
@@ -681,6 +749,16 @@ enum ScoutService {
             declined = toRead.dropFirst(chosen.count).map(\.source)
             toRead = chosen
         }
+
+        // #4330 (A13): the tail touches the store (the fairness clock, the booking reconcile, the blocked
+        // town retirement), so it holds a second, short token of its own, taken after the read budget
+        // answer and released after its own save below. A refusal here throws before the handoff: the
+        // shows above are already saved, and the pages keep their unread state for the next scout.
+        let tailToken = try await landings.begin(
+            entryPoint: .runScoutTail, priority: landingPriority,
+            deadline: LandingSingleFlight.Deadline.runScoutTail,
+            onWait: { onNativeStep(.waitingForTheLandingInProgress) })
+        defer { tailToken.end() }
 
         if !toRead.isEmpty && !isCancelled() {
             onNativeStep(.handingPagesToTheReader)
@@ -741,6 +819,16 @@ enum ScoutService {
             }
         }
         onNativeStep(.saving)
+        // #4330: the tail's own save, so the fairness clock and anything else it wrote is on disk before its
+        // token is released, rather than left to autosave (A12's closing save rule, for the tail).
+        if context.hasChanges {
+            do {
+                try context.save()
+            } catch {
+                outcome.saveFailed = true
+            }
+        }
+        tailToken.end()
         // Record that a scout completed, so the masthead can show freshness (#35).
         recordScout(at: Date(), in: defaults)
         return outcome

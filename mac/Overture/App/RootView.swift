@@ -1264,6 +1264,9 @@ struct RootView: View {
                 if ScoutExtractService.isRunning(now: Date()) {
                     await reattachScoutExtractRun()
                 }
+                // #4330 (A13, L665): the launch sweep of kept calendar results, offered from their own
+                // copies. Empty on every ordinary launch, and one directory listing to learn so.
+                await offerPendingScoutIngests()
                 autoScoutIfDue()   // run a scheduled scout on launch if one is due (#33)
             }
             // #2365: load Dan's client list at launch, and again whenever the reconcile tick observes the
@@ -2284,25 +2287,65 @@ struct RootView: View {
     // #3905: ASYNC, because the ingest it calls now awaits the classify pass off the main actor. That
     // is the whole reason the async travels up through this view: the work is the same, it just no
     // longer holds the window while it happens.
-    private func ingestScoutExtract() async -> ScoutService.Outcome? {
+    // #4330: `priority` is a Dan action only when Dan asked for this ingest himself (keeping a cancelled
+    // read); the detached read's own ingest is a scout landing.
+    private func ingestScoutExtract(priority: LandingSingleFlight.Priority = .scout) async -> ScoutService.Outcome? {
         // #2879: THE SCOUT SIBLING of #2873, the same line for the third time. A results file the
         // decoder refused returned nil here, which every caller reads as "the run produced nothing", so
         // a whole extract run's shows could be dropped in silence. The answer to the caller is unchanged;
         // the failure is now recorded against the file and reaches the masthead.
-        guard let results = HandoffFile.read(at: ScoutExtractResultsDecoder.defaultURL,
-                                             decode: ScoutExtractResultsDecoder.decode).value else { return nil }
+        // #4330: the bytes are kept beside the decoded results, so an ingest that has to wait for the store
+        // can copy exactly what it decoded (`ScoutExtractLanding`), never whatever the file holds by then.
+        guard let file = HandoffFile.read(at: ScoutExtractResultsDecoder.defaultURL,
+                                          decode: { ($0, try ScoutExtractResultsDecoder.decode($0)) }).value
+        else { return nil }
         let loaded = DownbeatBridge.loadWithHealth(now: Date())
         let existing = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
-        let outcome = await ScoutExtractIngest.ingest(
-            results, clients: loaded.clients,
+        let landed = await ScoutExtractLanding.land(
+            file.0, file.1, clients: loaded.clients,
             history: LocalHistory.forMatching(existing: existing),
             blocked: ScoutService.blockedCalendar(export: (loaded.bookings, loaded.blockedDates,
                                                            loaded.health),
                                                   context: context),
+            priority: priority,
             into: context)
+        if let left = landed.copyLeftBehind { status.set(left, priority: .warning) }
+        let outcome = landed.outcome
 
         scoutSummary = ScoutRunSummary.watchedCalendarSummary(for: outcome)   // #885
+        // #4330: the sweep at the end of every landing.
+        await offerPendingScoutIngests()
         return outcome
+    }
+
+    // #4330 (A13, L665): every kept set of calendar results, offered again from its own copy. Nothing to
+    // say on the ordinary day, when nothing is kept; otherwise one status line that says what landed, what
+    // is still waiting, and what is stuck.
+    private func offerPendingScoutIngests() async {
+        let pending = PendingScoutIngests.live
+        do {
+            guard !(try pending.list()).isEmpty else { return }
+        } catch {
+            status.set(LandingWaitCopy.pendingUnreadable(path: pending.directory.path,
+                                                         why: String(describing: error)),
+                       priority: .warning)
+            return
+        }
+        let loaded = DownbeatBridge.loadWithHealth(now: Date())
+        let existing = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
+        let offered = await ScoutExtractLanding.offerPending(
+            clients: loaded.clients, history: LocalHistory.forMatching(existing: existing),
+            blocked: ScoutService.blockedCalendar(export: (loaded.bookings, loaded.blockedDates, loaded.health),
+                                                  context: context),
+            pending: pending, into: context)
+        let problems = offered.unreadable + offered.copiesLeftBehind
+        if let line = LandingWaitCopy.offered(landed: offered.landed.count, stillWaiting: offered.stillWaiting,
+                                              stuck: offered.stuck) {
+            status.set(([line] + problems).joined(separator: " "),
+                       priority: offered.stuck > 0 || !problems.isEmpty ? .warning : .info)
+        } else if !problems.isEmpty {
+            status.set(problems.joined(separator: " "), priority: .warning)
+        }
     }
 
     // The reply drafter's completion half (#435): the classify+drafter run is detached, so without this
@@ -2668,6 +2711,18 @@ struct RootView: View {
         }
         scoutTask = Task {
             do {
+                // #4330 (A13): a press Dan made waits its turn when a landing holds the store, says so in
+                // the acknowledgement, and starts the sweep once that landing has finished. The scheduled
+                // run does not wait here: only its landing block does, behind every Dan action.
+                if !auto {
+                    try await LandingSingleFlight.shared.waitForTurnToStartARun(acknowledge: { line in
+                        feedback.acknowledge(line)
+                        scoutProgress.nativeSnapshot = .init(sourceName: nil, completed: 0, total: 0,
+                                                             advancedAt: Date(),
+                                                             step: .waitingForTheLandingInProgress)
+                    })
+                    guard gen == scoutGeneration else { return }
+                }
                 let outcome = try await ScoutService.runScout(
                     into: context, depth: depth, only: only,
                     // #1034: the native "Scouting" phase heartbeat feeds the modal's source name and
@@ -2704,8 +2759,11 @@ struct RootView: View {
                         return await withCheckedContinuation { continuation in
                             askReadBudget(ScoutReadAsk(pending: pending) { continuation.resume(returning: $0) })
                         }
-                    })
+                    },
+                    landingPriority: auto ? .scout : .danAction)
                 guard gen == scoutGeneration else { return }   // superseded by a Retry / newer run
+                // #4330: the sweep of kept calendar results at the end of this landing.
+                await offerPendingScoutIngests()
                 scoutSummary = ScoutRunSummary.summary(for: outcome)   // #885
 
                 // #802, Dan's 3rd decision: SHOW him the do-not-contact guard working. An org that asked
@@ -2958,7 +3016,7 @@ struct RootView: View {
     // and leave the work running behind a screen that says it is done (L415, L12).
     private func keepCancelledRead() {
         Task {
-            await ingestScoutExtract()
+            await ingestScoutExtract(priority: .danAction)
             cancelledScoutRead = nil
             modals.settled()
         }

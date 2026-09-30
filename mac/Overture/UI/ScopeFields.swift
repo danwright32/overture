@@ -472,6 +472,7 @@ extension WatchedSource: ScopeObserved {
         .init(\.lastReadableCount),
         .init(\.lastStructuralGapCount),
         .init(\.lastSucceededAt),
+        .init(\.lastTouchedSequence),
         .init(\.lastUnreadableCount),
         .init(\.lastUnreadableTitleCount),
         .init(\.listingsURL),
