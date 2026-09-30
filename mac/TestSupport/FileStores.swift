@@ -22,7 +22,7 @@ import SwiftData
 // unsaved change still pending did not fault.
 //
 // So a test opens a file store through `container(for:configurations:)`, which records it, and removes
-// the directory through `remove(_:)` (or a `TemporarySandboxes`, which calls `close(under:)` itself).
+// the directory through `remove(_:)` (or a `TemporarySandboxes`, whose `deinit` calls `remove(_:)` itself).
 // `FileStoresGuardTests` fails on a bare file-backed `ModelContainer(` anywhere in the test sources, so
 // the next suite cannot quietly go back to it (L27, L613).
 enum FileStores {

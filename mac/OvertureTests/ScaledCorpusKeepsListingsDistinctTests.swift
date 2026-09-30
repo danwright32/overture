@@ -29,10 +29,11 @@ struct ScaledCorpusKeepsListingsDistinctTests {
     @Test(.enabled(if: LiveStorePresence.exists, LiveStorePresence.absenceReason))
     func eachCopyHasItsOwnListings() async throws {
         await RealStoreTestLock.shared.acquire()
+        let fm = FileManager.default
+        let dir = fm.temporaryDirectory.appendingPathComponent("scaled-urls-\(UUID().uuidString)", isDirectory: true)
+        // #4061: the stores are released and the directory removed INSIDE the real-store lock on both paths,
+        // the ordering #1608 fixed in ImmutableStoreFixture; a `defer` here would run after the release.
         do {
-            let fm = FileManager.default
-            let dir = fm.temporaryDirectory.appendingPathComponent("scaled-urls-\(UUID().uuidString)", isDirectory: true)
-            defer { FileStores.remove(dir) }
             try fm.createDirectory(at: dir, withIntermediateDirectories: true)
             guard let clone = try LiveStoreClone.makeClone(in: dir) else {
                 throw LiveStoreClone.Refusal.backupFailed("no live store on this machine")
@@ -50,8 +51,10 @@ struct ScaledCorpusKeepsListingsDistinctTests {
                     "run addresses: clone \(base.run), 2x copy \(got.run), expected \(2 * base.run)")
             #expect(got.largestListing == base.largestListing,
                     "the fullest listing held \(base.largestListing) shows in the clone and \(got.largestListing) in the copy")
+            FileStores.remove(dir)
             await RealStoreTestLock.shared.release()
         } catch {
+            FileStores.remove(dir)
             await RealStoreTestLock.shared.release()
             throw error
         }
