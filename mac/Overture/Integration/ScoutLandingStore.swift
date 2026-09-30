@@ -202,7 +202,7 @@ final class ScoutLandingStore {
 
     // Every stored show, as a fresh fetch would return it right now. Throws when the store cannot answer.
     func rows() throws -> [Prospect] {
-        if policy == .everyRead { return try read(context) }
+        if policy == .everyRead { return Prospect.inKeyOrder(try read(context)) }
         if let loaded {
             noteWrittenRows()
             // Re-filtering every row on every read was, once keyed lookups came here, a larger cost than the
@@ -214,7 +214,9 @@ final class ScoutLandingStore {
             members = deletionPending ? nil : current
             return current
         }
-        let fetched = try read(context)
+        // #4397: held in key order, never the read's own. Every first match the landing makes reads this array,
+        // and an unsorted fetch on a context with unsaved changes comes back in a different order each time.
+        let fetched = Prospect.inKeyOrder(try read(context))
         loaded = fetched
         members = fetched
         return fetched

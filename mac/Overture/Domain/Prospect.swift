@@ -1745,6 +1745,21 @@ final class Prospect {
     // for an exclamation mark, a stray comma) stops minting a second row for the same night. The fold
     // runs AFTER canonicalize, never before: canonicalize is what decodes "&amp;", and stripping
     // punctuation first would leave "amp" behind and split the rows #25 taught this key to join.
+    // #4397: shows in ONE order, by natural key compared byte for byte, whatever order they were read in.
+    //
+    // A table fetch with no sort has no order to promise (L343), and SwiftData's is not even repeatable: on a
+    // context holding ANY unsaved change it came back in a different order on each of six opens of the same
+    // store file (measured 2026-09-30, 1,350 and 5,400 shows), while a clean context's order repeated. A reader
+    // that takes the FIRST row matching something therefore picked a different row from run to run, which is
+    // how two landings of the same inputs left two different stores. The natural key is unique in the store,
+    // so this order is total; bytes rather than a localized comparison, which can call two distinct keys equal.
+    // The key is read once per row, not once per comparison: each read goes through SwiftData's backing data.
+    static func inKeyOrder(_ rows: [Prospect]) -> [Prospect] {
+        rows.map { (key: $0.naturalKey, row: $0) }
+            .sorted { $0.key.utf8.lexicographicallyPrecedes($1.key.utf8) }
+            .map(\.row)
+    }
+
     static func makeNaturalKey(groupName: String, performanceDate: String?, venue: String?) -> String {
         let normalizedVenue = venue.map(VenueNormalization.normalizeForKey)
         let foldedTitle = TitleNormalization.normalizeForKey(canonicalize(groupName))
