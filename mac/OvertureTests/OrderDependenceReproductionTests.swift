@@ -101,18 +101,44 @@ final class OrderDependenceReproductionTests {
         ]
     }
 
-    @Test func todayShowLinkGroupMemberOrderFollowsInputOrder() {
-        let rows = showLinkRows()
-        let forward = OracleRendering.keyed(ShowLink.group(rows))
-        let reversed = OracleRendering.keyed(ShowLink.group(rows.reversed()))
-        #expect(forward != reversed, "ShowLink.group no longer depends on input order; retire this test (L373)")
+    // #4344, plan v7 Step T: the two `today...` reproductions that stood here were CONSUMED when the product
+    // term was made deterministic, and are inverted rather than kept (L373). The PRODUCT functions, called
+    // with no wrapper, now give ONE answer over 100 orders and it is the canonical oracle's answer, so the
+    // Phase 0c proofs made against the oracle carry over. Run twice: on the fixture, and again after a
+    // re-key that moves a fully tied row to the front of the natural key order (plan section 6: a re-key
+    // is the one change a tie-break by key turns into a visible move, L419).
+    private func showLinkRowsRekeyed() -> [ShowLink.Row] {
+        showLinkRows().map { row in
+            guard row.id == "sl-c" else { return row }
+            var moved = row
+            moved.id = "sl-0"
+            return moved
+        }
     }
 
-    @Test func todayShowLinkCollapseFrontMembersFollowInputOrder() {
-        let rows = showLinkRows()
-        let forward = OracleRendering.collapse(ShowLink.collapse(rows))
-        let reversed = OracleRendering.collapse(ShowLink.collapse(rows.reversed()))
-        #expect(forward != reversed, "ShowLink.collapse fronts no longer depend on input order; retire this test (L373)")
+    @Test(arguments: [false, true])
+    func productShowLinkGroupIsTheCanonicalAnswerOverEveryOrder(rekeyed: Bool) {
+        let rows = rekeyed ? showLinkRowsRekeyed() : showLinkRows()
+        let seed: UInt64 = 4344_01
+        let oracle = OracleRendering.keyed(CanonicalOracle.showLinkGroup(rows))
+        let distinct = distinctAnswers({ order in
+            OracleRendering.keyed(ShowLink.group(order.map { rows[$0] }))
+        }, size: rows.count, seed: seed)
+        #expect(distinct == [oracle], report("ShowLink.group, product", distinct, seed: seed))
+    }
+
+    @Test(arguments: [false, true])
+    func productShowLinkCollapseIsTheCanonicalAnswerOverEveryOrder(rekeyed: Bool) {
+        let rows = rekeyed ? showLinkRowsRekeyed() : showLinkRows()
+        let seed: UInt64 = 4344_02
+        // A surface that draws only some of the group, the queue's case, as well as the archive's nil.
+        for drawn in [nil, Set(rows.map(\.id)).subtracting(["sl-a"])] as [Set<String>?] {
+            let oracle = OracleRendering.collapse(CanonicalOracle.showLinkCollapse(rows, drawn: drawn))
+            let distinct = distinctAnswers({ order in
+                OracleRendering.collapse(ShowLink.collapse(order.map { rows[$0] }, drawn: drawn))
+            }, size: rows.count, seed: seed)
+            #expect(distinct == [oracle], report("ShowLink.collapse, product", distinct, seed: seed))
+        }
     }
 
     @Test func canonicalShowLinkGroupIsOneAnswerOverEveryOrder() {
