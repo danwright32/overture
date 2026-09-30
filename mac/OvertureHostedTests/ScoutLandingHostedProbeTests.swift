@@ -425,7 +425,9 @@ final class ScoutLandingHostedProbeTests {
         if skip("0.9") { return }
         let null = try await run("null: planted, nothing saved", autosave: false, window: .seconds(2)) { _ in }
         let watched = try await run("save of one WatchedSource field", autosave: false, window: .seconds(2)) { rig in
-            rig.source.lastCheckedAt = Date(timeIntervalSince1970: 1_790_000_000)
+            // Any value the row did not hold (it held nil). From the live clock, as every hosted fixture's instants
+            // are (HostedProbeFixturesFollowTheLiveClockTests), so it never drifts into a different state.
+            rig.source.lastCheckedAt = LiveClockProbe.fresh
             try rig.ctx.save()
         }
         let landingRun = try await run("save of one inserted CancelledShoot (LandingRun stand in)", autosave: false,
