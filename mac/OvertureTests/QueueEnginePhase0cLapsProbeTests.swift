@@ -784,7 +784,10 @@ final class QueueEnginePhase0cLapsProbeTests {
                 "the header no longer states the deep plan: \(Phase0cTickLaps.describe(Phase0cTickLaps.deepPlan))")
     }
 
-    private struct SaveRefused: Error {}
+    // Carries its own text, so the tests can see the save's own reason reaches the error it becomes (L520).
+    private struct SaveRefused: Error, CustomStringConvertible {
+        var description: String { "the store refused the save: disk full" }
+    }
 
     // #4324: a real lap whose hand restore cannot be saved THROWS, naming its lap, rather than reading as a
     // restore that landed. Each lap is driven to an instant where it really writes, or the save it is meant
@@ -801,6 +804,7 @@ final class QueueEnginePhase0cLapsProbeTests {
                                                 save: { _ in throw SaveRefused() })
         }
         #expect(error?.lap == "settle")
+        #expect(error?.underlying.contains("disk full") == true, "the save's own reason was lost: \(error?.underlying ?? "")")
         #expect(Phase0cLapOracle.rollbackLeaks > leaksBefore, "the settle restore wrote nothing, so no save was asked")
     }
 
@@ -814,6 +818,7 @@ final class QueueEnginePhase0cLapsProbeTests {
             _ = try Phase0cLapOracle.retireReal(context: world.context, today: day, save: { _ in throw SaveRefused() })
         }
         #expect(error?.lap == "retirement")
+        #expect(error?.underlying.contains("disk full") == true, "the save's own reason was lost: \(error?.underlying ?? "")")
     }
 
     /// Fact 8's clock half: the due set equals settle's changed set at every instant on either side of every
