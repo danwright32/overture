@@ -156,10 +156,12 @@ struct FileStoresGuardTests {
         var routed = 0
         // The helper itself, and this file, which has to name the construction to find it.
         for file in files where file.name != "FileStores.swift" && file.name != "FileStoresTests.swift" {
-            let code = SwiftSource.scannableLines(in: file.text).map(\.code).joined(separator: "\n")
+            let lines = SwiftSource.scannableLines(in: file.text)
+            let code = lines.map(\.code).joined(separator: "\n")
             if code.contains("FileStores.container(") { routed += 1 }
+            // The scan counts lines of the scanned code; named here by the file's own line number.
             for line in Self.fileBackedConstructions(in: code) {
-                offenders.append("\(file.name):\(line)")
+                offenders.append("\(file.name):\(lines.indices.contains(line - 1) ? lines[line - 1].line : line)")
             }
         }
         #expect(files.count >= Self.floor, "the test sources were not walked, so this guard checked nothing")
