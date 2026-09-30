@@ -576,7 +576,8 @@ enum QueueRenderPass {
             geo: geo,
             // #4121: the table itself, so a surface OUTSIDE this pass can project from it rather than
             // deciding every show's stages again. `RenderData.scoutRows()` is the first such reader.
-            placement: placement)
+            placement: placement,
+            now: context.now)
     }
 
     // #1694: one possible-match record flagged across a crowd of shows, which is the tell that the rule
