@@ -751,6 +751,7 @@ extension QueueEnginePhase0cRowsProbeTests {
         let shows = Self.pendingContactDraftShows(fx)
         try #require(!shows.isEmpty, "the fixture holds no contacted show, so the case cannot be built")
         var proto = Phase0cRowEntries(rows: fx.rows, context: fx.rowContext(), upstream: fx.upstream())
+        let before = Self.disagreement(fx, proto)
         let p = shows[0]
         let pid = p.persistentModelID
         #expect(p.recipients.contains { $0.sendState == .pending && $0.email != nil })
@@ -758,7 +759,10 @@ extension QueueEnginePhase0cRowsProbeTests {
         proto.apply(changed: [pid], rows: fx.rowsByPID, upstream: fx.upstream(), context: fx.rowContext())
         #expect(proto.entries[pid]?.lint?.body == Phase0cRowsFixture.draftWithSlot,
                 "the edit did not reach the draft lint, so timing it would time the skip")
-        #expect(fx.oracle().mismatches(proto, rowsByKey: fx.rowsByKey).isEmpty)
+        // The edit adds no disagreement of its own. Not "no disagreement at all": this shape disagrees at build
+        // on `reachedOutDue`, and in a way that moves between runs of one seed (see the probe below), so an
+        // assertion of none would be a flaky red on every push.
+        #expect(Self.disagreement(fx, proto) == before, "the draft edit changed how the prototype disagrees with the oracle")
     }
 
     // The TimeProbe stand-in's count, on every push: two builds at one instant move nothing, and a changed row
@@ -784,13 +788,38 @@ extension QueueEnginePhase0cRowsProbeTests {
         #expect(Phase0cRows.geoReplayLine(r, rebuilt: [9], loadBefore: 2, loadAfter: .infinity).hasPrefix("UNMEASURED"))
     }
 
-    /// `AgentInputs`' description as field name to value, so a disagreement names its fields.
+    @Test func aFieldValueHoldingACommaStaysWhole() {
+        let fields = Self.agentFields("AgentInputs(toTriage: 3, runInFlight: Optional(a, b), reachedOutDue: 295)")
+        #expect(fields["runInFlight"] == "Optional(a, b)")
+        #expect(fields["reachedOutDue"] == "295")
+        #expect(fields.count == 3)
+    }
+
+    /// `AgentInputs`' description as field name to value, so a disagreement names its fields. Split only where
+    /// a comma is followed by the next `name: `, so a value that itself holds a comma stays whole.
     static func agentFields(_ text: String) -> [String: String] {
+        var body = text
+        if body.hasPrefix("AgentInputs(") { body.removeFirst("AgentInputs(".count) }
+        if body.hasSuffix(")") { body.removeLast() }
         var out: [String: String] = [:]
-        for part in text.split(separator: ",") {
+        let parts = body.replacingOccurrences(of: #", (?=[A-Za-z_][A-Za-z0-9_]*: )"#, with: "\u{1F}",
+                                              options: .regularExpression)
+            .split(separator: "\u{1F}")
+        for part in parts {
             let pair = part.split(separator: ":", maxSplits: 1).map { $0.trimmingCharacters(in: .whitespaces) }
-            if pair.count == 2 { out[pair[0].replacingOccurrences(of: "AgentInputs(", with: "")] = pair[1] }
+            if pair.count == 2 { out[pair[0]] = pair[1] }
         }
+        return out
+    }
+
+    /// How the prototype disagrees with the oracle, by component and by AgentInputs FIELD NAME, so two states
+    /// that disagree in the same places compare equal even when the counts behind them moved.
+    static func disagreement(_ fx: Phase0cRowsFixture, _ proto: Phase0cRowEntries) -> Set<String> {
+        let oracle = fx.oracle()
+        var out = Set(oracle.mismatches(proto, rowsByKey: fx.rowsByKey).filter { !$0.hasPrefix("AgentInputs") })
+        let mine = agentFields(String(describing: proto.agentInputs))
+        let theirs = agentFields(oracle.agent)
+        for name in Set(mine.keys).union(theirs.keys) where mine[name] != theirs[name] { out.insert("AgentInputs." + name) }
         return out
     }
 
@@ -817,6 +846,7 @@ extension QueueEnginePhase0cRowsProbeTests {
             // 2026-09-29: it disagrees at BUILD, on `reachedOutDue`, once a contacted show carries a waiting
             // contact, so the edits are judged against the build's disagreement rather than against none.
             let atBuild = fx.oracle().mismatches(proto, rowsByKey: fx.rowsByKey)
+            let buildDisagreement = Self.disagreement(fx, proto)
             let buildFields = Self.agentFields(String(describing: proto.agentInputs))
             let buildOracle = Self.agentFields(fx.oracle().agent)
             let buildDiffering = buildFields.keys.filter { buildFields[$0] != buildOracle[$0] }.sorted()
@@ -827,7 +857,7 @@ extension QueueEnginePhase0cRowsProbeTests {
                 samples.append(edit(p))
                 guard firstBreak == "none" else { continue }
                 let now = fx.oracle()
-                guard now.mismatches(proto, rowsByKey: fx.rowsByKey) != atBuild else { continue }
+                guard Self.disagreement(fx, proto) != buildDisagreement else { continue }
                 let mine = Self.agentFields(String(describing: proto.agentInputs))
                 let theirs = Self.agentFields(now.agent)
                 let differing = mine.keys.filter { mine[$0] != theirs[$0] }.sorted()
@@ -838,7 +868,10 @@ extension QueueEnginePhase0cRowsProbeTests {
                     + "prototype against oracle \(differing.joined(separator: "; "))"
             }
             let mismatches = fx.oracle().mismatches(proto, rowsByKey: fx.rowsByKey)
-            #expect(mismatches.isEmpty, "the prototype disagrees with the oracle after the edits [\(size)]")
+            // The build's own disagreement is the finding and FAILS the stop rule below; what this asserts is
+            // that the edits add none.
+            #expect(Self.disagreement(fx, proto) == buildDisagreement,
+                    "the draft edits changed how the prototype disagrees with the oracle [\(size)]")
             var replays: [String] = []
             var worst: Double? = 0
             for i in samples.indices.sorted(by: { samples[$0] > samples[$1] }).prefix(5) {
