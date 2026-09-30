@@ -98,11 +98,26 @@ struct FileStoresTests {
     // folder and a request naming a directory that is not, so nothing real is touched.
     @Test func nothingOutsideTheTempFolderIsReleased() throws {
         let dir = try scratch("file-stores-refusal")
-        _ = try openStoreWithAPendingChange(in: dir)
+        // Held for the whole test: the registry holds containers weakly, so a dropped one could close
+        // itself and make the refusal below pass for the wrong reason.
+        let held = try openStoreWithAPendingChange(in: dir)
+        defer { withExtendedLifetime(held) {} }
         let outside = URL(fileURLWithPath: "/usr/share")
         _ = FileStores.close(under: outside)
         #expect(!FileStores.openFiles(under: dir).isEmpty,
                 "a close aimed outside the temp folder released a store")
+        #expect(FileStores.remove(dir))
+    }
+
+    // The temp folder itself is not a sandbox: a close aimed at it must not reach every suite's stores.
+    @Test func theTempFolderItselfIsNeverReleased() throws {
+        let dir = try scratch("file-stores-temp-root")
+        // Held for the whole test: the registry holds containers weakly, so a dropped one could close
+        // itself and make the refusal below pass for the wrong reason.
+        let held = try openStoreWithAPendingChange(in: dir)
+        defer { withExtendedLifetime(held) {} }
+        _ = FileStores.close(under: URL(fileURLWithPath: NSTemporaryDirectory()))
+        #expect(!FileStores.openFiles(under: dir).isEmpty, "a close aimed at the temp folder released a store in it")
         #expect(FileStores.remove(dir))
     }
 }

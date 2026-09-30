@@ -28,12 +28,18 @@ import SwiftData
 enum FileStores {
 
     private static let lock = NSLock()
-    nonisolated(unsafe) private static var held: [ModelContainer] = []
+    /// WEAK, so recording a container never keeps it alive: one nothing else references is released (and
+    /// its files closed) exactly as it would have been without this, and `close(under:)` acts on the rest.
+    private final class WeakContainer {
+        weak var container: ModelContainer?
+        init(_ container: ModelContainer) { self.container = container }
+    }
+    nonisolated(unsafe) private static var held: [WeakContainer] = []
 
     /// A file-backed container, recorded so `close(under:)` can release it before its files go.
     static func container(for schema: Schema, configurations: [ModelConfiguration]) throws -> ModelContainer {
         let made = try ModelContainer(for: schema, configurations: configurations)
-        lock.withLock { held.append(made) }
+        lock.withLock { held.append(WeakContainer(made)) }
         return made
     }
 
@@ -51,21 +57,25 @@ enum FileStores {
             // the process.
             let gone = dir.standardizedFileURL.path
             lock.withLock {
-                held.removeAll { c in c.configurations.contains { isInside($0.url.standardizedFileURL.path, gone) } }
+                held.removeAll { box in
+                    guard let c = box.container else { return true }
+                    return c.configurations.contains { isInside($0.url.standardizedFileURL.path, gone) }
+                }
             }
             return []
         }
-        guard let scratch = realPath(URL(fileURLWithPath: NSTemporaryDirectory())), isInside(root, scratch) else {
+        guard let scratch = realPath(URL(fileURLWithPath: NSTemporaryDirectory())), root != scratch, isInside(root, scratch) else {
             return openFiles(under: dir)
         }
         let closing: [ModelContainer] = lock.withLock {
-            let mine = held.filter { container in
+            held.removeAll { $0.container == nil }
+            let mine = held.compactMap(\.container).filter { container in
                 container.configurations.contains { config in
                     guard let store = storeDirectory(config.url) else { return false }
                     return isInside(store, root)
                 }
             }
-            held.removeAll { c in mine.contains { $0 === c } }
+            held.removeAll { box in mine.contains { $0 === box.container } }
             return mine
         }
         // The main context autosaves by default, and one left holding unsaved changes over a destroyed
