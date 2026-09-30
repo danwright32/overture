@@ -232,7 +232,7 @@ struct TheDivergenceLogKeysOnKindAndSourceTests {
     @Test func otherKindsDoNotProveTheCardCheckRan() throws {
         let dir = try sandboxes.make(named: "d8-never-ran")
         try write([record(1, kind: .noOpDirty, source: .reconcile, fields: [])], to: CardDivergenceLog.url(in: dir))
-        let defaults = try #require(UserDefaults(suiteName: "d8-never-ran-\(UUID().uuidString)"))
+        let defaults = ScratchDefaults.make("d8-never-ran")
         #expect(CardDivergenceReport.newlyReported(in: dir, defaults: defaults) == CardDivergenceCopy.neverRan)
     }
 
@@ -244,7 +244,7 @@ struct TheDivergenceLogKeysOnKindAndSourceTests {
         let url = CardDivergenceLog.url(in: dir)
         try write([record(1, kind: .noOpDirty, source: .reconcile, fields: []),
                    record(2, kind: .factMismatch, source: .reconcile, fields: ["venue"])], to: url)
-        let defaults = try #require(UserDefaults(suiteName: "d8-reader-\(UUID().uuidString)"))
+        let defaults = ScratchDefaults.make("d8-reader")
         defaults.set(Date(), forKey: CardDivergenceLog.lastRanKey)
         #expect(CardDivergenceReport.newlyReported(in: dir, defaults: defaults) == nil,
                 "a record that is not a card divergence was said to Dan as a wrong card")
