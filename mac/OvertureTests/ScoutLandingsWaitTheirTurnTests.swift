@@ -456,6 +456,33 @@ struct ScoutLandingsWaitTheirTurnTests {
         #expect(try pending.list().isEmpty, "the copy was not removed once it landed")
     }
 
+    // L5, L665: a kept copy is removed only once the save carrying its results has succeeded. A landing
+    // whose closing save fails never reached disk, so its copy is the only record left: kept, reported as
+    // not landed, and landed by a later offer.
+    @Test func aKeptCopyWhoseLandingFailedToSaveIsKeptAndLandsOnALaterOffer() async throws {
+        struct SaveRefused: Error {}
+        let c = try container()
+        let ctx = c.mainContext
+        htmlSource(in: ctx)
+        try ctx.save()
+        let dir = try sandboxes.make(named: "pending-save-failed")
+        let pending = PendingScoutIngests(directory: dir)
+        try pending.record(try JSONEncoder().encode(Self.results("unsaved")), sequence: 1, now: now)
+        let flight = LandingSingleFlight(sleep: { _ in })
+
+        let failed = await ScoutExtractLanding.offerPending(clients: [], history: [], blocked: .empty, now: now,
+                                                           landings: flight, pending: pending,
+                                                           saveClosing: { _ in throw SaveRefused() }, into: ctx)
+        #expect(failed.landed.isEmpty, "a landing whose save failed was counted as landed")
+        #expect(try pending.list().count == 1, "the only copy of results that never reached disk was deleted")
+
+        let offered = await ScoutExtractLanding.offerPending(clients: [], history: [], blocked: .empty, now: now,
+                                                            landings: flight, pending: pending, into: ctx)
+        #expect(offered.landed.count == 1)
+        #expect(try ModelContext(c).fetch(FetchDescriptor<Prospect>()).map(\.groupName).filter { $0.contains("unsaved") }.count == 2)
+        #expect(try pending.list().isEmpty)
+    }
+
     // A kept copy that keeps being refused for longer than a scout interval is STUCK, not waiting.
     @Test func aKeptCopyOlderThanAScoutIntervalIsReportedStuck() async throws {
         let c = try container()

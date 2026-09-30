@@ -25,6 +25,7 @@ enum ScoutExtractLanding {
                      landings: LandingSingleFlight = .shared,
                      priority: LandingSingleFlight.Priority = .scout,
                      pending: PendingScoutIngests = .live,
+                     saveClosing: (ModelContext) throws -> Void = { try $0.save() },
                      into context: ModelContext) async -> Landed {
         let hash = PendingScoutIngests.contentHash(of: data)
         var kept = sequence != nil
@@ -44,6 +45,7 @@ enum ScoutExtractLanding {
                     copyFailure = String(describing: error)
                 }
             },
+            saveClosing: saveClosing,
             into: context)
         if outcome.notLandedYet != nil {
             // The refusal's own sentence says a copy was kept. When it was not, that sentence is false, so
@@ -51,7 +53,10 @@ enum ScoutExtractLanding {
             if !kept { outcome.notLandedYet = LandingWaitCopy.ingestRefusedWithoutACopy(copyFailure ?? "unknown") }
             return Landed(outcome: outcome, copyLeftBehind: nil)
         }
-        if kept {
+        // L5, L665: removed only once the save carrying these results has succeeded. A failed save means
+        // they may never have reached disk, and the copy is then the only record of them, so it stays and
+        // the sweep offers it again.
+        if kept && !outcome.saveFailed {
             do {
                 try pending.remove(hash)
             } catch {
@@ -93,6 +98,7 @@ enum ScoutExtractLanding {
                              stuckAfter: TimeInterval = ScoutSchedule.defaultInterval,
                              landings: LandingSingleFlight = .shared,
                              pending: PendingScoutIngests = .live,
+                             saveClosing: (ModelContext) throws -> Void = { try $0.save() },
                              into context: ModelContext) async -> Offered {
         var offered = Offered()
         let listed: [PendingScoutIngests.Listed]
@@ -119,10 +125,11 @@ enum ScoutExtractLanding {
                 }
                 let landed = await land(copy.data, copy.results, sequence: entry.sequence,
                                         clients: clients, history: history, blocked: blocked, now: now,
-                                        landings: landings, pending: pending, into: context)
+                                        landings: landings, pending: pending, saveClosing: saveClosing,
+                                        into: context)
                 let outcome = landed.outcome
                 if let left = landed.copyLeftBehind { offered.copiesLeftBehind.append(left) }
-                if outcome.notLandedYet == nil {
+                if outcome.notLandedYet == nil && !outcome.saveFailed {
                     offered.landed.append(outcome)
                 } else if now.timeIntervalSince(entry.recordedAt) > stuckAfter {
                     offered.stuck += 1

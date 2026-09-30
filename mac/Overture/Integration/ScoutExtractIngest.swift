@@ -67,6 +67,8 @@ enum ScoutExtractIngest {
                        // Called with the run's sequence only when the landing has to WAIT for the store,
                        // before it starts to: where the caller keeps a copy of what it is holding (L665).
                        onWait: (Int) -> Void = { _ in },
+                       // The closing save, injected so a test can make it fail (`ScoutService.saveLanding`).
+                       saveClosing: (ModelContext) throws -> Void = { try $0.save() },
                        into context: ModelContext) async -> ScoutService.Outcome {
         var outcome = ScoutService.Outcome(found: 0, inserted: 0, updated: 0, skipped: 0)
         let sequence = givenSequence ?? landings.mintSequence(
@@ -355,7 +357,7 @@ enum ScoutExtractIngest {
         }
         // #4325: the reconcile's writes, and every source's bookkeeping above, saved before the landing
         // returns, through the one closing save the native sweep uses. Nothing saved them before this.
-        if !ScoutService.saveLanding(landing, into: context) { outcome.saveFailed = true }
+        if !ScoutService.saveLanding(landing, into: context, save: saveClosing) { outcome.saveFailed = true }
         token.end()
 
         return outcome
