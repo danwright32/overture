@@ -347,6 +347,9 @@ struct LandingOracleTests {
         return Frozen(archive: archive, manifest: manifest, out: out, mode: mode)
     }
 
+    // What a landing reads besides the store, which an archive must hold for the real arm to run on it.
+    static let requiredInputs = ["overture-scout-extract-results.json", "downbeat-export.json", "overture-history.json"]
+
     @Test func realArmAt1x() async throws { try await realArm(size: "x1") }
     @Test func realArmAt4x() async throws { try await realArm(size: "x4") }
 
@@ -364,8 +367,13 @@ struct LandingOracleTests {
             Issue.record(Comment(rawValue: "UNMEASURED: the MANIFEST names no \(size) store"))
             return
         }
-        for name in storeNames + ["overture-scout-extract-results.json", "downbeat-export.json",
-                                  "overture-history.json"] {
+        // Every input the landing reads must be one the archive froze and hashed. One it lacks is an archive
+        // this run cannot measure on, said as such rather than as a copy error (L11).
+        for name in Self.requiredInputs where frozen.manifest.sha256[name] == nil {
+            Issue.record(Comment(rawValue: "UNMEASURED: inputs differ from the oracle's (\(name): not in the archive)"))
+            return
+        }
+        for name in storeNames + Self.requiredInputs {
             let to = work.appendingPathComponent(name)
             try FileManager.default.createDirectory(at: to.deletingLastPathComponent(),
                                                     withIntermediateDirectories: true)
@@ -450,11 +458,15 @@ struct LandingOracleTests {
             }
         }
         let handoff = StoreLocation.handoffDirectory(appSupport: StoreLocation.appSupport, isDebugBuild: false)
-        for name in ["overture-scout-extract-results.json", "downbeat-export.json", "overture-history.json",
-                     "overture-shoot-history.json"] {
+        // The inputs a landing reads are REQUIRED: an archive without one could never be landed on, so the
+        // freeze refuses rather than writing it. The shoot history is kept when present, for later phases.
+        for name in Self.requiredInputs + ["overture-shoot-history.json"] {
             let from = handoff.appendingPathComponent(name)
             if FileManager.default.fileExists(atPath: from.path) {
                 try FileManager.default.copyItem(at: from, to: archive.appendingPathComponent(name))
+            } else if Self.requiredInputs.contains(name) {
+                Issue.record(Comment(rawValue: "REFUSED: \(name) is not in the handoff folder, so these inputs cannot be frozen"))
+                return
             }
         }
         let now = Date()
