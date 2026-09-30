@@ -54,6 +54,11 @@ enum ScoutExtractIngest {
                        // #4275: how the whole show table is read, injected so a test can count the reads.
                        // Every read of it this ingest makes goes through here.
                        readProspectTable: @escaping ScoutLandingStore.Read = ScoutService.readProspectTable,
+                       // #4327 step 0.7: handed the working set's cumulative counters after each LANDED source
+                       // (labelled with its source id) and once more after the reconcile's read (labelled
+                       // `Counters.afterReconcile`), so a probe can say what each source cost. Counting only;
+                       // nil, which every shipping caller passes, reports nothing.
+                       onLandingStep: ((String, ScoutLandingStore.Counters) -> Void)? = nil,
                        into context: ModelContext) async -> ScoutService.Outcome {
         var outcome = ScoutService.Outcome(found: 0, inserted: 0, updated: 0, skipped: 0)
 
@@ -283,7 +288,9 @@ enum ScoutExtractIngest {
         for slot in slots {
             switch slot {
             case .settled(let settled): outcome.merge(settled)
-            case .pending(let pending): land(pending)
+            case .pending(let pending):
+                land(pending)
+                onLandingStep?(pending.source.sourceId, landing.counters)
             }
         }
 
@@ -312,6 +319,7 @@ enum ScoutExtractIngest {
             let allStored = (try? landing.rows()) ?? []
             FeedReconcile.reconcile(stored: allStored, reports: reports, today: today)
         }
+        onLandingStep?(ScoutLandingStore.Counters.afterReconcile, landing.counters)
 
         return outcome
     }

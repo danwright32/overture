@@ -124,9 +124,57 @@ final class ScoutLandingStore {
     private var indexedKey: [ObjectIdentifier: String] = [:]
     private var position: [ObjectIdentifier: Int] = [:]
     private let saveWatch = SaveWatch()
+    // #4327 step 0.7 (RC4): what this working set did, counted, so whether the stored shows are served from
+    // the cache for the second source onwards is a measurement and not a reading of this file. Cumulative
+    // over the landing; the difference of two snapshots is what the work between them cost, which is how the
+    // landing attribution probe reports each source. Counting only: nothing here reads a counter.
+    struct Counters: Equatable, Sendable, CustomStringConvertible {
+        // The label an ingest reports its last snapshot under, taken after the reconcile's read.
+        static let afterReconcile = "after the reconcile"
+        // `storedShowsPerURL` walked every row into shows again, and when it answered from its cache.
+        var storedShowsBuilds = 0
+        var storedShowsCacheHits = 0
+        // Why `generation` moved, by the site that moved it: a row folded for the FIRST time (`fold(of:)` with
+        // nothing cached), a cached fold that no longer described its row (`fold(of:)`, a written field), and a
+        // row the landing inserted (`inserted(_:)`). Any move makes the next stored shows read rebuild.
+        var generationMovesFirstFold = 0
+        var generationMovesFoldChanged = 0
+        var generationMovesInserted = 0
+        // Cached folds compared against their row, because SwiftData named the row as written (#4275).
+        var foldValidations = 0
+        // Store rows VISITED. `rowsRead` is the rows the one fetch returned. `rowsHandedOut` is the rows every
+        // caller of `rows()` was given, each of which walks what it is given. `rowsWalked` is the working
+        // set's own walks over every row: the deletion filter, the key index build, and the stored shows
+        // read's fold pass and build.
+        var rowsRead = 0
+        var rowsHandedOut = 0
+        var rowsWalked = 0
+
+        var generationMoves: Int { generationMovesFirstFold + generationMovesFoldChanged + generationMovesInserted }
+
+        static func - (a: Counters, b: Counters) -> Counters {
+            Counters(storedShowsBuilds: a.storedShowsBuilds - b.storedShowsBuilds,
+                     storedShowsCacheHits: a.storedShowsCacheHits - b.storedShowsCacheHits,
+                     generationMovesFirstFold: a.generationMovesFirstFold - b.generationMovesFirstFold,
+                     generationMovesFoldChanged: a.generationMovesFoldChanged - b.generationMovesFoldChanged,
+                     generationMovesInserted: a.generationMovesInserted - b.generationMovesInserted,
+                     foldValidations: a.foldValidations - b.foldValidations,
+                     rowsRead: a.rowsRead - b.rowsRead,
+                     rowsHandedOut: a.rowsHandedOut - b.rowsHandedOut,
+                     rowsWalked: a.rowsWalked - b.rowsWalked)
+        }
+
+        var description: String {
+            "builds \(storedShowsBuilds), cache hits \(storedShowsCacheHits), generation moves \(generationMoves) "
+                + "(first fold \(generationMovesFirstFold), fold changed \(generationMovesFoldChanged), inserted "
+                + "\(generationMovesInserted)), fold validations \(foldValidations), rows read \(rowsRead), "
+                + "rows handed out \(rowsHandedOut), rows walked \(rowsWalked)"
+        }
+    }
+    private(set) var counters = Counters()
     // How many cached folds were compared against their row. Counted so a test can pin that it does not
     // grow with the store (#4275).
-    private(set) var foldValidations = 0
+    var foldValidations: Int { counters.foldValidations }
     // Moves whenever any row's folds are (re)computed or a row joins, so a value derived from every row's
     // folds knows when it has to be derived again.
     private var generation = 0
@@ -178,6 +226,13 @@ final class ScoutLandingStore {
 
     // Every stored show, as a fresh fetch would return it right now. Throws when the store cannot answer.
     func rows() throws -> [Prospect] {
+        let current = try currentRows()
+        counters.rowsHandedOut += current.count
+        return current
+    }
+
+    // `rows()` without counting the rows as handed to a caller, for the working set's own reads.
+    private func currentRows() throws -> [Prospect] {
         if policy == .everyRead { return try read(context) }
         if let loaded {
             noteWrittenRows()
@@ -186,11 +241,13 @@ final class ScoutLandingStore {
             // used only while no deletion is pending, which is what makes it the answer the filter would give.
             let deletionPending = context.hasChanges && !context.deletedModelsArray.isEmpty
             if let members, !deletionPending { return members }
+            counters.rowsWalked += loaded.count
             let current = loaded.filter { !$0.isDeleted }
             members = deletionPending ? nil : current
             return current
         }
         let fetched = try read(context)
+        counters.rowsRead += fetched.count
         loaded = fetched
         members = fetched
         return fetched
@@ -203,6 +260,7 @@ final class ScoutLandingStore {
         loaded?.append(p)
         members = nil
         generation += 1
+        counters.generationMovesInserted += 1
         if keyIndex != nil { index(p, at: (loaded?.count ?? 1) - 1) }
     }
 
@@ -214,10 +272,11 @@ final class ScoutLandingStore {
         if policy == .everyRead { return try readKey(key, context) }
         // The rows are loaded once; after that only what was written is asked about. A deleted row stays in
         // the index and is refused below, so no read of every row's `isDeleted` is needed here.
-        if loaded == nil { _ = try rows() } else { noteWrittenRows() }
+        if loaded == nil { _ = try currentRows() } else { noteWrittenRows() }
         if keyIndex == nil {
             keyIndex = [:]
             keysToCheck = [:]
+            counters.rowsWalked += loaded?.count ?? 0
             for (i, p) in (loaded ?? []).enumerated() { index(p, at: i) }
         } else {
             for (id, p) in keysToCheck where indexedKey[id] != nil && indexedKey[id] != p.naturalKey {
@@ -258,8 +317,11 @@ final class ScoutLandingStore {
         let written = foldsToCheck.remove(id) != nil
         if let cached = folds[id] {
             if !written { return cached }
-            foldValidations += 1
+            counters.foldValidations += 1
             if cached.describes(p) { return cached }
+            counters.generationMovesFoldChanged += 1
+        } else {
+            counters.generationMovesFirstFold += 1
         }
         let fresh = Fold(p)
         folds[id] = fresh
@@ -272,11 +334,15 @@ final class ScoutLandingStore {
     // title test per URL), and before this it was repeated, identically, for every source of a landing.
     // Every row's fold is asked for first, which re-folds any row SwiftData named as written since.
     func storedShowsPerURL() throws -> StoredShows {
-        let rows = try rows()
+        let rows = try currentRows()
+        counters.rowsWalked += rows.count
         for row in rows { _ = fold(of: row) }
         if policy == .once, let shows, shows.generation == generation, shows.count == rows.count {
+            counters.storedShowsCacheHits += 1
             return shows.value
         }
+        counters.storedShowsBuilds += 1
+        counters.rowsWalked += rows.count
         var value = StoredShows()
         let seen = rows.flatMap { ScoutService.ambiguityEntries(of: fold(of: $0)) }
         ShowLink.addShows(seen, scopedByVenue: true, into: &value.atAVenue)
