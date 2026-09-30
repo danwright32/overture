@@ -215,6 +215,11 @@ run_foreground_check "scripts/check-detached-runner-scope.sh" "${REPO_ROOT}/scri
 # into every session opened here.
 run_foreground_check "scripts/check-project-plugin-scope.sh" "${REPO_ROOT}/scripts/check-project-plugin-scope.sh"
 
+# #4328: no file in the tree may be a real-arm recording (a hashed snapshot of Dan's real data, marked by
+# its first line). The SECOND layer: the pre-push hook and CI's scan walk every commit in a push or a pull
+# request, which this tree scan cannot (L489); this one sees a file before it is ever committed.
+run_foreground_check "scripts/real-arm-scan.sh --tree" "${REPO_ROOT}/scripts/real-arm-scan.sh" --tree "${REPO_ROOT}"
+
 # The app launches its runners with /bin/sh, so they must PARSE there. `bash -n` is not enough and
 # missing that shipped a runner that died on its first real run.
 run_foreground_check "scripts/check-runner-posix.sh" "${REPO_ROOT}/scripts/check-runner-posix.sh"
