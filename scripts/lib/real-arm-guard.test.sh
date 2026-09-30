@@ -150,6 +150,22 @@ rm -f "${WORK}/untracked.oracle"
 out="$("${SCAN}" --tree "${WORK}" 2>&1)"
 assert_equals "and with it gone the tree is clean, the self-matching files included" "0" "$?"
 
+# --- 9. a tree the size of this repository --------------------------------------------------------------
+# The scan first shipped reading each file through its own process substitution, and macOS bash 3.2 died
+# part way through a tree of this repository's size (2,339 files on 2026-09-30, status 133), which the scan
+# then reported as UNMEASURED on every merge gate run. Three thousand files, the marked one among them, is
+# the real size; the handful above never reached it.
+mkdir -p "${WORK}/many"
+for i in $(seq 1 3000); do printf 'row %s\n' "${i}" > "${WORK}/many/f${i}.txt"; done
+printf '%s\n' "${MARKER}" > "${WORK}/many/f1500.oracle"
+out="$("${SCAN}" --tree "${WORK}" 2>&1)"
+assert_equals "a real-arm file among three thousand is still refused, not unmeasured" "1" "$?"
+assert_contains "and named" "${out}" "many/f1500.oracle"
+rm -f "${WORK}/many/f1500.oracle"
+out="$("${SCAN}" --tree "${WORK}" 2>&1)"
+assert_equals "and three thousand clean files measure clean" "0" "$?"
+rm -rf "${WORK}/many"
+
 if [[ ${FAILURES} -gt 0 ]]; then
   echo "${FAILURES} failure(s)"
   exit 1

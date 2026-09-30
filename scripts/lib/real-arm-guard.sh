@@ -33,7 +33,10 @@ real_arm_blob_is_marked() {
   local blob="$1" first="" marker
   marker="$(real_arm_marker)"
   git cat-file -e "${blob}" 2>/dev/null || return 2
-  IFS= read -r first < <(git cat-file blob "${blob}" 2>/dev/null | head -c 64) || true
+  # A command substitution rather than `read < <(...)`: bash 3.2 does not reap a process substitution per
+  # call, and over a repository's worth of files the shell dies part way (status 133, #4389).
+  first="$(git cat-file blob "${blob}" 2>/dev/null | head -c 64)" || true
+  first="${first%%$'\n'*}"
   first="${first%$'\r'}"
   [ "${first}" = "${marker}" ]
 }
@@ -138,7 +141,8 @@ real_arm_tree_violations() {
   while IFS= read -r -d '' path; do
     [ -f "${repo}/${path}" ] || continue
     first=""
-    IFS= read -r first < <(head -c 64 "${repo}/${path}" 2>/dev/null) || true
+    first="$(head -c 64 "${repo}/${path}" 2>/dev/null)" || true
+    first="${first%%$'\n'*}"
     first="${first%$'\r'}"
     [ "${first}" = "${marker}" ] && echo "${path}"
   done < <("${list[@]}" 2>/dev/null)
