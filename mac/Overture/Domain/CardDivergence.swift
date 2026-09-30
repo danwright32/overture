@@ -321,6 +321,8 @@ enum CardDivergenceLog {
     static func compact(at url: URL, cap: Int = fileCap) -> CompactionOutcome {
         let read = read(at: url)
         guard !read.fileWasAbsent else { return .nothingToArchive }
+        // Nothing to rewrite is quiet whatever the file holds: the refusal below is for a REWRITE (L11).
+        guard read.records.count > cap else { return .nothingToArchive }
         let unrecognised = read.records.filter(\.isFromALaterBuild).count
         guard unrecognised == 0 else { return .refusedUnrecognised(records: unrecognised) }
         let result = compacted(read.records, cap: cap)
@@ -392,11 +394,13 @@ enum CardDivergenceLog {
         // No archive is the ordinary state: most installs have never compacted. Nothing to report.
         guard !read.fileWasAbsent else { return .nothingToRemove }
         guard read.unreadableLines == 0 else { return .refused(unreadableLines: read.unreadableLines) }
-        let unrecognised = read.records.filter(\.isFromALaterBuild).count
-        guard unrecognised == 0 else { return ArchivePrune.refusedUnrecognised(records: unrecognised) }
-
+        // Worked out first, so an archive with nothing to remove is quiet whatever it holds: the refusal
+        // below is for a REWRITE (L11). A later build's records all share the unrecognised key, so they
+        // can make a drop appear here, which is exactly when the refusal must win.
         let result = prunedArchive(read.records)
         guard result.dropped > 0 else { return .nothingToRemove }
+        let unrecognised = read.records.filter(\.isFromALaterBuild).count
+        guard unrecognised == 0 else { return ArchivePrune.refusedUnrecognised(records: unrecognised) }
 
         // Atomically, and reported as a removal only once the write has actually happened: saying records
         // were removed when the write failed is a report of a deletion nobody performed (L12).
