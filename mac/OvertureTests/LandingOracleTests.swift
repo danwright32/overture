@@ -189,11 +189,12 @@ final class LandingOracleTests {
     private static func unexcluded(_ container: ModelContainer) throws -> [LandingOracle.Row] {
         let fresh = ModelContext(container)
         func rows<M: ScopeObserved>(_ type: M.Type) throws -> [LandingOracle.Row] {
-            try fresh.fetch(FetchDescriptor<M>()).map { model in
-                LandingOracle.Row(entity: String(describing: M.self), fields: M.scopeFields.map {
-                    LandingOracle.Field(name: ScoutReLandWritesNothingTests.fieldName($0.keyPath),
-                                        value: LandingOracle.render(model[keyPath: $0.keyPath]))
-                }.sorted { $0.name < $1.name })
+            let named = M.scopeFields.map { (name: ScoutReLandWritesNothingTests.fieldName($0.keyPath), keyPath: $0.keyPath) }
+                .sorted { $0.name < $1.name }
+            return try fresh.fetch(FetchDescriptor<M>()).map { model in
+                LandingOracle.Row(entity: String(describing: M.self), fields: named.map {
+                    LandingOracle.Field(name: $0.name, value: LandingOracle.render(model[keyPath: $0.keyPath]))
+                })
             }
         }
         var out: [LandingOracle.Row] = []

@@ -106,14 +106,14 @@ enum LandingOracle {
     @MainActor
     private static func snapshotRows<M: ScopeObserved>(_ type: M.Type, in context: ModelContext) throws -> [Row] {
         let entity = String(describing: M.self)
+        // The names ONCE per model, never per row: a key path's name is found by a symbol lookup in dyld, and
+        // doing it per row per field was nearly all of a 4x recording's time (sampled, 1,445 of 1,458 samples).
+        let named = M.scopeFields
+            .map { (name: ScoutReLandWritesNothingTests.fieldName($0.keyPath), keyPath: $0.keyPath) }
+            .filter { clockDerived["\(entity).\($0.name)"] == nil }
+            .sorted { $0.name < $1.name }
         return try context.fetch(FetchDescriptor<M>()).map { model in
-            var fields: [Field] = []
-            for field in M.scopeFields {
-                let name = ScoutReLandWritesNothingTests.fieldName(field.keyPath)
-                guard clockDerived["\(entity).\(name)"] == nil else { continue }
-                fields.append(Field(name: name, value: render(model[keyPath: field.keyPath])))
-            }
-            return Row(entity: entity, fields: fields.sorted { $0.name < $1.name })
+            Row(entity: entity, fields: named.map { Field(name: $0.name, value: render(model[keyPath: $0.keyPath])) })
         }
     }
 
