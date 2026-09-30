@@ -99,6 +99,9 @@ enum FailurePathRevert {
             context.delete(model)
             report.insertsDeleted += 1
         }
+        // A delete is only pending until the context processes it, and until then the row is still listed as
+        // inserted and still returned by a fetch. Processed here so the context reads as the store does.
+        context.processPendingChanges()
         return report
     }
 

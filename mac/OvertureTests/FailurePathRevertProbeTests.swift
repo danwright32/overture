@@ -124,10 +124,17 @@ final class FailurePathRevertProbeTests {
         return out
     }
 
+    // Fixture values only (invented shows and contacts), so naming them is safe.
     private static func differences(_ a: [String: [String]], _ b: [String: [String]]) -> String {
-        let rows = Set(a.keys).symmetricDifference(b.keys).count
-        let fields = a.filter { b[$0.key] != nil && b[$0.key] != $0.value }.count
-        return "\(rows) rows present in only one, \(fields) rows whose fields differ"
+        let only = Set(a.keys).symmetricDifference(b.keys).sorted()
+        var fields: [String] = []
+        for (key, values) in a.sorted(by: { $0.key < $1.key }) {
+            guard let other = b[key], other != values else { continue }
+            for i in values.indices where i < other.count && values[i] != other[i] {
+                fields.append("\(key.prefix(20)) field \(i): \(values[i].prefix(60)) against \(other[i].prefix(60))")
+            }
+        }
+        return "rows in only one: \(only.map { String($0.prefix(24)) }); fields differing: \(fields)"
     }
 
     private func held<M: PersistentModel>(_ ctx: ModelContext, _: M.Type) throws -> [M] {
@@ -224,7 +231,9 @@ final class FailurePathRevertProbeTests {
         if flushed {
             #expect(status == .queued && committedStatus == .queued, Comment(rawValue:
                 "a flushed edit did not survive the revert: \(String(describing: status))"))
-            #expect(try Self.snapshot(ctx) == seeded.committed)
+            let now = try Self.snapshot(ctx)
+            #expect(now == seeded.committed, Comment(rawValue:
+                "after the revert the context differs from the store: " + Self.differences(now, seeded.committed)))
         } else {
             #expect(status != .queued, "without the entry flush the revert was expected to take the edit back")
         }
