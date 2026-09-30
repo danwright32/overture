@@ -236,6 +236,29 @@ struct LandingOracleTests {
             "the synthetic arm printed no corpus value either, so the redaction above is unmeasured"))
     }
 
+    // MARK: the row form reads back what it wrote
+
+    // A recording is one line per row under a `fields` line, each cell `=` then the escaped value or `h` then
+    // a hash. The parser tells the two apart by that first character only, so a VALUE that itself begins with
+    // "h", or holds a tab, a newline or a backslash, must come back as itself and never be read as a hash or
+    // split into two cells. Also that a hashed file compares EQUAL to the values it was made from, which is
+    // what lets the real arm (hashes) and the synthetic arm (values) share one comparison.
+    @Test func theRowFormReadsBackEveryValueItWrote() {
+        let awkward = ["h0123456789abcdef", "tab\there", "line\nbreak", "back\\slash", "", "nil", "=lead"]
+        let snapshot = LandingOracle.Snapshot(rows: awkward.enumerated().map { i, v in
+            LandingOracle.Row(entity: "Prospect", fields: [LandingOracle.Field(name: "groupName", value: v),
+                                                           LandingOracle.Field(name: "naturalKey", value: "k\(i)")])
+        })
+        let values = LandingOracle.parse(LandingOracle.syntheticFile(snapshot, header: []))
+        let readBack = (values.values["Prospect"] ?? []).map { $0["groupName"] ?? "absent" }
+        #expect(readBack == awkward, Comment(rawValue: "the row form did not read back what it wrote: \(readBack)"))
+        #expect(LandingOracle.differences(expected: values, actual: snapshot, arm: .synthetic).isEmpty)
+        let hashed = LandingOracle.parse(LandingOracle.realArmFile(snapshot, header: []))
+        #expect(hashed.values.isEmpty, Comment(rawValue: "a hashed recording carried values"))
+        #expect(LandingOracle.differences(expected: hashed, actual: snapshot, arm: .real).isEmpty,
+                Comment(rawValue: "a hashed recording does not compare equal to the values it was made from"))
+    }
+
     // MARK: where a real-arm file may go, and what it starts with
 
     @Test func aRealArmFileIsRefusedInsideAGitWorkTreeAndWhenGitCannotAnswer() throws {
