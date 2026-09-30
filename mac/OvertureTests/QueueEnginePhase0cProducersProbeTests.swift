@@ -1037,8 +1037,9 @@ enum Phase0cT6Check {
     static func truth(_ rule: Phase0cEngagement.Rule, _ drawn: [EngagementLink.Row]) -> [String: [EngagementLink.Member]] {
         switch rule {
         // #4347: the product runs rule (b) now, so rule (a) is judged against its restatement in the 0c.10
-        // probe, over the product's own total order, and (b) against the brute force below. The product
-        // itself is held to the brute force in `t6EngagementPatchMatchesBothRules`.
+        // probe, over the product's own total order, and (b) against the brute force below. The PRODUCT is
+        // not compared with either here yet: until #4346's total sort is on main it walks equal nights in
+        // date only order, which the brute force does not, so its rule is held by EngagementLinkTests.
         case .lastAppended: return Phase0cOrders.engagement(drawn, rule: .lastAppended)
         case .clusterLatest: return bruteClusterLatest(drawn)
         }
