@@ -45,7 +45,7 @@ enum TestModelContainer {
     @MainActor
     static func onDisk(_ types: [any PersistentModel.Type], at url: URL) throws -> ModelContainer {
         let schema = Schema(types)
-        let made = try ModelContainer(for: schema, configurations: [
+        let made = try FileStores.container(for: schema, configurations: [
             ModelConfiguration(schema: schema, url: url, cloudKitDatabase: .none)])
         made.mainContext.autosaveEnabled = false
         return made
