@@ -380,7 +380,9 @@ struct QueueView: View {
         // selection bar's rows are the fourth, and it was the one asking from a body.
         let placement: StageNavigation.Placement
         // #4322: the instant this pass was derived at, which a card's clock reads are drawn against, so a
-        // card redraws when the pass's minute moves and not on every evaluation of the body.
+        // card redraws when the pass's minute moves and not on every evaluation of the body. It trails the
+        // body's own clock by at most the render memo's reuse window (`ScopeMemo.staleAfterSeconds`, 2 s): a
+        // body later than that rebuilds the pass, so a card's minute flips at most two seconds late.
         let now: Date
 
         // #4121: the rows a reachability check could be run over, projected from the placement above.
