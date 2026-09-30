@@ -802,6 +802,7 @@ extension QueueEnginePhase0cRowsProbeTests {
         for size in [1_350, 5_400] {
             let fx = try Phase0cRowsFixture(size: size, seed: 4368)
             let shows = Self.pendingContactDraftShows(fx)
+            try #require(!shows.isEmpty, "the fixture holds no contacted show at \(size) rows, so nothing can be timed")
             var proto = Phase0cRowEntries(rows: fx.rows, context: fx.rowContext(), upstream: fx.upstream())
             let byPID = fx.rowsByPID
             let up = proto.upstream, ctx = proto.context
@@ -857,6 +858,8 @@ extension QueueEnginePhase0cRowsProbeTests {
                                               samples[i], reading.median, reading.low, reading.high, quiet.load, after))
             }
             // 0c.5's own stop rule: any disagreement fails it, whatever the timing says.
+            // No show edited means nothing was measured, never a measured zero (L90).
+            if samples.isEmpty { worst = nil }
             let verdict = Phase0cRows.stopVerdict(mismatches: mismatches.count, replayedMaxMs: worst)
             Phase0cRows.say("""
                 0c.5 pending contact draft edit [synthetic \(size) rows, seed 4368] \(shows.count) contacted shows given a waiting contact, \(Phase0.load()), Debug build

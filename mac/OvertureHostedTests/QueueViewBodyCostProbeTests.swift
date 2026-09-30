@@ -376,8 +376,7 @@ enum Phase0cViewRig {
 @MainActor
 @Suite("#4106 Phase 0c.8: the queue body plus layout over a served RenderData (opt in)")
 struct QueueViewBodyCostProbeTests {
-    // The frame parsing, on every push: a passed frame wins, an unreadable one falls back AND says so.
-    // The load rule the stage change and first draw arms are scored by (#4368), on every push: a quiet arm
+    // The load rule every scored arm is judged by (#4368), on every push: a quiet arm
     // decides, and a load at or over 8 at EITHER end, or one that could not be read, makes it UNMEASURED.
     @Test func anArmTakenAtLoadEightOrOverDecidesNothing() {
         #expect(Phase0cView.loadRefusal(before: 3.2, after: 7.9) == nil)
@@ -386,6 +385,7 @@ struct QueueViewBodyCostProbeTests {
         #expect(Phase0cView.loadRefusal(before: .infinity, after: 1.0)?.hasPrefix("UNMEASURED") == true)
     }
 
+    // The frame parsing, on every push: a passed frame wins, an unreadable one falls back AND says so.
     @Test func theWindowFrameIsPassedInNeverReadFromTheApp() {
         #expect(Phase0cView.windowFrame([:]).frame == Phase0cView.measuredFrame)
         #expect(Phase0cView.windowFrame(["MEASURE_4106_PHASE0C_VIEW_FRAME": "1200x800"]).frame == NSSize(width: 1200, height: 800))
@@ -603,6 +603,10 @@ struct QueueViewBodyCostProbeTests {
             // MARK: first draw, cards NOT prebuilt: the app's genuine first frame, every realized card
             // built inside the body. A fresh pass per sample, because the card store keeps what it built.
             var firstCold = Kind(name: "first draw, cards built in the body")
+            // The arms below do not wait for the load (only the two above do, #4368), but every arm the
+            // verdict loop scores is judged by the same rule: its load at start and end is read, and one at
+            // 8 or more makes it UNMEASURED rather than scored.
+            let coldStart = Phase0.oneMinuteLoad()
             cpus = []; walls = []
             for _ in 0..<5 {
                 let cold = Phase0cViewRig.servedPass(t, now: now, stage: .scout, cards: [], registry: registry)
@@ -614,6 +618,7 @@ struct QueueViewBodyCostProbeTests {
                 w.close()
             }
             firstCold.close(cpu: cpus, wall: walls)
+            firstCold.loadRefusal = Phase0cView.loadRefusal(before: coldStart, after: Phase0.oneMinuteLoad())
             firstCold.note = "hosting view built outside the clock here, \(Phase0.load())"
 
             // One window for every per-change kind, drawn once and settled before anything is timed.
@@ -636,6 +641,7 @@ struct QueueViewBodyCostProbeTests {
             // MARK: one row dismissed, for EVERY row the viewport draws: the served pass differs by that
             // one row. Each key is dismissed and restored five times; both directions are one-row changes.
             var dismiss = Kind(name: "one row dismissed (and its undo)")
+            let dismissStart = Phase0.oneMinuteLoad()
             let drawnOrdered = a.focusedRows.map(\.id).filter { drawnOnA.contains($0) }
             let byKey = Dictionary(t.rows.map { ($0.naturalKey, $0) }, uniquingKeysWith: { x, _ in x })
             for key in drawnOrdered {
@@ -654,6 +660,7 @@ struct QueueViewBodyCostProbeTests {
                 _ = registry.takeKeys()
                 dismiss.close(cpu: kc, wall: kw)
             }
+            dismiss.loadRefusal = Phase0cView.loadRefusal(before: dismissStart, after: Phase0.oneMinuteLoad())
             dismiss.note = "every drawn row of the Scout stage, \(Phase0.load())"
 
             // MARK: a stage focus change, to EVERY stage the queue list draws with rows on it.
@@ -681,6 +688,7 @@ struct QueueViewBodyCostProbeTests {
 
             // MARK: a scroll to the middle of the Scout list and back, by a real wheel event.
             var scrollKind = Kind(name: "scroll to the middle (and back)")
+            let scrollStart = Phase0.oneMinuteLoad()
             if ScreenSession.isLocked {
                 ScreenSession.reportUnmeasured("QueueViewBodyCostProbeTests.scroll")
                 scrollKind.note = "screen locked, the WindowServer lays nothing out"
@@ -706,6 +714,7 @@ struct QueueViewBodyCostProbeTests {
                 }
                 let drawnWhileScrolling = registry.takeKeys().subtracting(drawnOnA).count
                 scrollKind.close(cpu: kc, wall: kw)
+                scrollKind.loadRefusal = Phase0cView.loadRefusal(before: scrollStart, after: Phase0.oneMinuteLoad())
                 scrollKind.note = "document \(Int(doc.frame.height)) pt, moved "
                     + "\(moved.map(String.init).joined(separator: ", ")) pt per turn, "
                     + "\(drawnWhileScrolling) rows drawn that the top had not, \(Phase0.load())"
