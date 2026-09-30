@@ -364,11 +364,36 @@ final class OrderDependenceReproductionTests {
         ]
     }
 
-    @Test func todayEngagementMembershipFollowsEqualDateInputOrder() {
-        let rows = engagementRows()
-        let forward = OracleRendering.engagement(EngagementLink.group(rows))
-        let reversed = OracleRendering.engagement(EngagementLink.group(rows.reversed()))
-        #expect(forward != reversed, "EngagementLink equal dates no longer depend on order; retire this test (L373)")
+    // #4346, plan v7 Step T: `todayEngagementMembershipFollowsEqualDateInputOrder` stood here and was CONSUMED
+    // when the product sort became (date, run end, room, natural key), so it is inverted rather than kept
+    // (L373). The product function with no wrapper now gives one answer over 100 orders, the canonical
+    // oracle's, and again after a re-key that moves one of the equal date rows to the front of the key order.
+    // The chain RULE is untouched here; decision 18 is its own change (#4347).
+    private func engagementRowsRekeyed() -> [EngagementLink.Row] {
+        engagementRows().map { row in
+            guard row.id == "el-y" else { return row }
+            var moved = row
+            moved.id = "el-0"
+            return moved
+        }
+    }
+
+    @Test(arguments: [false, true])
+    func productEngagementLinkIsTheCanonicalAnswerOverEveryOrder(rekeyed: Bool) {
+        let rows = rekeyed ? engagementRowsRekeyed() : engagementRows()
+        let seed: UInt64 = 4346_01
+        let oracle = OracleRendering.engagement(CanonicalOracle.engagementLink(rows))
+        let distinct = distinctAnswers({ order in
+            OracleRendering.engagement(EngagementLink.group(order.map { rows[$0] }))
+        }, size: rows.count, seed: seed)
+        #expect(distinct == [oracle], report("EngagementLink.group, product", distinct, seed: seed))
+    }
+
+    // What the order decides, pinned: on one night a row with no run end sorts before a run, so the run is
+    // the row appended last and the room two weeks on is measured from the run's closing night and joins.
+    @Test func productEngagementLinkMeasuresTheEqualNightFromTheRun() {
+        let out = EngagementLink.group(engagementRows().reversed())
+        #expect(Set(out["el-z"] ?? []).count == 2, "the third room must join the two that opened together")
     }
 
     @Test func canonicalEngagementLinkIsOneAnswerOverEveryOrder() {
