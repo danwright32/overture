@@ -344,6 +344,9 @@ struct ScoutReLandWritesNothingTests {
     @Test func aMultiSourceLandingsSavesNameEveryRowTheyInsertUpdateAndDelete() async throws {
         let (container, ctx) = try Self.seeded()
         defer { withExtendedLifetime(container) {} }
+        // This test AWAITS (the paste), so an autosave could land inside it and add a save nobody made; every
+        // save counted below must be one the landing or the paste made itself (#3874's timer, 14.5 s in 0.2).
+        ctx.autosaveEnabled = false
         let saves = SaveTap(ctx)
         defer { saves.stop() }
 

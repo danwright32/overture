@@ -140,15 +140,15 @@ final class InsertedRowIdentifierAcrossSaveTests {
             savedRowKeptItsID: savedRowKeptItsID)
     }
 
+    // Through the one helper, so autosave is OFF on both: a timer save landing between the insert and the
+    // explicit save would change what `before` and `willSave` see (#3874, L613).
     private func inMemory() throws -> ModelContainer {
-        try ModelContainer(for: AppSchema.schema, configurations: [ModelConfiguration(isStoredInMemoryOnly: true)])
+        try TestModelContainer.inMemory(AppSchema.models)
     }
 
     private func onDisk() throws -> ModelContainer {
         let dir = try sandboxes.make(named: "inserted-row-identifier")
-        return try ModelContainer(for: AppSchema.schema, configurations: [
-            ModelConfiguration(schema: AppSchema.schema, url: dir.appendingPathComponent("probe.store"),
-                               cloudKitDatabase: .none)])
+        return try TestModelContainer.onDisk(AppSchema.models, at: dir.appendingPathComponent("probe.store"))
     }
 
     @Test(arguments: ["in memory", "on disk"])
