@@ -27,7 +27,10 @@ enum CardDivergenceReport {
                               read: (URL) -> CardDivergenceLog.Read = CardDivergenceLog.read(at:)) -> String? {
         let found = read(CardDivergenceLog.url(in: support))
         let alreadySaid = Set(defaults.stringArray(forKey: CardDivergenceLog.reportedIdsKey) ?? [])
-        let fresh = found.records.filter { !alreadySaid.contains($0.identity) }
+        // #4354: only CARD divergences are said as wrong cards. The log now holds other kinds (the queue
+        // engine's no-op dirties and fact mismatches, #4358), and counting one of those here would tell Dan
+        // a card was built wrongly when none was (L11). Saying those kinds is the verifier's reader, #4358.
+        let fresh = found.records.filter { $0.kind == .cardDivergence && !alreadySaid.contains($0.identity) }
         defaults.set(found.records.map(\.identity), forKey: CardDivergenceLog.reportedIdsKey)
 
         if let worst = fresh.max(by: { $0.fields.count < $1.fields.count }) {
