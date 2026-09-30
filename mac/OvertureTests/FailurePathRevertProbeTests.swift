@@ -383,6 +383,11 @@ final class FailurePathRevertProbeTests {
         }
         let chosen = Int(LandingProbe.env["MEASURE_4327_REVERT_SOURCE"] ?? "").map { $0 - 1 }
             ?? results.results.indices.max { results.results[$0].events.count < results.results[$1].events.count }!
+        guard results.results.indices.contains(chosen) else {
+            LandingProbe.say("revert UNMEASURED: TEST_RUNNER_MEASURE_4327_REVERT_SOURCE names source \(chosen + 1), "
+                             + "and the results file has \(results.results.count)")
+            return
+        }
         let one = ScoutExtractResults(version: results.version, generatedAt: results.generatedAt,
                                       results: [results.results[chosen]])
         let dir = try sandboxes.make(named: "probe4327-revert-stores")

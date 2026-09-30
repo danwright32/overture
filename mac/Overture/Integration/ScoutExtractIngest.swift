@@ -56,7 +56,8 @@ enum ScoutExtractIngest {
                        readProspectTable: @escaping ScoutLandingStore.Read = ScoutService.readProspectTable,
                        // #4327 step 0.7: handed the working set's cumulative counters after each LANDED source
                        // (labelled with its source id) and once more after the reconcile's read (labelled
-                       // `Counters.afterReconcile`), so a probe can say what each source cost. Counting only;
+                       // `Counters.afterReconcile`, and only when a reconcile ran, so a landing that reconciled
+                       // nothing never reports a reconcile), so a probe can say what each source cost. Counting only;
                        // nil, which every shipping caller passes, reports nothing.
                        onLandingStep: ((String, ScoutLandingStore.Counters) -> Void)? = nil,
                        into context: ModelContext) async -> ScoutService.Outcome {
@@ -318,8 +319,8 @@ enum ScoutExtractIngest {
             // which is what the empty answer this used to fall back to did.
             let allStored = (try? landing.rows()) ?? []
             FeedReconcile.reconcile(stored: allStored, reports: reports, today: today)
+            onLandingStep?(ScoutLandingStore.Counters.afterReconcile, landing.counters)
         }
-        onLandingStep?(ScoutLandingStore.Counters.afterReconcile, landing.counters)
 
         return outcome
     }
