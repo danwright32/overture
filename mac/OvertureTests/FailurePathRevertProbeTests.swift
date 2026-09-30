@@ -218,6 +218,22 @@ final class FailurePathRevertProbeTests {
             "after the revert the context differs from the store: " + Self.differences(now, seeded.committed)))
     }
 
+    // The to-many branch on its own. In the whole-record case above the contact's own to-one (`prospect`) is in
+    // the write set too, and restoring it puts the contact back on the show through the inverse, so that case
+    // stays green with the to-many branch broken (measured by mutation). Here only the SHOW is in the write set,
+    // so nothing but the to-many branch can give it its contacts back.
+    @Test func theToManyBranchRestoresAShowsContactsOnItsOwn() throws {
+        let seeded = try seed("to-many")
+        defer { seeded.store.release() }
+        let ctx = try seeded.store.openRefusing()
+        let rondo = try #require(try held(ctx, Prospect.self).first { $0.naturalKey == "rondo-key" })
+        rondo.recipients.removeAll { $0.id == "r2" }
+        #expect(Set(rondo.recipients.map(\.id)) == ["r1"])
+        let report = FailurePathRevert.revert(.init(changed: [rondo], inserted: [], deleted: []), in: ctx)
+        #expect(report.notRestorable.isEmpty && Set(rondo.recipients.map(\.id)) == ["r1", "r2"], Comment(rawValue:
+            "the show's contacts after reverting the show alone: \(rondo.recipients.map(\.id).sorted()), \(report)"))
+    }
+
     // MARK: the four correctness cases
 
     // (1) A pending pre-landing edit on the row the failed source also touches. With the entry flush it was
