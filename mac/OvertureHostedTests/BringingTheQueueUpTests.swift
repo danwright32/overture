@@ -106,34 +106,8 @@ struct BringingTheQueueUpTests {
         return (window, hosting)
     }
 
-    // The half above the queue, which is where #1930's own finding says the extra derivations came from:
-    // four of its five reported `nothing this view reads`, meaning nothing the queue looks at had moved,
-    // so the invalidation arrived from the screen above it.
-    //
-    // Hosting `RootView` is how that becomes measurable at all. It is the view the app launches into, and
-    // its own launch work (the reattach passes, the roster load, the notices) runs here as it does there.
-    private struct RootHarness: View {
-        let container: ModelContainer
-        @State private var addLead: AddLeadPresenter
-        @State private var undoStack = QueueUndoStack()
-        @State private var undoRequest = QueueUndoRequest()
-
-        init(container: ModelContainer) {
-            self.container = container
-            // Built the way `OvertureApp` builds it, from the container, rather than from a default that
-            // would put this harness in the degraded no-store state the real app is never in here.
-            _addLead = State(initialValue: AddLeadPresenter(store: container))
-        }
-
-        var body: some View {
-            RootView()
-                .modelContainer(container)
-                .environment(addLead)
-                .environment(undoStack)
-                .environment(undoRequest)
-        }
-    }
-
+    // The half above the queue is hosted through `RootHarness` (RootHarness.swift), shared with the
+    // #4327 hosted probes so the two cannot build RootView two different ways (L613).
 
     // Wait until the derivation count has GONE QUIET, rather than for a fixed time.
     //

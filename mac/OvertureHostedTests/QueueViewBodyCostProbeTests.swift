@@ -255,6 +255,23 @@ enum Phase0cView {
     static func f(_ v: Double) -> String { String(format: "%.1f", v) }
 
     static func verdict(_ maxMs: Double, limit: Double) -> String { maxMs > limit ? "FAIL" : "PASS" }
+
+    // Gate 0c's scoring rule (#4106 comment 5860086027): a maximum decides only when the one minute load was
+    // under 8 while it was taken. 0c.2 waits for that; 0c.8's stage change and first draw arms did not, so on
+    // 2026-09-29 both were read at load 11 to 31 and decided nothing (#4368). Those arms now wait, bounded,
+    // through the one shared reader (#4315), and are UNMEASURED rather than scored when the Mac never quiets.
+    static let loadCeiling = 8.0
+    static let loadWaitSeconds = 600.0
+
+    /// Nil when the arm ran with the load under the ceiling both when it started and when it ended; otherwise
+    /// the UNMEASURED reason. Read at BOTH ends, so a Mac that got busy part way through cannot score a PASS on
+    /// the reading taken before the first sample. A load that could not be read is infinite (L490).
+    static func loadRefusal(before: Double, after: Double, ceiling: Double = loadCeiling) -> String? {
+        // Written as "not provably under", so a NaN reading is refused too, never scored as quiet.
+        guard !(before < ceiling && after < ceiling) else { return nil }
+        return String(format: "UNMEASURED: one minute load %.2f when the arm started and %.2f when it ended, "
+                      + "the rule needs both under %.0f", before, after, ceiling)
+    }
 }
 
 // The rig 0c.8 and the view attribution probe beside it share, declared once (L613): the harness that
@@ -360,6 +377,16 @@ enum Phase0cViewRig {
 @MainActor
 @Suite("#4106 Phase 0c.8: the queue body plus layout over a served RenderData (opt in)")
 struct QueueViewBodyCostProbeTests {
+    // The load rule every scored arm is judged by (#4368), on every push: a quiet arm
+    // decides, and a load at or over 8 at EITHER end, or one that could not be read, makes it UNMEASURED.
+    @Test func anArmTakenAtLoadEightOrOverDecidesNothing() {
+        #expect(Phase0cView.loadRefusal(before: 3.2, after: 7.9) == nil)
+        #expect(Phase0cView.loadRefusal(before: 8.0, after: 2.0)?.hasPrefix("UNMEASURED") == true)
+        #expect(Phase0cView.loadRefusal(before: 2.0, after: 11.0)?.hasPrefix("UNMEASURED") == true)
+        #expect(Phase0cView.loadRefusal(before: .infinity, after: 1.0)?.hasPrefix("UNMEASURED") == true)
+        #expect(Phase0cView.loadRefusal(before: .nan, after: 1.0)?.hasPrefix("UNMEASURED") == true)
+    }
+
     // The frame parsing, on every push: a passed frame wins, an unreadable one falls back AND says so.
     @Test func theWindowFrameIsPassedInNeverReadFromTheApp() {
         #expect(Phase0cView.windowFrame([:]).frame == Phase0cView.measuredFrame)
@@ -469,6 +496,8 @@ struct QueueViewBodyCostProbeTests {
         var unsettledCPU: [Double] = []
         var firstUnsettled = ""
         var rig: [Double] = []
+        /// Set on the arms that wait for the load: why this kind's maximum decides nothing (#4368).
+        var loadRefusal: String?
 
         // A reading that never went quiet is kept OUT of the medians, because its number is the cap
         // rather than a cost, and reported on its own with what kept it going. Never dropped silently:
@@ -543,8 +572,10 @@ struct QueueViewBodyCostProbeTests {
             print("0c.8 \(label) served Scout pass: \(a.focusedRows.count) rows on the stage, "
                   + "\(a.dateGroups.count) date groups, \(a.cards.builtCount) cards prebuilt")
 
-            // MARK: first draw, cards prebuilt: a fresh window each sample.
+            // MARK: first draw, cards prebuilt: a fresh window each sample, taken with the load under 8.
             var firstPre = Kind(name: "first draw, cards prebuilt")
+            let firstQuiet = Phase0.waitForLoad(below: Phase0cView.loadCeiling, deadline: Phase0cView.loadWaitSeconds,
+                                                poll: 10)
             var realized: [Int] = []
             let floorWindow = Phase0cViewRig.host(container, rows: t.rows, feed: Phase0cServedFeed(a), size: size)
             _ = Phase0cView.settle(floorWindow, bodyMustRun: true) {}   // warm the host once, untimed
@@ -564,7 +595,9 @@ struct QueueViewBodyCostProbeTests {
                 w?.close()
             }
             firstPre.close(cpu: cpus, wall: walls)
-            firstPre.note = "five fresh windows, hosting view built inside the clock, \(Phase0.load())"
+            firstPre.loadRefusal = Phase0cView.loadRefusal(before: firstQuiet.load, after: Phase0.oneMinuteLoad())
+            firstPre.note = "five fresh windows, hosting view built inside the clock, waited for \(firstQuiet.text), "
+                + "then \(Phase0.load())"
             print("0c.8 \(label) viewport: \(realized.map(String.init).joined(separator: ", ")) rows realized "
                   + "per first draw at \(Int(size.width))x\(Int(size.height)) (the card store's own count of "
                   + "rows that asked for a card)")
@@ -572,6 +605,10 @@ struct QueueViewBodyCostProbeTests {
             // MARK: first draw, cards NOT prebuilt: the app's genuine first frame, every realized card
             // built inside the body. A fresh pass per sample, because the card store keeps what it built.
             var firstCold = Kind(name: "first draw, cards built in the body")
+            // The arms below do not wait for the load (only the two above do, #4368), but every arm the
+            // verdict loop scores is judged by the same rule: its load at start and end is read, and one at
+            // 8 or more makes it UNMEASURED rather than scored.
+            let coldStart = Phase0.oneMinuteLoad()
             cpus = []; walls = []
             for _ in 0..<5 {
                 let cold = Phase0cViewRig.servedPass(t, now: now, stage: .scout, cards: [], registry: registry)
@@ -583,6 +620,7 @@ struct QueueViewBodyCostProbeTests {
                 w.close()
             }
             firstCold.close(cpu: cpus, wall: walls)
+            firstCold.loadRefusal = Phase0cView.loadRefusal(before: coldStart, after: Phase0.oneMinuteLoad())
             firstCold.note = "hosting view built outside the clock here, \(Phase0.load())"
 
             // One window for every per-change kind, drawn once and settled before anything is timed.
@@ -605,6 +643,7 @@ struct QueueViewBodyCostProbeTests {
             // MARK: one row dismissed, for EVERY row the viewport draws: the served pass differs by that
             // one row. Each key is dismissed and restored five times; both directions are one-row changes.
             var dismiss = Kind(name: "one row dismissed (and its undo)")
+            let dismissStart = Phase0.oneMinuteLoad()
             let drawnOrdered = a.focusedRows.map(\.id).filter { drawnOnA.contains($0) }
             let byKey = Dictionary(t.rows.map { ($0.naturalKey, $0) }, uniquingKeysWith: { x, _ in x })
             for key in drawnOrdered {
@@ -623,11 +662,14 @@ struct QueueViewBodyCostProbeTests {
                 _ = registry.takeKeys()
                 dismiss.close(cpu: kc, wall: kw)
             }
+            dismiss.loadRefusal = Phase0cView.loadRefusal(before: dismissStart, after: Phase0.oneMinuteLoad())
             dismiss.note = "every drawn row of the Scout stage, \(Phase0.load())"
 
             // MARK: a stage focus change, to EVERY stage the queue list draws with rows on it.
             var stageKind = Kind(name: "stage focus change (Scout and back)")
             var stagesDone: [String] = []
+            let stageQuiet = Phase0.waitForLoad(below: Phase0cView.loadCeiling, deadline: Phase0cView.loadWaitSeconds,
+                                                poll: 10)
             for stage in StageFocus.allCases where stage != .scout && stage != .followUps
                 && stage != .reachedOut {
                 let s = Phase0cViewRig.servedPass(t, now: now, stage: stage, registry: registry)
@@ -642,11 +684,13 @@ struct QueueViewBodyCostProbeTests {
                 _ = registry.takeKeys()
                 stageKind.close(cpu: kc, wall: kw)
             }
+            stageKind.loadRefusal = Phase0cView.loadRefusal(before: stageQuiet.load, after: Phase0.oneMinuteLoad())
             stageKind.note = "every served stage with its row count: \(stagesDone.joined(separator: ", ")); followUps and "
-                + "reachedOut draw other lists and are not served here, \(Phase0.load())"
+                + "reachedOut draw other lists and are not served here, waited for \(stageQuiet.text), then \(Phase0.load())"
 
             // MARK: a scroll to the middle of the Scout list and back, by a real wheel event.
             var scrollKind = Kind(name: "scroll to the middle (and back)")
+            let scrollStart = Phase0.oneMinuteLoad()
             if ScreenSession.isLocked {
                 ScreenSession.reportUnmeasured("QueueViewBodyCostProbeTests.scroll")
                 scrollKind.note = "screen locked, the WindowServer lays nothing out"
@@ -672,6 +716,7 @@ struct QueueViewBodyCostProbeTests {
                 }
                 let drawnWhileScrolling = registry.takeKeys().subtracting(drawnOnA).count
                 scrollKind.close(cpu: kc, wall: kw)
+                scrollKind.loadRefusal = Phase0cView.loadRefusal(before: scrollStart, after: Phase0.oneMinuteLoad())
                 scrollKind.note = "document \(Int(doc.frame.height)) pt, moved "
                     + "\(moved.map(String.init).joined(separator: ", ")) pt per turn, "
                     + "\(drawnWhileScrolling) rows drawn that the top had not, \(Phase0.load())"
@@ -690,6 +735,14 @@ struct QueueViewBodyCostProbeTests {
                 for k in [dismiss, stageKind, scrollKind, firstPre, firstCold] {
                     // A reading that never settled is a FAIL on its own: the main thread was still working
                     // when the cap ended it, whatever the settled medians say.
+                    // A load-refused arm decides nothing, not even by failing to settle (the busy Mac may be why).
+                    if let refusal = k.loadRefusal {
+                        verdicts.append("0c.8 stop (\(k.name)) at 5,376: \(refusal); "
+                            + (k.perKeyMedianCPU.max().map { "cpu \(Phase0cView.f($0)) ms reported and deciding nothing" }
+                               ?? "no reading settled")
+                            + (k.unsettled == 0 ? "" : ", \(k.unsettled) reading(s) never settled"))
+                        continue
+                    }
                     let neverNote = k.unsettled == 0 ? "" : "; \(k.unsettled) reading(s) NEVER SETTLED, FAIL"
                     guard let cpu = k.perKeyMedianCPU.max(), let wall = k.perKeyMedianWall.max() else {
                         verdicts.append("0c.8 stop (\(k.name)): "
