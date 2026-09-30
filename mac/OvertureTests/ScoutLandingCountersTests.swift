@@ -148,6 +148,23 @@ struct ScoutLandingCountersTests {
             "the first source built no stored shows, so the counters are not wired to the landing"))
     }
 
+    // A landing that reconciled nothing reports no reconcile step, so a probe never reads a reconcile that did
+    // not run as a cheap one. Here the only source is one the app never queued, so nothing lands and no report
+    // reaches the reconcile.
+    @Test func noReconcileStepIsReportedWhenNoReconcileRan() async throws {
+        let ctx = try context()
+        for k in 0..<2 { stored(ctx, "Kept \(k)", Self.night(30 + k), url: "https://src.example/Kept \(k)") }
+        try ctx.save()
+        let results = ScoutExtractResults(version: 1, generatedAt: "2026-09-29T00:00:00Z", results: [
+            ScoutExtractResult(sourceId: "never-queued", verdict: .upcomingListings,
+                               events: [event("Kept 0", 30)], note: nil),
+        ])
+        var steps: [String] = []
+        await ScoutExtractIngest.ingest(results, clients: [], history: [], blocked: .empty, today: Self.today,
+                                        onLandingStep: { label, _ in steps.append(label) }, into: ctx)
+        #expect(steps.isEmpty, Comment(rawValue: "a landing that reconciled nothing reported \(steps)"))
+    }
+
     // MARK: the counters are pure counting
 
     // Counting must not change what a landing does. The same landing is run once with the hook and once
