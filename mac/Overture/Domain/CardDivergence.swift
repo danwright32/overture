@@ -295,7 +295,8 @@ enum CardDivergenceLog {
     // WHAT THIS USED TO DO AND WHY THAT WAS NOT A SMALL THING. It rewrote the live file with the kept
     // records and returned a count, so the dropped ones were gone. `docs/contracts.md` said the file was
     // "COMPACTED AT LAUNCH", and the rule it describes is not a plain cap: it keeps one example of each
-    // distinct FIELD SET so a common divergence cannot evict the only record of a rare one, which is the
+    // distinct FIELD SET (since #4354, of each distinct kind, source and field set) so a common divergence
+    // cannot evict the only record of a rare one, which is the
     // reading the file exists for. That rule had never run once, because `compact` had no caller anywhere
     // in the app. Wiring it up as it stood would have started permanently deleting divergence records for
     // the first time, which is a decision rather than a side effect of fixing a missing call (L5).
