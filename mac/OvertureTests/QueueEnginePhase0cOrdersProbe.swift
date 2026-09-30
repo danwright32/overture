@@ -13,10 +13,9 @@ import SwiftData
 enum Phase0cEngagementRule { case lastAppended, latestNight }
 
 enum Phase0cOrders {
-    /// `EngagementLink.group`, restated so the sort and the chain rule can each be swapped. Proved equal to
-    /// the production function on the live store before any count is read from it (L70).
-    static func engagement(_ rows: [EngagementLink.Row], canonicalSort: Bool,
-                           rule: Phase0cEngagementRule) -> [String: [EngagementLink.Member]] {
+    /// `EngagementLink.group`, restated so the chain rule can be swapped. Proved equal to the production
+    /// function on the live store before any count is read from it (L70).
+    static func engagement(_ rows: [EngagementLink.Row], rule: Phase0cEngagementRule) -> [String: [EngagementLink.Member]] {
         func canon(_ s: String?) -> String { (s ?? "").lowercased().trimmingCharacters(in: .whitespaces) }
         var byTitle: [String: [EngagementLink.Row]] = [:]
         for r in rows where r.performanceDate != nil {
@@ -24,14 +23,11 @@ enum Phase0cOrders {
         }
         var out: [String: [EngagementLink.Member]] = [:]
         for (_, titleRows) in byTitle {
-            let sorted: [EngagementLink.Row]
-            if canonicalSort {
-                sorted = titleRows.sorted {
-                    ($0.performanceDate ?? "", $0.runEndDate ?? "", $0.venue ?? "", $0.id)
-                        < ($1.performanceDate ?? "", $1.runEndDate ?? "", $1.venue ?? "", $1.id)
-                }
-            } else {
-                sorted = titleRows.sorted { ($0.performanceDate ?? "") < ($1.performanceDate ?? "") }
+            // The product's own total order since #4346 (date, run end, venue, naturalKey). #4347 retired the
+            // date only arm, which priced the Step T sort before it shipped and could only ever read 0 after.
+            let sorted = titleRows.sorted {
+                ($0.performanceDate ?? "", $0.runEndDate ?? "", $0.venue ?? "", $0.id)
+                    < ($1.performanceDate ?? "", $1.runEndDate ?? "", $1.venue ?? "", $1.id)
             }
             var clusters: [[EngagementLink.Row]] = []
             var clusterEnd: [String?] = []
@@ -230,27 +226,17 @@ extension QueueEnginePhase0cRowsProbeTests {
         let production = EngagementLink.group(linkRows)
         // Since #4347 the product measures the chain from the cluster's latest night (decision 18(b)). Compared
         // as MEMBERSHIP, because the restatement walks equal nights in a total order the product may not.
-        let replica = Phase0cOrders.engagement(linkRows, canonicalSort: true, rule: .latestNight)
+        let replica = Phase0cOrders.engagement(linkRows, rule: .latestNight)
         let replicaAgrees = Set(replica.keys) == Set(production.keys)
             && replica.keys.allSatisfy { Set(replica[$0]!) == Set(production[$0] ?? []) }
-        let canonicalToday = Phase0cOrders.engagement(linkRows, canonicalSort: true, rule: .lastAppended)
-        let canonicalLatest = Phase0cOrders.engagement(linkRows, canonicalSort: true, rule: .latestNight)
-        func differ(_ a: [String: [EngagementLink.Member]], _ b: [String: [EngagementLink.Member]],
-                    asSets: Bool) -> Int {
-            Set(a.keys).union(b.keys).filter {
-                asSets ? Set(a[$0] ?? []) != Set(b[$0] ?? []) : (a[$0] ?? []) != (b[$0] ?? [])
-            }.count
-        }
-        var dateTies = 0, dateTieRows = 0
-        var byTitle: [String: [String: Int]] = [:]
-        for r in linkRows where r.performanceDate != nil {
-            byTitle[GroupNameMatch.normalize(r.groupName), default: [:]][r.performanceDate!, default: 0] += 1
-        }
-        for nights in byTitle.values { for n in nights.values where n > 1 { dateTies += 1; dateTieRows += n } }
+        // #4347: only the agreement check above and rule (a) against (b) remain. The pre-decision lines (the
+        // Step T sort under today's rule, equal-date ties, (b) against today's production) priced decisions
+        // 13 and 18 before they were answered, and once both shipped they compare the product with itself.
+        let ruleA = Phase0cOrders.engagement(linkRows, rule: .lastAppended)
+        let ruleBDiffers = Set(ruleA.keys).union(replica.keys)
+            .filter { Set(ruleA[$0] ?? []) != Set(replica[$0] ?? []) }.count
         lines.append("decision 18, EngagementLink: \(linkRows.count) rows, \(production.count) linked today; the restated rule reproduces production: \(replicaAgrees ? "yes" : "NO, counts below are not evidence")")
-        lines.append("    equal-date ties inside a title group \(dateTies) nights holding \(dateTieRows) rows")
-        lines.append("    Step T sort (date, run end, venue, naturalKey) under today's rule: membership changes on \(differ(production, canonicalToday, asSets: true)) rows, member order on \(differ(production, canonicalToday, asSets: false))")
-        lines.append("    rule (b), latest night so far, against (a) with the same sort: membership changes on \(differ(canonicalToday, canonicalLatest, asSets: true)) rows (\(canonicalLatest.count) linked under (b), \(canonicalToday.count) under (a)); against today's production \(differ(production, canonicalLatest, asSets: true))")
+        lines.append("    rule (b), latest night so far, against (a) with the same sort: membership changes on \(ruleBDiffers) rows (\(replica.count) linked under (b), \(ruleA.count) under (a))")
         Phase0cRows.say(lines.joined(separator: "\n  "))
         #expect(replicaAgrees, "the restated EngagementLink rule does not reproduce production on the clone")
     }

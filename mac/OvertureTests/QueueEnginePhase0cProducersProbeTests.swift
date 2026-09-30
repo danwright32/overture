@@ -1039,7 +1039,7 @@ enum Phase0cT6Check {
         // #4347: the product runs rule (b) now, so rule (a) is judged against its restatement in the 0c.10
         // probe, over the product's own total order, and (b) against the brute force below. The product
         // itself is held to the brute force in `t6EngagementPatchMatchesBothRules`.
-        case .lastAppended: return Phase0cOrders.engagement(drawn, canonicalSort: true, rule: .lastAppended)
+        case .lastAppended: return Phase0cOrders.engagement(drawn, rule: .lastAppended)
         case .clusterLatest: return bruteClusterLatest(drawn)
         }
     }
