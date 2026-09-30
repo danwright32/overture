@@ -427,14 +427,13 @@ struct Phase0cFeedBreakPatch<Key: Hashable> {
 
     init(asOf: String) { self.asOf = asOf }
 
-    /// The deterministic order this probe compares in, stated in the PR because FeedBreakEvent's own full
-    /// ties fall back to Dictionary iteration (Step T0): member count descending, then venue label, then
-    /// miss count, then first member key.
+    /// The product's own order since #4348, which no longer falls back to Dictionary iteration: member count
+    /// descending, then venue label, then first member key (the keys of two events never overlap, so the
+    /// order is total).
     static func ordered(_ events: [FeedBreakEvent.Event]) -> [FeedBreakEvent.Event] {
         events.sorted { l, r in
             if l.memberKeys.count != r.memberKeys.count { return l.memberKeys.count > r.memberKeys.count }
             if l.venue != r.venue { return l.venue < r.venue }
-            if l.missedScoutCount != r.missedScoutCount { return l.missedScoutCount < r.missedScoutCount }
             return (l.memberKeys.first ?? "") < (r.memberKeys.first ?? "")
         }
     }
@@ -505,7 +504,12 @@ struct Phase0cFeedBreakPatch<Key: Hashable> {
             events[bucket] = nil
             return
         }
-        events[bucket] = FeedBreakEvent.Event(venue: first.facts.label,
+        // #4348: the product's label rule, the most common spelling with ties to the smallest key's.
+        var spellings: [String: Int] = [:]
+        for member in members { spellings[member.facts.label, default: 0] += 1 }
+        let top = spellings.values.max() ?? 0
+        let label = members.first { spellings[$0.facts.label] == top }?.facts.label ?? first.facts.label
+        events[bucket] = FeedBreakEvent.Event(venue: label,
                                               missedScoutCount: first.facts.missed,
                                               memberKeys: members.map { $0.facts.id },
                                               coveredByAnotherCard: members.filter { covered.contains($0.key) }.count)

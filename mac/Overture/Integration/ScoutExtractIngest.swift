@@ -318,9 +318,12 @@ enum ScoutExtractIngest {
             // The working set, which is the store as it now stands. A read that fails reconciles nothing,
             // which is what the empty answer this used to fall back to did.
             let allStored = (try? landing.rows()) ?? []
-            FeedReconcile.reconcile(stored: allStored, reports: reports, today: today)
+            landing.noteReconcile(FeedReconcile.reconcile(stored: allStored, reports: reports, today: today))
             onLandingStep?(ScoutLandingStore.Counters.afterReconcile, landing.counters)
         }
+        // #4325: the reconcile's writes, and every source's bookkeeping above, saved before the landing
+        // returns, through the one closing save the native sweep uses. Nothing saved them before this.
+        if !ScoutService.saveLanding(landing, into: context) { outcome.saveFailed = true }
 
         return outcome
     }

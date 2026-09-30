@@ -179,6 +179,25 @@ final class ScoutLandingStore {
         var anywhere: [String: [String]] = [:]
     }
 
+    // #4325: the reconcile writes of this landing that no save has carried yet, oldest first. A successful
+    // save of this context empties it (`didSave`, below), whoever saved, so what is left at the closing save
+    // is exactly what that save would carry for the reconcile, and exactly what a failed one must put back.
+    private(set) var unsavedReconcileWrites: [FeedReconcile.Writes] = []
+    private let reconcileSaveWatch = SaveWatch()
+
+    func noteReconcile(_ writes: FeedReconcile.Writes) {
+        if !writes.isEmpty { unsavedReconcileWrites.append(writes) }
+    }
+
+    // Called after a save the landing made itself, which a test may inject and so post no `didSave`.
+    func reconcileWritesSaved() { unsavedReconcileWrites = [] }
+
+    // Puts back every reconcile write no save carried, newest first, so a retry counts each miss once.
+    func revertUnsavedReconcileWrites() {
+        for writes in unsavedReconcileWrites.reversed() { writes.revert() }
+        unsavedReconcileWrites = []
+    }
+
     init(context: ModelContext, read: @escaping Read = ScoutService.readProspectTable,
          readKey: @escaping ReadKey = { try Prospect.stored(key: $0, in: $1) },
          policy: Policy = .once) {
@@ -186,6 +205,11 @@ final class ScoutLandingStore {
         self.read = read
         self.readKey = readKey
         self.policy = policy
+        // #4325: for both policies, since both land. Posted only for a save that succeeded.
+        reconcileSaveWatch.token = NotificationCenter.default.addObserver(
+            forName: ModelContext.didSave, object: context, queue: nil) { [weak self] _ in
+            MainActor.assumeIsolated { self?.unsavedReconcileWrites = [] }
+        }
         guard policy == .once else { return }
         // A save empties the context's changed and inserted models, so what it is about to carry off is
         // noted as it begins. Posted synchronously by `save()` on the saving thread, which for the main

@@ -228,7 +228,8 @@ extension QueueEnginePhase0cRowsProbeTests {
         // Decision 18: EngagementLink's chain rule, over the rows the pass links (the queue scope).
         let linkRows = inQueueToday.map(EngagementLink.Row.init)
         let production = EngagementLink.group(linkRows)
-        let replica = Phase0cOrders.engagement(linkRows, canonicalSort: false, rule: .lastAppended)
+        // Since #4346 the product sorts by (date, run end, venue, naturalKey), so that is the replica's sort.
+        let replica = Phase0cOrders.engagement(linkRows, canonicalSort: true, rule: .lastAppended)
         let replicaAgrees = replica == production
         let canonicalToday = Phase0cOrders.engagement(linkRows, canonicalSort: true, rule: .lastAppended)
         let canonicalLatest = Phase0cOrders.engagement(linkRows, canonicalSort: true, rule: .latestNight)

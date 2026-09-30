@@ -646,6 +646,8 @@ enum ScoutService {
                 outcome.merge(landed)
             }
         }
+        // #4325: the last source's reconcile, and its feed health, saved here rather than left to autosave.
+        if !saveLanding(landing, into: context) { outcome.saveFailed = true }
 
         // ONE batched detached run for every page that changed, never N subprocesses: one hung source
         // must not be able to block the marker guard or leave a bare indefinite spinner. Only reachable
@@ -1241,10 +1243,35 @@ enum ScoutService {
             // out. It is skipped and NAMED instead.
             if let allStored = readOrRecord(.reconcileStoredShows, into: &outcome.degradedReads,
                                             { try landing.rows() }) {
-                FeedReconcile.reconcile(stored: allStored, reports: [report], today: today)
+                // #4325: noted on the landing, whose closing save carries it (`saveLanding`).
+                landing.noteReconcile(FeedReconcile.reconcile(stored: allStored, reports: [report], today: today))
             }
         }
         return outcome
+    }
+
+    // #4325: the closing save of a scout landing, ONE implementation for both paths (`runScout`'s native
+    // sweep and `ScoutExtractIngest.ingest`). Each source's upserts are saved as it lands, but the reconcile
+    // after the last one (and, in the ingest, the only one) was left to autosave or the next unrelated save,
+    // so a quit or a crash first lost a feed miss (L12), and a probe round read the last round's writes as
+    // its own (#4327 step 0.5).
+    //
+    // A failed save is the per source save's failure (`Outcome.saveFailed`, #499), never `try?`. And it
+    // PUTS BACK the reconcile writes it could not carry: `missedScoutCount += 1` is not idempotent, so a miss
+    // left pending would be counted again by the retry and both would land on the next save. Only the
+    // reconcile's own writes are put back; the upserts stay pending exactly as a failed per source save
+    // leaves them. Returns whether the landing's writes are in the store.
+    static func saveLanding(_ landing: ScoutLandingStore, into context: ModelContext,
+                            save: (ModelContext) throws -> Void = { try $0.save() }) -> Bool {
+        guard context.hasChanges else { return true }
+        do {
+            try save(context)
+            landing.reconcileWritesSaved()
+            return true
+        } catch {
+            landing.revertUnsavedReconcileWrites()
+            return false
+        }
     }
 
     // Application of already-extracted events with injected data, so the full

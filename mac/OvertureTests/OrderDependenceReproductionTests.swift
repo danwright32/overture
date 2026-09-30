@@ -101,18 +101,44 @@ final class OrderDependenceReproductionTests {
         ]
     }
 
-    @Test func todayShowLinkGroupMemberOrderFollowsInputOrder() {
-        let rows = showLinkRows()
-        let forward = OracleRendering.keyed(ShowLink.group(rows))
-        let reversed = OracleRendering.keyed(ShowLink.group(rows.reversed()))
-        #expect(forward != reversed, "ShowLink.group no longer depends on input order; retire this test (L373)")
+    // #4344, plan v7 Step T: the two `today...` reproductions that stood here were CONSUMED when the product
+    // term was made deterministic, and are inverted rather than kept (L373). The PRODUCT functions, called
+    // with no wrapper, now give ONE answer over 100 orders and it is the canonical oracle's answer, so the
+    // Phase 0c proofs made against the oracle carry over. Run twice: on the fixture, and again after a
+    // re-key that moves a fully tied row to the front of the natural key order (plan section 6: a re-key
+    // is the one change a tie-break by key turns into a visible move, L419).
+    private func showLinkRowsRekeyed() -> [ShowLink.Row] {
+        showLinkRows().map { row in
+            guard row.id == "sl-c" else { return row }
+            var moved = row
+            moved.id = "sl-0"
+            return moved
+        }
     }
 
-    @Test func todayShowLinkCollapseFrontMembersFollowInputOrder() {
-        let rows = showLinkRows()
-        let forward = OracleRendering.collapse(ShowLink.collapse(rows))
-        let reversed = OracleRendering.collapse(ShowLink.collapse(rows.reversed()))
-        #expect(forward != reversed, "ShowLink.collapse fronts no longer depend on input order; retire this test (L373)")
+    @Test(arguments: [false, true])
+    func productShowLinkGroupIsTheCanonicalAnswerOverEveryOrder(rekeyed: Bool) {
+        let rows = rekeyed ? showLinkRowsRekeyed() : showLinkRows()
+        let seed: UInt64 = 4344_01
+        let oracle = OracleRendering.keyed(CanonicalOracle.showLinkGroup(rows))
+        let distinct = distinctAnswers({ order in
+            OracleRendering.keyed(ShowLink.group(order.map { rows[$0] }))
+        }, size: rows.count, seed: seed)
+        #expect(distinct == [oracle], report("ShowLink.group, product", distinct, seed: seed))
+    }
+
+    @Test(arguments: [false, true])
+    func productShowLinkCollapseIsTheCanonicalAnswerOverEveryOrder(rekeyed: Bool) {
+        let rows = rekeyed ? showLinkRowsRekeyed() : showLinkRows()
+        let seed: UInt64 = 4344_02
+        // A surface that draws only some of the group, the queue's case, as well as the archive's nil.
+        for drawn in [nil, Set(rows.map(\.id)).subtracting(["sl-a"])] as [Set<String>?] {
+            let oracle = OracleRendering.collapse(CanonicalOracle.showLinkCollapse(rows, drawn: drawn))
+            let distinct = distinctAnswers({ order in
+                OracleRendering.collapse(ShowLink.collapse(order.map { rows[$0] }, drawn: drawn))
+            }, size: rows.count, seed: seed)
+            #expect(distinct == [oracle], report("ShowLink.collapse, product", distinct, seed: seed))
+        }
     }
 
     @Test func canonicalShowLinkGroupIsOneAnswerOverEveryOrder() {
@@ -191,14 +217,30 @@ final class OrderDependenceReproductionTests {
         return rows + [first, second, third]
     }
 
-    @Test func todayReachedOutListBreaksEqualDatesByInputPosition() throws {
+    // #4345, plan v7 Step T: `todayReachedOutListBreaksEqualDatesByInputPosition` stood here and was CONSUMED
+    // when the product list gained its (next, naturalKey) order, so it is inverted rather than kept (L373).
+    // The product function with no wrapper now gives one list over 100 orders, the canonical oracle's, and
+    // again after a re-key that moves one of the three tied shows to the front of the key order (L419).
+    private func reachedOutRowsRekeyed() -> [Prospect] {
         let rows = reachedOutRows()
+        rows.first { $0.naturalKey == "ro-c" }?.naturalKey = "ro-0"
+        return rows
+    }
+
+    @Test(arguments: [false, true])
+    func productReachedOutListIsTheCanonicalAnswerOverEveryOrder(rekeyed: Bool) throws {
+        let rows = rekeyed ? reachedOutRowsRekeyed() : reachedOutRows()
         let forward = ReachedOutQueue.activeWithDates(from: rows, now: now)
         try #require(forward.count == 3, "fixture: all three contacted shows must be live")
         try #require(Set(forward.map(\.next)).count == 1, "fixture: the three rows must tie on next")
-        let reversed = ReachedOutQueue.activeWithDates(from: rows.reversed(), now: now)
-        #expect(OracleRendering.reachedOut(forward) != OracleRendering.reachedOut(reversed),
-                "ReachedOutQueue no longer breaks equal dates by position; retire this test (L373)")
+        let seed: UInt64 = 4345_01
+        let oracle = OracleRendering.reachedOut(CanonicalOracle.reachedOut(rows, now: now))
+        let distinct = distinctAnswers({ order in
+            OracleRendering.reachedOut(ReachedOutQueue.activeWithDates(from: order.map { rows[$0] }, now: now))
+        }, size: rows.count, seed: seed)
+        #expect(distinct == [oracle], report("ReachedOutQueue list, product", distinct, seed: seed))
+        #expect(forward.map(\.prospect.naturalKey) == forward.map(\.prospect.naturalKey).sorted(),
+                "equal dates must fall back to the natural key")
     }
 
     @Test func canonicalReachedOutListIsOneAnswerOverEveryOrder() {
@@ -212,8 +254,9 @@ final class OrderDependenceReproductionTests {
 
     // MARK: ReachedOutQueue representative (relationship order, judged by tie class)
 
-    // One show whose two contacts tie in both branches the representative rule has: `replied` picks the
-    // first replied contact, and the no reply branch picks the first at the minimum `next`.
+    // One show whose contacts tie on every key the representative rule compares EXCEPT the address: in the
+    // replied branch none carries a reply time, and in the no reply branch all were sent at one instant, so
+    // since #4345 the address decides (earliest reply or soonest `next`, then address, then identifier).
     private func representativeFixture(order: [String], replied: Bool,
                                        into ctx: ModelContext) -> Prospect {
         let p = show("rep-show", title: "Juniper Choral Society", status: .contacted, into: ctx)
@@ -227,46 +270,55 @@ final class OrderDependenceReproductionTests {
 
     private let tiedContacts = ["hazel@example.org", "rowan@example.org"]
 
-    // The function itself: handed the relationship in two orders, it names two different people.
+    // #4345, plan v7 Step T: the two `todayRepresentative...` reproductions that stood here were CONSUMED when
+    // the representative gained a total order in each branch, and are inverted rather than kept (L373).
+    //
+    // The function itself, handed the relationship in EVERY order of three tied contacts: one person, and it
+    // is the one the rule names (earliest reply, then address, then identifier; with no reply the soonest
+    // date, then address, then identifier). The relationship's order is controllable here because an
+    // unsaved relationship keeps the order it was assigned, which the first `#require` confirms.
+    private let threeTiedContacts = ["rowan@example.org", "hazel@example.org", "yarrow@example.org"]
+
     @Test(arguments: [false, true])
-    func todayRepresentativeFollowsRecipientArrayOrder(replied: Bool) throws {
-        let forward = representativeFixture(order: tiedContacts, replied: replied, into: ModelContext(container))
-        let backward = representativeFixture(order: tiedContacts.reversed(), replied: replied,
-                                             into: ModelContext(container))
-        try #require(forward.recipients.map(\.id) == tiedContacts,
-                     "fixture: an unsaved relationship keeps the order it was assigned")
-        #expect(representative(of: forward) != representative(of: backward),
-                "the representative no longer follows p.recipients order; retire this test (L373)")
+    func productRepresentativeIsOnePersonOverEveryRelationshipOrder(replied: Bool) throws {
+        var named: Set<String> = []
+        for order in CanonicalOracle.permutations(threeTiedContacts, count: 12, seed: 4345_02) {
+            let p = representativeFixture(order: order, replied: replied, into: ModelContext(container))
+            try #require(p.recipients.map(\.id) == order,
+                         "fixture: an unsaved relationship keeps the order it was assigned")
+            named.insert(representative(of: p) ?? "nil")
+        }
+        #expect(named == ["hazel@example.org"],
+                "the representative follows the relationship order again: \(named.sorted())")
     }
 
-    // What production actually meets: the relationship as the STORE hands it back after a save. Whether
-    // insertion order survives that round trip is SwiftData's to decide, so this measures rather than
-    // assumes, and says UNMEASURED when the store returned one order for both insertions.
+    // What production actually meets: the relationship as the STORE hands it back after a save, which Step
+    // T0 measured coming back in a different order across runs. Whatever order comes back, one person.
     @Test(arguments: [false, true])
-    func todayRepresentativeAfterAStoreRoundTrip(replied: Bool) throws {
-        func roundTrip(_ order: [String]) throws -> (order: [String], representative: String?) {
+    func productRepresentativeSurvivesAStoreRoundTrip(replied: Bool) throws {
+        func roundTrip(_ order: [String]) throws -> String? {
             let store = try TestModelContainer.inMemory([Prospect.self, Recipient.self])
             let writer = ModelContext(store)
             representativeFixture(order: order, replied: replied, into: writer)
             try writer.save()
-            let reader = ModelContext(store)
-            let fetched = try #require(try reader.fetch(FetchDescriptor<Prospect>()).first)
-            return (fetched.recipients.map(\.id), representative(of: fetched))
+            let fetched = try #require(try ModelContext(store).fetch(FetchDescriptor<Prospect>()).first)
+            return representative(of: fetched)
         }
-        let forward = try roundTrip(tiedContacts)
-        let backward = try roundTrip(tiedContacts.reversed())
-        let branch = replied ? "replied branch" : "no reply branch"
-        if forward.order == backward.order {
-            print("UNMEASURED: ReachedOutQueue representative, \(branch), after a store round trip:"
-                  + " the store returned \(forward.order) for both insertion orders, so this fixture cannot"
-                  + " make relationship order differ; the dependence is real in the function (see"
-                  + " todayRepresentativeFollowsRecipientArrayOrder) but not shown through a fetch here")
-            return
+        let named = Set(try [tiedContacts, tiedContacts.reversed()].map { try roundTrip($0) ?? "nil" })
+        #expect(named == ["hazel@example.org"], "named \(named.sorted()) across two insertion orders")
+    }
+
+    // The replied branch orders by the REPLY first: the contact who wrote earliest is named even when the
+    // address alone would pick the other, so the address is a tie-break and not the rule.
+    @Test func productRepresentativeAmongRepliersIsTheEarliestReply() throws {
+        for order in [tiedContacts, tiedContacts.reversed()] {
+            let p = representativeFixture(order: order, replied: true, into: ModelContext(container))
+            for r in p.recipients {
+                r.repliedAt = r.id == "rowan@example.org" ? sentAt.addingTimeInterval(3_600)
+                    : sentAt.addingTimeInterval(7_200)
+            }
+            #expect(representative(of: p) == "rowan@example.org")
         }
-        print("REPRODUCED: ReachedOutQueue representative, \(branch), after a store round trip: orders"
-              + " \(forward.order) and \(backward.order) named \(forward.representative ?? "nil")"
-              + " and \(backward.representative ?? "nil")")
-        #expect(forward.representative != backward.representative)
     }
 
     // Plan section 6, second bullet: the representative is correct when it is a MEMBER of the oracle's tie
@@ -312,11 +364,36 @@ final class OrderDependenceReproductionTests {
         ]
     }
 
-    @Test func todayEngagementMembershipFollowsEqualDateInputOrder() {
-        let rows = engagementRows()
-        let forward = OracleRendering.engagement(EngagementLink.group(rows))
-        let reversed = OracleRendering.engagement(EngagementLink.group(rows.reversed()))
-        #expect(forward != reversed, "EngagementLink equal dates no longer depend on order; retire this test (L373)")
+    // #4346, plan v7 Step T: `todayEngagementMembershipFollowsEqualDateInputOrder` stood here and was CONSUMED
+    // when the product sort became (date, run end, room, natural key), so it is inverted rather than kept
+    // (L373). The product function with no wrapper now gives one answer over 100 orders, the canonical
+    // oracle's, and again after a re-key that moves one of the equal date rows to the front of the key order.
+    // The chain RULE is untouched here; decision 18 is its own change (#4347).
+    private func engagementRowsRekeyed() -> [EngagementLink.Row] {
+        engagementRows().map { row in
+            guard row.id == "el-y" else { return row }
+            var moved = row
+            moved.id = "el-0"
+            return moved
+        }
+    }
+
+    @Test(arguments: [false, true])
+    func productEngagementLinkIsTheCanonicalAnswerOverEveryOrder(rekeyed: Bool) {
+        let rows = rekeyed ? engagementRowsRekeyed() : engagementRows()
+        let seed: UInt64 = 4346_01
+        let oracle = OracleRendering.engagement(CanonicalOracle.engagementLink(rows))
+        let distinct = distinctAnswers({ order in
+            OracleRendering.engagement(EngagementLink.group(order.map { rows[$0] }))
+        }, size: rows.count, seed: seed)
+        #expect(distinct == [oracle], report("EngagementLink.group, product", distinct, seed: seed))
+    }
+
+    // What the order decides, pinned: on one night a row with no run end sorts before a run, so the run is
+    // the row appended last and the room two weeks on is measured from the run's closing night and joins.
+    @Test func productEngagementLinkMeasuresTheEqualNightFromTheRun() {
+        let out = EngagementLink.group(engagementRows().reversed())
+        #expect(Set(out["el-z"] ?? []).count == 2, "the third room must join the two that opened together")
     }
 
     @Test func canonicalEngagementLinkIsOneAnswerOverEveryOrder() {
@@ -330,8 +407,8 @@ final class OrderDependenceReproductionTests {
 
     // MARK: FeedBreakEvent label and tie order
 
-    // Three flagged rows at one room written two ways (the fold makes them one source), so the event's
-    // label is whichever spelling the first member carried.
+    // Three flagged rows at one room written two ways (the fold makes them one source). Since #4348 the
+    // event's label is the spelling most of them carry, with a tie going to the smallest key's spelling.
     private func flagged(_ key: String, venue: String, missed: Int) -> Prospect {
         let p = show(key, title: "Willow Song Cycle \(key)", venue: venue, date: "2027-02-20")
         p.missedScoutCount = missed
@@ -346,13 +423,37 @@ final class OrderDependenceReproductionTests {
         ]
     }
 
-    @Test func todayFeedBreakLabelIsTheFirstMembersSpelling() throws {
+    // #4348, plan v7 Step T: `todayFeedBreakLabelIsTheFirstMembersSpelling` stood here and was CONSUMED when
+    // the label became the most common spelling, so it is inverted rather than kept (L373). The product
+    // function with no wrapper now gives one answer over 100 orders, the canonical oracle's, and it names the
+    // room the way two of the three members spell it.
+    @Test func productFeedBreakEventsAreTheCanonicalAnswerOverEveryOrder() throws {
         let rows = feedBreakRows()
-        let forward = FeedBreakEvent.events(among: rows, asOf: today)
-        try #require(forward.count == 1, "fixture: the three flagged rows must form one event")
-        let reversed = FeedBreakEvent.events(among: rows.reversed(), asOf: today)
-        #expect(OracleRendering.feedBreaks(forward) != OracleRendering.feedBreaks(reversed),
-                "FeedBreakEvent's label no longer follows input order; retire this test (L373)")
+        let seed: UInt64 = 4348_01
+        let oracle = OracleRendering.feedBreaks(CanonicalOracle.feedBreakEvents(rows, asOf: today))
+        let distinct = distinctAnswers({ order in
+            OracleRendering.feedBreaks(FeedBreakEvent.events(among: order.map { rows[$0] }, asOf: today))
+        }, size: rows.count, seed: seed)
+        #expect(distinct == [oracle], report("FeedBreakEvent, product", distinct, seed: seed))
+        let event = try #require(FeedBreakEvent.events(among: rows, asOf: today).first)
+        #expect(event.venue == "LANTERN HALL", "the most common spelling names the room")
+    }
+
+    // Two spellings two apiece: the tie goes to the spelling of the member with the smallest key, and a
+    // re-key that moves the other spelling's member to the front moves the label with it (L419).
+    @Test(arguments: [false, true])
+    func productFeedBreakLabelTieGoesToTheSmallestKey(rekeyed: Bool) throws {
+        let rows = fillerShows(6) + [
+            flagged("sp-b", venue: "Lantern Hall", missed: 3),
+            flagged("sp-c", venue: "LANTERN HALL", missed: 3),
+            flagged("sp-d", venue: "LANTERN HALL", missed: 3),
+            flagged("sp-e", venue: "Lantern Hall", missed: 3),
+        ]
+        if rekeyed { rows.first { $0.naturalKey == "sp-c" }?.naturalKey = "sp-a" }
+        let labels = Set(CanonicalOracle.permutations(rows, count: permutationCount, seed: 4348_02).compactMap {
+            FeedBreakEvent.events(among: $0, asOf: today).first?.venue
+        })
+        #expect(labels == [rekeyed ? "LANTERN HALL" : "Lantern Hall"], "labels \(labels.sorted())")
     }
 
     @Test func canonicalFeedBreakEventsAreOneAnswerOverEveryOrder() {
@@ -365,40 +466,22 @@ final class OrderDependenceReproductionTests {
     }
 
     // The TIE half: two events at one room label with the same member count and different miss counts.
-    // `sorted` leaves them in `buckets.values` order, which is a Dictionary's iteration order, and that
-    // is seeded per storage allocation rather than by input order. So this measures whether the tie
-    // order moves at all, over input orders AND over repeated calls on one order, and reports what it saw.
-    @Test func todayFeedBreakFullTieOrder() {
-        let rows = fillerShows(6) + [
-            flagged("ft-1", venue: "Lantern Hall", missed: 3),
-            flagged("ft-2", venue: "Lantern Hall", missed: 3),
-            flagged("ft-3", venue: "Lantern Hall", missed: 3),
-            flagged("ft-4", venue: "Lantern Hall", missed: 4),
-            flagged("ft-5", venue: "Lantern Hall", missed: 4),
-            flagged("ft-6", venue: "Lantern Hall", missed: 4),
-        ]
-        let canonical = rows.sorted(by: CanonicalOracle.byNaturalKey)
-        var sameOrder: Set<String> = []
-        var keepAlive: [[FeedBreakEvent.Event]] = []
-        for _ in 0..<permutationCount {
-            let events = FeedBreakEvent.events(among: canonical, asOf: today)
-            keepAlive.append(events)
-            sameOrder.insert(events.map { String($0.missedScoutCount) }.joined(separator: ","))
+    // `sorted` used to leave them in `buckets.values` order, a Dictionary's iteration order, which no input
+    // order can fix. #4348, plan v7 Step T: `todayFeedBreakFullTieOrder` stood here and was CONSUMED by the
+    // output tie-break on the first member key, so it is inverted rather than kept (L373): over repeated
+    // calls on one input AND over input orders, ONE order, and it is the member key order.
+    @Test func productFeedBreakFullTieIsOneOrderByFirstMemberKey() {
+        // Six tied events rather than two, so a Dictionary order that happens to agree with the key order
+        // does so by a 1 in 720 chance rather than a coin toss, and the mutation proof means something.
+        let rows = fillerShows(6) + (3...8).reversed().flatMap { missed in
+            (1...3).map { flagged("ft-\(missed)-\($0)", venue: "Lantern Hall", missed: missed) }
         }
-        let acrossOrders = Set(CanonicalOracle.permutations(rows, count: permutationCount, seed: 4106_08).map {
-            FeedBreakEvent.events(among: $0, asOf: today).map { String($0.missedScoutCount) }.joined(separator: ",")
-        })
-        #expect(keepAlive.allSatisfy { $0.count == 2 })
-        if sameOrder.count == 1 && acrossOrders.count == 1 {
-            print("UNMEASURED: FeedBreakEvent full tie order: one order (\(sameOrder.first ?? ""))"
-                  + " over \(permutationCount) repeated calls and \(permutationCount) input orders. Swift seeds"
-                  + " Dictionary iteration per storage allocation, so the dependence is on the hash table,"
-                  + " not the input, and this process did not show it")
-        } else {
-            print("REPRODUCED: FeedBreakEvent full tie order: \(sameOrder.count) orders over repeated calls on"
-                  + " ONE input order, \(acrossOrders.count) over input orders. A canonical INPUT order cannot"
-                  + " fix this; only an output tie-break can")
+        func render(_ input: [Prospect]) -> String {
+            FeedBreakEvent.events(among: input, asOf: today).map { String($0.missedScoutCount) }.joined(separator: ",")
         }
+        var seen = Set((0..<permutationCount).map { _ in render(rows) })
+        seen.formUnion(CanonicalOracle.permutations(rows, count: permutationCount, seed: 4348_03).map(render))
+        #expect(seen == ["3,4,5,6,7,8"], "orders seen: \(seen.sorted())")
     }
 
     // MARK: laterLookalikes nil firstSeenAt ties
@@ -420,16 +503,36 @@ final class OrderDependenceReproductionTests {
         return fillerShows(12) + [target, first, second]
     }
 
-    @Test func todayLaterLookalikesBreakNilFirstSeenTiesByInputPosition() throws {
+    // #4349, plan v7 Step T: `todayLaterLookalikesBreakNilFirstSeenTiesByInputPosition` stood here and was
+    // CONSUMED when equal sightings gained a natural key tie-break, so it is inverted rather than kept (L373).
+    // The product, called with no wrapper, now gives one answer over 100 orders, the canonical oracle's, and
+    // the card names the smaller key's title; a re-key that moves the other row to the front of the key
+    // order moves the named title with it (L419).
+    @Test(arguments: [false, true])
+    func productLaterLookalikesAreTheCanonicalAnswerOverEveryOrder(rekeyed: Bool) throws {
         let rows = lookalikeRows()
+        if rekeyed { rows.first { $0.naturalKey == "ll-b" }?.naturalKey = "ll-0" }
         let keys = rows.map(\.naturalKey)
-        let forward = CanonicalOracle.lookalikeTitlesByCard(QueueModel.scope(from: rows, now: now, today: today),
-                                                            keys: keys)
-        try #require(forward["ll-t"]?.count == 2, "fixture: the target card must name both later lookalikes")
-        let reversed = CanonicalOracle.lookalikeTitlesByCard(
-            QueueModel.scope(from: rows.reversed(), now: now, today: today), keys: keys)
-        #expect(OracleRendering.keyed(forward) != OracleRendering.keyed(reversed),
-                "laterLookalikes no longer break nil ties by position; retire this test (L373)")
+        let seed: UInt64 = 4349_01
+        let oracle = OracleRendering.keyed(CanonicalOracle.laterLookalikes(rows, now: now, today: today))
+        let distinct = distinctAnswers({ order in
+            OracleRendering.keyed(CanonicalOracle.lookalikeTitlesByCard(
+                QueueModel.scope(from: order.map { rows[$0] }, now: now, today: today), keys: keys))
+        }, size: rows.count, seed: seed)
+        #expect(distinct == [oracle], report("laterLookalikes, product", distinct, seed: seed))
+        let titles = CanonicalOracle.lookalikeTitlesByCard(QueueModel.scope(from: rows, now: now, today: today),
+                                                           keys: keys)
+        try #require(titles["ll-t"]?.count == 2, "fixture: the target card must name both later lookalikes")
+        #expect(titles["ll-t"]?.first == (rekeyed ? "Harbor Lights Encore Gala" : "Harbor Lights Encore"))
+    }
+
+    // The sighting still decides first: a stamped row is named ahead of an unstamped one whatever the keys.
+    @Test func productLaterLookalikesStillNameTheNewestSightingFirst() throws {
+        let rows = lookalikeRows()
+        rows.first { $0.naturalKey == "ll-b" }?.firstSeenAt = now
+        let titles = CanonicalOracle.lookalikeTitlesByCard(QueueModel.scope(from: rows, now: now, today: today),
+                                                           keys: rows.map(\.naturalKey))
+        #expect(titles["ll-t"]?.first == "Harbor Lights Encore Gala")
     }
 
     @Test func canonicalLaterLookalikesAreOneAnswerOverEveryOrder() {
@@ -469,39 +572,66 @@ final class OrderDependenceReproductionTests {
     // Two stored answers for one organisation at the same instant. The unique constraint on orgKey makes
     // this impossible in a saved store; the ledger's own comment names it anyway, and the plan's canonical
     // order includes it, so the fixture holds it directly.
-    @Test func todayLedgerEqualProbedAtKeepsTheFirstAnswerSeen() {
+    //
+    // #4351, plan v7 Step T: `todayLedgerEqualProbedAtKeepsTheFirstAnswerSeen` stood here and was CONSUMED
+    // when an equal `probedAt` gained its (orgKey, presenterName) tie-break, so it is inverted rather than
+    // kept (L373): either order, the smaller name's answer, and its address.
+    @Test func productLedgerEqualProbedAtKeepsTheSmallerName() {
         let corpus = qualifyingCorpus()
-        let answers = [answer(presenter: "Lark & Finch Players", email: "box@example.org"),
-                       answer(presenter: "Lark and Finch Players", email: "desk@example.org")]
-        let forward = QueueModel.inheritedAnswers(answers, corpus: corpus, overrides: .none, refusals: .none,
-                                                  heldKeys: [], now: now)
-        let reversed = QueueModel.inheritedAnswers(answers.reversed(), corpus: corpus, overrides: .none,
-                                                   refusals: .none, heldKeys: [], now: now)
-        #expect(!forward.isEmpty)
-        #expect(OracleRendering.inherited(forward) != OracleRendering.inherited(reversed),
-                "the ledger no longer keeps the first equal probedAt answer; retire this test (L373)")
+        let answers = [answer(presenter: "Lark and Finch Players", email: "desk@example.org"),
+                       answer(presenter: "Lark & Finch Players", email: "box@example.org")]
+        let renders = Set([answers, answers.reversed()].map {
+            OracleRendering.inherited(QueueModel.inheritedAnswers($0, corpus: corpus, overrides: .none,
+                                                                  refusals: .none, heldKeys: [], now: now))
+        })
+        #expect(renders.count == 1, "the equal probedAt answer still follows input order")
+        let one = QueueModel.inheritedAnswers(answers, corpus: corpus, overrides: .none, refusals: .none,
+                                              heldKeys: [], now: now)
+        #expect(!one.isEmpty)
+        #expect(one.values.allSatisfy { $0.organisation == "Lark & Finch Players" && $0.emails == ["box@example.org"] })
     }
 
     // Two spellings of one organisation that fold to ONE orgKey but to two producer keys: `&amp;` is
     // decoded by `OrgKey`'s canonicalize and not by `ProducerGate.key`. One spelling plays two rooms and
-    // qualifies; the other plays one and does not. The memo keeps the verdict of whichever show came first.
+    // qualifies; the other plays one and does not. The memo used to keep the verdict of whichever show came
+    // first; #4351 (decision 7(a)) keys it by producer key, so each show takes its OWN spelling's verdict.
     private func memoCorpus() -> [Prospect] {
         qualifyingCorpus() + [presented("lg-3", by: "Lark &amp; Finch Players", at: "Harbor Hall")]
     }
 
-    @Test func todayLedgerVerdictMemoFollowsTheFirstPresenterMet() throws {
+    // #4351: `todayLedgerVerdictMemoFollowsTheFirstPresenterMet` stood here and was CONSUMED, so it is
+    // inverted (L373): either corpus order, the two shows of the qualifying spelling inherit and the show of
+    // the one room spelling does not.
+    @Test func productLedgerVerdictIsPerProducerKeyInEitherOrder() throws {
         try #require(OrgKey.stored(for: "Lark & Finch Players") == orgKey)
         try #require(OrgKey.stored(for: "Lark &amp; Finch Players") == orgKey)
         try #require(ProducerGate.key("Lark & Finch Players") != ProducerGate.key("Lark &amp; Finch Players"),
                      "fixture: the two spellings must be two producer keys")
         let corpus = memoCorpus()
         let answers = [answer(presenter: "Lark & Finch Players", email: "box@example.org")]
-        let qualifyingFirst = QueueModel.inheritedAnswers(answers, corpus: corpus, overrides: .none,
-                                                          refusals: .none, heldKeys: [], now: now)
-        let lonelyFirst = QueueModel.inheritedAnswers(answers, corpus: corpus.reversed(), overrides: .none,
-                                                      refusals: .none, heldKeys: [], now: now)
-        #expect(OracleRendering.inherited(qualifyingFirst) != OracleRendering.inherited(lonelyFirst),
-                "the verdict memo no longer follows show order; retire this test (L373)")
+        for order in [corpus, corpus.reversed()] {
+            let inherited = QueueModel.inheritedAnswers(answers, corpus: order, overrides: .none,
+                                                        refusals: .none, heldKeys: [], now: now)
+            #expect(Set(inherited.keys) == ["lg-1", "lg-2"], "inherited \(inherited.keys.sorted())")
+        }
+    }
+
+    // The product with no wrapper, over 100 orders of both the corpus and the answers: one answer, the
+    // canonical oracle's (plan section 6).
+    @Test func productLedgerIsTheCanonicalAnswerOverEveryOrder() {
+        let corpus = memoCorpus()
+        let answers = [answer(presenter: "Lark & Finch Players", email: "box@example.org"),
+                       answer(presenter: "Lark and Finch Players", email: "desk@example.org")]
+        let oracle = OracleRendering.inherited(CanonicalOracle.inheritedAnswers(answers, corpus: corpus, now: now))
+        let seed: UInt64 = 4351_01
+        var generator = SeededGenerator(seed: seed)
+        var distinct: Set<String> = []
+        for _ in 0..<permutationCount {
+            distinct.insert(OracleRendering.inherited(QueueModel.inheritedAnswers(
+                answers.shuffled(using: &generator), corpus: corpus.shuffled(using: &generator), overrides: .none,
+                refusals: .none, heldKeys: [], now: now)))
+        }
+        #expect(distinct == [oracle], report("OrgAnswerLedger, product", distinct, seed: seed))
     }
 
     @Test func canonicalLedgerIsOneAnswerOverEveryOrder() {
@@ -541,16 +671,29 @@ final class OrderDependenceReproductionTests {
         return rows
     }
 
-    @Test func todayBookingTieIsClaimedByTheFirstInInputOrder() {
-        let forward = bookingRows(into: ModelContext(container))
-        DownbeatBooking.reconcileBooked(prospects: forward, clients: [], bookings: [sharedBooking],
-                                        health: .ok, now: now)
-        let backward = bookingRows(into: ModelContext(container))
-        DownbeatBooking.reconcileBooked(prospects: backward.reversed(), clients: [], bookings: [sharedBooking],
-                                        health: .ok, now: now)
-        #expect(forward.filter { $0.outcome == .booked }.count == 1)
-        #expect(OracleRendering.booked(forward) != OracleRendering.booked(backward),
-                "the booking tie no longer follows input order; retire this test (L373)")
+    // #4350, plan v7 Step T: `todayBookingTieIsClaimedByTheFirstInInputOrder` stood here and was CONSUMED when
+    // the product sort gained its natural key tie-break, so it is inverted rather than kept (L373). The
+    // product function with no wrapper now gives one answer over 100 orders, the canonical oracle's: the
+    // smallest key claims the booking, and a re-key that moves another show to the front moves the claim.
+    @Test(arguments: [false, true])
+    func productBookingsAreTheCanonicalAnswerOverEveryOrder(rekeyed: Bool) {
+        func fixture() -> [Prospect] {
+            let rows = bookingRows(into: ModelContext(container))
+            if rekeyed { rows.first { $0.naturalKey == "bk-3" }?.naturalKey = "bk-0" }
+            return rows
+        }
+        let seed: UInt64 = 4350_01
+        let canonical = fixture()
+        CanonicalOracle.reconcileBooked(canonical, bookings: [sharedBooking], now: now)
+        let oracle = OracleRendering.booked(canonical)
+        let distinct = distinctAnswers({ order in
+            let rows = fixture()
+            DownbeatBooking.reconcileBooked(prospects: order.map { rows[$0] }, clients: [], bookings: [sharedBooking],
+                                            health: .ok, now: now)
+            return OracleRendering.booked(rows)
+        }, size: 3, seed: seed)
+        #expect(distinct == [oracle], report("DownbeatBooking.reconcileBooked, product", distinct, seed: seed))
+        #expect(canonical.filter { $0.outcome == .booked }.map(\.naturalKey) == [rekeyed ? "bk-0" : "bk-1"])
     }
 
     @Test func canonicalBookingsAreOneAnswerOverEveryOrder() {

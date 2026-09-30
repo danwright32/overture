@@ -15,7 +15,8 @@ import AppKit
 //     -only-testing:OvertureTests/ScoutLandingAttributionProbeTests
 //
 // Optional: TEST_RUNNER_MEASURE_4275_SIZES=1,2,4 (store multiples), TEST_RUNNER_MEASURE_4275_ROUNDS=3,
-// TEST_RUNNER_MEASURE_4275_ARMS=noview,queue (add `fields` for #4106 Phase 1a's per field write count). A 4x run holds one test for over 20 minutes, so give it
+// TEST_RUNNER_MEASURE_4275_ARMS=noview,queue (add `fields` for #4106 Phase 1a's per field write count,
+// or `carry,carrysaved` for #4327 step 0.5's pending writes between rounds, with autosave off). A 4x run holds one test for over 20 minutes, so give it
 // OVERTURE_TEST_STALL_END_SECONDS=3300 or the runner's stall guard ends it as hung (measured, #4275).
 //
 // WHAT IT DOES. At each store size it lands the recorded scout extract results through the app's own
@@ -308,6 +309,11 @@ struct ScoutLandingAttributionProbeTests {
                                         settleDeadline: settleDeadline)
                     continue
                 }
+                if arm == "carry" || arm == "carrysaved" {
+                    try await carryArm(inputs, into: ctx, saves: saves, factor: factor,
+                                       saveBetweenRounds: arm == "carrysaved", settleDeadline: settleDeadline)
+                    continue
+                }
                 var window: NSWindow?
                 var hosting: NSView?
                 if arm == "queue" {
@@ -338,6 +344,39 @@ struct ScoutLandingAttributionProbeTests {
             }
         }
     }
+    // #4327 step 0.5: why identical 4x re-lands wrote 819 rows on some rounds and 214 on others. The
+    // hypothesis (c) is that the landing's closing FeedReconcile writes (#4325) are left unsaved, so the next
+    // round's first save carries them INSIDE its window unless an autosave flushed them between rounds. With
+    // autosave OFF the carry cannot be flushed by chance, so it is read directly: whether the context holds
+    // changes, and how many Prospect rows are pending, at each round's end and at the next round's start.
+    // `carrysaved` is the control the plan names: an explicit save OUTSIDE the window after each round, which
+    // must make the carry vanish if (c) is the cause. Counts only (L222).
+    private func carryArm(_ inputs: Inputs, into ctx: ModelContext, saves: Phase0SaveLog, factor: Int,
+                          saveBetweenRounds: Bool, settleDeadline: Int) async throws {
+        let arm = saveBetweenRounds ? "carrysaved" : "carry"
+        let wasAutosaving = ctx.autosaveEnabled
+        ctx.autosaveEnabled = false
+        defer { ctx.autosaveEnabled = wasAutosaving }
+        func pending() -> String {
+            let prospects = ctx.changedModelsArray.filter { $0 is Prospect }.count
+            let sources = ctx.changedModelsArray.filter { $0 is WatchedSource }.count
+            return "hasChanges \(ctx.hasChanges), pending Prospect rows \(prospects), pending WatchedSource rows "
+                + "\(sources), pending inserts \(ctx.insertedModelsArray.count)"
+        }
+        for round in 0...LandingProbe.rounds {
+            let name = round == 0 ? "warm up" : "round \(round)"
+            LandingProbe.say("x\(factor) \(arm) \(name) start: " + pending())
+            let l = try await land(inputs, into: ctx, hosting: nil, saves: saves, sampleSeconds: nil,
+                                   sampleFile: nil, settleDeadline: settleDeadline)
+            LandingProbe.say("x\(factor) \(arm) \(name): saves \(l.saves), rows written \(l.rowsWritten), "
+                             + "saveFailed \(l.outcome.saveFailed); end: " + pending())
+            if saveBetweenRounds && ctx.hasChanges {
+                try ctx.save()
+                LandingProbe.say("x\(factor) \(arm) \(name) saved outside the window: " + pending())
+            }
+        }
+    }
+
     // #4106 Phase 1a: which STORED FIELDS a re-land writes, and which it really changes. Observation is armed
     // on every stored property of every show (`ScopeFields`, held to the schema), one tracking per field so a
     // fire names its field, and a value snapshot before and after says which fires changed anything. Its own

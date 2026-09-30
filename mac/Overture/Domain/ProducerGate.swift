@@ -75,6 +75,13 @@ enum ProducerGate {
     static func qualifies(_ presenter: String, in corpus: Corpus,
                           overrides: ProducerOverrides = .none) -> Bool {
         guard let presenterKey = key(presenter) else { return false }
+        return qualifies(presenterKey: presenterKey, in: corpus, overrides: overrides)
+    }
+
+    // #4351: the same rule asked of a key already folded, for a caller that remembers its verdicts by that
+    // key (the ledger), so it pays one fold per name rather than one per question.
+    static func qualifies(presenterKey: String, in corpus: Corpus,
+                          overrides: ProducerOverrides = .none) -> Bool {
         guard !isVenueBrand(presenterKey, venues: corpus.venues, overrides: overrides)
         else { return false }
         if overrides.promoted.contains(presenterKey) { return true }

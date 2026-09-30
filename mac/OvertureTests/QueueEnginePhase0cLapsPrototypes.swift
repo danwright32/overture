@@ -457,7 +457,12 @@ enum Phase0cLapOracle {
 
     /// The REAL `ContactScoreAdjustment.settle` over every row, its changed set collected, then rolled back.
     /// The context must hold no unsaved change on entry, or the rollback would take it too.
-    static func settleReal(_ rows: [Prospect], now: Date, context: ModelContext) -> Set<Phase0cPID> {
+    ///
+    /// #4324: THROWS when the hand restore below cannot be saved. It used to end in `try? context.save()`, so a
+    /// restore that never reached the store read exactly like one that did, and every comparison after it
+    /// judged a store still holding the real lap's writes (L515, L10). `save` is the seam a test fails.
+    static func settleReal(_ rows: [Prospect], now: Date, context: ModelContext,
+                           save: (ModelContext) throws -> Void = { try $0.save() }) throws -> Set<Phase0cPID> {
         precondition(!context.hasChanges, "settleReal would roll back an unsaved change")
         typealias Stamp = (Int?, Int, String, String?, String?)
         func stamp(_ p: Prospect) -> Stamp {
@@ -476,9 +481,26 @@ enum Phase0cLapOracle {
         }
         if leaked > 0 {
             rollbackLeaks += leaked
-            try? context.save()
+            try saveRestore(context, lap: "settle", save: save)
         }
         return changed
+    }
+
+    /// A hand restore that did not reach the store. Its own type, so a failure names which lap it came from.
+    struct RestoreNotSaved: Error, CustomStringConvertible {
+        let lap: String
+        let underlying: String
+        var description: String { "the \(lap) lap's hand restore was not saved: \(underlying)" }
+    }
+
+    /// The one save both laps' restores go through, so neither can swallow a failure the other reports.
+    private static func saveRestore(_ context: ModelContext, lap: String,
+                                    save: (ModelContext) throws -> Void) throws {
+        do {
+            try save(context)
+        } catch {
+            throw RestoreNotSaved(lap: lap, underlying: String(describing: error))
+        }
     }
 
     /// Rows whose values `rollback()` left in place and the oracle had to put back by hand.
@@ -498,7 +520,9 @@ enum Phase0cLapOracle {
     }
 
     /// The REAL `WentByRetirement.run` then `PassedKeptRetirement.run`, which rows each dismissed, rolled back.
-    static func retireReal(context: ModelContext, today: String)
+    /// #4324: throws when the restore cannot be saved, for the reason `settleReal` gives.
+    static func retireReal(context: ModelContext, today: String,
+                           save: (ModelContext) throws -> Void = { try $0.save() }) throws
         -> (wentBy: Set<Phase0cPID>, passedKept: Set<Phase0cPID>) {
         precondition(!context.hasChanges, "retireReal would roll back an unsaved change")
         let all = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
@@ -520,7 +544,7 @@ enum Phase0cLapOracle {
         }
         if leaked > 0 {
             rollbackLeaks += leaked
-            try? context.save()
+            try saveRestore(context, lap: "retirement", save: save)
         }
         precondition(afterWent.count == wentCount && afterBoth.count == wentCount + passedCount,
                      "a retirement's count disagrees with the rows it changed")
