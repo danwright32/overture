@@ -784,6 +784,16 @@ extension QueueEnginePhase0cRowsProbeTests {
         #expect(Phase0cRows.geoReplayLine(r, rebuilt: [9], loadBefore: 2, loadAfter: .infinity).hasPrefix("UNMEASURED"))
     }
 
+    /// `AgentInputs`' description as field name to value, so a disagreement names its fields.
+    static func agentFields(_ text: String) -> [String: String] {
+        var out: [String: String] = [:]
+        for part in text.split(separator: ",") {
+            let pair = part.split(separator: ":", maxSplits: 1).map { $0.trimmingCharacters(in: .whitespaces) }
+            if pair.count == 2 { out[pair[0].replacingOccurrences(of: "AgentInputs(", with: "")] = pair[1] }
+        }
+        return out
+    }
+
     /// The draft edit on a contacted show with a contact waiting, timed on the synthetic fixture by Gate 0c's
     /// rule: every such show edited once, then the five slowest replayed five times each with the one minute
     /// load under 8, the median of the slowest key deciding. Opt in with the other 0c.5 probes.
@@ -801,7 +811,25 @@ extension QueueEnginePhase0cRowsProbeTests {
                     : Phase0cRowsFixture.draft
                 return Phase0.time { _ = proto.apply(changed: [pid], rows: byPID, upstream: up, context: ctx) }
             }
-            let samples = shows.map { edit($0) }
+            // Whether the prototype agrees BEFORE any edit, and, if an edit breaks it, which edit first and
+            // which AgentInputs fields (counts only, field names and numbers, L222).
+            let atBuild = fx.oracle().mismatches(proto, rowsByKey: fx.rowsByKey)
+            var firstBreak = "none"
+            var samples: [Double] = []
+            for (n, p) in shows.enumerated() {
+                samples.append(edit(p))
+                guard firstBreak == "none" else { continue }
+                let now = fx.oracle()
+                guard !now.mismatches(proto, rowsByKey: fx.rowsByKey).isEmpty else { continue }
+                let mine = Self.agentFields(String(describing: proto.agentInputs))
+                let theirs = Self.agentFields(now.agent)
+                let differing = mine.keys.filter { mine[$0] != theirs[$0] }.sorted()
+                    .map { "\($0) \(mine[$0] ?? "-") against \(theirs[$0] ?? "-")" }
+                firstBreak = "edit \(n + 1) of \(shows.count) (key \(Phase0b.hash8(p.naturalKey)) \(p.recipients.count) contacts, "
+                    + "\(p.recipients.filter { $0.sendState == .pending }.count) pending, draft "
+                    + "\(p.draftBody == Phase0cRowsFixture.draftWithSlot ? "with" : "without") the slot): "
+                    + "prototype against oracle \(differing.joined(separator: "; "))"
+            }
             let mismatches = fx.oracle().mismatches(proto, rowsByKey: fx.rowsByKey)
             #expect(mismatches.isEmpty, "the prototype disagrees with the oracle after the edits [\(size)]")
             var replays: [String] = []
@@ -826,7 +854,8 @@ extension QueueEnginePhase0cRowsProbeTests {
             Phase0cRows.say("""
                 0c.5 pending contact draft edit [synthetic \(size) rows, seed 4368] \(shows.count) contacted shows given a waiting contact, \(Phase0.load()), Debug build
                   every such show edited once                         \(Phase0cRows.spread(samples).text)
-                  oracle after the edits                              \(mismatches.count) mismatches
+                  oracle at build, before any edit                    \(atBuild.isEmpty ? "0 mismatches" : atBuild.joined(separator: "; "))
+                  oracle after the edits                              \(mismatches.count) mismatches; first break: \(firstBreak)
                   the five slowest keys, replayed:
                     \(replays.joined(separator: "\n    "))
                   stop (the slowest key's replayed median over 1 ms, load under 8): \(verdict)\(worst.map { String(format: ", %.3f ms", $0) } ?? "")
