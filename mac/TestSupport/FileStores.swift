@@ -45,7 +45,16 @@ enum FileStores {
     /// passes (L42). A path outside the temp folder is left open and reported as open.
     @discardableResult
     static func close(under dir: URL) -> [String] {
-        guard let root = realPath(dir) else { return [] }
+        guard let root = realPath(dir) else {
+            // The directory is already gone, so there is nothing on disk to close or protect; its recorded
+            // containers are only forgotten, by their configured path, so they are not held for the life of
+            // the process.
+            let gone = dir.standardizedFileURL.path
+            lock.withLock {
+                held.removeAll { c in c.configurations.contains { isInside($0.url.standardizedFileURL.path, gone) } }
+            }
+            return []
+        }
         guard let scratch = realPath(URL(fileURLWithPath: NSTemporaryDirectory())), isInside(root, scratch) else {
             return openFiles(under: dir)
         }
@@ -65,18 +74,26 @@ enum FileStores {
         // full suite run). Its changes are dropped first where that is legal, on the main thread; a context a
         // test made itself is out of reach here and, built with `ModelContext(container)` inside a test
         // process, does not autosave (measured the same day).
+        // Off the main thread (a sandbox released by an async test) the same step is sent to the main queue
+        // rather than skipped. It then lands just after `deleteAllData()`, which is safe: measured the same
+        // day, a destroyed store with an unsaved change pending did not fault, it only logged.
         if Thread.isMainThread {
-            MainActor.assumeIsolated {
-                for container in closing {
-                    container.mainContext.autosaveEnabled = false
-                    container.mainContext.rollback()
-                }
+            MainActor.assumeIsolated { for container in closing { dropMainContextChanges(container) } }
+        } else if !closing.isEmpty {
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated { for container in closing { dropMainContextChanges(container) } }
             }
         }
         if #available(macOS 15, *) {
             for container in closing { container.deleteAllData() }
         }
         return openFiles(under: dir)
+    }
+
+    @MainActor
+    private static func dropMainContextChanges(_ container: ModelContainer) {
+        container.mainContext.autosaveEnabled = false
+        container.mainContext.rollback()
     }
 
     /// Closes the stores under `dir` and removes it. When a file under it is still open (a container
