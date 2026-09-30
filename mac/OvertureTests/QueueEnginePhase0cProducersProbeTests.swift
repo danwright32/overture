@@ -221,8 +221,10 @@ struct Phase0cProducerTables {
     private(set) var venuesByPresenter: [String: [String: Int]] = [:]
     private var venueWordSet: [String: Set<String>] = [:]
     private var presenterWordSet: [String: Set<String>] = [:]
-    private var venueWords: [String: Set<String>] = [:]
-    private var presenterWords: [String: Set<String>] = [:]
+    // #4353 (Step W): the product's own word candidate function, one instance per side. The word SETS
+    // above stay, because the subset test in `sameRoom` needs them; they are built from the same split.
+    private var venueWords = ProducerGate.WordPostings()
+    private var presenterWords = ProducerGate.WordPostings()
     private(set) var witnesses: [String: Set<String>] = [:]
     private(set) var witnessedBy: [String: Set<String>] = [:]
     private(set) var brand: Set<String> = []
@@ -291,7 +293,7 @@ struct Phase0cProducerTables {
     }
 
     private static func wordSet(_ key: String) -> Set<String> {
-        Set(key.split(separator: " ").map(String.init))
+        Set(ProducerGate.WordPostings.words(of: key).map(String.init))
     }
 
     /// `containsAsWords` in either direction, behind the necessary condition that the needle's words are a
@@ -303,10 +305,8 @@ struct Phase0cProducerTables {
 
     private func findWitnesses(_ p: String, tests: inout Int) -> Set<String> {
         guard let pw = presenterWordSet[p] else { return [] }
-        var candidates = Set<String>()
-        for w in pw { if let hits = venueWords[w] { candidates.formUnion(hits) } }
         var found = Set<String>()
-        for v in candidates {
+        for v in venueWords.keys(sharingAWordWith: p) {
             tests += 1
             if Self.sameRoom(p, pw, v, venueWordSet[v]!) { found.insert(v) }
         }
@@ -316,28 +316,22 @@ struct Phase0cProducerTables {
     private mutating func addVenueWords(_ v: String) {
         let ws = Self.wordSet(v)
         venueWordSet[v] = ws
-        for w in ws { venueWords[w, default: []].insert(v) }
+        venueWords.insert(v)
     }
 
     private mutating func removeVenueWords(_ v: String) {
-        for w in venueWordSet[v] ?? [] {
-            venueWords[w]?.remove(v)
-            if venueWords[w]?.isEmpty == true { venueWords[w] = nil }
-        }
+        venueWords.remove(v)
         venueWordSet[v] = nil
     }
 
     private mutating func addPresenterWords(_ p: String) {
         let ws = Self.wordSet(p)
         presenterWordSet[p] = ws
-        for w in ws { presenterWords[w, default: []].insert(p) }
+        presenterWords.insert(p)
     }
 
     private mutating func removePresenterWords(_ p: String) {
-        for w in presenterWordSet[p] ?? [] {
-            presenterWords[w]?.remove(p)
-            if presenterWords[w]?.isEmpty == true { presenterWords[w] = nil }
-        }
+        presenterWords.remove(p)
         presenterWordSet[p] = nil
     }
 
@@ -427,9 +421,7 @@ struct Phase0cProducerTables {
         // A venue key that APPEARS is tested ONCE against each presenter sharing a word with it.
         for v in newVenues {
             let vw = venueWordSet[v]!
-            var candidates = Set<String>()
-            for w in vw { if let hits = presenterWords[w] { candidates.formUnion(hits) } }
-            for p in candidates where !newPresenters.contains(p) {
+            for p in presenterWords.keys(sharingAWordWith: v) where !newPresenters.contains(p) {
                 tests += 1
                 guard Self.sameRoom(p, presenterWordSet[p]!, v, vw) else { continue }
                 witnesses[p, default: []].insert(v)
@@ -1141,7 +1133,7 @@ enum Phase0cFixtures {
         case 10:
             // A venue spelled from the corpus's commonest words, so it shares a word with nearly everyone.
             var freq: [String: Int] = [:]
-            for s in w.shows.values { for word in (ProducerGate.key(s.venue) ?? "").split(separator: " ") { freq[String(word), default: 0] += 1 } }
+            for s in w.shows.values { for word in ProducerGate.WordPostings.words(of: ProducerGate.key(s.venue) ?? "") { freq[String(word), default: 0] += 1 } }
             let common = freq.sorted { $0.value != $1.value ? $0.value > $1.value : $0.key < $1.key }.prefix(5).map(\.key)
             next.shows[next.nextPid] = ProducerGate.Show(presenter: w.shows[anyPid()]!.presenter,
                                                          venue: common.joined(separator: " "))
@@ -1759,7 +1751,7 @@ struct QueueEnginePhase0cProducersProbeTests {
             // The adversarial venue (the corpus's six commonest venue words, weighted by rows), and one venue
             // key added and removed twenty times running.
             var freq: [String: Int] = [:]
-            for v in venueKeys { for w in v.split(separator: " ") { freq[String(w), default: 0] += pidsByVenue[v]!.count } }
+            for v in venueKeys { for w in ProducerGate.WordPostings.words(of: v) { freq[String(w), default: 0] += pidsByVenue[v]!.count } }
             let adversarial = freq.sorted { $0.value != $1.value ? $0.value > $1.value : $0.key < $1.key }
                 .prefix(6).map(\.key).joined(separator: " ")
             let somePresenter = world[firstPidOf.values.min()!]!.presenter

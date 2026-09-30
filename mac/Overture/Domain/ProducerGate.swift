@@ -189,7 +189,7 @@ enum ProducerGate {
         // #1963: only the rooms that share a WORD with this name. Containment in either direction requires
         // it (a run of whole words inside another run of whole words), so a room sharing none can never
         // match and the scan that used to visit all 114 of them per presenter visits a handful.
-        return venues.candidates(for: presenterKey).contains { namesTheSameRoom(presenterKey, $0) }
+        return venues.postings.keys(sharingAWordWith: presenterKey).contains { namesTheSameRoom(presenterKey, $0) }
     }
 
     // #1963: the venue keys, plus which of them holds each word.
@@ -198,32 +198,69 @@ enum ProducerGate {
     // arm from a cross product (roughly 400 presenters by 114 rooms on the live store, each pair two full
     // string scans, 846 of 14,856 main-thread samples) into a handful of comparisons per name.
     //
-    // It filters, it does not judge: `candidates` returns every key that COULD match and the rule itself
-    // still decides. That distinction is what keeps the verdict identical, and it is only sound because
-    // both directions of the containment test need the two names to share at least one whole word.
+    // It filters, it does not judge: `postings.keys(sharingAWordWith:)` returns every key that COULD match
+    // and the rule itself still decides. That distinction is what keeps the verdict identical, and it is
+    // only sound because both directions of the containment test need the two names to share at least one
+    // whole word.
     struct VenueKeyIndex: Equatable, Sendable {
         let keys: Set<String>
-        private let keysByWord: [String: Set<String>]
+        let postings: WordPostings
 
         init(_ venueKeys: Set<String>) {
             keys = venueKeys
-            var index: [String: Set<String>] = [:]
-            for key in venueKeys {
-                // Split the same way containsAsWords counts words, so the filter and the rule cannot
-                // disagree about where one word ends and the next begins.
-                for word in key.split(separator: " ") {
-                    index[String(word), default: []].insert(key)
-                }
-            }
-            keysByWord = index
+            postings = WordPostings(venueKeys)
+        }
+    }
+
+    // #4353 (plan v7 Step W): THE word candidate function, one copy for the producer tables and their patch.
+    //
+    // A key is posted under each of its words, and `keys(sharingAWordWith:)` returns every posted key that
+    // shares at least one word with the one asked about. A superset by construction: containment either way
+    // puts all of one name's words inside the other, so a key sharing no word cannot match in either
+    // direction. The venue index above is these postings over venue keys; a patch keeps a second instance
+    // over presenter keys, so a venue key that appears can find the presenters it might name, and grows and
+    // shrinks both with `insert` and `remove` instead of rebuilding.
+    //
+    // Before this the same reasoning was written three times (here, and a hand rolled word map in each of
+    // the 0b.1 and 0c.3 patch prototypes), which is how two of them come to disagree about where a word ends
+    // (L370). Because the product and a patch now share it, a fault here reaches both, so the independent
+    // side of every comparison is a brute force over the DEFINITION with no prefilter at all (L70):
+    // `ProducerGateVenueIndexTests` and `WordPostingsTests`.
+    struct WordPostings: Equatable, Sendable {
+        private var keysByWord: [String: Set<String>] = [:]
+
+        init() {}
+
+        init(_ keys: some Sequence<String>) {
+            for key in keys { insert(key) }
         }
 
-        // Every venue key that could possibly contain, or be contained in, this name. A superset by
-        // construction: containment either way puts all of one name's words inside the other, so a key
-        // sharing no word with the presenter cannot match in either direction.
-        func candidates(for presenterKey: String) -> Set<String> {
+        // Split the same way containsAsWords bounds an occurrence, on a single space, so the filter and
+        // the rule cannot disagree about where one word ends and the next begins.
+        static func words(of key: String) -> [Substring] {
+            key.split(separator: " ")
+        }
+
+        mutating func insert(_ key: String) {
+            for word in Self.words(of: key) {
+                keysByWord[String(word), default: []].insert(key)
+            }
+        }
+
+        // Takes the key off every word it was posted under, and drops a word left holding nothing, so a
+        // value that has grown and shrunk equals one built cold from what remains.
+        mutating func remove(_ key: String) {
+            for word in Self.words(of: key) {
+                let w = String(word)
+                keysByWord[w]?.remove(key)
+                if keysByWord[w]?.isEmpty == true { keysByWord[w] = nil }
+            }
+        }
+
+        func keys(sharingAWordWith key: String) -> Set<String> {
+            let asked = Self.words(of: key)
             var found: Set<String> = []
-            for word in presenterKey.split(separator: " ") {
+            for word in asked {
                 if let hits = keysByWord[String(word)] { found.formUnion(hits) }
             }
             return found
