@@ -407,8 +407,8 @@ final class OrderDependenceReproductionTests {
 
     // MARK: FeedBreakEvent label and tie order
 
-    // Three flagged rows at one room written two ways (the fold makes them one source), so the event's
-    // label is whichever spelling the first member carried.
+    // Three flagged rows at one room written two ways (the fold makes them one source). Since #4348 the
+    // event's label is the spelling most of them carry, with a tie going to the smallest key's spelling.
     private func flagged(_ key: String, venue: String, missed: Int) -> Prospect {
         let p = show(key, title: "Willow Song Cycle \(key)", venue: venue, date: "2027-02-20")
         p.missedScoutCount = missed
@@ -423,13 +423,37 @@ final class OrderDependenceReproductionTests {
         ]
     }
 
-    @Test func todayFeedBreakLabelIsTheFirstMembersSpelling() throws {
+    // #4348, plan v7 Step T: `todayFeedBreakLabelIsTheFirstMembersSpelling` stood here and was CONSUMED when
+    // the label became the most common spelling, so it is inverted rather than kept (L373). The product
+    // function with no wrapper now gives one answer over 100 orders, the canonical oracle's, and it names the
+    // room the way two of the three members spell it.
+    @Test func productFeedBreakEventsAreTheCanonicalAnswerOverEveryOrder() throws {
         let rows = feedBreakRows()
-        let forward = FeedBreakEvent.events(among: rows, asOf: today)
-        try #require(forward.count == 1, "fixture: the three flagged rows must form one event")
-        let reversed = FeedBreakEvent.events(among: rows.reversed(), asOf: today)
-        #expect(OracleRendering.feedBreaks(forward) != OracleRendering.feedBreaks(reversed),
-                "FeedBreakEvent's label no longer follows input order; retire this test (L373)")
+        let seed: UInt64 = 4348_01
+        let oracle = OracleRendering.feedBreaks(CanonicalOracle.feedBreakEvents(rows, asOf: today))
+        let distinct = distinctAnswers({ order in
+            OracleRendering.feedBreaks(FeedBreakEvent.events(among: order.map { rows[$0] }, asOf: today))
+        }, size: rows.count, seed: seed)
+        #expect(distinct == [oracle], report("FeedBreakEvent, product", distinct, seed: seed))
+        let event = try #require(FeedBreakEvent.events(among: rows, asOf: today).first)
+        #expect(event.venue == "LANTERN HALL", "the most common spelling names the room")
+    }
+
+    // Two spellings two apiece: the tie goes to the spelling of the member with the smallest key, and a
+    // re-key that moves the other spelling's member to the front moves the label with it (L419).
+    @Test(arguments: [false, true])
+    func productFeedBreakLabelTieGoesToTheSmallestKey(rekeyed: Bool) throws {
+        let rows = fillerShows(6) + [
+            flagged("sp-b", venue: "Lantern Hall", missed: 3),
+            flagged("sp-c", venue: "LANTERN HALL", missed: 3),
+            flagged("sp-d", venue: "LANTERN HALL", missed: 3),
+            flagged("sp-e", venue: "Lantern Hall", missed: 3),
+        ]
+        if rekeyed { rows.first { $0.naturalKey == "sp-c" }?.naturalKey = "sp-a" }
+        let labels = Set(CanonicalOracle.permutations(rows, count: permutationCount, seed: 4348_02).compactMap {
+            FeedBreakEvent.events(among: $0, asOf: today).first?.venue
+        })
+        #expect(labels == [rekeyed ? "LANTERN HALL" : "Lantern Hall"], "labels \(labels.sorted())")
     }
 
     @Test func canonicalFeedBreakEventsAreOneAnswerOverEveryOrder() {
@@ -442,40 +466,22 @@ final class OrderDependenceReproductionTests {
     }
 
     // The TIE half: two events at one room label with the same member count and different miss counts.
-    // `sorted` leaves them in `buckets.values` order, which is a Dictionary's iteration order, and that
-    // is seeded per storage allocation rather than by input order. So this measures whether the tie
-    // order moves at all, over input orders AND over repeated calls on one order, and reports what it saw.
-    @Test func todayFeedBreakFullTieOrder() {
-        let rows = fillerShows(6) + [
-            flagged("ft-1", venue: "Lantern Hall", missed: 3),
-            flagged("ft-2", venue: "Lantern Hall", missed: 3),
-            flagged("ft-3", venue: "Lantern Hall", missed: 3),
-            flagged("ft-4", venue: "Lantern Hall", missed: 4),
-            flagged("ft-5", venue: "Lantern Hall", missed: 4),
-            flagged("ft-6", venue: "Lantern Hall", missed: 4),
-        ]
-        let canonical = rows.sorted(by: CanonicalOracle.byNaturalKey)
-        var sameOrder: Set<String> = []
-        var keepAlive: [[FeedBreakEvent.Event]] = []
-        for _ in 0..<permutationCount {
-            let events = FeedBreakEvent.events(among: canonical, asOf: today)
-            keepAlive.append(events)
-            sameOrder.insert(events.map { String($0.missedScoutCount) }.joined(separator: ","))
+    // `sorted` used to leave them in `buckets.values` order, a Dictionary's iteration order, which no input
+    // order can fix. #4348, plan v7 Step T: `todayFeedBreakFullTieOrder` stood here and was CONSUMED by the
+    // output tie-break on the first member key, so it is inverted rather than kept (L373): over repeated
+    // calls on one input AND over input orders, ONE order, and it is the member key order.
+    @Test func productFeedBreakFullTieIsOneOrderByFirstMemberKey() {
+        // Six tied events rather than two, so a Dictionary order that happens to agree with the key order
+        // does so by a 1 in 720 chance rather than a coin toss, and the mutation proof means something.
+        let rows = fillerShows(6) + (3...8).reversed().flatMap { missed in
+            (1...3).map { flagged("ft-\(missed)-\($0)", venue: "Lantern Hall", missed: missed) }
         }
-        let acrossOrders = Set(CanonicalOracle.permutations(rows, count: permutationCount, seed: 4106_08).map {
-            FeedBreakEvent.events(among: $0, asOf: today).map { String($0.missedScoutCount) }.joined(separator: ",")
-        })
-        #expect(keepAlive.allSatisfy { $0.count == 2 })
-        if sameOrder.count == 1 && acrossOrders.count == 1 {
-            print("UNMEASURED: FeedBreakEvent full tie order: one order (\(sameOrder.first ?? ""))"
-                  + " over \(permutationCount) repeated calls and \(permutationCount) input orders. Swift seeds"
-                  + " Dictionary iteration per storage allocation, so the dependence is on the hash table,"
-                  + " not the input, and this process did not show it")
-        } else {
-            print("REPRODUCED: FeedBreakEvent full tie order: \(sameOrder.count) orders over repeated calls on"
-                  + " ONE input order, \(acrossOrders.count) over input orders. A canonical INPUT order cannot"
-                  + " fix this; only an output tie-break can")
+        func render(_ input: [Prospect]) -> String {
+            FeedBreakEvent.events(among: input, asOf: today).map { String($0.missedScoutCount) }.joined(separator: ",")
         }
+        var seen = Set((0..<permutationCount).map { _ in render(rows) })
+        seen.formUnion(CanonicalOracle.permutations(rows, count: permutationCount, seed: 4348_03).map(render))
+        #expect(seen == ["3,4,5,6,7,8"], "orders seen: \(seen.sorted())")
     }
 
     // MARK: laterLookalikes nil firstSeenAt ties
