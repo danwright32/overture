@@ -314,9 +314,16 @@ final class Prospect {
     // A guard on the card build asserts it reads the contacts only through here, so a thirteenth reach
     // added later is counted rather than exempt: a hand-written list of call sites is blind to precisely
     // the thing it exists to catch (L96).
+    //
+    // #4352 (plan v7 Step T, the correction of 2026-09-27): and in ONE canonical order, `Recipient.id` then
+    // the store's own identifier. The relationship is handed back in whatever order SwiftData chooses, and
+    // Step T0 and probe 0c.5 measured it changing after a save and a refetch with nothing about the show
+    // changed. Every per-row reader in the pass (the row's `RecipientFacts`, the card's first held reason
+    // and first misgreeted contact) takes its contacts from here, so each now reads the same answer on
+    // every launch, and a retained row can be compared with a rebuilt one.
     var countedRecipients: [Recipient] {
         QueueRenderPass.WorkTally.recordRecipientReach()
-        return recipients
+        return Recipient.inCanonicalOrder(recipients)
     }
 
     var reachabilityResultFromRecipients: Reachability.ProbeResult {
@@ -1400,7 +1407,8 @@ final class Prospect {
     // guessed attribution would silently move the number the split exists to keep honest.
     var bookingSource: OutcomeSource? {
         if outcome == .booked, let raw = outcomeSourceRaw { return OutcomeSource(rawValue: raw) }
-        return recipients.first { $0.resolution == .booked }?
+        // #4352: the first booked contact in the canonical order, not the relationship's.
+        return Recipient.inCanonicalOrder(recipients).first { $0.resolution == .booked }?
             .outcomeSourceRaw.flatMap(OutcomeSource.init)
     }
 
