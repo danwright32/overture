@@ -437,11 +437,17 @@ enum ShowLink {
             // one card, and asking Dan whether two rows he is looking at as one show are the same show
             // is the fastest way to teach him to skip the surface (#3772, correction 1: counting the
             // raw failing pairs instead of these gave 18 where the reviewable number is 9).
+            // #4382: each pair turned so `a` is the smaller natural key, rather than whichever row the
+            // walk met first.
             out.append(contentsOf: refused
                 .filter { find.root($0.0.id) != find.root($0.1.id) }
-                .map { NearMiss(a: $0.0.id, b: $0.1.id) })
+                .map { $0.0.id < $0.1.id ? NearMiss(a: $0.0.id, b: $0.1.id) : NearMiss(a: $0.1.id, b: $0.0.id) })
         }
-        return out
+        // #4382: and the list in natural key order, so it no longer follows the Dictionary order `buckets`
+        // hands back (which moves between launches) or the order the rows arrived in (L343). Measured on a
+        // clone of the live store 2026-09-30: of 108 refused pairs, 108 sat at a different position and 108
+        // were turned round when the same rows arrived reversed. The same rule `clusters` sorts members by.
+        return out.sorted { ($0.a, $0.b) < ($1.a, $1.b) }
     }
 }
 
