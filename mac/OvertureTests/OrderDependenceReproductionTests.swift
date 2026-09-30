@@ -228,8 +228,9 @@ final class OrderDependenceReproductionTests {
 
     // MARK: ReachedOutQueue representative (relationship order, judged by tie class)
 
-    // One show whose two contacts tie in both branches the representative rule has: `replied` picks the
-    // first replied contact, and the no reply branch picks the first at the minimum `next`.
+    // One show whose contacts tie on every key the representative rule compares EXCEPT the address: in the
+    // replied branch none carries a reply time, and in the no reply branch all were sent at one instant, so
+    // since #4345 the address decides (earliest reply or soonest `next`, then address, then identifier).
     private func representativeFixture(order: [String], replied: Bool,
                                        into ctx: ModelContext) -> Prospect {
         let p = show("rep-show", title: "Juniper Choral Society", status: .contacted, into: ctx)
