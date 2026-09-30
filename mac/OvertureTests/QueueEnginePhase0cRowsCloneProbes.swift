@@ -789,22 +789,28 @@ extension QueueEnginePhase0cRowsProbeTests {
     }
 
     @Test func aFieldValueHoldingACommaStaysWhole() {
-        let fields = Self.agentFields("AgentInputs(toTriage: 3, runInFlight: Optional(a, b), reachedOutDue: 295)")
-        #expect(fields["runInFlight"] == "Optional(a, b)")
+        let fields = Self.agentFields("AgentInputs(toTriage: 3, runInFlight: Optional(x: 1, y: 2), reachedOutDue: 295)")
+        #expect(fields["runInFlight"] == "Optional(x: 1, y: 2)")
         #expect(fields["reachedOutDue"] == "295")
         #expect(fields.count == 3)
     }
 
-    /// `AgentInputs`' description as field name to value, so a disagreement names its fields. Split only where
-    /// a comma is followed by the next `name: `, so a value that itself holds a comma stays whole.
+    /// `AgentInputs`' description as field name to value, so a disagreement names its fields. Split only on a
+    /// comma at the top level, outside any parentheses or brackets, so a nested value stays whole.
     static func agentFields(_ text: String) -> [String: String] {
         var body = text
         if body.hasPrefix("AgentInputs(") { body.removeFirst("AgentInputs(".count) }
         if body.hasSuffix(")") { body.removeLast() }
+        var parts: [String] = []
+        var current = ""
+        var depth = 0
+        for ch in body {
+            if ch == "(" || ch == "[" { depth += 1 } else if ch == ")" || ch == "]" { depth -= 1 }
+            if ch == "," && depth == 0 { parts.append(current); current = ""; continue }
+            current.append(ch)
+        }
+        parts.append(current)
         var out: [String: String] = [:]
-        let parts = body.replacingOccurrences(of: #", (?=[A-Za-z_][A-Za-z0-9_]*: )"#, with: "\u{1F}",
-                                              options: .regularExpression)
-            .split(separator: "\u{1F}")
         for part in parts {
             let pair = part.split(separator: ":", maxSplits: 1).map { $0.trimmingCharacters(in: .whitespaces) }
             if pair.count == 2 { out[pair[0]] = pair[1] }
@@ -864,24 +870,25 @@ extension QueueEnginePhase0cRowsProbeTests {
                     "the draft edits changed how the prototype disagrees with the oracle [\(size)]")
             var replays: [String] = []
             var worst: Double? = 0
-            // One bounded wait for the whole replay block, then the load read beside each key: a wait per key
-            // could outlast the runner's twenty minute stall limit on a busy Mac.
+            // One bounded wait before the FIRST key only, then the load read before and after each key, which is
+            // what decides it: a wait per key could outlast the runner's twenty minute stall limit on a busy Mac,
+            // so a later key can be UNMEASURED on load the wait did not cover.
             _ = Phase0.waitForLoad(below: Phase0cRows.loadCeiling, deadline: 300, poll: 5)
             for i in samples.indices.sorted(by: { samples[$0] > samples[$1] }).prefix(5) {
                 let p = shows[i]
-                let quiet = (load: Phase0.oneMinuteLoad(), text: "")
+                let before = Phase0.oneMinuteLoad()
                 let reading = Phase0.Reading(runs: (0..<5).map { _ in edit(p) })
                 let after = Phase0.oneMinuteLoad()
                 let shape = "key \(Phase0b.hash8(p.naturalKey)) \(p.recipients.count) contacts, "
                     + "\(p.recipients.filter { $0.sendState == .pending }.count) pending"
-                guard quiet.load < Phase0cRows.loadCeiling && after < Phase0cRows.loadCeiling else {
+                guard before < Phase0cRows.loadCeiling && after < Phase0cRows.loadCeiling else {
                     worst = nil
-                    replays.append(shape + String(format: ": UNMEASURED, load %.2f before and %.2f after", quiet.load, after))
+                    replays.append(shape + String(format: ": UNMEASURED, load %.2f before and %.2f after", before, after))
                     continue
                 }
                 worst = worst.map { max($0, reading.median) }
                 replays.append(shape + String(format: ": sample %.3f ms, replay median %.3f (%.3f to %.3f), load %.2f before, %.2f after",
-                                              samples[i], reading.median, reading.low, reading.high, quiet.load, after))
+                                              samples[i], reading.median, reading.low, reading.high, before, after))
             }
             // 0c.5's own stop rule: any disagreement fails it, whatever the timing says.
             // No show edited means nothing was measured, never a measured zero (L90).

@@ -267,7 +267,8 @@ enum Phase0cView {
     /// the UNMEASURED reason. Read at BOTH ends, so a Mac that got busy part way through cannot score a PASS on
     /// the reading taken before the first sample. A load that could not be read is infinite (L490).
     static func loadRefusal(before: Double, after: Double, ceiling: Double = loadCeiling) -> String? {
-        guard before >= ceiling || after >= ceiling else { return nil }
+        // Written as "not provably under", so a NaN reading is refused too, never scored as quiet.
+        guard !(before < ceiling && after < ceiling) else { return nil }
         return String(format: "UNMEASURED: one minute load %.2f when the arm started and %.2f when it ended, "
                       + "the rule needs both under %.0f", before, after, ceiling)
     }
@@ -383,6 +384,7 @@ struct QueueViewBodyCostProbeTests {
         #expect(Phase0cView.loadRefusal(before: 8.0, after: 2.0)?.hasPrefix("UNMEASURED") == true)
         #expect(Phase0cView.loadRefusal(before: 2.0, after: 11.0)?.hasPrefix("UNMEASURED") == true)
         #expect(Phase0cView.loadRefusal(before: .infinity, after: 1.0)?.hasPrefix("UNMEASURED") == true)
+        #expect(Phase0cView.loadRefusal(before: .nan, after: 1.0)?.hasPrefix("UNMEASURED") == true)
     }
 
     // The frame parsing, on every push: a passed frame wins, an unreadable one falls back AND says so.
@@ -733,15 +735,18 @@ struct QueueViewBodyCostProbeTests {
                 for k in [dismiss, stageKind, scrollKind, firstPre, firstCold] {
                     // A reading that never settled is a FAIL on its own: the main thread was still working
                     // when the cap ended it, whatever the settled medians say.
+                    // A load-refused arm decides nothing, not even by failing to settle (the busy Mac may be why).
+                    if let refusal = k.loadRefusal {
+                        verdicts.append("0c.8 stop (\(k.name)) at 5,376: \(refusal); "
+                            + (k.perKeyMedianCPU.max().map { "cpu \(Phase0cView.f($0)) ms reported and deciding nothing" }
+                               ?? "no reading settled")
+                            + (k.unsettled == 0 ? "" : ", \(k.unsettled) reading(s) never settled"))
+                        continue
+                    }
                     let neverNote = k.unsettled == 0 ? "" : "; \(k.unsettled) reading(s) NEVER SETTLED, FAIL"
                     guard let cpu = k.perKeyMedianCPU.max(), let wall = k.perKeyMedianWall.max() else {
                         verdicts.append("0c.8 stop (\(k.name)): "
                             + (k.unsettled > 0 ? "FAIL, no reading settled" : "UNMEASURED, \(k.note)"))
-                        continue
-                    }
-                    if let refusal = k.loadRefusal {
-                        verdicts.append("0c.8 stop (\(k.name)) at 5,376: \(refusal); cpu \(Phase0cView.f(cpu)) ms, "
-                            + "wall \(Phase0cView.f(wall)) ms reported and deciding nothing" + neverNote)
                         continue
                     }
                     verdicts.append("0c.8 stop (\(k.name)) at 5,376: cpu \(Phase0cView.f(cpu)) ms "
