@@ -3381,9 +3381,14 @@ enum QueueModel {
             guard let target = row.arrivedLookingLike else { continue }
             laterLookalikesByKey[target, default: []].append(row)
         }
+        //
+        // #4349 (plan v7 Step T, decision 13(vi)): equal sightings, which is every pair of rows written before
+        // #1886, fall back to the natural key, so the title the note NAMES is the same on every render
+        // rather than whichever of the tied rows the corpus happened to hand over first.
         let laterLookalikes = laterLookalikesByKey.mapValues { rows in
             rows.sorted {
-                ($0.firstSeenAt ?? .distantPast) > ($1.firstSeenAt ?? .distantPast)
+                let (left, right) = ($0.firstSeenAt ?? .distantPast, $1.firstSeenAt ?? .distantPast)
+                return left != right ? left > right : $0.naturalKey < $1.naturalKey
             }.map(\.naturalKey)
         }
         // #4042: the same walk, the same scope, and the same read-time resolution.
