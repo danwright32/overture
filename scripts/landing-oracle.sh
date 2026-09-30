@@ -76,6 +76,25 @@ outside_every_work_tree() {
   esac
 }
 
+# oracle_record_real_arm <runner> <suite> <inputs> <out> <log>: records the real arm, ONE SIZE PER RUNNER
+# INVOCATION, so each lands in a test process that has run nothing else (#4397): measured, 1x reproduces
+# only alone, so neither size may follow the other in one process. Returns the first non-zero runner exit.
+oracle_record_real_arm() {
+  local runner="$1" suite="$2" inputs="$3" out="$4" log="$5" size one status=0
+  : > "${log}.all"
+  for size in 1x 4x; do
+    OVERTURE_TEST_STALL_END_SECONDS="${OVERTURE_TEST_STALL_END_SECONDS:-3300}" \
+    TEST_RUNNER_MEASURE_4275=1 TEST_RUNNER_MEASURE_4275_INPUTS="${inputs}" TEST_RUNNER_MEASURE_4275_OUT="${out}" \
+    TEST_RUNNER_LANDING_ORACLE_MODE=record TEST_RUNNER_SWIFT_DETERMINISTIC_HASHING=1 \
+      "${runner}" "-only-testing:${suite}/realArmAt${size}()" 2>&1 | tee "${log}"
+    one="${PIPESTATUS[0]}"
+    cat "${log}" >> "${log}.all"
+    [ "${one}" -eq 0 ] || [ "${status}" -ne 0 ] || status="${one}"
+  done
+  cp "${log}.all" "${log}"
+  return "${status}"
+}
+
 main() {
   local commit="6d3453d8" freeze="" inputs="" out="" synthetic_to=""
   while [ $# -gt 0 ]; do
@@ -206,21 +225,9 @@ main() {
   #    Measured 2026-09-30 (#4397): 1x reproduces only in its own process, and 4x varies run to run even so.
   if [ -n "${inputs}" ]; then
     mkdir -p "${out}"
-    # One size per runner invocation, so each lands in a test process that has run nothing else (#4397):
-    # measured, 1x reproduces only alone, so neither size may follow the other in one process.
-    local size marker one
     status=0
-    : > "${log}.all"
-    for size in 1x 4x; do
-      OVERTURE_TEST_STALL_END_SECONDS="${OVERTURE_TEST_STALL_END_SECONDS:-3300}" \
-      TEST_RUNNER_MEASURE_4275=1 TEST_RUNNER_MEASURE_4275_INPUTS="${inputs}" TEST_RUNNER_MEASURE_4275_OUT="${out}" \
-      TEST_RUNNER_LANDING_ORACLE_MODE=record TEST_RUNNER_SWIFT_DETERMINISTIC_HASHING=1 \
-        "${runner}" "-only-testing:${suite}/realArmAt${size}()" 2>&1 | tee "${log}"
-      one="${PIPESTATUS[0]}"
-      cat "${log}" >> "${log}.all"
-      [ "${one}" -eq 0 ] || status="${one}"
-    done
-    cp "${log}.all" "${log}"
+    oracle_record_real_arm "${runner}" "${suite}" "${inputs}" "${out}" "${log}" || status=$?
+    local size marker
     marker="$(printf '%s%s' "OVERTURE-REAL-ARM" ": never commit")"
     for size in x1 x4; do
       if [ "$(head -n 1 "${out}/real-arm-${size}.oracle" 2>/dev/null)" != "${marker}" ]; then

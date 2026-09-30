@@ -58,6 +58,22 @@ out="$(main --out 2>&1)"
 assert_equals "a trailing flag with no value is refused" "2" "$?"
 assert_contains "and named" "${out}" "--out needs a value"
 
+# The real arm is recorded one size per runner invocation, so neither size lands in a process the other has
+# already used (#4397). Driven with a stub runner that records its arguments and fails the first time.
+STUB="${SCRATCH}/stub-runner.sh"
+CALLS="${SCRATCH}/calls.txt"
+printf '#!/bin/bash\necho "$*" >> "%s"\n[ "$(wc -l < "%s")" -gt 1 ]\n' "${CALLS}" "${CALLS}" > "${STUB}"
+chmod +x "${STUB}"
+oracle_record_real_arm "${STUB}" "OvertureTests/LandingOracleTests" "${SCRATCH}/in" "${SCRATCH}/out" \
+  "${SCRATCH}/run.log" > /dev/null 2>&1
+status=$?
+assert_equals "the runner is invoked once per size" "2" "$(wc -l < "${CALLS}" | tr -d ' ')"
+assert_equals "the first names only 1x" "-only-testing:OvertureTests/LandingOracleTests/realArmAt1x()" \
+  "$(sed -n 1p "${CALLS}")"
+assert_equals "the second names only 4x" "-only-testing:OvertureTests/LandingOracleTests/realArmAt4x()" \
+  "$(sed -n 2p "${CALLS}")"
+assert_equals "and a failed size is not hidden by a later one that passed" "1" "${status}"
+
 # The whole script refuses before building anything when the real arm would write inside a checkout.
 out="$(main --inputs "${SCRATCH}/archive" --out "${REPO_ROOT}/real-arm-out" 2>&1)"
 assert_equals "the real arm's output inside a checkout is refused before any build" "2" "$?"
