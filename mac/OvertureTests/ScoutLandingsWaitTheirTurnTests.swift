@@ -645,6 +645,51 @@ struct ScoutLandingsWaitTheirTurnTests {
         #expect(LandingSingleFlight(sleep: { _ in }).mintSequence(above: pending.highestSequence) == 8)
     }
 
+    // The sequence floor is read on every mint, so reading it must never move, recover or write anything:
+    // recovery is `list()`'s alone. It still reads the sequences a crash left in a temporary folder.
+    @Test func readingTheSequenceFloorChangesNothingOnDisk() throws {
+        let dir = try sandboxes.make(named: "pending-floor-readonly")
+        let staging = try sandboxes.make(named: "pending-floor-staging")
+        let fm = FileManager.default
+        // A results-only folder, which `list()` would recover by writing an entry.
+        let orphan = try JSONEncoder().encode(Self.results("orphan"))
+        let orphanHash = PendingScoutIngests.contentHash(of: orphan)
+        try fm.createDirectory(at: dir.appendingPathComponent(orphanHash), withIntermediateDirectories: true)
+        try orphan.write(to: dir.appendingPathComponent(orphanHash).appendingPathComponent("results.json"))
+        // A finished copy left in its temporary folder, which `list()` would move into place.
+        let staged = try PendingScoutIngests(directory: staging).record(
+            try JSONEncoder().encode(Self.results("staged")), sequence: 9, now: now)
+        try fm.moveItem(at: staging.appendingPathComponent(staged.contentHash),
+                        to: dir.appendingPathComponent(".incoming-interrupted"))
+        func snapshot() throws -> [String] {
+            (fm.enumerator(atPath: dir.path)?.allObjects as? [String] ?? []).sorted()
+        }
+        let before = try snapshot()
+
+        #expect(PendingScoutIngests(directory: dir).highestSequence == 9)
+        #expect(try snapshot() == before, "reading the sequence floor moved or wrote files")
+    }
+
+    // MARK: - The landing sweep's warning survives the run's own receipt
+
+    // `StatusLine` always lets a CLEAR through, and the do-not-contact receipt clears the line on a run
+    // with nothing suppressed. So the sweep that can leave a stuck or unreadable warning runs after that
+    // receipt, never before it, or its warning is erased in the same run.
+    @Test func theLandingSweepRunsAfterTheSuppressionReceipt() throws {
+        var line = StatusLine()
+        line.set("kept results are stuck", priority: .warning)
+        line.set(SuppressionReport.summary(for: []))
+        #expect(line.text == nil, "the receipt no longer clears the line, so this ordering rule can be revisited")
+
+        let root = SourceGuardHelper.source("Overture/App/RootView.swift")
+        let body = try #require(SourceGuardHelper.bodyOfFunction(named: "runScout", in: root))
+        let code = SourceGuardHelper.normalizedCode(body)
+        let receipt = try #require(code.range(of: "status.set(SuppressionReport.summary("))
+        let sweep = try #require(code.range(of: "await offerPendingScoutIngests()"))
+        #expect(sweep.lowerBound > receipt.upperBound,
+                "the landing sweep runs before the suppression receipt, which then erases its warning")
+    }
+
     // MARK: - The #1027 guard stays what it was
 
     // "A scout run is in flight" is still RootView's own guard, unchanged, and is not the landing

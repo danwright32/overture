@@ -2762,8 +2762,6 @@ struct RootView: View {
                     },
                     landingPriority: auto ? .scout : .danAction)
                 guard gen == scoutGeneration else { return }   // superseded by a Retry / newer run
-                // #4330: the sweep of kept calendar results at the end of this landing.
-                await offerPendingScoutIngests()
                 scoutSummary = ScoutRunSummary.summary(for: outcome)   // #885
 
                 // #802, Dan's 3rd decision: SHOW him the do-not-contact guard working. An org that asked
@@ -2774,6 +2772,11 @@ struct RootView: View {
                 // Deliberately the STATUS line and not the warning line. Nothing is wrong, nothing needs
                 // fixing, and putting a receipt in the warning slot would teach him to dismiss warnings.
                 status.set(SuppressionReport.summary(for: outcome.suppressedOrgs))
+                // #4330: the sweep of kept calendar results at the end of this landing. AFTER the receipt
+                // above, which clears the status line on a run with nothing suppressed and would otherwise
+                // erase the stuck or unreadable warning this can leave.
+                await offerPendingScoutIngests()
+                guard gen == scoutGeneration else { return }
 
                 // #802: the native half is done and shown. The pages that CHANGED are being read by a
                 // detached run right now, and its results land minutes later, so follow it to completion

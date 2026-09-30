@@ -171,13 +171,23 @@ struct PendingScoutIngests {
 
     // The floor a new landing sequence is minted above. A pending entry from a session that has ended can
     // hold a number the store never saw (it never landed), and a new run minted at or below it would be
-    // judged OLDER than a copy it actually postdates. A folder that cannot be listed leaves the floor to the
-    // store and this process's own mints; the same failure is what `ScoutExtractLanding.offerPending`
-    // reports by name, so it does not pass in silence.
+    // judged OLDER than a copy it actually postdates.
+    //
+    // READ ONLY, and deliberately not `list()`: this runs on every sequence mint, and `list()` recovers
+    // (it moves folders and writes entries). Only the entries are read, in every folder including a
+    // temporary one a crash left, whose entry already holds the sequence it would be moved in with. A
+    // results-only folder carries no sequence and is recovered as 0, so it adds nothing to the floor. A
+    // folder that cannot be read is skipped here; `list()`, on the sweep, is what reports it by name.
     var highestSequence: Int {
-        ((try? list()) ?? []).reduce(0) { top, listed in
-            if case .entry(let e) = listed { return max(top, e.sequence) }
-            return top
+        let fm = FileManager.default
+        guard let names = try? fm.contentsOfDirectory(atPath: directory.path) else { return 0 }
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return names.reduce(0) { top, name in
+            let url = directory.appendingPathComponent(name).appendingPathComponent(Self.entryName)
+            guard let data = try? Data(contentsOf: url),
+                  let entry = try? decoder.decode(Entry.self, from: data) else { return top }
+            return max(top, entry.sequence)
         }
     }
 }
