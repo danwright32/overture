@@ -480,7 +480,7 @@ extension QueueEnginePhase0cRowsProbeTests {
                     visibleRows: visibleRows, cardCheck: scope.cardCheck, focusedRows: focusedRows,
                     dateGroups: dateGroups, inquiryRows: [], inquiryGroups: [], inquiriesByRowID: [:],
                     reachedOutList: .none, dateProbeHeadings: headings, stageCounts: [:], geo: context.geo,
-                    placement: placement)
+                    placement: placement, now: context.now)
             }
             let tRenderData = Phase0.median5 { _ = renderData() }
             let passTerms: [(String, Phase0.Reading)] = [

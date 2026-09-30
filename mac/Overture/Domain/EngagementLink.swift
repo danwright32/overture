@@ -41,7 +41,15 @@ enum EngagementLink {
 
         var out: [String: [Member]] = [:]
         for (_, titleRows) in byTitle {
-            let sorted = titleRows.sorted { ($0.performanceDate ?? "") < ($1.performanceDate ?? "") }
+            // #4346 (plan v7 Step T): a TOTAL order. By date alone, two rows opening on one night kept the
+            // order they arrived in, and the chain below compares each row with the row appended LAST, so
+            // which of the two landed last decided whether a later row joined (Step T0 reproduced it). Run
+            // end, then room, then the natural key make the walk, and so the membership, the same however
+            // the rows arrive. A row with no run end sorts before one with a run end on the same night.
+            let sorted = titleRows.sorted {
+                ($0.performanceDate ?? "", $0.runEndDate ?? "", $0.venue ?? "", $0.id)
+                    < ($1.performanceDate ?? "", $1.runEndDate ?? "", $1.venue ?? "", $1.id)
+            }
             // #4347 (plan v7 decision 18(b), Dan's call 2026-09-27): a row joins when it falls within the gap
             // of the LATEST closing night the engagement has reached so far, not the closing night of
             // whichever row happened to be appended last. The old anchor let a one-night show nested inside

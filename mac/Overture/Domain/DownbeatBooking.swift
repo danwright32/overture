@@ -53,7 +53,7 @@ enum DownbeatBooking {
         let entities = entities()
         var count = 0
         var consumed: Set<String> = []
-        // Deterministic order: sort by performanceDate then groupName so 1:1 booking
+        // Deterministic order: sort by performanceDate, kind, groupName, then naturalKey, so 1:1 booking
         // consumption is stable across runs.
         let sorted = entities
             .filter { $0.wasProvablyContacted }
@@ -66,7 +66,12 @@ enum DownbeatBooking {
                 // prospect is downgraded to a suggestion rather than auto-booking. Among same-kind
                 // entities this is constant and falls through to the stable groupName order.
                 if $0.permitsAutoBook != $1.permitsAutoBook { return !$0.permitsAutoBook }
-                return $0.groupName < $1.groupName
+                if $0.groupName != $1.groupName { return $0.groupName < $1.groupName }
+                // #4350 (plan v7 Step T, decision 13(v)): the natural key LAST, so two entities of one kind
+                // with one group on one date claim a shared booking in the same order every run. By group
+                // name alone they kept the order the fetch returned, and the first of them auto-booked
+                // while the rest fell to a suggestion, so which show was marked booked could change.
+                return $0.naturalKey < $1.naturalKey
             }
         for p in sorted {
             if p.bookingManualOutcome { continue }

@@ -85,14 +85,33 @@ enum FeedBreakEvent {
         return buckets.values
             .filter { $0.count >= minimumMembers }
             .map { members in
-                Event(venue: members[0].venue ?? "",
+                Event(venue: label(of: members),
                       missedScoutCount: members[0].missedScoutCount,
                       memberKeys: members.map(\.naturalKey).sorted(),
                       coveredByAnotherCard: members.filter { covered.contains($0.naturalKey) }.count)
             }
             // Deterministic, and never `first` on an unordered fetch: the venue breaks the tie so two
-            // events of one size cannot swap places between renders (L343, L419).
-            .sorted { ($0.memberKeys.count, $1.venue) > ($1.memberKeys.count, $0.venue) }
+            // events of one size cannot swap places between renders (L343, L419). #4348: and where the size
+            // and the room tie too, the first member key, because the order `buckets.values` hands back is
+            // a Dictionary's, which no input order fixes (Step T0 found this).
+            .sorted { left, right in
+                if left.memberKeys.count != right.memberKeys.count {
+                    return left.memberKeys.count > right.memberKeys.count
+                }
+                if left.venue != right.venue { return left.venue < right.venue }
+                return (left.memberKeys.first ?? "") < (right.memberKeys.first ?? "")
+            }
+    }
+
+    // #4348 (plan v7 decision 13(iv)): the room as most of its members spell it, rather than as whichever
+    // member happened to be first in the input. A tie between spellings goes to the one carried by the
+    // member with the smallest natural key, so the sentence names the same room on every render.
+    private static func label(of members: [Prospect]) -> String {
+        var counts: [String: Int] = [:]
+        for member in members { counts[member.venue ?? "", default: 0] += 1 }
+        let top = counts.values.max() ?? 0
+        return members.sorted { $0.naturalKey < $1.naturalKey }
+            .first { counts[$0.venue ?? ""] == top }?.venue ?? ""
     }
 
     // The same fold the natural key uses, so two spellings of one room are one source here as well.

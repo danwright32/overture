@@ -144,9 +144,17 @@ struct ReachedOutRowInputs: Equatable {
 //
 // The reply lookup travels as a closure deliberately: it is read inside the contact's own row, so a reply
 // going out redraws that contact rather than the whole card.
-struct QueueSendAwareRow<Content: View>: View {
+//
+// #4322: and it is EQUATABLE, for #4320's reason one stage over. The content is a closure SwiftUI can never
+// find equal to the last one, so every card on screen re-ran its body on every evaluation of the queue's
+// (measured: a served change that moved nothing re-ran 6 of 6 drawn cards, `AnUnchangedScoutCardSkipsItsBodyTests`).
+// The equality compares what the content is drawn FROM (`redrawsOn`), and leaves out what reaches this body
+// on its own: the three transient facts, read from `sendState` inside it and observed there.
+struct QueueSendAwareRow<Content: View>: View, Equatable {
     let key: String
     let sendState: SendProgressState
+    // No default, for the reason `ReachedOutSendAwareRow.redrawsOn` has none (L168).
+    let redrawsOn: ScoutCardInputs
     @ViewBuilder let content: (_ highlightedKey: String?,
                                _ sendingSince: Date?,
                                _ replySince: @escaping (String) -> Date?,
@@ -162,6 +170,58 @@ struct QueueSendAwareRow<Content: View>: View {
                 // QueueView's derivation (#1922, #1916).
                 { email in sendState.isStruck(SendProgressState.strikeKey(show: key, email: email)) })
     }
+
+    nonisolated static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.sendState === rhs.sendState && lhs.key == rhs.key && lhs.redrawsOn == rhs.redrawsOn
+    }
+}
+
+// #4322: every value a date grouped card's content closure captures from `QueueView.prospectRow` that the
+// card draws, which is exactly what decides whether it has to redraw. The card is drawn from `item`, a
+// VALUE snapshot the pass built (so any change to the show arrives as a different item), plus the pass's
+// run state, the two town sets, the day, and the clock to the minute, which the card's recheck control
+// reads through `Date()` and nothing in a model moves. The objects the closure also captures (the context,
+// the feedback surfaces, the undo stack) are the same objects on every body, and the action closures read
+// the store through `QueueView.liveProspects` at the press, so a skipped body cannot leave a card acting on
+// an older list of shows (#3690).
+struct ScoutCardInputs: Equatable {
+    let item: QueueItem
+    let today: String
+    let clockMinute: Int
+    let gmailConnected: Bool
+    let checkRunning: Bool
+    let probeRunning: Bool
+    let checkRunSince: Date?
+    let checkLookups: Int?
+    let offeredEarlyAsAClient: Bool
+    let userExcludedTowns: Set<String>
+    let allowedSeedTowns: Set<String>
+
+    init(item: QueueItem, today: String, now: Date, gmailConnected: Bool, checkRunning: Bool,
+         probeRunning: Bool, checkRunSince: Date?, checkLookups: Int?, offeredEarlyAsAClient: Bool,
+         userExcludedTowns: Set<String>, allowedSeedTowns: Set<String>) {
+        self.item = item
+        self.today = today
+        self.clockMinute = Int((now.timeIntervalSinceReferenceDate / 60).rounded(.down))
+        self.gmailConnected = gmailConnected
+        self.checkRunning = checkRunning
+        self.probeRunning = probeRunning
+        self.checkRunSince = checkRunSince
+        self.checkLookups = checkLookups
+        self.offeredEarlyAsAClient = offeredEarlyAsAClient
+        self.userExcludedTowns = userExcludedTowns
+        self.allowedSeedTowns = allowedSeedTowns
+    }
+}
+
+// #4322: the shows an action reads at the PRESS, held in one object every copy of `QueueView` shares. A
+// body SwiftUI skips keeps the closures an earlier body built, and those captured that body's copy of the
+// view, whose `allProspects` is the list as it stood then. Reading through this box instead, which every
+// body refreshes before anything is drawn, an old closure acts on the current shows, so a merge that
+// replaced a row since cannot send its write to the deleted one (#3690's failure, by another route).
+final class LiveProspects {
+    private(set) var rows: [Prospect] = []
+    func adopt(_ rows: [Prospect]) { self.rows = rows }
 }
 
 // #4062: what makes a row something a jump can land on and mark: the show's key as its scroll identity,

@@ -10,6 +10,10 @@ import Foundation
 // Guards are semantic booleans, not raw enums, so a conformer with its own outcome model still
 // expresses the same "don't touch" rules (manually resolved, already booked, booked-at-send).
 protocol BookingMatchable: AnyObject {
+    // The entity's own identity, which `reconcileBooked` breaks a full tie on (#4350). Both conformers
+    // carry one already: a Prospect stores it, an Inquiry derives it from its fields.
+    var naturalKey: String { get }
+
     // Inputs BookingMatch.classify reads:
     var groupName: String { get }
     var venue: String? { get }

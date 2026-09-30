@@ -1135,6 +1135,16 @@ final class Recipient {
         }
     }
 
+    // #4352: the ONE order a show's contacts are read in wherever the answer could depend on it: the
+    // address-or-URL identity, then the store's identifier, because one address can sit on two contacts of
+    // a show and `id` alone would leave those two in the relationship's order. Not the SEND order above,
+    // which is a judgement about who is written to first; this is only a tie-break that never moves.
+    nonisolated static func inCanonicalOrder(_ recipients: [Recipient]) -> [Recipient] {
+        recipients.sorted { a, b in
+            a.id != b.id ? a.id < b.id : a.persistentModelID < b.persistentModelID
+        }
+    }
+
     var firstName: String { Salutation.firstName(name) }
 
     // Manual-judge outcome marking (#418 B2). Dan hand-sets THIS contact's outcome from the
