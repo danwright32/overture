@@ -106,6 +106,11 @@ enum FileStores {
         container.mainContext.rollback()
     }
 
+    /// Whether `container` is still recorded, for the tests that pin the registry's behaviour.
+    static func isRecorded(_ container: ModelContainer) -> Bool {
+        lock.withLock { held.contains { $0.container === container } }
+    }
+
     /// Closes the stores under `dir` and removes it. When a file under it is still open (a container
     /// something else opened, or a raw descriptor), the directory is LEFT IN PLACE and said so on the
     /// output: unlinking an open SQLite file is the API violation itself, and a directory left behind is

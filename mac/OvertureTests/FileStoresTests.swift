@@ -109,6 +109,58 @@ struct FileStoresTests {
         #expect(FileStores.remove(dir))
     }
 
+    // The registry holds containers WEAKLY: recording one must never be what keeps it alive.
+    @Test func recordingAContainerDoesNotKeepItAlive() throws {
+        let schema = Schema([Prospect.self, Recipient.self])
+        weak var recorded: ModelContainer?
+        do {
+            let made = try FileStores.container(for: schema, configurations: [
+                ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)])
+            #expect(FileStores.isRecorded(made), "the premise: the container was recorded")
+            recorded = made
+        }
+        #expect(recorded == nil, "the registry kept a container alive that nothing else references")
+    }
+
+    // Off the main thread the main context's changes are still dropped, by a hop to the main queue.
+    @MainActor
+    @Test func aCloseOffTheMainThreadStillDropsTheMainContextsChanges() async throws {
+        let dir = try scratch("file-stores-off-main")
+        let schema = Schema([Prospect.self, Recipient.self])
+        let container = try FileStores.container(for: schema, configurations: [
+            ModelConfiguration(schema: schema, url: dir.appendingPathComponent("probe.store"), cloudKitDatabase: .none)])
+        container.mainContext.autosaveEnabled = false
+        container.mainContext.insert(Prospect(naturalKey: "file-stores-off-main", groupName: "Ensemble", discipline: "music",
+                                              venue: "Hall", performanceDate: "2027-01-01", sourceListingURL: nil,
+                                              priorRelationship: "none", production: "presenter", profile: "strong",
+                                              coverage: "likely_uncovered", fitScore: 5, tier: "mid", fitReason: "original",
+                                              matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
+                                              status: .drafted))
+        #expect(container.mainContext.hasChanges, "the premise: the main context holds an unsaved change")
+        let path = dir
+        let left = await Task.detached { FileStores.close(under: path) }.value
+        #expect(left.isEmpty)
+        #expect(await waitUntil("the main context's changes dropped by the hop to the main queue") {
+            !container.mainContext.hasChanges
+        })
+        FileStores.remove(dir)
+    }
+
+    // A directory already gone leaves nothing to close, and its containers are forgotten, not held for ever.
+    @Test func aDirectoryAlreadyGoneForgetsItsContainers() throws {
+        let dir = try scratch("file-stores-gone")
+        let moved = dir.deletingLastPathComponent().appendingPathComponent(dir.lastPathComponent + "-moved")
+        let schema = Schema([Prospect.self, Recipient.self])
+        let container = try FileStores.container(for: schema, configurations: [
+            ModelConfiguration(schema: schema, url: dir.appendingPathComponent("probe.store"), cloudKitDatabase: .none)])
+        // Moved, not deleted, so the open files are never unlinked while in use.
+        try FileManager.default.moveItem(at: dir, to: moved)
+        #expect(FileStores.close(under: dir).isEmpty)
+        #expect(!FileStores.isRecorded(container), "a container whose directory is gone is still recorded")
+        if #available(macOS 15, *) { container.deleteAllData() }
+        try? FileManager.default.removeItem(at: moved)
+    }
+
     // The temp folder itself is not a sandbox: a close aimed at it must not reach every suite's stores.
     @Test func theTempFolderItselfIsNeverReleased() throws {
         let dir = try scratch("file-stores-temp-root")
