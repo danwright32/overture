@@ -843,8 +843,9 @@ enum Phase0cT5Check {
 
 /// A TEST-ONLY prototype of plan v7 T6: `titleKey -> Set<PID>` over drawn, dated rows, re-clustering only
 /// the titles a change touches (its old and its new), under either chain rule of decision 18:
-/// (a) today's, a row joins when within `RunGrouping.gapDays` of the last night of the row appended LAST;
-/// (b) the answered one, measured from the cluster's LATEST last night so far.
+/// (a) the rule before #4347, a row joins when within `RunGrouping.gapDays` of the last night of the row
+/// appended LAST; (b) the answered one the product runs since #4347, measured from the cluster's LATEST last
+/// night so far.
 /// Rows sort by (date, run end, room, natural key), the product's own total order since plan v7 Step T
 /// (#4346), so the prototype walks the rows in the order the product does. Dates are pre-folded to day
 /// ordinals once per row, so a rebuild does no calendar work.
@@ -1036,7 +1037,11 @@ enum Phase0cT6Check {
 
     static func truth(_ rule: Phase0cEngagement.Rule, _ drawn: [EngagementLink.Row]) -> [String: [EngagementLink.Member]] {
         switch rule {
-        case .lastAppended: return CanonicalOracle.engagementLink(drawn)
+        // #4347: the product runs rule (b) now, so rule (a) is judged against its restatement in the 0c.10
+        // probe, over the product's own total order, and (b) against the brute force below. The PRODUCT is
+        // held to (b)'s brute force as membership at the end of every harness run (t6EngagementPatchMatchesBothRules),
+        // now that #4346's total order and #4347's rule are both on main; EngagementLinkTests holds its cases.
+        case .lastAppended: return Phase0cOrders.engagement(drawn, rule: .lastAppended)
         case .clusterLatest: return bruteClusterLatest(drawn)
         }
     }
@@ -1623,8 +1628,18 @@ struct QueueEnginePhase0cProducersProbeTests {
                     end: { w, at in
                         // The canonical oracle is order independent: reversed input gives the same answer.
                         let rows = Phase0cT6Check.drawnRows(w)
-                        return Phase0cT6Check.truth(rule, rows) == Phase0cT6Check.truth(rule, rows.reversed())
+                        var bad = Phase0cT6Check.truth(rule, rows) == Phase0cT6Check.truth(rule, rows.reversed())
                             ? [] : ["\(at): the \(rule.rawValue) truth depends on input order"]
+                        // The PRODUCT is held to rule (b)'s brute force as membership, now that #4346's total
+                        // order and #4347's rule are both on main (the follow-up #4347's PR recorded).
+                        if rule == .clusterLatest {
+                            let product = EngagementLink.group(rows)
+                            let brute = Phase0cT6Check.truth(.clusterLatest, rows)
+                            let differing = Set(product.keys).union(brute.keys)
+                                .filter { Set(product[$0] ?? []) != Set(brute[$0] ?? []) }.count
+                            if differing > 0 { bad.append("\(at): EngagementLink.group differs from rule (b)'s brute force on \(differing) titles") }
+                        }
+                        return bad
                     })
                 F.say("0c.4 T6 harness \(rule.rawValue) [\(size) rows] \(run.transitions) transitions checked in "
                       + String(format: "%.0f ms", Phase0.ms(since: started)) + ", failures \(run.failures.count), "
