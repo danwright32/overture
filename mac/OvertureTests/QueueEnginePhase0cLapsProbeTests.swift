@@ -767,9 +767,6 @@ final class QueueEnginePhase0cLapsProbeTests {
         #expect(missing.isEmpty, "0c.7: operation kinds never drawn: \(missing)")
     }
 
-    /// Fact 8's clock half: the due set equals settle's changed set at every instant on either side of every
-    /// expiry crossing in the fixture (one millisecond before, the computed crossing itself, one after), plus
-    /// 50 evenly spaced instants, with no write in between.
     // #4324: the header states the plan the harness runs, read from the constants rather than trusted. The
     // header is joined into one line first, so rewrapping it cannot fail this and cannot satisfy it either.
     @Test func theHeaderStatesThePlanTheHarnessRuns() throws {
@@ -819,6 +816,9 @@ final class QueueEnginePhase0cLapsProbeTests {
         #expect(error?.lap == "retirement")
     }
 
+    /// Fact 8's clock half: the due set equals settle's changed set at every instant on either side of every
+    /// expiry crossing in the fixture (one millisecond before, the computed crossing itself, one after), plus
+    /// 50 evenly spaced instants, with no write in between.
     @Test func settleDueSetEqualsSettleAtEveryExpiryCrossing() throws {
         var lines: [String] = []
         var problems: [String] = []

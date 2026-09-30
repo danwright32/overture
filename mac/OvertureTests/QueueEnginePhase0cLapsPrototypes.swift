@@ -499,7 +499,7 @@ enum Phase0cLapOracle {
         do {
             try save(context)
         } catch {
-            throw RestoreNotSaved(lap: lap, underlying: String(describing: type(of: error)))
+            throw RestoreNotSaved(lap: lap, underlying: String(describing: error))
         }
     }
 
