@@ -39,6 +39,13 @@ else
   pass "a path inside this checkout is refused, even before it exists"
 fi
 
+# A relative name that does not exist yet is judged from where the script is run, and the walk up ends.
+if (cd "${SCRATCH}" && outside_every_work_tree "not-made-yet/deeper"); then
+  pass "a relative path under the temp folder is outside every work tree, and the walk up ends"
+else
+  fail "a relative path under the temp folder was refused"
+fi
+
 # A git that cannot answer (here, no git on the PATH at all) is a refusal, never a pass (L42).
 if PATH="/nonexistent" outside_every_work_tree "${SCRATCH}/archive"; then
   fail "with no git to ask, a directory was read as outside every work tree"

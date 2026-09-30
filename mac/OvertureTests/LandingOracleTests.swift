@@ -16,9 +16,11 @@ import SwiftData
 //   MEASURE_4275=1 MEASURE_4275_INPUTS=<archive> MEASURE_4275_OUT=<dir> LANDING_ORACLE_MODE=record|compare
 //                                            the real arm, on the frozen inputs, opt in
 //   FREEZE_4275_TO=<dir>                     build the frozen inputs (#4327 step 0.0), opt in
+// A `final class`, not a struct, because `TemporarySandboxes` removes what it made when its owner is released,
+// and a struct suite is never released as an object: the real arm's copies of real data would outlive the run.
 @MainActor
 @Suite("The scout landing oracle (#4328, step A1 of #4275)", .serialized)
-struct LandingOracleTests {
+final class LandingOracleTests {
 
     private let sandboxes = TemporarySandboxes()
 

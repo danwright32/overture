@@ -62,7 +62,9 @@ oracle_overlay_refusal() {
 # all) or answers "false" from inside a .git directory, is 1: a question it did not answer refuses (L42).
 outside_every_work_tree() {
   local probe="$1" said
-  # Parameter expansion rather than dirname, so the walk up cannot depend on the PATH and loop for ever.
+  # Absolute first, so the walk up by parameter expansion always reaches "/": a bare relative name holds no
+  # slash to strip and would loop for ever. Expansion rather than dirname, so the walk cannot depend on PATH.
+  case "${probe}" in /*) ;; *) probe="${PWD}/${probe}" ;; esac
   while [ ! -e "${probe}" ] && [ -n "${probe}" ] && [ "${probe}" != "/" ]; do probe="${probe%/*}"; done
   [ -n "${probe}" ] || probe="/"
   if said="$(git -C "${probe}" rev-parse --is-inside-work-tree 2>&1)"; then
