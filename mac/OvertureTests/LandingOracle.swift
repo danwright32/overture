@@ -135,7 +135,10 @@ enum LandingOracle {
             return "Prospect(" + prospect.naturalKey + ")"
         case let model as any PersistentModel:
             return String(describing: type(of: model)) + "(related)"
-        case let models as [any PersistentModel]:
+        // Only when the array's own TYPE holds models: an EMPTY `[String]` also casts to `[any PersistentModel]`,
+        // because a cast of an empty array has no element to refuse, and rendered an empty `sourceIds` as
+        // "0 related" (seen in the first seen-to-fail text of #4328).
+        case let models as [any PersistentModel] where type(of: value) is [any PersistentModel].Type:
             return "\(models.count) related"
         case let set as Set<String>:
             return String(describing: set.sorted())

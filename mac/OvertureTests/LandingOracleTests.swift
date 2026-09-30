@@ -262,6 +262,14 @@ final class LandingOracleTests {
                 Comment(rawValue: "a hashed recording does not compare equal to the values it was made from"))
     }
 
+    // An empty list of strings is an empty list, and a list of related rows is a count: the cast from `Any` to a
+    // list of models succeeds for EVERY empty array, so the render has to ask the array's type instead.
+    @Test func anEmptyListRendersAsAListAndRelatedRowsAsACount() throws {
+        #expect(LandingOracle.render([String]()) == "[]")
+        #expect(LandingOracle.render(["a"]) == "[\"a\"]")
+        #expect(LandingOracle.render([Recipient]()) == "0 related")
+    }
+
     // MARK: where a real-arm file may go, and what it starts with
 
     @Test func aRealArmFileIsRefusedInsideAGitWorkTreeAndWhenGitCannotAnswer() throws {
