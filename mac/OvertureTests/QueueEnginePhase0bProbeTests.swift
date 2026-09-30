@@ -93,8 +93,9 @@ struct Phase0bPatchTables {
     var presenterRef: [String: Int] = [:]
     var venueRef: [String: Int] = [:]
     var venuesByPresenter: [String: [String: Int]] = [:]
-    var venueWords: [String: Set<String>] = [:]
-    var presenterWords: [String: Set<String>] = [:]
+    // #4353 (Step W): the product's own word candidate function, one instance per side.
+    var venueWords = ProducerGate.WordPostings()
+    var presenterWords = ProducerGate.WordPostings()
     var brand: Set<String> = []
     var room: Set<String> = []
 
@@ -103,15 +104,11 @@ struct Phase0bPatchTables {
         _ = patch(remove: [], add: shows, overrides: overrides, evaluateAll: true)
     }
 
-    private static func words(_ key: String) -> [String] { key.split(separator: " ").map(String.init) }
-
     func isBrand(_ p: String) -> Bool {
         if venueRef[p] != nil { return true }
         if overrides.demoted.contains(p) { return true }
         if overrides.promoted.contains(p) { return false }
-        var candidates = Set<String>()
-        for w in Self.words(p) { if let hits = venueWords[w] { candidates.formUnion(hits) } }
-        return candidates.contains { ProducerGate.containsAsWords(p, $0) || ProducerGate.containsAsWords($0, p) }
+        return venueWords.keys(sharingAWordWith: p).contains { ProducerGate.containsAsWords(p, $0) || ProducerGate.containsAsWords($0, p) }
     }
 
     func distinctVenueCount(_ p: String) -> Int { venuesByPresenter[p]?.count ?? 0 }
@@ -135,10 +132,7 @@ struct Phase0bPatchTables {
                 if n <= 1 {
                     venueRef[vk] = nil
                     venuesMoved.insert(vk)
-                    for w in Self.words(vk) {
-                        venueWords[w]?.remove(vk)
-                        if venueWords[w]?.isEmpty == true { venueWords[w] = nil }
-                    }
+                    venueWords.remove(vk)
                 } else { venueRef[vk] = n - 1 }
             }
             guard let pk = ProducerGate.key(s.presenter), let pn = presenterRef[pk] else { continue }
@@ -148,10 +142,7 @@ struct Phase0bPatchTables {
             if pn <= 1 {
                 presenterRef[pk] = nil
                 venuesByPresenter[pk] = nil
-                for w in Self.words(pk) {
-                    presenterWords[w]?.remove(pk)
-                    if presenterWords[w]?.isEmpty == true { presenterWords[w] = nil }
-                }
+                presenterWords.remove(pk)
                 brand.remove(pk)
                 room.remove(pk)
                 changed.insert(pk)
@@ -163,14 +154,14 @@ struct Phase0bPatchTables {
                 if let n = venueRef[vk] { venueRef[vk] = n + 1 } else {
                     venueRef[vk] = 1
                     venuesMoved.insert(vk)
-                    for w in Self.words(vk) { venueWords[w, default: []].insert(vk) }
+                    venueWords.insert(vk)
                 }
             }
             guard let pk = ProducerGate.key(s.presenter) else { continue }
             if let pn = presenterRef[pk] { presenterRef[pk] = pn + 1 } else {
                 presenterRef[pk] = 1
                 venuesByPresenter[pk] = [:]
-                for w in Self.words(pk) { presenterWords[w, default: []].insert(pk) }
+                presenterWords.insert(pk)
                 touched.insert(pk)
                 changed.insert(pk)
             }
@@ -184,7 +175,7 @@ struct Phase0bPatchTables {
         touched.formUnion(overrides.demoted.symmetricDifference(new.demoted))
         overrides = new
         for v in venuesMoved {
-            for w in Self.words(v) { if let hits = presenterWords[w] { touched.formUnion(hits) } }
+            touched.formUnion(presenterWords.keys(sharingAWordWith: v))
         }
         let asked: [String] = evaluateAll ? Array(presenterRef.keys) : touched.filter { presenterRef[$0] != nil }
         for pk in asked {
