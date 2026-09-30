@@ -281,6 +281,16 @@ struct LandingOracleTests {
         let noGit = LandingOracle.refusalToWrite(into: outside, git: outside.appendingPathComponent("no-git").path)
         #expect(noGit?.contains("could not run") == true, Comment(rawValue:
             "with no git to ask, the write was allowed rather than refused"))
+
+        // A git that runs and fails for any other reason than "not a repository" is a question it did not
+        // answer, and refuses too. `/usr/bin/false` stands in for it: it runs, prints nothing, exits 1.
+        let failing = LandingOracle.refusalToWrite(into: outside, git: "/usr/bin/false")
+        #expect(failing?.contains("did not say") == true, Comment(rawValue:
+            "a git that failed without saying the directory is outside every repository was taken as a yes"))
+
+        // Inside a .git directory git answers "false", which is still inside a repository.
+        let gitDir = LandingOracle.refusalToWrite(into: repo.appendingPathComponent(".git"))
+        #expect(gitDir != nil, Comment(rawValue: "a directory inside a .git directory was not refused"))
     }
 
     @Test func aRealArmFileBeginsWithTheMarkerThePushGuardRefuses() throws {

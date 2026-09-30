@@ -39,6 +39,13 @@ else
   pass "a path inside this checkout is refused, even before it exists"
 fi
 
+# A git that cannot answer (here, no git on the PATH at all) is a refusal, never a pass (L42).
+if PATH="/nonexistent" outside_every_work_tree "${SCRATCH}/archive"; then
+  fail "with no git to ask, a directory was read as outside every work tree"
+else
+  pass "with no git to ask, the directory is refused"
+fi
+
 # The whole script refuses before building anything when the real arm would write inside a checkout.
 out="$(main --inputs "${SCRATCH}/archive" --out "${REPO_ROOT}/real-arm-out" 2>&1)"
 assert_equals "the real arm's output inside a checkout is refused before any build" "2" "$?"

@@ -57,11 +57,21 @@ oracle_overlay_refusal() {
   fi
 }
 
-# outside_every_work_tree <dir>: 0 when <dir> (or its nearest existing parent) is in no git work tree.
+# outside_every_work_tree <dir>: 0 only when git says <dir> (or its nearest existing parent) is in NO
+# repository. Any other answer, including a git that fails for another reason (dubious ownership, no git at
+# all) or answers "false" from inside a .git directory, is 1: a question it did not answer refuses (L42).
 outside_every_work_tree() {
-  local probe="$1"
-  while [ ! -e "${probe}" ] && [ "${probe}" != "/" ]; do probe="$(dirname "${probe}")"; done
-  [ "$(git -C "${probe}" rev-parse --is-inside-work-tree 2>/dev/null)" != "true" ]
+  local probe="$1" said
+  # Parameter expansion rather than dirname, so the walk up cannot depend on the PATH and loop for ever.
+  while [ ! -e "${probe}" ] && [ -n "${probe}" ] && [ "${probe}" != "/" ]; do probe="${probe%/*}"; done
+  [ -n "${probe}" ] || probe="/"
+  if said="$(git -C "${probe}" rev-parse --is-inside-work-tree 2>&1)"; then
+    return 1
+  fi
+  case "${said}" in
+    *"not a git repository"*) return 0 ;;
+    *) return 1 ;;
+  esac
 }
 
 main() {

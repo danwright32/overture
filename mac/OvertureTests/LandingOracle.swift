@@ -344,22 +344,31 @@ enum LandingOracle {
         process.executableURL = URL(fileURLWithPath: git)
         process.arguments = ["-C", probe.path, "rev-parse", "--is-inside-work-tree"]
         let pipe = Pipe()
+        let errors = Pipe()
         process.standardOutput = pipe
-        process.standardError = Pipe()
+        process.standardError = errors
         do {
             try process.run()
         } catch {
             return "REFUSED: could not run \(git) to ask whether \(directory.path) is inside a git work tree, "
                 + "so a real-arm file is not written there (\(error))"
         }
-        process.waitUntilExit()
         let said = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)?
             .trimmingCharacters(in: .whitespacesAndNewlines)
+        let complained = String(data: errors.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+        process.waitUntilExit()
         if said == "true" {
             return "REFUSED: \(directory.path) is inside a git work tree, and a real-arm file holds real "
                 + "data that must never be committed. Name a directory outside every checkout."
         }
-        return nil
+        // The ONE answer that allows the write is git saying it is in no repository at all. Anything else (it
+        // answered "false", which it does inside a .git directory; it refused over ownership; it failed some
+        // other way) is a question it did not answer, and that refuses (L42, L490).
+        if process.terminationStatus != 0, complained.contains("not a git repository") {
+            return nil
+        }
+        return "REFUSED: \(git) did not say \(directory.path) is outside every git work tree (exit "
+            + "\(process.terminationStatus), answered \"\(said ?? "")\"), so a real-arm file is not written there"
     }
 
     // MARK: the frozen inputs (#4327 step 0.0)
