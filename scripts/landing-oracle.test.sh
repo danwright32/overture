@@ -53,6 +53,11 @@ else
   pass "with no git to ask, the directory is refused"
 fi
 
+# A flag with no value is refused, rather than leaving the argument loop unable to move on.
+out="$(main --out 2>&1)"
+assert_equals "a trailing flag with no value is refused" "2" "$?"
+assert_contains "and named" "${out}" "--out needs a value"
+
 # The whole script refuses before building anything when the real arm would write inside a checkout.
 out="$(main --inputs "${SCRATCH}/archive" --out "${REPO_ROOT}/real-arm-out" 2>&1)"
 assert_equals "the real arm's output inside a checkout is refused before any build" "2" "$?"

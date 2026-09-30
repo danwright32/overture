@@ -79,6 +79,12 @@ outside_every_work_tree() {
 main() {
   local commit="6d3453d8" freeze="" inputs="" out="" synthetic_to=""
   while [ $# -gt 0 ]; do
+    # Every flag takes a value. One given without it would leave `shift 2` unable to shift and the loop
+    # spinning, so it is refused by name instead.
+    if [ $# -lt 2 ]; then
+      echo "landing-oracle: REFUSED: $1 needs a value" >&2
+      return 2
+    fi
     case "$1" in
       --freeze) freeze="${2:-}"; shift 2 ;;
       --inputs) inputs="${2:-}"; shift 2 ;;
