@@ -23,10 +23,10 @@ enum Phase0cOrders {
         }
         var out: [String: [EngagementLink.Member]] = [:]
         for (_, titleRows) in byTitle {
-            // The total order #4346 gives the product (date, run end, venue, naturalKey). Until #4346 is on main
-            // the product still walks equal nights by date alone, which is why the replica below is compared
-            // as MEMBERSHIP. #4347 retired the date only arm here, which priced the Step T sort before it
-            // shipped and reads 0 once it has.
+            // The total order #4346 gives the product (date, run end, venue, naturalKey), which is on main. #4347
+            // retired the date only arm here, which priced the Step T sort before it shipped and reads 0 once it
+            // has. The replica below is still compared as MEMBERSHIP: holding the product's member ORDER to this
+            // restatement is the follow-up recorded in #4347's PR, not something this probe claims.
             let sorted = titleRows.sorted {
                 ($0.performanceDate ?? "", $0.runEndDate ?? "", $0.venue ?? "", $0.id)
                     < ($1.performanceDate ?? "", $1.runEndDate ?? "", $1.venue ?? "", $1.id)
@@ -226,8 +226,9 @@ extension QueueEnginePhase0cRowsProbeTests {
         // Decision 18: EngagementLink's chain rule, over the rows the pass links (the queue scope).
         let linkRows = inQueueToday.map(EngagementLink.Row.init)
         let production = EngagementLink.group(linkRows)
-        // Since #4347 the product measures the chain from the cluster's latest night (decision 18(b)). Compared
-        // as MEMBERSHIP, because the restatement walks equal nights in a total order the product may not.
+        // Since #4347 the product measures the chain from the cluster's latest night (decision 18(b)), and since
+        // #4346 it walks the same total order as this restatement. Compared as MEMBERSHIP only: member ORDER is
+        // not asserted here (see the note on the restatement above).
         let replica = Phase0cOrders.engagement(linkRows, rule: .latestNight)
         let replicaAgrees = Set(replica.keys) == Set(production.keys)
             && replica.keys.allSatisfy { Set(replica[$0]!) == Set(production[$0] ?? []) }
