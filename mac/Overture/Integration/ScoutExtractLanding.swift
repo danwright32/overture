@@ -50,7 +50,13 @@ enum ScoutExtractLanding {
         if outcome.notLandedYet != nil {
             // The refusal's own sentence says a copy was kept. When it was not, that sentence is false, so
             // it is replaced by one that names what failed and where the results still are.
-            if !kept { outcome.notLandedYet = LandingWaitCopy.ingestRefusedWithoutACopy(copyFailure ?? "unknown") }
+            // L11: three cases, three sentences. A copy that was kept is what the refusal already says; a copy
+            // that FAILED names its failure; and an ingest stopped before it ever waited attempted no copy at
+            // all, so it says where its results still are rather than blaming a copy nobody tried to write.
+            if !kept {
+                outcome.notLandedYet = copyFailure.map(LandingWaitCopy.ingestRefusedWithoutACopy)
+                    ?? LandingWaitCopy.ingestStoppedBeforeItWaited
+            }
             return Landed(outcome: outcome, copyLeftBehind: nil)
         }
         // L5, L665: removed only once the save carrying these results has succeeded. A failed save means

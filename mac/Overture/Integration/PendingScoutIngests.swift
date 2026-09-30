@@ -108,8 +108,11 @@ struct PendingScoutIngests {
         guard fm.fileExists(atPath: directory.path) else { return [] }
         // L617: first, anything a crash left half done. Recovery can fail too, and then the folder is
         // reported by name below rather than skipped.
+        var stranded: [Listed] = []
         for name in try fm.contentsOfDirectory(atPath: directory.path) where name.hasPrefix(".incoming-") {
-            recoverIncoming(directory.appendingPathComponent(name, isDirectory: true))
+            if let failed = recoverIncoming(directory.appendingPathComponent(name, isDirectory: true)) {
+                stranded.append(failed)
+            }
         }
         let names = try fm.contentsOfDirectory(atPath: directory.path).filter { !$0.hasPrefix(".") }.sorted()
         let listed: [Listed] = names.map { name in
@@ -118,7 +121,7 @@ struct PendingScoutIngests {
                 return .unreadable(path: folder(name).path, why: String(describing: error))
             }
         }
-        return listed.sorted { a, b in
+        return (listed + stranded).sorted { a, b in
             switch (a, b) {
             case (.entry(let x), .entry(let y)): return x.recordedAt < y.recordedAt
             case (.unreadable, .entry): return false
@@ -130,18 +133,25 @@ struct PendingScoutIngests {
 
     // A temporary folder a crash left before it was moved into place. With its results in it, it is moved
     // into place (its entry recovered below if it never got one); with none, there is nothing to lose.
-    private func recoverIncoming(_ incoming: URL) {
+    // L10: a move that FAILS is returned as unreadable, by path, so it is reported the way any other
+    // folder that cannot be read is, rather than retried unseen on every sweep.
+    private func recoverIncoming(_ incoming: URL) -> Listed? {
         let fm = FileManager.default
         guard let data = try? Data(contentsOf: incoming.appendingPathComponent(Self.resultsName)) else {
             try? fm.removeItem(at: incoming)
-            return
+            return nil
         }
         let hash = Self.contentHash(of: data)
         if (try? entry(hash)) != nil {
             try? fm.removeItem(at: incoming)
-            return
+            return nil
         }
-        try? moveIntoPlace(incoming, hash: hash)
+        do {
+            try moveIntoPlace(incoming, hash: hash)
+            return nil
+        } catch {
+            return .unreadable(path: incoming.path, why: String(describing: error))
+        }
     }
 
     // A folder with its results and no readable entry. The run's sequence was never recorded, so it is

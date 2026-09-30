@@ -483,6 +483,74 @@ struct ScoutLandingsWaitTheirTurnTests {
         #expect(try pending.list().isEmpty)
     }
 
+    // L94: the single warning string never drops "kept, will be offered again" behind a higher part. The
+    // early returns ahead of it (the save failure, and the reader that could not be launched) each carry it.
+    @Test func theWarningKeepsTheNotLandedLineBesideTheLinesAheadOfIt() {
+        let refused = LandingWaitCopy.refused(.scoutExtractIngest, waited: .seconds(1_800))
+        var launch = ScoutService.Outcome(found: 0, inserted: 0, updated: 0, skipped: 0)
+        launch.extractLaunchFailure = "The reader is not set up."
+        launch.notLandedYet = refused
+        #expect(launch.warning?.contains("The reader is not set up.") == true)
+        #expect(launch.warning?.contains(refused) == true, Comment(rawValue: launch.warning ?? "nil"))
+        var save = ScoutService.Outcome(found: 0, inserted: 0, updated: 0, skipped: 0)
+        save.saveFailed = true
+        save.notLandedYet = refused
+        #expect(save.warning?.contains(ScoutWarningCopy.saveFailed) == true)
+        #expect(save.warning?.contains(refused) == true, Comment(rawValue: save.warning ?? "nil"))
+    }
+
+    // L11: an ingest stopped before it ever waited attempted no copy, so it must not be told a copy failed.
+    // Its results are still in the reader's file, which is what it says.
+    @Test func anIngestStoppedBeforeItWaitedIsNotBlamedOnACopy() async throws {
+        let c = try container()
+        let ctx = c.mainContext
+        htmlSource(in: ctx)
+        try ctx.save()
+        let dir = try sandboxes.make(named: "pending-stopped")
+        let pending = PendingScoutIngests(directory: dir)
+        let flight = LandingSingleFlight(sleep: { _ in })
+        let holder = try await flight.begin(entryPoint: .runScoutLanding, priority: .scout, deadline: .seconds(1))
+        let data = try JSONEncoder().encode(Self.results("stopped"))
+        let results = try ScoutExtractResultsDecoder.decode(data)
+        let now = self.now
+        let stopped = Task { @MainActor in
+            withUnsafeCurrentTask { $0?.cancel() }
+            return await ScoutExtractLanding.land(data, results, clients: [], history: [], blocked: .empty,
+                                                  today: ScoutTestClock.beforeAllFixtures, now: now,
+                                                  landings: flight, pending: pending, into: ctx)
+        }
+        let landed = await stopped.value
+        #expect(landed.outcome.notLandedYet == LandingWaitCopy.ingestStoppedBeforeItWaited,
+                Comment(rawValue: landed.outcome.notLandedYet ?? "nil"))
+        #expect(landed.outcome.notLandedYet?.contains("could not keep") != true)
+        #expect(try pending.list().isEmpty)
+        holder.end()
+    }
+
+    // L10: a leftover temporary folder that cannot be moved into place is reported by name, never retried
+    // unseen.
+    @Test func aTemporaryFolderThatCannotBeMovedIntoPlaceIsReported() throws {
+        let dir = try sandboxes.make(named: "pending-stuck-move")
+        let fm = FileManager.default
+        let data = try JSONEncoder().encode(Self.results("blocked"))
+        let hash = PendingScoutIngests.contentHash(of: data)
+        let incoming = dir.appendingPathComponent(".incoming-blocked", isDirectory: true)
+        try fm.createDirectory(at: incoming, withIntermediateDirectories: true)
+        try data.write(to: incoming.appendingPathComponent("results.json"))
+        // The destination is a folder whose contents cannot be removed, so the move cannot happen.
+        let destination = dir.appendingPathComponent(hash, isDirectory: true)
+        try fm.createDirectory(at: destination, withIntermediateDirectories: true)
+        try Data("x".utf8).write(to: destination.appendingPathComponent("pinned"))
+        try fm.setAttributes([.posixPermissions: 0o500], ofItemAtPath: destination.path)
+        defer { try? fm.setAttributes([.posixPermissions: 0o700], ofItemAtPath: destination.path) }
+
+        let listed = try PendingScoutIngests(directory: dir).list()
+        #expect(listed.contains { if case .unreadable(let path, _) = $0 { return path == incoming.path }; return false },
+                Comment(rawValue: "the folder that could not be moved was not reported: \(listed)"))
+        #expect(fm.fileExists(atPath: incoming.appendingPathComponent("results.json").path),
+                "the results were lost when the move failed")
+    }
+
     // A kept copy that keeps being refused for longer than a scout interval is STUCK, not waiting.
     @Test func aKeptCopyOlderThanAScoutIntervalIsReportedStuck() async throws {
         let c = try container()

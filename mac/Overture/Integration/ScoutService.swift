@@ -280,12 +280,16 @@ enum ScoutService {
         // for a source that HAS a healthy baseline and still came back with nothing, which for
         // Carnegie's 90-day window is the same unusual event it always was (#27, #126).
         var warning: String? {
+            // #4330 (L94): `notLandedYet` rides with both early returns rather than being hidden behind them:
+            // "kept, will be offered again" is true of the run whatever else went wrong with it.
             if saveFailed {
-                return ScoutWarningCopy.saveFailed
+                return [ScoutWarningCopy.saveFailed, notLandedYet].compactMap { $0 }.joined(separator: "\n\n")
             }
             // The run found new listings and could not read them. It outranks a per-source failure
             // because it is the app that is broken, not a calendar, and because it has a one-step fix.
-            if let extractLaunchFailure { return extractLaunchFailure }
+            if let extractLaunchFailure {
+                return [extractLaunchFailure, notLandedYet].compactMap { $0 }.joined(separator: "\n\n")
+            }
             // A source that could not be checked is the most actionable thing after that, and it is
             // named, every run, for as long as it keeps failing. A dead source and a quiet season must
             // never look alike. #857: a run that rebuilt an id (returned work under a source we never
@@ -309,8 +313,6 @@ enum ScoutService {
             return ScoutWarningCopy.unqueued(ids: unqueuedResultIds)
         }
 
-        // #3071: the reads that could not answer, in Dan's words. This is the READER that stops
-        // `degradedReads` being a field written and never read (L46).
         // #4330: the reader of `.superseded`, so a set aside reading is said rather than left looking like a
         // source that was never checked.
         private var supersededWarning: String? {
@@ -319,6 +321,8 @@ enum ScoutService {
             return ScoutWarningCopy.superseded(set.map(\.orgName))
         }
 
+        // #3071: the reads that could not answer, in Dan's words. This is the READER that stops
+        // `degradedReads` being a field written and never read (L46).
         private var degradedReadWarning: String? {
             guard !degradedReads.isEmpty else { return nil }
             return ScoutWarningCopy.degradedReads(degradedReads.map(\.label))

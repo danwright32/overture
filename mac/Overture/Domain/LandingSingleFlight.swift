@@ -275,6 +275,11 @@ enum LandingWaitCopy {
     static let ingestCancelled = "The calendar results have not landed yet, because their landing was stopped "
         + "while it waited for the store. Overture kept a copy of them and will offer them again."
 
+    // The ingest was stopped (its task cancelled) before it ever had to wait, so no copy was attempted.
+    static let ingestStoppedBeforeItWaited = "The calendar results have not landed yet, because their landing "
+        + "was stopped before it began. They are still in the reader's results file until the next read "
+        + "replaces it."
+
     // The ingest was refused AND its copy could not be written, so the sentence above would be false.
     static func ingestRefusedWithoutACopy(_ why: String) -> String {
         "The calendar results have not landed yet, because another landing was still saving to the store, "
