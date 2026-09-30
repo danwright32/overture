@@ -122,4 +122,24 @@ final class CanonicalContactOrderTests {
         #expect(sources == ["\(OutcomeSource.manual)"], "sources seen: \(sources.sorted())")
         #expect(outcomeContacts == ["hazel@example.org"], "contacts seen: \(outcomeContacts.sorted())")
     }
+
+    // The lesson export's reply pairs: two contacts whose rewritten replies tie on outcome and on the moment
+    // they were sent come out in one order whatever order the relationship holds (review of #4352).
+    @Test func tiedReplyPairsExportInTheCanonicalOrder() throws {
+        let sentAt = Date(timeIntervalSince1970: 1_800_000_000)
+        var seen: Set<[String]> = []
+        for order in orders() {
+            let p = show(order, into: ModelContext(container))
+            try #require(p.recipients.map(\.id) == order)
+            for r in p.recipients {
+                r.originalReplyDraftBody = "Thanks for writing back, happy to talk dates for the spring concert."
+                r.sentReplyBody = "Thank you for the note. I would love to talk about spring dates; when suits you?"
+                r.replySentAt = sentAt
+            }
+            let pairs = VoiceFeedbackBuilder.build(from: [p], generatedAt: "2027-01-01T00:00:00Z").pairs
+            seen.insert(pairs.compactMap(\.outcomeRecipientId))
+        }
+        try #require(seen.first?.count == 3, "fixture: every contact's rewrite must count as a lesson")
+        #expect(seen == [addresses.sorted()], "orders seen: \(seen.map { $0.joined(separator: ",") }.sorted())")
+    }
 }

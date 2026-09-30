@@ -58,8 +58,10 @@ enum VoiceFeedbackBuilder {
                     outcome: p.outcome.rawValue, outcomeRecipientId: outcomeRecipient(p)),
                     rank: outcomeRank(p.outcome), date: sentAt))
             }
-            // Reply edits: per recipient, the inbound-reply Dan rewrote and committed (#463).
-            for r in p.recipients {
+            // Reply edits: per recipient, the inbound-reply Dan rewrote and committed (#463). #4352: in the
+            // canonical contact order, so two reply pairs that tie on rank and date keep one order under the
+            // cap rather than the relationship's.
+            for r in Recipient.inCanonicalOrder(p.recipients) {
                 guard let original = r.originalReplyDraftBody, let sent = r.sentReplyBody,
                       let sentAt = r.replySentAt, isHighSignal(originalBody: original, sentBody: sent) else { continue }
                 let outcome = replyOutcome(r)
