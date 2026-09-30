@@ -151,12 +151,12 @@ struct QueueEnginePhase0cRowsProbeTests {
             // Every kind once, in order, first, so each is exercised whatever the seed draws; then at random.
             let every = Phase0cRowsFixture.Kind.allCases
             let kind = step <= every.count ? every[step - 1] : fx.pickKind()
-            guard let op = fx.perform(kind) else { result.skipped += 1; continue }
+            guard let op = try fx.perform(kind) else { result.skipped += 1; continue }
             result.opsByKind[kind.rawValue, default: 0] += 1
             apply(op.changed, kind: kind.rawValue)
             check(step, op.label, kind: kind.rawValue)
             if fx.coin(0.4) {
-                apply(op.undo(), kind: nil)
+                apply(try op.undo(), kind: nil)
                 check(step, op.label + " (undo)", kind: nil)
             }
             if result.failures.count >= 5 { break }
@@ -221,6 +221,50 @@ struct QueueEnginePhase0cRowsProbeTests {
         #expect(Phase0cRows.stopVerdict(mismatches: 0, replayedMaxMs: 0.9) == "PASS")
         #expect(Phase0cRows.stopVerdict(mismatches: 0, replayedMaxMs: nil) == "UNMEASURED")
         #expect(Phase0cRows.stopVerdict(mismatches: 2, replayedMaxMs: nil) == "FAIL")
+    }
+
+    // Carries its own text, so the tests can see the save's own reason reaches the error it becomes (L520).
+    private struct SaveRefused: Error, CustomStringConvertible {
+        var description: String { "the store refused the save: disk full" }
+    }
+
+    // #4384: the insert row step, and its undo, THROW when their save does not land, naming the step, rather
+    // than ending in `try? context.save()`, which let a save that never reached the store read like one that
+    // did, so every comparison after it judged uncommitted state (L515, L10). Same shape as #4324's fix to
+    // probe 0c.7's restores. The positive control first (L159): with the ordinary save the step commits.
+    @Test func anInsertRowStepWhoseSaveFailsThrowsAndSoDoesItsUndo() throws {
+        let fx = try Phase0cRowsFixture(size: 60, seed: 4384_01)
+        let count = fx.rows.count
+        let op = try #require(try fx.perform(.insertRow))
+        #expect(fx.rows.count == count + 1)
+        #expect(!fx.context.hasChanges, "the ordinary save left the inserted row pending")
+
+        fx.save = { _ in throw SaveRefused() }
+        let undoError = #expect(throws: Phase0.SaveNotLanded.self) { _ = try op.undo() }
+        #expect(undoError?.step == "insert row (undo)")
+        #expect(undoError?.underlying.contains("disk full") == true,
+                "the save's own reason was lost: \(undoError?.underlying ?? "")")
+
+        let stepError = #expect(throws: Phase0.SaveNotLanded.self) { _ = try fx.perform(.insertRow) }
+        #expect(stepError?.step == "insert row")
+        #expect(stepError?.underlying.contains("disk full") == true,
+                "the save's own reason was lost: \(stepError?.underlying ?? "")")
+    }
+
+    // #4384: the two halves the probes whose saves cannot throw where they run (a stopwatch body, work on
+    // another thread) go through. A failed save is reported with its own text and then refuses by step name;
+    // a landed one reports nothing and refuses nothing.
+    @Test func aProbeSaveThatCannotThrowWhereItRunsStillRefusesAfterwards() throws {
+        let fx = try Phase0cRowsFixture(size: 60, seed: 4384_02)
+        #expect(Phase0.saveFailure(fx.context) == nil)
+        try Phase0.requireSaved(nil, step: "landed")
+        let failure = Phase0.saveFailure(fx.context, save: { _ in throw SaveRefused() })
+        #expect(failure?.contains("disk full") == true, "the save's own reason was lost: \(failure ?? "nil")")
+        let error = #expect(throws: Phase0.SaveNotLanded.self) {
+            try Phase0.requireSaved(failure, step: "0b.6 empty save")
+        }
+        #expect(error?.step == "0b.6 empty save")
+        #expect(error?.underlying.contains("disk full") == true)
     }
 
     // The prototype's entries do not depend on the order the relationship hands a show's contacts back

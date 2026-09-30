@@ -615,12 +615,16 @@ struct QueueEnginePhase0ProbeTests {
             phase0ArmTrackers(s.shows, log: fires)
             let id = s.shows[0].persistentModelID
             let container = s.container
-            let wrote: Bool = await phase0OnThread("phase0-foreign") {
+            // #4384: the write must have LANDED before the pin below means anything: a foreign save that failed
+            // leaves the main instance stale and fires no tracker too, which is exactly what the pin asserts.
+            let foreign: String? = await phase0OnThread("phase0-foreign") {
                 let other = ModelContext(container)
-                guard let row = other.model(for: id) as? Prospect else { return false }
+                guard let row = other.model(for: id) as? Prospect else { return "the row was not found" }
                 row.fitReason = "written elsewhere"
-                return (try? other.save()) != nil
+                return Phase0.saveFailure(other)
             }
+            try Phase0.requireSaved(foreign, step: "phase 0 foreign save")
+            let wrote = foreign == nil
             await settle()
             let snap = fires.snapshot
             #expect(snap.rows.isEmpty && s.shows[0].fitReason != "written elsewhere",
@@ -635,11 +639,13 @@ struct QueueEnginePhase0ProbeTests {
             _ = held.fitReason
             let id = held.persistentModelID
             let container = s.container
-            _ = await phase0OnThread("phase0-refault") {
+            let foreign: String? = await phase0OnThread("phase0-refault") {
                 let other = ModelContext(container)
-                if let row = other.model(for: id) as? Prospect { row.fitReason = "written elsewhere"; try? other.save() }
-                return true
+                guard let row = other.model(for: id) as? Prospect else { return "the row was not found" }
+                row.fitReason = "written elsewhere"
+                return Phase0.saveFailure(other)
             }
+            try Phase0.requireSaved(foreign, step: "phase 0 foreign save before \(candidate)")
             await settle()
             let staleBefore = held.fitReason != "written elsewhere"
             var fresh = false, sameObject = false
