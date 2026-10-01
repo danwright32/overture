@@ -767,6 +767,38 @@ struct ScoutLandingsWaitTheirTurnTests {
         #expect(try snapshot() == before, "reading the sequence floor moved or wrote files")
     }
 
+    // #2879: an entry the floor cannot read is REPORTED (to the read failures the masthead shows), never
+    // skipped in silence, and a missing one (a results-only folder) is not a failure at all.
+    @Test func anEntryTheSequenceFloorCannotReadIsReported() throws {
+        let dir = try sandboxes.make(named: "pending-floor-unreadable")
+        let fm = FileManager.default
+        try fm.createDirectory(at: dir.appendingPathComponent("broken"), withIntermediateDirectories: true)
+        try Data("not json".utf8).write(to: dir.appendingPathComponent("broken").appendingPathComponent("entry.json"))
+        try fm.createDirectory(at: dir.appendingPathComponent("results-only"), withIntermediateDirectories: true)
+        let recorder = HandoffReadFailures()
+        let pending = PendingScoutIngests(directory: dir, readFailures: recorder)
+        try pending.record(try JSONEncoder().encode(Self.results("good")), sequence: 3, now: now)
+
+        #expect(pending.highestSequence == 3)
+        let reported = recorder.current().map(\.file)
+        #expect(reported == ["scout-extract-pending/broken/entry.json"], Comment(rawValue: "reported: \(reported)"))
+    }
+
+    // A temporary folder whose results file is there and cannot be read is reported by path, the way
+    // `list()` reports any unreadable folder, and is left in place rather than removed.
+    @Test func aTemporaryFolderWhoseResultsCannotBeReadIsReported() throws {
+        let dir = try sandboxes.make(named: "pending-incoming-unreadable")
+        let incoming = dir.appendingPathComponent(".incoming-garbled", isDirectory: true)
+        // A results "file" that is a folder: present, and unreadable as data.
+        let results = incoming.appendingPathComponent("results.json", isDirectory: true)
+        try FileManager.default.createDirectory(at: results, withIntermediateDirectories: true)
+
+        let listed = try PendingScoutIngests(directory: dir, readFailures: HandoffReadFailures()).list()
+        #expect(listed.contains { if case .unreadable(let path, _) = $0 { return path == results.path }; return false },
+                Comment(rawValue: "an unreadable results file was not reported: \(listed)"))
+        #expect(FileManager.default.fileExists(atPath: incoming.path), "an unreadable results file was removed")
+    }
+
     // MARK: - The landing sweep's warning survives the run's own receipt
 
     // `StatusLine` always lets a CLEAR through, and the do-not-contact receipt clears the line on a run

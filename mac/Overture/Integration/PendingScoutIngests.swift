@@ -16,10 +16,15 @@ import CryptoKit
 // (`StoreLocation.writableHandoffDirectory`).
 struct PendingScoutIngests {
     let directory: URL
+    // #2879: where an entry the sequence floor cannot read is reported, so it reaches the masthead rather
+    // than being skipped in silence. Tests hand in their own.
+    var readFailures: HandoffReadFailures = .shared
+
+    static let folderName = "scout-extract-pending"
 
     static var live: PendingScoutIngests {
         PendingScoutIngests(directory: StoreLocation.handoffDirectory
-            .appendingPathComponent("scout-extract-pending", isDirectory: true))
+            .appendingPathComponent(folderName, isDirectory: true))
     }
 
     struct Entry: Codable, Equatable, Sendable {
@@ -137,9 +142,19 @@ struct PendingScoutIngests {
     // folder that cannot be read is, rather than retried unseen on every sweep.
     private func recoverIncoming(_ incoming: URL) -> Listed? {
         let fm = FileManager.default
-        guard let data = try? Data(contentsOf: incoming.appendingPathComponent(Self.resultsName)) else {
+        // #2879: through the shared reader, which tells a results file that is not there (nothing to lose,
+        // so the folder goes) from one that is there and cannot be read (reported by path, left in place).
+        // Reported by `list()` itself, so not also recorded for the masthead.
+        let resultsFile = incoming.appendingPathComponent(Self.resultsName)
+        let data: Data
+        switch HandoffFile.data(at: resultsFile, recorder: .reportedByItsOwnSurface) {
+        case .absent:
             try? fm.removeItem(at: incoming)
             return nil
+        case .unreadable(let reason):
+            return .unreadable(path: resultsFile.path, why: reason)
+        case .read(let read):
+            data = read
         }
         let hash = Self.contentHash(of: data)
         if (try? entry(hash)) != nil {
@@ -176,18 +191,37 @@ struct PendingScoutIngests {
     // READ ONLY, and deliberately not `list()`: this runs on every sequence mint, and `list()` recovers
     // (it moves folders and writes entries). Only the entries are read, in every folder including a
     // temporary one a crash left, whose entry already holds the sequence it would be moved in with. A
-    // results-only folder carries no sequence and is recovered as 0, so it adds nothing to the floor. A
-    // folder that cannot be read is skipped here; `list()`, on the sweep, is what reports it by name.
+    // results-only folder carries no sequence and is recovered as 0, so it adds nothing to the floor (an
+    // ABSENT entry is not a failure). An entry that is there and cannot be read is REPORTED to `readFailures`
+    // by its own path (#2879), and cleared once it reads again; it adds nothing to the floor meanwhile.
     var highestSequence: Int {
         let fm = FileManager.default
-        guard let names = try? fm.contentsOfDirectory(atPath: directory.path) else { return 0 }
+        guard fm.fileExists(atPath: directory.path) else { return 0 }
+        let listing = Self.folderName + "/"
+        let names: [String]
+        do {
+            names = try fm.contentsOfDirectory(atPath: directory.path)
+            readFailures.clear(file: listing)
+        } catch {
+            readFailures.record(file: listing, reason: HandoffDecodeFailure.describe(error))
+            return 0
+        }
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
         return names.reduce(0) { top, name in
             let url = directory.appendingPathComponent(name).appendingPathComponent(Self.entryName)
-            guard let data = try? Data(contentsOf: url),
-                  let entry = try? decoder.decode(Entry.self, from: data) else { return top }
-            return max(top, entry.sequence)
+            let label = "\(Self.folderName)/\(name)/\(Self.entryName)"
+            switch HandoffFile.read(at: url, recorder: .reportedByItsOwnSurface,
+                                    decode: { try decoder.decode(Entry.self, from: $0) }) {
+            case .absent:
+                return top
+            case .unreadable(let reason):
+                readFailures.record(file: label, reason: reason)
+                return top
+            case .read(let entry):
+                readFailures.clear(file: label)
+                return max(top, entry.sequence)
+            }
         }
     }
 }
