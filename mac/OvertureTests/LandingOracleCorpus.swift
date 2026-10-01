@@ -256,7 +256,7 @@ enum LandingOracleCorpus {
     /// `order` is the order the sources are INSERTED, which is the order `runScout` meets its native
     /// sources in (it reads the watchlist unsorted, so `landThroughRunScout` checks the order it was given).
     static func seed(into context: ModelContext, kind: SourceKind = .html, order: [String]? = nil) throws {
-        let ids = order ?? sources.map(\.id)
+        let ids = try checkedOrder(order)
         let byId = Dictionary(uniqueKeysWithValues: sources.enumerated().map { ($0.element.id, ($0.offset, $0.element)) })
         for id in ids {
             // An id the corpus does not hold would quietly seed, and land, fewer sources than the caller asked for.
@@ -301,6 +301,8 @@ enum LandingOracleCorpus {
     /// One whole landing on a fresh in-memory store: seed, ingest, ONE explicit save, then the container for
     /// a fresh context to read. Autosave is off (TestModelContainer), so that save is the only way in.
     static func land(order: [String]? = nil) async throws -> ModelContainer {
+        // `results(order:)` drops an id it does not know, so the order is checked here, before it can land less.
+        _ = try checkedOrder(order)
         let container = try TestModelContainer.inMemory(AppSchema.models)
         let context = container.mainContext
         try seed(into: context)
@@ -338,6 +340,17 @@ enum LandingOracleCorpus {
     /// A landing that could not be made the way the oracle needs it, said as such rather than compared.
     struct Unmeasured: Error, CustomStringConvertible {
         let description: String
+    }
+
+    /// The source ids a landing is asked for, in order: the corpus order when none is given, and a refusal
+    /// naming the first id the corpus does not hold, because every landing would otherwise drop it and land
+    /// fewer sources than it claims. One check for all three entry points, so none can skip it.
+    static func checkedOrder(_ order: [String]?) throws -> [String] {
+        let ids = order ?? sources.map(\.id)
+        if let unknown = ids.first(where: { id in !sources.contains { $0.id == id } }) {
+            throw Unmeasured(description: "\(unknown) is not a corpus source")
+        }
+        return ids
     }
 
     static func land(_ path: Path, order: [String]? = nil) async throws -> ModelContainer {
@@ -381,7 +394,7 @@ enum LandingOracleCorpus {
     /// one explicit save and the container, exactly as `land` does for the ingest.
     static func landThroughRunScout(order: [String]? = nil) async throws -> ModelContainer {
         if let refusal = handoffInputsRefusal() { throw Unmeasured(description: refusal) }
-        let ids = order ?? sources.map(\.id)
+        let ids = try checkedOrder(order)
         let container = try TestModelContainer.inMemory(AppSchema.models)
         let context = container.mainContext
         // A native kind with a real listings page (Carnegie's .algolia has a placeholder one), and not a
@@ -428,7 +441,7 @@ enum LandingOracleCorpus {
     /// read answered at once with that source's events, then the one explicit save and the container.
     static func landThroughLeadPaste(order: [String]? = nil) async throws -> ModelContainer {
         if let refusal = handoffInputsRefusal() { throw Unmeasured(description: refusal) }
-        let ids = order ?? sources.map(\.id)
+        let ids = try checkedOrder(order)
         let container = try TestModelContainer.inMemory(AppSchema.models)
         let context = container.mainContext
         try seed(into: context)

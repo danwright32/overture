@@ -209,6 +209,23 @@ final class LandingOracleTests {
         }
     }
 
+    // An order naming a source the corpus does not hold is refused by name on every entry point, never landed
+    // as a smaller corpus: each one used to skip such an id, and the ingest's results file still would.
+    @Test func anOrderNamingASourceTheCorpusLacksIsRefusedOnEveryEntryPoint() async {
+        let order = LandingOracleCorpus.sources.map(\.id) + ["oracle-typo"]
+        for path in LandingOracleCorpus.Path.allCases {
+            do {
+                _ = try await LandingOracleCorpus.land(path, order: order)
+                Issue.record(Comment(rawValue: "the \(path.rawValue) landing took an order naming oracle-typo"))
+            } catch let refused as LandingOracleCorpus.Unmeasured {
+                #expect(refused.description == "oracle-typo is not a corpus source", Comment(rawValue:
+                    "the \(path.rawValue) landing refused for another reason: \(refused.description)"))
+            } catch {
+                Issue.record(Comment(rawValue: "the \(path.rawValue) landing failed some other way: \(error)"))
+            }
+        }
+    }
+
     // The script copies the recordings by the names IT expects, and this suite reads them by the names each
     // Path names. Two lists of one fact, so they are compared, with the script's built by the script (L70).
     @Test func theScriptRecordsTheFilesEachEntryPointReads() throws {
