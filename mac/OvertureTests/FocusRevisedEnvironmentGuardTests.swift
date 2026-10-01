@@ -47,7 +47,7 @@ import Foundation
 // it does not know what anything costs. It answers one question: does this view read a focus-revised
 // environment value while its redraw can reach a declared whole-store derivation that nothing makes
 // conditional.
-@Suite("No view derives the whole store behind a focus-revised environment value (#3880)")
+@Suite("No view derives the whole store behind a focus-revised environment value (#3880)", .sharesTheRenderCounter)
 struct FocusRevisedEnvironmentGuardTests {
 
     // Written as the REASON, not as the case that bit: an environment value the window system revises
