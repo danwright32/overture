@@ -112,9 +112,25 @@ struct ReconcileTickLandingRaceTests {
         let landedFields: LandedFields?
     }
 
-    // One tick with a landing at hand back `landAt`. Only Gmail is stubbed out (the two injected Gmail
-    // passes do nothing); every other pass is the tick's own, and the closing read is the real one.
+    // L2 and L284: every seam the tick leaves real, and why it cannot reach anything live, asserted on
+    // every run rather than assumed. The tick's injected threading repair and proposal sweep are stubbed
+    // below. The rest run for real: the Downbeat export the booking, conflict and freshness passes read,
+    // and the Gmail credentials the reply check and signature refresh need, both resolve through
+    // `StoreLocation.handoffDirectory`, which a test run redirects into a temp folder (#2097), so they
+    // can only ever find a test's own file. OmniFocus runs only behind its opt in, read from `.standard`,
+    // which must be off here or the tick would drive the real AppleScript.
+    private func liveServicesUnreachable() -> Bool {
+        let redirect = StoreLocation.testRunHandoffDirectory.standardizedFileURL.path
+        return DownbeatBridge.defaultURL.standardizedFileURL.path.hasPrefix(redirect)
+            && GmailCredentials.tokenURL.standardizedFileURL.path.hasPrefix(redirect)
+            && GmailCredentials.clientConfigURL.standardizedFileURL.path.hasPrefix(redirect)
+            && !OmniFocusSyncConfig.loaded().enabled
+    }
+
+    // One tick with a landing at hand back `landAt`. The threading repair and proposal sweep are stubbed;
+    // every other pass is the tick's own (see `liveServicesUnreachable`), and the closing read is real.
     private func tick(_ ctx: ModelContext, row: Prospect, landAt: Int, label: String) async -> Run {
+        #expect(liveServicesUnreachable(), "a pass this tick runs for real could reach a live service or file")
         var events: [Event] = []
         var landedFields: LandedFields?
         let summary = await ReconcileScheduler(context: ctx, replyRunAlive: { _ in false }).runSafeReconcilesOnce(
