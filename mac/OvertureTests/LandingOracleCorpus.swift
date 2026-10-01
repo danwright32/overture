@@ -259,7 +259,8 @@ enum LandingOracleCorpus {
         let ids = order ?? sources.map(\.id)
         let byId = Dictionary(uniqueKeysWithValues: sources.enumerated().map { ($0.element.id, ($0.offset, $0.element)) })
         for id in ids {
-            guard let (i, s) = byId[id] else { continue }
+            // An id the corpus does not hold would quietly seed, and land, fewer sources than the caller asked for.
+            guard let (i, s) = byId[id] else { throw Unmeasured(description: "\(id) is not a corpus source") }
             let source = WatchedSource(sourceId: s.id, orgName: s.org, listingsURL: s.listingsURL, kind: kind,
                                        addedAt: now)
             if !kind.usesNativeExtractor {
@@ -388,7 +389,7 @@ enum LandingOracleCorpus {
         try seed(into: context, kind: .squarespaceFeed, order: ids)
         let byId = Dictionary(uniqueKeysWithValues: sources.map { ($0.id, $0) })
         var read: [String] = []
-        _ = try await ScoutService.runScout(
+        let outcome = try await ScoutService.runScout(
             into: context, depth: .watchOnly, extractor: NoFeed(),
             extractorRegistry: { source in
                 read.append(source?.sourceId ?? "(none)")
@@ -403,6 +404,18 @@ enum LandingOracleCorpus {
         // one asked for landed a different case, so it is refused rather than compared.
         guard read == ids else {
             throw Unmeasured(description: "runScout read the sources in the order \(read), not \(ids)")
+        }
+        // Every source must have LANDED, not merely been read in order: one that failed or was set aside inside
+        // the sweep would still pass the check above and record a smaller store as 6d3453d8's (L475).
+        let notLanded = ids.filter { id in
+            !outcome.sources.contains { result in
+                guard result.sourceId == id, case .ingested = result.state else { return false }
+                return true
+            }
+        }
+        guard notLanded.isEmpty else {
+            throw Unmeasured(description: "runScout did not land \(notLanded): "
+                + outcome.sources.map { "\($0.sourceId) \($0.state)" }.joined(separator: ", "))
         }
         try context.save()
         return container
@@ -423,7 +436,9 @@ enum LandingOracleCorpus {
         let defaults = ScratchDefaults.make("LandingOracleCorpus.leadPaste")
         let page = leadPage
         for id in ids {
-            guard let s = byId[id], let url = URL(string: s.listingsURL) else { continue }
+            guard let s = byId[id], let url = URL(string: s.listingsURL) else {
+                throw Unmeasured(description: "\(id) is not a corpus source with a listings URL, so it cannot be pasted")
+            }
             let leadId = LeadIntakeModel.sourceId(for: url)
             let answer = ScoutExtractResults(
                 version: 1, generatedAt: today + "T12:00:00Z",
