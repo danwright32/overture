@@ -104,7 +104,9 @@ enum OrgAnswerRecording {
     @discardableResult
     static func record(answeredKeys: Set<String>, in context: ModelContext, now: Date) -> Outcome {
         guard !answeredKeys.isEmpty else { return .nothingToDo }
-        let prospects = ((try? context.fetch(FetchDescriptor<Prospect>())) ?? [])
+        // #4406: in key order, because two shows by one organisation write the same answer row, and the
+        // LAST one wins.
+        let prospects = Prospect.inKeyOrder((try? context.fetch(FetchDescriptor<Prospect>())) ?? [])
             .filter { answeredKeys.contains($0.naturalKey) }
         guard !prospects.isEmpty else { return .nothingToDo }
 

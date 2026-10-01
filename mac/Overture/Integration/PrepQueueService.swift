@@ -157,7 +157,10 @@ enum PrepQueueService {
     // field needed); the app tracks "this run is a probe" in its own run-type state, not in the queue JSON.
     // `needsPrep`/the prep pill are left completely untouched.
     static func buildProbeQueue(from context: ModelContext, generatedAt: String, keys: Set<String>) -> PrepQueue {
-        let all = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
+        // #4406: in key order, because `ProbeBatch.plan` makes the FIRST show it meets for each producer that
+        // producer's representative, and an unsorted read hands it a different first show from one read to the
+        // next.
+        let all = Prospect.inKeyOrder((try? context.fetch(FetchDescriptor<Prospect>())) ?? [])
         // #1597 Phase 4.3: pay once per producer, not once per show. Judged against the WHOLE store, not
         // just Dan's selection, or one night's ticks would make every producer look like a single-venue
         // house and nothing would amortise. A room that rents itself out never groups (ProducerGate).
