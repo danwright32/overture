@@ -409,6 +409,7 @@
 		2A057AF952EABD2CD08390FD /* ExperimentReport.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4536133170CF9278F246223 /* ExperimentReport.swift */; };
 		2A33247C317864BDB901CA4D /* FreezeReport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 231BCEDEE0AA2E4D577AD060 /* FreezeReport.swift */; };
 		2A5CFE0787DB7369750F37A8 /* ToolbarPopoverGuardTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3BEBCF94E20C0F098D5943DD /* ToolbarPopoverGuardTests.swift */; };
+		2A630C1EA6F4119C1EC6F1AF /* TheDivergenceLogKeysOnKindAndSourceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FCD18573CC882E125A974E30 /* TheDivergenceLogKeysOnKindAndSourceTests.swift */; };
 		2A729059897AEC17C0F2C41C /* VenueTixCalendar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A30B9ADDD3819FD07425159 /* VenueTixCalendar.swift */; };
 		2A89774E95689D024374C478 /* CancelledReadDispositionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55236A452237AC991BC6F53D /* CancelledReadDispositionTests.swift */; };
 		2A937366D0F72FB5C5E541B1 /* ScoutTailProgressTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0602311EB99C42AD8EB20FF4 /* ScoutTailProgressTests.swift */; };
@@ -4326,6 +4327,7 @@
 		FC4319EA21A986DD686816E8 /* NativePathPlacementTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativePathPlacementTests.swift; sourceTree = "<group>"; };
 		FCBAEEAC5C00CE56FB52C695 /* FreezeWatch.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FreezeWatch.swift; sourceTree = "<group>"; };
 		FCCCFE72CA35119010BE5823 /* PrepShortfallTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrepShortfallTests.swift; sourceTree = "<group>"; };
+		FCD18573CC882E125A974E30 /* TheDivergenceLogKeysOnKindAndSourceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TheDivergenceLogKeysOnKindAndSourceTests.swift; sourceTree = "<group>"; };
 		FCD742CE9CC4F42349E9FB06 /* FollowUpsViewSendStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FollowUpsViewSendStateTests.swift; sourceTree = "<group>"; };
 		FCE0C0CFFC8DC7DC54CE4E1D /* FinishingCanTimeOutTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FinishingCanTimeOutTests.swift; sourceTree = "<group>"; };
 		FD11317645BD714A15FCD1B6 /* AttachedConversation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AttachedConversation.swift; sourceTree = "<group>"; };
@@ -5679,6 +5681,7 @@
 				47F020A9B04BAAC18175B38A /* TheAppChecksItsOwnCardsTests.swift */,
 				84B7054F8DD240778478BB82 /* TheAppReportsItsOwnFreezesTests.swift */,
 				87673B91FD2858EF5A66A0D1 /* TheDivergenceLogIsCompactedTests.swift */,
+				FCD18573CC882E125A974E30 /* TheDivergenceLogKeysOnKindAndSourceTests.swift */,
 				5413D4478D3B1F70EC7D5358 /* TheFreezeLogIsBoundedWhileTheAppRunsTests.swift */,
 				3D5D1C4AC4B0559A6EC8D312 /* TheFreezeLogKeepsItsOldestRecordsTests.swift */,
 				DF071E8CC57B29B1988BF50D /* TheFreezeLogSaysWhereItsWindowEndsTests.swift */,
@@ -8797,6 +8800,7 @@
 				33725B65203DA56E5F5C6A78 /* TheAppChecksItsOwnCardsTests.swift in Sources */,
 				A301FEC3D3D116DFE7554174 /* TheAppReportsItsOwnFreezesTests.swift in Sources */,
 				81A5D2E4BBD512D20D11FD0D /* TheDivergenceLogIsCompactedTests.swift in Sources */,
+				2A630C1EA6F4119C1EC6F1AF /* TheDivergenceLogKeysOnKindAndSourceTests.swift in Sources */,
 				025A7F0495B66B2ED30BD39F /* TheFreezeLogIsBoundedWhileTheAppRunsTests.swift in Sources */,
 				CD58E47DD6204CC2BB5FF787 /* TheFreezeLogKeepsItsOldestRecordsTests.swift in Sources */,
 				276397FEA8A9F186A6155907 /* TheFreezeLogSaysWhereItsWindowEndsTests.swift in Sources */,
