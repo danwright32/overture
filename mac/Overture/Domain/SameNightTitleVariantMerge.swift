@@ -66,8 +66,10 @@ enum SameNightTitleVariantMerge {
 
     @discardableResult
     static func run(in context: ModelContext) -> Summary {
-        // #4406: in key order, because the oldest first sort below leaves two rows tied on `ingestedAt` in read order,
-        // and that order picks the cluster representative and the fallback survivor.
+        // #4406: in key order, because the oldest first sort below used to leave two rows tied on `ingestedAt`
+        // in read order, and that order picks the cluster representative and the fallback survivor. The sort
+        // now breaks the tie on the natural key itself, so this is the second of two locks rather than the only
+        // one (Swift does not promise a stable sort).
         let stored = Prospect.inKeyOrder((try? context.fetch(FetchDescriptor<Prospect>())) ?? [])
         let watched = watchedRoomNames(in: context)
         var summary = Summary()
@@ -93,7 +95,9 @@ enum SameNightTitleVariantMerge {
         for (_, members) in groups where members.count > 1 {
             // Oldest first, so the cluster representative and the fallback survivor are both stable and
             // do not depend on fetch order.
-            let ordered = members.sorted { $0.ingestedAt < $1.ingestedAt }
+            let ordered = members.sorted {
+                $0.ingestedAt == $1.ingestedAt ? $0.naturalKey < $1.naturalKey : $0.ingestedAt < $1.ingestedAt
+            }
 
             for cluster in clusters(of: ordered) {
                 guard cluster.count > 1 else { continue }

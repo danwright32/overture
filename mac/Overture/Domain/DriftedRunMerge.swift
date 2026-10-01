@@ -19,8 +19,9 @@ enum DriftedRunMerge {
 
     @discardableResult
     static func run(in context: ModelContext) -> Summary {
-        // #4406: in key order, because a group is built in read order and its survivor rungs break an `ingestedAt` tie
-        // by position (`first(where:)`, the sort, `max(by:)`).
+        // #4406: in key order, because a group is built in read order and its survivor rungs break an
+        // `ingestedAt` tie by position (`first(where:)` and `max(by:)`; the freshest first sort below breaks its
+        // own tie on the natural key, since Swift does not promise a stable sort).
         let stored = Prospect.inKeyOrder((try? context.fetch(FetchDescriptor<Prospect>())) ?? [])
         var summary = Summary()
         // #4147: every title this pass rewrites, through the carry below.
@@ -97,7 +98,9 @@ enum DriftedRunMerge {
             // from the rows Dan has NOT decided about, so a night he refused makes way for one he has not
             // and the show comes back for another look.
             let candidates = NaturalKeyVenueMigration.preferringASecondLook(members)
-            let freshestFirst = candidates.sorted { $1.ingestedAt < $0.ingestedAt }
+            let freshestFirst = candidates.sorted {
+                $0.ingestedAt == $1.ingestedAt ? $0.naturalKey < $1.naturalKey : $1.ingestedAt < $0.ingestedAt
+            }
             let survivor =
                 // #4024: `first` is safe here ONLY because `mustDefer` above has already refused the
                 // case where two rows could match: the strict record test implies `hasOutreachHistory`,
