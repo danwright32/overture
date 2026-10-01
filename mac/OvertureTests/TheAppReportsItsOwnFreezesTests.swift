@@ -303,7 +303,7 @@ struct TheAppReportsItsOwnFreezesTests {
     func unreadableEntriesAreMentioned() {
         var read = FreezeLog.Read()
         read.records = [stall(1.0)]
-        read.unreadableLines = 3
+        read.unreadable = ["{", "{", "{"]
         let said = try! #require(FreezeReport.newlyReported(in: URL(fileURLWithPath: "/tmp"),
                                                             watchdogRan: true, defaults: defaults("unreadable"),
                                                             read: liveOnly(read)))
