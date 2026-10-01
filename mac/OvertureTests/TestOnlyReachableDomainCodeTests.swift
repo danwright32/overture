@@ -129,7 +129,11 @@ struct TestOnlyReachableDomainCodeTests {
         // to the schema by `ScopeFieldsMatchTheSchemaTests`, so a memo can re-arm observation on all of
         // them), so a mention there says nothing about whether any code uses the property, and counting it
         // would clear every stored property this guard exists to find.
-        let appFiles = scanned(app, floor: 200).filter { $0.name != "ScopeFields.swift" }
+        // #4356: `QueueFacts.swift` and `RowFacts.swift` are the same case. They carry, or exempt BY NAME,
+        // every stored property of `Prospect` and `Recipient`, held to the schema by
+        // `RowFactsSchemaCoverageTests`, so a mention there is the list rather than a use.
+        let byConstruction: Set<String> = ["ScopeFields.swift", "QueueFacts.swift", "RowFacts.swift"]
+        let appFiles = scanned(app, floor: 200).filter { !byConstruction.contains($0.name) }
         var testFiles = scanned(RepoRoot.mac.appendingPathComponent("OvertureTests"), floor: 400)
         testFiles += scanned(RepoRoot.mac.appendingPathComponent("OvertureHostedTests"), floor: 20)
         testFiles += scanned(RepoRoot.mac.appendingPathComponent("TestSupport"), floor: 5)

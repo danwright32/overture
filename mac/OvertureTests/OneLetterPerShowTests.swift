@@ -92,6 +92,12 @@ struct OneLetterPerShowTests {
                 // the schema, which must name the retained column because the schema still stores it. It
                 // registers observation and never reads or writes the letter.
                 if file.name == "ScopeFields.swift", trimmed == ".init(\\.overrideBody)," { continue }
+                // #4356: the exemption that keeps the retained column OUT of a retained row's facts, held to
+                // the schema by `RowFactsSchemaCoverageTests`. It names the column so that nothing carries it,
+                // and neither reads nor writes the letter.
+                if file.name == "RowFacts.swift", trimmed.hasPrefix("\"overrideBody\": RowFacts.retained(") {
+                    continue
+                }
                 found.append("\(file.name):\(line)  \(trimmed)")
             }
         }
