@@ -266,6 +266,13 @@ enum LandingOracleCorpus {
                 source.pendingContentHash = "oracle-hash-\(i)"
                 source.hasUnreadChanges = true
             }
+            // #4374: past its warmup, with the size this run lists as its baseline, so a stored show the run no
+            // longer lists (Old Harbor Revue) is real evidence and the reconcile counts the miss. Seeded in
+            // warmup, as it was, no arm's reconcile marked anything (missedScoutCount 0 on every row of all
+            // three recordings), so runScout reconciling per source and the ingest reconciling once at the end
+            // were both invisible to the oracle.
+            source.successfulCheckCount = WatchedSource.warmupRuns
+            source.baselineFeedCount = s.events.count
             context.insert(source)
             // A native source is saved as it is inserted, so its row is created in this order. Saved together,
             // the pending inserts went to the store in set order, and `runScout`'s unsorted watchlist fetch

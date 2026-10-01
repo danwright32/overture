@@ -188,6 +188,27 @@ final class LandingOracleTests {
             "two entry points left identical stores, so their recordings cannot tell them apart: \(digests)"))
     }
 
+    // The corpus has to make each reconcile DO something, or the oracle cannot see where it runs: a stored
+    // show its own source no longer lists is counted as missed by the two sweeps, and never by the lead paste,
+    // which is one pasted page and so evidence of nothing (#826). Measured on the landing, not assumed from
+    // the seed (L159).
+    @Test func theReconcileCountsAMissOnTheSweepsAndNeverOnTheLeadPaste() async throws {
+        for path in LandingOracleCorpus.Path.allCases {
+            let fresh = ModelContext(try await LandingOracleCorpus.land(path))
+            let missed = try fresh.fetch(FetchDescriptor<Prospect>())
+                .first { $0.groupName == "Old Harbor Revue" }?.missedScoutCount
+            if path == .leadPaste {
+                #expect(missed == 0, Comment(rawValue:
+                    "the lead paste counted a miss (\(missed.map(String.init) ?? "no row")), so a pasted page "
+                    + "was taken as a sweep of somebody's calendar"))
+            } else {
+                #expect((missed ?? 0) > 0, Comment(rawValue:
+                    "the \(path.rawValue) landing counted no miss against the show its source stopped listing "
+                    + "(\(missed.map(String.init) ?? "no row")), so the corpus does not exercise its reconcile"))
+            }
+        }
+    }
+
     // The script copies the recordings by the names IT expects, and this suite reads them by the names each
     // Path names. Two lists of one fact, so they are compared, with the script's built by the script (L70).
     @Test func theScriptRecordsTheFilesEachEntryPointReads() throws {

@@ -906,6 +906,11 @@ the measurement it came from lives here. Read the entry before the rule decides 
   `UNMEASURED` rather than compared. And both new arms read Downbeat's export and the booking history
   from the handoff folder, which under test is one temporary folder every test shares, so either file
   present there refuses the landing (`handoffInputsRefusal`) rather than recording whatever left it.
+  Every source is seeded PAST its warmup with its listing count as baseline, because seeded in warmup (as
+  #4328 first did) no reconcile marked anything and Old Harbor Revue read `missedScoutCount` 0 in every
+  recording, so the ingest's one reconcile and runScout's per source ones were invisible; all three were
+  re-recorded from 6d3453d8 with that seed, and `theReconcileCountsAMissOnTheSweepsAndNeverOnTheLeadPaste`
+  measures that the two sweeps count the miss and the lead paste (#826) never does.
   `theThreeEntryPointsLeaveDifferentStores` keeps a recording copied under the wrong name from passing,
   and the clock list is derived over all three. The REAL arm stays ingest only: the frozen inputs hold a
   results file, not native reads.
