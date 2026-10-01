@@ -259,6 +259,32 @@ final class LandingOracleTests {
             "scripts/landing-oracle.sh records \(fromScript), and the suite reads \(fromPaths)"))
     }
 
+    // The script runs the recording tests by NAME, and a name matching no test makes `-only-testing` run nothing
+    // for that arm, found only as a refusal at the next re-record. So the script's list is compared, both ways,
+    // with the recording tests this file actually declares, read from its source, and their count with the
+    // number of entry points (L41, L96).
+    @Test func theScriptRunsEveryRecordingTestThisSuiteDeclares() throws {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/bash")
+        let script = RepoRoot.url.appendingPathComponent("scripts/landing-oracle.sh").path
+        process.arguments = ["-c", "source \"$1\" && printf '%s\\n' \"${ORACLE_SYNTHETIC_TESTS[@]}\"", "bash", script]
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        try process.run()
+        process.waitUntilExit()
+        let fromScript = Set((String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? "")
+            .split(separator: "\n").map(String.init))
+        let source = try String(contentsOf: RepoRoot.url.appendingPathComponent(
+            "mac/OvertureTests/LandingOracleTests.swift"), encoding: .utf8)
+        let declared = Set(try NSRegularExpression(pattern: "@Test func (\\w+LandingEqualsTheOracleRecordedFromMain)\\(")
+            .matches(in: source, range: NSRange(source.startIndex..., in: source))
+            .compactMap { Range($0.range(at: 1), in: source).map { String(source[$0]) } })
+        #expect(process.terminationStatus == 0 && fromScript == declared, Comment(rawValue:
+            "scripts/landing-oracle.sh runs \(fromScript.sorted()), and this suite declares \(declared.sorted())"))
+        #expect(declared.count == LandingOracleCorpus.Path.allCases.count, Comment(rawValue:
+            "\(declared.count) recording tests for \(LandingOracleCorpus.Path.allCases.count) entry points"))
+    }
+
     // runScout and the lead paste read Downbeat's export and the booking history from the handoff folder, so a
     // file there refuses the landing by name. Driven against a sandbox, never the shared test handoff folder.
     @Test func aHandoffInputThereRefusesTheLandingByName() throws {
