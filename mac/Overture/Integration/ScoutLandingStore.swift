@@ -17,9 +17,10 @@ import SwiftData
 // title A just rewrote is what B's token discard has to count. A copy taken at the start and never updated
 // would let two sources mint the same show twice or join what must not be joined, silently. So:
 //
-//   - MEMBERSHIP is the fetch plus every row the landing inserts (`inserted`), in that order, which is the
-//     order a fresh fetch returns them in (an unsorted fetch comes back in insertion order, and a row
-//     inserted since sits after every row that was already there). Rows deleted from the context drop out
+//   - MEMBERSHIP is the fetch plus every row the landing inserts (`inserted`), in that order: the fetch in
+//     natural key order, then the inserts as they came (#4397). Never the fetch's own order, which on a
+//     context holding unsaved changes differs from one read to the next. `.everyRead` orders each fresh
+//     fetch the same way, by the rank this landing gave each row. Rows deleted from the context drop out
 //     on every read. Nothing in the landing deletes a show today; the filter is there so the day something
 //     does, the working set cannot hand back a row a fresh fetch would not.
 //   - EVERY FOLD is re-derived when the raw fields it came from change. A cached fold is compared against
@@ -119,10 +120,15 @@ final class ScoutLandingStore {
     private var keysToCheck: [ObjectIdentifier: Prospect] = [:]
     // The natural key index, built on the first keyed lookup from the membership and kept in its order, so
     // two rows holding one key (possible only between an insert and the save that refuses it) answer in the
-    // order a fresh fetch would.
+    // membership's order.
     private var keyIndex: [String: [Prospect]]?
     private var indexedKey: [ObjectIdentifier: String] = [:]
     private var position: [ObjectIdentifier: Int] = [:]
+    // #4397: the order this landing holds its rows in, one rank per row, kept with the row so the identifier
+    // cannot be reused by another object. The first read ranks what it found in key order; every row the
+    // landing inserts is ranked after all of those, in the order inserted. Both policies order by it, so the
+    // working set and the fresh read it is proved equivalent to agree, and a re-key does not move a row.
+    private var rank: [ObjectIdentifier: (row: Prospect, rank: Int)] = [:]
     private let saveWatch = SaveWatch()
     // #4327 step 0.7 (RC4): what this working set did, counted, so whether the stored shows are served from
     // the cache for the second source onwards is a measurement and not a reading of this file. Cumulative
@@ -241,7 +247,8 @@ final class ScoutLandingStore {
         }
     }
 
-    // Every stored show, as a fresh fetch would return it right now. Throws when the store cannot answer.
+    // Every stored show a fresh fetch would return right now, in this landing's order. Throws when the store
+    // cannot answer.
     func rows() throws -> [Prospect] {
         let current = try currentRows()
         counters.rowsHandedOut += current.count
@@ -250,7 +257,7 @@ final class ScoutLandingStore {
 
     // `rows()` without counting the rows as handed to a caller, for the working set's own reads.
     private func currentRows() throws -> [Prospect] {
-        if policy == .everyRead { return try read(context) }
+        if policy == .everyRead { return ranked(try read(context)) }
         if let loaded {
             noteWrittenRows()
             // Re-filtering every row on every read was, once keyed lookups came here, a larger cost than the
@@ -263,16 +270,35 @@ final class ScoutLandingStore {
             members = deletionPending ? nil : current
             return current
         }
-        let fetched = try read(context)
+        // #4397: held in the landing's own order, never the read's. Every first match the landing makes reads
+        // this array, and an unsorted fetch on a context with unsaved changes comes back in a different order
+        // each time.
+        let fetched = ranked(try read(context))
         counters.rowsRead += fetched.count
         loaded = fetched
         members = fetched
         return fetched
     }
 
+    // `rows` in this landing's order: rows it has ranked by their rank, and any it has not yet seen (the whole
+    // first read) ranked now, in key order, after them.
+    private func ranked(_ rows: [Prospect]) -> [Prospect] {
+        let unseen = rows.filter { rank[ObjectIdentifier($0)] == nil }
+        for p in Prospect.inKeyOrder(unseen) { rankNext(p) }
+        return rows.map { (row: $0, rank: rank[ObjectIdentifier($0)]?.rank ?? Int.max) }
+            .sorted { $0.rank < $1.rank }
+            .map(\.row)
+    }
+
+    private func rankNext(_ p: Prospect) {
+        rank[ObjectIdentifier(p)] = (row: p, rank: rank.count)
+    }
+
     // A row this landing has just put into the context. Before the first read there is nothing to add it
     // to, and the read that follows will return it, because a fetch includes unsaved inserts.
     func inserted(_ p: Prospect) {
+        // Ranked under both policies once anything has been read, so a fresh read places it where `.once` does.
+        if !rank.isEmpty, rank[ObjectIdentifier(p)] == nil { rankNext(p) }
         guard policy == .once, loaded != nil else { return }
         loaded?.append(p)
         members = nil

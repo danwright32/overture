@@ -32,8 +32,10 @@ enum LocalHistory {
     private static let schedulingDismissals: Set<ShowOutcome> = [.dateConflict, .hadPaidWork,
                                                                  .pitchingOtherShows]
 
+    // #4397: in key order, because the matcher takes the FIRST possible match (`history.first(where:)`) and
+    // its callers hand it an unsorted table read, whose order can change from one read to the next.
     static func records(from prospects: [Prospect]) -> [HistoryRecord] {
-        prospects.compactMap { p in
+        Prospect.inKeyOrder(prospects).compactMap { p in
             // #769: the org asked Dan to stop emailing them. Checked FIRST, and it outranks everything
             // below: even a past booking with them does not license another cold pitch after they have
             // said no. "dnc" is a status the scout's matcher already knows how to suppress on, so this
