@@ -10,7 +10,9 @@ enum VoiceFeedbackService {
     @discardableResult
     static func export(from context: ModelContext, generatedAt: String,
                        url: URL = VoiceFeedbackBuilder.defaultURL) throws -> Int {
-        let all = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
+        // #4406: in key order, because pairs tied on rank and date keep read order through the sort, and the cap
+        // keeps the first of them (#4352 did the same for the contacts inside one show).
+        let all = Prospect.inKeyOrder((try? context.fetch(FetchDescriptor<Prospect>())) ?? [])
         let feedback = VoiceFeedbackBuilder.build(from: all, generatedAt: generatedAt)
         let data = try VoiceFeedbackBuilder.encode(feedback)
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(),

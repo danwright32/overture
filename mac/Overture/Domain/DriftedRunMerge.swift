@@ -19,7 +19,9 @@ enum DriftedRunMerge {
 
     @discardableResult
     static func run(in context: ModelContext) -> Summary {
-        let stored = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
+        // #4406: in key order, because a group is built in read order and its survivor rungs break an `ingestedAt` tie
+        // by position (`first(where:)`, the sort, `max(by:)`).
+        let stored = Prospect.inKeyOrder((try? context.fetch(FetchDescriptor<Prospect>())) ?? [])
         var summary = Summary()
         // #4147: every title this pass rewrites, through the carry below.
         var titleRenames: [TitleRenameLedger.Entry] = []

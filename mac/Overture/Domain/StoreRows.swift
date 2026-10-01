@@ -36,7 +36,9 @@ struct StoreRows {
     // `try?` on the inquiries keeps a container that predates Inquiry (an older test harness) working: it
     // yields none, the same allowance every pass made for itself before this existed.
     static func fetch(from context: ModelContext) -> StoreRows {
-        StoreRows(prospects: (try? context.fetch(FetchDescriptor<Prospect>())) ?? [],
+        // #4406: in key order, because these rows feed every pass of the reconcile tick and the Gmail reads, and a
+        // pass taking a first match from an unsorted read picks a different row on unchanged data.
+        StoreRows(prospects: Prospect.inKeyOrder((try? context.fetch(FetchDescriptor<Prospect>())) ?? []),
                   inquiries: (try? context.fetch(FetchDescriptor<Inquiry>())) ?? [])
     }
 
@@ -103,7 +105,9 @@ struct DueReading: Sendable {
     // never the main actor; everything it fetches stays inside this function.
     static func readInBackground(container: ModelContainer, now: Date, replyRunAlive: Bool) async -> DueReading {
         let context = ModelContext(container)
-        let prospects = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
+        // #4406: in key order, because the same as `StoreRows.fetch`, so the away alert names shows in one order
+        // whichever context took the reading.
+        let prospects = Prospect.inKeyOrder((try? context.fetch(FetchDescriptor<Prospect>())) ?? [])
         let inquiries = (try? context.fetch(FetchDescriptor<Inquiry>())) ?? []
         return derive(prospects: prospects, inquiries: inquiries, now: now, replyRunAlive: replyRunAlive)
     }

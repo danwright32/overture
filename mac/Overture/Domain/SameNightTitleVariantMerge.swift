@@ -66,7 +66,9 @@ enum SameNightTitleVariantMerge {
 
     @discardableResult
     static func run(in context: ModelContext) -> Summary {
-        let stored = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
+        // #4406: in key order, because the oldest first sort below leaves two rows tied on `ingestedAt` in read order,
+        // and that order picks the cluster representative and the fallback survivor.
+        let stored = Prospect.inKeyOrder((try? context.fetch(FetchDescriptor<Prospect>())) ?? [])
         let watched = watchedRoomNames(in: context)
         var summary = Summary()
         // #3379: every key this pass rewrites, so a paid answer recorded against the old key can still be
