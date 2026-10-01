@@ -135,6 +135,9 @@ enum Phase0 {
             ModelConfiguration(schema: AppSchema.schema, url: url, cloudKitDatabase: .none)])
     }
 
+    /// The text glued onto copy `k`'s names and listing addresses ("qa", "qb", ...).
+    nonisolated static func glue(forCopy k: Int) -> String { "q" + String(UnicodeScalar(UInt8(96 + k))) }
+
     /// A copy of `clone` holding `factor` times the shows. The copies scale the clone's DISTRIBUTIONS rather
     /// than duplicating rows (L391): every copy keeps its row's shape (status, dates, fields, contacts) and
     /// gets a new identity (natural key, presenter, venue, title, series, thread ids, contact addresses), so
@@ -147,8 +150,6 @@ enum Phase0 {
     /// shows in the clone holds N in each copy rather than 4N in one. `ScaledCorpusKeepsListingsDistinctTests`
     /// holds that. `runSourceURLs` is an archived blob SQL cannot edit, so it is rewritten through the model
     /// after the rows are copied.
-    nonisolated static func glue(forCopy k: Int) -> String { "q" + String(UnicodeScalar(UInt8(96 + k))) }
-
     ///
     /// `reidentifyListings: false` leaves every copy holding its original's `sourceListingURL` and
     /// `runSourceURLs`, which is the corpus as it stood before #4288. Only #4372's attribution probe asks for
