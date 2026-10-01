@@ -527,6 +527,103 @@ struct ScoutLandingsWaitTheirTurnTests {
         holder.end()
     }
 
+    // L11: an ingest that waited and could not write its copy says so, and why it did not land, whether it
+    // was refused at its deadline or stopped while it waited. Never "stopped before it began".
+    @Test func anIngestThatWaitedAndCouldNotKeepACopySaysWhatHappened() async throws {
+        let c = try container()
+        let ctx = c.mainContext
+        htmlSource(in: ctx)
+        try ctx.save()
+        // A pending folder under a plain file, so no copy can ever be written.
+        let dir = try sandboxes.make(named: "pending-unwritable")
+        let blocker = dir.appendingPathComponent("not-a-folder")
+        try Data("x".utf8).write(to: blocker)
+        let pending = PendingScoutIngests(directory: blocker.appendingPathComponent("pending"))
+        let data = try JSONEncoder().encode(Self.results("unkept"))
+        let results = try ScoutExtractResultsDecoder.decode(data)
+        let now = self.now
+
+        // Stopped while it waited.
+        let deadlines = Deadlines()
+        let held = LandingSingleFlight(sleep: { await deadlines.sleep($0) })
+        let holder = try await held.begin(entryPoint: .runScoutLanding, priority: .scout, deadline: .seconds(1))
+        let stopped = Task { @MainActor in
+            await ScoutExtractLanding.land(data, results, clients: [], history: [], blocked: .empty,
+                                           today: ScoutTestClock.beforeAllFixtures, now: now,
+                                           landings: held, pending: pending, into: ctx)
+        }
+        await waitUntil("the ingest is waiting") { held.queue == [.scoutExtractIngest] }
+        stopped.cancel()
+        let cancelledOutcome = await stopped.value.outcome
+        let cancelledLine = cancelledOutcome.notLandedYet ?? "nil"
+        #expect(cancelledLine != LandingWaitCopy.ingestStoppedBeforeItWaited, Comment(rawValue: cancelledLine))
+        #expect(cancelledLine.hasPrefix(LandingWaitCopy.ingestCancelledWithoutACopy("").prefix(60)),
+                Comment(rawValue: cancelledLine))
+        #expect(cancelledLine.contains("could not keep a copy"))
+        holder.end()
+        deadlines.passAll()
+
+        // Refused at its deadline.
+        let refusing = LandingSingleFlight(sleep: { _ in })
+        let blocking = try await refusing.begin(entryPoint: .runScoutLanding, priority: .scout, deadline: .seconds(1))
+        let refused = await ScoutExtractLanding.land(data, results, clients: [], history: [], blocked: .empty,
+                                                     today: ScoutTestClock.beforeAllFixtures, now: now,
+                                                     landings: refusing, pending: pending, into: ctx)
+        let refusedLine = refused.outcome.notLandedYet ?? "nil"
+        #expect(refusedLine.hasPrefix(LandingWaitCopy.ingestRefusedWithoutACopy("").prefix(60)),
+                Comment(rawValue: refusedLine))
+        blocking.end()
+        #expect(try titles(ctx).isEmpty)
+    }
+
+    // Two landings of the SAME bytes overlapping: when one of them finishes, the other is still queued, so
+    // the sweep must still see the copy as in flight and not offer it a third time.
+    @Test func aCopyStaysInFlightWhileAnyLandingOfItsBytesIsStillQueued() async throws {
+        let c = try container()
+        let ctx = c.mainContext
+        htmlSource(in: ctx)
+        try ctx.save()
+        let dir = try sandboxes.make(named: "pending-overlap")
+        let pending = PendingScoutIngests(directory: dir)
+        let data = try JSONEncoder().encode(Self.results("twice"))
+        let results = try ScoutExtractResultsDecoder.decode(data)
+        let now = self.now
+        let deadlines = Deadlines()
+        let flight = LandingSingleFlight(sleep: { await deadlines.sleep($0) })
+        let holder = try await flight.begin(entryPoint: .runScoutLanding, priority: .scout, deadline: .seconds(1))
+        func landing() -> Task<ScoutExtractLanding.Landed, Never> {
+            Task { @MainActor in
+                await ScoutExtractLanding.land(data, results, clients: [], history: [], blocked: .empty,
+                                               today: ScoutTestClock.beforeAllFixtures, now: now,
+                                               landings: flight, pending: pending, into: ctx)
+            }
+        }
+        let first = landing()
+        await waitUntil("the first landing is waiting") { flight.queue.count == 1 }
+        let second = landing()
+        await waitUntil("the second landing is waiting") { flight.queue.count == 2 }
+        first.cancel()
+        _ = await first.value
+        #expect(flight.queue.count == 1)
+        #expect(try pending.list().count == 1)
+
+        var swept = false
+        let sweep = Task { @MainActor in
+            let offered = await ScoutExtractLanding.offerPending(clients: [], history: [], blocked: .empty, now: now,
+                                                                landings: flight, pending: pending, into: ctx)
+            swept = true
+            return offered
+        }
+        await waitUntil("the sweep passed over the copy still in flight") { swept }
+        #expect(flight.queue.count == 1, "the sweep queued a third landing of a copy still in flight")
+
+        holder.end()
+        _ = await second.value
+        _ = await sweep.value
+        #expect(try titles(ctx).filter { $0.contains("twice") }.count == 2)
+        deadlines.passAll()
+    }
+
     // L10: a leftover temporary folder that cannot be moved into place is reported by name, never retried
     // unseen.
     @Test func aTemporaryFolderThatCannotBeMovedIntoPlaceIsReported() throws {

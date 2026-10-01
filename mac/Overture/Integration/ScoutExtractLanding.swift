@@ -13,9 +13,11 @@ import SwiftData
 // every landing.
 @MainActor
 enum ScoutExtractLanding {
-    // The copies whose ingest is waiting in THIS process right now, so the sweep never offers a copy a
-    // second time while its first offer is still in the queue.
-    private static var waiting: Set<String> = []
+    // The copies whose ingest is in flight in THIS process right now, so the sweep never offers a copy a
+    // second time while a landing of it is still in the queue. COUNTED per content hash, not a set: two
+    // landings of identical bytes can overlap (a fresh ingest and an offer of its kept copy), and the first
+    // to finish must not un-mark the hash while the other is still queued.
+    private static var inFlight: [String: Int] = [:]
 
     // `sequence` is nil for a fresh file (the ingest mints one) and the kept sequence for a copy offered
     // again, whose copy is then already recorded.
@@ -29,14 +31,19 @@ enum ScoutExtractLanding {
                      into context: ModelContext) async -> Landed {
         let hash = PendingScoutIngests.contentHash(of: data)
         var kept = sequence != nil
+        var waited = false
         var copyFailure: String?
-        waiting.insert(hash)
-        defer { waiting.remove(hash) }
+        inFlight[hash, default: 0] += 1
+        defer {
+            inFlight[hash, default: 1] -= 1
+            if inFlight[hash] == 0 { inFlight[hash] = nil }
+        }
         var outcome = await ScoutExtractIngest.ingest(
             results, clients: clients, history: history, blocked: blocked, today: today, now: now,
             landings: landings, priority: priority, sequence: sequence,
             sequenceFloor: { pending.highestSequence },
             onWait: { runSequence in
+                waited = true
                 guard !kept else { return }
                 do {
                     try pending.record(data, sequence: runSequence, now: now)
@@ -53,9 +60,17 @@ enum ScoutExtractLanding {
             // L11: three cases, three sentences. A copy that was kept is what the refusal already says; a copy
             // that FAILED names its failure; and an ingest stopped before it ever waited attempted no copy at
             // all, so it says where its results still are rather than blaming a copy nobody tried to write.
+            // The sentence comes from what HAPPENED: whether it waited, whether it was stopped or refused, and
+            // whether a copy was attempted.
             if !kept {
-                outcome.notLandedYet = copyFailure.map(LandingWaitCopy.ingestRefusedWithoutACopy)
-                    ?? LandingWaitCopy.ingestStoppedBeforeItWaited
+                let stopped = outcome.notLandedYet == LandingWaitCopy.ingestCancelled
+                if !waited {
+                    outcome.notLandedYet = LandingWaitCopy.ingestStoppedBeforeItWaited
+                } else {
+                    let why = copyFailure ?? "no copy was written"
+                    outcome.notLandedYet = stopped ? LandingWaitCopy.ingestCancelledWithoutACopy(why)
+                                                   : LandingWaitCopy.ingestRefusedWithoutACopy(why)
+                }
             }
             return Landed(outcome: outcome, copyLeftBehind: nil)
         }
@@ -122,7 +137,7 @@ enum ScoutExtractLanding {
             case .unreadable(let path, let why):
                 offered.unreadable.append(LandingWaitCopy.pendingUnreadable(path: path, why: why))
             case .entry(let entry):
-                guard !waiting.contains(entry.contentHash) else { continue }
+                guard inFlight[entry.contentHash] == nil else { continue }
                 let copy: (data: Data, results: ScoutExtractResults)
                 do {
                     copy = try pending.results(entry)

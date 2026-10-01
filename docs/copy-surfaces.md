@@ -131,6 +131,7 @@ A sentence written as a constant is read here at the file that RENDERS it, not o
 `Integration/ScoutExtractIngest.swift`
     LandingWaitCopy.ingestCancelled  "The calendar results have not landed yet, because their landing was stopped "
 `Integration/ScoutExtractLanding.swift`
+    LandingWaitCopy.ingestCancelled  "The calendar results have not landed yet, because their landing was stopped "
     LandingWaitCopy.ingestStoppedBeforeItWaited  "The calendar results have not landed yet, because their landing "
 `UI/BuildFreshnessSheet.swift`
     BuildFreshnessCopy.cannotUpdate  "Ask Claude to reinstall Overture."
