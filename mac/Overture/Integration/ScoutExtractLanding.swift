@@ -54,6 +54,8 @@ enum ScoutExtractLanding {
                      pending: PendingScoutIngests = .live,
                      alreadyLanded: AlreadyLandedCheck = .lookUp,
                      saveClosing: (ModelContext) throws -> Void = { try $0.save() },
+                     // #4334: the landing's entry flush, injected so a test can make it refuse.
+                     saveEntry: (ModelContext) throws -> Void = { try $0.save() },
                      into context: ModelContext) async -> Landed {
         let hash = PendingScoutIngests.contentHash(of: data)
         var kept = sequence != nil
@@ -73,6 +75,15 @@ enum ScoutExtractLanding {
             refused.alreadyLandedAt = landedAt
             return removingTheCopy(of: hash, kept: kept, after: refused, pending: pending)
         }
+        func keepACopy(_ runSequence: Int) {
+            guard !kept else { return }
+            do {
+                try pending.record(data, sequence: runSequence, now: now)
+                kept = true
+            } catch {
+                copyFailure = String(describing: error)
+            }
+        }
         var outcome = await ScoutExtractIngest.ingest(
             results, clients: clients, history: history, blocked: blocked, today: today, now: now,
             landings: landings, priority: priority,
@@ -81,15 +92,13 @@ enum ScoutExtractLanding {
             sequenceFloor: { pending.highestSequence },
             onWait: { runSequence in
                 waited = true
-                guard !kept else { return }
-                do {
-                    try pending.record(data, sequence: runSequence, now: now)
-                    kept = true
-                } catch {
-                    copyFailure = String(describing: error)
-                }
+                keepACopy(runSequence)
             },
             saveClosing: saveClosing,
+            saveEntry: saveEntry,
+            // #4334 (A5, L371): a landing the entry flush refused applied nothing, so its results are kept
+            // by content hash, exactly as a landing that waited is, and land once the edits are saved.
+            onRefused: { keepACopy($0) },
             into: context)
         if outcome.notLandedYet != nil {
             // The refusal's own sentence says a copy was kept. When it was not, that sentence is false, so
@@ -111,16 +120,22 @@ enum ScoutExtractLanding {
             }
             return Landed(outcome: outcome, copyLeftBehind: nil)
         }
+        // #4334: a landing that stopped, or never started, keeps its copy (below); when that copy could not be
+        // written, the results are still in the reader's file, which is said.
+        if let copyFailure, outcome.landingStop != nil, !kept {
+            outcome.notLandedYet = ScoutWarningCopy.stoppedWithoutACopy(copyFailure)
+        }
         return removingTheCopy(of: hash, kept: kept, after: outcome, pending: pending)
     }
 
     // L5, L665: removed only once the save carrying these results has succeeded. A failed save means
     // they may never have reached disk, and the copy is then the only record of them, so it stays and
     // the sweep offers it again. #4336: results that had already landed have nothing left to offer, so
-    // their copy goes too.
+    // their copy goes too. #4334: a landing that stopped, or never started, before every source in it had
+    // landed keeps its copy, like a failed save.
     private static func removingTheCopy(of hash: String, kept: Bool, after outcome: ScoutService.Outcome,
                                         pending: PendingScoutIngests) -> Landed {
-        if kept && !outcome.saveFailed {
+        if kept && !outcome.saveFailed && outcome.landingStop == nil {
             do {
                 try pending.remove(hash)
             } catch {
@@ -200,7 +215,7 @@ enum ScoutExtractLanding {
                 if let left = landed.copyLeftBehind { offered.copiesLeftBehind.append(left) }
                 if let landedAt = outcome.alreadyLandedAt {
                     offered.alreadyLanded.append(landedAt)
-                } else if outcome.notLandedYet == nil && !outcome.saveFailed {
+                } else if outcome.notLandedYet == nil && !outcome.saveFailed && outcome.landingStop == nil {
                     offered.landed.append(outcome)
                 } else if now.timeIntervalSince(entry.recordedAt) > stuckAfter {
                     offered.stuck += 1

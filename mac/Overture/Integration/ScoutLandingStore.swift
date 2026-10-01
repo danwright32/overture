@@ -21,8 +21,10 @@ import SwiftData
 //     natural key order, then the inserts as they came (#4397). Never the fetch's own order, which on a
 //     context holding unsaved changes differs from one read to the next. `.everyRead` orders each fresh
 //     fetch the same way, by the rank this landing gave each row. Rows deleted from the context drop out
-//     on every read. Nothing in the landing deletes a show today; the filter is there so the day something
-//     does, the working set cannot hand back a row a fresh fetch would not.
+//     on every read. #4334 (A5): the one delete on the landing path is the failure path revert's, of the
+//     rows a failed source inserted and no save carried (`revertFailedSave`). Those are taken out of the
+//     working set by name (`discarded(_:)`) rather than left to the deletion filter, because once the save
+//     after the delete has run `isDeleted` reads false again and the filter would hand the row back.
 //   - EVERY FOLD is re-derived when the raw fields it came from change. A cached fold is compared against
 //     the four raw fields it was built from (title, venue, listing URL, run URLs), and folded again on any
 //     difference. So an in place write by an earlier source, or by an earlier event of the same source, is
@@ -44,9 +46,10 @@ import SwiftData
 // every row it did not write.
 //
 // It is sound only for a landing, meaning a stretch of main actor work with no `await` in it: nothing else
-// can write the store while it runs, so the landing's own inserts are the only change a fresh fetch could
-// see that the working set does not already hold. Both callers build it immediately before their landing
-// loop (`runScout`, `ScoutExtractIngest.ingest`), never before the reads that await.
+// can write the store while it runs, so the landing's own inserts, and the failure path revert's deletes of
+// those same inserts (#4334), are the only changes a fresh fetch could see that the working set does not
+// already hold. Both callers build it immediately before their landing loop (`runScout`,
+// `ScoutExtractIngest.ingest`), never before the reads that await.
 //
 // A READ THAT FAILS is not cached. The first call that needs the rows fetches them; if that throws, the
 // error goes to that caller exactly as the fetch it replaces would have thrown, and the next caller tries
@@ -129,6 +132,9 @@ final class ScoutLandingStore {
     // landing inserts is ranked after all of those, in the order inserted. Both policies order by it, so the
     // working set and the fresh read it is proved equivalent to agree, and a re-key does not move a row.
     private var rank: [ObjectIdentifier: (row: Prospect, rank: Int)] = [:]
+    // The next rank to hand out. Its own counter rather than `rank.count`, because a row the revert takes
+    // out of the working set leaves a gap that a count would fill with a rank another row already holds.
+    private var nextRank = 0
     private let saveWatch = SaveWatch()
     // #4327 step 0.7 (RC4): what this working set did, counted, so whether the stored shows are served from
     // the cache for the second source onwards is a measurement and not a reading of this file. Cumulative
@@ -189,32 +195,122 @@ final class ScoutLandingStore {
     // save of this context empties it (`didSave`, below), whoever saved, so what is left at the closing save
     // is exactly what that save would carry for the reconcile, and exactly what a failed one must put back.
     private(set) var unsavedReconcileWrites: [FeedReconcile.Writes] = []
+    // #4334: the same rows as each of those, with the values the reconcile LEFT them holding, so the revert
+    // of a later source's failed save can put an earlier source's pending reconcile back after restoring the
+    // committed values underneath it.
+    private var unsavedReconcileResults: [FeedReconcile.Writes] = []
     private let reconcileSaveWatch = SaveWatch()
 
     func noteReconcile(_ writes: FeedReconcile.Writes) {
-        if !writes.isEmpty { unsavedReconcileWrites.append(writes) }
+        guard !writes.isEmpty else { return }
+        unsavedReconcileWrites.append(writes)
+        unsavedReconcileResults.append(FeedReconcile.Writes(entries: writes.entries.map {
+            FeedReconcile.Writes.Entry(show: $0.show, missedScoutCount: $0.show.missedScoutCount,
+                                       survivedMergeAt: $0.show.survivedMergeAt,
+                                       mergeSurvivorUnseenAt: $0.show.mergeSurvivorUnseenAt)
+        }))
     }
 
     // Called after a save the landing made itself, which a test may inject and so post no `didSave`.
-    func reconcileWritesSaved() { unsavedReconcileWrites = [] }
+    func reconcileWritesSaved() { saved() }
 
-    // Puts back every reconcile write no save carried, newest first, so a retry counts each miss once.
-    func revertUnsavedReconcileWrites() {
-        for writes in unsavedReconcileWrites.reversed() { writes.revert() }
+    // Everything this landing tracks about writes no save has carried yet, emptied by a save that succeeded.
+    private func saved() {
         unsavedReconcileWrites = []
+        unsavedReconcileResults = []
+        settledSinceSave = []
+        savingWriteSet = nil
+    }
+
+    // #4334 (A5): the save every landing source makes, and how its failure is classified, injected so a test
+    // can fail one source's save and not the next (a real refusal fails every save the container makes).
+    let saveSource: (ModelContext) throws -> Void
+    let classify: (Error) -> LandingSaveFailure.Scope
+    // The pending set as the most recent save began (`willSave`), which is what a save that then failed was
+    // carrying. Emptied by a save that succeeded.
+    private var savingWriteSet: LandingRevert.WriteSet?
+    private let writeSetWatch = SaveWatch()
+    // The rows the settled slots (a source that failed, was unchanged, or was confirmed quiet) wrote since the
+    // previous save. Not part of the next source's turn, so a failure of that source's save leaves them
+    // pending for the save after it.
+    private var settledSinceSave: Set<PersistentIdentifier> = []
+
+    func noteSettled(_ row: any PersistentModel) { settledSinceSave.insert(row.persistentModelID) }
+
+    // #4334 (A5): puts back what a failed save was carrying, through `LandingRevert` (committed values read
+    // through a fresh context, pending inserts deleted, never `rollback()`), and takes the deleted inserts out
+    // of the working set.
+    //
+    // A SOURCE's save (`closing: false`) is put back as that source's turn: the pending set at the failed
+    // save minus the rows the settled slots wrote since the previous save, which stay pending; and the
+    // reconcile an EARLIER source made, still pending under it, is put back on top afterwards, so the only
+    // thing the revert removes is the failed source's own writes. A CLOSING save (`closing: true`) is put
+    // back whole, its reconcile included, because there is no later save in this landing to carry any of it.
+    //
+    // Whatever the revert could not restore is in the report's `notRestorable`; the caller stops the landing
+    // on it, by name, rather than carry on over rows it could not put back.
+    @discardableResult
+    func revertFailedSave(closing: Bool) -> LandingRevert.Report {
+        let carried = savingWriteSet ?? .pending(in: context)
+        savingWriteSet = nil
+        let set = closing ? carried : carried.excluding(settledSinceSave)
+        let earlierReconciles = closing ? [] : unsavedReconcileResults
+        let report = LandingRevert.revert(set, in: context)
+        discarded(set.inserted.compactMap { $0 as? Prospect })
+        if closing {
+            unsavedReconcileWrites = []
+            unsavedReconcileResults = []
+            settledSinceSave = []
+        } else {
+            for results in earlierReconciles { results.revert() }
+        }
+        return report
+    }
+
+    // #4334: rows the landing inserted and then deleted (the failure path revert), taken out of every table
+    // the working set keeps, so neither `rows()` nor `stored(key:)` can hand one back.
+    func discarded(_ rows: [Prospect]) {
+        guard !rows.isEmpty else { return }
+        let ids = Set(rows.map { ObjectIdentifier($0) })
+        loaded?.removeAll { ids.contains(ObjectIdentifier($0)) }
+        members = nil
+        for p in rows {
+            let id = ObjectIdentifier(p)
+            unindex(p)
+            position[id] = nil
+            folds[id] = nil
+            foldsToCheck.remove(id)
+            keysToCheck[id] = nil
+            rank[id] = nil
+        }
+        generation += 1
+        shows = nil
     }
 
     init(context: ModelContext, read: @escaping Read = ScoutService.readProspectTable,
          readKey: @escaping ReadKey = { try Prospect.stored(key: $0, in: $1) },
-         policy: Policy = .once) {
+         policy: Policy = .once,
+         saveSource: @escaping (ModelContext) throws -> Void = { try $0.save() },
+         classify: @escaping (Error) -> LandingSaveFailure.Scope = LandingSaveFailure.classify) {
         self.context = context
         self.read = read
         self.readKey = readKey
         self.policy = policy
+        self.saveSource = saveSource
+        self.classify = classify
         // #4325: for both policies, since both land. Posted only for a save that succeeded.
         reconcileSaveWatch.token = NotificationCenter.default.addObserver(
             forName: ModelContext.didSave, object: context, queue: nil) { [weak self] _ in
-            MainActor.assumeIsolated { self?.unsavedReconcileWrites = [] }
+            MainActor.assumeIsolated { self?.saved() }
+        }
+        // #4334: what each save is carrying, as it begins, for both policies, so a save that fails can be put
+        // back. Posted synchronously by `save()` on the saving thread, which for the main context is this actor.
+        writeSetWatch.token = NotificationCenter.default.addObserver(
+            forName: ModelContext.willSave, object: context, queue: nil) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                self.savingWriteSet = .pending(in: self.context)
+            }
         }
         guard policy == .once else { return }
         // A save empties the context's changed and inserted models, so what it is about to carry off is
@@ -291,7 +387,8 @@ final class ScoutLandingStore {
     }
 
     private func rankNext(_ p: Prospect) {
-        rank[ObjectIdentifier(p)] = (row: p, rank: rank.count)
+        rank[ObjectIdentifier(p)] = (row: p, rank: nextRank)
+        nextRank += 1
     }
 
     // A row this landing has just put into the context. Before the first read there is nothing to add it

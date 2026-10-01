@@ -87,6 +87,14 @@ enum ScoutExtractIngest {
                        // #4329 (A12): handed each source's captured read-phase writes as the landing applies
                        // them, so a test can prove every branch that writes was driven. nil reports nothing.
                        onApplyCaptured: ((SourceWrites) -> Void)? = nil,
+                       // #4334 (A5): each landing source's own save, the entry flush's, and how a failed save is
+                       // classified, injected so a test can fail one source's save and not the next.
+                       saveSource: @escaping (ModelContext) throws -> Void = { try $0.save() },
+                       saveEntry: (ModelContext) throws -> Void = { try $0.save() },
+                       classifySaveFailure: @escaping (Error) -> LandingSaveFailure.Scope = LandingSaveFailure.classify,
+                       // #4334: called with the run's sequence when the entry flush refuses the landing, where
+                       // the caller keeps a copy of the results to land once the edits are saved (L371, L665).
+                       onRefused: (Int) -> Void = { _ in },
                        into context: ModelContext) async -> ScoutService.Outcome {
         var outcome = ScoutService.Outcome(found: 0, inserted: 0, updated: 0, skipped: 0)
         let sequence = givenSequence ?? landings.mintSequence(
@@ -267,7 +275,35 @@ enum ScoutExtractIngest {
                 outcome.degradedReads.append(.landedRuns)
             }
         }
-        let landing = ScoutLandingStore(context: context, read: readProspectTable)
+        // #4334 (A5): a slot a stopped landing never reached, reported as such so it is not silence. A result
+        // under an id nobody queued is a report rather than a write, so it is still said.
+        func reportNotAttempted(_ slot: Slot) {
+            switch slot {
+            case .settled(let settled, nil, _):
+                outcome.merge(settled)
+            case .settled(_, let source?, _):
+                outcome.sources.append(ScoutService.SourceResult(
+                    sourceId: source.sourceId, orgName: source.orgName, state: .notAttempted,
+                    listingsURL: source.listingsURL))
+            case .pending(let pending):
+                outcome.sources.append(ScoutService.SourceResult(
+                    sourceId: pending.source.sourceId, orgName: pending.source.orgName, state: .notAttempted,
+                    listingsURL: pending.source.listingsURL))
+            }
+        }
+        // #4334 (A5): the ENTRY FLUSH, the first WRITE done holding the store (`ScoutService.flushBeforeLanding`),
+        // after #4336's refusal above, which only reads: results that already landed are refused whatever is
+        // pending, so that answer must not wait on a save, nor be said as "your edits could not be saved".
+        // A flush that cannot save refuses the landing by name before anything is applied (L667): the edits
+        // stay exactly as they were, and the caller keeps the results to land once they are saved.
+        if let refused = ScoutService.flushBeforeLanding(context, save: saveEntry) {
+            outcome.landingStop = refused
+            for slot in slots { reportNotAttempted(slot) }
+            onRefused(sequence)
+            return outcome
+        }
+        let landing = ScoutLandingStore(context: context, read: readProspectTable, saveSource: saveSource,
+                                        classify: classifySaveFailure)
         // #4330: the re-validation. A later run landed this source after this one read it, so this reading is
         // the older one and is set aside whole: nothing applied (#4329: not even its note, its failure or its
         // failure streak, which the read loop no longer writes), and the page hash not promoted, so the next
@@ -319,18 +355,27 @@ enum ScoutExtractIngest {
                 preClassified: pending.preClassified,
                 landing: landing,
                 into: context)
-            outcome.merge(applied)
 
             if applied.saveFailed {
                 // #499: everything above was classified and upserted in memory and never persisted. The
                 // hash stays UNSTAMPED and the unread flag stays set, so the next run reads this page
                 // again. Stamp it here instead and the source would fetch fine, report fine, and have
                 // silently ingested nothing since the day the save failed.
+                //
+                // #4334 (A5): and it is PUT BACK, with this source's captured writes, so nothing it wrote is
+                // left pending for a later save to carry, or to fail on again, or for an offer of the same
+                // results to apply a second time. Reported as `.saveFailed`, never `.ingested`, and its counts
+                // are not merged: none of its shows is in the store.
+                outcome.saveFailed = true
+                outcome.degradedReads.append(contentsOf: applied.degradedReads)
+                outcome.landingStop = outcome.landingStop ?? ScoutService.isolateFailedSave(
+                    of: source.orgName, scope: applied.saveFailureScope, landing: landing)
                 outcome.sources.append(ScoutService.SourceResult(
                     sourceId: source.sourceId, orgName: source.orgName,
-                    state: .ingested(found: events.count), hadBaseline: health.baseline > 0))
+                    state: .saveFailed, hadBaseline: health.baseline > 0, listingsURL: source.listingsURL))
                 return
             }
+            outcome.merge(applied)
 
             // #986: how many of the shows this run KEPT said where they are, by the SAME rule the native
             // path uses (SourcePlacement.placedCount), so the two ingest doors can never disagree on it.
@@ -372,6 +417,11 @@ enum ScoutExtractIngest {
                 droppedRowCount: rejection.unreadTotal + rejection.structuralGapCount))
         }
         for slot in slots {
+            // #4334: a landing a failed save stopped lands nothing after it (decision 3).
+            if outcome.landingStop != nil {
+                reportNotAttempted(slot)
+                continue
+            }
             switch slot {
             case .settled(let settled, let source, let writes):
                 guard let source else {
@@ -380,6 +430,8 @@ enum ScoutExtractIngest {
                 }
                 if setAsideIfSuperseded(source) { continue }
                 landCaptured(writes, on: source)
+                // #4334: not the next source's turn, so that source's failed save leaves these pending.
+                landing.noteSettled(source)
                 outcome.merge(settled)
             case .pending(let pending):
                 land(pending)
@@ -405,8 +457,9 @@ enum ScoutExtractIngest {
         // runScout, minutes before this file even exists. So a show co-listed by Carnegie AND a watched
         // HTML calendar is still never marked gone. That is the SAFE direction and no worse than before,
         // but it is not the whole rule, and somebody should know that before assuming it is.
+        // #4334: a stopped landing reconciles nothing, since not every source it was given was asked.
         let reports = outcome.allReports
-        if !reports.isEmpty {
+        if !reports.isEmpty && outcome.landingStop == nil {
             // The working set, which is the store as it now stands. A read that fails reconciles nothing,
             // which is what the empty answer this used to fall back to did.
             let allStored = (try? landing.rows()) ?? []
@@ -418,16 +471,18 @@ enum ScoutExtractIngest {
         // #4336 (A7): the record that these results landed rides the closing save, so it reaches disk with
         // the landing or not at all. Only a landing nothing failed to save is recorded: a failed save leaves
         // the results to be offered again, and a record of it would refuse them (L5). A record whose save
-        // failed is taken back out of the context, so no later save can persist it.
-        var landedRun: LandingRun?
-        if let identity, !outcome.saveFailed {
+        // failed is taken back out of the context by the closing save's revert (#4334), which deletes every
+        // pending insert, so no later save can persist it.
+        if let identity, !outcome.saveFailed, outcome.landingStop == nil {
             let run = LandingRun(runIdentity: identity.contentHash, landedAt: now)
             context.insert(run)
-            landedRun = run
         }
-        if !ScoutService.saveLanding(landing, into: context, save: saveClosing) {
+        // #4334 (A5): a landing that stopped because a source could NOT be put back makes no further save, so
+        // nothing it could not restore is saved; any other stop still saves what the sources before it left.
+        if case .notReverted? = outcome.landingStop {
             outcome.saveFailed = true
-            if let landedRun { context.delete(landedRun) }
+        } else if !ScoutService.saveLanding(landing, into: context, save: saveClosing) {
+            outcome.saveFailed = true
         }
         token.end()
 

@@ -64,6 +64,9 @@ struct ScoutWarnings: Equatable, Sendable {
     var supersededSources: [ScoutService.SourceResult] = []
     // #4336 (A7): the calendar results were refused because they had already landed, at this time.
     var alreadyLandedAt: Date? = nil
+    // #4334 (A5): why a landing stopped before landing every source, or never started, in its own sentence
+    // (`Outcome.landingStopWarning`).
+    var landingStopped: String? = nil
 
     static func from(native: ScoutService.Outcome, extract: ScoutService.Outcome?,
                      finishedEmpty: String?) -> ScoutWarnings {
@@ -125,7 +128,14 @@ struct ScoutWarnings: Equatable, Sendable {
             storeUnreadableKeys: dedupedKeys,
             notLandedYet: native.notLandedYet ?? extract?.notLandedYet,
             supersededSources: superseded,
-            alreadyLandedAt: native.alreadyLandedAt ?? extract?.alreadyLandedAt)
+            alreadyLandedAt: native.alreadyLandedAt ?? extract?.alreadyLandedAt,
+            landingStopped: landingStopped(native, extract))
+    }
+
+    // Both halves can stop, the sweep's landing and the ingest's, and each says its own.
+    private static func landingStopped(_ native: ScoutService.Outcome, _ extract: ScoutService.Outcome?) -> String? {
+        let said = [native.landingStopWarning, extract?.landingStopWarning].compactMap { $0 }
+        return said.isEmpty ? nil : said.joined(separator: "\n\n")
     }
 
     // #1190: deferred venues make a run NOT clean even when nothing failed. A run that checked 20 of 38
@@ -139,6 +149,8 @@ struct ScoutWarnings: Equatable, Sendable {
     // hold two messages.
     enum Section: Equatable, Sendable {
         case saveFailed
+        // #4334: app level, beside the save failure it usually explains.
+        case landingStopped(String)
         // #3074: the keys ride WITH the count rather than in a section of their own, because they are
         // the detail of one fact and a second section would ask Dan to join two boxes up himself.
         case storeUnreadable(Int, [String])
@@ -171,6 +183,8 @@ struct ScoutWarnings: Equatable, Sendable {
             return count == 1
                 ? "A show was left out this run because the local store stopped answering. Run the scout again."
                 : "\(count) shows were left out this run because the local store stopped answering. Run the scout again."
+        case .landingStopped:
+            return "The scout stopped before landing every calendar. The rest will be read or offered again."
         case .notLandedYet:
             return "The calendar results have not landed yet. Overture kept them and will offer them again."
         case .extractLaunchFailure:
@@ -205,6 +219,7 @@ struct ScoutWarnings: Equatable, Sendable {
     var sections: [Section] {
         var out: [Section] = []
         if saveFailed { out.append(.saveFailed) }
+        if let landingStopped { out.append(.landingStopped(landingStopped)) }
         if storeUnreadableCount > 0 {
             out.append(.storeUnreadable(storeUnreadableCount, storeUnreadableKeys))
         }

@@ -27,9 +27,9 @@ import SwiftData
 // night and the arrival brings the EARLIER one, so the joined row lands on a new opening night and its key
 // genuinely moves (asserted, not assumed: an unmoved key would make the whole probe vacuous).
 //
-// The DELETE half of the plan's question (a tick holding a pending insert that A5's revert deletes) is not
-// reachable on today's main: nothing a landing does today deletes a row it inserted, and A5 (#4334) is what
-// adds that. It is added here once A5 lands.
+// The DELETE half of the plan's question (a tick holding a pending insert that A5's revert deletes) became
+// reachable with A5 (#4334), the first thing on the landing path that deletes a row it inserted. It is the
+// last test below: a landing at a hand back whose save fails and is put back.
 private let venue = "The Green Room 42"
 private let token = "zGbL9oImamvWwHF3ti5i"
 private let host = "https://thegreenroom42.venuetix.com/showdetails/"
@@ -251,5 +251,66 @@ struct ReconcileTickLandingRaceTests {
 
         #expect(run.summary.newBookings.isEmpty,
                 "a show booked before the tick began was named a new booking: \(run.summary.newBookings)")
+    }
+
+    // MARK: the delete half, reachable since #4334 (A5)
+
+    // A landing at hand back 1 inserts a show and its save fails, so A5's revert DELETES that pending insert.
+    // Named wrong outcome (L681): a later pass, or the closing read, holding or naming the deleted row, or the
+    // tick's own writes carrying it into the store. Measured: neither, because the tick's snapshot was taken
+    // before the row existed and its closing read is fresh, so the row is gone from everything it reads.
+    @Test func aLandingPutBackMidTickLeavesTheTickNoDeletedRowToHoldOrSave() async throws {
+        struct SaveRefused: Error {}
+        let container = try container()
+        let ctx = ModelContext(container)
+        let row = storedRow(in: ctx, booked: false)
+        try ctx.save()
+        let newTitle = "Lumen Quartet Debut"
+        var events: [Event] = []
+        var insertedAtFailure: [String] = []
+        var stop: LandingStop?
+
+        #expect(liveServicesUnreachable(), "a pass this tick runs for real could reach a live service or file")
+        let summary = await ReconcileScheduler(context: ctx, replyRunAlive: { _ in false }).runSafeReconcilesOnce(
+            now: tickNow, defaults: ScratchDefaults.make("4337-delete"),
+            repairThreading: { _, _ in nil },
+            sweepProposals: { _, _, _ in .notConnected },
+            readClosing: { context, at, alive in
+                events.append(.closingRead)
+                return await DueReading.read(from: context, now: at, replyRunAlive: alive)
+            },
+            recordTimeline: { _ in },
+            afterHandBack: { n in
+                events.append(.handBack(n))
+                guard n == 1 else { return }
+                let landing = ScoutLandingStore(context: ctx, saveSource: { context in
+                    insertedAtFailure = context.insertedModelsArray.compactMap { ($0 as? Prospect)?.groupName }
+                    throw SaveRefused()
+                })
+                let outcome = ScoutService.apply(
+                    events: [ExtractedEvent(title: newTitle, presenter: venue, venue: venue,
+                                            performanceDate: arrivingNight, sourceUrl: host + "lumen")],
+                    clients: [], history: [], blocked: .empty, today: landingDay,
+                    sourceIds: ["thegreenroom42-venuetix-com"], landing: landing, into: ctx)
+                if outcome.saveFailed {
+                    stop = ScoutService.isolateFailedSave(of: "The Green Room 42", scope: outcome.saveFailureScope,
+                                                          landing: landing)
+                }
+            })
+
+        // The control (L248): the landing really inserted the show, really failed, and ran mid tick.
+        #expect(insertedAtFailure.contains(newTitle), Comment(rawValue:
+            "the landing never inserted the show, so its deletion proves nothing: \(insertedAtFailure)"))
+        #expect(stop == .storeRefusedASave(source: "The Green Room 42"))
+        let landedAt = events.firstIndex(of: .handBack(1))
+        #expect(landedAt != nil && events[(landedAt ?? 0)...].contains(.closingRead),
+                "the landing did not run between the tick's read and its closing read")
+        #expect(summary.newBookings.isEmpty)
+        try ctx.save()
+        let fresh = try ModelContext(container).fetch(FetchDescriptor<Prospect>())
+        #expect(fresh.map(\.naturalKey) == [row.naturalKey], Comment(rawValue:
+            "the tick left the store holding \(fresh.map(\.groupName)), not just the row it read"))
+        #expect(try ctx.fetch(FetchDescriptor<Prospect>()).allSatisfy { $0.groupName != newTitle },
+                "the tick's context still holds the row the revert deleted")
     }
 }

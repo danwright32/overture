@@ -259,9 +259,39 @@ enum ScoutService {
         // #4336 (A7): these results were refused because they had already landed, at this time (the FIRST
         // landing's). Nothing from them was applied. Its own outcome, never a landing that found nothing.
         var alreadyLandedAt: Date? = nil
+        // #4334 (A5): why this landing stopped before landing every source, or never started (`LandingStop`).
+        // nil for a landing that reached every source it was given, including one where a source level
+        // failure put one source back and the rest landed.
+        var landingStop: LandingStop? = nil
+        // #4334: how `apply`'s own save failed, classified once (`LandingSaveFailure`). Read by the landing
+        // that called it, to decide whether to carry on; nil when the save succeeded or nothing saved.
+        var saveFailureScope: LandingSaveFailure.Scope? = nil
 
         // #4330: the sources this run set aside because a later run had already landed them.
         var supersededSources: [SourceResult] { sources.filter { $0.state == .superseded } }
+
+        // #4334: the sources a stopped landing never reached.
+        var notAttemptedSources: [SourceResult] { sources.filter { $0.state == .notAttempted } }
+
+        // #4334: the stop, in Dan's words, with what it left behind. nil when nothing stopped, and for a store
+        // that refused a save, whose sentence is `ScoutWarningCopy.saveFailed` itself, unless sources after it
+        // went unlanded, which is then said.
+        var landingStopWarning: String? {
+            var parts: [String] = []
+            switch landingStop {
+            case .recentEditsUnsaved(let rows)?: parts.append(ScoutWarningCopy.recentEditsUnsaved(rows))
+            case .notReverted(let source, _)?: parts.append(ScoutWarningCopy.notReverted(source))
+            case .storeRefusedASave?, nil: break
+            }
+            let unreached = notAttemptedSources.count
+            if unreached > 0, landingStop != nil, !isRecentEditsRefusal { parts.append(ScoutWarningCopy.notAttempted(unreached)) }
+            return parts.isEmpty ? nil : parts.joined(separator: " ")
+        }
+
+        private var isRecentEditsRefusal: Bool {
+            if case .recentEditsUnsaved? = landingStop { return true }
+            return false
+        }
 
         // #888 part B: what THIS source swept, carried home so the caller can reconcile every source it
         // landed in ONE pass. Nil when this apply had no feed to report on (the lead path), which is
@@ -291,7 +321,8 @@ enum ScoutService {
             // #4330 (L94): `notLandedYet` rides with both early returns rather than being hidden behind them:
             // "kept, will be offered again" is true of the run whatever else went wrong with it.
             if saveFailed {
-                return [ScoutWarningCopy.saveFailed, notLandedYet].compactMap { $0 }.joined(separator: "\n\n")
+                return [ScoutWarningCopy.saveFailed, landingStopWarning, notLandedYet].compactMap { $0 }
+                    .joined(separator: "\n\n")
             }
             // The run found new listings and could not read them. It outranks a per-source failure
             // because it is the app that is broken, not a calendar, and because it has a one-step fix.
@@ -304,7 +335,7 @@ enum ScoutService {
             // queued) is shown alongside, not masked by, the failures, because both can happen in one run.
             // #3071: alongside the two above rather than instead of either, because all three can
             // happen in one run and each names a different thing that went wrong.
-            let parts = [notLandedYet, failureWarning, unqueuedWarning, degradedReadWarning,
+            let parts = [landingStopWarning, notLandedYet, failureWarning, unqueuedWarning, degradedReadWarning,
                          supersededWarning].compactMap { $0 }
             if !parts.isEmpty { return parts.joined(separator: "\n\n") }
             if !silentlyEmptySources.isEmpty {
@@ -378,6 +409,8 @@ enum ScoutService {
             titleRenames.append(contentsOf: other.titleRenames)
             notLandedYet = notLandedYet ?? other.notLandedYet
             alreadyLandedAt = alreadyLandedAt ?? other.alreadyLandedAt
+            // #4334: the first stop wins; nothing after it was attempted, so there is no second.
+            landingStop = landingStop ?? other.landingStop
             // #888 part B: reports ACCUMULATE across a merge rather than the last one winning. That is
             // the whole point: a caller that landed six sources must be able to hand all six to one
             // reconcile, or "every owner was asked" can never be true of a co-listed show.
@@ -431,6 +464,14 @@ enum ScoutService {
             // failure (the later run's reading is in the store) and not `.unchanged` (the page may well
             // have changed): its own case, so the report says what happened.
             case superseded
+            // #4334 (A5): this source's shows were applied and its save failed, so they were PUT BACK
+            // (`ScoutLandingStore.revertFailedSave`): nothing it wrote is in the store or left pending, its
+            // page hash is not promoted and its unread flag stays set, so the next scout reads it again.
+            // Never `.ingested`, which is what this path used to say (#499).
+            case saveFailed
+            // #4334: a landing stopped before this source (`Outcome.landingStop`), so nothing of this run's
+            // reading of it was applied. Its page keeps its unread state, so the next scout reads it again.
+            case notAttempted
 
             var isFailure: Bool { if case .failed = self { return true }; return false }
 
@@ -546,7 +587,13 @@ enum ScoutService {
                          // #4329: handed each source's captured read-phase writes as the landing applies them,
                          // so a test can prove every branch that writes was driven. nil, which every shipping
                          // caller passes, reports nothing.
-                         onApplyCaptured: ((SourceWrites) -> Void)? = nil)
+                         onApplyCaptured: ((SourceWrites) -> Void)? = nil,
+                         // #4334 (A5): each landing source's own save, the entry flush's, and how a failed save
+                         // is classified, injected so a test can fail one source's save and not the next (a real
+                         // refusal fails every save the container makes).
+                         saveSource: @escaping (ModelContext) throws -> Void = { try $0.save() },
+                         saveEntry: (ModelContext) throws -> Void = { try $0.save() },
+                         classifySaveFailure: @escaping (Error) -> LandingSaveFailure.Scope = LandingSaveFailure.classify)
                          async throws -> Outcome {
         let loaded = DownbeatBridge.loadWithHealth(now: now)
         // History the matcher sees = any one-time legacy import + Overture's own activity,
@@ -734,8 +781,40 @@ enum ScoutService {
                                                     state: .deferred, listingsURL: source.listingsURL))
             }
         }
-        let landing = ScoutLandingStore(context: context, read: readProspectTable)
+        // #4334 (A5): a slot a stopped landing never reached, reported as such so it is not silence.
+        var notAttempted: Set<String> = []
+        func reportNotAttempted(_ slot: ReportSlot) {
+            switch slot {
+            case .checked(_, let source, _):
+                notAttempted.insert(source.sourceId)
+                outcome.sources.append(SourceResult(sourceId: source.sourceId, orgName: source.orgName,
+                                                    state: .notAttempted, listingsURL: source.listingsURL))
+            case .read(let i):
+                let native = reads[i]
+                notAttempted.insert(native.sourceId)
+                outcome.sources.append(SourceResult(sourceId: native.sourceId, orgName: native.orgName,
+                                                    state: .notAttempted, listingsURL: native.source?.listingsURL))
+            }
+        }
+        // #4334 (A5): the ENTRY FLUSH, the first thing done holding the store. A failed source's save is put
+        // back to its COMMITTED values, which are the values from just before this landing only if nothing it
+        // can touch was pending when the landing began, so anything pending is saved first. A flush that
+        // cannot save REFUSES the landing by name before anything is applied (L667): the edits stay exactly
+        // as they were for Dan's own save path, and every page keeps its unread state for the next scout.
+        if let refused = flushBeforeLanding(context, save: saveEntry) {
+            outcome.landingStop = refused
+            for slot in reports { reportNotAttempted(slot) }
+            outcome.clientListWarning = DownbeatBridge.warningText(for: loaded.health)
+            return outcome
+        }
+        let landing = ScoutLandingStore(context: context, read: readProspectTable, saveSource: saveSource,
+                                        classify: classifySaveFailure)
         for slot in reports {
+            // #4334: a landing a failed save stopped lands nothing after it (decision 3).
+            if outcome.landingStop != nil {
+                reportNotAttempted(slot)
+                continue
+            }
             switch slot {
             case .checked(let result, let source, let writes):
                 if supersededSinceRead(source) {
@@ -743,6 +822,9 @@ enum ScoutService {
                     continue
                 }
                 landCaptured(writes, on: source)
+                // #4334: a settled source's writes are not the next source's turn, so that source's failed
+                // save leaves them pending for the save after it.
+                landing.noteSettled(source)
                 outcome.sources.append(result)
             case .read(let i):
                 let native = reads[i]
@@ -750,7 +832,11 @@ enum ScoutService {
                     setAsideAndReport(source)
                     continue
                 }
-                if let source = native.source { landCaptured(native.writes, on: source) }
+                if let source = native.source {
+                    landCaptured(native.writes, on: source)
+                    // A read that failed lands nothing, so its writes are settled ones, like a checked slot's.
+                    if case .failed = native.read { landing.noteSettled(source) }
+                }
                 let landed = landNative(native, clients: loaded.clients, history: history, blocked: blocked,
                                         now: now, landing: landing, into: context)
                 if let hash = native.markReadAs, let source = native.source,
@@ -782,11 +868,19 @@ enum ScoutService {
         // being read. Everything the tail WRITES (the handoff, the fairness clock, the booking reconcile, the
         // blocked town retirement, the completed scout timestamp) stays stopped, since it would build on
         // writes the store never took.
-        if !saveLanding(landing, into: context, save: saveClosing) {
+        //
+        // #4334 (A5): a landing a failed source save STOPPED takes the same way out, after saving what the
+        // sources before the failure left pending (a store that refused one save will usually refuse this
+        // one too, and then it is put back like any failed closing save). A landing that stopped because a
+        // source could NOT be put back makes no further save at all, so nothing it could not restore is saved.
+        let stop = outcome.landingStop
+        let notReverted: Bool = { if case .notReverted? = stop { return true }; return false }()
+        if notReverted || !saveLanding(landing, into: context, save: saveClosing) || stop != nil {
             outcome.saveFailed = true
             let neverHandedOver = Set(toRead.map { $0.source.sourceId })
             outcome.sources.removeAll { $0.state == .queuedForReading && neverHandedOver.contains($0.sourceId) }
-            reportWaiting(SourceSchedule.waitingToRead(deferred: plan.deferred) + toRead.map(\.source))
+            reportWaiting(SourceSchedule.waitingToRead(deferred: plan.deferred)
+                          + toRead.map(\.source).filter { !notAttempted.contains($0.sourceId) })
             outcome.clientListWarning = DownbeatBridge.warningText(for: loaded.health)
             return outcome      // save one failed: the landing stops here
         }
@@ -883,11 +977,13 @@ enum ScoutService {
         // #4330 / #4329: SAVE TWO, the tail's own, so the fairness clock, the booking reconcile (#41) and the
         // retirement are on disk before its token is released, rather than left to autosave. Its own save,
         // so a failure here never touches save one, which is already in the store. #499: a failure is
-        // recorded as `saveFailed`; putting the tail's writes back first is A5's revert, not built yet.
+        // recorded as `saveFailed`, and #4334 (A5): the tail's writes are put back first, so the next scout
+        // does them once rather than on top of a pending copy.
         if context.hasChanges {
             do {
                 try saveClosing(context)
             } catch {
+                landing.revertFailedSave(closing: true)
                 outcome.saveFailed = true
             }
         }
@@ -1091,6 +1187,21 @@ enum ScoutService {
             today: QueueModel.easternToday(now),
             sourceIds: [native.sourceId], preClassified: listed.preClassified, landing: landing,
             into: context)
+
+        // #4334 (A5): the #499 rule, which this path broke. A source whose save failed is PUT BACK, with the
+        // writes its read captured, and NOTHING that follows a save runs for it: no `recordCheck`, and it is
+        // reported `.saveFailed`, never `.ingested`, so `runScout` neither marks its page read nor clears its
+        // unread flag. Its counts are not carried: none of its shows is in the store.
+        if outcome.saveFailed {
+            var failed = Outcome(found: 0, inserted: 0, updated: 0, skipped: 0)
+            failed.saveFailed = true
+            failed.degradedReads = outcome.degradedReads
+            failed.landingStop = isolateFailedSave(of: native.orgName, scope: outcome.saveFailureScope,
+                                                   landing: landing)
+            failed.sources = [SourceResult(sourceId: native.sourceId, orgName: native.orgName, state: .saveFailed,
+                                           hadBaseline: health.baseline > 0, listingsURL: source?.listingsURL)]
+            return failed
+        }
 
         // Fold this run into the source's own feed-health state: a full feed re-baselines immediately,
         // and a feed that stays degraded at a stable smaller level across selfHealThreshold scouts
@@ -1419,10 +1530,10 @@ enum ScoutService {
     // its own (#4327 step 0.5).
     //
     // A failed save is the per source save's failure (`Outcome.saveFailed`, #499), never `try?`. And it
-    // PUTS BACK the reconcile writes it could not carry: `missedScoutCount += 1` is not idempotent, so a miss
-    // left pending would be counted again by the retry and both would land on the next save. Only the
-    // reconcile's own writes are put back; the upserts stay pending exactly as a failed per source save
-    // leaves them. Returns whether the landing's writes are in the store.
+    // PUTS BACK everything it could not carry (#4334, A5: the failure path revert, over the whole closing
+    // write set): `missedScoutCount += 1` is not idempotent, so a miss left pending would be counted again by
+    // the retry and both would land on the next save, and the same is true of every source's bookkeeping the
+    // closing save was carrying. Returns whether the landing's writes are in the store.
     static func saveLanding(_ landing: ScoutLandingStore, into context: ModelContext,
                             save: (ModelContext) throws -> Void = { try $0.save() }) -> Bool {
         guard context.hasChanges else { return true }
@@ -1431,9 +1542,53 @@ enum ScoutService {
             landing.reconcileWritesSaved()
             return true
         } catch {
-            landing.revertUnsavedReconcileWrites()
+            landing.revertFailedSave(closing: true)
             return false
         }
+    }
+
+    // #4334 (A5): one source's save failed. ONE implementation for both landing paths. The source is put back
+    // (`ScoutLandingStore.revertFailedSave`), and the answer is whether the landing may go on: nil when the
+    // failure was confined to this source's rows (`LandingSaveFailure`, source level), a stop otherwise, and
+    // a stop BY NAME when what the source wrote could not all be put back.
+    static func isolateFailedSave(of orgName: String, scope: LandingSaveFailure.Scope?,
+                                  landing: ScoutLandingStore) -> LandingStop? {
+        let report = landing.revertFailedSave(closing: false)
+        if !report.notRestorable.isEmpty { return .notReverted(source: orgName, why: report.notRestorable) }
+        return scope == .source ? nil : .storeRefusedASave(source: orgName)
+    }
+
+    // #4334 (A5): the ENTRY FLUSH, shared by both landing paths. Anything pending in the main context when a
+    // landing takes the store is saved first, so the failure path revert, which restores COMMITTED values,
+    // can never put back an edit made before the landing. The whole context, not a chosen set of types: a
+    // type left out is a type whose pending edit a revert could silently discard, and saving what is pending
+    // is what autosave would do anyway. Cheap when nothing is pending, which after #4329 is the normal case.
+    // A flush that cannot save refuses the landing, naming the rows it was carrying, and leaves them exactly
+    // as they were.
+    static func flushBeforeLanding(_ context: ModelContext, save: (ModelContext) throws -> Void) -> LandingStop? {
+        guard context.hasChanges else { return nil }
+        let rows = pendingRowNames(in: context)
+        do {
+            try save(context)
+            return nil
+        } catch {
+            return .recentEditsUnsaved(rows: rows)
+        }
+    }
+
+    // What is waiting to be saved, in the words Dan knows each row by: a show by its title, a calendar by its
+    // organisation, a contact by their address, and anything else as one more record, never a type name.
+    static func pendingRowNames(in context: ModelContext) -> [String] {
+        let models = context.changedModelsArray + context.insertedModelsArray + context.deletedModelsArray
+        let names = models.map { model -> String in
+            switch model {
+            case let p as Prospect: return p.groupName
+            case let w as WatchedSource: return w.orgName
+            case let r as Recipient: return r.email ?? r.name ?? "a contact"
+            default: return "another record"
+            }
+        }
+        return Array(Set(names)).sorted()
     }
 
     // Application of already-extracted events with injected data, so the full
@@ -2022,7 +2177,8 @@ enum ScoutService {
             .sorted { ($0.showCount, $1.orgName) > ($1.showCount, $0.orgName) }
 
         do {
-            try context.save()
+            // #4334 (A5): through the landing, so a test can fail one source's save and not the next.
+            try landing.saveSource(context)
         } catch {
             // #499: everything above was classified/upserted in memory but never persisted.
             //
@@ -2039,6 +2195,8 @@ enum ScoutService {
             // #3071: carried even onto a run that failed to save. The brand corpus was read (or not)
             // before any of this, and a save failure does not make that read any more readable.
             outcome.degradedReads = degradedReads
+            // #4334: classified once, here where the error is, for the landing that decides what comes next.
+            outcome.saveFailureScope = landing.classify(error)
             return outcome
         }
         // #4147: AFTER the save and never before, so the ledger records what the store actually holds.
