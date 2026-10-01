@@ -37,7 +37,7 @@ struct ListingLinkLabelLiveStoreTests {
 
     private func openContainer(at url: URL) throws -> ModelContainer {
         let schema = Schema([Prospect.self, Recipient.self, WatchedSource.self])
-        return try ModelContainer(for: schema,
+        return try FileStores.container(for: schema,
                                   configurations: [ModelConfiguration(schema: schema,
                                                                       url: url, cloudKitDatabase: .none)])
     }
@@ -60,7 +60,7 @@ struct ListingLinkLabelLiveStoreTests {
         let fm = FileManager.default
         let scratch = fm.temporaryDirectory
             .appendingPathComponent("overture-1825-\(UUID().uuidString)", isDirectory: true)
-        defer { try? fm.removeItem(at: scratch) }
+        defer { FileStores.remove(scratch) }
         let storeCopy = try copyLiveStore(to: scratch)
 
         let ctx = ModelContext(try openContainer(at: storeCopy))

@@ -116,13 +116,13 @@ struct CatchAllFitReasonRetirementTests {
         let tmpDir = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("fitreason-dryrun-\(UUID().uuidString)")
         try fm.createDirectory(at: tmpDir, withIntermediateDirectories: true)
-        defer { try? fm.removeItem(at: tmpDir) }
+        defer { FileStores.remove(tmpDir) }
 
         // #1672: through the ONE shared clone, which takes the copy via SQLite's online backup
         // rather than racing three file copies against a live writer. See LiveStoreClone.
         guard let copy = try LiveStoreClone.makeClone(in: tmpDir) else { return }
 
-        let container = try ModelContainer(for: AppSchema.schema,
+        let container = try FileStores.container(for: AppSchema.schema,
                                            configurations: [ModelConfiguration(url: copy)])
         let ctx = ModelContext(container)
         let before = try ctx.fetch(FetchDescriptor<Prospect>())

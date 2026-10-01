@@ -20,7 +20,7 @@ struct WeeklyDayOffMigrationDryRunTests {
         let tmpDir = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("weekly-day-off-dryrun-\(UUID().uuidString)")
         try fm.createDirectory(at: tmpDir, withIntermediateDirectories: true)
-        defer { try? fm.removeItem(at: tmpDir) }
+        defer { FileStores.remove(tmpDir) }
 
         let start = try MigrationRehearsal.begin("weekly days off", liveStore: releaseStoreURL, into: tmpDir)
         guard case let .rehearse(copy) = start else {
@@ -37,7 +37,7 @@ struct WeeklyDayOffMigrationDryRunTests {
             let oldModels = AppSchema.models.filter {
                 ObjectIdentifier($0) != ObjectIdentifier(WeeklyDayOff.self)
             }
-            let ctx = ModelContext(try ModelContainer(for: Schema(oldModels),
+            let ctx = ModelContext(try FileStores.container(for: Schema(oldModels),
                                                       configurations: [ModelConfiguration(url: copy)]))
             prospects = try ctx.fetch(FetchDescriptor<Prospect>()).count
             daysOff = try ctx.fetch(FetchDescriptor<DayOff>()).count
@@ -45,7 +45,7 @@ struct WeeklyDayOffMigrationDryRunTests {
         }
 
         // Migrate: the same clone under the NEW schema.
-        let ctx = ModelContext(try ModelContainer(for: AppSchema.schema,
+        let ctx = ModelContext(try FileStores.container(for: AppSchema.schema,
                                                   configurations: [ModelConfiguration(url: copy)]))
         #expect(try ctx.fetch(FetchDescriptor<Prospect>()).count == prospects)
         // The two stores of Dan's own calendar decisions, checked by name rather than left to the prospect

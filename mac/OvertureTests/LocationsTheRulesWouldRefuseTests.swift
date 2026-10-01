@@ -40,7 +40,7 @@ struct LocationsTheRulesWouldRefuseTests {
             let fm = FileManager.default
             let dir = fm.temporaryDirectory.appendingPathComponent("location-repair-\(UUID().uuidString)",
                                                                    isDirectory: true)
-            defer { try? fm.removeItem(at: dir) }
+            defer { FileStores.remove(dir) }
             try fm.createDirectory(at: dir, withIntermediateDirectories: true)
             // A nil clone AFTER `liveStoreExists` is a failed BACKUP, not a machine without a store, and
             // the two must not look alike: silently returning here would let a broken copy read as a
@@ -51,7 +51,7 @@ struct LocationsTheRulesWouldRefuseTests {
                 return
             }
             let schema = Schema([Prospect.self, Recipient.self])
-            let context = ModelContext(try ModelContainer(
+            let context = ModelContext(try FileStores.container(
                 for: schema,
                 configurations: [ModelConfiguration(schema: schema, url: clone, cloudKitDatabase: .none)]))
             let shows = try context.fetch(FetchDescriptor<Prospect>())

@@ -68,12 +68,12 @@ struct SeedTableCensusLiveStoreTests {
             throw LiveStoreClone.Refusal.backupFailed("no live store on this machine")
         }
         let schema = Schema([Prospect.self, Recipient.self, WatchedSource.self])
-        let context = ModelContext(try ModelContainer(
+        let context = ModelContext(try FileStores.container(
             for: schema,
             configurations: [ModelConfiguration(schema: schema, url: clone, cloudKitDatabase: .none)]))
         let store = LiveStore(prospects: try context.fetch(FetchDescriptor<Prospect>()),
                               sources: try context.fetch(FetchDescriptor<WatchedSource>()))
-        return (store, { try? fm.removeItem(at: scratch) })
+        return (store, { FileStores.remove(scratch) })
     }
 
     // MARK: - The seed table

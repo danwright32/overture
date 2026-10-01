@@ -42,7 +42,7 @@ final class FailurePathRevertProbeTests {
         /// save it attempts fails.
         @MainActor func openRefusing() throws -> ModelContext {
             for suffix in ["", "-wal", "-shm"] { _ = chflags(url.path + suffix, UInt32(UF_IMMUTABLE)) }
-            let c = try ModelContainer(for: AppSchema.schema,
+            let c = try FileStores.container(for: AppSchema.schema,
                                        configurations: [ModelConfiguration(schema: AppSchema.schema, url: url)])
             container = c
             c.mainContext.autosaveEnabled = false
@@ -73,7 +73,7 @@ final class FailurePathRevertProbeTests {
         let dir = try sandboxes.make(named: "revert-\(name)")
         let url = dir.appendingPathComponent("Overture.store")
         do {
-            let c = try ModelContainer(for: AppSchema.schema,
+            let c = try FileStores.container(for: AppSchema.schema,
                                        configurations: [ModelConfiguration(schema: AppSchema.schema, url: url)])
             let ctx = ModelContext(c)
             let source = WatchedSource(sourceId: "src-a", orgName: "Org A", listingsURL: "https://src-a.example/",
@@ -94,7 +94,7 @@ final class FailurePathRevertProbeTests {
             try flushed(ctx)
             try ctx.save()
         }
-        let committed = try Self.snapshot(ModelContext(try ModelContainer(
+        let committed = try Self.snapshot(ModelContext(try FileStores.container(
             for: AppSchema.schema, configurations: [ModelConfiguration(schema: AppSchema.schema, url: url)])))
         return Seeded(store: RefusingStore(url: url), committed: committed)
     }

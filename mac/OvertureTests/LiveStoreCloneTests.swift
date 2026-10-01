@@ -26,7 +26,7 @@ struct LiveStoreCloneTests {
     @Test func nolivestoreMeansNothingToClone() throws {
         guard LiveStoreClone.liveStoreURL == nil else { return }
         let dir = try scratchDir()
-        defer { try? FileManager.default.removeItem(at: dir) }
+        defer { FileStores.remove(dir) }
         #expect(try LiveStoreClone.makeClone(in: dir) == nil)
     }
 
@@ -36,13 +36,13 @@ struct LiveStoreCloneTests {
     @Test func thecloneIsAReadableCopyAndNeverTheLiveFile() throws {
         guard let live = LiveStoreClone.liveStoreURL else { return }
         let dir = try scratchDir()
-        defer { try? FileManager.default.removeItem(at: dir) }
+        defer { FileStores.remove(dir) }
 
         let clone = try #require(try LiveStoreClone.makeClone(in: dir))
         #expect(clone.path != live.path)
         #expect(clone.path.hasPrefix(dir.path), "the clone must live in the caller's own directory")
 
-        let container = try ModelContainer(for: AppSchema.schema,
+        let container = try FileStores.container(for: AppSchema.schema,
                                            configurations: [ModelConfiguration(url: clone)])
         let count = try ModelContext(container).fetch(FetchDescriptor<Prospect>()).count
         #expect(count > 0, "a clone of the live store with no shows in it is not a clone worth rehearsing against")
@@ -58,7 +58,7 @@ struct LiveStoreCloneTests {
     @Test func thecloneOpensReadOnlyOnItsOwn() throws {
         guard LiveStoreClone.liveStoreURL != nil else { return }
         let dir = try scratchDir()
-        defer { try? FileManager.default.removeItem(at: dir) }
+        defer { FileStores.remove(dir) }
 
         let clone = try #require(try LiveStoreClone.makeClone(in: dir))
         // #2930: the census names its own refusal now, so a clone that cannot be read read-only reports
@@ -282,7 +282,7 @@ struct ContendedLiveStoreCloneTests {
         let root = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("clone-contention-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: root) }
+        defer { FileStores.remove(root) }
 
         let sourceDir = root.appendingPathComponent("source", isDirectory: true)
         try FileManager.default.createDirectory(at: sourceDir, withIntermediateDirectories: true)

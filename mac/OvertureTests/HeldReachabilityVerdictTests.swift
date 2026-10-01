@@ -193,10 +193,10 @@ struct HeldReachabilityVerdictTests {
         let tmpDir = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("held-verdict-\(UUID().uuidString)")
         try fm.createDirectory(at: tmpDir, withIntermediateDirectories: true)
-        defer { try? fm.removeItem(at: tmpDir) }
+        defer { FileStores.remove(tmpDir) }
         guard let copy = try LiveStoreClone.makeClone(in: tmpDir) else { return }
 
-        let container = try ModelContainer(for: AppSchema.schema,
+        let container = try FileStores.container(for: AppSchema.schema,
                                            configurations: [ModelConfiguration(url: copy)])
         let ctx = ModelContext(container)
         let prospects = try ctx.fetch(FetchDescriptor<Prospect>())

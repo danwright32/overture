@@ -99,7 +99,7 @@ struct SourcesSheetCostTests {
         }
         let schema = Schema([Prospect.self, Recipient.self, WatchedSource.self,
                              ExcludedTown.self, AllowedSeedTown.self, DismissedCoverageClient.self])
-        let ctx = ModelContext(try ModelContainer(
+        let ctx = ModelContext(try FileStores.container(
             for: schema,
             configurations: [ModelConfiguration(schema: schema, url: clone, cloudKitDatabase: .none)]))
         let prospects = try ctx.fetch(FetchDescriptor<Prospect>())
@@ -177,7 +177,7 @@ struct SourcesSheetCostTests {
             let dir = fm.temporaryDirectory
                 .appendingPathComponent("sources-sheet-cost-\(UUID().uuidString)", isDirectory: true)
             try fm.createDirectory(at: dir, withIntermediateDirectories: true)
-            defer { try? fm.removeItem(at: dir) }
+            defer { FileStores.remove(dir) }
 
             let now = Date()
             let l = try live(in: dir, now: now)

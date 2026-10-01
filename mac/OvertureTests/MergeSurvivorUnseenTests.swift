@@ -313,13 +313,13 @@ struct MergeSurvivorLiveStoreTests {
         let fm = FileManager.default
         let dir = fm.temporaryDirectory.appendingPathComponent("merge-marks-\(UUID().uuidString)",
                                                                isDirectory: true)
-        defer { try? fm.removeItem(at: dir) }
+        defer { FileStores.remove(dir) }
         try fm.createDirectory(at: dir, withIntermediateDirectories: true)
         guard let url = try LiveStoreClone.makeClone(in: dir) else {
             throw LiveStoreClone.Refusal.backupFailed("no live store on this machine")
         }
         let schema = Schema([Prospect.self, Recipient.self])
-        let context = ModelContext(try ModelContainer(
+        let context = ModelContext(try FileStores.container(
             for: schema,
             configurations: [ModelConfiguration(schema: schema, url: url, cloudKitDatabase: .none)]))
 

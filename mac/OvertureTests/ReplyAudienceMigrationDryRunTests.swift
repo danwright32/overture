@@ -31,7 +31,7 @@ struct ReplyAudienceMigrationDryRunTests {
         let tmpDir = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("reply-audience-dryrun-\(UUID().uuidString)")
         try fm.createDirectory(at: tmpDir, withIntermediateDirectories: true)
-        defer { try? fm.removeItem(at: tmpDir) }
+        defer { FileStores.remove(tmpDir) }
 
         // #1672: through the ONE shared clone, which takes the copy via SQLite's online backup rather
         // than racing three file copies against a live writer. See LiveStoreClone.
@@ -60,7 +60,7 @@ struct ReplyAudienceMigrationDryRunTests {
             StoreColumnCensus.nonNullRows(table: $0.table, column: $0.column, inSQLiteFileAt: copy.path)
         }
 
-        let container = try ModelContainer(for: AppSchema.schema,
+        let container = try FileStores.container(for: AppSchema.schema,
                                            configurations: [ModelConfiguration(url: copy)])
         let ctx = ModelContext(container)
         let prospects = try ctx.fetch(FetchDescriptor<Prospect>())
@@ -124,7 +124,7 @@ struct ReplyAudienceMigrationDryRunTests {
         }
 
         // Opening the ALREADY-migrated clone a second time must find exactly the same rows.
-        let reopened = ModelContext(try ModelContainer(for: AppSchema.schema,
+        let reopened = ModelContext(try FileStores.container(for: AppSchema.schema,
                                                        configurations: [ModelConfiguration(url: copy)]))
         #expect(try reopened.fetch(FetchDescriptor<Prospect>()).count == prospects.count)
         #expect(try reopened.fetch(FetchDescriptor<Recipient>()).count == recipients.count)

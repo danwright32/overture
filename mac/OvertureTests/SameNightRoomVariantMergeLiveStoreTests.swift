@@ -40,7 +40,7 @@ struct SameNightRoomVariantMergeLiveStoreTests {
 
     private func openContainer(at url: URL) throws -> ModelContainer {
         let schema = Schema([Prospect.self, Recipient.self])
-        return try ModelContainer(for: schema,
+        return try FileStores.container(for: schema,
                                   configurations: [ModelConfiguration(schema: schema,
                                                                       url: url, cloudKitDatabase: .none)])
     }
@@ -55,7 +55,7 @@ struct SameNightRoomVariantMergeLiveStoreTests {
     func afterThePassNoNightStillHoldsTwoCopiesOfOneShow() throws {
         let dir = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("overture-1761-\(UUID().uuidString)")
-        defer { try? FileManager.default.removeItem(at: dir) }
+        defer { FileStores.remove(dir) }
 
         let ctx = ModelContext(try openContainer(at: try copyLiveStore(to: dir)))
         // #3496: what this actually examined, counted BEFORE the replay. A night holding one row can never
@@ -113,7 +113,7 @@ struct SameNightRoomVariantMergeLiveStoreTests {
     func afterThePassNoShowSitsInTheQueueTwiceAtTwoDifferentRanks() throws {
         let dir = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("overture-1845-\(UUID().uuidString)")
-        defer { try? FileManager.default.removeItem(at: dir) }
+        defer { FileStores.remove(dir) }
 
         let ctx = ModelContext(try openContainer(at: try copyLiveStore(to: dir)))
         // #3496: a whole launch, not this one pass. `DriftedRunMerge` runs BEFORE it at launch and can
@@ -155,7 +155,7 @@ struct SameNightRoomVariantMergeLiveStoreTests {
     func thePassNeverDeletesARowThatReachedTheOutsideWorld() throws {
         let dir = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("overture-1761-history-\(UUID().uuidString)")
-        defer { try? FileManager.default.removeItem(at: dir) }
+        defer { FileStores.remove(dir) }
 
         let ctx = ModelContext(try openContainer(at: try copyLiveStore(to: dir)))
         func reachedOutside(_ rows: [Prospect]) -> Int {
@@ -187,7 +187,7 @@ struct SameNightRoomVariantMergeLiveStoreTests {
     func everySurvivingRowStillNamesItsRoom() throws {
         let dir = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("overture-1761-rooms-\(UUID().uuidString)")
-        defer { try? FileManager.default.removeItem(at: dir) }
+        defer { FileStores.remove(dir) }
 
         let ctx = ModelContext(try openContainer(at: try copyLiveStore(to: dir)))
         let namedBefore = ((try? ctx.fetch(FetchDescriptor<Prospect>())) ?? [])

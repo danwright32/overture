@@ -48,7 +48,7 @@ struct TownKeyAlignmentLiveStoreTests {
         let fm = FileManager.default
         let dir = fm.temporaryDirectory.appendingPathComponent("town-align-\(UUID().uuidString)",
                                                                isDirectory: true)
-        defer { try? fm.removeItem(at: dir) }
+        defer { FileStores.remove(dir) }
         try fm.createDirectory(at: dir, withIntermediateDirectories: true)
 
         // No live store is the ordinary state on a clone, in CI and in an agent worktree, and it is NOT
@@ -62,7 +62,7 @@ struct TownKeyAlignmentLiveStoreTests {
         }
 
         let schema = Schema([ExcludedTown.self, AllowedSeedTown.self])
-        let context = ModelContext(try ModelContainer(
+        let context = ModelContext(try FileStores.container(
             for: schema,
             configurations: [ModelConfiguration(schema: schema, url: url, cloudKitDatabase: .none)]))
 

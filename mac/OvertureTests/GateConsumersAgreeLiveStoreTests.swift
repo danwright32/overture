@@ -41,7 +41,7 @@ struct GateConsumersAgreeLiveStoreTests {
 
     private func openContainer(at url: URL) throws -> ModelContainer {
         let schema = Schema([Prospect.self, Recipient.self])
-        return try ModelContainer(for: schema,
+        return try FileStores.container(for: schema,
                                   configurations: [ModelConfiguration(schema: schema,
                                                                       url: url, cloudKitDatabase: .none)])
     }
@@ -55,7 +55,7 @@ struct GateConsumersAgreeLiveStoreTests {
             let fm = FileManager.default
             let scratch = fm.temporaryDirectory
                 .appendingPathComponent("overture-1785-live-\(UUID().uuidString)", isDirectory: true)
-            defer { try? fm.removeItem(at: scratch) }
+            defer { FileStores.remove(scratch) }
             let storeCopy = try copyLiveStore(to: scratch)
 
             let ctx = ModelContext(try openContainer(at: storeCopy))

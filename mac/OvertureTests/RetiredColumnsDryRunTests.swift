@@ -87,7 +87,7 @@ struct RetiredColumnsDryRunTests {
         let tmpDir = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("retired-columns-dryrun-\(UUID().uuidString)")
         try fm.createDirectory(at: tmpDir, withIntermediateDirectories: true)
-        defer { try? fm.removeItem(at: tmpDir) }
+        defer { FileStores.remove(tmpDir) }
 
         // #1672/#3035: through the ONE shared clone, which takes the copy via SQLite's online backup
         // rather than racing file copies against a live writer, and which SAYS when it rehearsed nothing.
@@ -171,7 +171,7 @@ struct RetiredColumnsDryRunTests {
         #expect(prospectsBefore > 0, "the clone holds no prospects, so this rehearsed nothing")
 
         // 4. The subtraction itself: the same clone, opened under the schema that no longer declares them.
-        let container = try ModelContainer(for: AppSchema.schema,
+        let container = try FileStores.container(for: AppSchema.schema,
                                            configurations: [ModelConfiguration(url: copy)])
         let ctx = ModelContext(container)
         let prospects = try ctx.fetch(FetchDescriptor<Prospect>())

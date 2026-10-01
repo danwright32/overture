@@ -126,7 +126,7 @@ struct QueueRenderPassLiveStoreCostTests {
         let schema = Schema([Prospect.self, Recipient.self, Inquiry.self, OrgReachabilityAnswer.self,
                              WatchedSource.self, RefusedContactAddress.self,
                              PromotedProducer.self, DemotedHouse.self])
-        return try ModelContainer(for: schema,
+        return try FileStores.container(for: schema,
                                   configurations: [ModelConfiguration(schema: schema, url: url,
                                                                       cloudKitDatabase: .none)])
     }
