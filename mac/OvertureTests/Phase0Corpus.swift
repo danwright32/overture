@@ -149,7 +149,12 @@ enum Phase0 {
     /// after the rows are copied.
     nonisolated static func glue(forCopy k: Int) -> String { "q" + String(UnicodeScalar(UInt8(96 + k))) }
 
-    nonisolated static func scaledCopy(of clone: URL, factor: Int, in dir: URL) throws -> URL {
+    ///
+    /// `reidentifyListings: false` leaves every copy holding its original's `sourceListingURL` and
+    /// `runSourceURLs`, which is the corpus as it stood before #4288. Only #4372's attribution probe asks for
+    /// it, to reproduce the reading probe 0b.6 took on that corpus; every other caller takes the default.
+    nonisolated static func scaledCopy(of clone: URL, factor: Int, in dir: URL,
+                                       reidentifyListings: Bool = true) throws -> URL {
         let out = dir.appendingPathComponent("Overture-x\(factor).store")
         for suffix in ["", "-wal", "-shm"] {
             let from = URL(fileURLWithPath: clone.path + suffix)
@@ -184,9 +189,9 @@ enum Phase0 {
             }
         }
         let offset = 100_000
-        let showSuffixed: Set<String> = ["ZNATURALKEY", "ZPRESENTER", "ZVENUE", "ZGROUPNAME", "ZSCOUTGROUPNAME",
-                                         "ZSCOUTVENUE", "ZSERIESID", "ZGMAILTHREADID", "ZGMAILMESSAGEID",
-                                         "ZSOURCELISTINGURL"]
+        let showSuffixed = Set(["ZNATURALKEY", "ZPRESENTER", "ZVENUE", "ZGROUPNAME", "ZSCOUTGROUPNAME",
+                                "ZSCOUTVENUE", "ZSERIESID", "ZGMAILTHREADID", "ZGMAILMESSAGEID"]
+                               + (reidentifyListings ? ["ZSOURCELISTINGURL"] : []))
         let contactPrefixed: Set<String> = ["ZEMAIL", "ZID"]
         let contactSuffixed: Set<String> = ["ZGMAILTHREADID", "ZGMAILMESSAGEID", "ZSENDGROUPID"]
         let showCols = try columns("ZPROSPECT")
@@ -236,7 +241,7 @@ enum Phase0 {
         let context = ModelContext(try openContainer(at: out))
         var rewritten = 0
         for row in try context.fetch(FetchDescriptor<Prospect>()) {
-            guard let k = copyOf[row.naturalKey], !row.runSourceURLs.isEmpty else { continue }
+            guard reidentifyListings, let k = copyOf[row.naturalKey], !row.runSourceURLs.isEmpty else { continue }
             let glue = Self.glue(forCopy: k)
             row.runSourceURLs = row.runSourceURLs.map { $0.isEmpty ? $0 : $0 + glue }
             rewritten += 1
