@@ -17,6 +17,12 @@ enum DriftedRunMerge {
         var titleRenames: [TitleRenameLedger.Entry] = []
     }
 
+    // #4406: freshest first, and a tie on `ingestedAt` broken by the natural key, which is unique, so the order
+    // is total rather than left to the input's order and to a sort Swift does not promise is stable.
+    static func freshestFirst(_ rows: [Prospect]) -> [Prospect] {
+        rows.sorted { $0.ingestedAt == $1.ingestedAt ? $0.naturalKey < $1.naturalKey : $1.ingestedAt < $0.ingestedAt }
+    }
+
     @discardableResult
     static func run(in context: ModelContext) -> Summary {
         // #4406: in key order, because a group is built in read order and its survivor rungs break an
@@ -98,9 +104,7 @@ enum DriftedRunMerge {
             // from the rows Dan has NOT decided about, so a night he refused makes way for one he has not
             // and the show comes back for another look.
             let candidates = NaturalKeyVenueMigration.preferringASecondLook(members)
-            let freshestFirst = candidates.sorted {
-                $0.ingestedAt == $1.ingestedAt ? $0.naturalKey < $1.naturalKey : $1.ingestedAt < $0.ingestedAt
-            }
+            let freshestFirst = Self.freshestFirst(candidates)
             let survivor =
                 // #4024: `first` is safe here ONLY because `mustDefer` above has already refused the
                 // case where two rows could match: the strict record test implies `hasOutreachHistory`,

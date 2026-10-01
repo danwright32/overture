@@ -233,6 +233,20 @@ final class ShowTableReadOrderTests {
             "which night of the drifted run survived depends on read order: \(outcomes)"))
     }
 
+    // The two merge sorts break an `ingestedAt` tie on the natural key themselves, rather than leaving it to the
+    // order they were handed and to a sort Swift does not promise is stable. Handed the tied rows in REVERSE key
+    // order, so keeping the input's order would fail.
+    @Test func bothMergeSortsBreakAnIngestedAtTieOnTheNaturalKey() {
+        let newer = Self.older.addingTimeInterval(60)
+        let rows = [Self.show("k-c"), Self.show("k-b"), Self.show("k-a"), Self.show("k-new", ingestedAt: newer)]
+        let oldest = SameNightTitleVariantMerge.oldestFirst(rows).map(\.naturalKey)
+        #expect(oldest == ["k-a", "k-b", "k-c", "k-new"], Comment(rawValue:
+            "the oldest first sort left tied rows in the order it was handed: \(oldest)"))
+        let freshest = DriftedRunMerge.freshestFirst(rows).map(\.naturalKey)
+        #expect(freshest == ["k-new", "k-a", "k-b", "k-c"], Comment(rawValue:
+            "the freshest first sort left tied rows in the order it was handed: \(freshest)"))
+    }
+
     @Test func twoTitleVariantsTiedOnIngestedAtLeaveTheSameSurvivorWhateverTheReadOrder() throws {
         let stores = try twoStores([
             { Self.show("autumn series|2026-11-04|weill recital hall", group: "Autumn Series",
