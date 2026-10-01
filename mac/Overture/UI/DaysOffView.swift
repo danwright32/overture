@@ -20,7 +20,9 @@ struct DaysOffView: View {
     // Read as an OPTIONAL, on the same footing as every other environment object here, so a missed
     // injection is a pass nobody counted rather than a crash.
     @Environment(FreezeWatch.self) private var freezeWatch: FreezeWatch?
-    @Environment(\.dismiss) private var dismiss
+    // #4408: no `\.dismiss` here. The window system revises it on every focus change, and held at this
+    // level it re-ran the whole body, and the booked shoots section's store fetch, each time. The header
+    // below owns it, the same rule `DoneButton` keeps for the sheets that only close from one button.
     @Environment(\.modelContext) private var context
     @Environment(ActionFeedback.self) private var feedback
     @Query(sort: \DayOff.startDate) private var daysOff: [DayOff]
@@ -92,17 +94,6 @@ struct DaysOffView: View {
         .frame(width: 560)
         .background(OVColor.canvas)
         .actionFeedbackBanner()
-        .confirmationDialog("You entered days off but haven't blocked them yet.",
-                            isPresented: $confirmUnsaved, titleVisibility: .visible) {
-            Button("Block these days") {
-                // Block, then leave: if the range is bad, keep the sheet open with the reason showing
-                // rather than closing on an error he never got to see.
-                add()
-                if addMessage == nil { dismiss() }
-            }
-            Button("Discard them", role: .destructive) { dismiss() }
-            Button("Keep editing", role: .cancel) { }
-        }
     }
 
     // The add form's editable state right now, in the same ISO-day form the helper compares against.
@@ -119,30 +110,22 @@ struct DaysOffView: View {
     // Done, but not at the cost of the range he just typed: the decision lives in the tested helper, so
     // it cannot quietly regress to a bare dismiss(). #928: it also does not nag when the open form was
     // never actually edited.
-    private func done() {
-        if DayOffEditing.closeNeedsConfirmation(addFormOpen: showAdd, draft: currentDraft, baseline: addBaseline) {
-            confirmUnsaved = true
-        } else {
-            dismiss()
-        }
+    private var closeNeedsConfirmation: Bool {
+        DayOffEditing.closeNeedsConfirmation(addFormOpen: showAdd, draft: currentDraft, baseline: addBaseline)
     }
 
     private var header: some View {
-        HStack(alignment: .firstTextBaseline) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Days off").font(.system(size: 15, weight: .semibold)).foregroundStyle(OVColor.ink)
-                Text("The days Overture won't pitch you for.")
-                    .font(.system(size: 12)).foregroundStyle(OVColor.inkSoft)
-            }
-            Spacer()
-            Button(DayOffEditing.addButtonTitle(isOpen: showAdd)) {
+        DaysOffHeader(
+            addTitle: DayOffEditing.addButtonTitle(isOpen: showAdd),
+            toggleAdd: {
                 if !showAdd { addBaseline = currentDraft }   // #928: snapshot the form as it opens
                 showAdd.toggle(); addMessage = nil
-            }
-                .buttonStyle(.plain).font(.system(size: 12)).foregroundStyle(OVColor.forestText)
-            Button("Done") { done() }.keyboardShortcut(.defaultAction)
-        }
-        .padding(OVSpacing.lg)
+            },
+            closeNeedsConfirmation: { closeNeedsConfirmation },
+            // Block, then leave: if the range is bad, keep the sheet open with the reason showing rather
+            // than closing on an error he never got to see.
+            blockSucceeded: { add(); return addMessage == nil },
+            confirmUnsaved: $confirmUnsaved)
     }
 
     private var addForm: some View {
@@ -511,5 +494,48 @@ struct DaysOffView: View {
             Text("(\(count))").font(.system(size: 12)).foregroundStyle(OVColor.inkFaint)
         }
         .foregroundStyle(OVColor.ink)
+    }
+}
+
+// #4408: the Days off header, and the one place in the sheet that holds `\.dismiss`.
+//
+// The sheet closes from three places (Done, and both ways out of the unsaved days dialog), so a bare
+// `DoneButton` cannot carry it the way it carries the sheets that close from one button. Moving the read
+// here instead keeps the rule `DoneButton` exists for: SwiftUI revises the value whenever the window's
+// key status changes, and only this small view's body is evaluated when it does, never the sheet's
+// (`ABannerDerivesNothingOnAnySheetTests.aFocusChangeDerivesNothingOnAnySheet`). The dialog moved with
+// the read because two of its buttons are what call it.
+private struct DaysOffHeader: View {
+    let addTitle: String
+    let toggleAdd: () -> Void
+    let closeNeedsConfirmation: () -> Bool
+    let blockSucceeded: () -> Bool
+    @Binding var confirmUnsaved: Bool
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Days off").font(.system(size: 15, weight: .semibold)).foregroundStyle(OVColor.ink)
+                Text("The days Overture won't pitch you for.")
+                    .font(.system(size: 12)).foregroundStyle(OVColor.inkSoft)
+            }
+            Spacer()
+            Button(addTitle) { toggleAdd() }
+                .buttonStyle(.plain).font(.system(size: 12)).foregroundStyle(OVColor.forestText)
+            Button("Done") {
+                if closeNeedsConfirmation() { confirmUnsaved = true } else { dismiss() }
+            }
+            .keyboardShortcut(.defaultAction)
+        }
+        .padding(OVSpacing.lg)
+        .confirmationDialog("You entered days off but haven't blocked them yet.",
+                            isPresented: $confirmUnsaved, titleVisibility: .visible) {
+            Button("Block these days") {
+                if blockSucceeded() { dismiss() }
+            }
+            Button("Discard them", role: .destructive) { dismiss() }
+            Button("Keep editing", role: .cancel) { }
+        }
     }
 }
