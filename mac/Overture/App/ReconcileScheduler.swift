@@ -124,7 +124,13 @@ final class ReconcileScheduler {
                                readClosing: @MainActor (ModelContext, Date, Bool) async -> DueReading = {
                                    await DueReading.read(from: $0, now: $1, replyRunAlive: $2)
                                },
-                               recordTimeline: (ReconcileTickTimeline) -> Void = { AgentLog.note($0.logLine) })
+                               recordTimeline: (ReconcileTickTimeline) -> Void = { AgentLog.note($0.logLine) },
+                               // #4337: called on the main actor each time the tick has handed the actor back
+                               // and resumed, with the count of hand backs so far (1 is the first, straight after
+                               // the tick's one read of the store). A scout landing is one synchronous main actor
+                               // block, so a hand back is the only place one can land inside a tick; this is
+                               // where a test lands one, and the count is the proof of when it did (L248).
+                               afterHandBack: @MainActor (Int) -> Void = { _ in })
         async -> ReconcileSummary {
         // #4107: what each pass costs, measured on every tick. `lap` closes the pass that just ran; `resume`
         // restarts the clock after the tick has given the main actor back, so a turn somebody else took is
@@ -140,8 +146,11 @@ final class ReconcileScheduler {
         // #4107: between passes the tick yields, so whatever else is waiting on the main actor gets a turn
         // between two passes rather than only after all eleven. Every pass is still awaited in order, so
         // nothing about what the tick does or in what order changes.
+        var handBacks = 0
         func handBack() async {
             await Task.yield()
+            handBacks += 1
+            afterHandBack(handBacks)
             mark = clock.now
         }
 
