@@ -199,11 +199,14 @@ enum SourceSchedule {
     }
 }
 
-// What one source's check decided, given what came back from the network, and what it wrote on the row.
+// What one source's check decided, given what came back from the network, and what it WOULD write on the
+// row.
 //
-// Pure apart from the mutations it makes to the row it is handed, so the whole of a source's health
-// lifecycle (it broke, it recovered, it did not change, it changed but we are not reading it today) is
-// a real test with no network in it.
+// #4329 (A12): pure. It used to write through `source`; it now returns those writes as a `SourceWrites` value
+// beside its `Decision`, because it runs in the read phase, between the sweep's awaits, and the landing block
+// applies them after re-validating the source against a later run (`WatchedSource.applyCaptured`). Still the
+// ONE rule for every success and failure branch, so the whole of a source's health lifecycle (it broke, it
+// recovered, it did not change, it changed but we are not reading it today) is a real test with no network.
 @MainActor
 enum SourceCheck {
     enum Decision: Equatable, Sendable {
@@ -214,11 +217,11 @@ enum SourceCheck {
     }
 
     static func decide(source: WatchedSource, result: Result<FetchedPage, SourceFetchError>,
-                       depth: ScoutDepth, now: Date) -> Decision {
-        // #1217: captured BEFORE the success branch below resets health and lastFailure, so a source that
-        // did not cleanly succeed last time can still be recognized after it fetches fine this time.
+                       depth: ScoutDepth, now: Date) -> (decision: Decision, writes: SourceWrites) {
+        // #1217: read from the row as the run found it, so a source that did not cleanly succeed last time
+        // can still be recognized after it fetches fine this time. Nothing below writes the row any more, so
+        // this is the row's own answer rather than one captured ahead of a reset.
         let retryStillBroken = source.lastCheckWasNotCleanSuccess
-        source.lastCheckedAt = now
 
         switch result {
         case .failure(let error):
@@ -227,7 +230,7 @@ enum SourceCheck {
             // without reading the page. A fetch that never landed it is exactly that, no less than a read
             // that came back unusable, and counting only the second would leave a source that has been
             // 404ing for a fortnight saying the same unqualified line it said on day one.
-            source.recordFailedRead(failure, now: now)
+            //
             // NOT lastSucceededAt, and NOT successfulCheckCount. A source that has been 404ing for a
             // month must not read as "checked an hour ago, all fine", and a failed check must never
             // count toward the warmup that lets a source start marking shows as gone.
@@ -237,23 +240,21 @@ enum SourceCheck {
             // list: "broken" and "they asked us to stop" are different facts, and a source that quietly
             // deactivated itself because its site was down for a day would be the watchlist silently
             // dropping something Dan asked it to watch.
-            return .failed(failure)
+            return (.failed(failure), SourceWrites(.fetchFailed, [.checkedAt(now), .failedRead(failure, at: now)]))
 
         case .success(let page):
-            source.health = .ok
-            source.lastFailure = nil        // it works again; do not carry a stale error forever
-
-            // #1048: record what this fetch SAW, on every success branch below. This is not the ingested
-            // hash (that is stamped only by a save, further down the pipeline): it is "the live page as
-            // far as we know", and the free daily watch-only pass is exactly the run that updates it
-            // without re-reading. The Sources confirm affordance compares it against the last read to warn
-            // when a confirm would anchor to bytes the page has since moved past (WatchedSource
-            // .confirmReadIsStale).
-            source.lastObservedContentHash = page.contentHash
-
-            // #1544: and HOW it came back. Stamped on every successful fetch, not only a read, so the row's
-            // warning is current and clears itself the day the site fixes its certificate.
-            source.lastFetchWasInsecure = page.wasReadInsecurely
+            // It works again; do not carry a stale error forever. #1048: record what this fetch SAW, on every
+            // success branch below. This is not the ingested hash (that is stamped only by a save, further
+            // down the pipeline): it is "the live page as far as we know", and the free daily watch-only pass
+            // is exactly the run that updates it without re-reading. The Sources confirm affordance compares
+            // it against the last read to warn when a confirm would anchor to bytes the page has since moved
+            // past (WatchedSource.confirmReadIsStale). #1544: and HOW it came back, stamped on every
+            // successful fetch, not only a read, so the row's warning is current and clears itself the day
+            // the site fixes its certificate.
+            let fetched: [SourceWrites.Step] = [
+                .checkedAt(now),
+                .fetchedCleanly(observedHash: page.contentHash, insecure: page.wasReadInsecurely),
+            ]
 
             // The hash is a CORRECTNESS mechanism, not merely a cost lever. If the page did not change,
             // the extractor never runs, so an extracted title cannot drift between runs and re-key a
@@ -262,26 +263,25 @@ enum SourceCheck {
             // lastContentHash is the hash of what we last successfully INGESTED, so a source that has
             // never been ingested is changed by definition.
             guard page.contentHash != source.lastContentHash else {
-                source.hasUnreadChanges = false
                 // #1217: a scout Dan started re-reads a source that did NOT cleanly succeed last time,
                 // even when the page is byte-for-byte unchanged, on the assumption he fixed the
                 // underlying cause (a code fix, a runbook fix, a corrected URL) between scouts. The free
                 // daily watch-only run never does this: it costs a token, which only Dan's run may spend.
                 if depth == .readChanged && retryStillBroken {
-                    return .read(page)
+                    return (.read(page), SourceWrites(.pageUnchangedRereadOwed, fetched + [.unreadChanges(false)]))
                 }
-                return .unchanged
+                return (.unchanged, SourceWrites(.pageUnchanged, fetched + [.unreadChanges(false)]))
             }
 
             // There are listings here we have not read. Flagged either way, so the free daily run can
             // tell Dan what is waiting without spending anything on it.
-            source.hasUnreadChanges = true
-
+            //
             // Note what is NOT done here: the content hash is not stamped. Only an ingest that actually
             // SAVED may stamp it. Stamp it at fetch time and a run that reads everything and then fails
             // to persist (the #499 saveFailed path) leaves the hash saying "nothing changed": the source
             // then fetches fine, reports fine, and silently ingests nothing, forever.
-            return depth == .readChanged ? .read(page) : .changedButNotRead
+            let writes = SourceWrites(.pageChanged, fetched + [.unreadChanges(true)])
+            return (depth == .readChanged ? .read(page) : .changedButNotRead, writes)
         }
     }
 }

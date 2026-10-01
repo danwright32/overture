@@ -527,7 +527,17 @@ enum ScoutService {
                          landingPriority: LandingSingleFlight.Priority = .scout,
                          // The floor the run's landing sequence is minted above, besides the store's own:
                          // the pending ingest copies, which can hold a number no landing ever saved.
-                         sequenceFloor: () -> Int = { PendingScoutIngests.live.highestSequence })
+                         sequenceFloor: () -> Int = { PendingScoutIngests.live.highestSequence },
+                         // #4329 (A12): the Squarespace collection probe (#1503), injected so a test can drive
+                         // the promotion without the network. Answers the collection's JSON body, or nil.
+                         squarespaceProbe: @escaping (URL) async -> Data? = ScoutService.probeSquarespaceCollection,
+                         // #4329: the landing's closing save (save one), injected so a test can make it fail
+                         // (`saveLanding`), as the ingest's is.
+                         saveClosing: (ModelContext) throws -> Void = { try $0.save() },
+                         // #4329: handed each source's captured read-phase writes as the landing applies them,
+                         // so a test can prove every branch that writes was driven. nil, which every shipping
+                         // caller passes, reports nothing.
+                         onApplyCaptured: ((SourceWrites) -> Void)? = nil)
                          async throws -> Outcome {
         let loaded = DownbeatBridge.loadWithHealth(now: now)
         // History the matcher sees = any one-time legacy import + Overture's own activity,
@@ -584,7 +594,8 @@ enum ScoutService {
         //
         // `reports` keeps the order each source was CHECKED in, so a read that lands later still sits in
         // the report where it was checked rather than at the end.
-        enum ReportSlot { case read(Int), checked(SourceResult, WatchedSource) }
+        // #4329 (A12): a checked source carries the writes its check decided, applied by the landing block.
+        enum ReportSlot { case read(Int), checked(SourceResult, WatchedSource, SourceWrites) }
         var reads: [NativeRead] = []
         var reports: [ReportSlot] = []
         // Read at the first free source rather than per source, and not at all on a run that has none.
@@ -613,7 +624,8 @@ enum ScoutService {
             // fetch (an await cannot be interrupted anyway), and the launch guard below then hands off no
             // read, so a cancelled run leaves nothing behind for a detached process to finish.
             if isCancelled() { break }
-            let (result, page) = await check(source, fetch: fetchFor(source), depth: depth, now: now)
+            let (result, page, checkWrites) = await check(source, fetch: fetchFor(source), probe: squarespaceProbe,
+                                                          depth: depth, now: now)
             // #1189: advance the manual scout's OWN fairness clock, but ONLY on a run Dan started. The
             // free daily watch-only run leaves it untouched (it advances only the shared lastCheckedAt,
             // inside SourceCheck.decide), so unlike lastCheckedAt it is not flattened every morning and a
@@ -635,12 +647,13 @@ enum ScoutService {
                 // detached ingest sets on success, so the next run skips an unchanged page; a drift/parse
                 // failure leaves lastContentHash on the old bytes so the next run re-reads and it stays
                 // visibly failing until fixed.
-                source.pendingContentHash = nil
-                source.pendingPageMonths = []
+                //
+                // #4329 (A12): captured with the check's own writes and applied by the landing block.
+                var inline: [SourceWrites.Step] = [.pendingRead(hash: nil, months: [])]
                 // #1529: remember that this row's shows come from a ticketing feed, so the Sources sheet can
                 // ask for the room on THIS row (TicketingFeedRead.needsVenueName) instead of on all of them.
                 if let feed = page.ticketingFeedURL, page.followedTicketLinkFrom != nil {
-                    source.ticketingFeedURL = feed
+                    inline.append(.ticketingFeed(feed))
                 }
                 let brands = corpus()
                 reports.append(.read(reads.count))
@@ -653,9 +666,10 @@ enum ScoutService {
                                               // two paths ingest natively while the row still says .html).
                                               venueGapsAreStructural: true,
                                               // Marked read only once its shows have landed (#4102).
-                                              markReadAs: page.contentHash))
+                                              markReadAs: page.contentHash,
+                                              writes: checkWrites.appending(SourceWrites(.readInline, inline))))
             } else {
-                reports.append(.checked(result, source))
+                reports.append(.checked(result, source, checkWrites))
                 if let page { toRead.append((source, page)) }
             }
             // #1034: the native-phase heartbeat. Fired for every fetched source, changed or not, so the
@@ -684,27 +698,42 @@ enum ScoutService {
         defer { landingToken.end() }
         // The first thing done under the token: re-validation. A source whose `lastTouchedSequence` is now
         // above this run's was landed by a later run after this one read it, so this run's reading of it is
-        // the older one. It is set aside whole: its shows are not applied and its page hash is not
-        // promoted, so nothing is lost and the next scout reads the page again. Before A12 the read phase
-        // still writes a checked source's own bookkeeping directly (its fetch health and pending hash), so
-        // what is set aside here is what this block would have written; A12 captures the rest.
+        // the older one. It is set aside whole: its captured writes are dropped (its fetch health, its failure
+        // streak, its pending hash), its shows are not applied, its page hash is not promoted and its page is
+        // not handed to the reader, so the row stays exactly as the later run left it and the next scout reads
+        // the page again. #4329 (A12): the read phase above wrote NOTHING, which is what makes "set aside
+        // whole" true; every write it decided is applied here, after this check, or not at all.
         func supersededSinceRead(_ source: WatchedSource?) -> Bool {
             (source?.lastTouchedSequence ?? 0) > sequence
+        }
+        var setAside: Set<ObjectIdentifier> = []
+        func setAsideAndReport(_ source: WatchedSource) {
+            setAside.insert(ObjectIdentifier(source))
+            outcome.sources.append(SourceResult(sourceId: source.sourceId, orgName: source.orgName,
+                                                state: .superseded, listingsURL: source.listingsURL))
+        }
+        func landCaptured(_ writes: SourceWrites, on source: WatchedSource) {
+            source.lastTouchedSequence = sequence
+            source.applyCaptured(writes)
+            onApplyCaptured?(writes)
         }
         let landing = ScoutLandingStore(context: context, read: readProspectTable)
         for slot in reports {
             switch slot {
-            case .checked(let result, let source):
-                if !supersededSinceRead(source) { source.lastTouchedSequence = sequence }
+            case .checked(let result, let source, let writes):
+                if supersededSinceRead(source) {
+                    setAsideAndReport(source)
+                    continue
+                }
+                landCaptured(writes, on: source)
                 outcome.sources.append(result)
             case .read(let i):
                 let native = reads[i]
                 if supersededSinceRead(native.source), let source = native.source {
-                    outcome.sources.append(SourceResult(sourceId: source.sourceId, orgName: source.orgName,
-                                                        state: .superseded, listingsURL: source.listingsURL))
+                    setAsideAndReport(source)
                     continue
                 }
-                native.source?.lastTouchedSequence = sequence
+                if let source = native.source { landCaptured(native.writes, on: source) }
                 let landed = landNative(native, clients: loaded.clients, history: history, blocked: blocked,
                                         now: now, landing: landing, into: context)
                 if let hash = native.markReadAs, let source = native.source,
@@ -715,10 +744,25 @@ enum ScoutService {
                 outcome.merge(landed)
             }
         }
+        // A page set aside above is not handed to the reader either: its pending hash was never recorded, so
+        // an ingest of it would have nothing to promote, and the later run that overtook it owns that page.
+        toRead.removeAll { setAside.contains(ObjectIdentifier($0.source)) }
+
         // #4325: the last source's reconcile, and its feed health, saved here rather than left to autosave.
-        if !saveLanding(landing, into: context) { outcome.saveFailed = true }
-        // #4330: released here, before the read budget question, which can wait on Dan for as long as he
-        // leaves it open.
+        //
+        // #4329 (A12): SAVE ONE, straight after the landing loop and BEFORE the read budget question, which can
+        // wait on Dan for as long as he leaves it open. It carries every landing source and every settled
+        // source's captured writes, so nothing sits unsaved across that question (ScopeMemo serves a refetch
+        // only while the main context holds nothing unsaved, and Phase C's clean-at-every-yield invariant needs
+        // it there too). A failed save one STOPS the landing: it is recorded as "could not be saved" and nothing
+        // below runs, so no read is handed off on a pending hash the store never took. Putting the unsaved
+        // writes back first is A5's revert, which is not built yet; until it is, they stay pending exactly as a
+        // failed per source save leaves them (#499).
+        if !saveLanding(landing, into: context, save: saveClosing) {
+            outcome.saveFailed = true
+            return outcome      // save one failed: the landing stops here
+        }
+        // #4330: released here, before the read budget question.
         landingToken.end()
 
         // ONE batched detached run for every page that changed, never N subprocesses: one hung source
@@ -801,33 +845,23 @@ enum ScoutService {
         // claiming a booking to win the tie-break). `try?` yields none on a container predating Inquiry.
         // #1960: built inside the call, so an unhealthy export refuses before the store is swept.
         onNativeStep(.checkingBookings)
-        if DownbeatBooking.reconcileBooked(entities: DownbeatBooking.bookingEntities(in: context),
-                                           clients: loaded.clients, bookings: loaded.bookings,
-                                           health: loaded.health, now: Date()) > 0 {
-            do {
-                try context.save()
-            } catch {
-                // #499: the booking reconcile mutated prospects in memory but couldn't persist them.
-                outcome.saveFailed = true
-            }
-        }
+        // #4329 (A12): the booking reconcile and the blocked town retirement each used to save on their own;
+        // both fold into the tail's one save below (save two), which carries them with the fairness clock.
+        _ = DownbeatBooking.reconcileBooked(entities: DownbeatBooking.bookingEntities(in: context),
+                                            clients: loaded.clients, bookings: loaded.bookings,
+                                            health: loaded.health, now: Date())
         // #1238: retire any show a blocked town this run may have (re-)surfaced, so blocking a town keeps
-        // future scouts out too, not just the shows present when Dan blocked it. Idempotent; only saves if
-        // it changed something.
+        // future scouts out too, not just the shows present when Dan blocked it. Idempotent.
         onNativeStep(.clearingBlockedTowns)
-        if ExcludedTownRetirement.run(in: context) > 0 {
-            do {
-                try context.save()
-            } catch {
-                outcome.saveFailed = true
-            }
-        }
+        _ = ExcludedTownRetirement.run(in: context)
         onNativeStep(.saving)
-        // #4330: the tail's own save, so the fairness clock and anything else it wrote is on disk before its
-        // token is released, rather than left to autosave (A12's closing save rule, for the tail).
+        // #4330 / #4329: SAVE TWO, the tail's own, so the fairness clock, the booking reconcile (#41) and the
+        // retirement are on disk before its token is released, rather than left to autosave. Its own save,
+        // so a failure here never touches save one, which is already in the store. #499: a failure is
+        // recorded as `saveFailed`; putting the tail's writes back first is A5's revert, not built yet.
         if context.hasChanges {
             do {
-                try context.save()
+                try saveClosing(context)
             } catch {
                 outcome.saveFailed = true
             }
@@ -880,11 +914,14 @@ enum ScoutService {
         // #1295 / #1529: an html page read natively is marked READ (its hash stamped as ingested) only once
         // its shows have landed, so the stamp can never describe bytes whose shows never reached the store.
         let markReadAs: String?
+        // #4329 (A12): what reading this source decided to write on its row (the check's own writes for an
+        // inline page, and the failure when the extractor threw), applied by the landing block.
+        let writes: SourceWrites
     }
 
-    // One native source, READ: extract and classify, both awaited, and nothing written to the store but the
-    // row's own failure when the extractor throws. Its failure is recorded and reported, never thrown, so
-    // a source that is down cannot cost Dan the rest of his watchlist.
+    // One native source, READ: extract and classify, both awaited, and NOTHING written to the store. Its
+    // failure is captured and reported, never thrown, so a source that is down cannot cost Dan the rest of
+    // his watchlist. #4329 (A12): the row's own failure is a captured write too, applied by the landing block.
     //
     // #4102: this used to be `runNative`, which also UPSERTED, one source at a time between the awaits of
     // the sweep, so every source reached the screen as its own change and the queue re-derived the whole
@@ -898,7 +935,8 @@ enum ScoutService {
                                    // while the row still says .html. nil keeps the kind's rule (SourceKind
                                    // .venueGapsAreStructural), which is right for every other caller.
                                    venueGapsAreStructural: Bool? = nil,
-                                   markReadAs: String? = nil) async -> NativeRead {
+                                   markReadAs: String? = nil,
+                                   writes: SourceWrites = .none) async -> NativeRead {
         let sourceId = source?.sourceId ?? WatchedSource.carnegieId
         let orgName = source?.orgName ?? "Carnegie Hall"
 
@@ -912,12 +950,13 @@ enum ScoutService {
             // #1759: through the one shared recorder, so a native feed that has been throwing for a week
             // carries the same history a failing html page does. The row is optional here, and a run
             // handed no row still records nothing at all, exactly as it already did.
-            source?.recordFailedRead(failure, now: now)
+            let failed = source == nil ? writes
+                : writes.appending(SourceWrites(.nativeReadFailed, [.failedRead(failure, at: now)]))
             var outcome = Outcome(found: 0, inserted: 0, updated: 0, skipped: 0)
             outcome.sources = [SourceResult(sourceId: sourceId, orgName: orgName, state: .failed(failure),
                                             listingsURL: source?.listingsURL)]
             return NativeRead(source: source, sourceId: sourceId, orgName: orgName, read: .failed(outcome),
-                              markReadAs: markReadAs)
+                              markReadAs: markReadAs, writes: failed)
         }
 
         // #801: this source's feed health lives on its own row, seeded from the three old global keys by
@@ -975,7 +1014,7 @@ enum ScoutService {
                           read: .listed(.init(usable: usable, rejection: rejection, health: health,
                                               preClassified: PreClassified(result: classifiedPass,
                                                                            degradedReads: corpus.degradedReads))),
-                          markReadAs: markReadAs)
+                          markReadAs: markReadAs, writes: writes)
     }
 
     // #4102: one source's read, LANDED: upsert, reconcile, and fold the run into the row's feed health.
@@ -1060,33 +1099,39 @@ enum ScoutService {
         return outcome
     }
 
-    // #1503: returns whether this source was just promoted to the native Squarespace feed. Only an .html
-    // source is a candidate (the others already ingest natively), and the cheap marker check runs first
-    // so no request is spent on a page that is obviously not Squarespace. A probe that fails for any
-    // reason simply leaves the source exactly as it was, on the path that already works.
-    private static func promoteToSquarespaceIfEventsCollection(_ source: WatchedSource,
-                                                        page: FetchedPage) async -> Bool {
+    // #1503: whether this source should be promoted to the native Squarespace feed. Only an .html source is
+    // a candidate (the others already ingest natively), and the cheap marker check runs first so no request
+    // is spent on a page that is obviously not Squarespace. A probe that fails for any reason simply leaves
+    // the source exactly as it was, on the path that already works. #4329 (A12): it only ANSWERS; the
+    // promotion itself is a captured write the landing block applies (`check`).
+    private static func shouldPromoteToSquarespace(_ source: WatchedSource, page: FetchedPage,
+                                                   probe: (URL) async -> Data?) async -> Bool {
         // The cheap half first, so no request is spent on a page that is obviously not Squarespace.
         guard source.kind == .html,
               SquarespaceCalendar.looksLikeSquarespace(page.normalizedHTML),
               let listings = source.listingsURL, let url = URL(string: listings) else { return false }
         // A probe that fails for ANY reason yields nil, which shouldPromote reads as "leave it alone".
-        var jsonBody: Data?
-        if let (data, response) = try? await URLSession.shared.data(from: SquarespaceCalendar.jsonURL(for: url)),
-           let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) {
-            jsonBody = data
-        }
-        guard SquarespaceCalendar.shouldPromote(kind: source.kind, pageHTML: page.normalizedHTML,
-                                                jsonBody: jsonBody) else { return false }
-        source.kind = .squarespaceFeed
-        return true
+        let jsonBody = await probe(SquarespaceCalendar.jsonURL(for: url))
+        return SquarespaceCalendar.shouldPromote(kind: source.kind, pageHTML: page.normalizedHTML,
+                                                 jsonBody: jsonBody)
+    }
+
+    // The live probe: the collection's JSON body when it answers 2xx, nil for anything else.
+    static func probeSquarespaceCollection(_ url: URL) async -> Data? {
+        guard let (data, response) = try? await URLSession.shared.data(from: url),
+              let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else { return nil }
+        return data
     }
 
     // One html source: fetch it, hash it, and decide. Never throws. Returns the page ONLY when this run
     // is going to read it, so the caller cannot accidentally spend a token on a run Dan did not start.
+    //
+    // #4329 (A12): and writes NOTHING. What the check decided for the row comes back as `SourceWrites`, which
+    // the landing block applies after its re-validation, or drops whole when a later run overtook this one.
     private static func check(_ source: WatchedSource,
                               fetch: (URL, String?, String?) async throws -> FetchedPage,
-                              depth: ScoutDepth, now: Date) async -> (SourceResult, FetchedPage?) {
+                              probe: (URL) async -> Data?,
+                              depth: ScoutDepth, now: Date) async -> (SourceResult, FetchedPage?, SourceWrites) {
         func result(_ state: SourceResult.State) -> SourceResult {
             SourceResult(sourceId: source.sourceId, orgName: source.orgName, state: state,
                          hadBaseline: source.baselineFeedCount > 0,
@@ -1100,8 +1145,8 @@ enum ScoutService {
             // #1759: through the one shared recorder. This run came away without reading the source, and
             // it will do so on every run until the address is corrected, which is precisely the state the
             // streak exists to make visible.
-            source.recordFailedRead(failure, now: now)
-            return (result(.failed(failure)), nil)
+            return (result(.failed(failure)), nil,
+                    SourceWrites(.noUsableAddress, [.failedRead(failure, at: now)]))
         }
 
         let fetched: Result<FetchedPage, SourceFetchError>
@@ -1119,27 +1164,27 @@ enum ScoutService {
         // too. Covers the 7 already on the watchlist and every Squarespace org Dan adds later, through
         // one mechanism instead of two.
         if case .success(let page) = fetched,
-           await promoteToSquarespaceIfEventsCollection(source, page: page) {
-            return (result(.unchanged), nil)
+           await shouldPromoteToSquarespace(source, page: page, probe: probe) {
+            return (result(.unchanged), nil, SourceWrites(.promotedToSquarespace, [.kind(.squarespaceFeed)]))
         }
 
-        switch SourceCheck.decide(source: source, result: fetched, depth: depth, now: now) {
+        let (decision, writes) = SourceCheck.decide(source: source, result: fetched, depth: depth, now: now)
+        switch decision {
         case .unchanged:
-            return (result(.unchanged), nil)
+            return (result(.unchanged), nil, writes)
         case .changedButNotRead:
-            return (result(.changedNotRead), nil)
+            return (result(.changedNotRead), nil, writes)
         case .failed(let f):
-            return (result(.failed(f)), nil)
+            return (result(.failed(f)), nil, writes)
         case .read(let page):
             // Remember the hash of the bytes we are about to hand to the run. It cannot be recomputed at
             // ingest: that happens minutes later in another process, by which time the live page may have
             // moved on, and re-hashing would stamp a hash for bytes nobody ever read.
-            source.pendingContentHash = page.contentHash
-            // #897: remember which months this pin actually stitched together, so ingest can tell a run
-            // that read all of them from one that skimmed some. Empty on the single-month default, where
-            // SweepCoverage is inert. Held like the hash, and cleared on the same success branch.
-            source.pendingPageMonths = page.monthsRead
-            return (result(.queuedForReading), page)
+            // #897: and which months this pin actually stitched together, so ingest can tell a run that read
+            // all of them from one that skimmed some. Empty on the single-month default, where SweepCoverage
+            // is inert. Held like the hash, and cleared on the same success branch.
+            return (result(.queuedForReading), page, writes.appending(SourceWrites(
+                .queuedForReading, [.pendingRead(hash: page.contentHash, months: page.monthsRead)])))
         }
     }
 
