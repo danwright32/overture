@@ -41,8 +41,10 @@ enum ScoutExtractIngest {
         let preClassified: ScoutService.PreClassified
     }
 
+    // #4330: a settled slot carries its source (nil for an id nobody queued) so the landing block can
+    // stamp it with this run's sequence.
     private enum Slot {
-        case settled(ScoutService.Outcome)
+        case settled(ScoutService.Outcome, WatchedSource?)
         case pending(Pending)
     }
 
@@ -54,6 +56,19 @@ enum ScoutExtractIngest {
                        // #4275: how the whole show table is read, injected so a test can count the reads.
                        // Every read of it this ingest makes goes through here.
                        readProspectTable: @escaping ScoutLandingStore.Read = ScoutService.readProspectTable,
+                       // #4330 (A13): the queue the landing block waits its turn in, and at what priority.
+                       landings: LandingSingleFlight = .shared,
+                       priority: LandingSingleFlight.Priority = .scout,
+                       // The run's landing sequence. nil mints one as the read phase starts; a pending copy
+                       // offered again passes the sequence it was minted with (`PendingScoutIngests`), so it
+                       // is judged as the run it really is.
+                       sequence givenSequence: Int? = nil,
+                       sequenceFloor: () -> Int = { PendingScoutIngests.live.highestSequence },
+                       // Called with the run's sequence only when the landing has to WAIT for the store,
+                       // before it starts to: where the caller keeps a copy of what it is holding (L665).
+                       onWait: (Int) -> Void = { _ in },
+                       // The closing save, injected so a test can make it fail (`ScoutService.saveLanding`).
+                       saveClosing: (ModelContext) throws -> Void = { try $0.save() },
                        // #4327 step 0.7: handed the working set's cumulative counters after each LANDED source
                        // (labelled with its source id) and once more after the reconcile's read (labelled
                        // `Counters.afterReconcile`, and only when a reconcile ran, so a landing that reconciled
@@ -62,6 +77,8 @@ enum ScoutExtractIngest {
                        onLandingStep: ((String, ScoutLandingStore.Counters) -> Void)? = nil,
                        into context: ModelContext) async -> ScoutService.Outcome {
         var outcome = ScoutService.Outcome(found: 0, inserted: 0, updated: 0, skipped: 0)
+        let sequence = givenSequence ?? landings.mintSequence(
+            above: max(sequenceFloor(), highestStoredSequence(in: context)))
 
         // #4102: every source is READ first (its checks, and its classify pass awaited off the actor) and
         // every source's shows LAND afterwards, together, in one block with no await in it. Landed as each
@@ -87,7 +104,7 @@ enum ScoutExtractIngest {
             // surfaced in the run's warning rather than being a bare `continue` nobody ever sees.
             guard let source = row(for: result.sourceId, in: context) else {
                 settled.unqueuedResultIds.append(result.sourceId)
-                slots.append(.settled(settled))
+                slots.append(.settled(settled, nil))
                 continue
             }
 
@@ -112,7 +129,7 @@ enum ScoutExtractIngest {
             if let reason = ScoutResultAudit.contradiction(in: result) {
                 source.notes = reason
                 fail(source, as: .inconsistentResult, now: now, outcome: &settled)
-                slots.append(.settled(settled))
+                slots.append(.settled(settled, source))
                 continue
             }
 
@@ -130,11 +147,11 @@ enum ScoutExtractIngest {
                                                        readHash: source.pendingContentHash,
                                                        confirmedEmptyHash: source.confirmedEmptyHash) {
                     recordConfirmedEmpty(on: source, now: now, outcome: &settled)
-                    slots.append(.settled(settled))
+                    slots.append(.settled(settled, source))
                     continue
                 }
                 fail(source, as: failure, now: now, outcome: &settled)
-                slots.append(.settled(settled))
+                slots.append(.settled(settled, source))
                 continue
             }
 
@@ -200,9 +217,36 @@ enum ScoutExtractIngest {
         // #4275: judged against ONE read of the stored shows, built here after the last await and kept
         // current as each source lands, rather than two whole table fetches per source and one more for
         // each event reaching the run URL arm (`ScoutLandingStore`).
+        //
+        // #4330 (A13): the store is taken HERE, after the last classify await, and released after the
+        // closing save below. A refusal at the deadline lands nothing and says so; the caller keeps the
+        // results to offer again (`ScoutExtractLanding`), so nothing is lost.
+        let token: LandingSingleFlight.Token
+        do {
+            token = try await landings.begin(entryPoint: .scoutExtractIngest, priority: priority,
+                                             deadline: LandingSingleFlight.Deadline.scoutExtractIngest,
+                                             onWait: { onWait(sequence) })
+        } catch is CancellationError {
+            outcome.notLandedYet = LandingWaitCopy.ingestCancelled
+            return outcome
+        } catch {
+            outcome.notLandedYet = String(describing: error)
+            return outcome
+        }
+        defer { token.end() }
         let landing = ScoutLandingStore(context: context, read: readProspectTable)
         func land(_ pending: Pending) {
             let source = pending.source
+            // #4330: the re-validation, first. A later run landed this source after this one read it, so
+            // this reading is the older one and is set aside whole: nothing applied, and the page hash
+            // not promoted, so the next scout reads the page again.
+            if source.lastTouchedSequence > sequence {
+                outcome.sources.append(ScoutService.SourceResult(
+                    sourceId: source.sourceId, orgName: source.orgName, state: .superseded,
+                    listingsURL: source.listingsURL))
+                return
+            }
+            source.lastTouchedSequence = sequence
             let events = pending.events
             let rejection = pending.rejection
             let health = pending.health
@@ -288,7 +332,9 @@ enum ScoutExtractIngest {
         }
         for slot in slots {
             switch slot {
-            case .settled(let settled): outcome.merge(settled)
+            case .settled(let settled, let source):
+                if let source, source.lastTouchedSequence < sequence { source.lastTouchedSequence = sequence }
+                outcome.merge(settled)
             case .pending(let pending):
                 land(pending)
                 onLandingStep?(pending.source.sourceId, landing.counters)
@@ -323,9 +369,19 @@ enum ScoutExtractIngest {
         }
         // #4325: the reconcile's writes, and every source's bookkeeping above, saved before the landing
         // returns, through the one closing save the native sweep uses. Nothing saved them before this.
-        if !ScoutService.saveLanding(landing, into: context) { outcome.saveFailed = true }
+        if !ScoutService.saveLanding(landing, into: context, save: saveClosing) { outcome.saveFailed = true }
+        token.end()
 
         return outcome
+    }
+
+    // #4330: the highest sequence any landing has stamped on a source, the store's half of the floor a new
+    // sequence is minted above. One sorted fetch of one row. A fetch that fails leaves the floor to this
+    // process's own mints; the same store then fails every `row(for:)` below, so nothing lands on it.
+    private static func highestStoredSequence(in context: ModelContext) -> Int {
+        var top = FetchDescriptor<WatchedSource>(sortBy: [SortDescriptor(\.lastTouchedSequence, order: .reverse)])
+        top.fetchLimit = 1
+        return (try? context.fetch(top))?.first?.lastTouchedSequence ?? 0
     }
 
     // The shared bookkeeping for a source that failed this run, whichever way it failed (a broken verdict

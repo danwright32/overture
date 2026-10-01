@@ -21,6 +21,9 @@ enum ScoutSweepStep: String, Equatable, Sendable, CaseIterable {
     case checkingBookings
     case clearingBlockedTowns
     case saving
+    // #4330 (A13): the landing block, or the tail, is waiting its turn for the store behind another
+    // landing (`LandingSingleFlight`). Named, so a wait reads as a wait rather than as a stall.
+    case waitingForTheLandingInProgress
 
     // The sentence Dan reads. Here rather than in the view so it reaches `docs/copy-inventory.md` and can
     // be read cold, and so the two surfaces that could show it cannot word it differently.
@@ -30,6 +33,7 @@ enum ScoutSweepStep: String, Equatable, Sendable, CaseIterable {
         case .checkingBookings: return "Checking what it found against your bookings"
         case .clearingBlockedTowns: return "Clearing out shows in towns you blocked"
         case .saving: return "Saving what this run found"
+        case .waitingForTheLandingInProgress: return "Waiting for the landing in progress to finish"
         }
     }
 }

@@ -108,4 +108,17 @@ enum ScoutWarningCopy {
             ? "The run returned results under a source it was never asked about (\(list)), so it rebuilt an id and that work was ignored. The source it should have belonged to will be read again."
             : "The run returned results under \(ids.count) sources it was never asked about (\(list)), so it rebuilt those ids and that work was ignored. The sources they should have belonged to will be read again."
     }
+
+    // #4330 (A13): a calendar this run read, set aside because a later run read it afterwards and landed
+    // first. Named, because the reading this run made is not in the store and saying nothing would leave a
+    // source that was checked looking like one that was skipped. Nothing is lost: the later run's reading
+    // is the newer one, and this run's page hash was not promoted, so the next scout reads the page again.
+    static func superseded(_ names: [String]) -> String {
+        names.count == 1
+            ? "\(names[0]) was superseded by a later run, which read it after this one and landed first, so "
+                + "this run's older reading was set aside. Nothing was lost."
+            : "\(names.count) calendars were superseded by a later run, which read them after this one and "
+                + "landed first, so this run's older readings of them were set aside: "
+                + names.joined(separator: ", ") + ". Nothing was lost."
+    }
 }

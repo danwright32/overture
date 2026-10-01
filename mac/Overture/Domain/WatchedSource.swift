@@ -164,6 +164,17 @@ final class WatchedSource {
     // old rows have had all along.
     var failedReadStreak: Int = 0
 
+    // #4330 (A13): the landing sequence of the last run that landed this source, or settled it in a landing
+    // block. A run mints its sequence when its read phase starts (`LandingSingleFlight.mintSequence`) and,
+    // at the start of its landing block, drops what it read for any source whose number here is now ABOVE
+    // its own: a later run read that page after this one did and has already landed it, so this run's
+    // reading is older and landing it would put the store back to it. Dropped rather than landed, its page
+    // hash is not promoted either, so the next scout reads the page again and nothing is lost.
+    //
+    // Defaulted to zero, so existing rows migrate as a lightweight addition and every run's first sequence
+    // (at least one) is above it.
+    var lastTouchedSequence: Int = 0
+
     // #891: what the last run that READ this source managed to read, and what it could not (an event whose
     // own detail page was never reached comes back with no venue and is dropped).
     //

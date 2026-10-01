@@ -139,6 +139,8 @@ struct ScoutSummaryView: View {
             infoBlock(ScoutWarningCopy.saveFailed)
         case .storeUnreadable(let count, let keys):
             infoBlock(ScoutWarningCopy.storeUnreadable(count: count, keys: keys))
+        case .notLandedYet(let message):
+            infoBlock(message)
         case .extractLaunchFailure(let message):
             infoBlock(message)
         case .readerFinishedEmpty(let message):
@@ -157,6 +159,8 @@ struct ScoutSummaryView: View {
             // so a source Dan settles on this screen leaves it.
             let stillEmpty = ScoutSummaryRow.silentlyEmptyStillWorthShowing(empties, in: sources)
             if !stillEmpty.isEmpty { silentlyEmptyBlock(stillEmpty) }
+        case .superseded(let results):
+            infoBlock(ScoutWarningCopy.superseded(results.map(\.orgName)))
         case .pastClientList(let message):
             infoBlock(message)
         }

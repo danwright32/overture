@@ -274,6 +274,9 @@ struct AddressCorrectionTests {
         "mergeSameDateVenue": "Dan's answer about how the ORG lists concerts (#1236)",
         "hasUnreadChanges": "set TRUE by the correction so the next scout reads the new page",
         "healthRaw": "set to neverChecked by the correction: it has not been checked at this address",
+        // #4330: which RUN last landed this row, not anything about the page. Kept so a run that read the
+        // old address before the correction can never be taken for one newer than a run that landed after.
+        "lastTouchedSequence": "the landing order of runs (#4330), not a fact about the page",
     ]
 
     // A stored property, as opposed to a computed one. The distinction is exactly whether the declaration

@@ -55,9 +55,9 @@ struct ScoutReadBelongsToThisRunGuardTests {
     // is a claim about the call graph, and a second direct caller would silently make it false (L281).
     @Test func nothingElseImportsTheReadDirectly() {
         let callers = SourceGuardHelper.normalizedCode(source)
-            .components(separatedBy: "ingestScoutExtract()").count - 1
+            .components(separatedBy: "ingestScoutExtract(").count - 1
         #expect(callers == 3,
-                Comment(rawValue: "ingestScoutExtract() appears \(callers) times (its declaration, the "
+                Comment(rawValue: "ingestScoutExtract( appears \(callers) times (its declaration, the "
                         + "watcher's ingest, and keepCancelledRead). A new caller has to say which read "
                         + "it means, because this one does not ask."))
     }
