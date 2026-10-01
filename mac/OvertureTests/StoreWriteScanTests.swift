@@ -84,6 +84,42 @@ struct StoreWriteScanTests {
         #expect(!keys.contains("Runner.run assigns count"))
     }
 
+    // A type split across extensions in several files is one type: a bare call from the region reaches its
+    // sibling in another file (found by the lessons review of #4416).
+    @Test func aBareCallReachesTheSameTypesExtensionInAnotherFile() throws {
+        let runner = """
+            enum Runner {
+                static func run(row: Row) async {
+                    elsewhere(row)
+                    let token = await flight.begin()
+                }
+            }
+            """
+        let extensionFile = """
+            extension Runner {
+                static func elsewhere(_ row: Row) { row.label = "y" }
+            }
+            """
+        let keys = try Self.scan([("Row.swift", Self.model), ("Runner.swift", runner),
+                                  ("Runner+Elsewhere.swift", extensionFile)])
+        #expect(keys == ["Runner.elsewhere assigns label"], Comment(rawValue: "found \(keys)"))
+    }
+
+    // The entry reached back through a recursive call is not scanned whole: the rest of it is the landing
+    // block the region ends before (found by the lessons review of #4416).
+    @Test func anEntryReachedRecursivelyDoesNotBringItsLandingIn() throws {
+        let runner = """
+            enum Runner {
+                static func run(row: Row) async {
+                    if row.count == 0 { await run(row: row) }
+                    let token = await flight.begin()
+                    row.count = 9
+                }
+            }
+            """
+        #expect(try Self.scan([("Row.swift", Self.model), ("Runner.swift", runner)]).isEmpty)
+    }
+
     @Test func aRegionWithNoBoundaryIsRefusedRatherThanScannedWhole() {
         let runner = """
             enum Runner {

@@ -330,7 +330,10 @@ enum StoreWriteScan {
     ]
 
     // The app functions these lines call by name: `Type.name(` resolves to that type's functions (in any
-    // file), `Self.name(` and a bare `name(` to the enclosing type's own, nested functions included.
+    // file), `Self.name(` to the enclosing type's own, and a bare `name(` to the enclosing type's own IN ANY
+    // FILE (a type split across extensions is one type; nested functions included) and to any top level
+    // function of that name. Where a name is ambiguous every candidate is followed: the scan over-reports
+    // rather than missing a write.
     static func callees(of lines: [(line: Int, code: String)], file: String, owner: String?,
                         index: Index) -> Set<Function> {
         var out: Set<Function> = []
@@ -345,7 +348,8 @@ enum StoreWriteScan {
                 guard let n = Range(m.range(at: 1), in: code) else { continue }
                 let name = String(code[n])
                 guard !notCalls.contains(name) else { continue }
-                out.formUnion(index.functions(named: name, owner: owner).filter { $0.file == file })
+                out.formUnion(index.functions(named: name, owner: owner))
+                if owner != nil { out.formUnion(index.functions(named: name, owner: nil)) }
             }
         }
         return out
@@ -399,8 +403,12 @@ enum StoreWriteScan {
         let region = body.filter { $0.line < end }
         let reached = reachable(from: region, file: entry.file, owner: entry.owner, index: index)
         // The region's own nested functions are already in its lines; scanning them again as callees would
-        // report each of their writes twice.
-        let outside = reached.filter { !($0.file == entry.file && $0.firstLine >= entry.firstLine && $0.lastLine < end) }
+        // report each of their writes twice. And the entry itself, reached back through a recursive call, is
+        // never scanned whole: its region is already in, and the rest of it is the landing block this region
+        // ends before, whose writes are the landing's.
+        let outside = reached.filter {
+            $0 != entry && !($0.file == entry.file && $0.firstLine >= entry.firstLine && $0.lastLine < end)
+        }
         var sites = writes(in: region, file: entry.file, function: entry.qualifiedName, vocabulary: vocabulary)
         for function in outside.sorted(by: { ($0.file, $0.firstLine) < ($1.file, $1.firstLine) }) {
             sites += writes(in: index.lines(of: function), file: function.file, function: function.qualifiedName,
