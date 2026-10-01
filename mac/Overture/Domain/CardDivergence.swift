@@ -51,8 +51,97 @@ struct CardDivergenceRecord: Codable, Equatable, Sendable {
     // ordinary narrowed case; one on a pass that built everything says something different.
     let cardsBuilt: Int
     let stage: String?
+    // #4354 (plan v7 D8): WHICH check wrote this, and on behalf of which change source. Both are CLOSED
+    // enums with no associated values, on `StallRecord.surface`'s precedent, so a show's name has nowhere
+    // to go rather than being forbidden (C7, L222). Absent on every record written before this shipped,
+    // all of which the card check wrote, so an absent kind reads as `.cardDivergence` and an absent source
+    // as nil (L133).
+    let kind: Kind
+    let source: Source?
+    // How many repeats of this record's (kind, source) its cooldown held back since the previous record of
+    // that pair was written. Zero for a card divergence, which has no cooldown.
+    let suppressedRepeats: Int
 
     var identity: String { "\(session)#\(sequence)" }
+
+    init(session: String, sequence: Int, at: Date, fields: [String], cardsBuilt: Int, stage: String?,
+         kind: Kind = .cardDivergence, source: Source? = nil, suppressedRepeats: Int = 0) {
+        self.session = session
+        self.sequence = sequence
+        self.at = at
+        self.fields = fields
+        self.cardsBuilt = cardsBuilt
+        self.stage = stage
+        self.kind = kind
+        self.source = source
+        self.suppressedRepeats = suppressedRepeats
+    }
+
+    // #4354: the kinds this log holds. Only `.cardDivergence` has a writer today (`QueueView.recordCardCheck`).
+    // `.noOpDirty` and `.factMismatch` are the queue engine's, activated by #4358 (plan v7 Phase 4 plus 5),
+    // named here because the compaction and cooldown rules below have to hold for them before the first
+    // one is written, which is the order the plan requires (L191). Each later verifier kind joins this
+    // list in the PR that writes it.
+    enum Kind: String, Codable, Equatable, Hashable, Sendable, CaseIterable {
+        case cardDivergence
+        case noOpDirty
+        case factMismatch
+        // Written by nobody: what a spelling this build does not know DECODES to, because a later build
+        // wrote it. Kept as a record rather than failing the whole line (L255, `StallRecord`'s rule).
+        case unrecognised
+
+        // Every kind but the card check waits ten minutes per (kind, source) before writing again. The card
+        // check keeps today's none: its reader counts records as wrong CARDS, so a suppressed repeat would
+        // read as a card nobody built wrongly. An exhaustive switch, so a new kind has to choose.
+        var cooldown: TimeInterval {
+            switch self {
+            case .cardDivergence: return 0
+            case .noOpDirty, .factMismatch, .unrecognised: return 600
+            }
+        }
+    }
+
+    // #4354: the change source a record is about. Written by nobody today; the engine's intake (#4358)
+    // names the source of each change it judges. Closed for the same privacy reason as `Kind`.
+    enum Source: String, Codable, Equatable, Hashable, Sendable, CaseIterable {
+        case reconcile
+        case scoutLanding
+        case unrecognised
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case session, sequence, at, fields, cardsBuilt, stage, kind, source, suppressedRepeats
+    }
+
+    // Decoded by hand so an ABSENT kind is a card divergence and an UNKNOWN one is `.unrecognised`:
+    // decoding the enum directly throws on a spelling it does not know, which fails the whole line.
+    init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        session = try c.decode(String.self, forKey: .session)
+        sequence = try c.decode(Int.self, forKey: .sequence)
+        at = try c.decode(Date.self, forKey: .at)
+        fields = try c.decode([String].self, forKey: .fields)
+        cardsBuilt = try c.decode(Int.self, forKey: .cardsBuilt)
+        stage = try c.decodeIfPresent(String.self, forKey: .stage)
+        kind = try c.decodeIfPresent(String.self, forKey: .kind)
+            .map { Kind(rawValue: $0) ?? .unrecognised } ?? .cardDivergence
+        source = try c.decodeIfPresent(String.self, forKey: .source).map { Source(rawValue: $0) ?? .unrecognised }
+        suppressedRepeats = try c.decodeIfPresent(Int.self, forKey: .suppressedRepeats) ?? 0
+    }
+
+    // #4354: what compaction and the archive prune count as "the same kind of record". The FIELDS alone
+    // used to be the key, so every record naming no field shared one key and a card divergence and a fact
+    // mismatch naming the same field were one (plan v7 D8, L191).
+    struct CompactionKey: Hashable, Sendable {
+        let kind: Kind
+        let source: Source?
+        let fields: [String]
+    }
+
+    var compactionKey: CompactionKey { CompactionKey(kind: kind, source: source, fields: fields) }
+
+    // A kind or source this build could not name, which only a later build writes.
+    var isFromALaterBuild: Bool { kind == .unrecognised || source == .unrecognised }
 }
 
 // The file, and the rules for reading, capping and appending it. Modelled on `FreezeLog` deliberately:
@@ -140,12 +229,13 @@ enum CardDivergenceLog {
 
     // What survives compaction.
     //
-    // The rule is KEEP ONE OF EACH DISTINCT FIELD SET, then the newest, and it is not `FreezeLog`'s rule
+    // The rule is KEEP ONE OF EACH DISTINCT KEY, then the newest, and it is not `FreezeLog`'s rule
     // wearing different words. There the reading the file exists for is the MAXIMUM, so the longest stall
     // is protected. Here the reading is WHICH KINDS of divergence have happened, and a cap by count lets a
     // common one evict the rare one: a thousand records of the same field set would flush out the single
     // record naming a different one, and the count would say some were dropped but never that the only
-    // example of a kind was among them (L191, L63).
+    // example of a kind was among them (L191, L63). #4354: the key is (kind, source, fields), never the
+    // fields alone, which let every record naming no field share one key.
     // #3811: what a compaction KEEPS and what it took out, on `FreezeLog.Compacted`'s shape exactly.
     //
     // `droppedRecords` is what this type did not carry before, and its absence is why `compact` could only
@@ -181,19 +271,23 @@ enum CardDivergenceLog {
         // The archive could not be written, so the live file was deliberately left OVER its cap rather
         // than trimmed.
         case archiveFailed
+        // #4354: the file holds records a LATER build wrote, whose kind or source this build reads as
+        // `.unrecognised`. Rewriting it would re-encode each as "unrecognised", losing the spelling for
+        // good, and would key every such record as one. So it is left untouched, over its cap if need be,
+        // until a build that knows those spellings runs (L650, L1013).
+        case refusedUnrecognised(records: Int)
     }
 
     static func compacted(_ records: [CardDivergenceRecord], cap: Int = fileCap) -> Compacted {
         guard records.count > cap else { return Compacted(records: records) }
         let newest = Array(records.suffix(cap))
-        let keptKinds = Set(newest.map { $0.fields.joined(separator: "|") })
+        let keptKinds = Set(newest.map(\.compactionKey))
         // The OLDEST example of each kind the newest window has lost, which is the one that would
         // otherwise disappear entirely.
         var rescued: [CardDivergenceRecord] = []
         var seen = keptKinds
         for record in records {
-            let kind = record.fields.joined(separator: "|")
-            if seen.insert(kind).inserted { rescued.append(record) }
+            if seen.insert(record.compactionKey).inserted { rescued.append(record) }
         }
         // #3811: the dropped set is now WORKED OUT rather than counted, because the archive needs the
         // records themselves. It is everything the input held that the kept list does not, compared by
@@ -209,7 +303,8 @@ enum CardDivergenceLog {
     // WHAT THIS USED TO DO AND WHY THAT WAS NOT A SMALL THING. It rewrote the live file with the kept
     // records and returned a count, so the dropped ones were gone. `docs/contracts.md` said the file was
     // "COMPACTED AT LAUNCH", and the rule it describes is not a plain cap: it keeps one example of each
-    // distinct FIELD SET so a common divergence cannot evict the only record of a rare one, which is the
+    // distinct FIELD SET (since #4354, of each distinct kind, source and field set) so a common divergence
+    // cannot evict the only record of a rare one, which is the
     // reading the file exists for. That rule had never run once, because `compact` had no caller anywhere
     // in the app. Wiring it up as it stood would have started permanently deleting divergence records for
     // the first time, which is a decision rather than a side effect of fixing a missing call (L5).
@@ -226,6 +321,10 @@ enum CardDivergenceLog {
     static func compact(at url: URL, cap: Int = fileCap) -> CompactionOutcome {
         let read = read(at: url)
         guard !read.fileWasAbsent else { return .nothingToArchive }
+        // Nothing to rewrite is quiet whatever the file holds: the refusal below is for a REWRITE (L11).
+        guard read.records.count > cap else { return .nothingToArchive }
+        let unrecognised = read.records.filter(\.isFromALaterBuild).count
+        guard unrecognised == 0 else { return .refusedUnrecognised(records: unrecognised) }
         let result = compacted(read.records, cap: cap)
         guard result.dropped > 0 else { return .nothingToArchive }
         guard archive(result.droppedRecords, besideLogAt: url) else { return .archiveFailed }
@@ -256,9 +355,12 @@ enum CardDivergenceLog {
         // counting it, and a file half written by a process killed mid-append is the ordinary case here
         // rather than a rare one (L211, L105).
         case refused(unreadableLines: Int)
+        // #4354: the same refusal as the live file's, for the same reason.
+        case refusedUnrecognised(records: Int)
     }
 
-    // ONE EXAMPLE OF EACH DISTINCT FIELD SET, and NOT a retention window, which is where this deliberately
+    // ONE EXAMPLE OF EACH DISTINCT KEY (#4354: kind, source and field set), and NOT a retention window,
+    // which is where this deliberately
     // parts from `FreezeLog`'s archive.
     //
     // The freeze archive keeps a month, and its own comment explains that this is safe because the reading
@@ -268,15 +370,16 @@ enum CardDivergenceLog {
     // defect this log's compaction rule exists to prevent arriving through its own retention (L387, L191).
     //
     // Bounded by kind rather than by time or count, so the archive can never exceed the number of distinct
-    // field sets the app can produce, which is a combination of card fields and therefore small. The
+    // keys the app can produce, which is closed enums times a combination of card fields and therefore
+    // small. The
     // OLDEST example of each kind is the one kept, because the first time a kind appeared is the fact
     // worth having.
     static func prunedArchive(_ records: [CardDivergenceRecord]) -> ArchivePruned {
-        var seen: Set<String> = []
+        var seen: Set<CardDivergenceRecord.CompactionKey> = []
         var kept: [CardDivergenceRecord] = []
         var dropped: [CardDivergenceRecord] = []
         for record in records {
-            if seen.insert(record.fields.joined(separator: "|")).inserted {
+            if seen.insert(record.compactionKey).inserted {
                 kept.append(record)
             } else {
                 dropped.append(record)
@@ -291,9 +394,13 @@ enum CardDivergenceLog {
         // No archive is the ordinary state: most installs have never compacted. Nothing to report.
         guard !read.fileWasAbsent else { return .nothingToRemove }
         guard read.unreadableLines == 0 else { return .refused(unreadableLines: read.unreadableLines) }
-
+        // Worked out first, so an archive with nothing to remove is quiet whatever it holds: the refusal
+        // below is for a REWRITE (L11). A later build's records all share the unrecognised key, so they
+        // can make a drop appear here, which is exactly when the refusal must win.
         let result = prunedArchive(read.records)
         guard result.dropped > 0 else { return .nothingToRemove }
+        let unrecognised = read.records.filter(\.isFromALaterBuild).count
+        guard unrecognised == 0 else { return ArchivePrune.refusedUnrecognised(records: unrecognised) }
 
         // Atomically, and reported as a removal only once the write has actually happened: saying records
         // were removed when the write failed is a report of a deletion nobody performed (L12).
@@ -339,10 +446,106 @@ enum CardDivergenceLog {
 
     // Appended rather than rewritten, on `FreezeLog.append`'s reasoning: a read, modify, write whose read
     // fails erases the record at exactly the moment it is worth having (L105).
+    //
+    // #4354: REFUSES a kind that has a cooldown, so a writer of one cannot skip it by calling the plain
+    // form (L621). Those go through `append(_:to:through:)`.
     @discardableResult
     static func append(_ record: CardDivergenceRecord, to url: URL) -> Bool {
+        guard record.kind.cooldown == 0 else { return false }
+        return write(record, to: url)
+    }
+
+    // #4354: the cooled form. Writes the record, carrying the repeats its window held back, or counts it as
+    // a repeat and writes nothing. Returns whether a line was written.
+    @discardableResult
+    static func append(_ record: CardDivergenceRecord, to url: URL, through cooldown: inout Cooldown) -> Bool {
+        // Admitted on a copy and committed only once the line is written: a failed write that still opened
+        // the window would suppress every repeat for its length and lose the count it carried (L368).
+        var proposed = cooldown
+        switch proposed.admit(kind: record.kind, source: record.source, at: record.at) {
+        case .suppressed:
+            cooldown = proposed
+            return false
+        case .write(let suppressedRepeats):
+            let carried = CardDivergenceRecord(session: record.session, sequence: record.sequence, at: record.at,
+                                               fields: record.fields, cardsBuilt: record.cardsBuilt,
+                                               stage: record.stage, kind: record.kind, source: record.source,
+                                               suppressedRepeats: suppressedRepeats)
+            guard write(carried, to: url) else { return false }
+            cooldown = proposed
+            return true
+        }
+    }
+
+    private static func write(_ record: CardDivergenceRecord, to url: URL) -> Bool {
         guard let line = line(for: record) else { return false }
         return appending(line + "\n", to: url)
+    }
+
+    // #4354 (plan v7 D8): a per (kind, source) window during which repeats are COUNTED rather than written,
+    // so a cheap check firing on every pass cannot flood the file and evict the rare record (L191, L36).
+    //
+    // The first record of a pair is written at once, so a crash inside the window loses a count and never
+    // the record. Repeats inside the window only increment a count. The next record written after the
+    // window ends carries that count as `suppressedRepeats`, and a window that ends with nothing after it
+    // is handed back by `drainEnded` so its count is written rather than lost to a quiet period (L710).
+    //
+    // In memory, owned by whichever writer holds it; the engine's verifier is that owner (#4358), and its
+    // hourly tick is where `drainEnded` is called. Pure, so every outcome is produced by a test rather
+    // than watched not to happen (L151).
+    struct Cooldown: Equatable, Sendable {
+        struct Key: Hashable, Sendable {
+            let kind: CardDivergenceRecord.Kind
+            let source: CardDivergenceRecord.Source?
+        }
+
+        struct Held: Equatable, Sendable {
+            let kind: CardDivergenceRecord.Kind
+            let source: CardDivergenceRecord.Source?
+            let suppressedRepeats: Int
+        }
+
+        enum Admission: Equatable, Sendable {
+            case write(suppressedRepeats: Int)
+            case suppressed
+        }
+
+        private struct Window: Equatable, Sendable {
+            let openedAt: Date
+            var suppressed: Int
+        }
+
+        private var windows: [Key: Window] = [:]
+
+        init() {}
+
+        mutating func admit(kind: CardDivergenceRecord.Kind, source: CardDivergenceRecord.Source?,
+                            at now: Date) -> Admission {
+            let interval = kind.cooldown
+            guard interval > 0 else { return .write(suppressedRepeats: 0) }
+            let key = Key(kind: kind, source: source)
+            // Inside the window only while `now` is at or after it opened: a clock set backwards must not
+            // hold a window open for ever (L74).
+            if let open = windows[key], now >= open.openedAt, now.timeIntervalSince(open.openedAt) < interval {
+                windows[key]?.suppressed += 1
+                return .suppressed
+            }
+            let carried = windows[key]?.suppressed ?? 0
+            windows[key] = Window(openedAt: now, suppressed: 0)
+            return .write(suppressedRepeats: carried)
+        }
+
+        // Every window that has ENDED still holding repeats, handed back once and cleared, sorted so two
+        // runs over the same state say the same thing.
+        mutating func drainEnded(at now: Date) -> [Held] {
+            var out: [Held] = []
+            for (key, open) in windows where open.suppressed > 0 {
+                guard now < open.openedAt || now.timeIntervalSince(open.openedAt) >= key.kind.cooldown else { continue }
+                out.append(Held(kind: key.kind, source: key.source, suppressedRepeats: open.suppressed))
+                windows[key] = nil
+            }
+            return out.sorted { ($0.kind.rawValue, $0.source?.rawValue ?? "") < ($1.kind.rawValue, $1.source?.rawValue ?? "") }
+        }
     }
 
     // #3811: the one place either the live file or the archive is written to, so the archive cannot

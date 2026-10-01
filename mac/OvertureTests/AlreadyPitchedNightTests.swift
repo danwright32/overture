@@ -34,7 +34,7 @@ struct AlreadyPitchedNightTests {
 
     private func container(at url: URL) throws -> ModelContainer {
         let schema = Schema([Prospect.self, Recipient.self])
-        return try ModelContainer(for: schema,
+        return try FileStores.container(for: schema,
                                   configurations: [ModelConfiguration(schema: schema, url: url,
                                                                       cloudKitDatabase: .none)])
     }

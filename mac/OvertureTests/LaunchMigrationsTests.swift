@@ -12,7 +12,7 @@ import SwiftData
 struct LaunchMigrationsTests {
     private func openContainer(at url: URL) throws -> ModelContainer {
         let schema = Schema([Prospect.self, Recipient.self])
-        return try ModelContainer(for: schema,
+        return try FileStores.container(for: schema,
                                   configurations: [ModelConfiguration(schema: schema,
                                                                       url: url, cloudKitDatabase: .none)])
     }
@@ -33,7 +33,7 @@ struct LaunchMigrationsTests {
             let fm = FileManager.default
             let scratch = fm.temporaryDirectory
                 .appendingPathComponent("overture-launch-migrations-\(UUID().uuidString)", isDirectory: true)
-            defer { try? fm.removeItem(at: scratch) }
+            defer { FileStores.remove(scratch) }
             try fm.createDirectory(at: scratch, withIntermediateDirectories: true)
             let storeURL = scratch.appendingPathComponent("default.store")
 
@@ -77,7 +77,7 @@ struct LaunchMigrationsTests {
             let fm = FileManager.default
             let scratch = fm.temporaryDirectory
                 .appendingPathComponent("overture-1590-launch-\(UUID().uuidString)", isDirectory: true)
-            defer { try? fm.removeItem(at: scratch) }
+            defer { FileStores.remove(scratch) }
             try fm.createDirectory(at: scratch, withIntermediateDirectories: true)
             let storeURL = scratch.appendingPathComponent("default.store")
 
@@ -117,7 +117,7 @@ struct LaunchMigrationsTests {
             let fm = FileManager.default
             let scratch = fm.temporaryDirectory
                 .appendingPathComponent("overture-1744-launch-\(UUID().uuidString)", isDirectory: true)
-            defer { try? fm.removeItem(at: scratch) }
+            defer { FileStores.remove(scratch) }
             try fm.createDirectory(at: scratch, withIntermediateDirectories: true)
             let storeURL = scratch.appendingPathComponent("default.store")
 
@@ -165,7 +165,7 @@ struct LaunchMigrationsTests {
             let fm = FileManager.default
             let scratch = fm.temporaryDirectory
                 .appendingPathComponent("overture-1693-launch-\(UUID().uuidString)", isDirectory: true)
-            defer { try? fm.removeItem(at: scratch) }
+            defer { FileStores.remove(scratch) }
             try fm.createDirectory(at: scratch, withIntermediateDirectories: true)
             let storeURL = scratch.appendingPathComponent("default.store")
 
@@ -212,13 +212,13 @@ struct LaunchMigrationsTests {
             let fm = FileManager.default
             let scratch = fm.temporaryDirectory
                 .appendingPathComponent("overture-1784-launch-\(UUID().uuidString)", isDirectory: true)
-            defer { try? fm.removeItem(at: scratch) }
+            defer { FileStores.remove(scratch) }
             try fm.createDirectory(at: scratch, withIntermediateDirectories: true)
             let storeURL = scratch.appendingPathComponent("default.store")
 
             let schema = Schema([Prospect.self, Recipient.self, OrgReachabilityAnswer.self])
             func open() throws -> ModelContext {
-                ModelContext(try ModelContainer(for: schema,
+                ModelContext(try FileStores.container(for: schema,
                                                 configurations: [ModelConfiguration(schema: schema,
                                                                                     url: storeURL,
                                                                                     cloudKitDatabase: .none)]))
@@ -256,13 +256,13 @@ struct LaunchMigrationsTests {
             let fm = FileManager.default
             let scratch = fm.temporaryDirectory
                 .appendingPathComponent("overture-3453-launch-\(UUID().uuidString)", isDirectory: true)
-            defer { try? fm.removeItem(at: scratch) }
+            defer { FileStores.remove(scratch) }
             try fm.createDirectory(at: scratch, withIntermediateDirectories: true)
             let storeURL = scratch.appendingPathComponent("default.store")
             let handoff = scratch.appendingPathComponent("handoff", isDirectory: true)
 
             let schema = Schema([Prospect.self, Recipient.self, OrgReachabilityAnswer.self])
-            let context = ModelContext(try ModelContainer(
+            let context = ModelContext(try FileStores.container(
                 for: schema,
                 configurations: [ModelConfiguration(schema: schema, url: storeURL,
                                                     cloudKitDatabase: .none)]))

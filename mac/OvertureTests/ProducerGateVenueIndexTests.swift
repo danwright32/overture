@@ -83,7 +83,7 @@ struct ProducerGateVenueIndexTests {
         var matchedPairs = 0
 
         for presenter in presenterKeys {
-            let candidates = index.candidates(for: presenter)
+            let candidates = index.postings.keys(sharingAWordWith: presenter)
             for venue in keys {
                 let matches = ProducerGate.containsAsWords(presenter, venue)
                     || ProducerGate.containsAsWords(venue, presenter)
@@ -131,10 +131,10 @@ struct ProducerGateVenueIndexTests {
 
         // Shares "hall" and "carnegie" with three Carnegie rooms, and "hall" with two others.
         let carnegie = ProducerGate.key("Carnegie Hall Presents") ?? ""
-        #expect(index.candidates(for: carnegie).count < keys.count)
+        #expect(index.postings.keys(sharingAWordWith: carnegie).count < keys.count)
         // Shares no word with any room in the corpus, so nothing is compared at all.
         let unrelated = ProducerGate.key("Aurora Strings") ?? ""
-        #expect(index.candidates(for: unrelated).isEmpty)
+        #expect(index.postings.keys(sharingAWordWith: unrelated).isEmpty)
     }
 
     // The verdicts the rule's own comments call load-bearing, restated against the indexed path so a
@@ -200,7 +200,7 @@ struct ProducerGateVenueIndexLiveStoreTests {
 
     private func openContainer(at url: URL) throws -> ModelContainer {
         let schema = Schema([Prospect.self, Recipient.self])
-        return try ModelContainer(for: schema,
+        return try FileStores.container(for: schema,
                                   configurations: [ModelConfiguration(schema: schema,
                                                                       url: url, cloudKitDatabase: .none)])
     }
@@ -213,7 +213,7 @@ struct ProducerGateVenueIndexLiveStoreTests {
             let fm = FileManager.default
             let scratch = fm.temporaryDirectory
                 .appendingPathComponent("overture-1963-live-\(UUID().uuidString)", isDirectory: true)
-            defer { try? fm.removeItem(at: scratch) }
+            defer { FileStores.remove(scratch) }
             let storeCopy = try copyLiveStore(to: scratch)
             let context = ModelContext(try openContainer(at: storeCopy))
             let all = try context.fetch(FetchDescriptor<Prospect>())

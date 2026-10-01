@@ -28,6 +28,37 @@ enum Phase0 {
 
     nonisolated static func ms(since start: UInt64) -> Double { Double(now() - start) / 1_000_000 }
 
+    /// #4384: a probe's save that did not reach the store, naming the step it came from. Every probe save goes
+    /// through `save`, `saveFailure` or `requireSaved` below rather than `try? context.save()`, which let a
+    /// save that never landed read exactly like one that did, so the comparisons and timings after it judged
+    /// uncommitted state (L515, L10). Carries the save's own text (L520).
+    struct SaveNotLanded: Error, CustomStringConvertible {
+        let step: String
+        let underlying: String
+        var description: String { "the \(step) save did not land: \(underlying)" }
+    }
+
+    /// nil when the save landed, otherwise the save's own error text. For a closure that cannot throw: a
+    /// stopwatch body, or work run on another thread, whose caller then hands the answer to `requireSaved`.
+    nonisolated static func saveFailure(_ context: ModelContext,
+                                        save: (ModelContext) throws -> Void = { try $0.save() }) -> String? {
+        do {
+            try save(context)
+            return nil
+        } catch {
+            return String(describing: error)
+        }
+    }
+
+    nonisolated static func requireSaved(_ failure: String?, step: String) throws {
+        if let failure { throw SaveNotLanded(step: step, underlying: failure) }
+    }
+
+    nonisolated static func save(_ context: ModelContext, step: String,
+                                 save: (ModelContext) throws -> Void = { try $0.save() }) throws {
+        try requireSaved(saveFailure(context, save: save), step: step)
+    }
+
     nonisolated static func time(_ work: () -> Void) -> Double {
         let start = now()
         work()
@@ -100,7 +131,7 @@ enum Phase0 {
     nonisolated static func say(_ line: String) { print("phase0 " + line) }
 
     nonisolated static func openContainer(at url: URL) throws -> ModelContainer {
-        try ModelContainer(for: AppSchema.schema, configurations: [
+        try FileStores.container(for: AppSchema.schema, configurations: [
             ModelConfiguration(schema: AppSchema.schema, url: url, cloudKitDatabase: .none)])
     }
 

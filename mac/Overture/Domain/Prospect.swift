@@ -1730,6 +1730,26 @@ final class Prospect {
     // #1630: any contact on this show that Dan pitched through its form and confirmed himself.
     var hasRecordedFormOutreach: Bool { recipients.contains { $0.formOutreachRecordedAt != nil } }
 
+    // #4397: shows in ONE order, by natural key compared byte for byte, whatever order they were read in.
+    //
+    // A table fetch with no sort has no order to promise (L343), and SwiftData's is not even repeatable: on a
+    // context holding ANY unsaved change it came back in a different order on each of six opens of the same
+    // store file (measured 2026-09-30, 1,350 and 5,400 shows), while a clean context's order repeated. A reader
+    // that takes the FIRST row matching something therefore picked a different row from run to run, which is
+    // how two landings of the same inputs left two different stores. The natural key is unique in the store,
+    // so this order is total; bytes rather than a localized comparison, which can call two distinct keys equal.
+    // The key is read once per row, not once per comparison: each read goes through SwiftData's backing data.
+    // Two rows holding one key (possible only between an insert and the save that refuses it) keep the order
+    // they were handed in, said explicitly rather than left to whether the sort is stable.
+    static func inKeyOrder(_ rows: [Prospect]) -> [Prospect] {
+        rows.enumerated().map { (key: $0.element.naturalKey, at: $0.offset, row: $0.element) }
+            .sorted {
+                $0.key.utf8.elementsEqual($1.key.utf8)
+                    ? $0.at < $1.at : $0.key.utf8.lexicographicallyPrecedes($1.key.utf8)
+            }
+            .map(\.row)
+    }
+
     // The content key two results files agree on for "the same performance". Each
     // part is CANONICALIZED so a scraped name and the same name fetched/decoded
     // elsewhere produce one key (the silent-mismatch root): HTML entities decoded,

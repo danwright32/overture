@@ -29,7 +29,7 @@ struct ShowLinkCorpusShapeTests {
 
     private func container(at url: URL) throws -> ModelContainer {
         let schema = Schema([Prospect.self, Recipient.self])
-        return try ModelContainer(for: schema,
+        return try FileStores.container(for: schema,
                                   configurations: [ModelConfiguration(schema: schema, url: url,
                                                                       cloudKitDatabase: .none)])
     }
@@ -41,8 +41,11 @@ struct ShowLinkCorpusShapeTests {
         // container (#2190/#2195). THREE paths, and the early return when there is no live store to
         // clone is the one a do/catch alone does not cover.
         await RealStoreTestLock.shared.acquire()
+        // #4061: the directory whose store is released inside the lock on BOTH paths, success and throw.
+        var opened: URL?
         do {
             let dir = try sandboxes.make(named: "showlink-corpus-shape")
+            opened = dir
             guard let clone = try LiveStoreClone.makeClone(in: dir) else {
                 await RealStoreTestLock.shared.release()
                 return
@@ -108,14 +111,36 @@ struct ShowLinkCorpusShapeTests {
                         "\(miss.a) and \(miss.b) are reported as both joined and refused")
             }
 
+            // #4382: the refused pairs are ONE list whatever order the store handed the rows back in, the
+            // pairs in the same places and each turned the same way round. Counts only, never a name
+            // (L155): how many positions hold a different PAIR between the fetch order and its reverse,
+            // whichever way round, and how many pairs turn round.
+            let forwardMisses = ShowLink.nearMisses(rows)
+            let reversedMisses = ShowLink.nearMisses(rows.reversed())
+            let moved = zip(forwardMisses, reversedMisses)
+                .filter { Set([$0.0.a, $0.0.b]) != Set([$0.1.a, $0.1.b]) }.count
+            let reversedSet = Set(reversedMisses)
+            let turned = forwardMisses.filter {
+                !reversedSet.contains($0) && reversedSet.contains(ShowLink.NearMiss(a: $0.b, b: $0.a))
+            }.count
+            print("ShowLink near misses over the store: \(forwardMisses.count) refused pair(s); "
+                  + "\(moved) in a different position and \(turned) turned round when the rows arrive reversed")
+            // Compared into a Bool first: a failing `#expect` renders its operands, and these hold the live
+            // store's natural keys, which are real show names (L155, L445).
+            let sameEitherWay = forwardMisses == reversedMisses
+            #expect(sameEitherWay, "ShowLink.nearMisses depends on row order, see the printed counts")
+
             // The queue is a SUBSET of the store, so it can never find a group the store does not.
             // This is what would have caught the plan sending somebody to screenshot a queue group
             // that is really five dismissed rows (#3772, claim 3).
             #expect(distinctGroups(queueGroups) <= distinctGroups(wholeStore))
 
-            try? FileManager.default.removeItem(at: clone)
+            // #4061: the clone is released inside the lock, where every other real store step runs; the
+            // sandbox removes the directory once the test ends.
+            FileStores.close(under: dir)
             await RealStoreTestLock.shared.release()
         } catch {
+            if let opened { FileStores.close(under: opened) }
             await RealStoreTestLock.shared.release()
             throw error
         }
@@ -146,8 +171,11 @@ struct ShowLinkCorpusShapeTests {
     @Test(.enabled(if: liveStoreExists, "no live store on this machine"))
     func theScriptAndTheShippedRuleAgreeOrTheDifferenceIsExplainedByAKnownBlindSpot() async throws {
         await RealStoreTestLock.shared.acquire()
+        // #4061: the directory whose store is released inside the lock on BOTH paths, success and throw.
+        var opened: URL?
         do {
             let dir = try sandboxes.make(named: "showlink-two-derivations")
+            opened = dir
             guard let clone = try LiveStoreClone.makeClone(in: dir) else {
                 await RealStoreTestLock.shared.release()
                 return
@@ -196,9 +224,12 @@ struct ShowLinkCorpusShapeTests {
                     \(unexplained.map { $0.sorted() }.prefix(3))
                     """)
 
-            try? FileManager.default.removeItem(at: clone)
+            // #4061: the clone is released inside the lock, where every other real store step runs; the
+            // sandbox removes the directory once the test ends.
+            FileStores.close(under: dir)
             await RealStoreTestLock.shared.release()
         } catch {
+            if let opened { FileStores.close(under: opened) }
             await RealStoreTestLock.shared.release()
             throw error
         }
@@ -277,8 +308,11 @@ struct ShowLinkCorpusShapeTests {
     @Test(.enabled(if: liveStoreExists, "no live store on this machine"))
     func theGroupingCostsNoMoreThanThePassBesideIt() async throws {
         await RealStoreTestLock.shared.acquire()
+        // #4061: the directory whose store is released inside the lock on BOTH paths, success and throw.
+        var opened: URL?
         do {
             let dir = try sandboxes.make(named: "showlink-cost")
+            opened = dir
             guard let clone = try LiveStoreClone.makeClone(in: dir) else {
                 await RealStoreTestLock.shared.release()
                 return
@@ -304,9 +338,12 @@ struct ShowLinkCorpusShapeTests {
                             + "against \(String(format: "%.1f", neighbour.median)) ms for the pass built "
                             + "beside it over the same rows"))
 
-            try? FileManager.default.removeItem(at: clone)
+            // #4061: the clone is released inside the lock, where every other real store step runs; the
+            // sandbox removes the directory once the test ends.
+            FileStores.close(under: dir)
             await RealStoreTestLock.shared.release()
         } catch {
+            if let opened { FileStores.close(under: opened) }
             await RealStoreTestLock.shared.release()
             throw error
         }

@@ -35,7 +35,7 @@ struct RefusedHandleMigrationLiveStoreTests {
             let dir = fm.temporaryDirectory
                 .appendingPathComponent("refusal-rename-\(UUID().uuidString)", isDirectory: true)
             try fm.createDirectory(at: dir, withIntermediateDirectories: true)
-            defer { try? fm.removeItem(at: dir) }
+            defer { FileStores.remove(dir) }
 
             // A nil clone here is a FAILURE, not an absence. This test is already gated on the live store
             // existing, so reaching this line means the COPY failed, and returning quietly would report
@@ -50,7 +50,7 @@ struct RefusedHandleMigrationLiveStoreTests {
             // Opened under the CURRENT schema, which is the rename, exactly as Dan's own store is opened
             // at his next launch.
             let schema = Schema([Prospect.self, Recipient.self, RefusedContactAddress.self])
-            let container = try ModelContainer(
+            let container = try FileStores.container(
                 for: schema,
                 configurations: [ModelConfiguration(schema: schema, url: clone, cloudKitDatabase: .none)])
             let context = ModelContext(container)

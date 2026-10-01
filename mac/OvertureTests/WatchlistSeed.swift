@@ -50,7 +50,7 @@ enum WatchlistSeed {
     @MainActor
     static func runImport(storeURL: URL, jsonURL: URL) throws -> Summary {
         let schema = Schema([Prospect.self, Recipient.self, WatchedSource.self, DayOff.self])
-        let container = try ModelContainer(
+        let container = try FileStores.container(
             for: schema,
             configurations: [ModelConfiguration(schema: schema, url: storeURL, cloudKitDatabase: .none)])
         let context = ModelContext(container)

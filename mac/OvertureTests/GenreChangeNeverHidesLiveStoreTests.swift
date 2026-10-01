@@ -50,10 +50,10 @@ struct GenreChangeNeverHidesLiveStoreTests {
             let fm = FileManager.default
             let dir = fm.temporaryDirectory.appendingPathComponent("genre-hides-\(UUID().uuidString)",
                                                                    isDirectory: true)
-            defer { try? fm.removeItem(at: dir) }
+            defer { FileStores.remove(dir) }
             let url = try copyLiveStore(to: dir)
             let schema = Schema([Prospect.self, Recipient.self, ExcludedTown.self, AllowedSeedTown.self])
-            let context = ModelContext(try ModelContainer(
+            let context = ModelContext(try FileStores.container(
                 for: schema,
                 configurations: [ModelConfiguration(schema: schema, url: url, cloudKitDatabase: .none)]))
 

@@ -141,6 +141,43 @@ final class OrderDependenceReproductionTests {
         }
     }
 
+    // #4382: `ShowLink.nearMisses` walks its buckets in Dictionary order and orients each refused pair by
+    // which row came first, so on unchanged data the list could reorder, and a pair could turn round,
+    // between launches (L343). Not one of Step T's terms, so it is judged here in the same style. The
+    // filler already holds refused pairs in nine buckets (same title and room, no shared night); two
+    // more rows of the Glass Lantern Revue, on nights nothing else plays, refuse against its cluster.
+    private func nearMissRows() -> [ShowLink.Row] {
+        showLinkRows() + [
+            ShowLink.Row(id: "nm-z", groupName: "Glass Lantern Revue", venue: "Harbor Hall",
+                         performanceDate: "2027-06-01"),
+            ShowLink.Row(id: "nm-y", groupName: "Glass Lantern Revue", venue: "Harbor Hall",
+                         performanceDate: "2027-06-20"),
+        ]
+    }
+
+    private func rendered(_ misses: [ShowLink.NearMiss]) -> String {
+        misses.map { "\($0.a)|\($0.b)" }.joined(separator: ",")
+    }
+
+    @Test func productShowLinkNearMissesAreOneOrderedAnswerOverEveryOrder() {
+        let rows = nearMissRows()
+        let seed: UInt64 = 4382_01
+        // The answer the list must be: the same PAIRS the rule refused (membership never depended on
+        // order), each pair oriented by natural key and the list sorted by it. Built from an unordered
+        // set, so it cannot inherit whatever order the product produced.
+        let pairs = Set(ShowLink.nearMisses(rows).map { [$0.a, $0.b].sorted() })
+        let expected = pairs.sorted { ($0[0], $0[1]) < ($1[0], $1[1]) }
+            .map { ShowLink.NearMiss(a: $0[0], b: $0[1]) }
+        // 21 in the filler (six buckets of three rows, three of two) and the revue's own refusals:
+        // nm-y and nm-z against each other and against each of the three rows of the joined run.
+        #expect(expected.count == 21 + 7)
+        #expect(expected.first == ShowLink.NearMiss(a: "filler-00", b: "filler-09"))
+        let distinct = distinctAnswers({ order in
+            self.rendered(ShowLink.nearMisses(order.map { rows[$0] }))
+        }, size: rows.count, seed: seed)
+        #expect(distinct == [rendered(expected)], report("ShowLink.nearMisses, product", distinct, seed: seed))
+    }
+
     @Test func canonicalShowLinkGroupIsOneAnswerOverEveryOrder() {
         let rows = showLinkRows()
         let seed: UInt64 = 4106_01

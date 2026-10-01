@@ -287,7 +287,7 @@ final class DebugStagingTests {
     // could both mask a real persistence gap that only a genuinely separate read surfaces.
     @Test func selfSendLeadKeepsItsPendingRecipientInAFileBackedStoreAcrossContexts() throws {
         let storeURL = try sandboxes.makeFile(named: "Overture.store", inSandboxNamed: "overture-test")
-        let container = try ModelContainer(for: Schema([Prospect.self, Recipient.self]),
+        let container = try FileStores.container(for: Schema([Prospect.self, Recipient.self]),
                                            configurations: [ModelConfiguration(url: storeURL)])
 
         let writeContext = ModelContext(container)

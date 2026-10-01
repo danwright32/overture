@@ -39,7 +39,7 @@ struct AnsweredReplyBackfillLiveStoreTests {
 
     private func openContainer(at url: URL) throws -> ModelContainer {
         let schema = Schema([Prospect.self, Recipient.self])
-        return try ModelContainer(for: schema,
+        return try FileStores.container(for: schema,
                                   configurations: [ModelConfiguration(schema: schema,
                                                                       url: url, cloudKitDatabase: .none)])
     }
@@ -66,7 +66,7 @@ struct AnsweredReplyBackfillLiveStoreTests {
         let fm = FileManager.default
         let scratch = fm.temporaryDirectory
             .appendingPathComponent("overture-answeredreply-\(UUID().uuidString)", isDirectory: true)
-        defer { try? fm.removeItem(at: scratch) }
+        defer { FileStores.remove(scratch) }
 
         let copy = try copyLiveStore(to: scratch)
         let ctx = ModelContext(try openContainer(at: copy))

@@ -39,7 +39,7 @@ struct ProductionTokenMergeLiveStoreTests {
         let dir = fm.temporaryDirectory
             .appendingPathComponent("token-merge-4055-\(UUID().uuidString)", isDirectory: true)
         try fm.createDirectory(at: dir, withIntermediateDirectories: true)
-        defer { try? fm.removeItem(at: dir) }
+        defer { FileStores.remove(dir) }
 
         // A nil clone here is a FAILURE, not an absence: this test is gated on the live store existing,
         // so reaching this line means the COPY failed, and returning quietly would report green having
@@ -51,7 +51,7 @@ struct ProductionTokenMergeLiveStoreTests {
         }
 
         let schema = Schema([Prospect.self, Recipient.self])
-        let context = ModelContext(try ModelContainer(
+        let context = ModelContext(try FileStores.container(
             for: schema,
             configurations: [ModelConfiguration(schema: schema, url: clone, cloudKitDatabase: .none)]))
 

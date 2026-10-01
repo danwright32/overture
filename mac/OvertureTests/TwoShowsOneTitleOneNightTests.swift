@@ -36,7 +36,7 @@ struct TwoShowsOneTitleOneNightTests {
 
     private func container(at url: URL) throws -> ModelContainer {
         let schema = Schema([Prospect.self, Recipient.self])
-        return try ModelContainer(for: schema,
+        return try FileStores.container(for: schema,
                                   configurations: [ModelConfiguration(schema: schema, url: url,
                                                                       cloudKitDatabase: .none)])
     }
@@ -86,8 +86,11 @@ struct TwoShowsOneTitleOneNightTests {
     @Test(.enabled(if: liveStoreExists, "no live store on this machine"))
     func theStoreHoldsNoPairTheSameNightMergeWouldWronglyCollapse() async throws {
         await RealStoreTestLock.shared.acquire()
+        // #4061: the directory whose store is released inside the lock on BOTH paths, success and throw.
+        var opened: URL?
         do {
             let dir = try sandboxes.make(named: "one-title-one-night")
+            opened = dir
             guard let clone = try LiveStoreClone.makeClone(in: dir) else {
                 await RealStoreTestLock.shared.release()
                 return
@@ -218,9 +221,12 @@ struct TwoShowsOneTitleOneNightTests {
                 \(unjudged.map { "  " + $0.line + "\n    verdict key: " + JudgedPair.of($0.a, $0.b, night: $0.night).description }.joined(separator: "\n"))
                 """))
 
-            try? FileManager.default.removeItem(at: clone)
+            // #4061: the clone is released inside the lock, where every other real store step runs; the
+            // sandbox removes the directory once the test ends.
+            FileStores.close(under: dir)
             await RealStoreTestLock.shared.release()
         } catch {
+            if let opened { FileStores.close(under: opened) }
             await RealStoreTestLock.shared.release()
             throw error
         }

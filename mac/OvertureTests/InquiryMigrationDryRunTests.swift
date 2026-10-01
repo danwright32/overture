@@ -22,7 +22,7 @@ struct InquiryMigrationDryRunTests {
         let tmpDir = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("inq-dryrun-\(UUID().uuidString)")
         try fm.createDirectory(at: tmpDir, withIntermediateDirectories: true)
-        defer { try? fm.removeItem(at: tmpDir) }
+        defer { FileStores.remove(tmpDir) }
 
         // #1672: through the ONE shared clone, which takes the copy via SQLite's online backup rather
         // than racing three file copies against a live writer. See LiveStoreClone.
@@ -43,14 +43,14 @@ struct InquiryMigrationDryRunTests {
             let oldModels = AppSchema.models.filter {
                 ObjectIdentifier($0) != ObjectIdentifier(Inquiry.self)
             }
-            let oldContainer = try ModelContainer(for: Schema(oldModels),
+            let oldContainer = try FileStores.container(for: Schema(oldModels),
                                                   configurations: [ModelConfiguration(url: copy)])
             baseline = try ModelContext(oldContainer).fetch(FetchDescriptor<Prospect>()).count
         }
 
         // Migrate: open the SAME clone with the NEW schema (adds Inquiry) and confirm nothing was lost
         // and the new table exists.
-        let container = try ModelContainer(for: AppSchema.schema,
+        let container = try FileStores.container(for: AppSchema.schema,
                                            configurations: [ModelConfiguration(url: copy)])
         let ctx = ModelContext(container)
         #expect(try ctx.fetch(FetchDescriptor<Prospect>()).count == baseline)

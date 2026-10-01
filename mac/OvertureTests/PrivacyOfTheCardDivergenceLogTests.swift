@@ -47,7 +47,10 @@ struct PrivacyOfTheCardDivergenceLogTests {
     func theRecordHoldsOnlyWhatItWasDesignedTo() {
         let body = try! #require(SourceGuardHelper.between("struct CardDivergenceRecord", and: "\n}",
                                                            in: model))
-        let allowed: Set<String> = ["session", "sequence", "at", "fields", "cardsBuilt", "stage"]
+        // #4354 (plan v7 D8): kind, source and suppressedRepeats, two closed enums and a count, asserted to
+        // stay closed by `kindAndSourceAreClosedEnums` below.
+        let allowed: Set<String> = ["session", "sequence", "at", "fields", "cardsBuilt", "stage",
+                                    "kind", "source", "suppressedRepeats"]
         let declared = Set(storedNames(in: body))
         // A floor FIRST. An extraction that read nothing and a record with no fields leave the same empty
         // set, and the emptiest possible failure must not read as the cleanest possible pass (L98).
@@ -57,6 +60,33 @@ struct PrivacyOfTheCardDivergenceLogTests {
             "the divergence record's fields are \(declared.sorted()) against the \(allowed.sorted()) it "
             + "was designed to hold. Anything else is a durable file on Dan's Mac gaining a field no "
             + "repository scanner can see into (L222, #3654 C7)."))
+    }
+
+    // #4354: the two new fields hold constants of this app and nothing else. A kind or source carrying an
+    // associated value, or a raw String, would be a field a show's name could be written into.
+    @Test("the record's kind and source are closed enums with no room for a value")
+    func kindAndSourceAreClosedEnums() throws {
+        let body = try #require(SourceGuardHelper.between("struct CardDivergenceRecord", and: "\n}", in: model))
+        #expect(body.contains("    let kind: Kind\n"))
+        #expect(body.contains("    let source: Source?\n"))
+        for name in ["enum Kind: String,", "enum Source: String,"] {
+            let decl = try #require(SourceGuardHelper.between(name, and: "\n    }", in: body),
+                                    Comment(rawValue: "\(name) is gone from the record"))
+            let cases = decl.components(separatedBy: "\n").filter {
+                $0.trimmingCharacters(in: .whitespaces).hasPrefix("case ")
+            }
+            #expect(cases.count >= 2, Comment(rawValue: "read only \(cases.count) cases off \(name)"))
+            for line in cases where !line.contains("return") {
+                #expect(!line.contains("("), Comment(rawValue:
+                    "\(name) has a case carrying a value, which is room for a show's name: \(line)"))
+            }
+        }
+        // The encoded line of a new kind carries only the constants.
+        let record = CardDivergenceRecord(session: "s", sequence: 1, at: Date(), fields: [], cardsBuilt: 0,
+                                          stage: nil, kind: .noOpDirty, source: .reconcile, suppressedRepeats: 3)
+        let line = try #require(CardDivergenceLog.line(for: record))
+        #expect(line.contains("\"kind\":\"noOpDirty\""))
+        #expect(line.contains("\"source\":\"reconcile\""))
     }
 
     // The comparison hands back NAMES, and this is asserted against real data rather than by reading the

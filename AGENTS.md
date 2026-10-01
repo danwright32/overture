@@ -278,6 +278,9 @@ the subject named below.
 - **Which test harnesses hold state for the whole process**: `scripts/check-test-shared-state.sh`,
   an advisory riding along in `scripts/test-all.sh`. Its baseline records the REASON each stored
   static is safe, and `SharedStateWiringTests` checks that reason is still true.
+- **Is the store a landing leaves still what 6d3453d8 left**: `LandingOracleTests`, recorded from a
+  worktree of that commit by `scripts/landing-oracle.sh`. A real-arm file (first line marked) never
+  leaves this Mac; the push hook, CI and `scripts/real-arm-scan.sh` refuse one in any commit.
 
 ### `docs/agents/diagnostics.md`
 

@@ -59,7 +59,7 @@ struct KeyRealignmentLiveStoreTests {
             let dir = fm.temporaryDirectory
                 .appendingPathComponent("realignment-2451-\(UUID().uuidString)", isDirectory: true)
             try fm.createDirectory(at: dir, withIntermediateDirectories: true)
-            defer { try? fm.removeItem(at: dir) }
+            defer { FileStores.remove(dir) }
 
             // A nil clone here is a FAILURE, not an absence. This test is gated on the live store
             // existing, so reaching this line means the COPY failed, and returning quietly would report
@@ -73,7 +73,7 @@ struct KeyRealignmentLiveStoreTests {
             let schema = Schema([Prospect.self, Recipient.self, WatchedSource.self,
                                  RefusedContactAddress.self, OrgReachabilityAnswer.self,
                                  VenuePlaceAnswer.self, PromotedProducer.self, DemotedHouse.self])
-            let context = ModelContext(try ModelContainer(
+            let context = ModelContext(try FileStores.container(
                 for: schema,
                 configurations: [ModelConfiguration(schema: schema, url: clone,
                                                     cloudKitDatabase: .none)]))

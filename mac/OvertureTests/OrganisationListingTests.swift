@@ -214,13 +214,13 @@ struct OrganisationListingLiveStoreTests {
             let fm = FileManager.default
             let scratch = fm.temporaryDirectory
                 .appendingPathComponent("overture-1776-live-\(UUID().uuidString)", isDirectory: true)
-            defer { try? fm.removeItem(at: scratch) }
+            defer { FileStores.remove(scratch) }
             try fm.createDirectory(at: scratch, withIntermediateDirectories: true)
             // #1672: through the ONE shared clone, which takes the copy via SQLite's online backup rather
             // than racing three file copies against a live writer. See LiveStoreClone.
             guard let dest = try LiveStoreClone.makeClone(in: scratch) else { return }
             let schema = Schema([Prospect.self, Recipient.self])
-            let ctx = ModelContext(try ModelContainer(for: schema,
+            let ctx = ModelContext(try FileStores.container(for: schema,
                 configurations: [ModelConfiguration(schema: schema, url: dest, cloudKitDatabase: .none)]))
             let all = try ctx.fetch(FetchDescriptor<Prospect>())
             #expect(all.count > 100, "the live store still holds a real queue to measure")

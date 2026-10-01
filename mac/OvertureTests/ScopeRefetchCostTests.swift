@@ -152,7 +152,7 @@ struct ScopeRefetchCostTests {
         guard let clone = try LiveStoreClone.makeClone(in: dir) else {
             throw LiveStoreClone.Refusal.backupFailed("no live store on this machine")
         }
-        let c = try ModelContainer(for: AppSchema.schema, configurations: [
+        let c = try FileStores.container(for: AppSchema.schema, configurations: [
             ModelConfiguration(schema: AppSchema.schema, url: clone, cloudKitDatabase: .none)])
         let ctx = ModelContext(c)
         let rows = try ctx.fetch(FetchDescriptor<Prospect>())

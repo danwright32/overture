@@ -53,13 +53,13 @@ struct AvailabilityRenderCostTests {
             let dir = fm.temporaryDirectory
                 .appendingPathComponent("availability-cost-\(UUID().uuidString)", isDirectory: true)
             try fm.createDirectory(at: dir, withIntermediateDirectories: true)
-            defer { try? fm.removeItem(at: dir) }
+            defer { FileStores.remove(dir) }
 
             guard let clone = try LiveStoreClone.makeClone(in: dir) else {
                 throw LiveStoreClone.Refusal.backupFailed("no live store on this machine")
             }
             let schema = Schema([Prospect.self, Recipient.self, DayOff.self, CancelledShoot.self])
-            let ctx = ModelContext(try ModelContainer(
+            let ctx = ModelContext(try FileStores.container(
                 for: schema,
                 configurations: [ModelConfiguration(schema: schema, url: clone, cloudKitDatabase: .none)]))
             let exportURL = StoreLocation.handoffDirectory(appSupport: StoreLocation.appSupport,

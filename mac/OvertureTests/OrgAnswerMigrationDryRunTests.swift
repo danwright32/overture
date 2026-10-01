@@ -21,7 +21,7 @@ struct OrgAnswerMigrationDryRunTests {
         let tmpDir = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("org-ledger-dryrun-\(UUID().uuidString)")
         try fm.createDirectory(at: tmpDir, withIntermediateDirectories: true)
-        defer { try? fm.removeItem(at: tmpDir) }
+        defer { FileStores.remove(tmpDir) }
 
         // #1672: through the ONE shared clone, which takes the copy via SQLite's online backup rather
         // than racing three file copies against a live writer. See LiveStoreClone.
@@ -42,7 +42,7 @@ struct OrgAnswerMigrationDryRunTests {
             let oldModels = AppSchema.models.filter {
                 ObjectIdentifier($0) != ObjectIdentifier(OrgReachabilityAnswer.self)
             }
-            let oldContainer = try ModelContainer(for: Schema(oldModels),
+            let oldContainer = try FileStores.container(for: Schema(oldModels),
                                                   configurations: [ModelConfiguration(url: copy)])
             let ctx = ModelContext(oldContainer)
             prospects = try ctx.fetch(FetchDescriptor<Prospect>()).count
@@ -50,7 +50,7 @@ struct OrgAnswerMigrationDryRunTests {
         }
 
         // Migrate: the same clone under the NEW schema.
-        let container = try ModelContainer(for: AppSchema.schema,
+        let container = try FileStores.container(for: AppSchema.schema,
                                            configurations: [ModelConfiguration(url: copy)])
         let ctx = ModelContext(container)
         #expect(try ctx.fetch(FetchDescriptor<Prospect>()).count == prospects)

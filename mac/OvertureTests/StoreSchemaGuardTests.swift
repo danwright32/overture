@@ -26,7 +26,7 @@ struct StoreSchemaGuardTests {
         await RealStoreTestLock.shared.acquire()
         do {
             let dir = try makeSandboxDirectory()
-            defer { try? FileManager.default.removeItem(at: dir) }
+            defer { FileStores.remove(dir) }
             let storeURL = dir.appendingPathComponent("default.store")
 
             #expect(StoreSchemaGuard.hasExpectedSchema(at: storeURL))
@@ -52,10 +52,10 @@ struct StoreSchemaGuardTests {
         await RealStoreTestLock.shared.acquire()
         do {
             let dir = try makeSandboxDirectory()
-            defer { try? FileManager.default.removeItem(at: dir) }
+            defer { FileStores.remove(dir) }
             let storeURL = dir.appendingPathComponent("default.store")
             let schema = Schema([Prospect.self, Recipient.self])
-            let container = try ModelContainer(
+            let container = try FileStores.container(
                 for: schema,
                 configurations: [ModelConfiguration(schema: schema, url: storeURL, cloudKitDatabase: .none)])
 
@@ -82,7 +82,7 @@ struct StoreSchemaGuardTests {
             let dir = try makeSandboxDirectory()
             defer {
                 try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: dir.path)
-                try? FileManager.default.removeItem(at: dir)
+                FileStores.remove(dir)
             }
             let storeURL = dir.appendingPathComponent("default.store")
             // Built with sqlite3 directly rather than a ModelContainer, so nothing in this test holds the
@@ -130,7 +130,7 @@ struct StoreSchemaGuardTests {
         await RealStoreTestLock.shared.acquire()
         do {
             let dir = try makeSandboxDirectory()
-            defer { try? FileManager.default.removeItem(at: dir) }
+            defer { FileStores.remove(dir) }
             let storeURL = dir.appendingPathComponent("default.store")
             var db: OpaquePointer?
             #expect(sqlite3_open(storeURL.path, &db) == SQLITE_OK)
@@ -154,7 +154,7 @@ struct StoreSchemaGuardTests {
         await RealStoreTestLock.shared.acquire()
         do {
             let dir = try makeSandboxDirectory()
-            defer { try? FileManager.default.removeItem(at: dir) }
+            defer { FileStores.remove(dir) }
             let storeURL = dir.appendingPathComponent("default.store")
             var db: OpaquePointer?
             #expect(sqlite3_open(storeURL.path, &db) == SQLITE_OK)
@@ -173,7 +173,7 @@ struct StoreSchemaGuardTests {
         await RealStoreTestLock.shared.acquire()
         do {
             let dir = try makeSandboxDirectory()
-            defer { try? FileManager.default.removeItem(at: dir) }
+            defer { FileStores.remove(dir) }
             let storeURL = dir.appendingPathComponent("default.store")
             try "not a sqlite file".write(to: storeURL, atomically: true, encoding: .utf8)
 
@@ -197,7 +197,7 @@ struct StoreSchemaGuardTests {
         await RealStoreTestLock.shared.acquire()
         do {
             let dir = try makeSandboxDirectory()
-            defer { try? FileManager.default.removeItem(at: dir) }
+            defer { FileStores.remove(dir) }
             let storeURL = dir.appendingPathComponent("default.store")
 
             let reason = StoreSchemaGuard.refusalReason(storeURL: storeURL, dataDirectory: dir, now: Date())
@@ -215,10 +215,10 @@ struct StoreSchemaGuardTests {
         await RealStoreTestLock.shared.acquire()
         do {
             let dir = try makeSandboxDirectory()
-            defer { try? FileManager.default.removeItem(at: dir) }
+            defer { FileStores.remove(dir) }
             let storeURL = dir.appendingPathComponent("default.store")
             let schema = Schema([Prospect.self, Recipient.self])
-            _ = try ModelContainer(for: schema,
+            _ = try FileStores.container(for: schema,
                                    configurations: [ModelConfiguration(schema: schema, url: storeURL,
                                                                        cloudKitDatabase: .none)])
 
@@ -239,7 +239,7 @@ struct StoreSchemaGuardTests {
         await RealStoreTestLock.shared.acquire()
         do {
             let dir = try makeSandboxDirectory()
-            defer { try? FileManager.default.removeItem(at: dir) }
+            defer { FileStores.remove(dir) }
             let storeURL = dir.appendingPathComponent(StoreLocation.storeFilename)
             var db: OpaquePointer?
             #expect(sqlite3_open(storeURL.path, &db) == SQLITE_OK)
@@ -271,7 +271,7 @@ struct StoreSchemaGuardTests {
         await RealStoreTestLock.shared.acquire()
         do {
             let dir = try makeSandboxDirectory()
-            defer { try? FileManager.default.removeItem(at: dir) }
+            defer { FileStores.remove(dir) }
             let storeURL = dir.appendingPathComponent("default.store")
             var db: OpaquePointer?
             #expect(sqlite3_open(storeURL.path, &db) == SQLITE_OK)

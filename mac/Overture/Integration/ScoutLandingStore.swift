@@ -17,9 +17,10 @@ import SwiftData
 // title A just rewrote is what B's token discard has to count. A copy taken at the start and never updated
 // would let two sources mint the same show twice or join what must not be joined, silently. So:
 //
-//   - MEMBERSHIP is the fetch plus every row the landing inserts (`inserted`), in that order, which is the
-//     order a fresh fetch returns them in (an unsorted fetch comes back in insertion order, and a row
-//     inserted since sits after every row that was already there). Rows deleted from the context drop out
+//   - MEMBERSHIP is the fetch plus every row the landing inserts (`inserted`), in that order: the fetch in
+//     natural key order, then the inserts as they came (#4397). Never the fetch's own order, which on a
+//     context holding unsaved changes differs from one read to the next. `.everyRead` orders each fresh
+//     fetch the same way, by the rank this landing gave each row. Rows deleted from the context drop out
 //     on every read. Nothing in the landing deletes a show today; the filter is there so the day something
 //     does, the working set cannot hand back a row a fresh fetch would not.
 //   - EVERY FOLD is re-derived when the raw fields it came from change. A cached fold is compared against
@@ -119,14 +120,60 @@ final class ScoutLandingStore {
     private var keysToCheck: [ObjectIdentifier: Prospect] = [:]
     // The natural key index, built on the first keyed lookup from the membership and kept in its order, so
     // two rows holding one key (possible only between an insert and the save that refuses it) answer in the
-    // order a fresh fetch would.
+    // membership's order.
     private var keyIndex: [String: [Prospect]]?
     private var indexedKey: [ObjectIdentifier: String] = [:]
     private var position: [ObjectIdentifier: Int] = [:]
+    // #4397: the order this landing holds its rows in, one rank per row, kept with the row so the identifier
+    // cannot be reused by another object. The first read ranks what it found in key order; every row the
+    // landing inserts is ranked after all of those, in the order inserted. Both policies order by it, so the
+    // working set and the fresh read it is proved equivalent to agree, and a re-key does not move a row.
+    private var rank: [ObjectIdentifier: (row: Prospect, rank: Int)] = [:]
     private let saveWatch = SaveWatch()
+    // #4327 step 0.7 (RC4): what this working set did, counted, so whether the stored shows are served from
+    // the cache for the second source onwards is a measurement and not a reading of this file. Cumulative
+    // over the landing; the difference of two snapshots is what the work between them cost, which is how the
+    // landing attribution probe reports each source. Counting only: nothing here reads a counter.
+    struct Counters: Equatable, Sendable {
+        // The label an ingest reports its last snapshot under, taken after the reconcile's read.
+        static let afterReconcile = "reconcile"
+        // `storedShowsPerURL` walked every row into shows again, and when it answered from its cache.
+        var storedShowsBuilds = 0
+        var storedShowsCacheHits = 0
+        // Why `generation` moved, by the site that moved it: a row folded for the FIRST time (`fold(of:)` with
+        // nothing cached), a cached fold that no longer described its row (`fold(of:)`, a written field), and a
+        // row the landing inserted (`inserted(_:)`). Any move makes the next stored shows read rebuild.
+        var generationMovesFirstFold = 0
+        var generationMovesFoldChanged = 0
+        var generationMovesInserted = 0
+        // Cached folds compared against their row, because SwiftData named the row as written (#4275).
+        var foldValidations = 0
+        // Store rows VISITED. `rowsRead` is the rows the one fetch returned. `rowsHandedOut` is the rows every
+        // caller of `rows()` was given, each of which walks what it is given. `rowsWalked` is the working
+        // set's own walks over every row: the deletion filter, the key index build, and the stored shows
+        // read's fold pass and build.
+        var rowsRead = 0
+        var rowsHandedOut = 0
+        var rowsWalked = 0
+
+        var generationMoves: Int { generationMovesFirstFold + generationMovesFoldChanged + generationMovesInserted }
+
+        static func - (a: Counters, b: Counters) -> Counters {
+            Counters(storedShowsBuilds: a.storedShowsBuilds - b.storedShowsBuilds,
+                     storedShowsCacheHits: a.storedShowsCacheHits - b.storedShowsCacheHits,
+                     generationMovesFirstFold: a.generationMovesFirstFold - b.generationMovesFirstFold,
+                     generationMovesFoldChanged: a.generationMovesFoldChanged - b.generationMovesFoldChanged,
+                     generationMovesInserted: a.generationMovesInserted - b.generationMovesInserted,
+                     foldValidations: a.foldValidations - b.foldValidations,
+                     rowsRead: a.rowsRead - b.rowsRead,
+                     rowsHandedOut: a.rowsHandedOut - b.rowsHandedOut,
+                     rowsWalked: a.rowsWalked - b.rowsWalked)
+        }
+    }
+    private(set) var counters = Counters()
     // How many cached folds were compared against their row. Counted so a test can pin that it does not
     // grow with the store (#4275).
-    private(set) var foldValidations = 0
+    var foldValidations: Int { counters.foldValidations }
     // Moves whenever any row's folds are (re)computed or a row joins, so a value derived from every row's
     // folds knows when it has to be derived again.
     private var generation = 0
@@ -200,9 +247,17 @@ final class ScoutLandingStore {
         }
     }
 
-    // Every stored show, as a fresh fetch would return it right now. Throws when the store cannot answer.
+    // Every stored show a fresh fetch would return right now, in this landing's order. Throws when the store
+    // cannot answer.
     func rows() throws -> [Prospect] {
-        if policy == .everyRead { return try read(context) }
+        let current = try currentRows()
+        counters.rowsHandedOut += current.count
+        return current
+    }
+
+    // `rows()` without counting the rows as handed to a caller, for the working set's own reads.
+    private func currentRows() throws -> [Prospect] {
+        if policy == .everyRead { return ranked(try read(context)) }
         if let loaded {
             noteWrittenRows()
             // Re-filtering every row on every read was, once keyed lookups came here, a larger cost than the
@@ -210,23 +265,45 @@ final class ScoutLandingStore {
             // used only while no deletion is pending, which is what makes it the answer the filter would give.
             let deletionPending = context.hasChanges && !context.deletedModelsArray.isEmpty
             if let members, !deletionPending { return members }
+            counters.rowsWalked += loaded.count
             let current = loaded.filter { !$0.isDeleted }
             members = deletionPending ? nil : current
             return current
         }
-        let fetched = try read(context)
+        // #4397: held in the landing's own order, never the read's. Every first match the landing makes reads
+        // this array, and an unsorted fetch on a context with unsaved changes comes back in a different order
+        // each time.
+        let fetched = ranked(try read(context))
+        counters.rowsRead += fetched.count
         loaded = fetched
         members = fetched
         return fetched
     }
 
+    // `rows` in this landing's order: rows it has ranked by their rank, and any it has not yet seen (the whole
+    // first read) ranked now, in key order, after them.
+    private func ranked(_ rows: [Prospect]) -> [Prospect] {
+        let unseen = rows.filter { rank[ObjectIdentifier($0)] == nil }
+        for p in Prospect.inKeyOrder(unseen) { rankNext(p) }
+        return rows.map { (row: $0, rank: rank[ObjectIdentifier($0)]?.rank ?? Int.max) }
+            .sorted { $0.rank < $1.rank }
+            .map(\.row)
+    }
+
+    private func rankNext(_ p: Prospect) {
+        rank[ObjectIdentifier(p)] = (row: p, rank: rank.count)
+    }
+
     // A row this landing has just put into the context. Before the first read there is nothing to add it
     // to, and the read that follows will return it, because a fetch includes unsaved inserts.
     func inserted(_ p: Prospect) {
+        // Ranked under both policies once anything has been read, so a fresh read places it where `.once` does.
+        if !rank.isEmpty, rank[ObjectIdentifier(p)] == nil { rankNext(p) }
         guard policy == .once, loaded != nil else { return }
         loaded?.append(p)
         members = nil
         generation += 1
+        counters.generationMovesInserted += 1
         if keyIndex != nil { index(p, at: (loaded?.count ?? 1) - 1) }
     }
 
@@ -238,10 +315,11 @@ final class ScoutLandingStore {
         if policy == .everyRead { return try readKey(key, context) }
         // The rows are loaded once; after that only what was written is asked about. A deleted row stays in
         // the index and is refused below, so no read of every row's `isDeleted` is needed here.
-        if loaded == nil { _ = try rows() } else { noteWrittenRows() }
+        if loaded == nil { _ = try currentRows() } else { noteWrittenRows() }
         if keyIndex == nil {
             keyIndex = [:]
             keysToCheck = [:]
+            counters.rowsWalked += loaded?.count ?? 0
             for (i, p) in (loaded ?? []).enumerated() { index(p, at: i) }
         } else {
             for (id, p) in keysToCheck where indexedKey[id] != nil && indexedKey[id] != p.naturalKey {
@@ -282,8 +360,11 @@ final class ScoutLandingStore {
         let written = foldsToCheck.remove(id) != nil
         if let cached = folds[id] {
             if !written { return cached }
-            foldValidations += 1
+            counters.foldValidations += 1
             if cached.describes(p) { return cached }
+            counters.generationMovesFoldChanged += 1
+        } else {
+            counters.generationMovesFirstFold += 1
         }
         let fresh = Fold(p)
         folds[id] = fresh
@@ -296,11 +377,15 @@ final class ScoutLandingStore {
     // title test per URL), and before this it was repeated, identically, for every source of a landing.
     // Every row's fold is asked for first, which re-folds any row SwiftData named as written since.
     func storedShowsPerURL() throws -> StoredShows {
-        let rows = try rows()
+        let rows = try currentRows()
+        counters.rowsWalked += rows.count
         for row in rows { _ = fold(of: row) }
         if policy == .once, let shows, shows.generation == generation, shows.count == rows.count {
+            counters.storedShowsCacheHits += 1
             return shows.value
         }
+        counters.storedShowsBuilds += 1
+        counters.rowsWalked += rows.count
         var value = StoredShows()
         let seen = rows.flatMap { ScoutService.ambiguityEntries(of: fold(of: $0)) }
         ShowLink.addShows(seen, scopedByVenue: true, into: &value.atAVenue)
