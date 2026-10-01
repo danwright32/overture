@@ -492,6 +492,39 @@ struct ScoutReadPhaseWritesNothingTests {
         #expect(s.lastManualReadAt == nil, "the tail ran after save one failed")
         #expect(!flight.isHeld)
     }
+
+    // Stopped is not silent: what this run found still reaches Dan when save one fails. The pages it never
+    // handed over read as waiting, not as being read; a source over budget still reads as waiting; and the
+    // past client list's health is still said. Only the tail's WRITES are stopped (lessons review of #4422).
+    @Test func aFailedSaveOneStillReportsWhatTheRunFound() async throws {
+        struct SaveRefused: Error {}
+        let c = try container()
+        let ctx = c.mainContext
+        for id in ["a-org", "b-org"] { html(id, in: ctx).hasUnreadChanges = true }
+        try ctx.save()
+        let flight = LandingSingleFlight(sleep: { _ in })
+        var launched = false
+
+        let outcome = try await ScoutService.runScout(
+            into: ctx, depth: .readChanged,
+            fetch: { url, _, _ in FetchedPage(normalizedHTML: "<p/>", finalURL: url.absoluteString, contentHash: "new") },
+            pin: { _, id in URL(fileURLWithPath: "/tmp/\(id).html") },
+            launch: { _ in launched = true },
+            budget: 1,
+            now: now, defaults: ScratchDefaults.make("ScoutReadPhaseWritesNothingTests-saveone-report"),
+            landings: flight, sequenceFloor: { 0 },
+            saveClosing: { _ in throw SaveRefused() })
+
+        #expect(outcome.saveFailed)
+        #expect(!launched)
+        let states = Dictionary(outcome.sources.map { ($0.sourceId, $0.state) }, uniquingKeysWith: { $1 })
+        #expect(states["a-org"] == .deferred, Comment(rawValue:
+            "the page never handed over was reported as \(String(describing: states["a-org"]))"))
+        #expect(states["b-org"] == .deferred, Comment(rawValue:
+            "the source over budget was reported as \(String(describing: states["b-org"]))"))
+        #expect(!outcome.sources.contains { $0.state == .queuedForReading })
+        #expect(outcome.clientListWarning == DownbeatBridge.warningText(for: DownbeatBridge.loadWithHealth(now: now).health))
+    }
 }
 
 // Holds a fetch until the test opens it, and says when it is holding.

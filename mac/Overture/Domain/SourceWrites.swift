@@ -16,8 +16,9 @@ import Foundation
 // source the same way and a test can prove every branch was driven (`Site`).
 struct SourceWrites: Equatable, Sendable {
 
-    // Where in the read phase a write was decided: one case per branch that writes, derived from the code
-    // by `ScoutReadPhaseWritesNothingTests`, which also drives each one and fails on a case no fake reached.
+    // Where in the read phase a write was decided: one case per branch that writes. That every case is built
+    // by the app is checked against the code by `ScoutReadPhaseWriteScanTests`; that a fake drives each one
+    // is `ScoutReadPhaseWritesNothingTests`, which fails on a case no fake reached.
     enum Site: String, CaseIterable, Sendable {
         // `SourceCheck.decide`: its failure branch, and its two success branches, the unchanged one both
         // with and without a re-read owed (#1217).

@@ -717,6 +717,14 @@ enum ScoutService {
             source.applyCaptured(writes)
             onApplyCaptured?(writes)
         }
+        // Sources this run leaves waiting to be read, reported as `.deferred`: the one word for that fact,
+        // whether the budget, Dan's answer or a failed save one is why (see the tail).
+        func reportWaiting(_ sources: [WatchedSource]) {
+            for source in sources {
+                outcome.sources.append(SourceResult(sourceId: source.sourceId, orgName: source.orgName,
+                                                    state: .deferred, listingsURL: source.listingsURL))
+            }
+        }
         let landing = ScoutLandingStore(context: context, read: readProspectTable)
         for slot in reports {
             switch slot {
@@ -758,8 +766,19 @@ enum ScoutService {
         // below runs, so no read is handed off on a pending hash the store never took. Putting the unsaved
         // writes back first is A5's revert, which is not built yet; until it is, they stay pending exactly as a
         // failed per source save leaves them (#499).
+        //
+        // What it does NOT stop is the report. This run's findings are still true and still Dan's to see: the
+        // per source results above, the sources still waiting to be read, and the past client list's health.
+        // The pages queued for reading were never handed over, so they are reported as waiting rather than as
+        // being read. Everything the tail WRITES (the handoff, the fairness clock, the booking reconcile, the
+        // blocked town retirement, the completed scout timestamp) stays stopped, since it would build on
+        // writes the store never took.
         if !saveLanding(landing, into: context, save: saveClosing) {
             outcome.saveFailed = true
+            let neverHandedOver = Set(toRead.map { $0.source.sourceId })
+            outcome.sources.removeAll { $0.state == .queuedForReading && neverHandedOver.contains($0.sourceId) }
+            reportWaiting(SourceSchedule.waitingToRead(deferred: plan.deferred) + toRead.map(\.source))
+            outcome.clientListWarning = DownbeatBridge.warningText(for: loaded.health)
             return outcome      // save one failed: the landing stops here
         }
         // #4330: released here, before the read budget question.
@@ -832,10 +851,7 @@ enum ScoutService {
         // path that already exists rather than gaining a second word for the same fact. It is NOT filtered
         // by waitingToRead: that filter exists to drop UNCHANGED sources a budget skipped, and every source
         // here reached toRead, which means it has something to read by definition.
-        for source in SourceSchedule.waitingToRead(deferred: plan.deferred) + declined {
-            outcome.sources.append(SourceResult(sourceId: source.sourceId, orgName: source.orgName,
-                                                state: .deferred, listingsURL: source.listingsURL))
-        }
+        reportWaiting(SourceSchedule.waitingToRead(deferred: plan.deferred) + declined)
 
         outcome.clientListWarning = DownbeatBridge.warningText(for: loaded.health)
 
