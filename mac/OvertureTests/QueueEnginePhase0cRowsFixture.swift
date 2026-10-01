@@ -45,6 +45,14 @@ final class Phase0cRowsFixture {
     var replyRunAlive = false
     private var rng: SeededGenerator
     private var inserted = 0
+    // #4384: the save a step and its undo go through, and the seam a test fails. It used to be a bare
+    // `try? context.save()`, so a save that never landed read exactly like one that did.
+    var save: (ModelContext) throws -> Void = { try $0.save() }
+
+    // Through `Phase0.save`, the one throwing save every Phase 0 probe shares, so a failure names its step.
+    private func commit(_ step: String) throws {
+        try Phase0.save(context, step: step, save: save)
+    }
 
     static func day(_ offset: Int, from base: Date = baseNow) -> String {
         let f = DateFormatter()
@@ -216,7 +224,7 @@ final class Phase0cRowsFixture {
         let kind: Kind
         let label: String
         let changed: Set<PersistentIdentifier>
-        let undo: () -> Set<PersistentIdentifier>
+        let undo: () throws -> Set<PersistentIdentifier>
     }
 
     func pickKind() -> Kind { pick(Kind.allCases) }
@@ -225,8 +233,9 @@ final class Phase0cRowsFixture {
 
     func coin(_ p: Double) -> Bool { chance(p) }
 
-    // Every operation returns the rows it touched and an undo that restores exactly what it changed.
-    func perform(_ kind: Kind) -> Op? {
+    // Every operation returns the rows it touched and an undo that restores exactly what it changed. Both THROW
+    // when a save they make does not land (#4384).
+    func perform(_ kind: Kind) throws -> Op? {
         let p = pick(rows)
         let pid = p.persistentModelID
         switch kind {
@@ -393,13 +402,13 @@ final class Phase0cRowsFixture {
                 fresh.performanceDate = p.performanceDate
                 fresh.runEndDate = p.runEndDate
             }
-            try? context.save()
+            try commit("insert row")
             rows.append(fresh)
             let fpid = fresh.persistentModelID
             return Op(kind: kind, label: "insert row", changed: [fpid]) {
                 self.rows.removeAll { $0 === fresh }
                 self.context.delete(fresh)
-                try? self.context.save()
+                try self.commit("insert row (undo)")
                 return [fpid]
             }
         case .producerOverride:

@@ -820,11 +820,13 @@ struct QueueEnginePhase0bProbeTests {
             let row = shows[0]
             _ = row.tier
             let id = row.persistentModelID
-            _ = await phase0OnThread("phase0b-foreign-a") {
+            let foreignA: String? = await phase0OnThread("phase0b-foreign-a") {
                 let other = ModelContext(container)
-                if let r = other.model(for: id) as? Prospect { r.tier = "top"; try? other.save() }
-                return true
+                guard let r = other.model(for: id) as? Prospect else { return "the row was not found" }
+                r.tier = "top"
+                return Phase0.saveFailure(other)
             }
+            try Phase0.requireSaved(foreignA, step: "0b.4 foreign save of A")
             row.fitReason = "unsaved B"
             let before = row.tier
             _ = refetch(ctx, id)
@@ -836,11 +838,13 @@ struct QueueEnginePhase0bProbeTests {
             let row = shows[0]
             _ = row.fitReason
             let id = row.persistentModelID
-            _ = await phase0OnThread("phase0b-foreign-delete") {
+            let foreignDelete: String? = await phase0OnThread("phase0b-foreign-delete") {
                 let other = ModelContext(container)
-                if let r = other.model(for: id) as? Prospect { other.delete(r); try? other.save() }
-                return true
+                guard let r = other.model(for: id) as? Prospect else { return "the row was not found" }
+                other.delete(r)
+                return Phase0.saveFailure(other)
             }
+            try Phase0.requireSaved(foreignDelete, step: "0b.4 foreign delete")
             let got = refetch(ctx, id)
             let all = ((try? ctx.fetch(FetchDescriptor<Prospect>())) ?? []).count
             lines.append("row deleted by another context, refetch on main: refetch returned \(got.count) rows; a whole fetch returns \(all) of 1 remaining; held instance isDeleted \(row.isDeleted), has a context \(row.modelContext != nil), StoreRows.isLive \(StoreRows.isLive(row))")
@@ -851,11 +855,13 @@ struct QueueEnginePhase0bProbeTests {
             let row = shows[0]
             if faulted { _ = probeExtractProspect(row) }
             let id = row.persistentModelID
-            _ = await phase0OnThread("phase0b-foreign-a2") {
+            let foreignA2: String? = await phase0OnThread("phase0b-foreign-a2") {
                 let other = ModelContext(container)
-                if let r = other.model(for: id) as? Prospect { r.tier = "top"; try? other.save() }
-                return true
+                guard let r = other.model(for: id) as? Prospect else { return "the row was not found" }
+                r.tier = "top"
+                return Phase0.saveFailure(other)
             }
+            try Phase0.requireSaved(foreignA2, step: "0b.4 foreign save of A before main saves B")
             row.fitReason = "main B"
             try ctx.save()
             let check: (String, String) = await phase0OnThread("phase0b-readback") {
@@ -1008,21 +1014,27 @@ struct QueueEnginePhase0bProbeTests {
                 : Set(restamped.flatMap { k in [k, k + "qa", k + "qb", k + "qc"] })
             let rows = try ctx.fetch(FetchDescriptor<Prospect>()).filter { keys.contains($0.naturalKey) }
             var oneSave: [Double] = [], spread: [Double] = [], empty: [Double] = []
+            // #4384: each timed save's failure is carried out of the stopwatch and ends the probe, so a save that
+            // never landed is not timed as one that did, and the next block does not time pending writes.
             for _ in 0..<5 {
-                empty.append(Phase0.time { try? ctx.save() })
+                var failure: String?
+                empty.append(Phase0.time { failure = Phase0.saveFailure(ctx) })
+                try Phase0.requireSaved(failure, step: "0b.6 empty save")
                 oneSave.append(Phase0.time {
                     let stamp = Date()
                     for r in rows { r.ingestedAt = stamp }
-                    try? ctx.save()
+                    failure = Phase0.saveFailure(ctx)
                 })
+                try Phase0.requireSaved(failure, step: "0b.6 one save of the restamp")
                 let chunk = max(1, rows.count / 36)
                 spread.append(Phase0.time {
                     let stamp = Date()
-                    for start in stride(from: 0, to: rows.count, by: chunk) {
+                    for start in stride(from: 0, to: rows.count, by: chunk) where failure == nil {
                         for r in rows[start..<min(start + chunk, rows.count)] { r.ingestedAt = stamp }
-                        try? ctx.save()
+                        failure = Phase0.saveFailure(ctx)
                     }
                 })
+                try Phase0.requireSaved(failure, step: "0b.6 restamp spread over 36 saves")
             }
             Phase0b.say("""
                 0b.6 [\(label)] \(events) events over \(results.results.count) sources, \(Phase0.load())
