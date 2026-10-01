@@ -596,7 +596,7 @@ struct ScoutServiceTests {
         source.lastUnreadableCount = 1
         let page = FetchedPage(normalizedHTML: "<p>listings</p>", finalURL: "https://dciny.org/opportunities/",
                                contentHash: "unchanged-bytes")
-        #expect(SourceCheck.decide(source: source, result: .success(page), depth: .readChanged, now: now)
+        #expect(SourceCheck.decideApplying(source: source, result: .success(page), depth: .readChanged, now: now)
                 == .read(page))   // re-read despite the unchanged hash: this is the path that re-extracts
 
         // First scout: the prospect lands and Dan queues it.

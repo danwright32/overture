@@ -90,7 +90,7 @@ struct AddressCorrectionTests {
 
     // #1503: `.squarespaceFeed` is assigned by a CONTENT probe and `forListingURL` cannot return it, so a
     // correction demotes it to `.html`. That is correct rather than a regression: the new address may not
-    // be Squarespace at all, and `ScoutService.promoteToSquarespaceIfEventsCollection` re-probes any
+    // be Squarespace at all, and `ScoutService.shouldPromoteToSquarespace` re-probes any
     // `.html` source on its next check, so a page that still is one is promoted straight back.
     @Test func aSquarespaceSourceIsDemotedToTheReadPathAndLetsTheProbePromoteItAgain() throws {
         let ctx = try context()

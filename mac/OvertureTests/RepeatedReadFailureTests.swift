@@ -161,8 +161,8 @@ struct RepeatedReadFailureTests {
     @Test func aFetchThatNeverLandedThePageCountsToo() {
         let s = source()
 
-        _ = SourceCheck.decide(source: s, result: .failure(.unreachable), depth: .watchOnly, now: now)
-        _ = SourceCheck.decide(source: s, result: .failure(.http(404)), depth: .watchOnly, now: now)
+        _ = SourceCheck.decideApplying(source: s, result: .failure(.unreachable), depth: .watchOnly, now: now)
+        _ = SourceCheck.decideApplying(source: s, result: .failure(.http(404)), depth: .watchOnly, now: now)
 
         #expect(s.failedReadStreak == 2)
         #expect(s.health == .failing)
@@ -179,7 +179,7 @@ struct RepeatedReadFailureTests {
 
         let page = FetchedPage(normalizedHTML: "<html></html>",
                                finalURL: "https://org.example/events", contentHash: "H")
-        _ = SourceCheck.decide(source: s, result: .success(page), depth: .watchOnly, now: now)
+        _ = SourceCheck.decideApplying(source: s, result: .success(page), depth: .watchOnly, now: now)
 
         #expect(s.health == .ok)                 // the fetch really did work, and the row says so
         #expect(s.lastFailure == nil)
@@ -238,7 +238,7 @@ struct RepeatedReadFailureTests {
         for _ in 1...4 { s.recordFailedRead(.verdict(.unreadable), now: now) }
         let page = FetchedPage(normalizedHTML: "<html></html>",
                                finalURL: "https://org.example/events", contentHash: "H")
-        _ = SourceCheck.decide(source: s, result: .success(page), depth: .watchOnly, now: now)
+        _ = SourceCheck.decideApplying(source: s, result: .success(page), depth: .watchOnly, now: now)
 
         #expect(SourceGrade(s) != .failing)          // nothing else in the sheet would flag it
         #expect(SourceAttention.needsALook(s, now: now))
