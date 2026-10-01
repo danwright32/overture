@@ -392,7 +392,8 @@ enum LandingOracleCorpus {
     /// The corpus landed through `ScoutService.runScout`: every source a native one whose extractor returns
     /// its events, read at `.watchOnly` (the free daily run, which reads nothing it would pay for), then the
     /// one explicit save and the container, exactly as `land` does for the ingest.
-    static func landThroughRunScout(order: [String]? = nil) async throws -> ModelContainer {
+    /// `failing` names corpus sources whose read fails, which only the test of the landed check passes.
+    static func landThroughRunScout(order: [String]? = nil, failing: Set<String> = []) async throws -> ModelContainer {
         if let refusal = handoffInputsRefusal() { throw Unmeasured(description: refusal) }
         let ids = try checkedOrder(order)
         let container = try TestModelContainer.inMemory(AppSchema.models)
@@ -406,7 +407,7 @@ enum LandingOracleCorpus {
             into: context, depth: .watchOnly, extractor: NoFeed(),
             extractorRegistry: { source in
                 read.append(source?.sourceId ?? "(none)")
-                guard let id = source?.sourceId, let s = byId[id] else { return NoFeed() }
+                guard let id = source?.sourceId, let s = byId[id], !failing.contains(id) else { return NoFeed() }
                 return CorpusFeed(events: s.events.map(\.asExtractedEvent))
             },
             fetch: { url, _, _ in throw Unmeasured(description: "runScout fetched \(url), and the corpus has no page") },

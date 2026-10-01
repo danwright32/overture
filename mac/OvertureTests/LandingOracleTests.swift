@@ -226,6 +226,20 @@ final class LandingOracleTests {
         }
     }
 
+    // A runScout sweep that read every source in order but failed to land one is refused, never recorded or
+    // compared as 6d3453d8's: the order check alone cannot see it, because the failed source was still read.
+    @Test func aRunScoutSweepThatDidNotLandEverySourceIsRefused() async {
+        do {
+            _ = try await LandingOracleCorpus.landThroughRunScout(failing: ["oracle-quarry"])
+            Issue.record("a runScout sweep that failed to read oracle-quarry was taken as a whole landing")
+        } catch let refused as LandingOracleCorpus.Unmeasured {
+            #expect(refused.description.hasPrefix("runScout did not land [\"oracle-quarry\"]"), Comment(rawValue:
+                "the sweep was refused for another reason: \(refused.description)"))
+        } catch {
+            Issue.record(Comment(rawValue: "the sweep failed some other way: \(error)"))
+        }
+    }
+
     // The script copies the recordings by the names IT expects, and this suite reads them by the names each
     // Path names. Two lists of one fact, so they are compared, with the script's built by the script (L70).
     @Test func theScriptRecordsTheFilesEachEntryPointReads() throws {
