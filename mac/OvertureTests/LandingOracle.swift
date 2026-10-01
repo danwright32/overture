@@ -57,6 +57,10 @@ enum LandingOracle {
             "a health stamp the plan pins later with the clock seam; recordSuccessfulRead writes it from now",
         "WatchedSource.lastNonEmptyAt":
             "a health stamp the plan pins later with the clock seam; recordSuccessfulRead writes it from now",
+        // Not a clock, but excluded for the same reason: it cannot repeat across two landings.
+        "WatchedSource.lastTouchedSequence":
+            "#4330's landing sequence, minted per run above every earlier mint in the process, so two "
+            + "landings of the same inputs differ by construction; 6d3453d8 has no such field",
     ]
 
     // MARK: the snapshot
