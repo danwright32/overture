@@ -5,9 +5,12 @@ set -uo pipefail
 # freeze the real inputs it is recorded on.
 #
 #   scripts/landing-oracle.sh [--freeze <archive>] [--inputs <archive>] [--out <dir>]
-#                             [--synthetic-to <file>] [--commit <sha>]
+#                             [--synthetic-to <dir>] [--commit <sha>]
 #
-#   (no flags)            record the synthetic arm into fixtures/landing-oracle/synthetic-<commit>.txt
+#   (no flags)            record the synthetic arm into fixtures/landing-oracle/, one file per entry point that
+#                         lands shows (#4374): synthetic-<commit>.txt (the extract ingest),
+#                         synthetic-runscout-<commit>.txt (runScout's native sweep) and
+#                         synthetic-leadpaste-<commit>.txt (the lead paste)
 #   --freeze <archive>    first build the frozen inputs there (#4327 step 0.0), then record the real arm on
 #                         them (implies --inputs <archive>). The archive must not exist yet, must sit outside
 #                         every git work tree, and is left READ ONLY with a MANIFEST of content hashes
@@ -41,6 +44,20 @@ ORACLE_OVERLAY=(
   mac/OvertureTests/LandingOracleCorpus.swift
   mac/OvertureTests/LandingOracleTests.swift
 )
+
+# The synthetic tests the recording runs, one per entry point that lands shows (#4374), and the file each
+# writes. LandingOracleCorpus.Path names the same three files on the Swift side; a run that leaves any one of
+# them unwritten is refused by name rather than copying the two it did write.
+ORACLE_SYNTHETIC_TESTS=(
+  theSyntheticLandingEqualsTheOracleRecordedFromMain
+  theRunScoutLandingEqualsTheOracleRecordedFromMain
+  theLeadPasteLandingEqualsTheOracleRecordedFromMain
+)
+
+# oracle_synthetic_recordings <short commit>: the file names the synthetic run writes, one per line.
+oracle_synthetic_recordings() {
+  printf '%s\n' "synthetic-$1.txt" "synthetic-runscout-$1.txt" "synthetic-leadpaste-$1.txt"
+}
 
 # oracle_overlay_refusal <commit> <path>: why <path> may not be overlaid onto <commit>, or nothing.
 oracle_overlay_refusal() {
@@ -120,7 +137,7 @@ main() {
     return 2
   fi
   local short="${full:0:8}"
-  [ -n "${synthetic_to}" ] || synthetic_to="${REPO_ROOT}/fixtures/landing-oracle/synthetic-${short}.txt"
+  [ -n "${synthetic_to}" ] || synthetic_to="${REPO_ROOT}/fixtures/landing-oracle"
   [ -z "${freeze}" ] || inputs="${freeze}"
 
   if [ -n "${inputs}" ]; then
@@ -183,19 +200,27 @@ main() {
   export OVERTURE_DIR_LOCK_TIMEOUT="${OVERTURE_DIR_LOCK_TIMEOUT:-14400}"
   log="${scratch}/run.log"
 
-  # 1. The synthetic arm. Its passing run IS the proof the overlay compiles against the old app.
-  local recorded="${scratch}/synthetic.txt"
-  TEST_RUNNER_LANDING_ORACLE_RECORD_SYNTHETIC="${recorded}" \
-    "${runner}" "-only-testing:${suite}/theSyntheticLandingEqualsTheOracleRecordedFromMain()" 2>&1 | tee "${log}"
+  # 1. The synthetic arm, one recording per entry point (#4374), all three in ONE runner invocation so they
+  #    queue for the test lock once. Its passing run IS the proof the overlay compiles against the old app.
+  local recorded="${scratch}/synthetic" name test missing=""
+  mkdir -p "${recorded}"
+  local only=()
+  for test in "${ORACLE_SYNTHETIC_TESTS[@]}"; do only+=("-only-testing:${suite}/${test}()"); done
+  TEST_RUNNER_LANDING_ORACLE_RECORD_SYNTHETIC="${recorded}" "${runner}" "${only[@]}" 2>&1 | tee "${log}"
   status="${PIPESTATUS[0]}"
-  if [ "${status}" -ne 0 ] || [ ! -s "${recorded}" ]; then
-    echo "landing-oracle: REFUSED: the overlay did not build and record at ${full} (exit ${status})" >&2
+  for name in $(oracle_synthetic_recordings "${short}"); do
+    [ -s "${recorded}/${name}" ] || missing="${missing} ${name}"
+  done
+  if [ "${status}" -ne 0 ] || [ -n "${missing}" ]; then
+    echo "landing-oracle: REFUSED: the overlay did not build and record at ${full} (exit ${status}; not recorded:${missing:- none})" >&2
     return 1
   fi
   echo "landing-oracle: OVERLAY COMPILED AND RAN against ${full}"
-  mkdir -p "$(dirname "${synthetic_to}")"
-  cp "${recorded}" "${synthetic_to}"
-  echo "landing-oracle: synthetic arm recorded to ${synthetic_to}"
+  mkdir -p "${synthetic_to}"
+  for name in $(oracle_synthetic_recordings "${short}"); do
+    cp "${recorded}/${name}" "${synthetic_to}/${name}"
+    echo "landing-oracle: synthetic arm recorded to ${synthetic_to}/${name}"
+  done
 
   # 2. The frozen inputs (#4327 step 0.0).
   if [ -n "${freeze}" ]; then
