@@ -44,6 +44,13 @@ struct FeedBreakEventTests {
 
     private let asOf = "2026-09-20"
 
+    // #4357 (oracle part two on this suite's own fixtures): the generic term answers the same over the rows
+    // extracted to `RowFacts` as over the live models, so every fixture here also checks extraction.
+    private func expectTheSameOverFacts(_ ctx: ModelContext) throws {
+        let findings = TermsOverFacts.findings(try ctx.fetch(FetchDescriptor<Prospect>()), asOf: asOf)
+        #expect(findings.isEmpty, Comment(rawValue: findings.joined(separator: "\n")))
+    }
+
     // THE CLAIM. Eight rows at one venue, all on the same count, are one event and are named as one.
     @Test func rowsAtOneVenueSharingAMissCountAreOneEvent() throws {
         let ctx = ModelContext(try container())
@@ -57,6 +64,7 @@ struct FeedBreakEventTests {
         #expect(event.missedScoutCount == 33)
         #expect(event.memberKeys.count == 4, "every row on that count belongs to the event")
         #expect(event.venue == "The Players Theatre")
+        try expectTheSameOverFacts(ctx)
     }
 
     // The counter-example that makes the rule a discriminator rather than a description. Zankel Hall's
@@ -68,6 +76,7 @@ struct FeedBreakEventTests {
         row(ctx, "Fang Tao Jiang, Soprano", venue: "Zankel Hall", opens: "2026-10-17", missed: 57)
         let events = FeedBreakEvent.events(among: try ctx.fetch(FetchDescriptor<Prospect>()), asOf: asOf)
         #expect(events.isEmpty, "three different counts are three departures, got \(events.count) event(s)")
+        try expectTheSameOverFacts(ctx)
     }
 
     // TWO rows sharing a count is arithmetic, not evidence, and the floor is what says so. Measured on
@@ -81,6 +90,7 @@ struct FeedBreakEventTests {
         row(ctx, "What If...", venue: "The Green Room 42", opens: "2026-11-10", missed: 11)
         #expect(FeedBreakEvent.events(among: try ctx.fetch(FetchDescriptor<Prospect>()), asOf: asOf).isEmpty,
                 "a pair is below the floor, so it must not be reported as a source breaking")
+        try expectTheSameOverFacts(ctx)
     }
 
     // A count BELOW the threshold that already decides whether a row is flagged at all is not an event,
@@ -91,6 +101,7 @@ struct FeedBreakEventTests {
         for i in 0..<6 { row(ctx, "Show \(i)", venue: "The Cutting Room", opens: "2026-10-0\(i+1)", missed: 1) }
         #expect(FeedBreakEvent.events(among: try ctx.fetch(FetchDescriptor<Prospect>()), asOf: asOf).isEmpty,
                 "rows the app does not even flag cannot be evidence that a source broke")
+        try expectTheSameOverFacts(ctx)
     }
 
     // A show that has already played is not something Dan can act on, and the whole point of naming an
@@ -102,6 +113,7 @@ struct FeedBreakEventTests {
         row(ctx, "Still To Come", venue: "The Players Theatre", opens: "2026-12-20", missed: 33)
         #expect(FeedBreakEvent.events(among: try ctx.fetch(FetchDescriptor<Prospect>()), asOf: asOf).isEmpty,
                 "one future row is not an event; the two past ones must not make it one")
+        try expectTheSameOverFacts(ctx)
     }
 
     // The half that says what the event MEANS, and the half #4027 is actually about: a member with a live
@@ -121,6 +133,7 @@ struct FeedBreakEventTests {
         #expect(event.memberKeys.count == 3)
         #expect(event.coveredByAnotherCard == 1,
                 "exactly one member has a live twin, got \(event.coveredByAnotherCard)")
+        try expectTheSameOverFacts(ctx)
     }
 
     // The notice, which is the only part of this Dan sees.
