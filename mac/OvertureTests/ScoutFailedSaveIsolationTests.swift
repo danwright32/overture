@@ -278,6 +278,10 @@ final class ScoutFailedSaveIsolationTests {
         #expect(source == "Org b")
         #expect(why.contains { $0.contains("deleted") }, Comment(rawValue: "\(why)"))
         #expect(states(outcome)["c"] == .notAttempted, "a source after a failure that was not put back was landed")
+        // No further save was made, so the delete the revert could not undo never reached the store.
+        let stored = try titles(c)
+        #expect(stored.contains("Recital a 1"), Comment(rawValue:
+            "a landing stopped as not reverted saved what it could not restore: \(stored)"))
         #expect(outcome.warning?.contains(ScoutWarningCopy.notReverted("Org b")) == true, Comment(rawValue:
             outcome.warning ?? "nil"))
     }
