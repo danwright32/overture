@@ -535,11 +535,12 @@ final class ScoutLandingStore {
         return VenueSpellings(lookup: { tables.spellings(usedBy: $0) })
     }
 
+    #if DEBUG
     // The tables as they stand, brought current, and the same tables rebuilt now from every row with a FRESH
-    // fold of each (never the cached one), as two snapshots: what the tests compare after each source.
+    // fold of each (never the cached one), as two snapshots: what the tests compare after each source. Debug
+    // only, so no shipping build carries a whole store rebuild.
     func batchTablesSnapshot() throws -> LandingBatchTables.Snapshot {
-        let tables = try currentTables()
-        return tables.snapshot(naming: { String(describing: $0) })
+        try currentTables().snapshot(naming: { String(describing: $0) })
     }
 
     func rebuiltBatchTablesSnapshot() throws -> LandingBatchTables.Snapshot {
@@ -547,10 +548,17 @@ final class ScoutLandingStore {
         return LandingBatchTables.rebuilt(rows.map { (ObjectIdentifier($0), Self.contribution(of: $0, Fold($0))) })
             .snapshot(naming: { String(describing: $0) })
     }
+    #endif
+
+    // Tables that should exist and do not: never answered as empty, which would poison nothing and call no
+    // URL ambiguous, so the caller takes its could-not-read direction instead (L42, L215).
+    struct TablesMissing: Error {}
 
     // The tables, built from every row the first time and brought current after that from the change feed.
+    // Changed IN PLACE through `self.tables`, never through a local copy: a copy would make the first change
+    // duplicate every table, which is the store sized cost this exists to remove (#4333 review).
     private func currentTables() throws -> LandingBatchTables {
-        guard var tables else {
+        if tables == nil {
             let current = try currentRows()
             counters.tableBuilds += 1
             counters.rowsWalked += current.count
@@ -561,24 +569,26 @@ final class ScoutLandingStore {
             nextTableOrder = current.count
             tablesToCheck = [:]
             joinOrder = [:]
-            self.tables = built
-            return built
+            tables = built
+        } else {
+            noteWrittenRows()
+            // A deletion still pending is out of every read (`currentRows` filters it), so out of the tables too.
+            if context.hasChanges {
+                for case let p as Prospect in context.deletedModelsArray { tablesToCheck[ObjectIdentifier(p)] = p }
+            }
+            let pending = tablesToCheck
+            let joins = joinOrder
+            tablesToCheck = [:]
+            joinOrder = [:]
+            for (id, p) in pending {
+                // A row the landing does not hold (one nobody announced) is in no read, so in no table.
+                guard let order = tables?.order(of: id) ?? joins[id] else { continue }
+                counters.tableRowsRejudged += 1
+                let value = p.isDeleted ? LandingBatchTables.Contribution.none : Self.contribution(of: p, fold(of: p))
+                tables?.set(id, order: order, to: value)
+            }
         }
-        noteWrittenRows()
-        // A deletion still pending is out of every read (`currentRows` filters it), so out of the tables too.
-        if context.hasChanges {
-            for case let p as Prospect in context.deletedModelsArray { tablesToCheck[ObjectIdentifier(p)] = p }
-        }
-        guard !tablesToCheck.isEmpty else { return tables }
-        for (id, p) in tablesToCheck {
-            // A row the landing does not hold (one nobody announced) is in no read, so in no table.
-            guard let order = tables.order(of: id) ?? joinOrder[id] else { continue }
-            counters.tableRowsRejudged += 1
-            tables.set(id, order: order, to: p.isDeleted ? .none : Self.contribution(of: p, fold(of: p)))
-        }
-        tablesToCheck = [:]
-        joinOrder = [:]
-        self.tables = tables
+        guard let tables else { throw TablesMissing() }
         return tables
     }
 
