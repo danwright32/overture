@@ -247,14 +247,6 @@ enum QueueEngineNode: String, CaseIterable, Sendable {
                              .rowEntries]
         }
     }
-
-    /// Whether this node reads the clock (through `TimeProbe`), so a deadline alone can change its output.
-    var readsTheClock: Bool {
-        switch self {
-        case .rows, .ledger, .feedBreaks, .rowEntries, .cards: return true
-        default: return false
-        }
-    }
 }
 
 enum QueueEngineGraph {
