@@ -18,6 +18,15 @@ private struct ListedFeed: SourceExtractor {
     }
 }
 
+// #4332: the table read is Sendable now (the brand corpus calls it off the main actor), so the count it
+// keeps must be safe to bump from whatever thread the read runs on.
+private final class ReadCount: @unchecked Sendable {
+    private let lock = NSLock()
+    private var count = 0
+    func bump() { lock.withLock { count += 1 } }
+    var value: Int { lock.withLock { count } }
+}
+
 @MainActor
 @Suite("A scout reads the show table a fixed number of times, however many sources land (#4275)")
 struct ScoutLandingReadsOnceTests {
@@ -61,7 +70,7 @@ struct ScoutLandingReadsOnceTests {
             ids.insert("feed-\(i)")
         }
         try ctx.save()
-        var reads = 0
+        let reads = ReadCount()
         let outcome = try await ScoutService.runScout(
             into: ctx, depth: .watchOnly, only: ids,
             extractorRegistry: { source in
@@ -73,10 +82,10 @@ struct ScoutLandingReadsOnceTests {
             pin: { _, id in URL(fileURLWithPath: "/tmp/\(id).html") }, launch: { _ in },
             defaults: ScratchDefaults.make("ScoutLandingReadsOnceTests"),
             readProspectTable: { ctx in
-                reads += 1
-                return try ctx.fetch(FetchDescriptor<Prospect>())
+                reads.bump()
+                return try ScoutService.readProspectTable(ctx)
             })
-        return (reads, outcome.inserted)
+        return (reads.value, outcome.inserted)
     }
 
     // The extract ingest: one results file carrying several sources.
@@ -101,14 +110,14 @@ struct ScoutLandingReadsOnceTests {
                                                          sourceUrl: $0.sourceUrl)
                                    }, note: nil)
             })
-        var reads = 0
+        let reads = ReadCount()
         let outcome = await ScoutExtractIngest.ingest(
             results, clients: [], history: [], blocked: .empty,
             readProspectTable: { ctx in
-                reads += 1
-                return try ctx.fetch(FetchDescriptor<Prospect>())
+                reads.bump()
+                return try ScoutService.readProspectTable(ctx)
             }, into: ctx)
-        return (reads, outcome.inserted)
+        return (reads.value, outcome.inserted)
     }
 
     @Test func aSweepReadsTheTableAsOftenForSixSourcesAsForOne() async throws {

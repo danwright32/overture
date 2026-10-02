@@ -58,7 +58,10 @@ enum ScoutExtractIngest {
                        now: Date = Date(),
                        // #4275: how the whole show table is read, injected so a test can count the reads.
                        // Every read of it this ingest makes goes through here.
-                       readProspectTable: @escaping ScoutLandingStore.Read = ScoutService.readProspectTable,
+                       // #4332 (A3): Sendable, because the brand corpus calls it off the main actor.
+                       readProspectTable: @escaping ScoutLandingStore.SendableRead = ScoutService.readProspectTable,
+                       // #4332: Dan's producer corrections, the corpus's other read, injected likewise.
+                       readProducerOverrides: @escaping ScoutService.OverrideRead = ScoutService.readProducerOverrides,
                        // #4330 (A13): the queue the landing block waits its turn in, and at what priority.
                        landings: LandingSingleFlight = .shared,
                        priority: LandingSingleFlight.Priority = .scout,
@@ -116,9 +119,44 @@ enum ScoutExtractIngest {
         // The brand corpus, read at the first source that needs it rather than once per source: a whole
         // table fetch, measured at 158.8 ms over 1,238 rows. Nothing lands until every source is read,
         // so a per source read would return the same store every time.
-        var corpusRead: (brands: ProducerGate.VenueBrands, degradedReads: [ScoutService.StoreRead])?
+        var corpusRead: ScoutService.CorpusRead?
+        // #4334 (A5): a slot a stopped landing never reached, reported as such so it is not silence. A result
+        // under an id nobody queued is a report rather than a write, so it is still said.
+        func reportNotAttempted(_ slot: Slot) {
+            switch slot {
+            case .settled(let settled, nil, _):
+                outcome.merge(settled)
+            case .settled(_, let source?, _):
+                outcome.sources.append(ScoutService.SourceResult(
+                    sourceId: source.sourceId, orgName: source.orgName, state: .notAttempted,
+                    listingsURL: source.listingsURL))
+            case .pending(let pending):
+                outcome.sources.append(ScoutService.SourceResult(
+                    sourceId: pending.source.sourceId, orgName: pending.source.orgName, state: .notAttempted,
+                    listingsURL: pending.source.listingsURL))
+            }
+        }
+        // #4332 (A3): the entry flush refused BEFORE the background corpus read. Nothing is read or applied
+        // after it: every source already read, and every one not yet reached, is reported not attempted, and
+        // the caller keeps the results to land once the edits are saved, as it does for a refusal under the
+        // token below.
+        func refuseBeforeTheRead(_ stop: LandingStop,
+                                 unread: ArraySlice<ScoutExtractResult>) -> ScoutService.Outcome {
+            outcome.landingStop = stop
+            for slot in slots { reportNotAttempted(slot) }
+            for result in unread {
+                if let source = row(for: result.sourceId, in: context) {
+                    reportNotAttempted(.settled(ScoutService.Outcome(found: 0, inserted: 0, updated: 0, skipped: 0),
+                                                source, .none))
+                } else {
+                    outcome.unqueuedResultIds.append(result.sourceId)
+                }
+            }
+            onRefused(sequence)
+            return outcome
+        }
 
-        for result in results.results {
+        for (index, result) in results.results.enumerated() {
             // What this source settled while being read (a failure, a confirmed quiet page, an id nobody
             // queued), reported in its own slot so the order holds.
             var settled = ScoutService.Outcome(found: 0, inserted: 0, updated: 0, skipped: 0)
@@ -221,13 +259,26 @@ enum ScoutExtractIngest {
             // upcoming-only guard apply to a watched source exactly as they do to everything else. A
             // watchlist that could smuggle a refused org back in by a side door would be worse than no
             // watchlist at all.
-            // #3905: the corpus is read HERE, on the main actor, because it needs the `ModelContext`;
-            // the loop over this source's events is awaited off it; the upserts in `land` run here again.
+            // #3905: the corpus is read HERE, the loop over this source's events is awaited off the main actor,
+            // and the upserts in `land` run on it again. #4332 (A3): the corpus is read off the main actor too,
+            // through a background context, behind the entry flush (`ScoutService.flushBeforeLanding`): a
+            // background context reads only what is SAVED, so anything pending is saved first, or the landing
+            // is refused by name before anything is read.
             // The same three steps the scout's own sweep takes (`ScoutService.readNative` and
             // `landNative`), and the same shared pieces, so the two paths cannot drift about what a
             // classify pass is.
-            let corpus = corpusRead ?? ScoutService.venueBrandCorpus(in: context, read: readProspectTable)
-            corpusRead = corpus
+            let corpus: ScoutService.CorpusRead
+            if let corpusRead {
+                corpus = corpusRead
+            } else {
+                if let refused = ScoutService.flushBeforeLanding(context, save: saveEntry) {
+                    return refuseBeforeTheRead(refused, unread: results.results[index...])
+                }
+                corpus = await ScoutService.venueBrandCorpusOffMain(container: context.container,
+                                                                    read: readProspectTable,
+                                                                    readOverrides: readProducerOverrides)
+                corpusRead = corpus
+            }
             let classifiedPass = await ScoutClassify.offTheCallersActor(
                 events: events, clients: clients, history: history,
                 venueBrands: corpus.brands, sourceIds: [source.sourceId])
@@ -273,22 +324,6 @@ enum ScoutExtractIngest {
                 }
             } catch {
                 outcome.degradedReads.append(.landedRuns)
-            }
-        }
-        // #4334 (A5): a slot a stopped landing never reached, reported as such so it is not silence. A result
-        // under an id nobody queued is a report rather than a write, so it is still said.
-        func reportNotAttempted(_ slot: Slot) {
-            switch slot {
-            case .settled(let settled, nil, _):
-                outcome.merge(settled)
-            case .settled(_, let source?, _):
-                outcome.sources.append(ScoutService.SourceResult(
-                    sourceId: source.sourceId, orgName: source.orgName, state: .notAttempted,
-                    listingsURL: source.listingsURL))
-            case .pending(let pending):
-                outcome.sources.append(ScoutService.SourceResult(
-                    sourceId: pending.source.sourceId, orgName: pending.source.orgName, state: .notAttempted,
-                    listingsURL: pending.source.listingsURL))
             }
         }
         // #4334 (A5): the ENTRY FLUSH, the first WRITE done holding the store (`ScoutService.flushBeforeLanding`),

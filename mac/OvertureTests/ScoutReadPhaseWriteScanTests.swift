@@ -34,12 +34,20 @@ struct ScoutReadPhaseWriteScanTests {
 
     // Every site the scan finds in a read phase that is not a store write, keyed by `Site.key`, with why.
     static let classified: [String: String] = [
+        // #4332 (A3): the ENTRY FLUSH (`ScoutService.flushBeforeLanding`, through each entry point's `saveEntry`
+        // seam) now runs in the read phase too, before the brand corpus is read off the main actor. It writes
+        // nothing the read phase decided: it saves only what was already pending on the main context when the
+        // corpus read began (Dan's own unsaved edits), so the background read sees what he sees, and it leaves
+        // the context clean across every read-phase await rather than dirty. A flush that cannot save refuses
+        // the landing before anything is read.
         "ScoutService.runScout saves":
-            "the default of runScout's `saveClosing` seam, declared in its signature and run only by save one "
-            + "and save two, both after the read phase",
+            "the defaults of runScout's save seams, declared in its signature: `saveClosing`, run only by save one "
+            + "and save two after the read phase, and `saveEntry`, the entry flush, which in the read phase saves "
+            + "only edits pending before the corpus read (#4332)",
         "ScoutExtractIngest.ingest saves":
-            "the default of the ingest's `saveClosing` seam, declared in its signature and run only by the "
-            + "closing save after the landing loop",
+            "the defaults of the ingest's save seams, declared in its signature: `saveClosing`, run only by the "
+            + "closing save after the landing loop, and `saveEntry`, the entry flush, which in the read phase "
+            + "saves only edits pending before the corpus read (#4332)",
         "ExtractedEventGuard.placed assigns venue":
             "`promoted.venue` on an ExtractedEvent, a value the read builds, not a model row",
         "SameDateVenueMerge.stamped assigns seriesId":

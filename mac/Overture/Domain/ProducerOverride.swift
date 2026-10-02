@@ -145,6 +145,15 @@ enum ProducerOverrideEditing {
         ProducerOverrides(promoted: promoted(in: context), demoted: demoted(in: context))
     }
 
+    // #4332 (A3): the same two reads, THROWING. The scout's brand corpus is joined from the show table and
+    // these corrections, and a corpus judged against an invented empty set of corrections would quietly undo
+    // every one Dan made (L530, L215). So the scout reads them here and records a failure as a degraded read
+    // of its own (`ScoutService.StoreRead.producerOverrides`), where `overrides(in:)` above answers empty.
+    nonisolated static func readOverrides(in context: ModelContext) throws -> ProducerOverrides {
+        try ProducerOverrides(promoted: Set(readPromotedRows(in: context).map(\.orgKey)),
+                              demoted: Set(readDemotedRows(in: context).map(\.orgKey)))
+    }
+
     nonisolated static func promoted(in context: ModelContext) -> Set<String> {
         Set(promotedRows(in: context).map(\.orgKey))
     }
@@ -154,11 +163,21 @@ enum ProducerOverrideEditing {
     }
 
     nonisolated static func promotedRows(in context: ModelContext) -> [PromotedProducer] {
-        (try? context.fetch(FetchDescriptor<PromotedProducer>(sortBy: [SortDescriptor(\.orgKey)]))) ?? []
+        (try? readPromotedRows(in: context)) ?? []
     }
 
     nonisolated static func demotedRows(in context: ModelContext) -> [DemotedHouse] {
-        (try? context.fetch(FetchDescriptor<DemotedHouse>(sortBy: [SortDescriptor(\.orgKey)]))) ?? []
+        (try? readDemotedRows(in: context)) ?? []
+    }
+
+    // The one spelling of each fetch, so the throwing reader above and the forgiving ones beside it cannot
+    // come to read different rows (L263).
+    nonisolated static func readPromotedRows(in context: ModelContext) throws -> [PromotedProducer] {
+        try context.fetch(FetchDescriptor<PromotedProducer>(sortBy: [SortDescriptor(\.orgKey)]))
+    }
+
+    nonisolated static func readDemotedRows(in context: ModelContext) throws -> [DemotedHouse] {
+        try context.fetch(FetchDescriptor<DemotedHouse>(sortBy: [SortDescriptor(\.orgKey)]))
     }
 
     private static func removePromotion(_ key: String, in context: ModelContext) {
