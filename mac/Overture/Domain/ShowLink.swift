@@ -198,7 +198,9 @@ enum ShowLink {
     // Where both are empty the row is a span, and the inclusive performanceDate ... runEndDate is its
     // nights. A row with no date at all occupies no nights and can therefore join nothing, which is
     // correct: it has nothing to be the same night as.
-    private static func nights(of row: Row) -> Set<String> {
+    // #4356: internal rather than private, so `RowKeys` folds a retained row through this rule
+    // rather than through a copy of it.
+    static func nights(of row: Row) -> Set<String> {
         let listed = Set(row.runNights).union(row.droppedNights)
         if !listed.isEmpty { return listed }
         guard let opening = row.performanceDate else { return [] }
@@ -457,7 +459,9 @@ extension ShowLink.Row {
     // `groupName` and leaves the key alone (#1274), and #1846 lets a merged card take the room name Dan
     // entered. Folding the display fields would split a group the moment he renames ONE member, because
     // that rename writes one row.
-    init(_ p: Prospect) {
+    // #4356: over any `ProspectFacts`, so a live model and a retained `RowFacts` build this slice
+    // by one rule.
+    init(_ p: some ProspectFacts) {
         self.init(id: p.naturalKey,
                   groupName: p.scoutGroupName ?? p.groupName,
                   venue: p.scoutVenue ?? p.venue,

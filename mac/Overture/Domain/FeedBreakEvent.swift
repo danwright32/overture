@@ -115,7 +115,9 @@ enum FeedBreakEvent {
     }
 
     // The same fold the natural key uses, so two spellings of one room are one source here as well.
-    private static func canonicalVenue(_ raw: String?) -> String {
+    // #4356: internal rather than private, so `RowKeys` folds a retained row through this rule
+    // rather than through a copy of it.
+    static func canonicalVenue(_ raw: String?) -> String {
         VenueNormalization.normalizeForKey(raw ?? "").lowercased()
     }
 }
