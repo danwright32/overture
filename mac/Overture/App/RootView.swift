@@ -2163,10 +2163,13 @@ struct RootView: View {
     }
 
     @discardableResult
-    private func reportAnyFreezes() -> Bool {
-        guard let message = FreezeReport.newlyReported(in: StoreLocation.handoffDirectory,
-                                                       watchdogRan: freezeWatch.isWatching,
-                                                       writesThatFailed: freezeWatch.writesThatFailed) else {
+    private func reportAnyFreezes() async -> Bool {
+        // #4453: the files are read OFF the main actor, through the actor that also compacts them. On
+        // 2026-10-02 this read was 69% of the main thread while Dan's window had stopped responding.
+        guard let message = await FreezeLogHousekeeper.shared.freezeReport(
+            in: StoreLocation.handoffDirectory,
+            watchdogRan: freezeWatch.isWatching,
+            writesThatFailed: freezeWatch.writesThatFailed) else {
             return false
         }
         // #3808: the two sentences that carry NO record identity are said once, and nothing else is
@@ -2583,9 +2586,14 @@ struct RootView: View {
     //
     // That is a real cost, stated rather than glossed: on a tick carrying both, the divergence waits an
     // hour. It was previously a whole login, and before this pairing it was lost outright.
+    //
+    // #4453: in a Task, because the freeze half now awaits the files off the main actor. The order and the
+    // early return are unchanged, and the divergence half still runs on the main actor after it.
     private func reportWhatWasRecorded() {
-        if reportAnyFreezes() { return }
-        reportAnyCardDivergences()
+        Task {
+            if await reportAnyFreezes() { return }
+            reportAnyCardDivergences()
+        }
     }
 
     // #3435/#3763: bound the freeze log and prune the archive it fills. ONE method, called from the
