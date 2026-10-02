@@ -85,7 +85,7 @@ struct ScopeBuildsOneProducerIndexTests {
         let ledger = answers(ctx)
 
         let work = QueueRenderPass.WorkTally.measure {
-            _ = QueueModel.scope(from: shows, answers: ledger, corpus: shows, cardKeys: [])
+            _ = QueueModel.scope(from: shows, answers: ledger, corpus: shows, now: Date(), cardKeys: [])
         }
 
         #expect(work.producerIndexes == 1,
@@ -104,7 +104,7 @@ struct ScopeBuildsOneProducerIndexTests {
         let shows = seed(ctx)
 
         let work = QueueRenderPass.WorkTally.measure {
-            _ = QueueModel.scope(from: shows, answers: [], corpus: shows, cardKeys: [])
+            _ = QueueModel.scope(from: shows, answers: [], corpus: shows, now: Date(), cardKeys: [])
         }
 
         #expect(work.producerIndexes == 1,

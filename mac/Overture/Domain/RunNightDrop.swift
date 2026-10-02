@@ -155,7 +155,9 @@ struct DroppedNight: Equatable, Sendable {
         self.init(night: night, reason: reason, at: Date(timeIntervalSince1970: seconds))
     }
 
-    static func all(on p: Prospect) -> [DroppedNight] {
+    // #4356: over any `ProspectFacts`, so a live model and a retained `RowFacts` build this slice
+    // by one rule.
+    static func all(on p: some ProspectFacts) -> [DroppedNight] {
         p.droppedRunNights.compactMap { DroppedNight(stored: $0) }
     }
 

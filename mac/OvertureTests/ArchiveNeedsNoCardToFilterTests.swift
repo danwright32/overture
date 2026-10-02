@@ -58,7 +58,7 @@ struct ArchiveNeedsNoCardToFilterTests {
     // last frame drew. An empty key set is the state on the FIRST frame, which is the one that used to
     // cost 1,224 cards.
     private func archiveScope(_ shows: [Prospect], drawing keys: Set<String> = []) -> QueueModel.Scope {
-        QueueModel.scope(from: shows, cardKeys: keys)
+        QueueModel.scope(from: shows, now: Date(), cardKeys: keys)
     }
 
     // THE ONE THAT MATTERS. The whole of Archive's filter, over every show, with nothing drawn yet.

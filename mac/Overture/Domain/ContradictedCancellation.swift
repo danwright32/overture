@@ -81,7 +81,9 @@ enum ContradictedCancellation {
         canonicalVenue(a) == canonicalVenue(b)
     }
 
-    private static func canonicalVenue(_ raw: String?) -> String {
+    // #4356: internal rather than private, so `RowKeys` folds a retained row through this rule
+    // rather than through a copy of it.
+    static func canonicalVenue(_ raw: String?) -> String {
         guard let raw, !raw.trimmingCharacters(in: .whitespaces).isEmpty else { return "" }
         return VenueNormalization.normalizeForKey(raw)
     }

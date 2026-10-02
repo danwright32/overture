@@ -167,7 +167,8 @@ struct TheSendPreviewDoesNotWriteToTheShowTests {
         p.sendsTogetherOverride = false
         #expect(SendConfirmation(prospect: p, approving: true, selecting: nil)
                 == SendConfirmation(prospect: p, approving: true, selecting: nil, together: false))
-        #expect(SendGroup.previewGroup(of: p).count == SendGroup.previewGroup(of: p, together: false).count)
+        #expect(SendGroup.previewGroup(of: p, today: EasternDate.today(Date())).count
+                == SendGroup.previewGroup(of: p, together: false, today: EasternDate.today(Date())).count)
     }
 
     // MARK: - The wiring, because built is not wired (L3)

@@ -30,7 +30,7 @@ import SwiftData
 enum PassedKeptRetirement {
     // Returns how many shows it closed, so the caller can say what it actually did rather than assume.
     @discardableResult
-    static func run(in context: ModelContext, today: String = EasternDate.today()) -> Int {
+    static func run(in context: ModelContext, today: String = EasternDate.today(Date())) -> Int {
         let kept = FetchDescriptor<Prospect>(
             predicate: #Predicate { $0.statusRaw == "queued" || $0.statusRaw == "drafted"
                 || $0.statusRaw == "approved" }

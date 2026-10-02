@@ -85,7 +85,9 @@ enum EngagementLink {
 }
 
 extension EngagementLink.Row {
-    init(_ p: Prospect) {
+    // #4356: over any `ProspectFacts`, so a live model and a retained `RowFacts` build this slice
+    // by one rule.
+    init(_ p: some ProspectFacts) {
         self.init(id: p.naturalKey, groupName: p.groupName, venue: p.venue,
                   performanceDate: p.performanceDate, runEndDate: p.runEndDate)
     }

@@ -32,7 +32,7 @@ struct ClientTagDecidesTheWindowTests {
     }
 
     private func context(_ window: ClientWindow) -> StageContext {
-        StageContext(geo: .none, clients: window, today: today)
+        StageContext(now: Date(), geo: .none, clients: window, today: today)
     }
 
     private func offeredForTriage(_ p: Prospect, in window: ClientWindow) -> Bool {

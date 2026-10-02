@@ -38,7 +38,7 @@ struct StageNavigationTests {
 
         let keys = StageNavigation.naturalKeys(for: .prep, in: all,
                                                    // #4136: pinned before the fixture night, since Prep now reads the date.
-                                                   context: StageContext(geo: .none, clients: .none, today: "2026-06-01"))
+                                                   context: StageContext(now: Date(), geo: .none, clients: .none, today: "2026-06-01"))
         #expect(keys == ["kept-no-draft"])
     }
 
@@ -57,7 +57,7 @@ struct StageNavigationTests {
 
         let keys = Set(StageNavigation.naturalKeys(for: .prep, in: all,
                                                    // #4136: pinned before the fixture night, since Prep now reads the date.
-                                                   context: StageContext(geo: .none, clients: .none, today: "2026-06-01")))
+                                                   context: StageContext(now: Date(), geo: .none, clients: .none, today: "2026-06-01")))
         #expect(keys == Set(["kept-no-draft", "flagged-drafted", "flagged-approved"]))
     }
 
@@ -87,7 +87,7 @@ struct StageNavigationTests {
         _ = prospect(ctx, key: "queued", status: .queued, hasDraft: false)
         let all = try ctx.fetch(FetchDescriptor<Prospect>())
 
-        let keys = Set(StageNavigation.naturalKeys(for: .review, in: all, context: StageContext(geo: .none, clients: .none)))
+        let keys = Set(StageNavigation.naturalKeys(for: .review, in: all, context: StageContext(now: Date(), geo: .none, clients: .none)))
         #expect(keys == Set(["drafted-1", "drafted-2"]))
     }
 
@@ -99,7 +99,7 @@ struct StageNavigationTests {
         _ = prospect(ctx, key: "drafted", status: .drafted)
         let all = try ctx.fetch(FetchDescriptor<Prospect>())
 
-        let keys = StageNavigation.naturalKeys(for: .sendApproved, in: all, context: StageContext(geo: .none, clients: .none))
+        let keys = StageNavigation.naturalKeys(for: .sendApproved, in: all, context: StageContext(now: Date(), geo: .none, clients: .none))
         #expect(keys == ["waiting-to-send"])
     }
 
@@ -112,7 +112,7 @@ struct StageNavigationTests {
         _ = prospect(ctx, key: "x", status: .queued, hasDraft: false)
         let all = try ctx.fetch(FetchDescriptor<Prospect>())
 
-        #expect(StageNavigation.naturalKeys(for: .followUps, in: all, context: StageContext(geo: .none, clients: .none)).isEmpty)
+        #expect(StageNavigation.naturalKeys(for: .followUps, in: all, context: StageContext(now: Date(), geo: .none, clients: .none)).isEmpty)
     }
 
 }

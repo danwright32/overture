@@ -83,9 +83,11 @@ struct SendConfirmation: Equatable {
         // #2033: the whole group the next press of Send reaches, from the one definition the send itself
         // reads, so what he approves names everybody it is going to (L64).
         let sendsTogether = together ?? prospect.sendsTogether
+        // #4356: one day for both, so the preview and the send gate cannot straddle a midnight.
+        let today = EasternDate.today(Date())
         let defaultGroup = approving && prospect.status == .drafted && prospect.draftBody != nil
-            ? SendGroup.previewGroup(of: prospect, together: sendsTogether)
-            : SendGroup.pendingGroup(of: prospect, together: sendsTogether)
+            ? SendGroup.previewGroup(of: prospect, together: sendsTogether, today: today)
+            : SendGroup.pendingGroup(of: prospect, together: sendsTogether, today: today)
         // A ticked contact must still clear every guard: `sendableFor` filters to the ones that could
         // actually go, so a held contact cannot be talked past by being named here (#2052).
         let group = selecting.map { SendGroup.sendableFor(prospect, ids: $0) } ?? defaultGroup

@@ -787,7 +787,7 @@ struct QueueRenderPassWorkUnitCostTests {
         ctx.insert(r)
         try? ctx.save()
 
-        let groupsOnly = QueueRenderPass.WorkTally.measure { _ = SendGroup.CardGroups(of: p) }
+        let groupsOnly = QueueRenderPass.WorkTally.measure { _ = SendGroup.CardGroups(of: p, today: EasternDate.today(Date())) }
         let wholeCard = QueueRenderPass.WorkTally.measure { _ = QueueItem(p) }
 
         let inInit = wholeCard.draftLintRuns - groupsOnly.draftLintRuns

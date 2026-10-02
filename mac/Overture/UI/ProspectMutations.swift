@@ -1645,7 +1645,7 @@ enum ProspectMutations {
             let sent = await SendService.sendNext(model, to: chosen, now: Date(), sender: sender)
             context.saveOrWarnSendNotConfirmed(org: model.groupName, feedback: feedback)
             clearSending(naturalKey)
-            if sent { onSent(naturalKey, SendGroup.pendingGroup(of: model).isEmpty) }
+            if sent { onSent(naturalKey, SendGroup.pendingGroup(of: model, today: EasternDate.today(Date())).isEmpty) }
             // #1770: refresh before deciding. A send that just failed is the moment a revoked credential
             // shows itself, so this must not answer from a cache filled before the token died.
             if !sent && !GmailConnection.shared.refreshedIsConnected() { onNeedsReconnect() }

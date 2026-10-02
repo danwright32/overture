@@ -33,7 +33,7 @@ enum SendService {
     static func sendNext(_ prospect: Prospect, to chosen: [Recipient]? = nil,
                          now: Date, sender: MailSender) async -> Bool {
         guard let chosen else {
-            let group = SendGroup.pendingGroup(of: prospect)
+            let group = SendGroup.pendingGroup(of: prospect, today: EasternDate.today(Date()))
             guard group.count > 1 else { return await sendOne(prospect, now: now, sender: sender) }
             return await sendJointly(prospect, to: group, now: now, sender: sender)
         }

@@ -44,10 +44,23 @@ struct CardSendGroupsTests {
     // The cost claim, made structurally so it cannot rot. The show really does have two sendable
     // contacts; the card is handed groups that say otherwise. Every field that still went and asked the
     // show for itself contradicts what it was handed, and fails here.
+    // #4356: the send groups are judged on the day they are HANDED, never on the wall clock's, so a card
+    // built for one day and a confirmation built from one day cannot each answer about a different one.
+    // The show plays on 2082-09-01: the day before, both contacts are sendable; the day after, nobody is.
+    @Test func theSendGroupsJudgeAPassedShowOnTheDayTheyAreHanded() throws {
+        let ctx = ModelContext(try container())
+        let p = show(ctx)
+        #expect(SendGroup.pendingGroup(of: p, today: "2082-08-31").count == 2)
+        #expect(SendGroup.pendingGroup(of: p, today: "2082-09-02").isEmpty,
+                "a show whose night has passed was still offered to send on the day it was judged against")
+        #expect(SendGroup.CardGroups(of: p, today: "2082-08-31").pending.count == 2)
+        #expect(SendGroup.CardGroups(of: p, today: "2082-09-02").pending.isEmpty)
+    }
+
     @Test func aCardReadsTheGroupsItIsHandedAndNeverAsksTheShowAgain() throws {
         let ctx = ModelContext(try container())
         let p = show(ctx)
-        #expect(SendGroup.previewGroup(of: p).count == 2, "the show itself really does send to two")
+        #expect(SendGroup.previewGroup(of: p, today: EasternDate.today(Date())).count == 2, "the show itself really does send to two")
 
         let item = QueueItem(p, sendGroups: SendGroup.CardGroups(preview: [], pending: []))
 
@@ -60,7 +73,7 @@ struct CardSendGroupsTests {
     // sending and keeps its approval gate.
     @Test func anUnapprovedShowPreviewsItsGroupButSendsToNobody() throws {
         let ctx = ModelContext(try container())
-        let groups = SendGroup.CardGroups(of: show(ctx, status: .drafted))
+        let groups = SendGroup.CardGroups(of: show(ctx, status: .drafted), today: EasternDate.today(Date()))
 
         #expect(groups.preview.count == 2)
         #expect(groups.pending.isEmpty)
@@ -69,7 +82,7 @@ struct CardSendGroupsTests {
 
     @Test func anApprovedShowSendsToTheGroupItPreviews() throws {
         let ctx = ModelContext(try container())
-        let groups = SendGroup.CardGroups(of: show(ctx, status: .approved))
+        let groups = SendGroup.CardGroups(of: show(ctx, status: .approved), today: EasternDate.today(Date()))
 
         #expect(groups.pending.map(\.id) == groups.preview.map(\.id))
     }
@@ -77,7 +90,7 @@ struct CardSendGroupsTests {
     // A show with nothing waiting says so, which is what the card's "no contact to send to" surfaces read.
     @Test func aShowWithNoAddressedContactHasNothingPending() throws {
         let ctx = ModelContext(try container())
-        let groups = SendGroup.CardGroups(of: show(ctx, contacts: []))
+        let groups = SendGroup.CardGroups(of: show(ctx, contacts: []), today: EasternDate.today(Date()))
 
         #expect(groups.hasPending == false)
         #expect(groups.preview.isEmpty)

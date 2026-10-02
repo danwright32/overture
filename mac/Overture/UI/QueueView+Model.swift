@@ -234,12 +234,12 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     // that proved it had `draftEditedByDan` set.
     //
     // `today` is a parameter so a test pins both ends of the comparison rather than one (L130).
-    func eventDateWarning(today: String = EasternDate.today()) -> String? {
+    func eventDateWarning(today: String = EasternDate.today(Date())) -> String? {
         eventDateFinding(today: today)?.message
     }
 
     // #3326: the one finding, asked once, so the warning and the send block read the same answer (L16).
-    func eventDateFinding(today: String = EasternDate.today()) -> EventDateFinding? {
+    func eventDateFinding(today: String = EasternDate.today(Date())) -> EventDateFinding? {
         guard let body = draftBody else { return nil }
         let playing = PlayingNights.of(runNights: runNights, performanceDate: performanceDate,
                                        runEndDate: runEndDate)
@@ -251,7 +251,7 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     }
 
     // #3326 (plan 2.8): the skipped night this draft names, which holds the send. Nil when it names none.
-    func skippedNightNamedInDraft(today: String = EasternDate.today()) -> String? {
+    func skippedNightNamedInDraft(today: String = EasternDate.today(Date())) -> String? {
         // Asked through `blocksTheSend`, the one place that says which findings hold a send, so a finding
         // added later that also blocks cannot be missed here while the warning shows it.
         guard let finding = eventDateFinding(today: today), finding.blocksTheSend,
@@ -1844,6 +1844,13 @@ enum QueueModel {
     // no label is wrapped around it anywhere, here or in the view.
     static func presenterLine(title: String, presenter: String?, venue: String?,
                               venueBrands: ProducerGate.VenueBrands = .none) -> String? {
+        presenterLine(title: title, presenter: presenter, venue: venue, isVenueBrand: { venueBrands.contains($0) })
+    }
+
+    // #4356: the same rule asked through a keyed answer, which is how a card asks it, so the read goes
+    // through `TableReader` and is recorded under the name it was asked with.
+    static func presenterLine(title: String, presenter: String?, venue: String?,
+                              isVenueBrand: (String) -> Bool) -> String? {
         let name = (presenter ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty, let presenterKey = ProducerGate.key(name) else { return nil }
         // ProducerGate.key rather than VenueNormalization.normalizeForKey directly: it is that fold plus
@@ -1851,7 +1858,7 @@ enum QueueModel {
         // presenter-versus-venue question in the app already uses.
         guard presenterKey != ProducerGate.key(title) else { return nil }
         guard presenterKey != ProducerGate.key(venue) else { return nil }
-        guard !venueBrands.contains(name) else { return nil }
+        guard !isVenueBrand(name) else { return nil }
         if let titleKey = ProducerGate.key(title),
            ProducerGate.containsAsWords(titleKey, presenterKey) { return nil }
         return name
@@ -2214,9 +2221,17 @@ enum QueueModel {
                                         venueBrands: ProducerGate.VenueBrands,
                                         standing: ProducerOverrideEditing.Standing,
                                         rowCount: Int) -> String? {
+        correctableOrganisation(presenter, isRoomName: { venueBrands.isRoomName($0) }, standing: standing,
+                                rowCount: rowCount)
+    }
+
+    // #4356: the same rule asked through a keyed answer, which is how a card asks it (see `presenterLine`).
+    static func correctableOrganisation(_ presenter: String?, isRoomName: (String) -> Bool,
+                                        standing: ProducerOverrideEditing.Standing,
+                                        rowCount: Int) -> String? {
         guard let presenter, ProducerGate.key(presenter) != nil else { return nil }
         if standing != .none { return presenter }
-        if venueBrands.isRoomName(presenter) { return nil }
+        if isRoomName(presenter) { return nil }
         return rowCount >= OrganisationListing.shortlistMinimumRows ? presenter : nil
     }
 
@@ -2626,8 +2641,10 @@ enum QueueModel {
     // #1598 Phase 5: a show already carrying an INHERITED answer is not a candidate either. This is where
     // the saving actually lands (59 lookups on the live store as measured 2026-07-27), and without it the
     // card would contradict itself: "Email found" sitting beside a button offering to go and find one.
-    static func reachabilityProbeCandidateKeys(_ items: [some QueueScopeFacts], now: Date = Date(),
-                                               today: String = QueueModel.easternToday(),
+    // #4356: no clock defaults, because the render pass reaches this and a caller that forgot `now:` or
+    // `today:` would read the wall clock instead of the pass's instant (`PassClockScanTests`).
+    static func reachabilityProbeCandidateKeys(_ items: [some QueueScopeFacts], now: Date,
+                                               today: String,
                                                geo: GeoRefusals = .none) -> [String] {
         items.filter { probeIsWorthOffering($0, today: today, geo: geo)
                         && !hasFreshReachabilityAnswer($0, now: now) }.map(\.id)
@@ -2679,8 +2696,8 @@ enum QueueModel {
     // and paying for a lookup that already succeeded is the one thing this must never do. The candidacy
     // rule holds too, so a show past deciding is not offered whatever any run did to it, and the mark ages
     // on the same clock as every other reachability fact rather than offering to spend money forever.
-    static func keysMissedByACheck(_ items: [some QueueScopeFacts], now: Date = Date(),
-                                   today: String = QueueModel.easternToday(),
+    static func keysMissedByACheck(_ items: [some QueueScopeFacts], now: Date,
+                                   today: String,
                                    geo: GeoRefusals = .none) -> [String] {
         QueueRenderPass.WorkTally.recordWholeQueueFoldRows(items.count)
         // #4106: the date test FIRST. It rejected every row on the live clone and on the 4x corpus, and
@@ -2708,8 +2725,8 @@ enum QueueModel {
     // date-level action must not quietly widen what a check pays for beyond what the per-card one would
     // (L16, the count Dan approves is the count that runs). And a show with no answer is left alone: it is
     // already a candidate and already counted, so marking it would make the action look bigger than it is.
-    static func keysToReofferForRecheck(_ items: [some QueueScopeFacts], now: Date = Date(),
-                                        today: String = QueueModel.easternToday(),
+    static func keysToReofferForRecheck(_ items: [some QueueScopeFacts], now: Date,
+                                        today: String,
                                         geo: GeoRefusals = .none) -> [String] {
         items.filter { probeIsWorthOffering($0, today: today, geo: geo)
                         && hasFreshReachabilityAnswer($0, now: now) }.map(\.id)
@@ -2732,8 +2749,9 @@ enum QueueModel {
     //
     // One function for both questions on purpose: the tick box appears exactly where it has something to
     // contribute, so its presence can never promise rows the run does not get (L16).
-    static func probeKeysForTickedDate(_ items: [some QueueScopeFacts], now: Date = Date(),
-                                       today: String = QueueModel.easternToday(),
+    // #4356: required, like the rest of this family, so a caller cannot read the wall clock by forgetting.
+    static func probeKeysForTickedDate(_ items: [some QueueScopeFacts], now: Date,
+                                       today: String,
                                        geo: GeoRefusals = .none) -> [String] {
         let outstanding = reachabilityProbeCandidateKeys(items, now: now, today: today, geo: geo)
         guard outstanding.isEmpty else { return outstanding }
@@ -2749,8 +2767,8 @@ enum QueueModel {
     // the keep-or-dismiss moment, or somewhere he has refused to travel, was never checked and must not
     // say it was. Those headings stay bare, which is honest; the marker is a claim, so it is made only
     // where an answer actually exists.
-    static func dateReachabilityIsFullyChecked(_ items: [some QueueScopeFacts], now: Date = Date(),
-                                               today: String = QueueModel.easternToday(),
+    static func dateReachabilityIsFullyChecked(_ items: [some QueueScopeFacts], now: Date,
+                                               today: String,
                                                geo: GeoRefusals = .none) -> Bool {
         guard reachabilityProbeCandidateKeys(items, now: now, today: today, geo: geo).isEmpty else {
             return false
@@ -2770,8 +2788,8 @@ enum QueueModel {
     // them, or the heading would take its date from a show it says nothing about (L287).
     //
     // Nil when nothing datable is left, which the copy renders as the sentence it always showed.
-    static func dateReachabilityCheckedOn(_ items: [some QueueScopeFacts], now: Date = Date(),
-                                          today: String = QueueModel.easternToday(),
+    static func dateReachabilityCheckedOn(_ items: [some QueueScopeFacts], now: Date,
+                                          today: String,
                                           geo: GeoRefusals = .none) -> Date? {
         items
             .filter { probeIsWorthOffering($0, today: today, geo: geo)
@@ -2808,8 +2826,7 @@ enum QueueModel {
             self.checkedOn = checkedOn
         }
 
-        init(_ items: [some QueueScopeFacts], now: Date = Date(), today: String = QueueModel.easternToday(),
-             geo: GeoRefusals = .none) {
+        init(_ items: [some QueueScopeFacts], now: Date, today: String, geo: GeoRefusals = .none) {
             // ONE candidate sweep per date, and the other three answers are derived from what it found rather
             // than asked again. The pass answers every date of the stage, not only the ones on screen, so a
             // second sweep here is paid once per date on every pass (#4321 review).
@@ -3279,7 +3296,8 @@ enum QueueModel {
                       // being offered EARLY has nothing to explain, and right for a test that is not
                       // asking about the window.
                       clients: ClientWindow = .none,
-                      now: Date = Date(),
+                      // #4356: required, because the render pass calls this (`PassClockScanTests`).
+                      now: Date,
                       // Overture's day. Optional and last for the same reason `StageContext`'s is: the
                       // ordinary spelling derives it, and pinning one is what a test goes out of its way
                       // to do.
@@ -3305,7 +3323,10 @@ enum QueueModel {
                       // what every test call site and every caller with no memo does, so this is a no-op
                       // until a surface hands them in.
                       producerTables: ProducerTables? = nil,
-                      today: String? = nil) -> Scope {
+                      today: String? = nil,
+                      // #4356: where every cross-row read of this build is recorded, or nil for none, which is
+                      // what the app passes. A test hands one in to see what the rows and cards read.
+                      tableLog: TableReader.Log? = nil) -> Scope {
         let day = today ?? EasternDate.today(now)
         // #3652/#3644: over `rowsForLinking`, which defaults to the rows being built. Its three
         // neighbours below judge against `corpus ?? prospects` and each says why; this one carried no
@@ -3398,17 +3419,18 @@ enum QueueModel {
                 return (row.naturalKey, night)
             },
             uniquingKeysWith: { first, _ in first })
-        let pre = CardPreamble(linked: linked, inherited: inherited, venueBrands: venueBrands,
-                               rowCounts: rowCounts, calendarBySourceId: calendarBySourceId,
-                               overrides: overrides, clients: clients,
-                               contradictedCancellations: contradictedCancellations,
-                               sameShowGroups: sameShowGroups,
-                               titlesByKey: titlesByKey,
-                               collapsedFronts: collapse.fronts,
-                               collapsedHidden: collapse.hidden,
-                               laterLookalikesByKey: laterLookalikes,
-                               nightsByKey: nightsByKey,
-                               now: now, day: day)
+        let built = CardPreamble(linked: linked, inherited: inherited, venueBrands: venueBrands,
+                                 rowCounts: rowCounts, calendarBySourceId: calendarBySourceId,
+                                 overrides: overrides, clients: clients,
+                                 contradictedCancellations: contradictedCancellations,
+                                 sameShowGroups: sameShowGroups,
+                                 titlesByKey: titlesByKey,
+                                 collapsedFronts: collapse.fronts,
+                                 collapsedHidden: collapse.hidden,
+                                 laterLookalikesByKey: laterLookalikes,
+                                 nightsByKey: nightsByKey,
+                                 now: now, day: day)
+        let pre = tableLog.map { built.reading(through: built.tables.recording(into: $0)) } ?? built
 
         var rows: [QueueScopeRow] = []
         var contactsByKey: [String: [Recipient]] = [:]
@@ -3424,7 +3446,7 @@ enum QueueModel {
             // It can never hide the LAST card a surface has for a group: the front is chosen from the
             // rows this pass is drawing, so a group with one row here keeps it however many copies the
             // corpus holds.
-            if pre.collapsedHidden.contains(p.naturalKey) { continue }
+            if pre.tables.isCollapsedHidden(p.naturalKey) { continue }
             // #3653 Phase 3: the contacts, read ONCE for this show, whatever is built from them.
             //
             // `Prospect.countedRecipients` is the accessor that records `WorkTally.recipientReaches`, so
@@ -3438,7 +3460,7 @@ enum QueueModel {
             let key = p.naturalKey
             contactsByKey[key] = contacts
             rows.append(QueueScopeRow(p, facts: RecipientFacts.of(p, contacts: contacts),
-                                      inheritedReachability: inherited[key]))
+                                      inheritedReachability: pre.tables.inherited(key)))
             // #3654: a card ONLY for a show something is going to draw. `nil` means every one of them,
             // which is what `items(from:)` and Archive still ask for.
             if cardKeys?.contains(key) ?? true {
@@ -3477,46 +3499,52 @@ enum QueueModel {
     // They are all built from the FULL corpus and never from the rows being drawn, so narrowing which
     // cards get built provably cannot change what any card says (this phase's own safety argument).
     struct CardPreamble {
-        let linked: [String: [EngagementLink.Member]]
-        let inherited: [String: OrgAnswerLedger.Inherited]
-        let venueBrands: ProducerGate.VenueBrands
-        let rowCounts: [String: Int]
+        // #4356 (plan v7 Phase 2): every cross-row table, behind keyed reads that can be recorded. Private
+        // storage of `TableReader`, so a card or a row reads one through an accessor or not at all.
+        let tables: TableReader
+        // What is NOT about other rows: the source calendars, the overrides, the client window, the instant
+        // and the day. Every card reads these the same way whatever else is stored.
         let calendarBySourceId: [String: String]
         let overrides: ProducerOverrides
         let clients: ClientWindow
-        // #3278: the flagged rows the store itself contradicts, computed once over the corpus.
-        //
-        // HERE rather than in the card, because this is a whole-corpus answer and the card is per row:
-        // asking it per card would walk the store once per card drawn. On the preamble it is built with
-        // the other whole-corpus tables and read by each card as a set membership test.
-        let contradictedCancellations: Set<String>
-        // #3282: for each row's natural key, the OTHER keys holding the same show.
-        let sameShowGroups: [String: [String]]
-        // #3330: every stored row's title by its key, for resolving an arrival tag to a name.
-        let titlesByKey: [String: String]
-        // #4030: the collapse. `fronts` maps the key of each group's fronting row to every member of that
-        // group (itself included); `hidden` is every member that is NOT its group's front, and those rows
-        // are not drawn at all. Computed once over the unfiltered corpus with the tables beside it, for
-        // the same reason they are: the answer is about other rows.
-        let collapsedFronts: [String: [String]]
-        let collapsedHidden: Set<String>
-        // #4146: the OTHER direction of that tag. For each stored row's key, the keys of the rows that
-        // arrived LOOKING LIKE it, newest first. #3330's tag is written in the `.insert` arm, which only
-        // ever runs for the row being written, so on a pair only the second row carried a sentence and
-        // the first said nothing at all. The pointer already names both halves; nothing but this reverse
-        // walk was needed to read it from the other end.
-        let laterLookalikesByKey: [String: [String]]
-        // #4042: and its night, for the duplicate contact warning, which has to name both. A second
-        // table over the same walk rather than a second walk: the rows are already in hand where
-        // `titlesByKey` is built.
-        let nightsByKey: [String: String]
         let now: Date
         let day: String
 
-        func organisationRowCount(_ presenter: String?) -> Int {
-            guard let key = ProducerGate.key(presenter) else { return 0 }
-            return rowCounts[key] ?? 0
+        // The tables by name, as they are built: #3278's contradictions, #3282's same-show groups, #3330's
+        // titles, #4030's collapse, #4146's later lookalikes, #4042's nights, and the rest. Each is about
+        // OTHER rows, which is why each lives in the reader rather than here.
+        init(linked: [String: [EngagementLink.Member]], inherited: [String: OrgAnswerLedger.Inherited],
+             venueBrands: ProducerGate.VenueBrands, rowCounts: [String: Int],
+             calendarBySourceId: [String: String], overrides: ProducerOverrides, clients: ClientWindow,
+             contradictedCancellations: Set<String>, sameShowGroups: [String: [String]],
+             titlesByKey: [String: String], collapsedFronts: [String: [String]], collapsedHidden: Set<String>,
+             laterLookalikesByKey: [String: [String]], nightsByKey: [String: String], now: Date, day: String) {
+            self.init(tables: TableReader(linked: linked, inherited: inherited, venueBrands: venueBrands,
+                                          rowCounts: rowCounts, contradicted: contradictedCancellations,
+                                          sameShowGroups: sameShowGroups, titles: titlesByKey,
+                                          collapsedFronts: collapsedFronts, collapsedHidden: collapsedHidden,
+                                          laterLookalikes: laterLookalikesByKey, nights: nightsByKey),
+                      calendarBySourceId: calendarBySourceId, overrides: overrides, clients: clients,
+                      now: now, day: day)
         }
+
+        private init(tables: TableReader, calendarBySourceId: [String: String], overrides: ProducerOverrides,
+                     clients: ClientWindow, now: Date, day: String) {
+            self.tables = tables
+            self.calendarBySourceId = calendarBySourceId
+            self.overrides = overrides
+            self.clients = clients
+            self.now = now
+            self.day = day
+        }
+
+        /// The same preamble reading its tables through `tables`, a recording or narrowed copy of its own.
+        func reading(through tables: TableReader) -> CardPreamble {
+            CardPreamble(tables: tables, calendarBySourceId: calendarBySourceId, overrides: overrides,
+                         clients: clients, now: now, day: day)
+        }
+
+        func organisationRowCount(_ presenter: String?) -> Int { tables.organisationRowCount(presenter) }
     }
 
     // #3654 step 4c: the in-app check, run once per pass over the cards the pass just built.
@@ -3594,19 +3622,19 @@ enum QueueModel {
     // screen after it. Two spellings of this would be two cards that can disagree about a show, and only
     // one of them would be the one on screen (L107, L263).
     static func card(_ p: Prospect, contacts: [Recipient]?, preamble pre: CardPreamble) -> QueueItem {
-        var item = QueueItem(p, sendGroups: SendGroup.CardGroups(of: p), contacts: contacts)
+        var item = QueueItem(p, sendGroups: SendGroup.CardGroups(of: p, today: pre.day), contacts: contacts)
         // #2524: inside the sweep that was already happening. Asked as its own pass over the store it
         // was a ninth whole-store sweep per render, which `QueueRenderPassCostTests` refused.
         item.offeredEarlyAsAClient = isOfferedEarlyAsAClient(
             performanceDate: p.performanceDate, isPastClient: pre.clients.isPastClientShow(p),
             today: pre.day)
         item.sourceCalendarURLs = p.sourceIds.compactMap { pre.calendarBySourceId[$0] }
-        item.linkedEngagementMembers = pre.linked[p.naturalKey] ?? []
-        item.inheritedReachability = pre.inherited[p.naturalKey]
+        item.linkedEngagementMembers = pre.tables.linkedMembers(p.naturalKey) ?? []
+        item.inheritedReachability = pre.tables.inherited(p.naturalKey)
         // #1648: one staleness evaluation, feeding both the badge and the merit split.
         item.contactRoute = p.contactRouteForScoring(now: pre.now)
         item.presenterLine = presenterLine(title: p.groupName, presenter: p.presenter,
-                                           venue: p.venue, venueBrands: pre.venueBrands)
+                                           venue: p.venue, isVenueBrand: { pre.tables.isVenueBrand($0) })
         item.producerStanding = producerStanding(of: p.presenter, overrides: pre.overrides)
         // Only an organisation the gate can actually key is correctable. A name that folds away to
         // nothing would store a key no presenter can ever match, which reads exactly like no
@@ -3624,11 +3652,11 @@ enum QueueModel {
         // #1732: and only where the correction would be worth something. The counts are worked out
         // once for the whole build, above, never per row.
         item.correctableOrganisation = correctableOrganisation(
-            p.presenter, venueBrands: pre.venueBrands, standing: item.producerStanding,
+            p.presenter, isRoomName: { pre.tables.isRoomName($0) }, standing: item.producerStanding,
             rowCount: pre.organisationRowCount(p.presenter))
         // Read off the SAME corpus verdict the card itself draws from, so the menu can never state a
         // classification the row is not actually using.
-        item.treatedAsVenue = pre.venueBrands.contains(p.presenter)
+        item.treatedAsVenue = pre.tables.isVenueBrand(p.presenter)
         item.presenterWasTheRoom = p.presenterWasTheRoom == true   // #1788
         // #3278: the warning is WITHHELD where the store holds a live row for plainly the same show.
         //
@@ -3642,38 +3670,38 @@ enum QueueModel {
         // saying it (L605). And it is withheld HERE rather than in `QueueItem.init` because the question
         // is about the whole corpus and the initialiser is handed one prospect: the set is built once per
         // pass, in `preamble`, exactly like `venueBrands` and the client list beside it (L91).
-        if pre.contradictedCancellations.contains(p.naturalKey) {
+        if pre.tables.isContradicted(p.naturalKey) {
             item.disappearedFromFeed = false
         }
         // #3282: the store holding this show more than once, said on the card rather than nowhere.
-        item.sameShowKeys = pre.sameShowGroups[p.naturalKey] ?? []
+        item.sameShowKeys = pre.tables.sameShowKeys(p.naturalKey) ?? []
         // #4030: and, where this row FRONTS a collapsed group, every row the card stands for.
-        item.collapsedMemberKeys = pre.collapsedFronts[p.naturalKey] ?? []
+        item.collapsedMemberKeys = pre.tables.collapsedMembers(p.naturalKey) ?? []
         // #3330: resolved HERE, against the corpus table, so a tag pointing at a row the launch merge has
         // since collapsed resolves to nothing and the card says nothing.
-        item.arrivedLookingLikeTitle = p.arrivedLookingLike.flatMap { pre.titlesByKey[$0] }
+        item.arrivedLookingLikeTitle = p.arrivedLookingLike.flatMap { pre.tables.title($0) }
         // #4130: the same read-time resolution, against the same table.
-        item.arrivedOnAPitchedNightTitle = p.arrivedOnAPitchedNight.flatMap { pre.titlesByKey[$0] }
+        item.arrivedOnAPitchedNightTitle = p.arrivedOnAPitchedNight.flatMap { pre.tables.title($0) }
         // #4146: the same tag read from the other end, resolved against the same table, so a pointer
         // from a row that has since been merged away draws nothing.
-        item.laterLookalikeTitles = (pre.laterLookalikesByKey[p.naturalKey] ?? [])
-            .compactMap { pre.titlesByKey[$0] }
+        item.laterLookalikeTitles = (pre.tables.laterLookalikes(p.naturalKey) ?? [])
+            .compactMap { pre.tables.title($0) }
         // #4042: the duplicate contact warning's other row, resolved HERE against the same corpus tables
         // the arrival tags use. A key naming a row that has since been merged away resolves to nothing,
         // and the sentence falls back to the wording it had before this change rather than naming a card
         // Dan cannot find (L200).
         item.contacts = item.contacts.map { snapshot in
             guard let key = snapshot.looksLikeDuplicateContactKey,
-                  let title = pre.titlesByKey[key] else { return snapshot }
+                  let title = pre.tables.title(key) else { return snapshot }
             var resolved = snapshot
             resolved.duplicateOfTitle = title
-            resolved.duplicateOfNight = pre.nightsByKey[key]
+            resolved.duplicateOfNight = pre.tables.night(key)
             return resolved
         }
         // #1731: only meaningful where the verdict IS the building; nil otherwise.
-        item.readAsTheBuildingReason = pre.venueBrands.contains(p.presenter)
+        item.readAsTheBuildingReason = pre.tables.isVenueBrand(p.presenter)
             ? OrganisationListing.buildingReason(
-                isRoomName: pre.venueBrands.isRoomName(p.presenter),
+                isRoomName: pre.tables.isRoomName(p.presenter),
                 standing: item.producerStanding)
             : nil
         return item
@@ -3764,7 +3792,7 @@ enum QueueModel {
         private var cards: [String: QueueItem]
         private let showsByKey: [String: Prospect]
         private let contactsByKey: [String: [Recipient]]
-        private let preamble: CardPreamble
+        let preamble: CardPreamble
         // The keys the pass was ASKED to build, or nil for "every row", which is what a caller wanting
         // the whole set passes. A nil here can never produce an unexpected miss, because there was no
         // narrower belief to be wrong about.
@@ -4047,7 +4075,7 @@ extension QueueItem: ShowSearchFacts {
 
 extension QueueItem {
     init(_ p: Prospect) {
-        self.init(p, sendGroups: SendGroup.CardGroups(of: p))
+        self.init(p, sendGroups: SendGroup.CardGroups(of: p, today: EasternDate.today(Date())))
     }
 
     // #2046: the send groups are worked out once, by the caller above, and handed in. Three of the fields

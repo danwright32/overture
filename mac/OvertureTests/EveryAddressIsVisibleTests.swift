@@ -73,7 +73,7 @@ struct EveryAddressIsVisibleTests {
 
         let item = QueueItem(p)
 
-        #expect(item.nextRecipientIds == SendGroup.pendingGroup(of: p).map(\.id))
+        #expect(item.nextRecipientIds == SendGroup.pendingGroup(of: p, today: EasternDate.today(Date())).map(\.id))
         #expect(item.nextRecipientIds.contains("info@thevenue.example"))
         #expect(item.nextRecipientIds.contains("sarah@company.example"),
                 "both are on the one email this show would send")

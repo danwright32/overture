@@ -130,7 +130,7 @@ struct PrepManuallyTakesARouteTests {
                                        feedback: ActionFeedback())
         p.status = .approved
         #expect(SendService.nextPendingRecipient(for: p) == nil)
-        #expect(SendGroup.pendingGroup(of: p).isEmpty)
+        #expect(SendGroup.pendingGroup(of: p, today: EasternDate.today(Date())).isEmpty)
     }
 
     // And the flow it DOES feed. The show's own verdict recomputes to a hand route, which is what makes

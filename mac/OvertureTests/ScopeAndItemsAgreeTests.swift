@@ -81,7 +81,7 @@ struct ScopeAndItemsAgreeTests {
         asked.reachabilityRecheckRequestedAt = Date(timeIntervalSince1970: 1_759_000_000)
         try ctx.save()
 
-        let scope = QueueModel.scope(from: shows, corpus: shows)
+        let scope = QueueModel.scope(from: shows, corpus: shows, now: Date())
         let row = try #require(scope.rows.first { $0.id == asked.naturalKey })
         let card = try #require(scope.items.first { $0.id == asked.naturalKey })
 

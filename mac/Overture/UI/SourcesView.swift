@@ -162,7 +162,7 @@ struct SourcesView: View {
     // left open across midnight goes on judging lead time by yesterday, and caching the whole context
     // would have bought about a microsecond of `Set` building at that price (L74, L175).
     private var roomContext: StageContext {
-        StageContext(geo: geo, clients: clientWindow ?? ClientWindow(sources: sources, clients: clients))
+        StageContext(now: Date(), geo: geo, clients: clientWindow ?? ClientWindow(sources: sources, clients: clients))
     }
     // #2216: the sources the live extract run has been asked for and not yet come back with, read once
     // per sheet build rather than per row (a per-row file read would put two file reads on every one of

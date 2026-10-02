@@ -43,7 +43,9 @@ struct StageContext: Equatable, Sendable {
     // out of their way. `StageContextTests.noProductionCallSitePinsTheDay` fails if a shipping file ever
     // does go out of its way, which is what keeps the one-clock property true of the APP rather than
     // only of this type.
-    init(now: Date = Date(), geo: GeoRefusals, clients: ClientWindow, today: String? = nil) {
+    // #4356: `now` is required too, for the reason `geo` is: the render pass builds one, and a context that
+    // quietly took the wall clock would answer about an instant the pass was not handed.
+    init(now: Date, geo: GeoRefusals, clients: ClientWindow, today: String? = nil) {
         self.now = now
         self.geo = geo
         self.clients = clients
