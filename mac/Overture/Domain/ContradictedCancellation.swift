@@ -20,7 +20,13 @@ enum ContradictedCancellation {
     // It answers about ONE row against a candidate set rather than returning pairs, because the caller
     // that matters is a row deciding whether to draw its own warning, and a pair list would make every
     // such row re-derive the whole store (L91).
-    static func liveTwin(of flagged: Prospect, among rows: [Prospect]) -> Prospect? {
+    //
+    // #4357 (plan v7 Phase 3, T2): generic over `ProspectFacts`, ONE body for the live models (the pass and
+    // the tests today) and the retained `RowFacts` (the engine, Phase 4), so the rule cannot be copied
+    // into a second implementation that drifts (L263, L370). It folds the room through its own
+    // `canonicalVenue` rather than reading `foldedKeys`, which on a model would run every fold in
+    // `RowKeys` per row (#4357's carried note, L383).
+    static func liveTwin<Row: ProspectFacts>(of flagged: Row, among rows: [Row]) -> Row? {
         guard flagged.disappearedFromFeed else { return nil }
         return rows.first { candidate in
             guard candidate.persistentModelID != flagged.persistentModelID else { return false }
@@ -50,9 +56,9 @@ enum ContradictedCancellation {
     // never pass it are no longer visited. `theSetAgreesWithAskingRowByRow` asserts that equivalence
     // against the row-by-row answer rather than against a literal, so the index cannot drift from the
     // rule it indexes (L58).
-    static func contradictedKeys(among rows: [Prospect]) -> Set<String> {
+    static func contradictedKeys<Row: ProspectFacts>(among rows: [Row]) -> Set<String> {
         QueueRenderPass.WorkTally.recordContradictionSweep()
-        var liveByVenue: [String: [Prospect]] = [:]
+        var liveByVenue: [String: [Row]] = [:]
         for row in rows where row.missedScoutCount == 0 {
             liveByVenue[canonicalVenue(row.venue), default: []].append(row)
         }
