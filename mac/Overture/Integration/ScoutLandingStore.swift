@@ -32,6 +32,10 @@ import SwiftData
 //   - EVERY KEYED LOOKUP (`stored(key:)`, what `Prospect.stored(key:in:)` answers from the database) is
 //     answered from a natural key index over the same membership, so it takes the landing's inserts, drops
 //     deleted rows, and follows a key moved in place, exactly as the fetch it replaces would.
+//   - EVERY STORE WIDE ANSWER a source asks for (the production token poison, the room spellings and the
+//     ambiguous URLs) is answered from tables of the stored rows built once and kept current from the same
+//     written rows, plus the joins and the revert's deletes (#4333, `LandingBatchTables`), so a source walks
+//     its own batch and what changed since the source before it, never every stored row again.
 //
 // WHICH ROWS ARE RE-CHECKED, and why it is not every row (#4275, second pass). Comparing every cached row
 // on every read was itself about 13% of what was left of a landing (optimised, on a store clone), because
@@ -139,40 +143,38 @@ final class ScoutLandingStore {
     // out of the working set leaves a gap that a count would fill with a rank another row already holds.
     private var nextRank = 0
     private let saveWatch = SaveWatch()
-    // #4327 step 0.7 (RC4): what this working set did, counted, so whether the stored shows are served from
-    // the cache for the second source onwards is a measurement and not a reading of this file. Cumulative
-    // over the landing; the difference of two snapshots is what the work between them cost, which is how the
-    // landing attribution probe reports each source. Counting only: nothing here reads a counter.
+    // #4327 step 0.7 (RC4): what this working set did, counted, so what each source costs is a measurement
+    // and not a reading of this file. Cumulative over the landing; the difference of two snapshots is what the
+    // work between them cost, which is how the landing attribution probe reports each source. Counting only:
+    // nothing here reads a counter.
     struct Counters: Equatable, Sendable {
         // The label an ingest reports its last snapshot under, taken after the reconcile's read.
         static let afterReconcile = "reconcile"
-        // `storedShowsPerURL` walked every row into shows again, and when it answered from its cache.
-        var storedShowsBuilds = 0
-        var storedShowsCacheHits = 0
-        // Why `generation` moved, by the site that moved it: a row folded for the FIRST time (`fold(of:)` with
-        // nothing cached), a cached fold that no longer described its row (`fold(of:)`, a written field), and a
-        // row the landing inserted (`inserted(_:)`). Any move makes the next stored shows read rebuild.
-        var generationMovesFirstFold = 0
-        var generationMovesFoldChanged = 0
-        var generationMovesInserted = 0
+        // #4333: the batch tables built from every row, which a landing does once, and the rows whose part in
+        // them was judged again because SwiftData named them as written, they joined, or they were reverted.
+        var tableBuilds = 0
+        var tableRowsRejudged = 0
+        // Folds taken, by the site that took them: a row folded for the FIRST time (`fold(of:)` with nothing
+        // cached), a cached fold that no longer described its row (`fold(of:)`, a written field), and a row the
+        // landing inserted (`inserted(_:)`).
+        var firstFolds = 0
+        var foldsChanged = 0
+        var rowsJoined = 0
         // Cached folds compared against their row, because SwiftData named the row as written (#4275).
         var foldValidations = 0
         // Store rows VISITED. `rowsRead` is the rows the one fetch returned. `rowsHandedOut` is the rows every
         // caller of `rows()` was given, each of which walks what it is given. `rowsWalked` is the working
-        // set's own walks over every row: the deletion filter, the key index build, and the stored shows
-        // read's fold pass and build.
+        // set's own walks over every row: the deletion filter, the key index build, and the batch tables build.
         var rowsRead = 0
         var rowsHandedOut = 0
         var rowsWalked = 0
 
-        var generationMoves: Int { generationMovesFirstFold + generationMovesFoldChanged + generationMovesInserted }
-
         static func - (a: Counters, b: Counters) -> Counters {
-            Counters(storedShowsBuilds: a.storedShowsBuilds - b.storedShowsBuilds,
-                     storedShowsCacheHits: a.storedShowsCacheHits - b.storedShowsCacheHits,
-                     generationMovesFirstFold: a.generationMovesFirstFold - b.generationMovesFirstFold,
-                     generationMovesFoldChanged: a.generationMovesFoldChanged - b.generationMovesFoldChanged,
-                     generationMovesInserted: a.generationMovesInserted - b.generationMovesInserted,
+            Counters(tableBuilds: a.tableBuilds - b.tableBuilds,
+                     tableRowsRejudged: a.tableRowsRejudged - b.tableRowsRejudged,
+                     firstFolds: a.firstFolds - b.firstFolds,
+                     foldsChanged: a.foldsChanged - b.foldsChanged,
+                     rowsJoined: a.rowsJoined - b.rowsJoined,
                      foldValidations: a.foldValidations - b.foldValidations,
                      rowsRead: a.rowsRead - b.rowsRead,
                      rowsHandedOut: a.rowsHandedOut - b.rowsHandedOut,
@@ -183,16 +185,19 @@ final class ScoutLandingStore {
     // How many cached folds were compared against their row. Counted so a test can pin that it does not
     // grow with the store (#4275).
     var foldValidations: Int { counters.foldValidations }
-    // Moves whenever any row's folds are (re)computed or a row joins, so a value derived from every row's
-    // folds knows when it has to be derived again.
-    private var generation = 0
-    private var shows: (generation: Int, count: Int, value: StoredShows)?
 
-    // The stored rows' URLs folded into SHOWS (`ShowLink.addShows`), in both scopes the ambiguity rule asks.
-    struct StoredShows {
-        var atAVenue: [String: [String]] = [:]
-        var anywhere: [String: [String]] = [:]
-    }
+    // #4333 (A4): the stored rows' half of the poison, spelling and ambiguity passes (`LandingBatchTables`),
+    // built from every row the first time a source asks and kept current after that from a CHANGE FEED: the
+    // rows SwiftData names as written (`noteWrittenRows`, the same feed the folds and the key index read),
+    // the rows this landing inserts (`inserted(_:)`), the rows a failed save's revert put back
+    // (`revertFailedSave`), and the rows it deleted (`discarded(_:)`). Each source then re-judges only those
+    // rows, and asks only about the keys its own batch carries.
+    private var tables: LandingBatchTables?
+    private var tablesToCheck: [ObjectIdentifier: Prospect] = [:]
+    // A row that joined since the last re-judgement, and its place in the tables' order: after every row
+    // already there, in the order inserted, which is the order `loaded` holds them in.
+    private var joinOrder: [ObjectIdentifier: Int] = [:]
+    private var nextTableOrder = 0
 
     // #4325: the reconcile writes of this landing that no save has carried yet, oldest first. A successful
     // save of this context empties it (`didSave`, below), whoever saved, so what is left at the closing save
@@ -260,6 +265,9 @@ final class ScoutLandingStore {
         let earlierReconciles = closing ? [] : unsavedReconcileResults
         let report = LandingRevert.revert(set, in: context)
         discarded(set.inserted.compactMap { $0 as? Prospect })
+        // #4333: a row the revert put back was written by it, whatever SwiftData lists afterwards, so its fold,
+        // its key and its part in the batch tables are all judged again on the next read.
+        for case let p as Prospect in set.changed { markWritten(p) }
         if closing {
             unsavedReconcileWrites = []
             unsavedReconcileResults = []
@@ -285,9 +293,10 @@ final class ScoutLandingStore {
             foldsToCheck.remove(id)
             keysToCheck[id] = nil
             rank[id] = nil
+            tables?.remove(id)
+            tablesToCheck[id] = nil
+            joinOrder[id] = nil
         }
-        generation += 1
-        shows = nil
     }
 
     init(context: ModelContext, read: @escaping Read = ScoutService.readProspectTable,
@@ -340,10 +349,15 @@ final class ScoutLandingStore {
         guard loaded != nil, context.hasChanges else { return }
         for model in context.changedModelsArray + context.insertedModelsArray {
             guard let p = model as? Prospect else { continue }
-            let id = ObjectIdentifier(p)
-            foldsToCheck.insert(id)
-            keysToCheck[id] = p
+            markWritten(p)
         }
+    }
+
+    private func markWritten(_ p: Prospect) {
+        let id = ObjectIdentifier(p)
+        foldsToCheck.insert(id)
+        keysToCheck[id] = p
+        if tables != nil { tablesToCheck[id] = p }
     }
 
     // Every stored show a fresh fetch would return right now, in this landing's order. Throws when the store
@@ -402,9 +416,14 @@ final class ScoutLandingStore {
         guard policy == .once, loaded != nil else { return }
         loaded?.append(p)
         members = nil
-        generation += 1
-        counters.generationMovesInserted += 1
+        counters.rowsJoined += 1
         if keyIndex != nil { index(p, at: (loaded?.count ?? 1) - 1) }
+        if tables != nil {
+            let id = ObjectIdentifier(p)
+            joinOrder[id] = nextTableOrder
+            nextTableOrder += 1
+            tablesToCheck[id] = p
+        }
     }
 
     // The stored row holding a natural key, or nil when nobody holds it: what `Prospect.stored(key:in:)`
@@ -462,35 +481,126 @@ final class ScoutLandingStore {
             if !written { return cached }
             counters.foldValidations += 1
             if cached.describes(p) { return cached }
-            counters.generationMovesFoldChanged += 1
+            counters.foldsChanged += 1
         } else {
-            counters.generationMovesFirstFold += 1
+            counters.firstFolds += 1
         }
         let fresh = Fold(p)
         folds[id] = fresh
-        generation += 1
         return fresh
     }
 
-    // The stored rows folded into shows, walked once and walked again only when a row joined, left, or had
-    // a folded field change since. The walk is the expensive half of the ambiguous URL rule (a pairwise
-    // title test per URL), and before this it was repeated, identically, for every source of a landing.
-    // Every row's fold is asked for first, which re-folds any row SwiftData named as written since.
-    func storedShowsPerURL() throws -> StoredShows {
-        let rows = try currentRows()
-        counters.rowsWalked += rows.count
-        for row in rows { _ = fold(of: row) }
-        if policy == .once, let shows, shows.generation == generation, shows.count == rows.count {
-            counters.storedShowsCacheHits += 1
-            return shows.value
+    // MARK: the batch tables (#4333, A4)
+
+    // Each source's three store wide answers: the stored rows' half from the tables, continued with the
+    // source's own batch, which is exactly what the walk over every stored row and then the batch answers
+    // (`LandingBatchTables`, where the reason each rule takes the structure it does is written). Under
+    // `.everyRead` each is that walk itself (`ScoutService`'s from-scratch functions), so the reference the
+    // equality tests compare against stays the code that ran before #4333. Each throws when the store cannot
+    // answer, exactly as the walk did, and the caller decides the direction (L215).
+    func poisonedTokens(adding incoming: [AssembledProspect]) throws -> Set<String> {
+        if policy == .everyRead {
+            return try ScoutService.poisonedTokensForBatch(incoming, storedRows: { try rows() })
         }
-        counters.storedShowsBuilds += 1
-        counters.rowsWalked += rows.count
-        var value = StoredShows()
-        let seen = rows.flatMap { ScoutService.ambiguityEntries(of: fold(of: $0)) }
-        ShowLink.addShows(seen, scopedByVenue: true, into: &value.atAVenue)
-        ShowLink.addShows(seen, scopedByVenue: false, into: &value.anywhere)
-        shows = (generation, rows.count, value)
-        return value
+        return try currentTables().poisoned(adding: Self.tokens(ScoutService.poisonEntries(of: incoming)))
+    }
+
+    func ambiguousURLs(adding incoming: [AssembledProspect]) throws -> ScoutService.AmbiguousURLs {
+        if policy == .everyRead {
+            return try ScoutService.ambiguousURLsForBatch(incoming, storedRows: { try rows() })
+        }
+        let tables = try currentTables()
+        let links = Self.links(ScoutService.ambiguityEntries(of: incoming))
+        return ScoutService.AmbiguousURLs(atAVenue: tables.atAVenue.answer(adding: links),
+                                          anywhere: tables.anywhere.answer(adding: links))
+    }
+
+    // How the stored rows have spelled their rooms, per source id, for `VenueSpellingLock.locked`.
+    struct VenueSpellings {
+        fileprivate let lookup: ([String]) -> [String]
+        func used(by sourceIds: [String]) -> [String] { lookup(sourceIds) }
+    }
+
+    func venueSpellings() throws -> VenueSpellings {
+        if policy == .everyRead {
+            // The walk #1848 made over every stored row, once per batch.
+            var bySource: [String: [String]] = [:]
+            for row in try rows() {
+                guard let venue = row.venue, !venue.isEmpty else { continue }
+                for id in row.sourceIds { bySource[id, default: []].append(venue) }
+            }
+            return VenueSpellings(lookup: { ids in ids.flatMap { bySource[$0] ?? [] } })
+        }
+        let tables = try currentTables()
+        return VenueSpellings(lookup: { tables.spellings(usedBy: $0) })
+    }
+
+    // The tables as they stand, brought current, and the same tables rebuilt now from every row with a FRESH
+    // fold of each (never the cached one), as two snapshots: what the tests compare after each source.
+    func batchTablesSnapshot() throws -> LandingBatchTables.Snapshot {
+        let tables = try currentTables()
+        return tables.snapshot(naming: { String(describing: $0) })
+    }
+
+    func rebuiltBatchTablesSnapshot() throws -> LandingBatchTables.Snapshot {
+        let rows = try currentRows()
+        return LandingBatchTables.rebuilt(rows.map { (ObjectIdentifier($0), Self.contribution(of: $0, Fold($0))) })
+            .snapshot(naming: { String(describing: $0) })
+    }
+
+    // The tables, built from every row the first time and brought current after that from the change feed.
+    private func currentTables() throws -> LandingBatchTables {
+        guard var tables else {
+            let current = try currentRows()
+            counters.tableBuilds += 1
+            counters.rowsWalked += current.count
+            var built = LandingBatchTables()
+            for (i, p) in current.enumerated() {
+                built.set(ObjectIdentifier(p), order: i, to: Self.contribution(of: p, fold(of: p)))
+            }
+            nextTableOrder = current.count
+            tablesToCheck = [:]
+            joinOrder = [:]
+            self.tables = built
+            return built
+        }
+        noteWrittenRows()
+        // A deletion still pending is out of every read (`currentRows` filters it), so out of the tables too.
+        if context.hasChanges {
+            for case let p as Prospect in context.deletedModelsArray { tablesToCheck[ObjectIdentifier(p)] = p }
+        }
+        guard !tablesToCheck.isEmpty else { return tables }
+        for (id, p) in tablesToCheck {
+            // A row the landing does not hold (one nobody announced) is in no read, so in no table.
+            guard let order = tables.order(of: id) ?? joinOrder[id] else { continue }
+            counters.tableRowsRejudged += 1
+            tables.set(id, order: order, to: p.isDeleted ? .none : Self.contribution(of: p, fold(of: p)))
+        }
+        tablesToCheck = [:]
+        joinOrder = [:]
+        self.tables = tables
+        return tables
+    }
+
+    // One row's part in each pass, from the SAME entry builders the from-scratch walks use (L370).
+    private static func contribution(of p: Prospect, _ folded: Fold) -> LandingBatchTables.Contribution {
+        var c = LandingBatchTables.Contribution()
+        c.tokens = Set(tokens(ScoutService.poisonEntries(of: folded)))
+        c.urls = links(ScoutService.ambiguityEntries(of: folded)).sorted { $0.url < $1.url }
+        // #1848's walk reads the row's own venue and source ids, which no fold carries.
+        if let venue = p.venue, !venue.isEmpty {
+            c.spellings = p.sourceIds.map { .init(sourceId: $0, venue: venue) }
+        }
+        return c
+    }
+
+    private static func tokens(_ entries: [(token: String, title: String, venue: String)])
+        -> [LandingBatchTables.Contribution.Token] {
+        entries.map { .init(token: $0.token, title: $0.title, venue: $0.venue) }
+    }
+
+    private static func links(_ entries: [(url: String, title: String, venue: String)])
+        -> [LandingBatchTables.Contribution.Link] {
+        entries.map { .init(url: $0.url, title: $0.title, venue: $0.venue) }
     }
 }

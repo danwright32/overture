@@ -486,7 +486,7 @@ struct ScoutLandingAttributionProbeTests {
                 let t0 = Phase0.now()
                 let outcome = await ScoutExtractIngest.ingest(
                     landed, clients: inputs.clients, history: inputs.history, blocked: inputs.blocked,
-                    onLandingStep: { steps.append(($0, $1, Phase0.ms(since: t0))) }, into: ctx)
+                    onLandingStep: { steps.append(($0, $1.counters, Phase0.ms(since: t0))) }, into: ctx)
                 let total = Phase0.ms(since: t0)
                 try? ctx.save()
                 let added = landed.results.reduce(0) { $0 + $1.events.count }
