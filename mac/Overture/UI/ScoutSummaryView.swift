@@ -163,6 +163,8 @@ struct ScoutSummaryView: View {
             infoBlock(ScoutWarningCopy.superseded(results.map(\.orgName)))
         case .pastClientList(let message):
             infoBlock(message)
+        case .alreadyLanded(let landedAt):
+            infoBlock(LandingWaitCopy.alreadyLanded(at: landedAt))
         }
     }
 

@@ -97,6 +97,8 @@ Inquiry.sourceRaw
 Inquiry.threadIdDegraded
 Inquiry.threadingDegraded
 Inquiry.venue
+LandingRun.landedAt
+LandingRun.runIdentity
 OrgReachabilityAnswer.foundEmailsRaw
 OrgReachabilityAnswer.orgKey
 OrgReachabilityAnswer.presenterName

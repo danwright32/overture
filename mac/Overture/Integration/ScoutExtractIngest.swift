@@ -62,6 +62,12 @@ enum ScoutExtractIngest {
                        // #4330 (A13): the queue the landing block waits its turn in, and at what priority.
                        landings: LandingSingleFlight = .shared,
                        priority: LandingSingleFlight.Priority = .scout,
+                       // #4336 (A7): the identity of the results being landed and the check to judge it by.
+                       // `ScoutExtractLanding` always passes one, being the only caller holding the bytes the
+                       // identity is the hash of (AlreadyLandedBypassIsTestOnlyTests holds the app to that).
+                       // nil, for a test landing decoded results with no file behind them, checks and records
+                       // nothing.
+                       identity: LandedResultsIdentity? = nil,
                        // The run's landing sequence. nil mints one as the read phase starts; a pending copy
                        // offered again passes the sequence it was minted with (`PendingScoutIngests`), so it
                        // is judged as the run it really is.
@@ -246,6 +252,21 @@ enum ScoutExtractIngest {
             return outcome
         }
         defer { token.end() }
+        // #4336 (A7): asked again now the store is held, because the caller's asking was formed before it
+        // was (L157), and two landings of the same bytes can both have passed it while they waited. Refused
+        // before anything is applied, as its own outcome with the first landing's time (L100, L11). A
+        // record that cannot be read refuses nothing (refusing would lose a run to a read nothing else
+        // needed) and is said as a degraded read, never read as "never landed" (L215).
+        if let identity {
+            do {
+                if let landedAt = try identity.check.landedAt(identity.contentHash, context) {
+                    outcome.alreadyLandedAt = landedAt
+                    return outcome
+                }
+            } catch {
+                outcome.degradedReads.append(.landedRuns)
+            }
+        }
         let landing = ScoutLandingStore(context: context, read: readProspectTable)
         // #4330: the re-validation. A later run landed this source after this one read it, so this reading is
         // the older one and is set aside whole: nothing applied (#4329: not even its note, its failure or its
@@ -394,7 +415,20 @@ enum ScoutExtractIngest {
         }
         // #4325: the reconcile's writes, and every source's bookkeeping above, saved before the landing
         // returns, through the one closing save the native sweep uses. Nothing saved them before this.
-        if !ScoutService.saveLanding(landing, into: context, save: saveClosing) { outcome.saveFailed = true }
+        // #4336 (A7): the record that these results landed rides the closing save, so it reaches disk with
+        // the landing or not at all. Only a landing nothing failed to save is recorded: a failed save leaves
+        // the results to be offered again, and a record of it would refuse them (L5). A record whose save
+        // failed is taken back out of the context, so no later save can persist it.
+        var landedRun: LandingRun?
+        if let identity, !outcome.saveFailed {
+            let run = LandingRun(runIdentity: identity.contentHash, landedAt: now)
+            context.insert(run)
+            landedRun = run
+        }
+        if !ScoutService.saveLanding(landing, into: context, save: saveClosing) {
+            outcome.saveFailed = true
+            if let landedRun { context.delete(landedRun) }
+        }
         token.end()
 
         return outcome
