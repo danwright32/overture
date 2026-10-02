@@ -404,6 +404,78 @@ struct ReconcileTickReadsTheStoreOnceTests {
         #expect(summary.newReplies == ["G stays"])
     }
 
+    // #4417: the same window, deleted but NOT yet saved. Looked up by identity the main context still holds
+    // the row, marked deleted, so the lookup alone would name it; only the liveness check keeps it out (a
+    // deleted and saved row is not found at all, which the test above covers). Same positive control.
+    @Test func aShowDeletedButUnsavedAfterTheClosingReadIsNotNamed() async throws {
+        let ctx = try context()
+        let goes = show(ctx, key: "goes")
+        let stays = show(ctx, key: "stays")
+        try ctx.save()
+
+        let summary = await tick(ctx, defaults: ScratchDefaults.make("4417-deleted-unsaved"),
+                                 readClosing: { context, at, alive in
+                                     goes.outcome = .replied
+                                     stays.outcome = .replied
+                                     try? ctx.save()
+                                     let r = await DueReading.read(from: context, now: at, replyRunAlive: alive)
+                                     ctx.delete(goes)
+                                     return r
+                                 },
+                                 mailbox: { req in self.respond(req, self.emptyList(), 200) })
+
+        #expect(summary.newReplyKeys == ["stays"])
+    }
+
+    // #4417: the same window, but the show is RE-KEYED rather than deleted (a scout landing joining nights
+    // does exactly this). It is still stored, so it is still named, and under the key it holds NOW, since
+    // that key is what the away alert's deep link opens. Checked by key, it read as deleted and vanished.
+    @Test func aShowReKeyedBetweenTheClosingReadAndItsApplyIsNamedUnderItsCurrentKey() async throws {
+        let ctx = try context()
+        let moves = show(ctx, key: "moves")
+        try ctx.save()
+
+        let summary = await tick(ctx, defaults: ScratchDefaults.make("4417-rekeyed-mid-read"),
+                                 readClosing: { context, at, alive in
+                                     moves.outcome = .replied
+                                     try? ctx.save()
+                                     let r = await DueReading.read(from: context, now: at, replyRunAlive: alive)
+                                     moves.naturalKey = "moved"
+                                     moves.groupName = "G moved"
+                                     try? ctx.save()
+                                     return r
+                                 },
+                                 mailbox: { req in self.respond(req, self.emptyList(), 200) })
+
+        #expect(summary.newReplyKeys == ["moved"])
+        #expect(summary.newReplies == ["G moved"])
+    }
+
+    // #4417: an identity taken from a row that was never saved is TEMPORARY, and the row's first save gives
+    // it a new one (`InsertedRowIdentifierAcrossSaveTests`). A show already booked when the tick read it, but
+    // not yet saved, and saved while the tick ran, is the same show, so it is not a new booking. The control
+    // in the same fixture: a show booked inside that window IS named, so silence here can fail.
+    @Test func aShowBookedButUnsavedWhenTheTickReadIsNotNewOnceItIsSaved() async throws {
+        let ctx = try context()
+        let already = show(ctx, key: "already")
+        let fresh = show(ctx, key: "fresh")
+        try ctx.save()
+        already.outcome = .booked
+        let pending = show(ctx, key: "pending")
+        pending.outcome = .booked
+        #expect(ctx.hasChanges, "nothing was unsaved when the tick read, so the fixture is wrong")
+
+        let summary = await tick(ctx, defaults: ScratchDefaults.make("4417-unsaved-at-read"),
+                                 readClosing: { context, at, alive in
+                                     fresh.outcome = .booked
+                                     try? ctx.save()
+                                     return await DueReading.read(from: context, now: at, replyRunAlive: alive)
+                                 },
+                                 mailbox: { req in self.respond(req, self.emptyList(), 200) })
+
+        #expect(summary.newBookingKeys == ["fresh"])
+    }
+
     // #4250: a background context reads what is SAVED. With unsaved changes on the main context the two
     // disagree, so the reading is taken on the main actor as it always was, and says so, which is what
     // the tick's timeline reports it by. The saved case above is the control: same reader, off main.
