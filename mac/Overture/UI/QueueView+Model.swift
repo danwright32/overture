@@ -2734,8 +2734,9 @@ enum QueueModel {
     //
     // One function for both questions on purpose: the tick box appears exactly where it has something to
     // contribute, so its presence can never promise rows the run does not get (L16).
-    static func probeKeysForTickedDate(_ items: [some QueueScopeFacts], now: Date = Date(),
-                                       today: String = QueueModel.easternToday(),
+    // #4356: required, like the rest of this family, so a caller cannot read the wall clock by forgetting.
+    static func probeKeysForTickedDate(_ items: [some QueueScopeFacts], now: Date,
+                                       today: String,
                                        geo: GeoRefusals = .none) -> [String] {
         let outstanding = reachabilityProbeCandidateKeys(items, now: now, today: today, geo: geo)
         guard outstanding.isEmpty else { return outstanding }
@@ -2751,8 +2752,8 @@ enum QueueModel {
     // the keep-or-dismiss moment, or somewhere he has refused to travel, was never checked and must not
     // say it was. Those headings stay bare, which is honest; the marker is a claim, so it is made only
     // where an answer actually exists.
-    static func dateReachabilityIsFullyChecked(_ items: [some QueueScopeFacts], now: Date = Date(),
-                                               today: String = QueueModel.easternToday(),
+    static func dateReachabilityIsFullyChecked(_ items: [some QueueScopeFacts], now: Date,
+                                               today: String,
                                                geo: GeoRefusals = .none) -> Bool {
         guard reachabilityProbeCandidateKeys(items, now: now, today: today, geo: geo).isEmpty else {
             return false

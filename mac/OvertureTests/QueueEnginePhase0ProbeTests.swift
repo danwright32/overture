@@ -878,7 +878,7 @@ struct QueueEnginePhase0ProbeTests {
             let sources = try ctx.fetch(FetchDescriptor<WatchedSource>())
             for r in rows { _ = r.recipients.count }
             let now = Date()
-            let context = StageContext(now: Date(), geo: .none, clients: .none)
+            let context = StageContext(now: now, geo: .none, clients: .none)
             let allRows = Phase0.median5 { _ = rows.map { QueueScopeRow($0, facts: RecipientFacts.of($0)) }.count }
             let searchable = Phase0.median5 {
                 let kept = rows.filter { $0.status != .dismissed }

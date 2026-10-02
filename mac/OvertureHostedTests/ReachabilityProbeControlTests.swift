@@ -44,7 +44,8 @@ struct ReachabilityProbeControlTests {
     // draws nothing when the date is past, so a fixture that has aged makes all of them fail for a reason
     // none of their names mention, which is what happened. This one says WHICH thing is wrong.
     @Test func theFixturesShowIsStillAhead() {
-        let keys = QueueModel.reachabilityProbeCandidateKeys([item("a")], now: Date(), today: EasternDate.today(Date()))
+        let now = Date()
+        let keys = QueueModel.reachabilityProbeCandidateKeys([item("a")], now: now, today: EasternDate.today(now))
         #expect(keys == ["a"], """
         the fixture's show is no longer a probe candidate, so every test in this suite is about to fail \
         for a reason that has nothing to do with the control. The date is \(Self.upcomingDate) against \
