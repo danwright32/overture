@@ -114,9 +114,9 @@ enum SendGroup {
 
     // #4168: carries `together` through for the same reason `previewGroup` takes it. The approval gate
     // below is unaffected by the choice, so only the grouping half moves.
-    static func pendingGroup(of prospect: Prospect, together: Bool? = nil) -> [Recipient] {
-        pending(from: previewGroup(of: prospect, together: together, today: EasternDate.today(Date())),
-                of: prospect)
+    // #4356: judged on the caller's day, like `previewGroup`, so a caller holding both judges them alike.
+    static func pendingGroup(of prospect: Prospect, together: Bool? = nil, today: String) -> [Recipient] {
+        pending(from: previewGroup(of: prospect, together: together, today: today), of: prospect)
     }
 
     // The approval gate on its own, so a caller that already holds the preview group pays for the filter

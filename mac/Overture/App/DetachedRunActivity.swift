@@ -65,7 +65,9 @@ final class DetachedRunActivity {
 
     private let liveness: @MainActor (Date) -> Bool
     private let sleep: @MainActor (TimeInterval) async -> Void
-    private let pollInterval: TimeInterval
+    // #4356: readable, so a signal that polls only while this run is live (`QueueContextSignals`) polls at
+    // this run's own interval rather than at a second number written beside it.
+    let pollInterval: TimeInterval
 
     // True while a run is believed to be in flight. Free to read.
     private(set) var isRunning: Bool
