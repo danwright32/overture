@@ -260,6 +260,24 @@ final class TheFreezeNoticeReadsOnlyWhatIsNewTests {
         #expect(healed.contains("stopped responding for 7.0 seconds"), Comment(rawValue: "once the archive opened, the record never said was not said alone: \(healed)"))
     }
 
+    // And what it carries meanwhile stays bounded, or an archive that never opens again regrows the list
+    // this change removed.
+    @Test("what is carried while the archive cannot be opened is bounded")
+    func whatIsCarriedIsBounded() throws {
+        let support = try sandboxes.make(named: "freeze-carried")
+        let defaults = ScratchDefaults.make("freeze-carried")
+        try FileManager.default.createDirectory(at: archiveURL(support), withIntermediateDirectories: false)
+        let earlier = FreezeReport.Said(liveIdentities: records("earlier", FreezeReport.carriedIdentityCeiling + 300).map(\.identity))
+        defaults.set(try FreezeLog.encoder().encode(earlier), forKey: FreezeReport.saidKey)
+        try write(records("live", 10), to: liveURL(support))
+
+        _ = try #require(report(support, defaults))
+
+        let carried = try stored(defaults).liveIdentities
+        #expect(carried.count == FreezeReport.carriedIdentityCeiling, Comment(rawValue: "an unopenable archive carried \(carried.count) identities"))
+        #expect(Array(carried.suffix(10)) == records("live", 10).map(\.identity), "the newest identities were not the ones kept")
+    }
+
     @Test("an archive that cannot be opened is said on its own once, when nothing else is new")
     func anUnopenableArchiveIsSaidOnce() throws {
         let support = try sandboxes.make(named: "freeze-unopenable-alone")

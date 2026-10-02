@@ -116,8 +116,13 @@ enum FreezeReport {
         }
         if archived.couldNotBeRead {
             var kept = Set(before.liveIdentities)
-            after.liveIdentities = before.liveIdentities
-                + after.liveIdentities.filter { kept.insert($0).inserted }
+            let carried = before.liveIdentities + after.liveIdentities.filter { kept.insert($0).inserted }
+            // BOUNDED, so an archive that stays unopenable cannot regrow the list #4453 removed. The
+            // newest are kept, and what falls off the front can only be said AGAIN once the archive
+            // opens, never lost. Not while migrating: the old list is the only account of a month of
+            // notices, and cutting it would repeat that month at once (L36).
+            let migrating = defaults.object(forKey: FreezeLog.reportedIdsKey) != nil
+            after.liveIdentities = migrating ? carried : Array(carried.suffix(carriedIdentityCeiling))
         } else {
             after.archiveAnchors = archived.anchors
         }
@@ -177,6 +182,9 @@ enum FreezeReport {
     }
 
     static let saidKey = "freezesSaid"
+
+    // How many identities are carried while the archive cannot be opened: four live files' worth.
+    static let carriedIdentityCeiling = FreezeLog.fileCap * 4
 
     // What has been said, read from wherever it is.
     //

@@ -250,10 +250,6 @@ enum FreezeLog {
         var unreadableLines: Int = 0
         // The archive's last records NOW, newest first, which is where the next read starts from.
         var anchors: [ArchiveAnchor] = []
-        // The remembered position was not found, so the whole file was read. Expected the first time and
-        // after the archive has been replaced; on any other read it is the cost this type exists to avoid,
-        // so it is said rather than inferred from a slow launch.
-        var readWholeFile: Bool = false
         var fileWasAbsent: Bool = false
         var couldNotBeRead: Bool = false
     }
@@ -311,7 +307,6 @@ enum FreezeLog {
             if met, out.anchors.count >= archiveAnchorDepth { break }
         }
         out.records = newestFirst.reversed()
-        out.readWholeFile = !met
         return out
     }
 
