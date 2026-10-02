@@ -1851,10 +1851,10 @@ enum ScoutService {
             })
         }
 
-        // #1848 and #4098 both need every stored row, so the store is read ONCE here and both answers
-        // below come from it. Each used to fetch the whole store for itself, which is two full reads per
-        // sweep for one question about the same rows. #4333 (A4): from the landing's tables, kept current
-        // as each source lands, rather than a walk over every row per source.
+        // #1848 and #4098 both ask a question of every stored row. Each used to fetch the whole store for
+        // itself, then (#4275) walk the landing's working set once per source; since #4333 (A4) both answers
+        // come from the landing's tables, built once per landing and kept current as each source lands, so
+        // nothing here reads or walks the store.
         //
         // The two want OPPOSITE things from a read that fails, and that is deliberate rather than an
         // inconsistency: the spelling lock can only ever REPLACE a spelling with one the source itself
@@ -2445,13 +2445,13 @@ enum ScoutService {
     // working one proves nothing about the branch that matters most, which is the one that decides
     // whether an unreadable store refuses every token or none (L140). Same reasoning, and the same
     // shape, as `Prospect.keyAvailability(_:lookup:)`.
-    // #4275: `fold` as for `ambiguousURLsForBatch` above.
+    // #4333: the FROM-SCRATCH walk, every stored row freshly folded. The landing answers from its tables
+    // (`ScoutLandingStore.poisonedTokens(adding:)`); this is what `.everyRead` and the tests compare against.
     static func poisonedTokensForBatch(_ incoming: [AssembledProspect],
-                                       storedRows: () throws -> [Prospect],
-                                       fold: (Prospect) -> ScoutLandingStore.Fold = ScoutLandingStore.Fold.init)
-        throws -> Set<String> {
+                                       storedRows: () throws -> [Prospect]) throws -> Set<String> {
         let stored = try storedRows()
-        return ShowLink.poisonedTokens(stored.flatMap { poisonEntries(of: fold($0)) } + poisonEntries(of: incoming))
+        return ShowLink.poisonedTokens(stored.flatMap { poisonEntries(of: ScoutLandingStore.Fold($0)) }
+                                       + poisonEntries(of: incoming))
     }
 
     // What one stored row, and what a batch, contribute to the token walk. ONE builder for each half, shared
