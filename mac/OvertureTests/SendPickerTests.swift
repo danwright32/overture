@@ -93,7 +93,7 @@ struct SendPickerTests {
 
         let confirmation = try #require(SendConfirmation(prospect: p))
 
-        #expect(confirmation.selected == SendGroup.pendingGroup(of: p).map(\.id))
+        #expect(confirmation.selected == SendGroup.pendingGroup(of: p, today: EasternDate.today(Date())).map(\.id))
     }
 
     @Test func onASeparatelyShowTheDefaultIsTheSingleContactSendWouldHaveTaken() throws {

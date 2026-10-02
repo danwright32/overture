@@ -73,11 +73,11 @@ struct TogetherOrSeparatelySwitchTests {
 
         ProspectMutations.setSendsTogether(item, false, prospects: [p], context: ctx,
                                            feedback: ActionFeedback())
-        #expect(SendGroup.pendingGroup(of: p).count == 1)
+        #expect(SendGroup.pendingGroup(of: p, today: EasternDate.today(Date())).count == 1)
 
         ProspectMutations.setSendsTogether(item, true, prospects: [p], context: ctx,
                                            feedback: ActionFeedback())
-        #expect(SendGroup.pendingGroup(of: p).count == 2)
+        #expect(SendGroup.pendingGroup(of: p, today: EasternDate.today(Date())).count == 2)
     }
 
     @Test func thesettingSurvivesBeingSaved() throws {

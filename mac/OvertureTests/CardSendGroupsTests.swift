@@ -44,6 +44,19 @@ struct CardSendGroupsTests {
     // The cost claim, made structurally so it cannot rot. The show really does have two sendable
     // contacts; the card is handed groups that say otherwise. Every field that still went and asked the
     // show for itself contradicts what it was handed, and fails here.
+    // #4356: the send groups are judged on the day they are HANDED, never on the wall clock's, so a card
+    // built for one day and a confirmation built from one day cannot each answer about a different one.
+    // The show plays on 2082-09-01: the day before, both contacts are sendable; the day after, nobody is.
+    @Test func theSendGroupsJudgeAPassedShowOnTheDayTheyAreHanded() throws {
+        let ctx = ModelContext(try container())
+        let p = show(ctx)
+        #expect(SendGroup.pendingGroup(of: p, today: "2082-08-31").count == 2)
+        #expect(SendGroup.pendingGroup(of: p, today: "2082-09-02").isEmpty,
+                "a show whose night has passed was still offered to send on the day it was judged against")
+        #expect(SendGroup.CardGroups(of: p, today: "2082-08-31").pending.count == 2)
+        #expect(SendGroup.CardGroups(of: p, today: "2082-09-02").pending.isEmpty)
+    }
+
     @Test func aCardReadsTheGroupsItIsHandedAndNeverAsksTheShowAgain() throws {
         let ctx = ModelContext(try container())
         let p = show(ctx)
