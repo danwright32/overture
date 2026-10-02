@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1699 sentences**.
+Every sentence Overture can say to Dan: **1701 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -14,7 +14,7 @@ What is not, and why:
   sentences under tokens nobody reads.
 - **Nothing, if it is written as two literals joined with `+`.** Those ARE joined here, into the
   one sentence the running app says (#3155). What is still only part of what Dan reads is a
-  sentence carrying a VALUE: 628 of the 1699 below hold a
+  sentence carrying a VALUE: 628 of the 1701 below hold a
   `\(...)` where a number or a name goes, so what is printed is the template. They are counted
   here rather than listed again, because the hole is visible in the line itself; what was missing
   was any statement of how much of this document is templates.
@@ -1656,6 +1656,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/StoreShrinkCheck.swift`
 "Overture could not open its data file to check it at \(path). Nothing has been opened or changed. The file may be in use by another program, or its permissions may have changed. Check that file before reopening Overture."
     `App/StoreSchemaGuard.swift`
+"Overture could not open its record of when it stopped responding, so nothing here can say whether it did."
+    `Domain/FreezeReport.swift`
 "Overture could not read kept calendar results at \(path) (\(why))."
     `Domain/LandingSingleFlight.swift`
 "Overture could not save the record of what this run searched for, so it will be lost when the next run starts: \(reason)"
@@ -1784,6 +1786,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ContactRoleClaim.swift`
 "Overture, \(Plural.count(count, "thing")) due"
     `Domain/DueBadge.swift`
+"Part of Overture's record of when it stopped responding could not be opened, so there may have been more."
+    `Domain/FreezeReport.swift`
 "Paste a link to the show, or to the organization's events page."
     `UI/AddLeadSheet.swift`
 "Paused (booked elsewhere)"

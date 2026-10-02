@@ -108,7 +108,7 @@ struct TheAppReportsItsOwnFreezesTests {
 
     // #3851: a reader that answers the LIVE log and reports NO ARCHIVE beside it.
     //
-    // These fixtures used to pass `read: liveOnly(read)`, a double that ignores the URL it is given. That
+    // These fixtures used to pass `sources: liveOnly(read)`, a double that ignores the URL it is given. That
     // was harmless while the reader opened one file and became wrong the moment it opened two: the same
     // records answered for both, so every freeze was counted twice. A double that ignores its argument
     // describes no file in particular, and it stops being a double at all when the thing under test starts
@@ -116,12 +116,22 @@ struct TheAppReportsItsOwnFreezesTests {
     //
     // Named rather than inlined at seventeen call sites, so the next file this reader learns to open is
     // one change here rather than seventeen.
-    private func liveOnly(_ live: FreezeLog.Read, support: URL = URL(fileURLWithPath: "/tmp"))
-        -> (URL) -> FreezeLog.Read {
-        var absent = FreezeLog.Read()
-        absent.fileWasAbsent = true
-        let archive = FreezeLog.archiveURL(besideLogAt: FreezeLog.url(in: support))
-        return { $0 == archive ? absent : live }
+    //
+    // #4453: it returns BOTH sources, because the archive now has a reader of its own, and a double for
+    // one file that left the other to its default would reach the real disk (L2, L143).
+    private func liveOnly(_ live: FreezeLog.Read) -> FreezeReport.Sources {
+        FreezeReport.Sources(live: { _ in live }, archive: { _, _ in FreezeLog.ArchiveTail(fileWasAbsent: true) })
+    }
+
+    // #4453: a live file AND an archive holding these records, read by the SAME rule the file reader uses,
+    // from lines in memory.
+    private func withArchive(_ archived: [StallRecord], live: FreezeLog.Read) -> FreezeReport.Sources {
+        let lines = archived.compactMap(FreezeLog.line(for:)).map { Data($0.utf8) }
+        let decoder = FreezeLog.decoder()
+        return FreezeReport.Sources(live: { _ in live }, archive: { _, anchors in
+            FreezeLog.archiveTail(newestFirst: lines.reversed(), after: anchors,
+                                  decode: { FreezeLog.decodeLine($0, with: decoder) })
+        })
     }
 
     private func defaults(_ name: String) -> UserDefaults {
@@ -134,7 +144,7 @@ struct TheAppReportsItsOwnFreezesTests {
     func noWatchdogIsItsOwnSentence() {
         let said = FreezeReport.newlyReported(in: URL(fileURLWithPath: "/tmp"), watchdogRan: false,
                                               defaults: defaults("nowatchdog"),
-                                              read: liveOnly(FreezeLog.Read()))
+                                              sources: liveOnly(FreezeLog.Read()))
         #expect(said == FreezeNoticeCopy.watchdogDidNotRun)
         // And it is not a count of nothing, which is the fold this state exists to avoid.
         #expect(said?.contains("stopped responding for") == false)
@@ -144,7 +154,7 @@ struct TheAppReportsItsOwnFreezesTests {
     func aCleanSessionSaysNothing() {
         let said = FreezeReport.newlyReported(in: URL(fileURLWithPath: "/tmp"), watchdogRan: true,
                                               defaults: defaults("clean"),
-                                              read: liveOnly(FreezeLog.Read()))
+                                              sources: liveOnly(FreezeLog.Read()))
         #expect(said == nil)
     }
 
@@ -155,7 +165,7 @@ struct TheAppReportsItsOwnFreezesTests {
         read.records = [stall(0.8, sequence: 1), stall(6.6, sequence: 2, surface: .archive)]
 
         let first = FreezeReport.newlyReported(in: URL(fileURLWithPath: "/tmp"), watchdogRan: true,
-                                               defaults: d, read: liveOnly(read))
+                                               defaults: d, sources: liveOnly(read))
         let said = try! #require(first)
         // "2 times" rather than "twice", matching `RunBoundaryViolations`'s existing "once / N times"
         // idiom: this notice sits in the same slot as that one, and two ways of counting in one place is
@@ -167,7 +177,7 @@ struct TheAppReportsItsOwnFreezesTests {
 
         // ONCE. A message that reappears on every launch teaches him to skim past it.
         let second = FreezeReport.newlyReported(in: URL(fileURLWithPath: "/tmp"), watchdogRan: true,
-                                                defaults: d, read: liveOnly(read))
+                                                defaults: d, sources: liveOnly(read))
         #expect(second == nil)
     }
 
@@ -208,7 +218,7 @@ struct TheAppReportsItsOwnFreezesTests {
 
         let said = try #require(FreezeReport.newlyReported(
             in: support, watchdogRan: true, defaults: d,
-            read: { $0 == self.archiveURL(besideLogIn: support) ? archived : live }))
+            sources: withArchive(archived.records, live: live)))
 
         #expect(said.contains("2 times"),
                 Comment(rawValue: "the archived freeze was not counted, so a compaction takes freezes "
@@ -229,10 +239,10 @@ struct TheAppReportsItsOwnFreezesTests {
         live.records = [stall(0.8, sequence: 900)]
         var archived = FreezeLog.Read()
         archived.records = [stall(9.9, sequence: 1, surface: .archive)]
-        let reader: (URL) -> FreezeLog.Read = { $0 == self.archiveURL(besideLogIn: support) ? archived : live }
+        let reader = withArchive(archived.records, live: live)
 
-        _ = try #require(FreezeReport.newlyReported(in: support, watchdogRan: true, defaults: d, read: reader))
-        let second = FreezeReport.newlyReported(in: support, watchdogRan: true, defaults: d, read: reader)
+        _ = try #require(FreezeReport.newlyReported(in: support, watchdogRan: true, defaults: d, sources: reader))
+        let second = FreezeReport.newlyReported(in: support, watchdogRan: true, defaults: d, sources: reader)
 
         #expect(second == nil,
                 Comment(rawValue: "the archived freeze was reported a second time, so the notice repeats "
@@ -247,12 +257,10 @@ struct TheAppReportsItsOwnFreezesTests {
         let support = URL(fileURLWithPath: "/tmp")
         var live = FreezeLog.Read()
         live.records = [stall(3.3, sequence: 1)]
-        var absent = FreezeLog.Read()
-        absent.fileWasAbsent = true
 
         let said = try #require(FreezeReport.newlyReported(
             in: support, watchdogRan: true, defaults: d,
-            read: { $0 == self.archiveURL(besideLogIn: support) ? absent : live }))
+            sources: liveOnly(live)))
 
         #expect(said.contains("3.3 seconds"),
                 Comment(rawValue: "the one live freeze was not reported. Said: \(said)"))
@@ -264,12 +272,12 @@ struct TheAppReportsItsOwnFreezesTests {
         var read = FreezeLog.Read()
         read.records = [stall(0.8, sequence: 1)]
         _ = FreezeReport.newlyReported(in: URL(fileURLWithPath: "/tmp"), watchdogRan: true,
-                                       defaults: d, read: liveOnly(read))
+                                       defaults: d, sources: liveOnly(read))
 
         read.records.append(stall(2.0, sequence: 2))
         let said = try! #require(FreezeReport.newlyReported(in: URL(fileURLWithPath: "/tmp"),
                                                            watchdogRan: true, defaults: d,
-                                                           read: liveOnly(read)))
+                                                           sources: liveOnly(read)))
         #expect(!said.contains("times"), "the earlier freeze was reported a second time")
         #expect(said.contains("stopped responding for 2.0 seconds"),
                 "a single freeze does not read as one: it borrows the plural sentence's wording")
@@ -282,7 +290,7 @@ struct TheAppReportsItsOwnFreezesTests {
         read.records = [stall(1.0, surface: .notRecorded)]
         let said = try! #require(FreezeReport.newlyReported(in: URL(fileURLWithPath: "/tmp"),
                                                             watchdogRan: true, defaults: defaults("nosurface"),
-                                                            read: liveOnly(read)))
+                                                            sources: liveOnly(read)))
         #expect(said.contains("Nothing recorded which screen was open."))
         // And it is NOT the same sentence as any surface that IS known, which is the fold L11 forbids.
         #expect(FreezeNoticeCopy.surfaceSentence(.notRecorded) != FreezeNoticeCopy.surfaceSentence(.queue))
@@ -306,7 +314,7 @@ struct TheAppReportsItsOwnFreezesTests {
         read.unreadable = ["{", "{", "{"]
         let said = try! #require(FreezeReport.newlyReported(in: URL(fileURLWithPath: "/tmp"),
                                                             watchdogRan: true, defaults: defaults("unreadable"),
-                                                            read: liveOnly(read)))
+                                                            sources: liveOnly(read)))
         #expect(said.contains("3 earlier records could not be read"))
     }
 
@@ -318,7 +326,7 @@ struct TheAppReportsItsOwnFreezesTests {
     func aFailedWriteIsSaidFirst() {
         let said = FreezeReport.newlyReported(in: URL(fileURLWithPath: "/tmp"), watchdogRan: true,
                                               writesThatFailed: 2, defaults: defaults("failed"),
-                                              read: liveOnly(FreezeLog.Read()))
+                                              sources: liveOnly(FreezeLog.Read()))
         #expect(said == FreezeNoticeCopy.writesFailed(2))
         #expect(said?.contains("could not write") == true)
     }
@@ -331,7 +339,7 @@ struct TheAppReportsItsOwnFreezesTests {
         read.records = [stall(1.0, sequence: 1)]
         let said = FreezeReport.newlyReported(in: URL(fileURLWithPath: "/tmp"), watchdogRan: true,
                                               writesThatFailed: 1, defaults: defaults("outranks"),
-                                              read: liveOnly(read))
+                                              sources: liveOnly(read))
         #expect(said?.contains("could not write") == true)
         #expect(said?.contains("1.0 seconds") == false)
     }
@@ -361,7 +369,7 @@ struct TheAppReportsItsOwnFreezesTests {
             stall(2.0, sequence: 2, at: Date(timeIntervalSince1970: 1_785_000_001)),
         ])
         _ = FreezeReport.newlyReported(in: URL(fileURLWithPath: "/tmp"), watchdogRan: true,
-                                       defaults: d, read: liveOnly(firstSession))
+                                       defaults: d, sources: liveOnly(firstSession))
 
         // A NEW launch. Its own sequence starts at 1 again, and its records are LATER in time.
         var afterRelaunch = firstSession
@@ -370,7 +378,7 @@ struct TheAppReportsItsOwnFreezesTests {
                                                  seconds: 3.0, surface: .queue, load: .baseline,
                                                  loadAverage: 1, passes: nil))
         let said = FreezeReport.newlyReported(in: URL(fileURLWithPath: "/tmp"), watchdogRan: true,
-                                              defaults: d, read: liveOnly(afterRelaunch))
+                                              defaults: d, sources: liveOnly(afterRelaunch))
 
         #expect(said != nil,
                 Comment(rawValue: "a freeze from a later session was not reported, because its sequence "
@@ -396,7 +404,7 @@ struct TheAppReportsItsOwnFreezesTests {
         let read = FreezeLog.Read(records: [stall(9.0, sequence: 1), stall(4.0, sequence: 2)])
 
         let said = FreezeReport.newlyReported(in: URL(fileURLWithPath: "/tmp"), watchdogRan: true,
-                                              defaults: d, read: liveOnly(read))
+                                              defaults: d, sources: liveOnly(read))
         #expect(said?.contains("2 times") == true,
                 Comment(rawValue: "the backlog from the broken version was not reported, so the first "
                         + "build able to speak says nothing, which is what the defect looked like"))
@@ -404,7 +412,7 @@ struct TheAppReportsItsOwnFreezesTests {
 
         // Once. The upgrade is a backlog like any other, never a notice that repeats.
         #expect(FreezeReport.newlyReported(in: URL(fileURLWithPath: "/tmp"), watchdogRan: true,
-                                           defaults: d, read: liveOnly(read)) == nil)
+                                           defaults: d, sources: liveOnly(read)) == nil)
     }
 
     // The OTHER wrong answer, and the reason the identity is not simply the timestamp: two stalls can
@@ -418,11 +426,11 @@ struct TheAppReportsItsOwnFreezesTests {
         let at = Date(timeIntervalSince1970: 1_785_000_000)
         var read = FreezeLog.Read(records: [stall(1.0, sequence: 1, at: at)])
         _ = FreezeReport.newlyReported(in: URL(fileURLWithPath: "/tmp"), watchdogRan: true,
-                                       defaults: d, read: liveOnly(read))
+                                       defaults: d, sources: liveOnly(read))
 
         read.records.append(stall(4.0, sequence: 2, at: at))
         let said = FreezeReport.newlyReported(in: URL(fileURLWithPath: "/tmp"), watchdogRan: true,
-                                              defaults: d, read: liveOnly(read))
+                                              defaults: d, sources: liveOnly(read))
         #expect(said?.contains("4.0 seconds") == true,
                 Comment(rawValue: "a stall sharing its instant with an already reported one was never "
                         + "said, so whatever identifies a record is the clock rather than the record"))
@@ -434,7 +442,7 @@ struct TheAppReportsItsOwnFreezesTests {
     func theFloorCanBeAskedFor() {
         var read = FreezeLog.Read()
         read.records = [stall(0.4, sequence: 1), stall(58.0, sequence: 2), stall(1.1, sequence: 3)]
-        let worst = FreezeReport.floor(in: URL(fileURLWithPath: "/tmp"), read: liveOnly(read))
+        let worst = FreezeReport.floor(in: URL(fileURLWithPath: "/tmp"), read: { _ in read })
         #expect(worst?.seconds == 58.0)
     }
 
