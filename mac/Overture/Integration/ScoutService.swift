@@ -134,6 +134,9 @@ enum ScoutService {
         // into `reconcileStoredShows`, because the two send Dan to different places and a sentence naming
         // the wrong one is worse than none (L11).
         case productionTokenCorpus
+        // #4336 (A7): the record of which calendar results already landed. Its own case, because a
+        // failure here means results may land twice, which no other read's sentence says.
+        case landedRuns
 
         // What Dan reads. Named for the thing rather than the symbol, because the sentence has to send
         // him somewhere and "venueBrands" sends him nowhere.
@@ -144,6 +147,7 @@ enum ScoutService {
             case .reconcileStoredShows: return "the shows it already had"
             case .venueBrandCorpus: return "the venue names it matches against"
             case .productionTokenCorpus: return "the production ids it joins a run by"
+            case .landedRuns: return "the record of which calendar results already landed"
             }
         }
     }
@@ -251,6 +255,10 @@ enum ScoutService {
         // that says why and that nothing was lost (`LandingWaitCopy`). Nothing from it landed; its results
         // are kept and offered again (`PendingScoutIngests`).
         var notLandedYet: String? = nil
+
+        // #4336 (A7): these results were refused because they had already landed, at this time (the FIRST
+        // landing's). Nothing from them was applied. Its own outcome, never a landing that found nothing.
+        var alreadyLandedAt: Date? = nil
 
         // #4330: the sources this run set aside because a later run had already landed them.
         var supersededSources: [SourceResult] { sources.filter { $0.state == .superseded } }
@@ -369,6 +377,7 @@ enum ScoutService {
             // reported none however many it made (`ScoutReadsLandTogetherTests`).
             titleRenames.append(contentsOf: other.titleRenames)
             notLandedYet = notLandedYet ?? other.notLandedYet
+            alreadyLandedAt = alreadyLandedAt ?? other.alreadyLandedAt
             // #888 part B: reports ACCUMULATE across a merge rather than the last one winning. That is
             // the whole point: a caller that landed six sources must be able to hand all six to one
             // reconcile, or "every owner was asked" can never be true of a co-listed show.

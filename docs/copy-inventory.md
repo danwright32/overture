@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1674 sentences**.
+Every sentence Overture can say to Dan: **1677 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -14,7 +14,7 @@ What is not, and why:
   sentences under tokens nobody reads.
 - **Nothing, if it is written as two literals joined with `+`.** Those ARE joined here, into the
   one sentence the running app says (#3155). What is still only part of what Dan reads is a
-  sentence carrying a VALUE: 622 of the 1674 below hold a
+  sentence carrying a VALUE: 624 of the 1677 below hold a
   `\(...)` where a number or a name goes, so what is printed is the template. They are counted
   here rather than listed again, because the hole is visible in the line itself; what was missing
   was any statement of how much of this document is templates.
@@ -49,6 +49,7 @@ What is not, and why:
 - `Domain/FeedMovementLog.swift`: a machine-parsed diagnostic log line for #913, never shown to Dan
 - `Domain/FollowUp.swift`: outbound-email: a recipient reads this, not Dan (#915, #2650)
 - `Domain/FreezeLog.swift`: a filename, not a sentence Overture says
+- `Domain/LandingSingleFlight.swift`: a date format pattern, never a sentence Dan reads (#4336)
 - `Domain/LaunchMigrations.swift`: developer diagnostic log, not the app's own voice (#915)
 - `Domain/ListingOrganiser.swift`: parser tokens matched against ticketing pages, never Overture's voice
 - `Domain/NaturalKeyVenueMigration.swift`: developer diagnostic log, not the app's own voice (#915)
@@ -1166,6 +1167,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/OnboardingView.swift`
 "Kept as companies"
     `UI/OrganisationsView.swift`
+"Kept calendar results had already landed at \(landedTime(landedAt)), so Overture removed the copy. Nothing new to add."
+    `Domain/LandingSingleFlight.swift`
 "Kept calendar results landed, but their copy could not be removed (\(why)), so Overture will offer them again."
     `Domain/LandingSingleFlight.swift`
 "LONG SHOT"
@@ -2501,6 +2504,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/QueueView.swift`
 "These organizations asked not to be contacted. Overture no longer watches them, and will not draft to them."
     `Domain/SourceGrade.swift`
+"These results already landed at \(landedTime(landedAt)). Nothing new to add."
+    `Domain/LandingSingleFlight.swift`
 "They all leave your queue, filed as \(reason.label)."
     `Domain/BulkDismiss.swift`
 "They all lose \(dateLabel), filed as \(reason.label), and turn up again under their next night."
@@ -3663,6 +3668,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Integration/ScoutService.swift`
 "the queue"
     `UI/ProspectMutations.swift`
+"the record of which calendar results already landed"
+    `Integration/ScoutService.swift`
 "the record of who you have shot before"
     `Integration/ScoutService.swift`
 "the show you checked never got an answer and is still unchecked"

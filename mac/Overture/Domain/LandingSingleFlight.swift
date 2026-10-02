@@ -300,19 +300,47 @@ enum LandingWaitCopy {
             + "offer them again."
     }
 
+    // #4336 (A7): results that had already landed, refused rather than landed a second time. Informational,
+    // not a warning (L36): the reattach path reaches it in ordinary use. The time is the FIRST landing's,
+    // in New York time, with its day, because the earlier landing can be days ago (L589).
+    static func alreadyLanded(at landedAt: Date) -> String {
+        "These results already landed at \(landedTime(landedAt)). Nothing new to add."
+    }
+
+    // The sweep's half: a kept copy whose results had already landed is removed, and says so.
+    static func keptCopyAlreadyLanded(at landedAt: Date) -> String {
+        "Kept calendar results had already landed at \(landedTime(landedAt)), so Overture removed the copy. "
+            + "Nothing new to add."
+    }
+
+    private static let landedTimeFormat: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.timeZone = EasternDate.timeZone
+        // copy-inventory:ignore-start  a date format pattern, never a sentence Dan reads (#4336)
+        f.dateFormat = "h:mm a 'on' MMM d"
+        // copy-inventory:ignore-end
+        return f
+    }()
+
+    static func landedTime(_ date: Date) -> String { landedTimeFormat.string(from: date) }
+
     static func pendingUnreadable(path: String, why: String) -> String {
         "Overture could not read kept calendar results at \(path) (\(why))."
     }
 
     // What the sweep of kept copies says, when it did anything at all. nil when it had nothing to report.
     // L720: `stuckAfter` is the SAME value the sweep judged stuck by, so the sentence names what was measured.
-    static func offered(landed: Int, stillWaiting: Int, stuck: Int, stuckAfter: TimeInterval) -> String? {
+    // #4336 (A7): an alreadyLanded copy is one landed EARLIER and now removed, never one landing now (L11).
+    static func offered(landed: Int, alreadyLanded: [Date] = [], stillWaiting: Int, stuck: Int,
+                        stuckAfter: TimeInterval) -> String? {
         let over = span(stuckAfter)
         var parts: [String] = []
         if landed > 0 {
             parts.append(landed == 1 ? "Calendar results that had been waiting for the store have landed."
                                      : "\(landed) sets of calendar results that had been waiting for the store have landed.")
         }
+        parts.append(contentsOf: alreadyLanded.map(keptCopyAlreadyLanded(at:)))
         if stillWaiting > 0 {
             parts.append(stillWaiting == 1 ? "One set of calendar results is still waiting for the store."
                                            : "\(stillWaiting) sets of calendar results are still waiting for the store.")
