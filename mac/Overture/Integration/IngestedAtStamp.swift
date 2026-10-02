@@ -16,9 +16,11 @@ import SwiftData
 // (L419), and a test that pins `now` pins the stamp.
 //
 // THE MERGE READERS, and the exception they force (decided 2026-09-29 on #4331). Four readers pick a
-// survivor among rows the scout lists twice by the freshest or oldest `ingestedAt`, and three of them say in
-// as many words that the value means LAST SEEN: `ScoutService.theOnlyRowThisMayReKey`, `DriftedRunMerge`,
-// `NaturalKeyVenueMigration` and `SameNightTitleVariantMerge`. Under "stamped only when changed" a duplicate
+// survivor among rows the scout lists twice by the freshest or oldest `ingestedAt`:
+// `ScoutService.theOnlyRowThisMayReKey`, `DriftedRunMerge`, `NaturalKeyVenueMigration` and
+// `SameNightTitleVariantMerge`. The first three say in as many words that the value means LAST SEEN;
+// `SameNightTitleVariantMerge` does not say it, but relies on it all the same, which makes it the one a
+// later change is likeliest to break without noticing. Under "stamped only when changed" a duplicate
 // that is still listed and unchanged keeps an old stamp, while a stale twin that last changed later reads as
 // fresher, and the merge keeps the hidden card and deletes the visible one. No answer derived from a
 // source's landings can order two rows of ONE source, and that is every pair these readers resolve. So a row
@@ -61,7 +63,8 @@ enum IngestedAtStamp {
 //   - the night, with `GroupNameMatch.isSameNightVariant` against any other row that night:
 //     `SameNightTitleVariantMerge`'s clusters, compared pairwise rather than against a cluster's first row,
 //     because which row is first is decided by `ingestedAt` itself.
-// `MergeCandidateIndexTests` holds a pair of each kind, so a kind dropped from here goes red.
+// `IngestedAtStampTests.aListedRowWithATwinIsRestampedOnEveryTouch` holds a pair of each kind, so a kind
+// dropped from here goes red.
 //
 // The night test is the only one that is not a lookup, so it is narrowed first by a necessary condition of
 // `isSameNightVariant`: two titles it accepts share a word, unless one of them is a single word (an acronym,
