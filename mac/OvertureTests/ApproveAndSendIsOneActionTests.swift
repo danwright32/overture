@@ -91,7 +91,7 @@ struct ApproveAndSendIsOneActionTests {
 
         let sheet = SendConfirmation(prospect: p, approving: true, signature: .none)
         p.status = .approved
-        let actuallyReached = SendGroup.pendingGroup(of: p).compactMap(\.email).joined(separator: ", ")
+        let actuallyReached = SendGroup.pendingGroup(of: p, today: EasternDate.today(Date())).compactMap(\.email).joined(separator: ", ")
 
         #expect(sheet?.recipient == actuallyReached)
         #expect(sheet?.recipient.contains("c0@org.example") == true)
