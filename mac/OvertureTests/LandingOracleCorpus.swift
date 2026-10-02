@@ -251,14 +251,36 @@ enum LandingOracleCorpus {
             })
     }
 
-    /// The store before the landing: every source queued with an unread page, and every stored show.
-    static func seed(into context: ModelContext) throws {
-        for (i, s) in sources.enumerated() {
-            let source = WatchedSource(sourceId: s.id, orgName: s.org, listingsURL: s.listingsURL, kind: .html,
+    /// The store before the landing: every source, and every stored show. An html source is queued with an
+    /// unread page, which is what the extract ingest reads; a native one has no page to queue (#4374).
+    /// `order` is the order the sources are INSERTED, which is the order `runScout` meets its native
+    /// sources in (it reads the watchlist unsorted, so `landThroughRunScout` checks the order it was given).
+    static func seed(into context: ModelContext, kind: SourceKind = .html, order: [String]? = nil) throws {
+        let ids = try checkedOrder(order)
+        let byId = Dictionary(uniqueKeysWithValues: sources.enumerated().map { ($0.element.id, ($0.offset, $0.element)) })
+        for id in ids {
+            // An id the corpus does not hold would quietly seed, and land, fewer sources than the caller asked for.
+            guard let (i, s) = byId[id] else { throw Unmeasured(description: "\(id) is not a corpus source") }
+            let source = WatchedSource(sourceId: s.id, orgName: s.org, listingsURL: s.listingsURL, kind: kind,
                                        addedAt: now)
-            source.pendingContentHash = "oracle-hash-\(i)"
-            source.hasUnreadChanges = true
+            if !kind.usesNativeExtractor {
+                source.pendingContentHash = "oracle-hash-\(i)"
+                source.hasUnreadChanges = true
+            }
+            // #4374: past its warmup, with the size this run lists as its baseline, so a stored show the run no
+            // longer lists (Old Harbor Revue) is real evidence and the reconcile counts the miss. Seeded in
+            // warmup, as it was, no arm's reconcile marked anything (missedScoutCount 0 on every row of all
+            // three recordings), so runScout reconciling per source and the ingest reconciling once at the end
+            // were both invisible to the oracle.
+            source.successfulCheckCount = WatchedSource.warmupRuns
+            source.baselineFeedCount = s.events.count
             context.insert(source)
+            // A native source is saved as it is inserted, so its row is created in this order. Saved together,
+            // the pending inserts went to the store in set order, and `runScout`'s unsorted watchlist fetch
+            // read them back as harbor, marlow, lantern, fenwick-b, fenwick-a, quarry (seen at 6d3453d8 on
+            // 2026-10-01, refused by `landThroughRunScout`'s order check). The ingest's sources are left as
+            // they were recorded, since nothing it does depends on the order its watchlist reads back in.
+            if kind.usesNativeExtractor { try context.save() }
         }
         for show in stored {
             let p = Prospect(naturalKey: Prospect.makeNaturalKey(groupName: show.title,
@@ -279,11 +301,180 @@ enum LandingOracleCorpus {
     /// One whole landing on a fresh in-memory store: seed, ingest, ONE explicit save, then the container for
     /// a fresh context to read. Autosave is off (TestModelContainer), so that save is the only way in.
     static func land(order: [String]? = nil) async throws -> ModelContainer {
+        // `results(order:)` drops an id it does not know, so the order is checked here, before it can land less.
+        _ = try checkedOrder(order)
         let container = try TestModelContainer.inMemory(AppSchema.models)
         let context = container.mainContext
         try seed(into: context)
         await ScoutExtractIngest.ingest(results(order: order), clients: [], history: [], blocked: .empty,
                                         today: today, now: now, into: context)
+        try context.save()
+        return container
+    }
+
+    // MARK: the other two entry points that land shows (#4374)
+
+    /// The three ways shows reach `ScoutService.apply`, each pinned by its own recording from the oracle
+    /// commit. They differ in call shape, which is the point: an equality claim about a change both of the
+    /// other two reach (A4's working set, A6's moved save, A11's async lead paste) needs each one pinned.
+    enum Path: String, CaseIterable, Sendable {
+        /// `ScoutExtractIngest.ingest`: the extract run's results file, every source, one reconcile at the end.
+        case ingest
+        /// `ScoutService.runScout`'s native sweep: every source read, then `landNative` per source, each
+        /// reconciling its own feed as it lands.
+        case runScout
+        /// `LeadIntakeModel.start`: one pasted page per source, applied with no feed (so nothing reconciles)
+        /// and no `preClassified` or `landing`, under the manual source id.
+        case leadPaste
+
+        /// The committed recording, made from a worktree of the oracle commit by scripts/landing-oracle.sh.
+        var fixture: String {
+            switch self {
+            case .ingest: return "fixtures/landing-oracle/synthetic-6d3453d8.txt"
+            case .runScout: return "fixtures/landing-oracle/synthetic-runscout-6d3453d8.txt"
+            case .leadPaste: return "fixtures/landing-oracle/synthetic-leadpaste-6d3453d8.txt"
+            }
+        }
+    }
+
+    /// A landing that could not be made the way the oracle needs it, said as such rather than compared.
+    struct Unmeasured: Error, CustomStringConvertible {
+        let description: String
+    }
+
+    /// The source ids a landing is asked for, in order: the corpus order when none is given, and a refusal
+    /// naming the first id the corpus does not hold, because every landing would otherwise drop it and land
+    /// fewer sources than it claims. One check for all three entry points, so none can skip it.
+    static func checkedOrder(_ order: [String]?) throws -> [String] {
+        let ids = order ?? sources.map(\.id)
+        if let unknown = ids.first(where: { id in !sources.contains { $0.id == id } }) {
+            throw Unmeasured(description: "\(unknown) is not a corpus source")
+        }
+        return ids
+    }
+
+    static func land(_ path: Path, order: [String]? = nil) async throws -> ModelContainer {
+        switch path {
+        case .ingest: return try await land(order: order)
+        case .runScout: return try await landThroughRunScout(order: order)
+        case .leadPaste: return try await landThroughLeadPaste(order: order)
+        }
+    }
+
+    /// Unlike the ingest, which is handed its clients, history and blocked days, `runScout` and the lead
+    /// paste read them from the handoff folder, which under test is one temporary folder every test shares.
+    /// A Downbeat export or a history file there would make the landing depend on whatever test left it, so
+    /// either one present refuses the landing rather than recording or comparing it (L411).
+    static func handoffInputsRefusal(_ inputs: [URL] = [DownbeatBridge.defaultURL, LocalHistory.importedURL])
+        -> String? {
+        let present = inputs.filter { FileManager.default.fileExists(atPath: $0.path) }
+        guard !present.isEmpty else { return nil }
+        return "UNMEASURED: " + present.map(\.lastPathComponent).joined(separator: " and ")
+            + " is in the test handoff folder (" + (present.first?.deletingLastPathComponent().path ?? "")
+            + "), and runScout and the lead paste read it, so their landing would depend on whatever wrote it"
+    }
+
+    private struct CorpusFeed: SourceExtractor {
+        let events: [ExtractedEvent]
+        func extract() async throws -> ExtractedListing {
+            ExtractedListing(events: events, verdict: .upcomingListings)
+        }
+    }
+
+    // What any source the corpus does not name reads through, instead of the real Carnegie extractor, so a
+    // landing can never reach the network. A source reading it shows up in `landThroughRunScout`'s check.
+    private struct NoFeed: SourceExtractor {
+        func extract() async throws -> ExtractedListing {
+            throw Unmeasured(description: "a source outside the corpus was read")
+        }
+    }
+
+    /// The corpus landed through `ScoutService.runScout`: every source a native one whose extractor returns
+    /// its events, read at `.watchOnly` (the free daily run, which reads nothing it would pay for), then the
+    /// one explicit save and the container, exactly as `land` does for the ingest.
+    /// `failing` names corpus sources whose read fails, which only the test of the landed check passes.
+    static func landThroughRunScout(order: [String]? = nil, failing: Set<String> = []) async throws -> ModelContainer {
+        if let refusal = handoffInputsRefusal() { throw Unmeasured(description: refusal) }
+        let ids = try checkedOrder(order)
+        let container = try TestModelContainer.inMemory(AppSchema.models)
+        let context = container.mainContext
+        // A native kind with a real listings page (Carnegie's .algolia has a placeholder one), and not a
+        // single venue kind, so each show's venue is its own.
+        try seed(into: context, kind: .squarespaceFeed, order: ids)
+        let byId = Dictionary(uniqueKeysWithValues: sources.map { ($0.id, $0) })
+        var read: [String] = []
+        let outcome = try await ScoutService.runScout(
+            into: context, depth: .watchOnly, extractor: NoFeed(),
+            extractorRegistry: { source in
+                read.append(source?.sourceId ?? "(none)")
+                guard let id = source?.sourceId, let s = byId[id], !failing.contains(id) else { return NoFeed() }
+                return CorpusFeed(events: s.events.map(\.asExtractedEvent))
+            },
+            fetch: { url, _, _ in throw Unmeasured(description: "runScout fetched \(url), and the corpus has no page") },
+            pin: { _, id in URL(fileURLWithPath: "/dev/null/oracle-\(id).html") }, launch: { _ in },
+            now: now, defaults: ScratchDefaults.make("LandingOracleCorpus.runScout"))
+        // The sweep meets its native sources in the order the watchlist fetch returns them, which nothing
+        // sorts, and the order decides the Fenwick triple. A run that read them in any other order than the
+        // one asked for landed a different case, so it is refused rather than compared.
+        guard read == ids else {
+            throw Unmeasured(description: "runScout read the sources in the order \(read), not \(ids)")
+        }
+        // Every source must have LANDED, not merely been read in order: one that failed or was set aside inside
+        // the sweep would still pass the check above and record a smaller store as 6d3453d8's (L475).
+        let notLanded = ids.filter { id in
+            !outcome.sources.contains { result in
+                guard result.sourceId == id, case .ingested = result.state else { return false }
+                return true
+            }
+        }
+        guard notLanded.isEmpty else {
+            throw Unmeasured(description: "runScout did not land \(notLanded): "
+                + outcome.sources.map { "\($0.sourceId) \($0.state)" }.joined(separator: ", "))
+        }
+        try context.save()
+        return container
+    }
+
+    // A page the lead paste accepts as readable: it mentions a month, which is enough (carriesReadableContent).
+    static let leadPage = "<h1>Upcoming</h1><p>Every invented show this season, from October onward.</p>"
+
+    /// The corpus landed through the lead paste: each source's listings page pasted as a lead, in order, its
+    /// read answered at once with that source's events, then the one explicit save and the container.
+    static func landThroughLeadPaste(order: [String]? = nil) async throws -> ModelContainer {
+        if let refusal = handoffInputsRefusal() { throw Unmeasured(description: refusal) }
+        let ids = try checkedOrder(order)
+        let container = try TestModelContainer.inMemory(AppSchema.models)
+        let context = container.mainContext
+        try seed(into: context)
+        let byId = Dictionary(uniqueKeysWithValues: sources.map { ($0.id, $0) })
+        let defaults = ScratchDefaults.make("LandingOracleCorpus.leadPaste")
+        let page = leadPage
+        for id in ids {
+            guard let s = byId[id], let url = URL(string: s.listingsURL) else {
+                throw Unmeasured(description: "\(id) is not a corpus source with a listings URL, so it cannot be pasted")
+            }
+            let leadId = LeadIntakeModel.sourceId(for: url)
+            let answer = ScoutExtractResults(
+                version: 1, generatedAt: today + "T12:00:00Z",
+                results: [ScoutExtractResult(sourceId: leadId, verdict: .upcomingListings, events: s.events,
+                                             note: nil)])
+            let model = LeadIntakeModel(
+                defaults: defaults,
+                fetch: { FetchedPage(normalizedHTML: page, finalURL: $0.absoluteString,
+                                     contentHash: "oracle-lead-" + id) },
+                pin: { _, name in URL(fileURLWithPath: "/dev/null/oracle-\(name).html") },
+                launch: { _ in },
+                readResults: { $0 == leadId ? answer : nil },
+                isRunAlive: { false })
+            model.urlText = s.listingsURL
+            await model.start(into: context, now: now, today: today, pollEvery: 0, giveUpAfter: 0,
+                              sleep: { _ in })
+            // A paste that ended anywhere but `.added` landed nothing, so the recording would be of a
+            // smaller corpus than it claims (L159).
+            guard case .added = model.phase else {
+                throw Unmeasured(description: "the lead paste of \(id) ended \(model.phase), not added")
+            }
+        }
         try context.save()
         return container
     }
