@@ -315,7 +315,12 @@ enum FreezeLog {
         guard FileManager.default.fileExists(atPath: url.path) else {
             return ArchiveTail(fileWasAbsent: true)
         }
-        guard let data = try? Data(contentsOf: url, options: .mappedIfSafe) else {
+        // A file that exists and cannot be opened is its own outcome, never an empty archive
+        // (HandoffFileReadTests.noAppSourceSwallowsAFileRead, #2879).
+        let data: Data
+        do {
+            data = try Data(contentsOf: url, options: .mappedIfSafe)
+        } catch {
             return ArchiveTail(couldNotBeRead: true)
         }
         let decoder = decoder()
