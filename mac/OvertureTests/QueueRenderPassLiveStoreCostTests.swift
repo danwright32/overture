@@ -351,10 +351,10 @@ struct QueueRenderPassLiveStoreCostTests {
         // between the two arms above reads as "the pass got cheaper" with no way to see how much of it
         // never could (L507, a remainder nobody records is where the unexplained cost accumulates).
         _ = QueueModel.scope(from: prospects, answers: answers, corpus: prospects, sources: sources,
-                             cardKeys: [])
+                             now: Date(), cardKeys: [])
         let preamble = medianSeconds {
             _ = QueueModel.scope(from: prospects, answers: answers, corpus: prospects, sources: sources,
-                                 cardKeys: [])
+                                 now: Date(), cardKeys: [])
         }
         let preambleSeconds = preamble.median
 

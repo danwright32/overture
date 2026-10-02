@@ -68,7 +68,7 @@ struct CardConstructionCensusTests {
             "there are \(recorded) card counters in this file rather than one. Two would double-count "
             + "every card and the cost pins would be measuring the counter; none would leave the pins "
             + "reading zero while the work happened (L11)."))
-        #expect(model.contains("self.init(p, sendGroups: SendGroup.CardGroups(of: p))"), Comment(rawValue:
+        #expect(model.contains("self.init(p, sendGroups: SendGroup.CardGroups(of: p, "), Comment(rawValue:
             "the convenience initialiser no longer delegates to the counted one, so a card built through "
             + "it is invisible to every cost pin in this repository"))
     }

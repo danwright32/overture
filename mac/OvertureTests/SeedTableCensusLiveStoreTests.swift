@@ -258,7 +258,7 @@ struct SeedTableCensusLiveStoreTests {
 
         var out: [String] = []
         out.append("")
-        out.append("=== P0.1 SEED TABLE CENSUS (#2450), measured \(EasternDate.today()) ===")
+        out.append("=== P0.1 SEED TABLE CENSUS (#2450), measured \(EasternDate.today(Date())) ===")
         out.append("shoot history: \(shoots.count) shoots, \(Set(shoots.map(\.venue)).count) distinct raw venue spellings")
         out.append("store: \(prospects.count) prospects, \(sources.count) watched sources")
         out.append("")

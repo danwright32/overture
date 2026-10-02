@@ -60,7 +60,7 @@ struct SearchCoversEveryContactFieldTests {
             p.recipients.append(r)
         }
 
-        let scope = QueueModel.scope(from: [p], cardKeys: ["k"])
+        let scope = QueueModel.scope(from: [p], now: Date(), cardKeys: ["k"])
         let row = try #require(scope.rows.first)
         let card = try #require(scope.cards.alreadyBuilt("k"))
         // The two really are about one show, asserted rather than assumed: a pass that returned a row for

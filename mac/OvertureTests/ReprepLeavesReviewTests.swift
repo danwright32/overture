@@ -36,7 +36,7 @@ struct ReprepLeavesReviewTests {
 
     private func focuses(_ p: Prospect) -> Set<StageFocus> {
         Set(StageNavigation.countedFocuses.filter {
-            StageNavigation.naturalKeys(for: $0, in: [p], context: StageContext(geo: .none, clients: .none)).count == 1
+            StageNavigation.naturalKeys(for: $0, in: [p], context: StageContext(now: Date(), geo: .none, clients: .none)).count == 1
         })
     }
 
@@ -131,15 +131,15 @@ struct ReprepLeavesReviewTests {
         try ctx.save()
         let all = try ctx.fetch(FetchDescriptor<Prospect>())
 
-        let counts = StageNavigation.counts(in: all, context: StageContext(geo: .none, clients: .none))
+        let counts = StageNavigation.counts(in: all, context: StageContext(now: Date(), geo: .none, clients: .none))
         for focus in StageNavigation.countedFocuses {
-            let rows = StageNavigation.naturalKeys(for: focus, in: all, context: StageContext(geo: .none, clients: .none))
+            let rows = StageNavigation.naturalKeys(for: focus, in: all, context: StageContext(now: Date(), geo: .none, clients: .none))
             #expect(counts[focus, default: 0] == rows.count, "\(focus): \(counts[focus] ?? 0) vs \(rows)")
         }
-        #expect(Set(StageNavigation.naturalKeys(for: .review, in: all, context: StageContext(geo: .none, clients: .none)))
+        #expect(Set(StageNavigation.naturalKeys(for: .review, in: all, context: StageContext(now: Date(), geo: .none, clients: .none)))
                 == Set(["plain-drafted", "plain-approved"]))
         // #3369: "reprep-clash" joins the other two under Prep rather than sitting in a focus of its own.
-        #expect(Set(StageNavigation.naturalKeys(for: .prep, in: all, context: StageContext(geo: .none, clients: .none)))
+        #expect(Set(StageNavigation.naturalKeys(for: .prep, in: all, context: StageContext(now: Date(), geo: .none, clients: .none)))
                 == Set(["kept", "reprep", "reprep-clash"]))
     }
 
@@ -152,6 +152,6 @@ struct ReprepLeavesReviewTests {
         try ctx.save()
         let all = try ctx.fetch(FetchDescriptor<Prospect>())
 
-        #expect(StageNavigation.stage(containing: "reprep", in: all, reachedOutKeys: [], context: StageContext(geo: .none, clients: .none)) == .prep)
+        #expect(StageNavigation.stage(containing: "reprep", in: all, reachedOutKeys: [], context: StageContext(now: Date(), geo: .none, clients: .none)) == .prep)
     }
 }

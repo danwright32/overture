@@ -50,7 +50,7 @@ struct FeedBreakEventLiveStoreTests {
     @Test(.enabled(if: LiveStorePresence.exists, LiveStorePresence.absenceReason))
     func everyEventTheRuleFindsOnTheLiveStoreHoldsItsOwnContract() async throws {
         try await withLiveShows { shows in
-            let asOf = EasternDate.today()
+            let asOf = EasternDate.today(Date())
             let events = FeedBreakEvent.events(among: shows, asOf: asOf)
             let flagged = shows.filter {
                 $0.disappearedFromFeed && max($0.performanceDate ?? "", $0.runEndDate ?? "") >= asOf

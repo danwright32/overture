@@ -77,7 +77,7 @@ enum PrepQueueService {
 
     static func buildQueue(from context: ModelContext, generatedAt: String,
                            includedKeys: Set<String>? = nil,
-                           today: String = EasternDate.today(),
+                           today: String = EasternDate.today(Date()),
                            venueHistory: VenueShootHistory? = nil) -> PrepQueue {
         // #1887: read once per build, never per item (it reads two files).
         let history = venueHistory ?? VenueShootHistory.current(today: today)

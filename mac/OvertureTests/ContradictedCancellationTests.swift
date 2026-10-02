@@ -152,7 +152,7 @@ struct ContradictedCancellationTests {
         try ctx.save()
         let all = try ctx.fetch(FetchDescriptor<Prospect>())
 
-        var data = QueueModel.scope(from: all)
+        var data = QueueModel.scope(from: all, now: Date())
         func warning(_ key: String) throws -> Bool {
             let row = try #require(data.rows.first { $0.id == key }, "no row for \(key)")
             return data.cards.card(for: row).disappearedFromFeed
@@ -225,7 +225,7 @@ struct ContradictedCancellationTests {
             // again. Comparing the set against the rows `liveTwin` picks out would be one rule checked
             // against itself and could not go red for any reason (L70); this crosses every step between
             // the rule and the screen.
-            var data = QueueModel.scope(from: onScreen, corpus: all)
+            var data = QueueModel.scope(from: onScreen, corpus: all, now: Date())
             let stillWarned = contradicted.compactMap { show -> String? in
                 guard let row = data.rows.first(where: { $0.id == show.naturalKey }) else { return nil }
                 return data.cards.card(for: row).disappearedFromFeed ? show.groupName : nil

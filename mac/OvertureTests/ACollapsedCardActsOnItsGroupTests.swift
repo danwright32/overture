@@ -127,7 +127,7 @@ struct ACollapsedCardActsOnItsGroupTests {
         let all = try ctx.fetch(FetchDescriptor<Prospect>())
         // The corpus holds both; this surface is handed only the later one, which is what the queue does
         // to a group whose earliest copy sits outside its window.
-        var data = QueueModel.scope(from: [later], corpus: all)
+        var data = QueueModel.scope(from: [later], corpus: all, now: Date())
 
         let drawn = try #require(data.rows.first { $0.id == later.naturalKey },
                                  "the only copy this surface had was hidden behind a card it never drew")

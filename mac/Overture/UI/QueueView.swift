@@ -1241,7 +1241,7 @@ struct QueueView: View {
         focusedStage = status.focus
         focusedHeading = "\(status.name): \(status.detail)"
         focusedKeys = StageNavigation.naturalKeys(for: status.focus, in: prospects,
-                                                  context: StageContext(geo: geo, clients: clientWindow))
+                                                  context: StageContext(now: Date(), geo: geo, clients: clientWindow))
     }
 
     // #236/#1134: land on a deep-linked lead by focusing the STAGE that holds it (the pipeline picker is
@@ -1259,7 +1259,7 @@ struct QueueView: View {
         // lead is in no stage (RootView routes truly unreachable leads to Archive, so this is a safety net).
         focusedStage = StageNavigation.stage(containing: key, in: inQueue,
                                              reachedOutKeys: reachedOutKeys,
-                                             context: StageContext(geo: geo, clients: clientWindow)) ?? StageNavigation.openingStage
+                                             context: StageContext(now: Date(), geo: geo, clients: clientWindow)) ?? StageNavigation.openingStage
         focusedKeys = nil   // #1140: stage mode re-derives its own membership; no frozen key set
         focusedHeading = nil
         sendState.highlight(key)
@@ -2712,7 +2712,7 @@ struct ReachabilityProbeControl: View {
     // #1609: geography defaulted to none, so a caller that does not care is unchanged.
     init(items: [QueueScopeRow], dateLabel: String, geo: GeoRefusals = .none, isRunning: Bool,
          onTap: @escaping (_ keys: [String], _ dateLabel: String) -> Void) {
-        self.init(heading: QueueModel.DateProbeHeading(items, geo: geo), dateLabel: dateLabel,
+        self.init(heading: QueueModel.DateProbeHeading(items, now: Date(), today: EasternDate.today(Date()), geo: geo), dateLabel: dateLabel,
                   isRunning: isRunning, onTap: onTap)
     }
 

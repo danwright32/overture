@@ -63,7 +63,7 @@ struct DraftReviewView: View {
     var gmailConnected: Bool = false
     // #4136: the day the send gate judges a passed show against, handed down by the row so the note beside
     // the button and the row's own "Performance passed" label read one clock.
-    var today: String = EasternDate.today()
+    var today: String = EasternDate.today(Date())
     // #436: when this outbound draft is mid-send, the instant it was launched (nil = not sending), so the
     // Send button is replaced by a live "Sending… m:ss" indicator that flips to "looks stuck" past the
     // send timeout. #468: a retry IS safe here (unlike when this comment was written): both sendOne and

@@ -89,7 +89,7 @@ struct ScopeRefetchCostTests {
                 sources: sources, context: .at(EasternDate.dayString(from: now), now: now),
                 focusedStage: .scout, focusedKeys: nil, requestedCardKeys: []))
         }
-        func archive() { _ = QueueModel.scope(from: rows, answers: [], sources: sources, cardKeys: []) }
+        func archive() { _ = QueueModel.scope(from: rows, answers: [], sources: sources, now: Date(), cardKeys: []) }
         func due() {
             _ = DueWork.countAndNextChange(prospects: rows, inquiries: inquiries, now: now, replyRunAlive: false)
         }

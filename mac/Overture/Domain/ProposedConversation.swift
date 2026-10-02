@@ -335,7 +335,8 @@ enum ProposedConversation {
         r.formOutreachRecordedAt != nil && !r.hasWatchableConversation
     }
 
-    static func state(of r: Recipient, now: Date = Date()) -> State {
+    // #4356: `now` is required, because the render pass reaches this through DueWork.
+    static func state(of r: Recipient, now: Date) -> State {
         if r.conversationAttachedAt != nil {
             // #2806: the second branch used to be `.notApplicable`. An attach that also stamped
             // `replyHandledAt` is the completely successful case and was the silent one.
@@ -406,12 +407,14 @@ enum ProposedConversation {
         let candidate: Candidate
     }
 
-    static func dueRecipients(from prospects: [Prospect]) -> [DueRecipient] {
+    // #4356: at the caller's instant, like the other members of `DueWork.Counts`, because the render pass
+    // reaches this through DueWork and must not read the wall clock for itself.
+    static func dueRecipients(from prospects: [Prospect], now: Date) -> [DueRecipient] {
         prospects.flatMap { p -> [DueRecipient] in
             // A show Dan has closed out or booked is not asking him anything.
             guard !p.replyWatchManualOutcome, !p.replyWatchIsBooked else { return [] }
             return p.recipients.compactMap { r in
-                guard case .proposed(let c) = state(of: r) else { return nil }
+                guard case .proposed(let c) = state(of: r, now: now) else { return nil }
                 guard r.replyWatchConversationIsOpen else { return nil }
                 return DueRecipient(prospect: p, recipient: r, candidate: c)
             }

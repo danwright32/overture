@@ -101,11 +101,13 @@ enum SendGroup {
         }
 
         // The one pass. Both groups come out of a single filter of the recipients.
-        init(of prospect: Prospect) {
+        // #4356: `today` is the day the send gate judges a passed show against, handed in, because the
+        // render pass builds these and must not read the wall clock for itself (`PassClockScanTests`).
+        init(of prospect: Prospect, today: String) {
             // #2046 collapsed three of these into one per card and nothing pinned that it stayed one.
             // #2048 counts them, so #2033's shape cannot come back without a number moving.
             QueueRenderPass.WorkTally.recordSendGroupBuild()
-            let preview = SendGroup.previewGroup(of: prospect)
+            let preview = SendGroup.previewGroup(of: prospect, today: today)
             self.init(preview: preview, pending: SendGroup.pending(from: preview, of: prospect))
         }
     }
@@ -113,7 +115,8 @@ enum SendGroup {
     // #4168: carries `together` through for the same reason `previewGroup` takes it. The approval gate
     // below is unaffected by the choice, so only the grouping half moves.
     static func pendingGroup(of prospect: Prospect, together: Bool? = nil) -> [Recipient] {
-        pending(from: previewGroup(of: prospect, together: together), of: prospect)
+        pending(from: previewGroup(of: prospect, together: together, today: EasternDate.today(Date())),
+                of: prospect)
     }
 
     // The approval gate on its own, so a caller that already holds the preview group pays for the filter
@@ -170,8 +173,9 @@ enum SendGroup {
     // 2026-09-22 as one core pinned at 100% with the sheet open, ended by a force quit.
     //
     // Absent, this is `prospect.sendsTogether` exactly, so every existing call site is unchanged.
-    static func previewGroup(of prospect: Prospect, together: Bool? = nil) -> [Recipient] {
-        let sendable = Recipient.inSendOrder(prospect.recipients.filter(\.isSendablePending))
+    // #4356: and judged on a given day, the one a card is built for, rather than the wall clock's.
+    static func previewGroup(of prospect: Prospect, together: Bool? = nil, today: String) -> [Recipient] {
+        let sendable = Recipient.inSendOrder(prospect.recipients.filter { $0.isSendablePending(today: today) })
         guard together ?? prospect.sendsTogether else { return Array(sendable.prefix(1)) }
         return sendable
     }

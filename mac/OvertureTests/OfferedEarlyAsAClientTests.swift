@@ -126,7 +126,7 @@ struct OfferedEarlyAsAClientTests {
         }
         shows.append(show(ctx, key: "client-undated", on: "tagged", date: ""))
 
-        let context = StageContext(geo: .none,
+        let context = StageContext(now: Date(), geo: .none,
                                    clients: ClientWindow(sources: [tagged, untagged], clients: []),
                                    today: today)
         let saying = Set(QueueModel.items(from: shows, clients: context.clients, today: today)
@@ -229,7 +229,7 @@ struct OfferedEarlyAsAClientTests {
         let tagged = source(ctx, id: "tagged", tag: true)
         let stranger = show(ctx, key: "stranger-on-a-client-calendar", on: "tagged", date: tenMonthsOut)
 
-        let context = StageContext(geo: .none, clients: ClientWindow(sources: [tagged], clients: []),
+        let context = StageContext(now: Date(), geo: .none, clients: ClientWindow(sources: [tagged], clients: []),
                                    today: today)
         #expect(QueueModel.items(from: [stranger], clients: context.clients, today: today)
             .allSatisfy { $0.offeredEarlyAsAClient }, "the fixture no longer reaches the arm this is about")

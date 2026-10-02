@@ -793,7 +793,7 @@ struct QueueEnginePhase0ProbeTests {
                 _ = QueueModel.ProducerTables(shows: shows, overrides: .none)
                 laps["ProducerTables cold"] = Phase0.ms(since: t); t = Phase0.now()
                 _ = QueueModel.scope(from: QueueModel.queueScope(rows), answers: answers, corpus: rows,
-                                     sources: sources, cardKeys: [])
+                                     sources: sources, now: Date(), cardKeys: [])
                 laps["scope over models (pass stand-in)"] = Phase0.ms(since: t)
                 return laps
             }
@@ -878,7 +878,7 @@ struct QueueEnginePhase0ProbeTests {
             let sources = try ctx.fetch(FetchDescriptor<WatchedSource>())
             for r in rows { _ = r.recipients.count }
             let now = Date()
-            let context = StageContext(geo: .none, clients: .none)
+            let context = StageContext(now: Date(), geo: .none, clients: .none)
             let allRows = Phase0.median5 { _ = rows.map { QueueScopeRow($0, facts: RecipientFacts.of($0)) }.count }
             let searchable = Phase0.median5 {
                 let kept = rows.filter { $0.status != .dismissed }
@@ -893,7 +893,7 @@ struct QueueEnginePhase0ProbeTests {
                 _ = PrepQueueBuilder.eligible(byStatus, today: QueueModel.easternToday()).count
             }
             let items = Phase0.median5 { _ = QueueModel.items(from: rows, corpus: rows, sources: sources).count }
-            let archive = Phase0.median5 { _ = QueueModel.scope(from: rows, sources: sources, cardKeys: []) }
+            let archive = Phase0.median5 { _ = QueueModel.scope(from: rows, sources: sources, now: Date(), cardKeys: []) }
             let due = Phase0.median5 {
                 _ = DueWork.countAndNextChange(prospects: rows, inquiries: inquiries, now: now, replyRunAlive: false)
             }

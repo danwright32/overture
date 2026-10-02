@@ -503,7 +503,7 @@ struct RootView: View {
         // #3493: ONE walk of the store, shared by the scope and the reached-out set it is judged with.
         let kept = nonDismissedProspects
         let scope = StageNavigation.stagedKeys(in: kept, reachedOutKeys: reachedOutKeys(in: kept),
-                                               context: StageContext(geo: geo, clients: clientWindow))
+                                               context: StageContext(now: Date(), geo: geo, clients: clientWindow))
         return allRows.filter { scope.contains($0.id) }
     }
 
@@ -523,7 +523,7 @@ struct RootView: View {
         let kept = nonDismissedProspects
         if StageNavigation.opensInQueue(key: key, in: kept,
                                         reachedOutKeys: reachedOutKeys(in: kept),
-                                        context: StageContext(geo: geo, clients: clientWindow)) {
+                                        context: StageContext(now: Date(), geo: geo, clients: clientWindow)) {
             deepLinkedKey = LeadDeepLink(key: key)
         } else {
             openArchive(key: key)

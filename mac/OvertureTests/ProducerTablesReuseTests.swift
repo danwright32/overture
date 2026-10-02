@@ -100,11 +100,11 @@ struct ProducerTablesReuseTests {
         try ctx.save()
         let rows = try ctx.fetch(FetchDescriptor<Prospect>())
 
-        let built = QueueModel.scope(from: rows, corpus: rows, cardKeys: [])
+        let built = QueueModel.scope(from: rows, corpus: rows, now: Date(), cardKeys: [])
         let tables = QueueModel.ProducerTables(
             shows: rows.map { ProducerGate.Show(presenter: $0.presenter, venue: $0.venue) },
             overrides: .none)
-        let handed = QueueModel.scope(from: rows, corpus: rows, cardKeys: [], producerTables: tables)
+        let handed = QueueModel.scope(from: rows, corpus: rows, now: Date(), cardKeys: [], producerTables: tables)
 
         // FIELD FOR FIELD over the rows, not a count: two scopes with the same number of rows and
         // different producer verdicts is exactly the regression this issue warns about, and a count

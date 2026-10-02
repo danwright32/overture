@@ -151,6 +151,8 @@ struct ArchiveView: View {
                              // prebuilds. A row that was not predicted still draws, from a card built on
                              // the spot, and the store counts that as an EXPECTED first-frame miss
                              // rather than a defect.
+                             // #4356: the instant is required now, because the render pass reaches scope.
+                             now: Date(),
                              cardKeys: keys,
                              cardKeyRegistry: cardKeys)
         }

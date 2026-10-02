@@ -604,7 +604,7 @@ private struct ScopeProbe<Extra: View>: View {
     @ViewBuilder let extra: () -> Extra
 
     var body: some View {
-        let scope = QueueModel.scope(from: prospects)
+        let scope = QueueModel.scope(from: prospects, now: Date())
         VStack(alignment: .leading) {
             Text("\(scope.rows.count) rows")
             extra()
@@ -639,7 +639,7 @@ private struct DismissProbe: View {
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        let scope = QueueModel.scope(from: prospects)
+        let scope = QueueModel.scope(from: prospects, now: Date())
         let _ = dismiss
         VStack(alignment: .leading) {
             Text("\(scope.rows.count) rows")

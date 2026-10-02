@@ -81,7 +81,7 @@ enum DueWork {
         // still unsettled whether the act ever replied; answering the confirm re-decides what the other
         // prompt should even say. Suppressed here, in the one place that decides what the sheet holds,
         // rather than in the view, so the number and the rows cannot disagree about it (L16).
-        let toConfirm = ProposedConversation.dueRecipients(from: prospects)
+        let toConfirm = ProposedConversation.dueRecipients(from: prospects, now: now)
         let confirmKeys = Set(toConfirm.map(\.recipient.id))
         // #3890: two more of the same shape, each settled here for the same reason.
         //

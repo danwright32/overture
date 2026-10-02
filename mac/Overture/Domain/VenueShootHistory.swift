@@ -134,7 +134,7 @@ struct VenueShootHistory: Equatable {
     // composes it for itself.
     //
     // Reads two files, so callers build it ONCE per pass and never per row.
-    static func current(today: String = EasternDate.today()) -> VenueShootHistory {
+    static func current(today: String = EasternDate.today(Date())) -> VenueShootHistory {
         VenueShootHistory(shoots: ShootHistory.loadWithHealth(now: Date()).shoots,
                           bookings: DownbeatBridge.loadedExport().bookings,
                           today: today)

@@ -38,7 +38,7 @@ struct ScoutExtractResults: Codable, Equatable, Sendable {
     // link because it is a signup form, the show falls back to this instead of being left linkless, so Dan
     // still has a page to open. nil (a caller that has no listings URL to offer) keeps the old drop-to-nil
     // behavior exactly.
-    func events(for sourceId: String, today: String = EasternDate.today(),
+    func events(for sourceId: String, today: String = EasternDate.today(Date()),
                 listingsURL: String? = nil) -> [ExtractedEvent] {
         rawEvents(for: sourceId)
             .map(ExtractedEventGuard.placed)              // #1214: carry a rescued outdoor venue to the prospect
