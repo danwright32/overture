@@ -202,13 +202,12 @@ struct ReconcileTickLandingRaceTests {
 
     // MARK: what the tick REPORTS from its snapshot
 
-    // Measured: REPRODUCES. The tick keeps the snapshot's booked and replied shows by KEY (`bookedBefore`,
-    // `repliedBefore`) to tell what is new this tick, and its closing read is a fresh one. A show that was
-    // already booked, re-keyed by a landing in between, is not in the "before" set under its new key, so the
-    // away alert names it as a new booking. No store write is wrong; the notification is.
+    // Measured on #4337: REPRODUCED. The tick kept the snapshot's booked and replied shows by KEY
+    // (`bookedBefore`, `repliedBefore`) to tell what is new this tick, and its closing read is a fresh one. A
+    // show that was already booked, re-keyed by a landing in between, was not in the "before" set under its
+    // new key, so the away alert named it as a new booking. No store write was wrong; the notification was.
     //
-    // Recorded as a known issue rather than asserted green, so this goes red by itself the day the follow
-    // up (#4417) fixes it, and the known issue is deleted then rather than left defending the defect (L252).
+    // #4417 keys both sets on the row's identity, so the re-keyed row is still the show the tick read.
     @Test func aBookedShowReKeyedMidTickIsNotReportedAsANewBooking() async throws {
         let ctx = ModelContext(try container())
         let row = storedRow(in: ctx, booked: true)
@@ -218,10 +217,25 @@ struct ReconcileTickLandingRaceTests {
         let run = await tick(ctx, row: row, landAt: 1, label: "alert")
 
         #expect(controlPassed(run, storedKey: storedKey), "the race was not staged, so this verdict is void")
-        withKnownIssue("#4417: a re-key between the tick's read and its closing read reads as a new booking") {
-            #expect(run.summary.newBookings.isEmpty,
-                    "an already booked show was named a new booking: \(run.summary.newBookings)")
-        }
+        #expect(run.summary.newBookings.isEmpty,
+                "an already booked show was named a new booking: \(run.summary.newBookings)")
+    }
+
+    // #4417: the reply twin. `repliedBefore` was the same defect, keyed the same way, so an already replied
+    // show re-keyed mid tick was announced as a new reply. The same landing, at the same hand back.
+    @Test func aRepliedShowReKeyedMidTickIsNotReportedAsANewReply() async throws {
+        let ctx = ModelContext(try container())
+        let row = storedRow(in: ctx, booked: false)
+        row.outcome = .replied
+        try ctx.save()
+        let storedKey = row.naturalKey
+
+        let run = await tick(ctx, row: row, landAt: 1, label: "reply")
+
+        #expect(controlPassed(run, storedKey: storedKey), "the race was not staged, so this verdict is void")
+        #expect(ReconcileScheduler.hasNewReply(row), "the landing cleared the reply, so the fixture is wrong")
+        #expect(run.summary.newReplies.isEmpty,
+                "an already replied show was named a new reply: \(run.summary.newReplies)")
     }
 
     // L159: the same show, the same landing, but landed BEFORE the tick reads. Nothing is new, so the alert

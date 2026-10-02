@@ -60,6 +60,30 @@ struct StoreRows {
     }
 }
 
+// #4417: the shows a reconcile tick found already booked (or already replied) when it read the store, by
+// IDENTITY, so its closing diff names only what arrived this tick however the rows were re-keyed meanwhile.
+//
+// An identity alone is not enough, and the rows are held for this reason. A row that had never been saved
+// when the tick read it carries a TEMPORARY identifier, and its first save gives it a new one
+// (`InsertedRowIdentifierAcrossSaveTests`), which a pass or a scout landing can do mid tick. So the set is
+// the identities taken at the read PLUS the identities the same rows carry when it is asked, which is the
+// permanent one for any row saved since. A row deleted since is read only through the first half, never
+// touched again (`StoreRows.isLive`).
+@MainActor
+struct TickBefore {
+    private let rows: [Prospect]
+    private let atRead: Set<PersistentIdentifier>
+
+    init(_ rows: [Prospect]) {
+        self.rows = rows
+        atRead = Set(rows.map(\.persistentModelID))
+    }
+
+    var identities: Set<PersistentIdentifier> {
+        atRead.union(rows.filter(StoreRows.isLive).map(\.persistentModelID))
+    }
+}
+
 // #4250: what the tick's closing count needs from the store, as VALUES, so it can be read off the main actor.
 //
 // Measured 2026-09-25 against a clone of the live store (1,340 prospects, three rounds within 3%): the
@@ -81,7 +105,10 @@ struct StoreRows {
 // `ReconcileScheduler.runSafeReconcilesOnce`); the badge count can be one stale until the next tick or
 // republish, which is the same staleness any edit made after a tick already has.
 struct DueReading: Sendable {
+    // #4417: `id` is the show's IDENTITY, what the tick compares by; `key` is only what the away alert's deep
+    // link opens. A scout landing can re-key a row while the tick runs, so a key cannot say "the same show".
     struct ShowName: Sendable, Equatable {
+        let id: PersistentIdentifier
         let key: String
         let name: String
     }
@@ -94,8 +121,8 @@ struct DueReading: Sendable {
 
     static func derive(prospects: [Prospect], inquiries: [Inquiry], now: Date, replyRunAlive: Bool) -> DueReading {
         DueReading(
-            replied: prospects.filter(ReconcileScheduler.hasNewReply).map { ShowName(key: $0.naturalKey, name: $0.groupName) },
-            booked: prospects.filter { $0.outcome == .booked }.map { ShowName(key: $0.naturalKey, name: $0.groupName) },
+            replied: prospects.filter(ReconcileScheduler.hasNewReply).map { ShowName(id: $0.persistentModelID, key: $0.naturalKey, name: $0.groupName) },
+            booked: prospects.filter { $0.outcome == .booked }.map { ShowName(id: $0.persistentModelID, key: $0.naturalKey, name: $0.groupName) },
             due: DueWork.counts(prospects: prospects, inquiries: inquiries, now: now, replyRunAlive: replyRunAlive),
             nextChange: DueWork.nextChange(prospects: prospects, now: now, replyRunAlive: replyRunAlive),
             readOnMainThread: Thread.isMainThread)

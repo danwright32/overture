@@ -92,7 +92,8 @@ enum UnsortedProspectFetchAudit {
 
         // The reconcile tick.
         Entry(file: "ReconcileScheduler.swift", scope: "stillStored", reads: 1, kind: .orderFree, why: """
-            A count of rows holding one natural key, which is unique; a count has no order.
+            The rows holding one persistent identifier (#4417), which at most one row can hold, so its \
+            `.first` is the only row there is.
             """),
         Entry(file: "ReconcileScheduler.swift", scope: "reconcileBookings", reads: 1, kind: .orderedDownstream,
               why: bookingSortsItself),
