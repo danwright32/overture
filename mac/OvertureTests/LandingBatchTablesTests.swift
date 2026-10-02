@@ -267,6 +267,23 @@ struct LandingBatchTablesTests {
             "the write was not judged as one row on the tables built once: \(landing.counters)"))
     }
 
+    // The from-scratch poison walk is the reference every equality above compares against, so it must fold
+    // each stored row FRESH as it stands, never from a cache a landing holds: a title rewritten onto the other
+    // row's title stops the token being poisoned on the very next walk.
+    @Test func theReferencePoisonWalkFoldsEveryRowAsItStands() throws {
+        let ctx = try context()
+        let token = "https://www.venuetix.com/showdetails/vtx4333"
+        stored(ctx, "Slow Comet", Self.night(20), url: token + "/slow-comet")
+        stored(ctx, "Paper Crowns", Self.night(21), url: token + "/paper-crowns")
+        try ctx.save()
+        let rows = try ctx.fetch(FetchDescriptor<Prospect>())
+        let poisoned = try ScoutService.poisonedTokensForBatch([], storedRows: { rows })
+        rows.first { $0.groupName == "Paper Crowns" }?.groupName = "Slow Comet"
+        let afterRewrite = try ScoutService.poisonedTokensForBatch([], storedRows: { rows })
+        #expect(poisoned == ["vtx4333"] && afterRewrite.isEmpty, Comment(rawValue:
+            "the walk poisoned \(poisoned.sorted()) before the rewrite and \(afterRewrite.sorted()) after it"))
+    }
+
     // MARK: the pure tables, against a rebuild, over a seeded random history
 
     // Rows on one page and one token at one room, with the triple's three titles among them, set, rewritten
