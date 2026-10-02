@@ -55,6 +55,8 @@ ShowOutcome.swift:asDismissReason
 SourceGrade.swift:isStopped
 SourceSchedule.swift:maySpendTokens
 StageOverlap.swift:violations
+TableReader.swift:answeringOnly  # #4356: proves the TableReader recording complete (TableReaderRecordsEveryReadTests) and has no app reader until the engine retains cards, Phase 4 (#4358); remove this line in that change.
+TableReader.swift:dependsOn  # #4356 shipped plan v7 Phase 2's declared dependency graph ahead of its reader, held to the plan by QueueEngineGraphTests. Its first app reader is the queue engine, Phase 4 (#4358); remove this line in that change.
 TimeProbe.swift:changedReads  # #4356 shipped plan v7 Phase 2's TimeProbe and ContextReader ahead of their reader, held by QueueContextTests. Their first app reader is the per-row entries in Phase 4b(d) (#4363); remove this line in that change.
 TimeProbe.swift:consulted  # #4356 shipped plan v7 Phase 2's TimeProbe and ContextReader ahead of their reader, held by QueueContextTests. Their first app reader is the per-row entries in Phase 4b(d) (#4363); remove this line in that change.
 TimeProbe.swift:readContinuously  # #4356 shipped plan v7 Phase 2's TimeProbe and ContextReader ahead of their reader, held by QueueContextTests. Their first app reader is the per-row entries in Phase 4b(d) (#4363); remove this line in that change.

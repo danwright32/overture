@@ -606,8 +606,8 @@ extension QueueEnginePhase0cRowsProbeTests {
                                             rowCounts: rowCounts, calendarBySourceId: calendar, overrides: t.overrides,
                                             clients: context.clients, contradictedCancellations: contradicted,
                                             sameShowGroups: sameShow, titlesByKey: titles,
-                                            collapsedFronts: pre.collapsedFronts, collapsedHidden: pre.collapsedHidden,
-                                            laterLookalikesByKey: pre.laterLookalikesByKey, nightsByKey: pre.nightsByKey,
+                                            collapsedFronts: collapse.fronts, collapsedHidden: collapse.hidden,
+                                            laterLookalikesByKey: lookalikes(), nightsByKey: nights(),
                                             now: now, day: today)
             }
             // The row loop exactly as scope runs it with no cards wanted.
@@ -618,7 +618,7 @@ extension QueueEnginePhase0cRowsProbeTests {
                 out.reserveCapacity(inQueue.count)
                 contactsByKey.reserveCapacity(inQueue.count)
                 for p in inQueue {
-                    if pre.collapsedHidden.contains(p.naturalKey) { continue }
+                    if pre.tables.isCollapsedHidden(p.naturalKey) { continue }
                     let contacts = p.countedRecipients
                     let key = p.naturalKey
                     contactsByKey[key] = contacts
