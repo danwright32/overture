@@ -62,6 +62,8 @@ struct ScoutWarnings: Equatable, Sendable {
     var notLandedYet: String? = nil
     // #4330: the sources a later run had already landed, so this run set its older reading aside.
     var supersededSources: [ScoutService.SourceResult] = []
+    // #4336 (A7): the calendar results were refused because they had already landed, at this time.
+    var alreadyLandedAt: Date? = nil
 
     static func from(native: ScoutService.Outcome, extract: ScoutService.Outcome?,
                      finishedEmpty: String?) -> ScoutWarnings {
@@ -122,7 +124,8 @@ struct ScoutWarnings: Equatable, Sendable {
             // and the empties above follow).
             storeUnreadableKeys: dedupedKeys,
             notLandedYet: native.notLandedYet ?? extract?.notLandedYet,
-            supersededSources: superseded)
+            supersededSources: superseded,
+            alreadyLandedAt: native.alreadyLandedAt ?? extract?.alreadyLandedAt)
     }
 
     // #1190: deferred venues make a run NOT clean even when nothing failed. A run that checked 20 of 38
@@ -149,6 +152,8 @@ struct ScoutWarnings: Equatable, Sendable {
         // #4330: informational, after the empties: the newer reading is in the store.
         case superseded([ScoutService.SourceResult])
         case pastClientList(String)
+        // #4336 (A7): last, and informational: nothing went wrong, and nothing new was added (L36).
+        case alreadyLanded(Date)
     }
 
     // #1027: the ONE quiet line an unattended scheduled run leaves in the masthead instead of the popup
@@ -190,6 +195,10 @@ struct ScoutWarnings: Equatable, Sendable {
                 : "\(set.count) calendars were superseded by a later run, so this run's older readings were set aside."
         case .pastClientList(let message):
             return message
+        case .alreadyLanded:
+            // An unattended run says nothing about it: the reattach path reaches it in ordinary use, and a
+            // masthead line for it would cry wolf (L36). It is last, so it is first only when it is alone.
+            return nil
         }
     }
 
@@ -207,6 +216,7 @@ struct ScoutWarnings: Equatable, Sendable {
         if !silentlyEmptySources.isEmpty { out.append(.silentlyEmptyFeed(silentlyEmptySources)) }
         if !supersededSources.isEmpty { out.append(.superseded(supersededSources)) }
         if let clientListWarning { out.append(.pastClientList(clientListWarning)) }
+        if let alreadyLandedAt { out.append(.alreadyLanded(alreadyLandedAt)) }
         return out
     }
 }

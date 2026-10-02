@@ -11,6 +11,31 @@ import SwiftData
 // (`PendingScoutIngests`); once it lands the copy is removed; refused at its deadline the copy stays, and
 // `offerPending` offers it again, from the copy and never from `defaultURL`, at launch and at the end of
 // every landing.
+// #4336 (A7): whether results with this identity have already landed. A parameter of the landing whose
+// default is the real lookup on `LandingRun`. `bypassedForMeasurement` exists for one reason: a probe that
+// re-lands ONE frozen results file every round would otherwise measure a refusal from the second round on
+// (the 2026-09-29 decision on #4336). It is reachable from test code only: AlreadyLandedBypassIsTestOnlyTests
+// fails if any app file outside this one names it or builds a check of its own.
+struct AlreadyLandedCheck: Sendable {
+    // When the results with this identity first landed, nil when they have not, or a throw when the record
+    // cannot be read, which is neither (L215).
+    let landedAt: @Sendable @MainActor (String, ModelContext) throws -> Date?
+
+    init(_ landedAt: @escaping @Sendable @MainActor (String, ModelContext) throws -> Date?) {
+        self.landedAt = landedAt
+    }
+
+    static let lookUp = AlreadyLandedCheck { identity, context in try LandingRun.landedAt(identity, in: context) }
+    static let bypassedForMeasurement = AlreadyLandedCheck { _, _ in nil }
+}
+
+// #4336 (A7): the identity of the results a landing holds, and the check to judge it by. Handed to the ingest
+// by this layer only, because only this layer holds the bytes the identity is the hash of.
+struct LandedResultsIdentity: Sendable {
+    let contentHash: String
+    let check: AlreadyLandedCheck
+}
+
 @MainActor
 enum ScoutExtractLanding {
     // The copies whose ingest is in flight in THIS process right now, so the sweep never offers a copy a
@@ -27,6 +52,7 @@ enum ScoutExtractLanding {
                      landings: LandingSingleFlight = .shared,
                      priority: LandingSingleFlight.Priority = .scout,
                      pending: PendingScoutIngests = .live,
+                     alreadyLanded: AlreadyLandedCheck = .lookUp,
                      saveClosing: (ModelContext) throws -> Void = { try $0.save() },
                      into context: ModelContext) async -> Landed {
         let hash = PendingScoutIngests.contentHash(of: data)
@@ -38,9 +64,20 @@ enum ScoutExtractLanding {
             inFlight[hash, default: 1] -= 1
             if inFlight[hash] == 0 { inFlight[hash] = nil }
         }
+        // #4336 (A7): results that already landed are refused here, before the read phase spends anything,
+        // as their own outcome carrying the first landing's time. The ingest asks again once it holds the
+        // store, because this answer was formed before the store was held (L157). A record that cannot be
+        // read is left to that second asking, which lands the results and says the read failed.
+        if let landedAt = try? alreadyLanded.landedAt(hash, context) {
+            var refused = ScoutService.Outcome(found: 0, inserted: 0, updated: 0, skipped: 0)
+            refused.alreadyLandedAt = landedAt
+            return removingTheCopy(of: hash, kept: kept, after: refused, pending: pending)
+        }
         var outcome = await ScoutExtractIngest.ingest(
             results, clients: clients, history: history, blocked: blocked, today: today, now: now,
-            landings: landings, priority: priority, sequence: sequence,
+            landings: landings, priority: priority,
+            identity: LandedResultsIdentity(contentHash: hash, check: alreadyLanded),
+            sequence: sequence,
             sequenceFloor: { pending.highestSequence },
             onWait: { runSequence in
                 waited = true
@@ -74,15 +111,21 @@ enum ScoutExtractLanding {
             }
             return Landed(outcome: outcome, copyLeftBehind: nil)
         }
-        // L5, L665: removed only once the save carrying these results has succeeded. A failed save means
-        // they may never have reached disk, and the copy is then the only record of them, so it stays and
-        // the sweep offers it again.
+        return removingTheCopy(of: hash, kept: kept, after: outcome, pending: pending)
+    }
+
+    // L5, L665: removed only once the save carrying these results has succeeded. A failed save means
+    // they may never have reached disk, and the copy is then the only record of them, so it stays and
+    // the sweep offers it again. #4336: results that had already landed have nothing left to offer, so
+    // their copy goes too.
+    private static func removingTheCopy(of hash: String, kept: Bool, after outcome: ScoutService.Outcome,
+                                        pending: PendingScoutIngests) -> Landed {
         if kept && !outcome.saveFailed {
             do {
                 try pending.remove(hash)
             } catch {
-                // Landed, and the copy could not be removed, so the sweep will offer it again and it will
-                // land a second time. Said rather than left to happen.
+                // Landed, and the copy could not be removed, so the sweep will offer it again (#4336: and
+                // it will then be refused as already landed). Said rather than left to happen.
                 return Landed(outcome: outcome,
                               copyLeftBehind: LandingWaitCopy.copyNotRemoved(String(describing: error)))
             }
@@ -100,6 +143,9 @@ enum ScoutExtractLanding {
     // What one sweep did, for the line Dan is told.
     struct Offered: Equatable {
         var landed: [ScoutService.Outcome] = []
+        // #4336 (A7): copies whose results had already landed, by when they first landed. Removed, never
+        // counted as landing now (L11).
+        var alreadyLanded: [Date] = []
         var stillWaiting = 0
         // Older than one scout interval and still not landed: STUCK, not waiting (L665).
         var stuck = 0
@@ -109,7 +155,7 @@ enum ScoutExtractLanding {
         var stuckAfter: TimeInterval = ScoutSchedule.defaultInterval
 
         var isEmpty: Bool {
-            landed.isEmpty && stillWaiting == 0 && stuck == 0 && unreadable.isEmpty && copiesLeftBehind.isEmpty
+            landed.isEmpty && alreadyLanded.isEmpty && stillWaiting == 0 && stuck == 0 && unreadable.isEmpty && copiesLeftBehind.isEmpty
         }
     }
 
@@ -152,7 +198,9 @@ enum ScoutExtractLanding {
                                         into: context)
                 let outcome = landed.outcome
                 if let left = landed.copyLeftBehind { offered.copiesLeftBehind.append(left) }
-                if outcome.notLandedYet == nil && !outcome.saveFailed {
+                if let landedAt = outcome.alreadyLandedAt {
+                    offered.alreadyLanded.append(landedAt)
+                } else if outcome.notLandedYet == nil && !outcome.saveFailed {
                     offered.landed.append(outcome)
                 } else if now.timeIntervalSince(entry.recordedAt) > stuckAfter {
                     offered.stuck += 1

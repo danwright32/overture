@@ -46,6 +46,9 @@ enum AppSchema {
         WeeklyDayOff.self,            // #3620: one weekday blocked every week. Independent for the same
                                       // reason as the rest, and stored as the rule Dan typed, never as
                                       // the weeks it covers.
+        LandingRun.self,              // #4336: which calendar results already landed, so the same results
+                                      // are refused rather than landed twice. Independent for the same
+                                      // reason as the rest; A6 (#4335) extends it into the landing record.
     ]
 
     static var schema: Schema { Schema(models) }

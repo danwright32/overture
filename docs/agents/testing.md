@@ -894,6 +894,26 @@ the measurement it came from lives here. Read the entry before the rule decides 
   any other field that moved. And the corpus shape test measures, through the app's own functions, that the
   corpus still holds a poisoned token, a non-transitive title triple whose arrival order changes a URL's
   show count, an ambiguous URL, a spelling decision and the stripped-key case.
+- **The synthetic arm pins all three entry points that land shows (#4374), not only the ingest.** The same
+  corpus is landed three ways (`LandingOracleCorpus.Path`), each against its own recording from 6d3453d8:
+  `ScoutExtractIngest.ingest` (`synthetic-6d3453d8.txt`), `ScoutService.runScout`'s native sweep, every
+  source a `.squarespaceFeed` whose stub extractor returns its events at `.watchOnly`
+  (`synthetic-runscout-6d3453d8.txt`), and the lead paste, `LeadIntakeModel.start` once per source with its
+  read answered at once (`synthetic-leadpaste-6d3453d8.txt`). The script records all three in one runner
+  invocation and refuses by name when any is unwritten. Two refusals belong to the new arms. `runScout`
+  meets its native sources in the order an UNSORTED watchlist fetch returns them, and that order decides
+  the Fenwick triple, so a run that read them in any other order than the corpus asked for is
+  `UNMEASURED` rather than compared. And both new arms read Downbeat's export and the booking history
+  from the handoff folder, which under test is one temporary folder every test shares, so either file
+  present there refuses the landing (`handoffInputsRefusal`) rather than recording whatever left it.
+  Every source is seeded PAST its warmup with its listing count as baseline, because seeded in warmup (as
+  #4328 first did) no reconcile marked anything and Old Harbor Revue read `missedScoutCount` 0 in every
+  recording, so the ingest's one reconcile and runScout's per source ones were invisible; all three were
+  re-recorded from 6d3453d8 with that seed, and `theReconcileCountsAMissOnTheSweepsAndNeverOnTheLeadPaste`
+  measures that the two sweeps count the miss and the lead paste (#826) never does.
+  `theThreeEntryPointsLeaveDifferentStores` keeps a recording copied under the wrong name from passing,
+  and the clock list is derived over all three. The REAL arm stays ingest only: the frozen inputs hold a
+  results file, not native reads.
 - **The REAL arm** lands the recorded scout extract results on the frozen 1x and 4x inputs of #4327 step 0.0,
   opt in (`TEST_RUNNER_MEASURE_4275=1`, `_INPUTS`, `_OUT`, `TEST_RUNNER_LANDING_ORACLE_MODE=record|compare`).
   Its recording holds a HASH per field and never a value, its first line is the real-arm marker, and it is

@@ -45,6 +45,10 @@ struct FreezeLogNote: Codable, Equatable, Sendable {
     // a real answer: this compaction promoted nothing, so every record in the file is inside the window.
     let promotedAt: Date?
     let promotedSeconds: Double?
+    // #4398: how many lines the compaction could not decode and carried through verbatim. Optional only
+    // so a note written before this field existed still decodes as a note rather than becoming an
+    // unreadable line itself; every compaction since writes the number, zero included.
+    var keptUnreadable: Int? = nil
 }
 
 enum FreezeLog {
@@ -124,7 +128,11 @@ enum FreezeLog {
         // therefore does not carry the previous note over. An ARRAY anyway, so a file holding two says so
         // rather than having one silently chosen for it (L521).
         var notes: [FreezeLogNote] = []
-        var unreadableLines: Int = 0
+        // #4398: the lines this build could not decode, VERBATIM, rather than only how many, because
+        // `compact` rewrites this file and a line it holds no copy of is a line the rewrite destroys. The
+        // count is derived from these, so the two can never disagree (L53).
+        var unreadable: [String] = []
+        var unreadableLines: Int { unreadable.count }
         // The file was not there at all, which is what a session with no freeze looks like AND what a
         // watchdog that never ran looks like. Kept as its own fact so the reader can say which (L11).
         var fileWasAbsent: Bool = false
@@ -135,7 +143,7 @@ enum FreezeLog {
         let decoder = decoder()
         for line in text.split(separator: "\n", omittingEmptySubsequences: true) {
             guard let data = line.data(using: .utf8) else {
-                out.unreadableLines += 1
+                out.unreadable.append(String(line))
                 continue
             }
             // #4122: the NOTE first, and the order is decided rather than incidental. A note carries a
@@ -147,7 +155,7 @@ enum FreezeLog {
                 continue
             }
             guard let record = try? decoder.decode(StallRecord.self, from: data) else {
-                out.unreadableLines += 1
+                out.unreadable.append(String(line))
                 continue
             }
             out.records.append(record)
@@ -344,7 +352,8 @@ enum FreezeLog {
     enum CompactionOutcome: Equatable, Sendable {
         // Under the cap, so nothing moved. The ordinary state.
         case nothingToArchive
-        case archived(count: Int)
+        // #4398: `keptUnreadable` is how many undecodable lines were carried through verbatim.
+        case archived(count: Int, keptUnreadable: Int = 0)
         // The archive could not be written, so the live file was deliberately left OVER its cap rather than
         // trimmed. Distinct from `nothingToArchive` because one is healthy and one needs attention (L11).
         case archiveFailed
@@ -412,8 +421,15 @@ enum FreezeLog {
         // and the per record mark still carries it.
         let promoted = result.records.first { $0.promotedFromOlderWindow == true }
         let note = FreezeLogNote(at: now, kept: result.records.count, archived: result.dropped,
-                                 promotedAt: promoted?.at, promotedSeconds: promoted?.seconds)
-        let lines = [line(for: note)].compactMap { $0 } + result.records.compactMap(line(for:))
+                                 promotedAt: promoted?.at, promotedSeconds: promoted?.seconds,
+                                 keptUnreadable: read.unreadable.count)
+        // #4398: every line the read could NOT decode is carried through VERBATIM, after the note and before
+        // the records. Rewriting from the decoded records alone destroyed them: a line torn by a process
+        // killed mid-freeze, which is the ordinary case this file exists for, was in neither the live file
+        // nor the archive afterwards and nothing counted it, while `pruneArchive` refuses on the same
+        // condition (L211, L5). Kept in the LIVE file rather than the archive, because the archive's prune
+        // refuses on an unreadable line and one moved there would stop the archive ever being bounded.
+        let lines = [line(for: note)].compactMap { $0 } + read.unreadable + result.records.compactMap(line(for:))
         let text = lines.joined(separator: "\n") + "\n"
         // The archive already holds these records, so a failed rewrite here leaves them in BOTH files rather
         // than in neither: nothing is lost, and the live file is simply still over its cap until the next
@@ -421,7 +437,7 @@ enum FreezeLog {
         // first, with both arms returning the same value, which is a decision that decides nothing and is
         // worse than no guard because it reads as one (L260).
         _ = try? text.write(to: url, atomically: true, encoding: .utf8)
-        return .archived(count: result.dropped)
+        return .archived(count: result.dropped, keptUnreadable: read.unreadable.count)
     }
 
     // Appended rather than rewritten, so a write during a freeze cannot lose what is already there and

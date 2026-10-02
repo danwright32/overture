@@ -29,7 +29,10 @@ enum ScoutRunSummary {
     //
     // The zero case is its own sentence, never "0 from watched calendars": a quiet calendar is the
     // NORMAL state (5 of the 7 sites in the #770 spike, in July) and must not read as a failure.
+    // #4336 (A7): results refused because they had already landed say so, never "Nothing new", which is
+    // what a landing that found nothing says (L11).
     static func watchedCalendarSummary(for outcome: ScoutService.Outcome) -> String {
+        if let landedAt = outcome.alreadyLandedAt { return LandingWaitCopy.alreadyLanded(at: landedAt) }
         let added = outcome.inserted + outcome.updated
         return added > 0 ? "\(added) from watched calendars" : "Nothing new on the watched calendars"
     }

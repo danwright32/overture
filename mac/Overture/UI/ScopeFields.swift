@@ -501,3 +501,12 @@ extension WeeklyDayOff: ScopeObserved {
         .init(\.weekday),
     ]
 }
+
+// #4336: no screen observes a landing record today, listed so the rule holds for every model in the schema.
+extension LandingRun: ScopeObserved {
+    func scopeAccess<V>(_ keyPath: KeyPath<LandingRun, V>) { access(keyPath: keyPath) }
+    static let scopeFields: [ScopeField<LandingRun>] = [
+        .init(\.landedAt),
+        .init(\.runIdentity),
+    ]
+}

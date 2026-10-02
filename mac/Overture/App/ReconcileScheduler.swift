@@ -124,7 +124,13 @@ final class ReconcileScheduler {
                                readClosing: @MainActor (ModelContext, Date, Bool) async -> DueReading = {
                                    await DueReading.read(from: $0, now: $1, replyRunAlive: $2)
                                },
-                               recordTimeline: (ReconcileTickTimeline) -> Void = { AgentLog.note($0.logLine) })
+                               recordTimeline: (ReconcileTickTimeline) -> Void = { AgentLog.note($0.logLine) },
+                               // #4337: called on the main actor each time the tick has handed the actor back
+                               // and resumed, with the count of hand backs so far (1 is the first, straight after
+                               // the tick's one read of the store). A scout landing is one synchronous main actor
+                               // block, so a hand back is the only place one can land inside a tick; this is
+                               // where a test lands one, and the count is the proof of when it did (L248).
+                               afterHandBack: @MainActor (Int) -> Void = { _ in })
         async -> ReconcileSummary {
         // #4107: what each pass costs, measured on every tick. `lap` closes the pass that just ran; `resume`
         // restarts the clock after the tick has given the main actor back, so a turn somebody else took is
@@ -140,8 +146,11 @@ final class ReconcileScheduler {
         // #4107: between passes the tick yields, so whatever else is waiting on the main actor gets a turn
         // between two passes rather than only after all eleven. Every pass is still awaited in order, so
         // nothing about what the tick does or in what order changes.
+        var handBacks = 0
         func handBack() async {
             await Task.yield()
+            handBacks += 1
+            afterHandBack(handBacks)
             mark = clock.now
         }
 
@@ -157,8 +166,12 @@ final class ReconcileScheduler {
         let rows = StoreRows.fetch(from: context)
         // #269: snapshot which leads are already replied/booked BEFORE mutating, so the diff after the
         // reconcile names exactly what arrived this tick (each item reported once).
-        let repliedBefore = Set(rows.prospects.filter(Self.hasNewReply).map(\.naturalKey))
-        let bookedBefore = Set(rows.prospects.filter { $0.outcome == .booked }.map(\.naturalKey))
+        // #4417: by IDENTITY, not by natural key. The tick takes no landing token, so a scout landing can run
+        // at any hand back below and re-key a row (`.reKeyJoiningNights` and every other `.reKey` arm); keyed,
+        // an already booked or replied show then read as new and Dan was told of a booking that did not
+        // happen. The rows are kept as well as their identities, for `TickBefore`'s reason.
+        let repliedBefore = TickBefore(rows.prospects.filter(Self.hasNewReply))
+        let bookedBefore = TickBefore(rows.prospects.filter { $0.outcome == .booked })
         lap(.readRows)
         await handBack()
 
@@ -259,23 +272,26 @@ final class ReconcileScheduler {
         mark = clock.now
         // #4250: the reading is a picture of the store at one moment and this runs after it, so a show
         // deleted in between must not be named in the away alert, whose deep link would then open nothing.
-        // Only the shows NEW this tick are checked (usually none), one keyed count each, never the whole store.
-        func stillStored(_ show: DueReading.ShowName) -> Bool {
-            let key = show.key
-            return ((try? context.fetchCount(FetchDescriptor<Prospect>(
-                predicate: #Predicate { $0.naturalKey == key }))) ?? 0) > 0
+        // Only the shows NEW this tick are checked (usually none), one lookup each, never the whole store.
+        // #4417: looked up by identity, and named by what the row holds NOW. Looked up by key, a show a landing
+        // re-keyed after the reading read as deleted and was silently left out; and its key is what the deep
+        // link opens, so the reading's key would have opened nothing.
+        func stillStored(_ show: DueReading.ShowName) -> DueReading.ShowName? {
+            let id = show.id
+            let row: Prospect? = context.registeredModel(for: id)
+                ?? (try? context.fetch(FetchDescriptor<Prospect>(predicate: #Predicate { $0.persistentModelID == id })))?.first
+            guard let row, StoreRows.isLive(row) else { return nil }
+            return DueReading.ShowName(id: id, key: row.naturalKey, name: row.groupName)
         }
-        let repliedAfter = closing.replied
-            .filter { repliedBefore.contains($0.key) || stillStored($0) }
-            .map { (key: $0.key, name: $0.name) }
-        let bookedAfter = closing.booked
-            .filter { bookedBefore.contains($0.key) || stillStored($0) }
-            .map { (key: $0.key, name: $0.name) }
-        let newReplies = AwayAlert.newNames(before: repliedBefore, after: repliedAfter)
-        let newBookings = AwayAlert.newNames(before: bookedBefore, after: bookedAfter)
+        let repliedNew = AwayAlert.newShows(before: repliedBefore.identities, after: closing.replied, id: \.id)
+            .compactMap(stillStored)
+        let bookedNew = AwayAlert.newShows(before: bookedBefore.identities, after: closing.booked, id: \.id)
+            .compactMap(stillStored)
+        let newReplies = repliedNew.map(\.name)
+        let newBookings = bookedNew.map(\.name)
         // #301: keep the keys aligned with the names so the away alert can deep-link to a sole new lead.
-        let newReplyKeys = AwayAlert.newKeys(before: repliedBefore, after: repliedAfter)
-        let newBookingKeys = AwayAlert.newKeys(before: bookedBefore, after: bookedAfter)
+        let newReplyKeys = repliedNew.map(\.key)
+        let newBookingKeys = bookedNew.map(\.key)
 
         lastReconcileAt = now
         defaults.set(now.timeIntervalSince1970, forKey: ReconcileScheduler.lastReconcileKey)

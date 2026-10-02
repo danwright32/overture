@@ -198,8 +198,13 @@ enum CardDivergenceLog {
 
     struct Read: Equatable, Sendable {
         var records: [CardDivergenceRecord] = []
-        var unreadableLines: Int = 0
+        // #4398: the lines this build could not decode, VERBATIM, rather than only how many. A count is
+        // enough to report a loss and not enough to prevent one: `compact` rewrites this file, and a line
+        // it holds no copy of is a line the rewrite destroys. The count is derived from these, so the two
+        // can never disagree (L53).
+        var unreadable: [String] = []
         var fileWasAbsent: Bool = false
+        var unreadableLines: Int { unreadable.count }
     }
 
     static func read(_ text: String) -> Read {
@@ -208,7 +213,7 @@ enum CardDivergenceLog {
         for line in text.split(separator: "\n", omittingEmptySubsequences: true) {
             guard let data = line.data(using: .utf8),
                   let record = try? decoder.decode(CardDivergenceRecord.self, from: data) else {
-                out.unreadableLines += 1
+                out.unreadable.append(String(line))
                 continue
             }
             out.records.append(record)
@@ -267,7 +272,10 @@ enum CardDivergenceLog {
     // one.
     enum CompactionOutcome: Equatable, Sendable {
         case nothingToArchive
-        case archived(count: Int)
+        // #4398: `keptUnreadable` is how many lines the compaction could not decode and therefore carried
+        // through to the rewritten live file verbatim. Its own number, because a compaction that met only
+        // records and one that met a torn append are different facts about the file (L11).
+        case archived(count: Int, keptUnreadable: Int = 0)
         // The archive could not be written, so the live file was deliberately left OVER its cap rather
         // than trimmed.
         case archiveFailed
@@ -280,21 +288,32 @@ enum CardDivergenceLog {
 
     static func compacted(_ records: [CardDivergenceRecord], cap: Int = fileCap) -> Compacted {
         guard records.count > cap else { return Compacted(records: records) }
-        let newest = Array(records.suffix(cap))
-        let keptKinds = Set(newest.map(\.compactionKey))
+        let keptKinds = Set(records.suffix(cap).map(\.compactionKey))
         // The OLDEST example of each kind the newest window has lost, which is the one that would
-        // otherwise disappear entirely.
-        var rescued: [CardDivergenceRecord] = []
+        // otherwise disappear entirely. Held as POSITIONS (see below).
+        var rescued: Set<Int> = []
         var seen = keptKinds
-        for record in records {
-            if seen.insert(record.compactionKey).inserted { rescued.append(record) }
+        for index in records.indices {
+            if seen.insert(records[index].compactionKey).inserted { rescued.insert(index) }
         }
-        // #3811: the dropped set is now WORKED OUT rather than counted, because the archive needs the
-        // records themselves. It is everything the input held that the kept list does not, compared by
-        // identity, so it stays correct however the rule above changes what it rescues.
-        let kept = rescued.isEmpty ? newest : rescued + newest.dropFirst(rescued.count)
-        let keptIds = Set(kept.map { "\($0.session)#\($0.sequence)" })
-        let dropped = records.filter { !keptIds.contains("\($0.session)#\($0.sequence)") }
+        // #3811: the dropped set is WORKED OUT rather than counted, because the archive needs the records
+        // themselves.
+        //
+        // #4398: and worked out in POSITIONS rather than identities, on `FreezeLog.compacted`'s precedent
+        // (#3763). The identity form left out of the dropped list EVERY copy of an identity the kept list
+        // held once, so a record written twice whose older copy fell outside the newest window was in
+        // neither file after a compaction. Each position is now kept or dropped, exactly once. The rescued
+        // records take the oldest slots of the newest window, so the file stays at its cap.
+        let newestStart = min(records.count, records.count - cap + rescued.count)
+        var kept: [CardDivergenceRecord] = []
+        var dropped: [CardDivergenceRecord] = []
+        for index in records.indices {
+            if rescued.contains(index) || index >= newestStart {
+                kept.append(records[index])
+            } else {
+                dropped.append(records[index])
+            }
+        }
         return Compacted(records: kept, droppedRecords: dropped)
     }
 
@@ -328,14 +347,21 @@ enum CardDivergenceLog {
         let result = compacted(read.records, cap: cap)
         guard result.dropped > 0 else { return .nothingToArchive }
         guard archive(result.droppedRecords, besideLogAt: url) else { return .archiveFailed }
-        let text = result.records.compactMap(line(for:)).joined(separator: "\n") + "\n"
+        // #4398: every line the read could NOT decode is carried through VERBATIM, at the head of the
+        // rewritten file. Rewriting from the decoded records alone destroyed them: a torn append, or a
+        // record a later build wrote in a shape this one cannot parse, was in neither the live file nor
+        // the archive afterwards and nothing counted it, while `pruneArchive` refuses outright on the same
+        // condition (L211, L5). Kept in the LIVE file rather than moved to the archive, because the
+        // archive's prune refuses on an unreadable line, so one moved there would stop the archive ever
+        // being bounded again. At the head, because each is older than anything appended after this.
+        let text = (read.unreadable + result.records.compactMap(line(for:))).joined(separator: "\n") + "\n"
         // The archive already holds these records, so a failed rewrite leaves them in BOTH files rather
         // than in neither: nothing is lost, and the live file is simply still over its cap until the next
         // tick tries again. The write's result is deliberately not branched on, for `FreezeLog.compact`'s
         // stated reason: a guard whose arms return the same value decides nothing and reads as if it does
         // (L260).
         _ = try? text.write(to: url, atomically: true, encoding: .utf8)
-        return .archived(count: result.dropped)
+        return .archived(count: result.dropped, keptUnreadable: read.unreadable.count)
     }
 
     // MARK: - #3811: what bounds the archive

@@ -330,7 +330,7 @@ struct SourceCheckTests {
     // a duplicate while the original gets marked gone. Determinism by abstention.
     @Test func anUnchangedPageIsNotRead() {
         let s = source(hash: "abc")
-        let decision = SourceCheck.decide(source: s, result: .success(page("abc")),
+        let decision = SourceCheck.decideApplying(source: s, result: .success(page("abc")),
                                           depth: .readChanged, now: now)
 
         #expect(decision == .unchanged)
@@ -341,7 +341,7 @@ struct SourceCheckTests {
 
     @Test func aChangedPageIsReadWhenDanStartedTheRun() {
         let s = source(hash: "abc")
-        let decision = SourceCheck.decide(source: s, result: .success(page("xyz")),
+        let decision = SourceCheck.decideApplying(source: s, result: .success(page("xyz")),
                                           depth: .readChanged, now: now)
 
         #expect(decision == .read(page("xyz")))
@@ -353,7 +353,7 @@ struct SourceCheckTests {
     // whole of Dan's 4th decision, in one branch.
     @Test func aChangedPageIsOnlyFlaggedOnTheFreeDailyRun() {
         let s = source(hash: "abc")
-        let decision = SourceCheck.decide(source: s, result: .success(page("xyz")),
+        let decision = SourceCheck.decideApplying(source: s, result: .success(page("xyz")),
                                           depth: .watchOnly, now: now)
 
         #expect(decision == .changedButNotRead)
@@ -370,7 +370,7 @@ struct SourceCheckTests {
     @Test func aDegradedSourceIsReReadOnAManualScoutEvenWhenUnchanged() {
         let s = source(hash: "abc")
         s.lastUnreadableCount = 1
-        let decision = SourceCheck.decide(source: s, result: .success(page("abc")),
+        let decision = SourceCheck.decideApplying(source: s, result: .success(page("abc")),
                                           depth: .readChanged, now: now)
         #expect(decision == .read(page("abc")))
     }
@@ -380,7 +380,7 @@ struct SourceCheckTests {
     // fix has to reach the show even though the bytes match the last ingest.
     @Test func aFailingSourceIsReReadOnAManualScoutWhenItNowFetchesUnchanged() {
         let s = source(hash: "abc", health: .failing)
-        let decision = SourceCheck.decide(source: s, result: .success(page("abc")),
+        let decision = SourceCheck.decideApplying(source: s, result: .success(page("abc")),
                                           depth: .readChanged, now: now)
         #expect(decision == .read(page("abc")))
     }
@@ -390,7 +390,7 @@ struct SourceCheckTests {
     @Test func aDegradedSourceIsNotReReadOnTheFreeDailyRun() {
         let s = source(hash: "abc")
         s.lastUnreadableCount = 1
-        let decision = SourceCheck.decide(source: s, result: .success(page("abc")),
+        let decision = SourceCheck.decideApplying(source: s, result: .success(page("abc")),
                                           depth: .watchOnly, now: now)
         #expect(decision == .unchanged)
     }
@@ -408,7 +408,7 @@ struct SourceCheckTests {
         #expect(s.lastUnreadableCount == 0)    // so the old rule did not fire
         #expect(s.readabilityNote != nil)      // yet Dan is being shown a line about it
 
-        #expect(SourceCheck.decide(source: s, result: .success(page("abc")),
+        #expect(SourceCheck.decideApplying(source: s, result: .success(page("abc")),
                                    depth: .readChanged, now: now) == .read(page("abc")))
     }
 
@@ -422,7 +422,7 @@ struct SourceCheckTests {
         #expect(s.lastUnreadableCount == 0)
         #expect(s.readabilityNote != nil)
 
-        #expect(SourceCheck.decide(source: s, result: .success(page("abc")),
+        #expect(SourceCheck.decideApplying(source: s, result: .success(page("abc")),
                                    depth: .readChanged, now: now) == .read(page("abc")))
     }
 
@@ -435,7 +435,7 @@ struct SourceCheckTests {
         s.baselineFeedCount = 40
         #expect(s.readabilityNote == nil)
 
-        #expect(SourceCheck.decide(source: s, result: .success(page("abc")),
+        #expect(SourceCheck.decideApplying(source: s, result: .success(page("abc")),
                                    depth: .readChanged, now: now) == .unchanged)
     }
 
@@ -451,7 +451,7 @@ struct SourceCheckTests {
         shrunken.baselineFeedCount = 28
 
         for s in [gaps, shrunken] {
-            #expect(SourceCheck.decide(source: s, result: .success(page("abc")),
+            #expect(SourceCheck.decideApplying(source: s, result: .success(page("abc")),
                                        depth: .watchOnly, now: now) == .unchanged)
         }
     }
@@ -459,7 +459,7 @@ struct SourceCheckTests {
     // A source with no hash yet has never been ingested, so it is changed by definition.
     @Test func aSourceNeverIngestedCountsAsChanged() {
         let s = source(hash: nil)
-        #expect(SourceCheck.decide(source: s, result: .success(page("first")),
+        #expect(SourceCheck.decideApplying(source: s, result: .success(page("first")),
                                    depth: .readChanged, now: now) == .read(page("first")))
     }
 
@@ -469,7 +469,7 @@ struct SourceCheckTests {
     // forever.
     @Test func aCheckNeverStampsTheContentHash() {
         let s = source(hash: "abc")
-        _ = SourceCheck.decide(source: s, result: .success(page("xyz")), depth: .readChanged, now: now)
+        _ = SourceCheck.decideApplying(source: s, result: .success(page("xyz")), depth: .readChanged, now: now)
         #expect(s.lastContentHash == "abc")   // still the last hash we actually INGESTED
     }
 
@@ -480,18 +480,18 @@ struct SourceCheckTests {
     // watch-only run, because "the live page as far as we know" is true whatever the run did next.
     @Test func aCheckRecordsTheHashItSaw() {
         let changed = source(hash: "abc")
-        _ = SourceCheck.decide(source: changed, result: .success(page("xyz")),
+        _ = SourceCheck.decideApplying(source: changed, result: .success(page("xyz")),
                                depth: .watchOnly, now: now)
         #expect(changed.lastObservedContentHash == "xyz")     // the free daily run saw new bytes
 
         let unchanged = source(hash: "abc")
-        _ = SourceCheck.decide(source: unchanged, result: .success(page("abc")),
+        _ = SourceCheck.decideApplying(source: unchanged, result: .success(page("abc")),
                                depth: .readChanged, now: now)
         #expect(unchanged.lastObservedContentHash == "abc")   // still current, and now recorded
 
         let failed = source(hash: "abc")
         failed.lastObservedContentHash = "abc"
-        _ = SourceCheck.decide(source: failed, result: .failure(.http(500)),
+        _ = SourceCheck.decideApplying(source: failed, result: .failure(.http(500)),
                                depth: .readChanged, now: now)
         #expect(failed.lastObservedContentHash == "abc")      // a fetch that failed saw nothing new
     }
@@ -505,7 +505,7 @@ struct SourceCheckTests {
         ]
         for error in failures {
             let s = source()
-            let decision = SourceCheck.decide(source: s, result: .failure(error), depth: .readChanged,
+            let decision = SourceCheck.decideApplying(source: s, result: .failure(error), depth: .readChanged,
                                               now: now)
 
             #expect(decision == .failed(.fetch(error)))
@@ -525,7 +525,7 @@ struct SourceCheckTests {
     @Test func aFailedCheckDoesNotClaimSuccess() {
         let s = source()
         s.lastSucceededAt = Date(timeIntervalSince1970: 1)
-        _ = SourceCheck.decide(source: s, result: .failure(.http(500)), depth: .readChanged, now: now)
+        _ = SourceCheck.decideApplying(source: s, result: .failure(.http(500)), depth: .readChanged, now: now)
 
         #expect(s.lastSucceededAt == Date(timeIntervalSince1970: 1))
         #expect(s.successfulCheckCount == 0)
@@ -536,7 +536,7 @@ struct SourceCheckTests {
         let s = source(hash: "abc", health: .failing)
         s.lastFailure = .fetch(.http(500))
 
-        _ = SourceCheck.decide(source: s, result: .success(page("abc")), depth: .readChanged, now: now)
+        _ = SourceCheck.decideApplying(source: s, result: .success(page("abc")), depth: .readChanged, now: now)
 
         #expect(s.health == .ok)
         #expect(s.lastFailure == nil)

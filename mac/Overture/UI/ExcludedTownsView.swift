@@ -27,7 +27,8 @@ struct ExcludedTownsView: View {
     // Read as an OPTIONAL, on the same footing as every other environment object here, so a missed
     // injection is a pass nobody counted rather than a crash.
     @Environment(FreezeWatch.self) private var freezeWatch: FreezeWatch?
-    @Environment(\.dismiss) private var dismiss
+    // #4408: no `\.dismiss` here. The window system revises it on every focus change, and held at this
+    // level it re-ran the whole body and fetched the listing again each time; `DoneButton` owns it.
     @Environment(\.modelContext) private var context
     @Environment(ActionFeedback.self) private var feedback
     // Bound, so a Remove redraws this sheet the instant the row is gone. The seed half is read the same
@@ -84,7 +85,7 @@ struct ExcludedTownsView: View {
                     .font(.system(size: 12)).foregroundStyle(OVColor.inkSoft)
             }
             Spacer()
-            Button("Done") { dismiss() }.keyboardShortcut(.defaultAction)
+            DoneButton(isDefaultAction: true)
         }
         .padding(OVSpacing.lg)
     }

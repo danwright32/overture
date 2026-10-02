@@ -39,12 +39,15 @@ enum ScoutExtractIngest {
         let health: FeedReconcile.FeedHealthState
         let effectiveVerdict: PageVerdict
         let preClassified: ScoutService.PreClassified
+        // #4329 (A12): the run's note for this source, applied with the rest of its landing.
+        let writes: SourceWrites
     }
 
     // #4330: a settled slot carries its source (nil for an id nobody queued) so the landing block can
-    // stamp it with this run's sequence.
+    // stamp it with this run's sequence. #4329 (A12): and what reading it decided to write on the row (its
+    // note, its failure, its confirmed quiet page), applied there after the re-validation, or dropped whole.
     private enum Slot {
-        case settled(ScoutService.Outcome, WatchedSource?)
+        case settled(ScoutService.Outcome, WatchedSource?, SourceWrites)
         case pending(Pending)
     }
 
@@ -59,6 +62,12 @@ enum ScoutExtractIngest {
                        // #4330 (A13): the queue the landing block waits its turn in, and at what priority.
                        landings: LandingSingleFlight = .shared,
                        priority: LandingSingleFlight.Priority = .scout,
+                       // #4336 (A7): the identity of the results being landed and the check to judge it by.
+                       // `ScoutExtractLanding` always passes one, being the only caller holding the bytes the
+                       // identity is the hash of (AlreadyLandedBypassIsTestOnlyTests holds the app to that).
+                       // nil, for a test landing decoded results with no file behind them, checks and records
+                       // nothing.
+                       identity: LandedResultsIdentity? = nil,
                        // The run's landing sequence. nil mints one as the read phase starts; a pending copy
                        // offered again passes the sequence it was minted with (`PendingScoutIngests`), so it
                        // is judged as the run it really is.
@@ -75,11 +84,19 @@ enum ScoutExtractIngest {
                        // nothing never reports a reconcile), so a probe can say what each source cost. Counting only;
                        // nil, which every shipping caller passes, reports nothing.
                        onLandingStep: ((String, ScoutLandingStore.Counters) -> Void)? = nil,
+                       // #4329 (A12): handed each source's captured read-phase writes as the landing applies
+                       // them, so a test can prove every branch that writes was driven. nil reports nothing.
+                       onApplyCaptured: ((SourceWrites) -> Void)? = nil,
                        into context: ModelContext) async -> ScoutService.Outcome {
         var outcome = ScoutService.Outcome(found: 0, inserted: 0, updated: 0, skipped: 0)
         let sequence = givenSequence ?? landings.mintSequence(
             above: max(sequenceFloor(), highestStoredSequence(in: context)))
 
+        // #4329 (A12): the read loop below writes NOTHING to the store. Every write it decides for a source (the
+        // run's note, a failure, a confirmed quiet page) is captured in that source's slot and applied by the
+        // landing block, after the re-validation, so the context is clean across the classify await and a
+        // reading a later run overtook leaves the row exactly as that later run left it.
+        //
         // #4102: every source is READ first (its checks, and its classify pass awaited off the actor) and
         // every source's shows LAND afterwards, together, in one block with no await in it. Landed as each
         // one was classified, every source reached the screen as its own change and the queue re-derived
@@ -104,7 +121,7 @@ enum ScoutExtractIngest {
             // surfaced in the run's warning rather than being a bare `continue` nobody ever sees.
             guard let source = row(for: result.sourceId, in: context) else {
                 settled.unqueuedResultIds.append(result.sourceId)
-                slots.append(.settled(settled, nil))
+                slots.append(.settled(settled, nil, .none))
                 continue
             }
 
@@ -112,7 +129,7 @@ enum ScoutExtractIngest {
             // the failure path and the healthy one alike, and overwritten each run so it always describes
             // the LAST thing that happened rather than accumulating a history nobody asked for. A source
             // that recovers must stop explaining a failure it no longer has.
-            source.notes = result.note
+            let note = SourceWrites(.runNote, [.notes(result.note)])
 
             // #857: the run's own results are untrusted input. A verdict that disagrees with the events
             // it returned (it claimed the page was empty or unreadable and still handed back shows, or
@@ -127,9 +144,9 @@ enum ScoutExtractIngest {
             // (`all_past` with events, which it would otherwise INGEST, and `upcoming_listings` with none,
             // which it would otherwise stamp as a healthy quiet read).
             if let reason = ScoutResultAudit.contradiction(in: result) {
-                source.notes = reason
-                fail(source, as: .inconsistentResult, now: now, outcome: &settled)
-                slots.append(.settled(settled, source))
+                let failed = fail(source, as: .inconsistentResult, now: now, outcome: &settled)
+                slots.append(.settled(settled, source,
+                                      note.appending(SourceWrites(.runNote, [.notes(reason)])).appending(failed)))
                 continue
             }
 
@@ -146,12 +163,12 @@ enum ScoutExtractIngest {
                 if SourceConfirmation.isConfirmedQuiet(verdict: result.verdict,
                                                        readHash: source.pendingContentHash,
                                                        confirmedEmptyHash: source.confirmedEmptyHash) {
-                    recordConfirmedEmpty(on: source, now: now, outcome: &settled)
-                    slots.append(.settled(settled, source))
+                    let quiet = recordConfirmedEmpty(on: source, now: now, outcome: &settled)
+                    slots.append(.settled(settled, source, note.appending(quiet)))
                     continue
                 }
-                fail(source, as: failure, now: now, outcome: &settled)
-                slots.append(.settled(settled, source))
+                let failed = fail(source, as: failure, now: now, outcome: &settled)
+                slots.append(.settled(settled, source, note.appending(failed)))
                 continue
             }
 
@@ -209,7 +226,8 @@ enum ScoutExtractIngest {
             slots.append(.pending(Pending(source: source, events: events, rejection: rejection, health: health,
                                           effectiveVerdict: effectiveVerdict,
                                           preClassified: ScoutService.PreClassified(
-                                              result: classifiedPass, degradedReads: corpus.degradedReads))))
+                                              result: classifiedPass, degradedReads: corpus.degradedReads),
+                                          writes: note)))
         }
 
         // #4102: every source lands here, in the order it was read, with no await between them.
@@ -234,19 +252,42 @@ enum ScoutExtractIngest {
             return outcome
         }
         defer { token.end() }
+        // #4336 (A7): asked again now the store is held, because the caller's asking was formed before it
+        // was (L157), and two landings of the same bytes can both have passed it while they waited. Refused
+        // before anything is applied, as its own outcome with the first landing's time (L100, L11). A
+        // record that cannot be read refuses nothing (refusing would lose a run to a read nothing else
+        // needed) and is said as a degraded read, never read as "never landed" (L215).
+        if let identity {
+            do {
+                if let landedAt = try identity.check.landedAt(identity.contentHash, context) {
+                    outcome.alreadyLandedAt = landedAt
+                    return outcome
+                }
+            } catch {
+                outcome.degradedReads.append(.landedRuns)
+            }
+        }
         let landing = ScoutLandingStore(context: context, read: readProspectTable)
+        // #4330: the re-validation. A later run landed this source after this one read it, so this reading is
+        // the older one and is set aside whole: nothing applied (#4329: not even its note, its failure or its
+        // failure streak, which the read loop no longer writes), and the page hash not promoted, so the next
+        // scout reads the page again.
+        func setAsideIfSuperseded(_ source: WatchedSource) -> Bool {
+            guard source.lastTouchedSequence > sequence else { return false }
+            outcome.sources.append(ScoutService.SourceResult(
+                sourceId: source.sourceId, orgName: source.orgName, state: .superseded,
+                listingsURL: source.listingsURL))
+            return true
+        }
+        func landCaptured(_ writes: SourceWrites, on source: WatchedSource) {
+            source.lastTouchedSequence = sequence
+            source.applyCaptured(writes)
+            onApplyCaptured?(writes)
+        }
         func land(_ pending: Pending) {
             let source = pending.source
-            // #4330: the re-validation, first. A later run landed this source after this one read it, so
-            // this reading is the older one and is set aside whole: nothing applied, and the page hash
-            // not promoted, so the next scout reads the page again.
-            if source.lastTouchedSequence > sequence {
-                outcome.sources.append(ScoutService.SourceResult(
-                    sourceId: source.sourceId, orgName: source.orgName, state: .superseded,
-                    listingsURL: source.listingsURL))
-                return
-            }
-            source.lastTouchedSequence = sequence
+            if setAsideIfSuperseded(source) { return }
+            landCaptured(pending.writes, on: source)
             let events = pending.events
             let rejection = pending.rejection
             let health = pending.health
@@ -332,8 +373,13 @@ enum ScoutExtractIngest {
         }
         for slot in slots {
             switch slot {
-            case .settled(let settled, let source):
-                if let source, source.lastTouchedSequence < sequence { source.lastTouchedSequence = sequence }
+            case .settled(let settled, let source, let writes):
+                guard let source else {
+                    outcome.merge(settled)
+                    continue
+                }
+                if setAsideIfSuperseded(source) { continue }
+                landCaptured(writes, on: source)
                 outcome.merge(settled)
             case .pending(let pending):
                 land(pending)
@@ -369,7 +415,20 @@ enum ScoutExtractIngest {
         }
         // #4325: the reconcile's writes, and every source's bookkeeping above, saved before the landing
         // returns, through the one closing save the native sweep uses. Nothing saved them before this.
-        if !ScoutService.saveLanding(landing, into: context, save: saveClosing) { outcome.saveFailed = true }
+        // #4336 (A7): the record that these results landed rides the closing save, so it reaches disk with
+        // the landing or not at all. Only a landing nothing failed to save is recorded: a failed save leaves
+        // the results to be offered again, and a record of it would refuse them (L5). A record whose save
+        // failed is taken back out of the context, so no later save can persist it.
+        var landedRun: LandingRun?
+        if let identity, !outcome.saveFailed {
+            let run = LandingRun(runIdentity: identity.contentHash, landedAt: now)
+            context.insert(run)
+            landedRun = run
+        }
+        if !ScoutService.saveLanding(landing, into: context, save: saveClosing) {
+            outcome.saveFailed = true
+            if let landedRun { context.delete(landedRun) }
+        }
         token.end()
 
         return outcome
@@ -387,39 +446,29 @@ enum ScoutExtractIngest {
     // The shared bookkeeping for a source that failed this run, whichever way it failed (a broken verdict
     // or a run that contradicted itself, #857). The hash is NOT stamped and the unread flag stays set, so
     // the next scout reads the page again rather than skipping it forever on the strength of a bad run.
+    //
+    // #4329 (A12): reported here, written by the landing block. The writes come back captured.
     private static func fail(_ source: WatchedSource, as failure: SourceFailure, now: Date,
-                             outcome: inout ScoutService.Outcome) {
+                             outcome: inout ScoutService.Outcome) -> SourceWrites {
+        outcome.sources.append(ScoutService.SourceResult(
+            sourceId: source.sourceId, orgName: source.orgName, state: .failed(failure),
+            listingsURL: source.listingsURL))
         // #1759: through the one shared recorder, which also counts this as another run that came away
         // without reading the page. Counted rather than merely stamped, because "The next scout will try
         // it again" is a promise, and on the tenth run in a row it is one the app has broken ten times
         // while saying exactly what it said the first time.
-        source.recordFailedRead(failure, now: now)
-        source.hasUnreadChanges = true
-        outcome.sources.append(ScoutService.SourceResult(
-            sourceId: source.sourceId, orgName: source.orgName, state: .failed(failure),
-            listingsURL: source.listingsURL))
+        return SourceWrites(.readFailed, [.failedRead(failure, at: now), .unreadChanges(true)])
     }
 
     // #1027: a no_dated_content page Dan already confirmed as right-but-empty, read again at the same
-    // bytes. It is accepted, not failed: stamp the hash so the daily run sees no change and stops
-    // re-reading it, clear the unread flag, and clear any prior failing display. Deliberately does NOT
-    // touch baseline or successfulCheckCount (an empty page is not this source's real size, exactly as
-    // recordPartialCheck avoids), and does NOT stamp lastSucceededAt: nothing was ingested.
+    // bytes. It is accepted, not failed (`SourceWrites.Step.confirmedEmpty` holds what that writes). Reported
+    // here; #4329 (A12): written by the landing block, with the hash the confirmation was judged against.
     private static func recordConfirmedEmpty(on source: WatchedSource, now: Date,
-                                             outcome: inout ScoutService.Outcome) {
-        source.lastCheckedAt = now
-        source.health = .ok
-        source.lastFailure = nil
-        // #1759: this page was fetched and read cleanly, and the one verdict against it is the one Dan has
-        // already answered. So the run of runs that could not read it is over.
-        source.failedReadStreak = 0
-        source.lastContentHash = source.pendingContentHash ?? source.lastContentHash
-        source.pendingContentHash = nil
-        source.pendingPageMonths = []
-        source.hasUnreadChanges = false
+                                             outcome: inout ScoutService.Outcome) -> SourceWrites {
         outcome.sources.append(ScoutService.SourceResult(
             sourceId: source.sourceId, orgName: source.orgName, state: .confirmedEmpty,
             listingsURL: source.listingsURL))
+        return SourceWrites(.confirmedEmpty, [.confirmedEmpty(at: now, readHash: source.pendingContentHash)])
     }
 
     // The page landed. Only now may its hash be promoted, and only now does this count as a check that

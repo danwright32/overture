@@ -26,6 +26,12 @@ assert_contains "a path climbing out may not" \
 assert_contains "a test file the oracle commit already has may not be REPLACED" \
   "$(oracle_overlay_refusal "${ORACLE}" mac/OvertureTests/Phase0Corpus.swift)" "already exists"
 
+# #4374: one recording per entry point that lands shows, and one test that writes each.
+assert_equals "three synthetic recordings, one per entry point" \
+  "synthetic-abc.txt synthetic-runscout-abc.txt synthetic-leadpaste-abc.txt" \
+  "$(oracle_synthetic_recordings abc | tr '\n' ' ' | sed 's/ $//')"
+assert_equals "and one synthetic test per recording" "3" "${#ORACLE_SYNTHETIC_TESTS[@]}"
+
 SCRATCH="$(fixture_scratch_dir)"
 trap 'rm -rf "${SCRATCH}"' EXIT
 if outside_every_work_tree "${SCRATCH}/archive/not-yet"; then

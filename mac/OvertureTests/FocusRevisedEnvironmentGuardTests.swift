@@ -47,7 +47,7 @@ import Foundation
 // it does not know what anything costs. It answers one question: does this view read a focus-revised
 // environment value while its redraw can reach a declared whole-store derivation that nothing makes
 // conditional.
-@Suite("No view derives the whole store behind a focus-revised environment value (#3880)")
+@Suite("No view derives the whole store behind a focus-revised environment value (#3880)", .sharesTheRenderCounter)
 struct FocusRevisedEnvironmentGuardTests {
 
     // Written as the REASON, not as the case that bit: an environment value the window system revises
@@ -150,8 +150,116 @@ struct FocusRevisedEnvironmentGuardTests {
         #expect(Self.violates(view: environmentOnly, derivations: ["DueWork.counts"]) == nil)
     }
 
+    // #4408: the derivations a view DECLARES on its own render path, beside the ones enumerated from
+    // signatures above. `wholeStoreDerivations` only sees a function that takes a `[Prospect]`, so a
+    // sheet deriving through a store fetch (`ExcludedTownEditing.listing(in:)`, Days off's cancelled rows)
+    // was invisible to it, and both of those sheets held `\.dismiss` at view level. That pair is what
+    // made `ABannerDerivesNothingOnAnySheetTests.excludedTowns()` read one derivation in a merge run when
+    // something else in the process revised the value. A view that calls this counter has said in its own
+    // code that the call marks a derivation it pays on every evaluation, so the marker is the declaration
+    // rather than a list of names somebody has to keep (L96). What it cannot see: a view that derives and
+    // never instrumented itself, which is the half the signature enumeration exists for.
+    static let declaredRenderDerivations: Set<String> = ["QueueRenderCounter.recordSurfaceDerivation"]
+
+    @Test func aDeclaredRenderDerivationCountsAsADerivation() {
+        // The shape the Skipped towns sheet had: a computed listing that records its own derivation and
+        // fetches through the context, reached from a body that sits beside a view level dismiss read.
+        let offender = """
+            struct SomeSheet: View {
+                @Environment(\\.dismiss) private var dismiss
+                private var listing: [String] {
+                    QueueRenderCounter.recordSurfaceDerivation("someSheet")
+                    return SomeEditing.listing(in: context)
+                }
+                var body: some View {
+                    let listing = self.listing
+                    Text("\\(listing.count)")
+                }
+            }
+            """
+        let found = Self.violates(view: offender, derivations: Self.declaredRenderDerivations)
+        #expect(found?.environment == "dismiss")
+        #expect(found?.derivation == "QueueRenderCounter.recordSurfaceDerivation")
+        let fixed = offender.replacingOccurrences(of: "@Environment(\\.dismiss) private var dismiss", with: "")
+        #expect(Self.violates(view: fixed, derivations: Self.declaredRenderDerivations) == nil)
+    }
+
+    /// A file's source split into one text per TYPE it declares, with every `extension` of a type joined
+    /// to that type's own text.
+    ///
+    /// #4408: the rule is about one view holding both halves, and a file can declare several. Days off
+    /// keeps its dismiss read on a small header view declared in the same file as the sheet, on purpose:
+    /// moving it to a file of its own would take the sheet's Return pairs out of `ReturnPairScan`'s
+    /// sight. Judged as one text, that file would be accused of the very shape it was split to avoid.
+    /// Extensions are joined rather than split off because a view's helpers often live in one, and the
+    /// redraw region has to be able to follow the body into them.
+    static func typeTexts(in source: String) -> [String] {
+        var order: [String] = []
+        var texts: [String: [String]] = [:]
+        var current: String?
+        for line in source.components(separatedBy: "\n") {
+            var head = Substring(line)
+            for modifier in ["private ", "fileprivate ", "public ", "internal ", "final "] where head.hasPrefix(modifier) {
+                head = head.dropFirst(modifier.count)
+            }
+            for keyword in ["struct ", "class ", "enum ", "actor ", "extension "] where head.hasPrefix(keyword) {
+                let name = String(head.dropFirst(keyword.count).prefix { $0.isLetter || $0.isNumber || $0 == "_" })
+                if !name.isEmpty { current = name }
+            }
+            let key = current ?? ""
+            if texts[key] == nil { order.append(key) }
+            texts[key, default: []].append(line)
+        }
+        return order.map { texts[$0, default: []].joined(separator: "\n") }
+    }
+
+    @Test func aFileIsJudgedOneTypeAtATime() {
+        // Two views in one file, each holding ONE half: neither is the pair, so nothing is refused.
+        let split = """
+            struct SomeSheet: View {
+                var body: some View {
+                    let rows = DueWork.counts(prospects: allProspects, now: Date())
+                    SomeHeader()
+                }
+            }
+
+            private struct SomeHeader: View {
+                @Environment(\\.dismiss) private var dismiss
+                var body: some View { Button("Done") { dismiss() } }
+            }
+            """
+        let texts = Self.typeTexts(in: split)
+        #expect(texts.count == 2)
+        #expect(texts.allSatisfy { Self.violates(view: $0, derivations: ["DueWork.counts"]) == nil })
+
+        // The same two halves on ONE view in that file is still the pair, so the split hides nothing.
+        let joined = split.replacingOccurrences(
+            of: "struct SomeSheet: View {\n",
+            with: "struct SomeSheet: View {\n    @Environment(\\.dismiss) private var dismiss\n")
+        #expect(Self.typeTexts(in: joined).contains { Self.violates(view: $0, derivations: ["DueWork.counts"]) != nil })
+
+        // And an extension rides with its type, so a helper declared in one is still followed.
+        let extended = """
+            struct SomeSheet: View {
+                @Environment(\\.dismiss) private var dismiss
+                var body: some View {
+                    rowsText
+                }
+            }
+
+            extension SomeSheet {
+                var rowsText: some View {
+                    let rows = DueWork.counts(prospects: allProspects, now: Date())
+                    return Text("\\(rows)")
+                }
+            }
+            """
+        #expect(Self.typeTexts(in: extended).count == 1)
+        #expect(Self.violates(view: extended, derivations: ["DueWork.counts"]) != nil)
+    }
+
     @Test func noViewReadsAFocusRevisedValueWhileDerivingTheWholeStore() {
-        let derivations = Self.wholeStoreDerivations()
+        let derivations = Self.wholeStoreDerivations().union(Self.declaredRenderDerivations)
         #expect(derivations.count > 40, Comment(rawValue: """
             only \(derivations.count) whole-store derivations were enumerated from the app's own \
             declarations, so the walk did not read the app and nothing below was measured (L98)
@@ -164,8 +272,10 @@ struct FocusRevisedEnvironmentGuardTests {
             let code = SwiftSource.scannableLines(in: file.text).map(\.code).joined(separator: "\n")
             guard Self.focusRevised.contains(where: { code.contains("@Environment(\\.\($0))") }) else { continue }
             readers.append(file.name)
-            if let found = Self.violates(view: file.text, derivations: derivations) {
-                offenders.append("\(file.name) reads \\.\(found.environment) and reaches \(found.derivation)")
+            for text in Self.typeTexts(in: file.text) {
+                if let found = Self.violates(view: text, derivations: derivations) {
+                    offenders.append("\(file.name) reads \\.\(found.environment) and reaches \(found.derivation)")
+                }
             }
         }
 

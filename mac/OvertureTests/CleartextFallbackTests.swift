@@ -226,7 +226,7 @@ struct CleartextFallbackTests {
                                contentHash: "abc")
         page.wasReadInsecurely = true
 
-        _ = SourceCheck.decide(source: source, result: .success(page), depth: .watchOnly, now: Date())
+        _ = SourceCheck.decideApplying(source: source, result: .success(page), depth: .watchOnly, now: Date())
 
         #expect(source.lastFetchWasInsecure)
         #expect(source.insecureFetchNote != nil)
@@ -242,7 +242,7 @@ struct CleartextFallbackTests {
         let secure = FetchedPage(normalizedHTML: "<p>Concerts</p>", finalURL: securedConcerts,
                                  contentHash: "def")
 
-        _ = SourceCheck.decide(source: source, result: .success(secure), depth: .watchOnly, now: Date())
+        _ = SourceCheck.decideApplying(source: source, result: .success(secure), depth: .watchOnly, now: Date())
 
         #expect(source.lastFetchWasInsecure == false)
         #expect(source.insecureFetchNote == nil)

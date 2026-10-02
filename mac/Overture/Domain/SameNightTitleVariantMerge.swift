@@ -64,9 +64,20 @@ enum SameNightTitleVariantMerge {
         var titleRenames: [TitleRenameLedger.Entry] = []
     }
 
+    // #4406: oldest first, and a tie on `ingestedAt` broken by the natural key, which is unique, so the order is
+    // total. Swift does not promise a stable sort, so leaving the tie to the input's order left the cluster
+    // representative and the fallback survivor to sort internals as well as to the read.
+    static func oldestFirst(_ rows: [Prospect]) -> [Prospect] {
+        rows.sorted { $0.ingestedAt == $1.ingestedAt ? $0.naturalKey < $1.naturalKey : $0.ingestedAt < $1.ingestedAt }
+    }
+
     @discardableResult
     static func run(in context: ModelContext) -> Summary {
-        let stored = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
+        // #4406: in key order, because the oldest first sort below used to leave two rows tied on `ingestedAt`
+        // in read order, and that order picks the cluster representative and the fallback survivor. The sort
+        // now breaks the tie on the natural key itself, so this is the second of two locks rather than the only
+        // one (Swift does not promise a stable sort).
+        let stored = Prospect.inKeyOrder((try? context.fetch(FetchDescriptor<Prospect>())) ?? [])
         let watched = watchedRoomNames(in: context)
         var summary = Summary()
         // #3379: every key this pass rewrites, so a paid answer recorded against the old key can still be
@@ -91,7 +102,7 @@ enum SameNightTitleVariantMerge {
         for (_, members) in groups where members.count > 1 {
             // Oldest first, so the cluster representative and the fallback survivor are both stable and
             // do not depend on fetch order.
-            let ordered = members.sorted { $0.ingestedAt < $1.ingestedAt }
+            let ordered = oldestFirst(members)
 
             for cluster in clusters(of: ordered) {
                 guard cluster.count > 1 else { continue }

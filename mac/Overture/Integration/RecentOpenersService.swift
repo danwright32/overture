@@ -11,7 +11,9 @@ enum RecentOpenersService {
     @discardableResult
     static func export(from context: ModelContext, generatedAt: String,
                        url: URL = RecentOpenersBuilder.defaultURL) throws -> Int {
-        let all = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
+        // #4406: in key order, because two openers tied on their date keep read order through the sort, and the
+        // dedupe keeps the first of them.
+        let all = Prospect.inKeyOrder((try? context.fetch(FetchDescriptor<Prospect>())) ?? [])
         let recent = RecentOpenersBuilder.build(from: all, generatedAt: generatedAt)
         let data = try RecentOpenersBuilder.encode(recent)
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(),
