@@ -59,4 +59,40 @@ struct ScaledCorpusKeepsListingsDistinctTests {
             throw error
         }
     }
+
+    // #4372: the corpus as it stood before #4288, which the attribution probe rebuilds to reproduce 0b.6's
+    // reading. Every copy keeps its original's listing addresses, so no address is added and the fullest
+    // listing holds twice the shows. If this option silently glued anyway, the probe's historical arm would
+    // measure today's corpus under the old name and report that the old reading cannot be reproduced.
+    @Test(.enabled(if: LiveStorePresence.exists, LiveStorePresence.absenceReason))
+    func theHistoricalCorpusSharesEachListingWithItsCopies() async throws {
+        await RealStoreTestLock.shared.acquire()
+        let fm = FileManager.default
+        let dir = fm.temporaryDirectory.appendingPathComponent("scaled-urls-old-\(UUID().uuidString)", isDirectory: true)
+        do {
+            try fm.createDirectory(at: dir, withIntermediateDirectories: true)
+            guard let clone = try LiveStoreClone.makeClone(in: dir) else {
+                throw LiveStoreClone.Refusal.backupFailed("no live store on this machine")
+            }
+            let base = listings(try ModelContext(Phase0.openContainer(at: clone)).fetch(FetchDescriptor<Prospect>()))
+            #expect(base.listing > 0 && base.run > 0,
+                    "the clone holds no listing addresses, so nothing below measured anything")
+
+            let scaled = try Phase0.scaledCopy(of: clone, factor: 2, in: dir, reidentifyListings: false)
+            let got = listings(try ModelContext(Phase0.openContainer(at: scaled)).fetch(FetchDescriptor<Prospect>()))
+
+            #expect(got.listing == base.listing,
+                    "listing addresses: clone \(base.listing), shared 2x copy \(got.listing), expected \(base.listing)")
+            #expect(got.run == base.run,
+                    "run addresses: clone \(base.run), shared 2x copy \(got.run), expected \(base.run)")
+            #expect(got.largestListing == 2 * base.largestListing,
+                    "the fullest listing held \(base.largestListing) shows in the clone and \(got.largestListing) in the shared copy")
+            FileStores.remove(dir)
+            await RealStoreTestLock.shared.release()
+        } catch {
+            FileStores.remove(dir)
+            await RealStoreTestLock.shared.release()
+            throw error
+        }
+    }
 }
