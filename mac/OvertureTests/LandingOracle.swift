@@ -44,10 +44,10 @@ enum LandingOracle {
     // Every field a landing stamps from a clock 6d3453d8 cannot pin, keyed "Entity.field", with its reason.
     static let clockDerived: [String: String] = [
         "Prospect.ingestedAt":
-            "apply stamps Date() on every row it touches (ScoutService.swift:2631) and on every insert (the "
-            + "Prospect initialiser's default)",
+            "6d3453d8 stamps Date() on every row apply touches and on every insert (the Prospect initialiser's "
+            + "default); since #4331 it is the landing's now plus an apply ordinal, on a changed row only",
         "Prospect.firstSeenAt":
-            "a new row copies its ingestedAt (Prospect.swift:1136), so it is the same Date()",
+            "a new row copies its ingestedAt (Prospect.swift:1136), so it is the same Date() at 6d3453d8",
         "Prospect.mergeSurvivorUnseenAt":
             "FeedReconcile.answerAnyMergeSurvivorQuestion stamps the reconcile's now, which ingest leaves at its "
             + "Date() default (FeedReconcile.swift:261)",

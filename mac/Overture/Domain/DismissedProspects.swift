@@ -4,7 +4,8 @@ import Foundation
 // mistaken cut (#28). Pure list + restore so the logic is testable without SwiftData.
 enum DismissedProspects {
     // Only the dismissed ones, most-recently-touched first (ingestedAt as the stand-in
-    // for "when it was last acted on").
+    // for "when it was last acted on"). #4331: since then ingestedAt is when a scout last CHANGED the row,
+    // so a dismissed show the scout keeps listing unchanged no longer climbs this list on every landing.
     static func list(from all: [Prospect]) -> [Prospect] {
         all.filter { $0.status == .dismissed }
            .sorted { $0.ingestedAt > $1.ingestedAt }

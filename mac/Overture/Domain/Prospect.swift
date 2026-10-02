@@ -103,8 +103,15 @@ final class Prospect {
     // "open" value, because giving open a spelling of its own is how "still waiting to hear" and "they
     // never answered" became one record.
     var showOutcomeRaw: String? = nil
-    // "Last read", NOT "first found": ScoutService.apply rewrites this on every run, including on shows
-    // already pitched, so it walks forward for as long as a show stays on a watched calendar.
+    // "Last changed by a scout", NOT "first found" (#4331, A2). A scout landing stamps it, from the landing's
+    // own `now` plus the row's apply ordinal, on a row it inserts or CHANGES, including shows already pitched,
+    // and leaves it alone on a re-land that changed nothing. One exception keeps the older meaning, "last
+    // read", where it is still needed: a row sharing a merge reader's candidate key with another row (a
+    // duplicate one of the launch merges or the scout's re-key may resolve) is restamped on every landing that
+    // lists it, because those readers keep the row seen most recently (`IngestedAtStamp`). Before #4331 every
+    // row was "last read". Readers, and the question each asks: the merge readers and re-key above (last seen),
+    // DismissedProspects (the Archive's order, now most recently changed first), RecentOpeners (an unsent
+    // draft's place in the opener list), FirstSeenBackfill (an upper bound on the first sighting).
     var ingestedAt: Date
 
     // #16: when this show FIRST entered the store, which is the funnel's opening node and the one thing

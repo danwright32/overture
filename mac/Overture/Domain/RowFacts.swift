@@ -156,9 +156,10 @@ struct RowFacts: ProspectFacts, Equatable, Sendable {
     /// term will ever want it, not merely that none does today.
     static let notReadByQueue: [String: String] = [
         "ingestedAt": """
-            Rewritten by every scout landing that touches the row, and read only by the merge paths, the \
-            re-key target, the first seen backfill and the Prep export (#4106 fact 10). Carrying it would make \
-            a re-land that changed nothing look like a change to every row it wrote.
+            Rewritten by a scout landing that changes the row, or that lists a row sharing a merge key with \
+            another (#4331), and read only by the merge paths, the re-key target, the first seen backfill and \
+            the Prep export (#4106 fact 10). Carrying it would make a landing look like a change to every \
+            duplicate it restamps.
             """,
         "classificationConfidence": retained("#1533"),
         "confidenceReviewedByDan": retained("#1533"),

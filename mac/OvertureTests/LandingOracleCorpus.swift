@@ -300,14 +300,16 @@ enum LandingOracleCorpus {
 
     /// One whole landing on a fresh in-memory store: seed, ingest, ONE explicit save, then the container for
     /// a fresh context to read. Autosave is off (TestModelContainer), so that save is the only way in.
-    static func land(order: [String]? = nil) async throws -> ModelContainer {
+    /// `landedAt` is the landing's own `now`, the corpus's by default. The seed is always stamped `now`, so a
+    /// later `landedAt` separates what the landing stamped from what it left (#4331).
+    static func land(order: [String]? = nil, landedAt: Date = now) async throws -> ModelContainer {
         // `results(order:)` drops an id it does not know, so the order is checked here, before it can land less.
         _ = try checkedOrder(order)
         let container = try TestModelContainer.inMemory(AppSchema.models)
         let context = container.mainContext
         try seed(into: context)
         await ScoutExtractIngest.ingest(results(order: order), clients: [], history: [], blocked: .empty,
-                                        today: today, now: now, into: context)
+                                        today: today, now: landedAt, into: context)
         try context.save()
         return container
     }
@@ -353,11 +355,11 @@ enum LandingOracleCorpus {
         return ids
     }
 
-    static func land(_ path: Path, order: [String]? = nil) async throws -> ModelContainer {
+    static func land(_ path: Path, order: [String]? = nil, landedAt: Date = now) async throws -> ModelContainer {
         switch path {
-        case .ingest: return try await land(order: order)
-        case .runScout: return try await landThroughRunScout(order: order)
-        case .leadPaste: return try await landThroughLeadPaste(order: order)
+        case .ingest: return try await land(order: order, landedAt: landedAt)
+        case .runScout: return try await landThroughRunScout(order: order, landedAt: landedAt)
+        case .leadPaste: return try await landThroughLeadPaste(order: order, landedAt: landedAt)
         }
     }
 
@@ -393,7 +395,8 @@ enum LandingOracleCorpus {
     /// its events, read at `.watchOnly` (the free daily run, which reads nothing it would pay for), then the
     /// one explicit save and the container, exactly as `land` does for the ingest.
     /// `failing` names corpus sources whose read fails, which only the test of the landed check passes.
-    static func landThroughRunScout(order: [String]? = nil, failing: Set<String> = []) async throws -> ModelContainer {
+    static func landThroughRunScout(order: [String]? = nil, failing: Set<String> = [],
+                                    landedAt: Date = now) async throws -> ModelContainer {
         if let refusal = handoffInputsRefusal() { throw Unmeasured(description: refusal) }
         let ids = try checkedOrder(order)
         let container = try TestModelContainer.inMemory(AppSchema.models)
@@ -412,7 +415,7 @@ enum LandingOracleCorpus {
             },
             fetch: { url, _, _ in throw Unmeasured(description: "runScout fetched \(url), and the corpus has no page") },
             pin: { _, id in URL(fileURLWithPath: "/dev/null/oracle-\(id).html") }, launch: { _ in },
-            now: now, defaults: ScratchDefaults.make("LandingOracleCorpus.runScout"))
+            now: landedAt, defaults: ScratchDefaults.make("LandingOracleCorpus.runScout"))
         // The sweep meets its native sources in the order the watchlist fetch returns them, which nothing
         // sorts, and the order decides the Fenwick triple. A run that read them in any other order than the
         // one asked for landed a different case, so it is refused rather than compared.
@@ -440,7 +443,7 @@ enum LandingOracleCorpus {
 
     /// The corpus landed through the lead paste: each source's listings page pasted as a lead, in order, its
     /// read answered at once with that source's events, then the one explicit save and the container.
-    static func landThroughLeadPaste(order: [String]? = nil) async throws -> ModelContainer {
+    static func landThroughLeadPaste(order: [String]? = nil, landedAt: Date = now) async throws -> ModelContainer {
         if let refusal = handoffInputsRefusal() { throw Unmeasured(description: refusal) }
         let ids = try checkedOrder(order)
         let container = try TestModelContainer.inMemory(AppSchema.models)
@@ -467,7 +470,7 @@ enum LandingOracleCorpus {
                 readResults: { $0 == leadId ? answer : nil },
                 isRunAlive: { false })
             model.urlText = s.listingsURL
-            await model.start(into: context, now: now, today: today, pollEvery: 0, giveUpAfter: 0,
+            await model.start(into: context, now: landedAt, today: today, pollEvery: 0, giveUpAfter: 0,
                               sleep: { _ in })
             // A paste that ended anywhere but `.added` landed nothing, so the recording would be of a
             // smaller corpus than it claims (L159).

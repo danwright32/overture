@@ -98,6 +98,9 @@ enum ScoutExtractIngest {
                        // #4334: called with the run's sequence when the entry flush refuses the landing, where
                        // the caller keeps a copy of the results to land once the edits are saved (L371, L665).
                        onRefused: (Int) -> Void = { _ in },
+                       // #4331 (A2): how the landing stamps `ingestedAt`. Only the merge survivor probe passes
+                       // anything but the rule, to measure the rule against the one it replaced.
+                       stampRule: IngestedAtStamp.Rule = .whenChanged,
                        into context: ModelContext) async -> ScoutService.Outcome {
         var outcome = ScoutService.Outcome(found: 0, inserted: 0, updated: 0, skipped: 0)
         let sequence = givenSequence ?? landings.mintSequence(
@@ -338,7 +341,7 @@ enum ScoutExtractIngest {
             return outcome
         }
         let landing = ScoutLandingStore(context: context, read: readProspectTable, saveSource: saveSource,
-                                        classify: classifySaveFailure)
+                                        classify: classifySaveFailure, stampRule: stampRule)
         // #4330: the re-validation. A later run landed this source after this one read it, so this reading is
         // the older one and is set aside whole: nothing applied (#4329: not even its note, its failure or its
         // failure streak, which the read loop no longer writes), and the page hash not promoted, so the next
@@ -386,7 +389,8 @@ enum ScoutExtractIngest {
                                              // struck for a row that is on the page right now.
                                              structuralGapURLs: rejection.structuralGapURLs,
                                              structuralGapDates: rejection.structuralGapDates),
-                today: today, sourceIds: [source.sourceId],
+                // #4331 (A2): this ingest's own `now`, which every row the landing changes is stamped from.
+                today: today, now: now, sourceIds: [source.sourceId],
                 preClassified: pending.preClassified,
                 landing: landing,
                 into: context)
