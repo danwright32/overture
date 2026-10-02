@@ -97,8 +97,11 @@ Inquiry.sourceRaw
 Inquiry.threadIdDegraded
 Inquiry.threadingDegraded
 Inquiry.venue
+LandingRun.entryPointRaw
 LandingRun.landedAt
 LandingRun.runIdentity
+LandingRun.sequence
+LandingRun.startedAt
 OrgReachabilityAnswer.foundEmailsRaw
 OrgReachabilityAnswer.orgKey
 OrgReachabilityAnswer.presenterName
@@ -385,6 +388,8 @@ WatchedSource.lastDegradedCount
 WatchedSource.lastDroppedShowLabelsRaw
 WatchedSource.lastErrorRaw
 WatchedSource.lastFetchWasInsecure
+WatchedSource.lastLandedRunID
+WatchedSource.lastLandedSequence
 WatchedSource.lastManualReadAt
 WatchedSource.lastNonEmptyAt
 WatchedSource.lastObservedContentHash

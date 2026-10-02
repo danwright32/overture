@@ -292,16 +292,14 @@ enum ScoutService {
             switch landingStop {
             case .recentEditsUnsaved(let rows)?: parts.append(ScoutWarningCopy.recentEditsUnsaved(rows))
             case .notReverted(let source, _)?: parts.append(ScoutWarningCopy.notReverted(source))
+            case .journalNotWritten(let why)?: parts.append(ScoutWarningCopy.journalNotWritten(why))
             case .storeRefusedASave?, nil: break
             }
             let unreached = notAttemptedSources.count
-            if unreached > 0, landingStop != nil, !isRecentEditsRefusal { parts.append(ScoutWarningCopy.notAttempted(unreached)) }
+            if unreached > 0, let landingStop, !landingStop.refusedBeforeAnything {
+                parts.append(ScoutWarningCopy.notAttempted(unreached))
+            }
             return parts.isEmpty ? nil : parts.joined(separator: " ")
-        }
-
-        private var isRecentEditsRefusal: Bool {
-            if case .recentEditsUnsaved? = landingStop { return true }
-            return false
         }
 
         // #888 part B: what THIS source swept, carried home so the caller can reconcile every source it
@@ -607,7 +605,11 @@ enum ScoutService {
                          // refusal fails every save the container makes).
                          saveSource: @escaping (ModelContext) throws -> Void = { try $0.save() },
                          saveEntry: (ModelContext) throws -> Void = { try $0.save() },
-                         classifySaveFailure: @escaping (Error) -> LandingSaveFailure.Scope = LandingSaveFailure.classify)
+                         classifySaveFailure: @escaping (Error) -> LandingSaveFailure.Scope = LandingSaveFailure.classify,
+                         // #4335 (A6): where this run keeps its landing journal (`LandingJournal`). RootView passes
+                         // `.live`, and `EveryProductLandingKeepsAJournalTests` fails when a product caller does
+                         // not. nil keeps none, for a test whose subject is not the journal.
+                         journals: LandingJournals? = nil)
                          async throws -> Outcome {
         let loaded = DownbeatBridge.loadWithHealth(now: now)
         // History the matcher sees = any one-time legacy import + Overture's own activity,
@@ -627,8 +629,14 @@ enum ScoutService {
         // #4330 (A13): this run's landing sequence, minted as its read phase starts, which writes nothing to
         // the store and so needs no token. Every source the landing block below lands or settles is
         // stamped with it, and a source a LATER run has already stamped higher is set aside (see there).
+        // #4335: and above every landing record and every journal NAME, pending or set aside as unreadable, so
+        // the number of a landing a crash interrupted before its first save is never handed out again.
         let sequence = landings.mintSequence(
-            above: max(sequenceFloor(), watchlist.map(\.lastTouchedSequence).max() ?? 0))
+            above: max(sequenceFloor(), watchlist.map(\.lastTouchedSequence).max() ?? 0,
+                       (try? LandingRun.highestSequence(in: context)) ?? 0, journals?.highestSequence ?? 0))
+        // #4335 (A6): this run's identity (L186), recorded in its journal before any source applies and on every
+        // source it lands. A sweep has no results file to hash, so it is an id of its own, minted once here.
+        let sweepID = "sweep-" + UUID().uuidString
 
         // The real paginating fetch, built PER SOURCE, unless a test injected its own. A known client's own
         // calendar (or a source Dan tagged as a client's) is read a full year forward to catch a returning
@@ -841,8 +849,36 @@ enum ScoutService {
             outcome.clientListWarning = DownbeatBridge.warningText(for: loaded.health)
             return outcome
         }
+        // #4335 (A6): the landing's record of itself, written before anything is applied, after the last await
+        // of the read phase. A journal that cannot be written refuses the landing by name (L258); every page
+        // keeps its unread state for the next scout, as the entry flush's refusal leaves it.
+        let journal = LandingJournal(
+            runIdentity: sweepID, sequence: sequence, entryPoint: .runScoutLanding,
+            sources: reports.map { slot -> LandingJournal.Source in
+                switch slot {
+                case .checked(_, let source, _): return .init(sourceId: source.sourceId, pageHash: nil)
+                case .read(let i): return .init(sourceId: reads[i].sourceId, pageHash: reads[i].markReadAs)
+                }
+            },
+            now: now)
+        if let journals {
+            do {
+                try journals.start(journal)
+            } catch {
+                outcome.landingStop = .journalNotWritten(why: HandoffDecodeFailure.describe(error))
+                for slot in reports { reportNotAttempted(slot) }
+                outcome.clientListWarning = DownbeatBridge.warningText(for: loaded.health)
+                return outcome
+            }
+        }
         let landing = ScoutLandingStore(context: context, read: readProspectTable, saveSource: saveSource,
                                         classify: classifySaveFailure)
+        // The landing record, inserted at the start of the synchronous landing block (the 2026-09-29 L55
+        // decision) and carried by its first save; a settled row to the revert, so a source whose save fails
+        // is put back without taking it.
+        let run = LandingRun.begin(runIdentity: sweepID, sequence: sequence, entryPoint: .runScoutLanding,
+                                   startedAt: now, in: context)
+        landing.noteSettled(run)
         for slot in reports {
             // #4334: a landing a failed save stopped lands nothing after it (decision 3).
             if outcome.landingStop != nil {
@@ -869,7 +905,14 @@ enum ScoutService {
                 if let source = native.source {
                     landCaptured(native.writes, on: source)
                     // A read that failed lands nothing, so its writes are settled ones, like a checked slot's.
-                    if case .failed = native.read { landing.noteSettled(source) }
+                    switch native.read {
+                    case .failed: landing.noteSettled(source)
+                    case .listed:
+                        // #4335: which run landed this source, in the same save as its shows, so the store says
+                        // which sources an interrupted landing finished. A failed save puts these back with them.
+                        source.lastLandedRunID = sweepID
+                        source.lastLandedSequence = sequence
+                    }
                 }
                 let landed = landNative(native, clients: loaded.clients, history: history, blocked: blocked,
                                         now: now, landing: landing, into: context)
@@ -909,6 +952,10 @@ enum ScoutService {
         // source could NOT be put back makes no further save at all, so nothing it could not restore is saved.
         let stop = outcome.landingStop
         let notReverted: Bool = { if case .notReverted? = stop { return true }; return false }()
+        // #4335: the landing record is stamped landed in save one, when every source's save went through; a
+        // failed save one puts the stamp back with everything else it carried.
+        let landedEverySource = stop == nil && !outcome.saveFailed
+        if landedEverySource { run.landedAt = now }
         if notReverted || !saveLanding(landing, into: context, save: saveClosing) || stop != nil {
             outcome.saveFailed = true
             let neverHandedOver = Set(toRead.map { $0.source.sourceId })
@@ -1021,6 +1068,9 @@ enum ScoutService {
                 outcome.saveFailed = true
             }
         }
+        // #4335: the run's journal is spent only once the tail's writes are in the store too, so a run stopped
+        // in the tail keeps it for the recovery, which then finds every source landed and only the tail left.
+        if landedEverySource && !outcome.saveFailed { journals?.retire(journal) }
         tailToken.end()
         // Record that a scout completed, so the masthead can show freshness (#35).
         recordScout(at: Date(), in: defaults)
