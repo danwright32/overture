@@ -108,7 +108,7 @@ struct TheAppReportsItsOwnFreezesTests {
 
     // #3851: a reader that answers the LIVE log and reports NO ARCHIVE beside it.
     //
-    // These fixtures used to pass `sources: liveOnly(read)`, a double that ignores the URL it is given. That
+    // These fixtures used to pass `read: liveOnly(read)`, a double that ignores the URL it is given. That
     // was harmless while the reader opened one file and became wrong the moment it opened two: the same
     // records answered for both, so every freeze was counted twice. A double that ignores its argument
     // describes no file in particular, and it stops being a double at all when the thing under test starts
