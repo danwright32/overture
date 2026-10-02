@@ -423,7 +423,58 @@ final class ScoutLandingRecordTests {
 
     @Test func aJournalOfAVersionThisBuildDoesNotKnowIsRefusedNotReadAsTheCurrentOne() {
         let future = Data("{\"version\":99,\"runIdentity\":\"r\",\"sequence\":1,\"entryPoint\":\"x\",\"sources\":[],\"now\":1}".utf8)
-        #expect(throws: CocoaError.self) { try LandingJournals.decode(future) }
+        #expect(throws: LandingJournals.UnknownVersion.self) { try LandingJournals.decode(future) }
+    }
+
+    // L255: a journal from a NEWER build is not a corrupt one. It is reported and left where it is, so the
+    // build that reads it can still recover it, rather than renamed out of every later recovery.
+    @Test func aJournalFromANewerBuildIsReportedAndLeftInPlace() throws {
+        let failures = HandoffReadFailures()
+        let j = try journals("file-newer", failures: failures)
+        try FileManager.default.createDirectory(at: j.directory, withIntermediateDirectories: true)
+        let newer = j.directory.appendingPathComponent(LandingJournals.fileName(sequence: 9, runIdentity: "next"))
+        try Data("{\"version\":2,\"runIdentity\":\"next\"}".utf8).write(to: newer)
+
+        let listed = try j.list()
+
+        guard case .leftInPlace(let path, let sequence, _)? = listed.first, listed.count == 1 else {
+            Issue.record(Comment(rawValue: "a newer build's journal was not left in place: \(listed)"))
+            return
+        }
+        #expect(path == newer.path && sequence == 9)
+        #expect(FileManager.default.fileExists(atPath: newer.path), "a newer build's journal was renamed away")
+        #expect(failures.current().contains { $0.reason.contains("version 2 is not one this build reads") },
+                Comment(rawValue: "\(failures.current())"))
+        #expect(j.highestSequence == 9)
+    }
+
+    // A journal the disk will not hand over right now (here, no read permission) is not corrupt either: it
+    // is reported and left in place for the next listing, never renamed away.
+    @Test func aJournalThatCannotBeReadFromDiskIsReportedAndLeftInPlace() throws {
+        let failures = HandoffReadFailures()
+        let j = try journals("file-unreadable", failures: failures)
+        let journal = LandingJournal(runIdentity: "locked", sequence: 4, entryPoint: .scoutExtractIngest,
+                                     sources: [], now: now)
+        let url = try j.start(journal)
+        try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: url.path)
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: url.path) }
+
+        let listed = try j.list()
+
+        guard case .leftInPlace(let path, let sequence, _)? = listed.first, listed.count == 1 else {
+            Issue.record(Comment(rawValue: "a journal that could not be read from disk was not left in place: \(listed)"))
+            return
+        }
+        #expect(path == url.path && sequence == 4)
+        #expect(FileManager.default.fileExists(atPath: url.path), "an unreadable journal was renamed away")
+        #expect(failures.current().contains { $0.reason.contains("could not read the landing record at \(url.path)") },
+                Comment(rawValue: "\(failures.current())"))
+    }
+
+    // A sequence past 32 bits keeps its whole value in the name, so the name floor never reads it low.
+    @Test func aSequencePastThirtyTwoBitsSurvivesTheName() {
+        let big = 5_000_000_123
+        #expect(LandingJournals.sequence(inName: LandingJournals.fileName(sequence: big, runIdentity: "r")) == big)
     }
 
     // The original `now` survives the file exactly, which a whole-second date format would not.

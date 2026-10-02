@@ -81,7 +81,7 @@ struct LandingJournals: Sendable {
         let safe = String(runIdentity.unicodeScalars.map {
             CharacterSet.alphanumerics.contains($0) || $0 == "-" ? Character($0) : "_"
         })
-        return String(format: "%010d", sequence) + "-" + safe + journalSuffix
+        return String(format: "%010ld", sequence) + "-" + safe + journalSuffix
     }
 
     // The sequence a journal's name carries, whether it is pending or quarantined. nil for a name that is
@@ -163,10 +163,21 @@ struct LandingJournals: Sendable {
         // Renamed to `<name>.unreadable` (or already was), never treated as absent (L215) and never allowed
         // to block another landing (L371). `sequence` is read from its name.
         case quarantined(path: String, sequence: Int?, why: String)
+        // A journal this build cannot read but which is not corrupt: written by a NEWER build (a version this
+        // one does not know), or not readable right now (an I/O error such as permissions). Reported by path
+        // and LEFT IN PLACE, so the build that can read it, or the next listing, still finds it (L255).
+        case leftInPlace(path: String, sequence: Int?, why: String)
     }
 
-    // Every journal, in landing order. A journal that cannot be read is QUARANTINED here, renamed so its
-    // sequence stays readable from the name, and reported by path. Reading this is the recovery's first step
+    // A version this build does not read: a newer build's journal, not a damaged one.
+    struct UnknownVersion: Error, CustomStringConvertible {
+        let version: Int
+        var description: String { "landing record version \(version) is not one this build reads" }
+    }
+
+    // Every journal, in landing order. A journal whose CONTENT is corrupt is QUARANTINED here, renamed so its
+    // sequence stays readable from the name, and reported by path; one from a newer build, or one that could
+    // not be read from disk, is reported and left where it is. Reading this is the recovery's first step
     // (#4335); a quarantined journal is what it offers to try again or discard.
     func list() throws -> [Listed] {
         let fm = FileManager.default
@@ -181,10 +192,21 @@ struct LandingJournals: Sendable {
                 return .quarantined(path: url.path, sequence: Self.sequence(inName: name),
                                     why: "it was set aside as unreadable earlier")
             }
+            let data: Data
             do {
-                let journal = try Self.decode(Data(contentsOf: url))
+                data = try Data(contentsOf: url)
+            } catch {
+                let why = HandoffDecodeFailure.describe(error)
+                readFailures.record(file: label, reason: "could not read the landing record at \(url.path): \(why)")
+                return .leftInPlace(path: url.path, sequence: Self.sequence(inName: name), why: why)
+            }
+            do {
+                let journal = try Self.decode(data)
                 readFailures.clear(file: label)
                 return .pending(journal, url: url)
+            } catch let newer as UnknownVersion {
+                readFailures.record(file: label, reason: "could not read the landing record at \(url.path): \(newer)")
+                return .leftInPlace(path: url.path, sequence: Self.sequence(inName: name), why: newer.description)
             } catch {
                 let why = HandoffDecodeFailure.describe(error)
                 let quarantined = url.appendingPathExtension(String(Self.quarantineSuffix.dropFirst()))
@@ -208,8 +230,7 @@ struct LandingJournals: Sendable {
         case 1:
             return try decoder.decode(LandingJournal.self, from: data)
         default:
-            throw CocoaError(.fileReadCorruptFile, userInfo: [
-                NSLocalizedDescriptionKey: "landing record version \(version) is not one this build reads"])
+            throw UnknownVersion(version: version)
         }
     }
 
