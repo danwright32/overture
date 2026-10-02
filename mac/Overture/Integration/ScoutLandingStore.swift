@@ -59,6 +59,9 @@ import SwiftData
 final class ScoutLandingStore {
     // How the rows are read. The default is the store; a test injects one that counts, or that fails.
     typealias Read = (ModelContext) throws -> [Prospect]
+    // #4332 (A3): the same read, safe to call off the main actor, which is how both scout entry points take
+    // it: the brand corpus calls it on a background context, the working set on the main one.
+    typealias SendableRead = @Sendable (ModelContext) throws -> [Prospect]
     typealias ReadKey = (String, ModelContext) throws -> Prospect?
 
     // `.everyRead` answers each question with a fresh fetch and a fresh fold, which is exactly what the

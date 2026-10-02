@@ -137,6 +137,11 @@ enum ScoutService {
         // #4336 (A7): the record of which calendar results already landed. Its own case, because a
         // failure here means results may land twice, which no other read's sentence says.
         case landedRuns
+        // #4332 (A3): Dan's producer corrections, the second of the two reads the brand corpus is joined from.
+        // Its own case rather than folding into `venueBrandCorpus`, because a corpus missing the corrections
+        // undoes what Dan said rather than judging against fewer rooms, and the sentence has to say which
+        // (L530, L11).
+        case producerOverrides
 
         // What Dan reads. Named for the thing rather than the symbol, because the sentence has to send
         // him somewhere and "venueBrands" sends him nowhere.
@@ -148,6 +153,7 @@ enum ScoutService {
             case .venueBrandCorpus: return "the venue names it matches against"
             case .productionTokenCorpus: return "the production ids it joins a run by"
             case .landedRuns: return "the record of which calendar results already landed"
+            case .producerOverrides: return "your producer and venue house corrections"
             }
         }
     }
@@ -175,7 +181,12 @@ enum ScoutService {
     // #4275: the ONE whole show table read in this file and in `ScoutExtractIngest`. Every read of the
     // table a scout makes goes through this, or through a caller's injected replacement for it, so a test
     // can count them (`ScoutLandingReadsOnceTests`), and a scan refuses any other spelling of it.
-    static let readProspectTable: ScoutLandingStore.Read = { try $0.fetch(FetchDescriptor<Prospect>()) }
+    // #4332: Sendable, because the brand corpus calls it on a background context, off the main actor.
+    nonisolated static let readProspectTable: ScoutLandingStore.SendableRead = { try $0.fetch(FetchDescriptor<Prospect>()) }
+
+    // #4332 (A3): Dan's producer corrections, read the same way: injected, so a test can make it fail.
+    typealias OverrideRead = @Sendable (ModelContext) throws -> ProducerOverrides
+    nonisolated static let readProducerOverrides: ScoutService.OverrideRead = { try ProducerOverrideEditing.readOverrides(in: $0) }
 
     static func required<T>(_ read: StoreRead, _ fetch: () throws -> [T]) throws -> [T] {
         do { return try fetch() } catch { throw StoreReadFailure(read: read, underlying: error) }
@@ -187,8 +198,8 @@ enum ScoutService {
     // It answers nil for unreadable, never an empty array, which is the whole difference from
     // `(try? fetch) ?? []`: the caller is made to say what it met, and the read names itself on the run
     // so the outcome can report what it judged against less of.
-    static func readOrRecord<T>(_ read: StoreRead, into degraded: inout [StoreRead],
-                                _ fetch: () throws -> [T]) -> [T]? {
+    nonisolated static func readOrRecord<T>(_ read: StoreRead, into degraded: inout [StoreRead],
+                                            _ fetch: () throws -> [T]) -> [T]? {
         do { return try fetch() } catch { degraded.append(read); return nil }
     }
 
@@ -567,7 +578,10 @@ enum ScoutService {
                          // #4275: how the whole show table is read. Every such read in this run goes through
                          // it (the history, the brand corpus, and the landing's working set), so a test can
                          // count them; nothing else in this file fetches the table.
-                         readProspectTable: @escaping ScoutLandingStore.Read = ScoutService.readProspectTable,
+                         // #4332 (A3): Sendable, because the brand corpus calls it off the main actor.
+                         readProspectTable: @escaping ScoutLandingStore.SendableRead = ScoutService.readProspectTable,
+                         // #4332: Dan's producer corrections, the corpus's other read, injected likewise.
+                         readProducerOverrides: @escaping ScoutService.OverrideRead = ScoutService.readProducerOverrides,
                          // #4330 (A13): the one queue every landing waits its turn in. The sweep runs WITHOUT
                          // it; only the landing block and the tail take a token. Injected so a test can hold
                          // the store across a suspension without making every other test's landing wait.
@@ -655,10 +669,45 @@ enum ScoutService {
         var reads: [NativeRead] = []
         var reports: [ReportSlot] = []
         // Read at the first free source rather than per source, and not at all on a run that has none.
-        var corpusRead: (brands: ProducerGate.VenueBrands, degradedReads: [StoreRead])?
-        func corpus() -> (brands: ProducerGate.VenueBrands, degradedReads: [StoreRead]) {
+        //
+        // #4334 (A5): a slot a stopped landing never reached, reported as such so it is not silence.
+        var notAttempted: Set<String> = []
+        func reportNotAttempted(_ slot: ReportSlot) {
+            switch slot {
+            case .checked(_, let source, _):
+                notAttempted.insert(source.sourceId)
+                outcome.sources.append(SourceResult(sourceId: source.sourceId, orgName: source.orgName,
+                                                    state: .notAttempted, listingsURL: source.listingsURL))
+            case .read(let i):
+                let native = reads[i]
+                notAttempted.insert(native.sourceId)
+                outcome.sources.append(SourceResult(sourceId: native.sourceId, orgName: native.orgName,
+                                                    state: .notAttempted, listingsURL: native.source?.listingsURL))
+            }
+        }
+        // #4332 (A3): read OFF the main actor, through a background context, which reads only what is SAVED. So
+        // the entry flush (`flushBeforeLanding`, A5's, the one implementation) runs first, here as well as under
+        // the token below: this one so the background read sees what Dan sees, that one so no source applies
+        // over an edit made while the sweep was reading. nil means the flush could not save, so the run is
+        // refused by name before anything is read or applied: every source is reported not attempted, and
+        // since the read phase writes nothing (A12), nothing needs undoing and the next scout reads them again.
+        var corpusRead: CorpusRead?
+        func corpus() async -> CorpusRead? {
             if let corpusRead { return corpusRead }
-            let read = venueBrandCorpus(in: context, read: readProspectTable)
+            if let refused = flushBeforeLanding(context, save: saveEntry) {
+                outcome.landingStop = refused
+                for slot in reports { reportNotAttempted(slot) }
+                for source in nativeSources.compactMap({ $0 }) + plan.fetch
+                where !notAttempted.contains(source.sourceId) {
+                    notAttempted.insert(source.sourceId)
+                    outcome.sources.append(SourceResult(sourceId: source.sourceId, orgName: source.orgName,
+                                                        state: .notAttempted, listingsURL: source.listingsURL))
+                }
+                outcome.clientListWarning = DownbeatBridge.warningText(for: loaded.health)
+                return nil
+            }
+            let read = await venueBrandCorpusOffMain(container: context.container, read: readProspectTable,
+                                                     readOverrides: readProducerOverrides)
             corpusRead = read
             return read
         }
@@ -666,7 +715,7 @@ enum ScoutService {
             // #1237: each native source reads through its own extractor (OPERA/VenueTix via the registry),
             // falling back to the injected one for Carnegie and any row the registry does not own.
             let resolved = extractorRegistry(source) ?? extractor
-            let brands = corpus()
+            guard let brands = await corpus() else { return outcome }
             reports.append(.read(reads.count))
             reads.append(await readNative(source, extractor: resolved, clients: loaded.clients,
                                           history: history, corpus: brands, now: now))
@@ -711,7 +760,7 @@ enum ScoutService {
                 if let feed = page.ticketingFeedURL, page.followedTicketLinkFrom != nil {
                     inline.append(.ticketingFeed(feed))
                 }
-                let brands = corpus()
+                guard let brands = await corpus() else { return outcome }
                 reports.append(.read(reads.count))
                 reads.append(await readNative(source, extractor: inlineExtractor, clients: loaded.clients,
                                               history: history, corpus: brands, now: now,
@@ -779,21 +828,6 @@ enum ScoutService {
             for source in sources {
                 outcome.sources.append(SourceResult(sourceId: source.sourceId, orgName: source.orgName,
                                                     state: .deferred, listingsURL: source.listingsURL))
-            }
-        }
-        // #4334 (A5): a slot a stopped landing never reached, reported as such so it is not silence.
-        var notAttempted: Set<String> = []
-        func reportNotAttempted(_ slot: ReportSlot) {
-            switch slot {
-            case .checked(_, let source, _):
-                notAttempted.insert(source.sourceId)
-                outcome.sources.append(SourceResult(sourceId: source.sourceId, orgName: source.orgName,
-                                                    state: .notAttempted, listingsURL: source.listingsURL))
-            case .read(let i):
-                let native = reads[i]
-                notAttempted.insert(native.sourceId)
-                outcome.sources.append(SourceResult(sourceId: native.sourceId, orgName: native.orgName,
-                                                    state: .notAttempted, listingsURL: native.source?.listingsURL))
             }
         }
         // #4334 (A5): the ENTRY FLUSH, the first thing done holding the store. A failed source's save is put
@@ -1614,16 +1648,52 @@ enum ScoutService {
     // #3071: a corpus built from an invented empty is a THINNER brand list, so a hall's own brand can
     // raise a fuzzy match it should not. The run still proceeds, because the answer is degraded rather
     // than wrong, but the failed read travels with it.
+    typealias CorpusRead = (brands: ProducerGate.VenueBrands, degradedReads: [StoreRead])
+
+    // On the context the caller holds, on the caller's actor: what `apply` reads when it classifies for itself
+    // (the lead paste, until A11 moves it, and every test that lands a batch directly).
     static func venueBrandCorpus(in context: ModelContext,
-                                 read: ScoutLandingStore.Read = ScoutService.readProspectTable)
-        -> (brands: ProducerGate.VenueBrands, degradedReads: [StoreRead]) {
+                                 read: ScoutLandingStore.Read = ScoutService.readProspectTable) -> CorpusRead {
+        buildBrandCorpus(shows: { try read(context) },
+                         overrides: { try ProducerOverrideEditing.readOverrides(in: context) })
+    }
+
+    // #4332 (A3): the same corpus, read through a context of its own, OFF the main actor. Built from Sendable
+    // values only (`ProducerGate.VenueBrands`), and the context never saves, so nothing it fetched crosses
+    // back. A background context reads what is SAVED, which is why every entry point calls this only after the
+    // entry flush (`flushBeforeLanding`) has saved whatever was pending.
+    //
+    // `Task.detached` rather than relying on a nonisolated async function leaving the caller's actor: a
+    // language mode in which such a function inherits its caller's actor would put the read straight back on
+    // the main thread while reading as though it had moved (the reason `ScoutClassify.offTheCallersActor`
+    // gives).
+    nonisolated static func venueBrandCorpusOffMain(container: ModelContainer,
+                                                    read: @escaping ScoutLandingStore.SendableRead,
+                                                    readOverrides: @escaping ScoutService.OverrideRead) async -> CorpusRead {
+        await Task.detached(priority: .userInitiated) {
+            let context = ModelContext(container)
+            return buildBrandCorpus(shows: { try read(context) }, overrides: { try readOverrides(context) })
+        }.value
+    }
+
+    // ONE implementation of the corpus, whichever context it is read through (L263). Both joined reads are
+    // gated (L530, L215): a failure is recorded under its own name, and the corpus is built from what could be
+    // read, so the landing proceeds degraded rather than wrong.
+    nonisolated static func buildBrandCorpus(shows: () throws -> [Prospect],
+                                             overrides: () throws -> ProducerOverrides) -> CorpusRead {
         var degraded: [StoreRead] = []
-        let brandShows = readOrRecord(.venueBrandCorpus, into: &degraded,
-                                      { try read(context) }) ?? []
-        let brands = ProducerGate.VenueBrands(
-            shows: brandShows.map { ProducerGate.Show(presenter: $0.presenter, venue: $0.venue) },
-            overrides: ProducerOverrideEditing.overrides(in: context))
-        return (brands, degraded)
+        let brandShows = readOrRecord(.venueBrandCorpus, into: &degraded, shows) ?? []
+        let corrections: ProducerOverrides
+        do { corrections = try overrides() } catch {
+            degraded.append(.producerOverrides)
+            corrections = .none
+        }
+        return (ProducerGate.VenueBrands(shows: brandShows.map(brandShow), overrides: corrections), degraded)
+    }
+
+    // The corpus's projection of a stored show: the only fields of it the brand judgement reads.
+    nonisolated static func brandShow(_ show: Prospect) -> ProducerGate.Show {
+        ProducerGate.Show(presenter: show.presenter, venue: show.venue)
     }
 
     @discardableResult

@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1684 sentences**.
+Every sentence Overture can say to Dan: **1699 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -14,7 +14,7 @@ What is not, and why:
   sentences under tokens nobody reads.
 - **Nothing, if it is written as two literals joined with `+`.** Those ARE joined here, into the
   one sentence the running app says (#3155). What is still only part of what Dan reads is a
-  sentence carrying a VALUE: 627 of the 1684 below hold a
+  sentence carrying a VALUE: 628 of the 1699 below hold a
   `\(...)` where a number or a name goes, so what is printed is the template. They are counted
   here rather than listed again, because the hole is visible in the line itself; what was missing
   was any statement of how much of this document is templates.
@@ -427,6 +427,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/PreviewBackground.swift`
 "1px solid rgba(255,255,255,0.18)"
     `Domain/PreviewBackground.swift`
+"A Debug only fingerprint of the caller's own state, recorded beside a derivation and read by \\nnothing in the pass."
+    `App/QueueContextSignals.swift`
 "A Gmail connection is already in progress. Finish it in the browser."
     `Integration/GmailAuthManager.swift`
 "A Prep run is already in progress. \(org) is queued to re-prep on the next run"
@@ -467,6 +469,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Integration/BounceService.swift`
 "A nudge will arrive as a new email"
     `Domain/InquiryCopy.swift`
+"A prebuilt copy of a value the pass derives from its own store inputs. The engine owns that \\ntable and patches it (plan v7 T4); it is never an input in its own right."
+    `App/QueueContextSignals.swift`
 "A previous run was still reading pages, so the pages this run found were not handed over. Nothing was lost: press Run scout again once the reading finishes and they will be read."
     `Integration/ScoutService.swift`
 "A reachability check couldn't find an email for this show. You can still keep it and add a contact by hand."
@@ -1900,6 +1904,14 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "Reached out"
     `App/ActionFeedback.swift`
     `Domain/AgentRoster.swift`
+"Reaches the queue only through `Prospect.conflictKey` and `conflictOpen`, which \\n`ConflictSweep.reapplyAll` writes on every day off edit, so the row change carries it in."
+    `Domain/AppSchemaInputClass.swift`
+"Reaches the queue only through `Prospect.location`, which `LocationBackfill` writes onto the \\nshows played in the answered room in the same call that records the answer."
+    `Domain/AppSchemaInputClass.swift`
+"Reaches the queue only through the same conflict fields, written by `ConflictSweep.reapplyAll` \\nwhen a shoot is cancelled or restored."
+    `Domain/AppSchemaInputClass.swift`
+"Reaches the queue only through the same conflict fields, written by the same \\n`ConflictSweep.reapplyAll` on every weekly rule edit."
+    `Domain/AppSchemaInputClass.swift`
 "Read 1 show before you cancelled."
     `Domain/CancelledReadDisposition.swift`
 "Read \(askAbove) now"
@@ -1916,6 +1928,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ScoutReadBudget.swift`
 "Read and edit how Overture drafts in your voice. Your notes stay yours; tendencies are learned from your edits."
     `App/RootView.swift`
+"Read by the Sources sheet's coverage panel alone."
+    `Domain/AppSchemaInputClass.swift`
 "Read none"
     `Domain/ScoutReadBudget.swift`
 "Read over an unencrypted connection, because this site's secure one is broken."
@@ -2018,6 +2032,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/ActionFeedback.swift`
 "Resumed pursuing \(who) on \(org)."
     `App/ActionFeedback.swift`
+"Retained storage, read and written by nothing since \(issue), and kept on the model only because dropping a column would be the store's first subtractive migration (see AppSchema)."
+    `Domain/RowFacts.swift`
 "Retry sync"
     `Integration/NotificationService.swift`
 "Returning client"
@@ -2027,6 +2043,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "Review and send"
     `UI/FollowUpsView.swift`
     `UI/SendConfirmSheet.swift`
+"Rewritten by every scout landing that touches the row, and read only by the merge paths, the \\nre-key target, the first seen backfill and the Prep export (#4106 fact 10). Carrying it would make \\na re-land that changed nothing look like a change to every row it wrote."
+    `Domain/RowFacts.swift`
 "Rooms Overture can't place"
     `UI/SourcesView.swift`
 "Run reconcile now"
@@ -2284,6 +2302,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ReplyPanel.swift`
 "Take this source off the watchlist. You can put it back any time"
     `UI/SourceFixConfirmActions.swift`
+"Teaches the classifier's vocabulary. It reaches a show only as the `discipline` a later \\nclassification writes onto the row."
+    `Domain/AppSchemaInputClass.swift`
 "Thalia Spanish Theatre"
     `Domain/VenueParser.swift`
 "That address is missing the part Overture needs to read this venue's calendar."
@@ -2384,6 +2404,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/DaysOffAttention.swift`
 "The days off sheet was on screen."
     `Domain/FreezeReport.swift`
+"The definition is read by the experiment report alone. A show's own arm is the \\n`experimentID` and `assignedArm` stored on the row."
+    `Domain/AppSchemaInputClass.swift`
 "The details are in run-boundary-violation.log, in the same folder as the store."
     `Domain/RunBoundaryViolations.swift`
 "The email bounced"
@@ -2422,6 +2444,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/SourceFixConfirmActions.swift`
 "The pages that changed couldn't be handed off to be read (\(error)). They'll be tried again on the next scout."
     `Integration/ScoutService.swift`
+"The parent link. A record lives inside its show's `RowFacts`, so the show it belongs to is the \\nvalue holding it, and carrying the link would put a model inside the value."
+    `Domain/RowFacts.swift`
 "The picker for which kept shows to prep was on screen."
     `Domain/FreezeReport.swift`
 "The pitch to \(first.email) for \(first.show) bounced, so nobody ever read it."
@@ -2436,6 +2460,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/LeadIntakeModel.swift`
 "The reader that pulls listings off a page isn't set up yet, so the pages that changed couldn't be read. See docs/scout-extract-runbook.md. Nothing was lost: they'll be read on the next scout once it's configured."
     `Integration/ScoutService.swift`
+"The record that a scout results file has landed (#4336), read only by the landing that \\nrefuses the same file twice. The shows it landed reach the queue through their own rows."
+    `Domain/AppSchemaInputClass.swift`
 "The reply drafter finished but didn't produce a draft. It may have hit an error."
     `Domain/DetachedRunOutcome.swift`
 "The room its shows play in"
@@ -2776,6 +2802,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/WrittenOffBacklogSection.swift`
 "When one show is stored twice, Overture keeps one copy and removes the other. The copy it keeps has to be the one its source goes on listing, or the show reads as gone while it is still playing. These were not listed the next time their sources were read."
     `Domain/AppNotice.swift`
+"Where the surface records which cards it drew, for the next pass. Written by the render and \\nnever read as an input to this one."
+    `App/QueueContextSignals.swift`
 "Which kept shows to prep?"
     `Domain/PrepSelectionCopy.swift`
 "Which message is their reply?"
@@ -3729,5 +3757,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ReachabilityRunSummary.swift`
 "your booking log"
     `UI/QueueView+Model.swift`
+"your producer and venue house corrections"
+    `Integration/ScoutService.swift`
 "your queue"
     `App/ActionFeedback.swift`

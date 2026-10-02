@@ -113,7 +113,10 @@ struct ProducerOverrideWiringTests {
     @Test func theBackgroundConsumersReadTheOverridesToo() {
         let scout = SourceGuardHelper.source("Overture/Integration/ScoutService.swift")
         let recheck = SourceGuardHelper.source("Overture/Domain/PossibleMatchRecheck.swift")
-        #expect(scout.contains("overrides: ProducerOverrideEditing.overrides(in: context)"))
+        // #4332 (A3): the scout reads them through the THROWING reader, on whichever context the corpus is
+        // read through, so a failed read is recorded as `.producerOverrides` rather than answered empty.
+        #expect(scout.contains("overrides: { try ProducerOverrideEditing.readOverrides(in: context) }"))
+        #expect(scout.contains("{ try ProducerOverrideEditing.readOverrides(in: $0) }"))
         #expect(recheck.contains("overrides: ProducerOverrideEditing.overrides(in: context)"))
     }
 }
