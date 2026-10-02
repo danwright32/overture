@@ -299,7 +299,7 @@ struct ProposedConversationTests {
         ProposedConversation.propose(candidate("m2"), on: formPitch(ctx, on: b), now: now)
         formPitch(ctx, on: c)
 
-        let rows = ProposedConversation.dueRecipients(from: [a, b, c])
+        let rows = ProposedConversation.dueRecipients(from: [a, b, c], now: now)
         let count = DueWork.counts(prospects: [a, b, c], inquiries: [], now: now, replyRunAlive: false).conversationsToConfirm
 
         #expect(rows.count == count)

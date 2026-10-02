@@ -80,7 +80,7 @@ struct StoredMoreThanOnceNoteTests {
             nights: ["2026-12-03", "2026-12-20"])
         let all = try ctx.fetch(FetchDescriptor<Prospect>())
 
-        var data = QueueModel.scope(from: all)
+        var data = QueueModel.scope(from: all, now: Date())
         #expect(data.rows.count == 1,
                 "two rows of one show are one card since #4030: \(data.rows.map(\.id))")
         let row = try #require(data.rows.first { $0.id == "run" })
@@ -97,7 +97,7 @@ struct StoredMoreThanOnceNoteTests {
             opens: "2026-10-31")
         let all = try ctx.fetch(FetchDescriptor<Prospect>())
 
-        var data = QueueModel.scope(from: all)
+        var data = QueueModel.scope(from: all, now: Date())
         let row = try #require(data.rows.first { $0.id == "oct11" })
         #expect(data.cards.card(for: row).sameShowKeys.isEmpty)
     }
@@ -115,7 +115,7 @@ struct StoredMoreThanOnceNoteTests {
             nights: ["2027-01-07", "2027-02-07"])
         let all = try ctx.fetch(FetchDescriptor<Prospect>())
 
-        var data = QueueModel.scope(from: [shown], corpus: all)
+        var data = QueueModel.scope(from: [shown], corpus: all, now: Date())
         let row = try #require(data.rows.first { $0.id == "shown" })
         #expect(data.cards.card(for: row).sameShowKeys == ["hidden"])
     }

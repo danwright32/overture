@@ -28,7 +28,9 @@ enum EasternDate {
     }
 
     // Today (or any instant), as the Eastern day string. Alias of dayString for call-site clarity.
-    static func today(_ now: Date = Date()) -> String {
+    // #4356: no default, because the render pass reaches this and a forgotten argument would be the wall
+    // clock read in place of the pass's own instant (`PassClockScanTests`).
+    static func today(_ now: Date) -> String {
         dayString(from: now)
     }
 

@@ -65,7 +65,7 @@ struct TheAppChecksItsOwnCardsTests {
         let shows = seed(ctx)
         try ctx.save()
 
-        let scope = QueueModel.scope(from: shows, corpus: shows)
+        let scope = QueueModel.scope(from: shows, corpus: shows, now: Date())
 
         #expect(scope.cardCheck.ran)
         #expect(scope.cardCheck.divergence == nil)
@@ -78,7 +78,7 @@ struct TheAppChecksItsOwnCardsTests {
         let shows = seed(ctx)
         try ctx.save()
 
-        let scope = QueueModel.scope(from: shows, corpus: shows, cardKeys: [])
+        let scope = QueueModel.scope(from: shows, corpus: shows, now: Date(), cardKeys: [])
 
         #expect(scope.cardCheck.ran == false)
         #expect(scope.cardCheck.divergence == nil)
@@ -90,7 +90,7 @@ struct TheAppChecksItsOwnCardsTests {
         let ctx = ModelContext(try container())
         let shows = seed(ctx)
         try ctx.save()
-        let built = QueueModel.scope(from: shows, corpus: shows)
+        let built = QueueModel.scope(from: shows, corpus: shows, now: Date())
         let mine = try #require(built.cards.alreadyBuilt("k8"))
         var wrong = mine
         wrong.presenterLine = "not what the fresh build says"

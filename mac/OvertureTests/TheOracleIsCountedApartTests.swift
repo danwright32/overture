@@ -52,7 +52,7 @@ struct TheOracleIsCountedApartTests {
 
         var scope: QueueModel.Scope?
         let work = QueueRenderPass.WorkTally.measure {
-            scope = QueueModel.scope(from: shows, corpus: shows)
+            scope = QueueModel.scope(from: shows, corpus: shows, now: Date())
         }
 
         #expect(scope?.cardCheck.ran == true, "the check did not run, so this measured nothing (L98)")
@@ -93,7 +93,7 @@ struct TheOracleIsCountedApartTests {
         let shows = seed(ctx)
         try ctx.save()
 
-        let work = QueueRenderPass.WorkTally.measure { _ = QueueModel.scope(from: shows, corpus: shows) }
+        let work = QueueRenderPass.WorkTally.measure { _ = QueueModel.scope(from: shows, corpus: shows, now: Date()) }
 
         let share = Double(work.oracleCards) / Double(max(work.queueItems, 1))
         print("card-check-cost: \(work.oracleCards) card, \(work.oracleSendGroupBuilds) send group, "

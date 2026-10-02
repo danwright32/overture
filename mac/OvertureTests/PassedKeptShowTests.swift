@@ -99,7 +99,7 @@ struct PassedKeptShowLeavesPrepTests {
         makeShow(ctx, "ahead", status: .queued, date: "2026-10-10")
         try ctx.save()
         let all = try ctx.fetch(FetchDescriptor<Prospect>())
-        let context = StageContext(geo: .none, clients: .none, today: today)
+        let context = StageContext(now: Date(), geo: .none, clients: .none, today: today)
 
         #expect(StageNavigation.counts(in: all, context: context)[.prep] == 1)
         #expect(StageNavigation.naturalKeys(for: .prep, in: all, context: context) == ["ahead"])

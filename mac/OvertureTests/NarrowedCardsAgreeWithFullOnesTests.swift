@@ -93,8 +93,8 @@ struct NarrowedCardsAgreeWithFullOnesTests {
         let shows = seed(ctx)
         try ctx.save()
 
-        let narrowed = QueueModel.scope(from: shows, corpus: shows, cardKeys: wanted)
-        let full = QueueModel.scope(from: shows, corpus: shows)
+        let narrowed = QueueModel.scope(from: shows, corpus: shows, now: Date(), cardKeys: wanted)
+        let full = QueueModel.scope(from: shows, corpus: shows, now: Date())
 
         var compared = 0
         for row in narrowed.rows {
@@ -137,7 +137,7 @@ struct NarrowedCardsAgreeWithFullOnesTests {
         let ctx = ModelContext(try container())
         let shows = seed(ctx)
         try ctx.save()
-        let built = QueueModel.scope(from: shows, corpus: shows)
+        let built = QueueModel.scope(from: shows, corpus: shows, now: Date())
         var mine = try #require(built.cards.alreadyBuilt("k3"))
         let theirs = try #require(built.cards.alreadyBuilt("k3"))
         mine.presenterLine = "something else entirely"

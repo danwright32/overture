@@ -234,12 +234,12 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     // that proved it had `draftEditedByDan` set.
     //
     // `today` is a parameter so a test pins both ends of the comparison rather than one (L130).
-    func eventDateWarning(today: String = EasternDate.today()) -> String? {
+    func eventDateWarning(today: String = EasternDate.today(Date())) -> String? {
         eventDateFinding(today: today)?.message
     }
 
     // #3326: the one finding, asked once, so the warning and the send block read the same answer (L16).
-    func eventDateFinding(today: String = EasternDate.today()) -> EventDateFinding? {
+    func eventDateFinding(today: String = EasternDate.today(Date())) -> EventDateFinding? {
         guard let body = draftBody else { return nil }
         let playing = PlayingNights.of(runNights: runNights, performanceDate: performanceDate,
                                        runEndDate: runEndDate)
@@ -251,7 +251,7 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     }
 
     // #3326 (plan 2.8): the skipped night this draft names, which holds the send. Nil when it names none.
-    func skippedNightNamedInDraft(today: String = EasternDate.today()) -> String? {
+    func skippedNightNamedInDraft(today: String = EasternDate.today(Date())) -> String? {
         // Asked through `blocksTheSend`, the one place that says which findings hold a send, so a finding
         // added later that also blocks cannot be missed here while the warning shows it.
         guard let finding = eventDateFinding(today: today), finding.blocksTheSend,
@@ -2626,8 +2626,10 @@ enum QueueModel {
     // #1598 Phase 5: a show already carrying an INHERITED answer is not a candidate either. This is where
     // the saving actually lands (59 lookups on the live store as measured 2026-07-27), and without it the
     // card would contradict itself: "Email found" sitting beside a button offering to go and find one.
-    static func reachabilityProbeCandidateKeys(_ items: [some QueueScopeFacts], now: Date = Date(),
-                                               today: String = QueueModel.easternToday(),
+    // #4356: no clock defaults, because the render pass reaches this and a caller that forgot `now:` or
+    // `today:` would read the wall clock instead of the pass's instant (`PassClockScanTests`).
+    static func reachabilityProbeCandidateKeys(_ items: [some QueueScopeFacts], now: Date,
+                                               today: String,
                                                geo: GeoRefusals = .none) -> [String] {
         items.filter { probeIsWorthOffering($0, today: today, geo: geo)
                         && !hasFreshReachabilityAnswer($0, now: now) }.map(\.id)
@@ -2679,8 +2681,8 @@ enum QueueModel {
     // and paying for a lookup that already succeeded is the one thing this must never do. The candidacy
     // rule holds too, so a show past deciding is not offered whatever any run did to it, and the mark ages
     // on the same clock as every other reachability fact rather than offering to spend money forever.
-    static func keysMissedByACheck(_ items: [some QueueScopeFacts], now: Date = Date(),
-                                   today: String = QueueModel.easternToday(),
+    static func keysMissedByACheck(_ items: [some QueueScopeFacts], now: Date,
+                                   today: String,
                                    geo: GeoRefusals = .none) -> [String] {
         QueueRenderPass.WorkTally.recordWholeQueueFoldRows(items.count)
         // #4106: the date test FIRST. It rejected every row on the live clone and on the 4x corpus, and
@@ -2708,8 +2710,8 @@ enum QueueModel {
     // date-level action must not quietly widen what a check pays for beyond what the per-card one would
     // (L16, the count Dan approves is the count that runs). And a show with no answer is left alone: it is
     // already a candidate and already counted, so marking it would make the action look bigger than it is.
-    static func keysToReofferForRecheck(_ items: [some QueueScopeFacts], now: Date = Date(),
-                                        today: String = QueueModel.easternToday(),
+    static func keysToReofferForRecheck(_ items: [some QueueScopeFacts], now: Date,
+                                        today: String,
                                         geo: GeoRefusals = .none) -> [String] {
         items.filter { probeIsWorthOffering($0, today: today, geo: geo)
                         && hasFreshReachabilityAnswer($0, now: now) }.map(\.id)
@@ -2732,8 +2734,9 @@ enum QueueModel {
     //
     // One function for both questions on purpose: the tick box appears exactly where it has something to
     // contribute, so its presence can never promise rows the run does not get (L16).
-    static func probeKeysForTickedDate(_ items: [some QueueScopeFacts], now: Date = Date(),
-                                       today: String = QueueModel.easternToday(),
+    // #4356: required, like the rest of this family, so a caller cannot read the wall clock by forgetting.
+    static func probeKeysForTickedDate(_ items: [some QueueScopeFacts], now: Date,
+                                       today: String,
                                        geo: GeoRefusals = .none) -> [String] {
         let outstanding = reachabilityProbeCandidateKeys(items, now: now, today: today, geo: geo)
         guard outstanding.isEmpty else { return outstanding }
@@ -2749,8 +2752,8 @@ enum QueueModel {
     // the keep-or-dismiss moment, or somewhere he has refused to travel, was never checked and must not
     // say it was. Those headings stay bare, which is honest; the marker is a claim, so it is made only
     // where an answer actually exists.
-    static func dateReachabilityIsFullyChecked(_ items: [some QueueScopeFacts], now: Date = Date(),
-                                               today: String = QueueModel.easternToday(),
+    static func dateReachabilityIsFullyChecked(_ items: [some QueueScopeFacts], now: Date,
+                                               today: String,
                                                geo: GeoRefusals = .none) -> Bool {
         guard reachabilityProbeCandidateKeys(items, now: now, today: today, geo: geo).isEmpty else {
             return false
@@ -2770,8 +2773,8 @@ enum QueueModel {
     // them, or the heading would take its date from a show it says nothing about (L287).
     //
     // Nil when nothing datable is left, which the copy renders as the sentence it always showed.
-    static func dateReachabilityCheckedOn(_ items: [some QueueScopeFacts], now: Date = Date(),
-                                          today: String = QueueModel.easternToday(),
+    static func dateReachabilityCheckedOn(_ items: [some QueueScopeFacts], now: Date,
+                                          today: String,
                                           geo: GeoRefusals = .none) -> Date? {
         items
             .filter { probeIsWorthOffering($0, today: today, geo: geo)
@@ -2808,8 +2811,7 @@ enum QueueModel {
             self.checkedOn = checkedOn
         }
 
-        init(_ items: [some QueueScopeFacts], now: Date = Date(), today: String = QueueModel.easternToday(),
-             geo: GeoRefusals = .none) {
+        init(_ items: [some QueueScopeFacts], now: Date, today: String, geo: GeoRefusals = .none) {
             // ONE candidate sweep per date, and the other three answers are derived from what it found rather
             // than asked again. The pass answers every date of the stage, not only the ones on screen, so a
             // second sweep here is paid once per date on every pass (#4321 review).
@@ -3279,7 +3281,8 @@ enum QueueModel {
                       // being offered EARLY has nothing to explain, and right for a test that is not
                       // asking about the window.
                       clients: ClientWindow = .none,
-                      now: Date = Date(),
+                      // #4356: required, because the render pass calls this (`PassClockScanTests`).
+                      now: Date,
                       // Overture's day. Optional and last for the same reason `StageContext`'s is: the
                       // ordinary spelling derives it, and pinning one is what a test goes out of its way
                       // to do.
@@ -3594,7 +3597,7 @@ enum QueueModel {
     // screen after it. Two spellings of this would be two cards that can disagree about a show, and only
     // one of them would be the one on screen (L107, L263).
     static func card(_ p: Prospect, contacts: [Recipient]?, preamble pre: CardPreamble) -> QueueItem {
-        var item = QueueItem(p, sendGroups: SendGroup.CardGroups(of: p), contacts: contacts)
+        var item = QueueItem(p, sendGroups: SendGroup.CardGroups(of: p, today: pre.day), contacts: contacts)
         // #2524: inside the sweep that was already happening. Asked as its own pass over the store it
         // was a ninth whole-store sweep per render, which `QueueRenderPassCostTests` refused.
         item.offeredEarlyAsAClient = isOfferedEarlyAsAClient(
@@ -4047,7 +4050,7 @@ extension QueueItem: ShowSearchFacts {
 
 extension QueueItem {
     init(_ p: Prospect) {
-        self.init(p, sendGroups: SendGroup.CardGroups(of: p))
+        self.init(p, sendGroups: SendGroup.CardGroups(of: p, today: EasternDate.today(Date())))
     }
 
     // #2046: the send groups are worked out once, by the caller above, and handed in. Three of the fields

@@ -84,7 +84,7 @@ struct SendConfirmation: Equatable {
         // reads, so what he approves names everybody it is going to (L64).
         let sendsTogether = together ?? prospect.sendsTogether
         let defaultGroup = approving && prospect.status == .drafted && prospect.draftBody != nil
-            ? SendGroup.previewGroup(of: prospect, together: sendsTogether)
+            ? SendGroup.previewGroup(of: prospect, together: sendsTogether, today: EasternDate.today(Date()))
             : SendGroup.pendingGroup(of: prospect, together: sendsTogether)
         // A ticked contact must still clear every guard: `sendableFor` filters to the ones that could
         // actually go, so a held contact cannot be talked past by being named here (#2052).

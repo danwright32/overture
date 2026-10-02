@@ -842,7 +842,7 @@ final class Recipient {
         return .unaccountedAddress
     }
 
-    var isSendablePending: Bool { isSendablePending(today: EasternDate.today()) }
+    var isSendablePending: Bool { isSendablePending(today: EasternDate.today(Date())) }
 
     // #4136: the same gate judged against a given day, so a test can pin the clock. The property above is
     // the spelling every send path reads, and it asks with the real one.
