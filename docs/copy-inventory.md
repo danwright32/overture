@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1677 sentences**.
+Every sentence Overture can say to Dan: **1684 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -14,7 +14,7 @@ What is not, and why:
   sentences under tokens nobody reads.
 - **Nothing, if it is written as two literals joined with `+`.** Those ARE joined here, into the
   one sentence the running app says (#3155). What is still only part of what Dan reads is a
-  sentence carrying a VALUE: 624 of the 1677 below hold a
+  sentence carrying a VALUE: 627 of the 1684 below hold a
   `\(...)` where a number or a name goes, so what is printed is the template. They are counted
   here rather than listed again, because the hole is visible in the line itself; what was missing
   was any statement of how much of this document is templates.
@@ -107,6 +107,7 @@ What is not, and why:
 - `Integration/GmailThreadingRepair.swift`: developer diagnostic log, not the app's own voice (#915)
 - `Integration/GmailThreadingRepair.swift`: a Google API URL and an HTTP header, not sentences Overture says (#915)
 - `Integration/InquiryConversationAttach.swift`: an HTTP header, not a sentence (#915)
+- `Integration/LandingRevert.swift`: the revert's diagnostic reasons and counts, carried in LandingStop.notReverted and in test output, never shown to Dan (#4334)
 - `Integration/LoopbackListener.swift`: developer diagnostic log, not the app's voice (#915)
 - `Integration/LoopbackListener.swift`: developer diagnostic log, not the app's voice (#915)
 - `Integration/OperaAmericaCalendar.swift`: synthesized source HTML the
@@ -1559,6 +1560,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/SendConfirmSheet.swift`
 "Once you have sent a pitch, the shows you are waiting to hear back about show up here, soonest follow-up first. A show drops off when you close it out, or when its follow-ups run out."
     `UI/QueueView.swift`
+"One calendar after it was not landed. The next scout reads it again."
+    `Domain/ScoutWarningCopy.swift`
 "One earlier record could not be read."
     `Domain/CardDivergenceReport.swift`
 "One email to everyone"
@@ -1643,6 +1646,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/OmniFocusSync.swift`
 "Overture could not check whether it stopped responding this session, so nothing here can say whether it did."
     `Domain/FreezeReport.swift`
+"Overture could not keep a copy of these calendar results either (\(why)). They are still in the reader's results file until the next read replaces it."
+    `Domain/ScoutWarningCopy.swift`
 "Overture could not open its backup folder, so there is nothing to compare against. Nothing has been changed. Check that folder before working."
     `App/StoreShrinkCheck.swift`
 "Overture could not open its data file to check it at \(path). Nothing has been opened or changed. The file may be in use by another program, or its permissions may have changed. Check that file before reopening Overture."
@@ -1681,8 +1686,12 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ReplyPanel.swift`
 "Overture couldn't refresh your Gmail sign-in, so it stopped checking for replies and can't tell whether anyone replied. Reconnect Gmail."
     `Domain/ReconcileSummary.swift`
+"Overture couldn't save \(orgName)'s results and couldn't undo all of the changes it had made for them, so the scout stopped there. Some of those changes are still unsaved."
+    `Domain/ScoutWarningCopy.swift`
 "Overture couldn't save the link. Try again; if this keeps happening, something's wrong with the local store."
     `Domain/ProposedConversation.swift`
+"Overture couldn't save your recent edits, so this scout's results were not applied. Nothing from the scout changed. Not yet saved: "
+    `Domain/ScoutWarningCopy.swift`
 "Overture couldn't start the Gmail sign-in on this Mac, so it didn't open your browser."
     `Integration/GmailAuthManager.swift`
 "Overture couldn't tell which conversation to link, so it linked nothing."
@@ -2461,6 +2470,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/LandingSingleFlight.swift`
 "The scout started reading the calendars that changed, but the run finished without producing anything. Those pages have NOT been read, and it will try them again on the next scout."
     `Domain/DetachedRunOutcome.swift`
+"The scout stopped before landing every calendar. The rest will be read or offered again."
+    `Domain/ScoutWarnings.swift`
 "The service replied, so this is not a connection problem: what came back was not what Overture expected. One bad answer is normal and says nothing here; this line appears only once several in a row have failed, and it clears as soon as one is readable again."
     `Domain/AppNotice.swift`
 "The shoot history file couldn't be read (it may be corrupted or a newer format), so pitches can't mention rooms you've photographed before. Re-run the shoot-history import."
@@ -3021,6 +3032,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/OutcomePatterns.swift`
 "\(count) \(prospectWord) already pending or re-prepped recently; nothing new queued"
     `App/ActionFeedback.swift`
+"\(count) calendars after it were not landed. The next scout reads them again."
+    `Domain/ScoutWarningCopy.swift`
 "\(count) clients set aside"
     `Domain/ClientCoverage.swift`
 "\(count) contacts named a way in and gave none, and the run never once said it found no route"
@@ -3517,6 +3530,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/LandingSingleFlight.swift`
 "an organisation no show names any more"
     `Domain/StruckAddressListing.swift`
+"another record"
+    `Integration/ScoutService.swift`
 "another show"
     `Domain/SelfBookingConflict.swift`
 "at \(v)"
