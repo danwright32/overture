@@ -4,7 +4,8 @@ import Darwin
 import SwiftData
 
 // #4327 step 0.8: the failure path revert, candidate (ii) only (decision 2), and its correctness cases, each a
-// test (L246, L574). The revert itself is `FailurePathRevert`, beside this file.
+// test (L246, L574). The revert itself is `LandingRevert`, which #4334 (A5) moved into the app
+// once every case here held.
 //
 // THE FAILURE IS REAL. Every failed save here is a genuine SwiftData save failure: the store file is flagged
 // immutable before the landing's container opens it (as `ImmutableStoreFixture` does, #617), so the source's
@@ -159,7 +160,7 @@ final class FailurePathRevertProbeTests {
     // THE FAILED TURN. Written through the real `apply` (a re-list of the stored show plus one new show), with
     // the writes apply does not make written by hand in the same turn: a contact removed, a contact added,
     // a run URL appended, the source's dropped-show labels rewritten. Then apply's own save fails.
-    private struct Turn { let outcome: ScoutService.Outcome; let writeSet: FailurePathRevert.WriteSet }
+    private struct Turn { let outcome: ScoutService.Outcome; let writeSet: LandingRevert.WriteSet }
 
     private func failedTurn(_ ctx: ModelContext) throws -> Turn {
         let rondo = try #require(try held(ctx, Prospect.self).first { $0.naturalKey == "rondo-key" })
@@ -177,7 +178,7 @@ final class FailurePathRevertProbeTests {
                            performanceDate: Self.night, sourceUrl: "https://src-a.example/new"),
         ]
         // Captured as the save begins, which is what A5's `willSave` observer records.
-        let capture = FailurePathRevert.SaveCapture(ctx)
+        let capture = LandingRevert.SaveCapture(ctx)
         let outcome = ScoutService.apply(events: events, clients: [], history: [], blocked: .empty,
                                          today: ScoutTestClock.beforeAllFixtures, sourceIds: ["src-a"], into: ctx)
         return Turn(outcome: outcome, writeSet: capture.set ?? .pending(in: ctx))
@@ -195,14 +196,14 @@ final class FailurePathRevertProbeTests {
             "the source did not both touch the stored show and insert one: \(turn.outcome.updated) updated, "
             + "\(turn.outcome.inserted) inserted"))
         // After the failed save the context still holds what it carried; the revert depends on that.
-        let after = FailurePathRevert.WriteSet.pending(in: ctx)
+        let after = LandingRevert.WriteSet.pending(in: ctx)
         #expect(after.changed.count == turn.writeSet.changed.count
                 && after.inserted.count == turn.writeSet.inserted.count && after.changed.count >= 3, Comment(rawValue:
             "a failed save changed the pending set: \(turn.writeSet.count) at the save, \(after.count) after it"))
         // Before the revert the context differs from the store, so the equality below measures the revert.
         #expect(try Self.snapshot(ctx) != seeded.committed)
 
-        let report = FailurePathRevert.revert(turn.writeSet, in: ctx)
+        let report = LandingRevert.revert(turn.writeSet, in: ctx)
         #expect(report.notRestorable.isEmpty, Comment(rawValue: "not restorable: \(report.notRestorable)"))
         #expect(report.insertsDeleted >= 2 && ctx.insertedModelsArray.isEmpty, Comment(rawValue:
             "inserts deleted: \(report.insertsDeleted), still inserted \(ctx.insertedModelsArray.count)"))
@@ -229,7 +230,7 @@ final class FailurePathRevertProbeTests {
         let rondo = try #require(try held(ctx, Prospect.self).first { $0.naturalKey == "rondo-key" })
         rondo.recipients.removeAll { $0.id == "r2" }
         #expect(Set(rondo.recipients.map(\.id)) == ["r1"])
-        let report = FailurePathRevert.revert(.init(changed: [rondo], inserted: [], deleted: []), in: ctx)
+        let report = LandingRevert.revert(.init(changed: [rondo], inserted: [], deleted: []), in: ctx)
         #expect(report.notRestorable.isEmpty && Set(rondo.recipients.map(\.id)) == ["r1", "r2"], Comment(rawValue:
             "the show's contacts after reverting the show alone: \(rondo.recipients.map(\.id).sorted()), \(report)"))
     }
@@ -251,7 +252,7 @@ final class FailurePathRevertProbeTests {
         if !flushed { try edit(ctx) }
         let turn = try failedTurn(ctx)
         #expect(turn.outcome.saveFailed && turn.outcome.updated >= 1)
-        let report = FailurePathRevert.revert(turn.writeSet, in: ctx)
+        let report = LandingRevert.revert(turn.writeSet, in: ctx)
         #expect(report.notRestorable.isEmpty)
         let status = try held(ctx, Prospect.self).first { $0.naturalKey == "rondo-key" }?.status
         let committedStatus = try committedRow(ctx, "rondo-key")?.status
@@ -279,7 +280,7 @@ final class FailurePathRevertProbeTests {
         if !flushed { try increment(ctx) }
         let turn = try failedTurn(ctx)
         #expect(turn.outcome.saveFailed && turn.outcome.updated >= 1)
-        _ = FailurePathRevert.revert(turn.writeSet, in: ctx)
+        _ = LandingRevert.revert(turn.writeSet, in: ctx)
         let missed = try held(ctx, Prospect.self).first { $0.naturalKey == "rondo-key" }?.missedScoutCount
         #expect(missed == (flushed ? 1 : 0), Comment(rawValue:
             "flushed \(flushed): the increment reads \(String(describing: missed)) after the revert"))
@@ -299,7 +300,7 @@ final class FailurePathRevertProbeTests {
         if !flushed { try edit(ctx) }
         let turn = try failedTurn(ctx)
         #expect(turn.outcome.saveFailed)
-        _ = FailurePathRevert.revert(turn.writeSet, in: ctx)
+        _ = LandingRevert.revert(turn.writeSet, in: ctx)
         let status = try held(ctx, Prospect.self).first { $0.naturalKey == "elsewhere-key" }?.status
         #expect((status == .queued) == flushed, Comment(rawValue:
             "flushed \(flushed): the unrelated edit reads \(String(describing: status)) after the revert"))
@@ -319,10 +320,10 @@ final class FailurePathRevertProbeTests {
         rondo.missedScoutCount += 1
         let source = try #require(try held(ctx, WatchedSource.self).first)
         source.lastCheckedAt = Date(timeIntervalSince1970: 1_800_000_000)
-        let closing = FailurePathRevert.WriteSet.pending(in: ctx)
+        let closing = LandingRevert.WriteSet.pending(in: ctx)
         #expect(throws: (any Error).self, "the closing save was expected to fail") { try ctx.save() }
         if reverted {
-            let report = FailurePathRevert.revert(closing, in: ctx)
+            let report = LandingRevert.revert(closing, in: ctx)
             #expect(report.notRestorable.isEmpty && rondo.missedScoutCount == 0, Comment(rawValue:
                 "the held row reads \(rondo.missedScoutCount) after the revert: \(report)"))
         }
@@ -344,9 +345,9 @@ final class FailurePathRevertProbeTests {
         let ctx = try seeded.store.openRefusing()
         let gone = try #require(try held(ctx, Prospect.self).first { $0.naturalKey == "elsewhere-key" })
         ctx.delete(gone)
-        let set = FailurePathRevert.WriteSet.pending(in: ctx)
+        let set = LandingRevert.WriteSet.pending(in: ctx)
         #expect(throws: (any Error).self) { try ctx.save() }
-        let report = FailurePathRevert.revert(set, in: ctx)
+        let report = LandingRevert.revert(set, in: ctx)
         #expect(report.notRestorable.count == 1, Comment(rawValue: "not restorable: \(report.notRestorable)"))
         #expect(try Self.snapshot(ctx) != seeded.committed, "the deleted row came back, which (ii) cannot do")
     }
@@ -408,15 +409,15 @@ final class FailurePathRevertProbeTests {
         var timings: [Double] = []
         for round in 1...3 {
             let wait = Phase0.waitForLoad(below: 8, deadline: 1800, poll: 5)
-            let capture = FailurePathRevert.SaveCapture(ctx)
+            let capture = LandingRevert.SaveCapture(ctx)
             let outcome = await ScoutExtractIngest.ingest(one, clients: loaded.clients, history: history,
                                                           blocked: blocked, into: ctx)
             let captured = capture.set
             // Everything pending now: the failed source save's set plus what ran after it (the reconcile),
             // which is the set a failed closing save would carry too.
-            let set = FailurePathRevert.WriteSet.pending(in: ctx)
-            var report = FailurePathRevert.Report()
-            let ms = Phase0.time { report = FailurePathRevert.revert(set, in: ctx) }
+            let set = LandingRevert.WriteSet.pending(in: ctx)
+            var report = LandingRevert.Report()
+            let ms = Phase0.time { report = LandingRevert.revert(set, in: ctx) }
             timings.append(ms)
             let fresh = ModelContext(ctx.container)
             var differing = 0

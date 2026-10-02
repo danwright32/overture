@@ -121,4 +121,33 @@ enum ScoutWarningCopy {
                 + "landed first, so this run's older readings of them were set aside: "
                 + names.joined(separator: ", ") + ". Nothing was lost."
     }
+
+    // #4334 (A5): the sources a landing never reached because a save failed before them. Each keeps its
+    // unread page and its old page hash, so the next scout reads it again; that is the one true thing to say.
+    static func notAttempted(_ count: Int) -> String {
+        count == 1
+            ? "One calendar after it was not landed. The next scout reads it again."
+            : "\(count) calendars after it were not landed. The next scout reads them again."
+    }
+
+    // #4334: a source whose save failed and whose changes could not all be put back. The landing stopped
+    // there and made no further save, so what could not be restored is still unsaved rather than in the store.
+    static func notReverted(_ orgName: String) -> String {
+        "Overture couldn't save \(orgName)'s results and couldn't undo all of the changes it had made for "
+            + "them, so the scout stopped there. Some of those changes are still unsaved."
+    }
+
+    // #4334: the entry flush. Edits made before the landing could not be saved, so it did not start. Names
+    // what was waiting to be saved, so Dan can tell which of his edits it means.
+    static func recentEditsUnsaved(_ rows: [String]) -> String {
+        "Overture couldn't save your recent edits, so this scout's results were not applied. Nothing from the "
+            + "scout changed. Not yet saved: " + rows.joined(separator: ", ") + "."
+    }
+
+    // #4334: that refusal, when the copy that would have kept the calendar results failed too. Says where
+    // the results still are, rather than promising they will be offered again.
+    static func stoppedWithoutACopy(_ why: String) -> String {
+        "Overture could not keep a copy of these calendar results either (\(why)). They are still in the "
+            + "reader's results file until the next read replaces it."
+    }
 }

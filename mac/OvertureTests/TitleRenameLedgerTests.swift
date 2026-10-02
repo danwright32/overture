@@ -225,7 +225,8 @@ struct TitleRenameLedgerTests {
                 .appendingPathComponent("Overture/Integration/ScoutService.swift"),
             encoding: .utf8)
         let recordCall = try #require(source.range(of: "TitleRenameLedger.recordOrLog(titleRenames"))
-        let save = try #require(source.range(of: "try context.save()", options: .backwards,
+        // #4334: the source's save goes through its landing, so a test can fail one source's save.
+        let save = try #require(source.range(of: "try landing.saveSource(context)", options: .backwards,
                                              range: source.startIndex..<recordCall.lowerBound))
         #expect(save.upperBound < recordCall.lowerBound,
                 "the ledger write must sit after the save, so it records what the store actually holds")
