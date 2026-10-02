@@ -45,4 +45,16 @@ actor FreezeLogHousekeeper {
     func runCardDivergence(at url: URL) -> CardDivergenceLog.Housekeeping {
         CardDivergenceLog.housekeeping(at: url)
     }
+
+    // #4453: the freeze NOTICE, through the same actor and off the main one.
+    //
+    // It ran on the main actor until 2026-10-02, when it was 69% of 4,270 main thread samples taken while
+    // Dan's window had stopped responding: it decoded the whole archive, 29,527 records, every time the
+    // window appeared. It reads only what is new now, and it runs here anyway, for two reasons. A read of
+    // a file belongs off the thread that draws, whatever it costs today. And the same actor that compacts
+    // and prunes these files is the one reading them, so the notice never reads a file half way through
+    // being rewritten (L157).
+    func freezeReport(in support: URL, watchdogRan: Bool, writesThatFailed: Int) -> String? {
+        FreezeReport.newlyReported(in: support, watchdogRan: watchdogRan, writesThatFailed: writesThatFailed)
+    }
 }
