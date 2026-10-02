@@ -95,15 +95,23 @@ struct ABannerDerivesNothingOnAnySheetTests {
     @discardableResult
     private func waitUntilQuiet(_ surface: StallSurface, in hosting: NSView, quietPolls: Int = 25,
                                 timeout: Duration = .seconds(20)) async -> Bool {
-        var last = QueueRenderCounter.renderCount(for: surface.rawValue)
-            + QueueRenderCounter.derivationCount(for: surface.rawValue)
+        await waitUntilQuiet(counter: surface.rawValue, in: hosting, quietPolls: quietPolls, timeout: timeout)
+    }
+
+    // The same wait keyed by the counter's own name, so the focus control below, which is not a
+    // `StallSurface`, is waited on by the identical rule rather than a second copy of it.
+    @discardableResult
+    private func waitUntilQuiet(counter surface: String, in hosting: NSView, quietPolls: Int = 25,
+                                timeout: Duration = .seconds(20)) async -> Bool {
+        var last = QueueRenderCounter.renderCount(for: surface)
+            + QueueRenderCounter.derivationCount(for: surface)
         var quiet = 0
         let deadline = ContinuousClock.now + timeout
         while ContinuousClock.now < deadline {
             hosting.layoutSubtreeIfNeeded()
             hosting.displayIfNeeded()
-            let now = QueueRenderCounter.renderCount(for: surface.rawValue)
-                + QueueRenderCounter.derivationCount(for: surface.rawValue)
+            let now = QueueRenderCounter.renderCount(for: surface)
+                + QueueRenderCounter.derivationCount(for: surface)
             quiet = (now == last) ? quiet + 1 : 0
             last = now
             if quiet >= quietPolls { return true }
@@ -162,25 +170,30 @@ struct ABannerDerivesNothingOnAnySheetTests {
             + "message shown while this sheet is open would cost a derivation (#4197)"))
     }
 
-    @Test func followUps() async throws {
+    // One hosted sheet, built the same way for the banner reading and the focus reading, so the two
+    // claims are made about the identical fixture rather than about two copies of it drifting apart.
+    private struct HostedSheet {
+        let surface: StallSurface
+        let window: NSWindow
+        let hosting: NSView
+        let feedback: ActionFeedback
+        let tearDown: () -> Void
+    }
+
+    private func hostFollowUps() throws -> HostedSheet {
         let c = try container()
-        let ctx = ModelContext(c)
-        let prospects = seedProspects(ctx)
+        let prospects = seedProspects(ModelContext(c))
         let feedback = ActionFeedback()
         let (window, hosting) = host(
             FollowUpsView(prospects: prospects, inquiries: [], gmailConnectedOverride: true,
                           replyRunAliveOverride: false)
                 .modelContainer(c)
                 .environment(feedback))
-        defer { window.close() }
-
-        await waitUntilQuiet(.followUps, in: hosting)
-        let appeared = QueueRenderCounter.derivationCount(for: StallSurface.followUps.rawValue)
-        let reading = await raiseABanner(over: .followUps, in: hosting, feedback: feedback)
-        expectNothingDerived(reading, .followUps, appeared: appeared)
+        return HostedSheet(surface: .followUps, window: window, hosting: hosting, feedback: feedback,
+                           tearDown: { window.close() })
     }
 
-    @Test func struckAddresses() async throws {
+    private func hostStruckAddresses() throws -> HostedSheet {
         let c = try container()
         let ctx = ModelContext(c)
         let prospects = seedProspects(ctx)
@@ -194,15 +207,11 @@ struct ABannerDerivesNothingOnAnySheetTests {
             StruckAddressesView(prospects: prospects)
                 .modelContainer(c)
                 .environment(feedback))
-        defer { window.close() }
-
-        await waitUntilQuiet(.struckAddresses, in: hosting)
-        let appeared = QueueRenderCounter.derivationCount(for: StallSurface.struckAddresses.rawValue)
-        let reading = await raiseABanner(over: .struckAddresses, in: hosting, feedback: feedback)
-        expectNothingDerived(reading, .struckAddresses, appeared: appeared)
+        return HostedSheet(surface: .struckAddresses, window: window, hosting: hosting, feedback: feedback,
+                           tearDown: { window.close() })
     }
 
-    @Test func excludedTowns() async throws {
+    private func hostExcludedTowns() throws -> HostedSheet {
         let c = try container()
         let ctx = ModelContext(c)
         for town in ["Albany", "Buffalo", "Ithaca", "Rochester", "Syracuse", "Utica"] {
@@ -214,13 +223,46 @@ struct ABannerDerivesNothingOnAnySheetTests {
             ExcludedTownsView()
                 .modelContainer(c)
                 .environment(feedback))
-        defer { window.close() }
-
-        await waitUntilQuiet(.excludedTowns, in: hosting)
-        let appeared = QueueRenderCounter.derivationCount(for: StallSurface.excludedTowns.rawValue)
-        let reading = await raiseABanner(over: .excludedTowns, in: hosting, feedback: feedback)
-        expectNothingDerived(reading, .excludedTowns, appeared: appeared)
+        return HostedSheet(surface: .excludedTowns, window: window, hosting: hosting, feedback: feedback,
+                           tearDown: { window.close() })
     }
+
+    private func hostDaysOff() throws -> HostedSheet {
+        let c = try container()
+        let ctx = c.mainContext
+        for n in 0..<23 {
+            let day = EasternDate.dayString(from: Date().addingTimeInterval(Double(n * 5) * 86_400))
+            ctx.insert(DayOff(startDate: day, endDate: day, note: "Away"))
+        }
+        ctx.insert(WeeklyDayOff(weekday: 4, note: "Rehearsal"))
+        try ctx.save()
+        let snapshot = AvailabilitySnapshot(loadExport: { (bookings: [], blockedDates: [], health: .ok) })
+        snapshot.attach(to: ctx)
+        let feedback = ActionFeedback()
+        let (window, hosting) = host(
+            DaysOffView()
+                .modelContainer(c)
+                .environment(feedback)
+                .environment(snapshot))
+        return HostedSheet(surface: .daysOff, window: window, hosting: hosting, feedback: feedback,
+                           tearDown: { window.close(); snapshot.detach() })
+    }
+
+    private func readBanner(_ sheet: HostedSheet) async {
+        defer { sheet.tearDown() }
+        await waitUntilQuiet(sheet.surface, in: sheet.hosting)
+        let appeared = QueueRenderCounter.derivationCount(for: sheet.surface.rawValue)
+        let reading = await raiseABanner(over: sheet.surface, in: sheet.hosting, feedback: sheet.feedback)
+        expectNothingDerived(reading, sheet.surface, appeared: appeared)
+    }
+
+    @Test func followUps() async throws { await readBanner(try hostFollowUps()) }
+
+    @Test func struckAddresses() async throws { await readBanner(try hostStruckAddresses()) }
+
+    @Test func excludedTowns() async throws { await readBanner(try hostExcludedTowns()) }
+
+    @Test func daysOff() async throws { await readBanner(try hostDaysOff()) }
 
     // ONE fetch of the listing per drawing. The two seed sections used to read the computed `listing`, a
     // store fetch, five times between them per body (L383), found by the #4197 lessons review. Evaluations
@@ -245,29 +287,78 @@ struct ABannerDerivesNothingOnAnySheetTests {
             + "drawing(s); it should be once per drawing (#4197, L383)"))
     }
 
-    @Test func daysOff() async throws {
-        let c = try container()
-        let ctx = c.mainContext
-        for n in 0..<23 {
-            let day = EasternDate.dayString(from: Date().addingTimeInterval(Double(n * 5) * 86_400))
-            ctx.insert(DayOff(startDate: day, endDate: day, note: "Away"))
-        }
-        ctx.insert(WeeklyDayOff(weekday: 4, note: "Rehearsal"))
-        try ctx.save()
-        let snapshot = AvailabilitySnapshot(loadExport: { (bookings: [], blockedDates: [], health: .ok) })
-        snapshot.attach(to: ctx)
-        defer { snapshot.detach() }
-        let feedback = ActionFeedback()
-        let (window, hosting) = host(
-            DaysOffView()
-                .modelContainer(c)
-                .environment(feedback)
-                .environment(snapshot))
-        defer { window.close() }
+    // MARK: - #4408: a change of window focus derives nothing either
 
-        await waitUntilQuiet(.daysOff, in: hosting)
-        let appeared = QueueRenderCounter.derivationCount(for: StallSurface.daysOff.rawValue)
-        let reading = await raiseABanner(over: .daysOff, in: hosting, feedback: feedback)
-        expectNothingDerived(reading, .daysOff, appeared: appeared)
+    // WHAT FAILED, and why it is this test rather than a rerun. On 2026-09-30 `excludedTowns()` read ONE
+    // derivation over ONE evaluation in the combined merge run for PR #4388, and passed on every run
+    // before and after it (31 readings in the saved logs, one of them red). Nothing in the banner path
+    // had changed. What had happened is that something in the process revised `@Environment(\.dismiss)`
+    // inside the measurement window, and the Skipped towns sheet held that value at VIEW level, so its
+    // whole body ran again and fetched its listing again. The Struck addresses and Follow-ups sheets,
+    // which do not hold it, never moved.
+    //
+    // MEASURED, not inferred (2026-10-01, a probe with `Self._printChanges()` in each sheet's body): a
+    // posted window key change re-evaluated the Skipped towns sheet with `_dismiss changed`, and so did a
+    // posted time zone change, which also re-evaluated Days off; Struck addresses moved for neither. An
+    // earlier probe had seen 24 closed Skipped towns sheets re-evaluate at once, 1.7 s after a banner,
+    // with nothing posted at all. What the merge run's own trigger was is not known, and does not need
+    // to be: every revision of that value cost these two sheets a derivation, so the fix is to stop them
+    // holding it, which #3876 had already done for six other sheets and `DoneButton` exists to do.
+    //
+    // HOW IT IS DRIVEN: the sheet's OWN window resigns key and becomes key again, posted rather than
+    // performed, because ordering a test window front would take Dan's screen. Posted at that one window
+    // rather than as a process wide notification (a time zone change would also reach every hosted suite
+    // running beside this one, which is the shared state this issue was about).
+    //
+    // THE POSITIVE CONTROL is a view whose only dependency is the dismiss read, in a window of its own,
+    // driven the same way. If it does not re-evaluate, the trigger did not reach SwiftUI and the zeros
+    // below would mean nothing was asked (L159).
+    private func keyTransition(_ window: NSWindow, counter: String, in hosting: NSView)
+        async -> (derivations: Int, evaluations: Int) {
+        await waitUntilQuiet(counter: counter, in: hosting)
+        let derivationsBefore = QueueRenderCounter.derivationCount(for: counter)
+        let evaluationsBefore = QueueRenderCounter.renderCount(for: counter)
+        NotificationCenter.default.post(name: NSWindow.didResignKeyNotification, object: window)
+        await waitUntilQuiet(counter: counter, in: hosting)
+        NotificationCenter.default.post(name: NSWindow.didBecomeKeyNotification, object: window)
+        await waitUntilQuiet(counter: counter, in: hosting)
+        return (QueueRenderCounter.derivationCount(for: counter) - derivationsBefore,
+                QueueRenderCounter.renderCount(for: counter) - evaluationsBefore)
+    }
+
+    @Test func aFocusChangeDerivesNothingOnAnySheet() async throws {
+        let control = host(DismissReadControl())
+        let controlReading = await keyTransition(control.window, counter: DismissReadControl.counter,
+                                                 in: control.hosting)
+        control.window.close()
+        #expect(controlReading.evaluations > 0, Comment(rawValue:
+            "a view holding only the dismiss read did not re-evaluate on a key change, so the trigger "
+            + "never reached SwiftUI and the zeros below prove nothing (L159)"))
+
+        for build in [hostFollowUps, hostStruckAddresses, hostExcludedTowns, hostDaysOff] {
+            let sheet = try build()
+            let reading = await keyTransition(sheet.window, counter: sheet.surface.rawValue, in: sheet.hosting)
+            sheet.tearDown()
+            print("focus-reading \(sheet.surface.rawValue): derivations=\(reading.derivations) "
+                  + "evaluations=\(reading.evaluations) control=\(controlReading.evaluations)")
+            #expect(reading.derivations == 0, Comment(rawValue:
+                "a window focus change with no data change derived the \(sheet.surface.rawValue) sheet "
+                + "\(reading.derivations) time(s) over \(reading.evaluations) body evaluation(s). The sheet "
+                + "holds a value the window system revises on focus, so every click away and back costs "
+                + "a derivation, and any reading taken over it can be moved by an unrelated window (#4408)"))
+        }
+    }
+}
+
+// The positive control's view: nothing in it but the value the window system revises, read in the
+// body, and a count of its own evaluations under a name no product surface uses.
+private struct DismissReadControl: View {
+    static let counter = "dismissReadControl4408"
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        let _ = QueueRenderCounter.recordRender(surface: Self.counter)
+        let _ = dismiss
+        Text("control")
     }
 }
