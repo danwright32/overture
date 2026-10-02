@@ -61,5 +61,9 @@ enum AppSchemaInputClass: Equatable, Sendable {
         "DismissedCoverageClient": .notAQueueInput(reason: """
             Read by the Sources sheet's coverage panel alone.
             """),
+        "LandingRun": .notAQueueInput(reason: """
+            The record that a scout results file has landed (#4336), read only by the landing that \
+            refuses the same file twice. The shows it landed reach the queue through their own rows.
+            """),
     ]
 }
