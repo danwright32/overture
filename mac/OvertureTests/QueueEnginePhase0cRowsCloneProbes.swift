@@ -601,13 +601,17 @@ extension QueueEnginePhase0cRowsProbeTests {
                                         nightsByKey: nights(), now: now, day: today)
             }
             let pre = preamble()
+            // #4356: the two tables built OUTSIDE the timed block, which times the preamble's init alone,
+            // since `sLookalikes` and `sNights` already time their derivation and both are summed below.
+            let lookalikeTable = lookalikes()
+            let nightTable = nights()
             let sPreamble = Phase0.median5 {
                 _ = QueueModel.CardPreamble(linked: linked, inherited: inherited, venueBrands: tables.venueBrands,
                                             rowCounts: rowCounts, calendarBySourceId: calendar, overrides: t.overrides,
                                             clients: context.clients, contradictedCancellations: contradicted,
                                             sameShowGroups: sameShow, titlesByKey: titles,
                                             collapsedFronts: collapse.fronts, collapsedHidden: collapse.hidden,
-                                            laterLookalikesByKey: lookalikes(), nightsByKey: nights(),
+                                            laterLookalikesByKey: lookalikeTable, nightsByKey: nightTable,
                                             now: now, day: today)
             }
             // The row loop exactly as scope runs it with no cards wanted.
