@@ -137,7 +137,9 @@ struct ArchiveView: View {
         fingerprint.add(watchedSources)
         fingerprint.add(refusedAddresses)
         // #4106: and any save into this store, through any context (see `ScopeMemo.value`'s `savesIn`).
-        return scopeMemo.value(fingerprint: fingerprint, cardKeys: keys, now: Date(),
+        // #4356: one instant for the memo and the scope it builds, so they reason about the same moment.
+        let now = Date()
+        return scopeMemo.value(fingerprint: fingerprint, cardKeys: keys, now: now,
                                savesIn: context.container,
                                // #4252: the whole-store scope (277 ms on the live store, 2026-09-25) against
                                // 134 ms to re-arm observation, so the refetch after a save is served.
@@ -152,7 +154,7 @@ struct ArchiveView: View {
                              // the spot, and the store counts that as an EXPECTED first-frame miss
                              // rather than a defect.
                              // #4356: the instant is required now, because the render pass reaches scope.
-                             now: Date(),
+                             now: now,
                              cardKeys: keys,
                              cardKeyRegistry: cardKeys)
         }

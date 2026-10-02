@@ -24,8 +24,9 @@ import Foundation
 // at more call sites, the safe direction. What it cannot see: a call inside a string interpolation (string
 // contents are removed), a member reached through a protocol requirement with no type named, a closure
 // stored in a property and called later, and an initialiser reached only through `.init` on a value. Those
-// are the guards' known blind spots, and `PassCallGraphTests` holds the graph to members the pass is known to
-// call so a parser regression cannot shrink it to nothing quietly (L98).
+// are the guards' known blind spots, and `PassClockScanTests.theGraphReachesWhatThePassIsKnownToCall` holds
+// the graph to members the pass is known to call, so a parser regression cannot shrink it to nothing
+// quietly (L98).
 enum PassCallGraph {
 
     enum Kind: Equatable, Sendable { case function, initializer, computed }

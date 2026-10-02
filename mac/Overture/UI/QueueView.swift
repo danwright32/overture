@@ -2712,8 +2712,10 @@ struct ReachabilityProbeControl: View {
     // #1609: geography defaulted to none, so a caller that does not care is unchanged.
     init(items: [QueueScopeRow], dateLabel: String, geo: GeoRefusals = .none, isRunning: Bool,
          onTap: @escaping (_ keys: [String], _ dateLabel: String) -> Void) {
-        self.init(heading: QueueModel.DateProbeHeading(items, now: Date(), today: EasternDate.today(Date()), geo: geo), dateLabel: dateLabel,
-                  isRunning: isRunning, onTap: onTap)
+        // #4356: one instant, and the day derived from it, so the two cannot straddle a midnight.
+        let now = Date()
+        self.init(heading: QueueModel.DateProbeHeading(items, now: now, today: EasternDate.today(now), geo: geo),
+                  dateLabel: dateLabel, isRunning: isRunning, onTap: onTap)
     }
 
     var body: some View {
