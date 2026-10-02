@@ -240,6 +240,33 @@ struct LandingBatchTablesTests {
         }, Comment(rawValue: "not every source rewrote a folded field: \(perSource.map { $0.1.description })"))
     }
 
+    // MARK: an answer already handed out is the store as that source began
+
+    // `apply` takes the spellings ONCE per source and reads them for every row of the batch, so they must stay
+    // the stored rows as they stood when the source began, even while the tables are changed in place under
+    // them by a later question. A row written after the answer was taken changes the NEXT answer only.
+    @Test func aSpellingAnswerStaysAsTheStoreWasWhenItWasTaken() throws {
+        let ctx = try context()
+        stored(ctx, "Tin Orchard", Self.night(20), url: "https://marlow.example/tin", venue: "Marlow Theatre",
+               sourceIds: ["marlow"])
+        try ctx.save()
+        let landing = ScoutLandingStore(context: ctx)
+        let before = try landing.venueSpellings()
+
+        let row = try #require(try landing.rows().first)
+        row.venue = "Marlow Theater"
+        row.sourceIds = ["marlow", "marlow-archive"]
+        try ctx.save()
+        let after = try landing.venueSpellings()
+
+        #expect(before.used(by: ["marlow"]) == ["Marlow Theatre"] && before.used(by: ["marlow-archive"]).isEmpty,
+                Comment(rawValue: "the answer taken first now reads \(before.used(by: ["marlow", "marlow-archive"]))"))
+        #expect(after.used(by: ["marlow"]) == ["Marlow Theater"] && after.used(by: ["marlow-archive"]) == ["Marlow Theater"],
+                Comment(rawValue: "the answer taken after the write reads \(after.used(by: ["marlow", "marlow-archive"]))"))
+        #expect(landing.counters.tableBuilds == 1 && landing.counters.tableRowsRejudged == 1, Comment(rawValue:
+            "the write was not judged as one row on the tables built once: \(landing.counters)"))
+    }
+
     // MARK: the pure tables, against a rebuild, over a seeded random history
 
     // Rows on one page and one token at one room, with the triple's three titles among them, set, rewritten
