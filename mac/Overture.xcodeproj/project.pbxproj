@@ -351,6 +351,7 @@
 		23A0C818C3C172A7D804B6FB /* ContactRowControlsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 44B888DB0E3591FDC5508A53 /* ContactRowControlsTests.swift */; };
 		23ABA42B3DF41BFD4C19EAA1 /* RecurringShowIsOneCardTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 227EC7AB68FC6A72D2C13659 /* RecurringShowIsOneCardTests.swift */; };
 		23AE388D2CFBF41D1F1558C2 /* PossibleMatchRecheckTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5597BF107193D57736B94215 /* PossibleMatchRecheckTests.swift */; };
+		23CBA3650AD48CCC7A750ED5 /* ProspectFactsMembers.swift in Sources */ = {isa = PBXBuildFile; fileRef = C953E7DF2B773FEC47C92634 /* ProspectFactsMembers.swift */; };
 		242DDAC7562C0FDE2735D1DC /* LeadSubmissionsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D7804ADCA50E74D9087C569 /* LeadSubmissionsTests.swift */; };
 		246C5CFABFBA0A342C3E213B /* SharedSetsOncePerPassTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB0C00C8CA7775A0AC2645A6 /* SharedSetsOncePerPassTests.swift */; };
 		247D69C7824F604FFE3E7B02 /* ReplyCaptureTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BE9DD8D0A1B26CB6C411B3FD /* ReplyCaptureTests.swift */; };
@@ -962,6 +963,7 @@
 		5FD7C0FEF733835CF9B19391 /* CalendarMonthIndex.swift in Sources */ = {isa = PBXBuildFile; fileRef = DCB4505CF0D31884FA476533 /* CalendarMonthIndex.swift */; };
 		5FD83D7E3D4F790E91325BB4 /* ProspectRowViewLaterLookalikeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 007FC50BF3AEAF3BB9DE31D5 /* ProspectRowViewLaterLookalikeTests.swift */; };
 		5FF49AAB5E568C76DF35397F /* InquiryQueue.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9BEC564814BBF16A3F636E80 /* InquiryQueue.swift */; };
+		5FF4C2C7FC6CFE12A9E654FB /* ProspectFactsMembers.swift in Sources */ = {isa = PBXBuildFile; fileRef = C953E7DF2B773FEC47C92634 /* ProspectFactsMembers.swift */; };
 		604A67A49B3F395F56E94061 /* ConfirmBackdrop.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF7898734751983F8F41E7FC /* ConfirmBackdrop.swift */; };
 		60654046D0FFBA3313455645 /* DraftSignaturePreview.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C6B3529DB2EF4BDE5AB17BE /* DraftSignaturePreview.swift */; };
 		60A40B9EA60838E58200ABE8 /* DraftTrace.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0129770C2EB5326112F8BD09 /* DraftTrace.swift */; };
@@ -4064,6 +4066,7 @@
 		C9064E2167420B0021F80693 /* ProducerCorpusIsBuiltOnceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProducerCorpusIsBuiltOnceTests.swift; sourceTree = "<group>"; };
 		C9235F9598687ECA4140ADCA /* TitleDecidesTheGenreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TitleDecidesTheGenreTests.swift; sourceTree = "<group>"; };
 		C9266356AE8B14EB790EA535 /* StageContext.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StageContext.swift; sourceTree = "<group>"; };
+		C953E7DF2B773FEC47C92634 /* ProspectFactsMembers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProspectFactsMembers.swift; sourceTree = "<group>"; };
 		C95E7D67946DA08045EA923F /* MastheadAnswersFromThePassTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MastheadAnswersFromThePassTests.swift; sourceTree = "<group>"; };
 		C97FC9ED6BC09A4361B886C2 /* BlockingWorkThreadTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BlockingWorkThreadTests.swift; sourceTree = "<group>"; };
 		C9CA4D01705078A9A8685ED2 /* ScoutLandingStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScoutLandingStore.swift; sourceTree = "<group>"; };
@@ -6240,6 +6243,7 @@
 				4A236B3B4CD4B24D74ADE92D /* ProposedConversation.swift */,
 				6C22E2042542477FF4D916B3 /* Prospect.swift */,
 				39078CF3F9C3902769283CB8 /* ProspectAssembler.swift */,
+				C953E7DF2B773FEC47C92634 /* ProspectFactsMembers.swift */,
 				04A0257C4480EC566824FA1E /* QueueFacts.swift */,
 				36795807A9F454119154EA6A /* QueueUndoStack.swift */,
 				295AFE7FD066E8FA04E4EC2D /* Ranker.swift */,
@@ -6967,6 +6971,7 @@
 				E89CCCC1D237DCF8349B68A1 /* ProposedConversation.swift in Sources */,
 				73679705D41DA095CC9189DC /* Prospect.swift in Sources */,
 				E887FF57AD484D520F4726D9 /* ProspectAssembler.swift in Sources */,
+				5FF4C2C7FC6CFE12A9E654FB /* ProspectFactsMembers.swift in Sources */,
 				74DDA85AB2C7978DB7552BCF /* ProspectMutations.swift in Sources */,
 				20D1754F10AC17472B579F39 /* ProspectRowFactory.swift in Sources */,
 				84F2B198166270B48CFCCBCF /* ProspectRowView.swift in Sources */,
@@ -8347,6 +8352,7 @@
 				00BBB1921BEF12F3EEF1FE12 /* ProspectAssembler.swift in Sources */,
 				D1DA16CE093E998F279DC660 /* ProspectAssemblerTests.swift in Sources */,
 				BCB2B9DEB4DFDD68CDDCE79D /* ProspectDerivedStatusTests.swift in Sources */,
+				23CBA3650AD48CCC7A750ED5 /* ProspectFactsMembers.swift in Sources */,
 				64F1941D84A0C3F180D91BEE /* ProspectFieldClassificationTests.swift in Sources */,
 				1801CBC362E19CE2F058B04D /* ProspectMutations.swift in Sources */,
 				990E9E92FD4CD399A5FE31DD /* ProspectMutationsTests.swift in Sources */,

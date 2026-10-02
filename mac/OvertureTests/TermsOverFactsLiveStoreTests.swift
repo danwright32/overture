@@ -40,7 +40,8 @@ final class TermsOverFactsLiveStoreTests {
                 #expect(!models.isEmpty, "the \(label) holds no shows, so nothing below compared anything")
                 let drawn = Set(QueueModel.queueScope(models).map(\.naturalKey))
                 let started = Phase0.now()
-                let findings = TermsOverFacts.findings(models, asOf: asOf, drawn: drawn)
+                let findings = TermsOverFacts.findings(models, asOf: asOf, drawn: drawn,
+                                                     rowByRow: label == "live clone")
                 let flagged = models.filter(\.disappearedFromFeed).count
                 print("terms over facts, \(label): \(models.count) row(s), \(flagged) flagged, "
                       + "\(drawn.count) drawn, \(findings.count) finding(s), "

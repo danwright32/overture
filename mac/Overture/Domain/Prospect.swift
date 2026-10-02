@@ -1152,7 +1152,7 @@ final class Prospect {
         set { statusRaw = newValue.rawValue }
     }
 
-    // `disappearedFromFeed` lives on `ProspectFacts` (QueueFacts.swift) since #4357, so a live model and a
+    // `disappearedFromFeed` lives on `ProspectFacts` (ProspectFactsMembers.swift) since #4357, so a live model and a
     // retained `RowFacts` answer it by one body.
 
     var hasDraft: Bool { draftBody != nil }

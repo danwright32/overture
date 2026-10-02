@@ -25,8 +25,11 @@ enum TermsOverFacts {
     /// surface draws, which is what the collapse hides rows in favour of (nil means every row is drawn).
     /// `facts` defaults to extracting `models` now; a positive control hands in facts taken BEFORE a model
     /// changed, to show the comparison can see a retained row that went stale (L159).
+    /// `rowByRow` also asks `liveTwin` of every flagged row on both arms, which is flagged rows times all
+    /// rows: about a second on the clone and over 40 on the 4x copy (measured 2026-10-02), so the 4x arm
+    /// compares the indexed set alone, which is what the pass reads.
     static func findings(_ models: [Prospect], facts given: [RowFacts]? = nil, asOf: String,
-                         drawn: Set<String>? = nil) -> [String] {
+                         drawn: Set<String>? = nil, rowByRow: Bool = true) -> [String] {
         let facts = given ?? models.map(RowFacts.extract)
         let pidByKey = Dictionary(models.map { ($0.naturalKey, String(describing: $0.persistentModelID)) },
                                   uniquingKeysWith: { first, _ in first })
@@ -60,6 +63,7 @@ enum TermsOverFacts {
             if model.disappearedFromFeed != fact.disappearedFromFeed {
                 out.append("disappearedFromFeed differs for row \(pid(model.naturalKey))")
             }
+            guard rowByRow else { continue }
             let twinModel = ContradictedCancellation.liveTwin(of: model, among: models)?.persistentModelID
             let twinFact = ContradictedCancellation.liveTwin(of: fact, among: facts)?.persistentModelID
             if twinModel != twinFact {
