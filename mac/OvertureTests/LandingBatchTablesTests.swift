@@ -55,8 +55,9 @@ struct LandingBatchTablesTests {
 
     // Store rows a landing VISITS for one source: every row handed to a caller, every row the working set
     // walked itself, and every row whose contribution to the batch tables was judged again.
+    // #4460: and every row a per event match arm was handed from the rows on its keys.
     private static func visits(_ c: ScoutLandingStore.Counters) -> Int {
-        c.rowsHandedOut + c.rowsWalked + c.tableRowsRejudged
+        c.rowsHandedOut + c.rowsWalked + c.tableRowsRejudged + c.rowsLookedUp
     }
 
     // A pure re-land of three sources, each re-listing its own three stored shows, over a store padded with
@@ -102,6 +103,134 @@ struct LandingBatchTablesTests {
         let large = try await perSourceVisits(padding: 391)
         #expect(!small.isEmpty && small == large, Comment(rawValue:
             "per source visits after the first: \(small) on a store of 40, \(large) on a store of 400"))
+    }
+
+    // MARK: the per event match arms, at two store sizes and two batch sizes (#4460)
+
+    // A source bringing `newShows` shows the store has never held, each missing its natural key so it reaches
+    // every per event arm (a series id, a production token in its listing, a listing URL, and the arrival
+    // notes), landed after a warm source over a store padded with `padding` rows on other nights, pages and
+    // tokens. Returns the visits the new source cost, and how many rows it inserted.
+    private func newShowVisits(padding: Int, newShows: Int) async throws -> (visits: Int, inserted: Int) {
+        let ctx = try context()
+        stored(ctx, "Kept Warm", Self.night(5), url: "https://src.example/Kept Warm", sourceIds: ["warm"])
+        for k in 0..<padding {
+            stored(ctx, "Padding \(k)", Self.night(60 + k % 200),
+                   url: LandingOracleCorpus.vtx("vtx\(50_000 + k)", "padding-\(k)"),
+                   venue: "Padding Hall \(k % 7)")
+        }
+        queued(ctx, ["warm", "fresh"])
+        try ctx.save()
+        let fresh = (0..<newShows).map { k in
+            ScoutExtractEvent(title: "Arriving Ensemble \(k)", presenter: Self.room, venue: Self.room,
+                              performanceDate: Self.night(10 + k),
+                              sourceUrl: LandingOracleCorpus.vtx("vtx\(90_000 + k)", "arriving-\(k)"),
+                              seriesId: "series-\(k)")
+        }
+        let results = ScoutExtractResults(version: 1, generatedAt: "2026-09-29T00:00:00Z", results: [
+            ScoutExtractResult(sourceId: "warm", verdict: .upcomingListings, events: [event("Kept Warm", 5)],
+                               note: nil),
+            ScoutExtractResult(sourceId: "fresh", verdict: .upcomingListings, events: fresh, note: nil),
+        ])
+        var steps: [(String, ScoutLandingStore.Counters)] = []
+        let outcome = await ScoutExtractIngest.ingest(results, clients: [], history: [], blocked: .empty,
+                                                      today: Self.today,
+                                                      onLandingStep: { steps.append(($0, $1.counters)) },
+                                                      into: ctx)
+        let landed = steps.filter { $0.0 != ScoutLandingStore.Counters.afterReconcile }
+        guard landed.map(\.0) == ["warm", "fresh"] else {
+            Issue.record(Comment(rawValue: "the landing reported \(steps.map(\.0)), not both sources"))
+            return (0, 0)
+        }
+        return (Self.visits(landed[1].1 - landed[0].1), outcome.inserted)
+    }
+
+    // THE GUARD (#4460). A source of new shows visits exactly as many stored rows on a store of 50 as on a store
+    // four times larger, and a batch four times larger visits no more than four times as many: what the per event
+    // arms cost is set by the batch, never by the rows nobody touched, and never by the batch squared. Seen on the
+    // code before #4460, where each new show walked every stored row in each arm it reached, and on its first
+    // draft, which rebuilt every unsaved insert on every read (601 visits for sixteen shows against 31 for four).
+    @Test func aNewShowsArmsVisitRowsInProportionToTheBatchNotTheStore() async throws {
+        let small = try await newShowVisits(padding: 50, newShows: 4)
+        let large = try await newShowVisits(padding: 200, newShows: 4)
+        let wide = try await newShowVisits(padding: 200, newShows: 16)
+        #expect(small.inserted == 4 && large.inserted == 4 && wide.inserted == 16, Comment(rawValue:
+            "the new shows were not all inserted (\(small.inserted), \(large.inserted), \(wide.inserted)), "
+            + "so they never reached the arms this measures"))
+        #expect(small.visits > 0 && small.visits == large.visits, Comment(rawValue:
+            "four new shows visited \(small.visits) rows on a store of 51 and \(large.visits) on a store of 201"))
+        #expect(wide.visits <= 4 * large.visits, Comment(rawValue:
+            "sixteen new shows visited \(wide.visits) rows where four visited \(large.visits), more than four times as many"))
+    }
+
+    // OLD AGAINST NEW, at every step of the oracle corpus's landing, in both Fenwick orders: for every key any
+    // corpus show or stored show could be looked up by, the rows the tables hand an arm are exactly the rows the
+    // walk over every stored row finds carrying that key, freshly folded, in the same order. The arms apply
+    // their own predicate to those rows unchanged, so the first match and every filter are the walk's.
+    @Test(arguments: [false, true])
+    func everyArmsKeyedRowsEqualTheWalkAfterEverySource(fenwickSwapped: Bool) async throws {
+        let order = fenwickSwapped ? LandingOracleTests.fenwickSwapped : LandingOracleCorpus.sources.map(\.id)
+        let container = try TestModelContainer.inMemory(AppSchema.models)
+        let context = container.mainContext
+        try LandingOracleCorpus.seed(into: context)
+        typealias Lookup = LandingBatchTables.Lookup
+        func lookups(listing: String?, runs: [String], series: String?, night: String?) -> [Lookup] {
+            let urls = (listing.map { [$0] } ?? []) + runs
+            var out: [Lookup] = [.sharingURL(ListingURL.foldedSet(urls))]
+            if let listing, !listing.isEmpty { out.append(.sharingURL([ListingURL.fold(listing)])) }
+            let tokens = Set(urls.compactMap(ProductionToken.inURL))
+            if !tokens.isEmpty { out.append(.sharingToken(tokens)) }
+            if let series, !series.isEmpty { out.append(.series(series)) }
+            if let night, !night.isEmpty { out.append(.night(night)) }
+            return out
+        }
+        let probes = LandingOracleCorpus.sources.flatMap(\.events).flatMap {
+            lookups(listing: $0.sourceUrl, runs: [], series: $0.seriesId, night: $0.performanceDate)
+        } + LandingOracleCorpus.stored.flatMap {
+            lookups(listing: $0.listingURL, runs: $0.runURLs, series: nil, night: $0.date)
+        }
+        var steps: [String] = []
+        var found: [String] = []
+        var handed = 0
+        await ScoutExtractIngest.ingest(LandingOracleCorpus.results(order: order), clients: [], history: [],
+                                        blocked: .empty, today: LandingOracleCorpus.today,
+                                        now: LandingOracleCorpus.now,
+                                        onLandingStep: { step, landing in
+                                            steps.append(step)
+                                            for probe in probes {
+                                                do {
+                                                    let keyed = try landing.rows(probe)
+                                                    let walked = try landing.walkedRows(probe)
+                                                    handed += keyed.count
+                                                    if keyed.map(ObjectIdentifier.init) != walked.map(ObjectIdentifier.init) {
+                                                        found.append("\(step) \(probe): keyed \(keyed.map(\.groupName)), "
+                                                                     + "the walk \(walked.map(\.groupName))")
+                                                    }
+                                                } catch {
+                                                    found.append("\(step) \(probe): the store could not answer: \(error)")
+                                                }
+                                            }
+                                        }, into: context)
+        #expect(steps == order + [ScoutLandingStore.Counters.afterReconcile], Comment(rawValue:
+            "the landing reported \(steps), so not every source was checked"))
+        #expect(handed > 0, "no probe found a row, so the equality above compared empty lists")
+        #expect(found.isEmpty, Comment(rawValue: found.joined(separator: "\n")))
+    }
+
+    // THE FAILURE PATH. A store that cannot answer refuses a keyed lookup by throwing, exactly as the walk it
+    // replaced did, so the arm refuses the show rather than reading "no match" and inserting it blind (L215).
+    @Test func aKeyedLookupOnAStoreThatCannotAnswerThrows() throws {
+        struct StoreIsDown: Error {}
+        let ctx = try context()
+        stored(ctx, "Kept Warm", Self.night(5), url: "https://src.example/Kept Warm")
+        try ctx.save()
+        let landing = ScoutLandingStore(context: ctx, read: { _ in throw StoreIsDown() })
+        for lookup: LandingBatchTables.Lookup in [.sharingURL(["https://src.example/Kept Warm"]),
+                                                  .sharingToken(["vtx1"]), .series("s"), .night(Self.night(5))] {
+            #expect(throws: StoreIsDown.self, Comment(rawValue: "\(lookup) answered on an unreadable store")) {
+                try landing.rows(lookup)
+            }
+        }
     }
 
     // MARK: the tables equal a rebuild, and every batch's answers equal the walks, after every source
@@ -298,6 +427,9 @@ struct LandingBatchTablesTests {
             c.tokens = [.init(token: "vtx1", title: ShowLink.foldedTitle(title), venue: venue)]
             c.urls = [.init(url: "https://page.example/season", title: title, venue: venue)]
             c.spellings = [.init(sourceId: source, venue: venue)]
+            // #4460: the series and night lists, churned with the rest.
+            c.seriesId = source == "a" ? "series-a" : nil
+            c.night = venue == "chapel" ? "2026-10-20" : "2026-10-21"
             return c
         }
         var rng = SeededGenerator(seed: 4333)

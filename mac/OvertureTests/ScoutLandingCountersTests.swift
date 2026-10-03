@@ -58,7 +58,8 @@ struct ScoutLandingCountersTests {
 
     // Five rows. The first batch question folds all five for the first time and builds the tables from them;
     // the second re-judges nothing; a row joining is counted as a join and re-judged alone; a title written in
-    // place is counted as a changed fold and re-judged with the joined row, which is still an unsaved insert.
+    // place is counted as a changed fold and re-judged, while the joined row, still an unsaved insert, is checked
+    // and found unchanged (#4460).
     // Every count below is exact.
     @Test func eachCounterMovesAtItsOwnSiteByExactlyItsOwnAmount() throws {
         let ctx = try context()
@@ -89,7 +90,9 @@ struct ScoutLandingCountersTests {
         rows[0].groupName = "Row 0: Encore"
         _ = try landing.ambiguousURLs(adding: [])
         c = landing.counters
-        #expect(c.foldsChanged == 1 && c.tableBuilds == 1 && c.tableRowsRejudged == 3 && c.foldValidations >= 1,
+        // #4460: the joined row, still an unsaved insert, is checked again and found unchanged, so only the
+        // rewritten row is judged again (it used to be rebuilt too, on every read until its source saved).
+        #expect(c.foldsChanged == 1 && c.tableBuilds == 1 && c.tableRowsRejudged == 2 && c.foldValidations >= 1,
                 Comment(rawValue: "a title written in place did not count as a changed fold judged again: \(c)"))
 
         let handed = try landing.rows().count
