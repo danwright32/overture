@@ -26,6 +26,21 @@ final class TheFreezeLogKeepsItsOldestRecordsTests {
         for record in records { _ = FreezeLog.append(record, to: url) }
     }
 
+    // #4454: the prune's rule works over the archive's LINES, so these hand it the lines `append` writes.
+    private func pruned(_ records: [StallRecord], now: Date) -> FreezeLog.Pruned {
+        let decoder = FreezeLog.decoder()
+        return FreezeLog.pruned(lines: records.compactMap(FreezeLog.line(for:)).map { Data($0.utf8) }, now: now,
+                                decode: { FreezeLog.decodeLine($0, with: decoder) })
+    }
+
+    private func keptIdentities(_ result: FreezeLog.Pruned) -> [String] {
+        let decoder = FreezeLog.decoder()
+        return result.keptLines.compactMap {
+            if case .record(let record) = FreezeLog.decodeLine($0, with: decoder) { return record.identity }
+            return nil
+        }
+    }
+
     // THE ONE THAT MATTERS. Every record a compaction drops is in the archive afterwards, so the
     // distribution survives a relaunch, which is the only thing a build install is guaranteed to do.
     @Test("the records a compaction drops are in the archive afterwards")
@@ -119,9 +134,9 @@ final class TheFreezeLogKeepsItsOldestRecordsTests {
         let outside = [stall(0.5, sequence: 3, at: now.addingTimeInterval(-window - day)),
                        stall(0.6, sequence: 4, at: now.addingTimeInterval(-window - 90 * day))]
 
-        let result = FreezeLog.pruned(outside + inside, now: now)
+        let result = pruned(outside + inside, now: now)
 
-        #expect(result.records.map(\.identity) == inside.map(\.identity),
+        #expect(keptIdentities(result) == inside.map(\.identity),
                 "the retention window kept the wrong records")
         #expect(result.dropped == outside.count,
                 Comment(rawValue: "expected \(outside.count) records outside the window to be dropped, "
@@ -142,7 +157,7 @@ final class TheFreezeLogKeepsItsOldestRecordsTests {
                        stall(0.5, sequence: 2, at: newestDropped),
                        stall(0.3, sequence: 3, at: now.addingTimeInterval(-day))]
 
-        let result = FreezeLog.pruned(records, now: now)
+        let result = pruned(records, now: now)
 
         #expect(result.dropped == 2)
         #expect(result.earliestDropped == oldest, "the prune cannot say how far back it reached")
@@ -156,7 +171,7 @@ final class TheFreezeLogKeepsItsOldestRecordsTests {
         let now = Date(timeIntervalSince1970: 1_800_000_000)
         let records = [stall(0.3, sequence: 1, at: now.addingTimeInterval(-60 * 60 * 24))]
 
-        let result = FreezeLog.pruned(records, now: now)
+        let result = pruned(records, now: now)
 
         #expect(result.dropped == 0)
         #expect(result.earliestDropped == nil)
@@ -185,41 +200,9 @@ final class TheFreezeLogKeepsItsOldestRecordsTests {
         #expect(left.records.map(\.identity) == ["s#2"], "the archive file was not rewritten to the window")
     }
 
-    // THE ONE THAT MATTERS HERE. A prune rewrites the archive from what its READ returned, so any line the
-    // read could not decode is destroyed by the rewrite without ever being counted. A log half written by a
-    // process killed mid-freeze is the ordinary case for this file, so that is not a rare path. A cleanup
-    // that deletes whatever its read failed to mention must refuse on a SHORT read, not only on a failed
-    // one (L211, L105).
-    @Test("a prune refuses to rewrite an archive holding lines it could not read")
-    func aPruneRefusesOnAnUnreadableArchive() throws {
-        let dir = try sandboxes.make(named: "freeze-prune-damaged")
-        let log = FreezeLog.url(in: dir)
-        let archive = FreezeLog.archiveURL(besideLogAt: log)
-        let now = Date(timeIntervalSince1970: 1_800_000_000)
-        let day: TimeInterval = 60 * 60 * 24
-        let window = Double(FreezeLog.archiveRetentionDays) * day
-        // Built as ONE write, with the truncated line in the MIDDLE, which is where a process killed
-        // mid-append leaves it. Written in one go deliberately: composing it by appending after a
-        // `String.write` would OVERWRITE the record before it, and the fixture would then be a damaged line
-        // plus one good one rather than the sandwich this case is about.
-        let good = [stall(0.5, sequence: 1, at: now.addingTimeInterval(-window - day)),
-                    stall(0.3, sequence: 2, at: now.addingTimeInterval(-day))]
-        let damaged = "{\"session\":\"s\",\"sequence\":99,\"at\":\"2026-09-10T17:4"
-        let lines = [FreezeLog.line(for: good[0]), damaged, FreezeLog.line(for: good[1])].compactMap { $0 }
-        #expect(lines.count == 3, "the fixture could not encode its own records, so it tests nothing")
-        try (lines.joined(separator: "\n") + "\n").write(to: archive, atomically: true, encoding: .utf8)
-        let before = try String(contentsOf: archive, encoding: .utf8)
-        #expect(FreezeLog.read(at: archive).unreadableLines == 1,
-                "the fixture's damaged line decoded after all, so this case was never reached")
-
-        let result = FreezeLog.pruneArchive(besideLogAt: log, now: now)
-
-        #expect(result == .refused(unreadableLines: 1),
-                Comment(rawValue: "the prune did not refuse on the unreadable line: got \(result)"))
-        let after = try String(contentsOf: archive, encoding: .utf8)
-        #expect(after == before,
-                "the archive was rewritten despite holding a line the read could not decode, so that line is gone")
-    }
+    // #4454 replaced the refusal that stood here. A prune now keeps every line it cannot read, verbatim, and
+    // still removes what it can show is old, on #4398's precedent for the live file; that and its failure
+    // path are pinned in `TheArchivePruneDecodesOnlyWhatItRemovesTests`.
 
     // MARK: - what Dan is told about it (#3763's "say how many and over what date range")
 
@@ -305,16 +288,6 @@ final class TheFreezeLogKeepsItsOldestRecordsTests {
         #expect(notice?.contains("1 records") == false, "the singular reads as a plural with a 1 in it")
         #expect(notice?.contains("between") == false,
                 "a single record was given a span, which is a range over a set of one")
-    }
-
-    // A refusal is NOT a quiet prune. The archive holds lines that could not be read, so nothing was
-    // removed and nothing will be until somebody looks (L11).
-    @Test("a prune that refused because it could not read the archive says so")
-    func aRefusedPruneIsSaid() {
-        let refused = FreezeLog.ArchivePrune.refused(unreadableLines: 3)
-        let notice = FreezeHousekeepingCopy.notice(FreezeLog.Housekeeping(prune: refused))
-        #expect(notice != nil, "a refused prune said nothing, so a damaged archive is never noticed")
-        #expect(notice?.contains("3") == true, "the sentence does not say how many lines could not be read")
     }
 
     // THE TEST THAT WAS MISSING, and its absence is why a contradiction sat behind a green suite. Every
@@ -457,9 +430,9 @@ final class TheFreezeLogKeepsItsOldestRecordsTests {
                   + "which is expected while the archive is newer than \(FreezeLog.archiveRetentionDays) days.")
             #expect(afterPrune.records.count == archived.records.count,
                     "the prune removed records while reporting that it removed none")
-        case .refused(let lines):
-            Issue.record(Comment(rawValue: "the prune refused on the real archive: \(lines) unreadable "
-                                 + "line(s). That is the guard working, and it means the real archive is damaged."))
+        case .couldNotRewrite:
+            Issue.record(Comment(rawValue: "the prune could not rewrite the copy of the real archive, so this "
+                                 + "rehearsal verified nothing about what it would remove."))
         case .removed(let count, let earliest, let latest):
             print("freeze-compaction-rehearsal: the prune removed \(count) record(s) from "
                   + "\(earliest) to \(latest).")
