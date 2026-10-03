@@ -1159,9 +1159,8 @@ final class Prospect {
         set { statusRaw = newValue.rawValue }
     }
 
-    // Gone from the feed: absent across enough consecutive scouts to rule out a transient
-    // partial feed (#133). Cancelled or pulled, not merely a one-off glitch.
-    var disappearedFromFeed: Bool { missedScoutCount >= FeedReconcile.goneThreshold }
+    // `disappearedFromFeed` lives on `ProspectFacts` (ProspectFactsMembers.swift) since #4357, so a live model and a
+    // retained `RowFacts` answer it by one body.
 
     var hasDraft: Bool { draftBody != nil }
 

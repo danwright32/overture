@@ -61,6 +61,22 @@ enum LandingOracle {
         "WatchedSource.lastTouchedSequence":
             "#4330's landing sequence, minted per run above every earlier mint in the process, so two "
             + "landings of the same inputs differ by construction; 6d3453d8 has no such field",
+        // #4335: which run landed the source, the same kind of fact as the sequence above.
+        "WatchedSource.lastLandedSequence":
+            "#4335's landing sequence of the run that landed the source, minted per run like "
+            + "lastTouchedSequence; 6d3453d8 has no such field",
+        "WatchedSource.lastLandedRunID":
+            "#4335's run identity, a sweep id minted per run (or, for decoded results with no file, an id of "
+            + "their own), so it cannot repeat; 6d3453d8 has no such field",
+    ]
+
+    // Whole models the oracle does not record, keyed by name, with the reason. Only a model that is a record
+    // OF the landing rather than data it lands belongs here, and only while 6d3453d8's recording, which
+    // predates it, is the oracle.
+    static let recordsOfTheLanding: [String: String] = [
+        "LandingRun":
+            "#4335's record of each landing (its identity, sequence and start), one row per run, so two landings "
+            + "of the same inputs leave two different rows; 6d3453d8 has no such model",
     ]
 
     // MARK: the snapshot
@@ -100,6 +116,7 @@ enum LandingOracle {
             // `everyModelInTheSchemaIsSnapshotted` fails the day one is not, rather than this reading EQUAL
             // over a model it never looked at (L96).
             guard let observed = type as? any ScopeObserved.Type else { continue }
+            guard recordsOfTheLanding[String(describing: type)] == nil else { continue }
             rows += try snapshotRows(observed, in: fresh)
         }
         rows.sort {

@@ -165,7 +165,9 @@ final class ScoutResultsAlreadyLandedTests {
         ctx.insert(WatchedSource(sourceId: "other", orgName: "Other", listingsURL: "https://other.example/",
                                  kind: .html))
         try ctx.save()
-        #expect(try ModelContext(c).fetch(FetchDescriptor<LandingRun>()).isEmpty,
+        // #4335 (A6): the landing's record of itself now reaches the store with its first save, UNLANDED, so
+        // what this asserts is that no record says these results landed.
+        #expect(try ModelContext(c).fetch(FetchDescriptor<LandingRun>()).allSatisfy { $0.landedAt == nil },
                 "a landing whose save failed was recorded as landed")
 
         let again = try await land(data, at: secondLanding, into: ctx, pending: pending)

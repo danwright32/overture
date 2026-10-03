@@ -2163,10 +2163,13 @@ struct RootView: View {
     }
 
     @discardableResult
-    private func reportAnyFreezes() -> Bool {
-        guard let message = FreezeReport.newlyReported(in: StoreLocation.handoffDirectory,
-                                                       watchdogRan: freezeWatch.isWatching,
-                                                       writesThatFailed: freezeWatch.writesThatFailed) else {
+    private func reportAnyFreezes() async -> Bool {
+        // #4453: the files are read OFF the main actor, through the actor that also compacts them. On
+        // 2026-10-02 this read was 69% of the main thread while Dan's window had stopped responding.
+        guard let message = await FreezeLogHousekeeper.shared.freezeReport(
+            in: StoreLocation.handoffDirectory,
+            watchdogRan: freezeWatch.isWatching,
+            writesThatFailed: freezeWatch.writesThatFailed) else {
             return false
         }
         // #3808: the two sentences that carry NO record identity are said once, and nothing else is
@@ -2308,6 +2311,8 @@ struct RootView: View {
                                                            loaded.health),
                                                   context: context),
             priority: priority,
+            // #4335 (A6): the landing journal folder, resolved here, at the product call site, once.
+            journals: .live,
             into: context)
         if let left = landed.copyLeftBehind { status.set(left, priority: .warning) }
         let outcome = landed.outcome
@@ -2337,7 +2342,7 @@ struct RootView: View {
             clients: loaded.clients, history: LocalHistory.forMatching(existing: existing),
             blocked: ScoutService.blockedCalendar(export: (loaded.bookings, loaded.blockedDates, loaded.health),
                                                   context: context),
-            pending: pending, into: context)
+            pending: pending, journals: .live, into: context)
         let problems = offered.unreadable + offered.copiesLeftBehind
         if let line = LandingWaitCopy.offered(landed: offered.landed.count, alreadyLanded: offered.alreadyLanded,
                                               stillWaiting: offered.stillWaiting,
@@ -2583,9 +2588,14 @@ struct RootView: View {
     //
     // That is a real cost, stated rather than glossed: on a tick carrying both, the divergence waits an
     // hour. It was previously a whole login, and before this pairing it was lost outright.
+    //
+    // #4453: in a Task, because the freeze half now awaits the files off the main actor. The order and the
+    // early return are unchanged, and the divergence half still runs on the main actor after it.
     private func reportWhatWasRecorded() {
-        if reportAnyFreezes() { return }
-        reportAnyCardDivergences()
+        Task {
+            if await reportAnyFreezes() { return }
+            reportAnyCardDivergences()
+        }
     }
 
     // #3435/#3763: bound the freeze log and prune the archive it fills. ONE method, called from the
@@ -2761,7 +2771,9 @@ struct RootView: View {
                             askReadBudget(ScoutReadAsk(pending: pending) { continuation.resume(returning: $0) })
                         }
                     },
-                    landingPriority: auto ? .scout : .danAction)
+                    landingPriority: auto ? .scout : .danAction,
+                    // #4335 (A6): the landing journal folder, resolved here, at the product call site, once.
+                    journals: .live)
                 guard gen == scoutGeneration else { return }   // superseded by a Retry / newer run
                 scoutSummary = ScoutRunSummary.summary(for: outcome)   // #885
 

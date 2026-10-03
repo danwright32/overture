@@ -277,6 +277,10 @@ struct AddressCorrectionTests {
         // #4330: which RUN last landed this row, not anything about the page. Kept so a run that read the
         // old address before the correction can never be taken for one newer than a run that landed after.
         "lastTouchedSequence": "the landing order of runs (#4330), not a fact about the page",
+        // #4335: which run last landed this row, kept for the same reason: the recovery reads an interrupted
+        // landing's journal against it, and a correction does not undo a landing that happened.
+        "lastLandedRunID": "which run last landed the row (#4335), not a fact about the page",
+        "lastLandedSequence": "which run last landed the row (#4335), not a fact about the page",
     ]
 
     // A stored property, as opposed to a computed one. The distinction is exactly whether the declaration

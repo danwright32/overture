@@ -98,13 +98,21 @@ enum ScoutExtractIngest {
                        // #4334: called with the run's sequence when the entry flush refuses the landing, where
                        // the caller keeps a copy of the results to land once the edits are saved (L371, L665).
                        onRefused: (Int) -> Void = { _ in },
+                       // #4335 (A6): where this landing keeps its journal, the record of what it set out to do
+                       // (`LandingJournal`). The product call sites pass `.live`, resolved there once, and
+                       // `EveryProductLandingKeepsAJournalTests` fails when one does not. nil keeps none, for a
+                       // test whose subject is not the journal; a test that is passes its own sandbox (L433).
+                       journals: LandingJournals? = nil,
                        // #4331 (A2): how the landing stamps `ingestedAt`. Only the merge survivor probe passes
                        // anything but the rule, to measure the rule against the one it replaced.
                        stampRule: IngestedAtStamp.Rule = .whenChanged,
                        into context: ModelContext) async -> ScoutService.Outcome {
         var outcome = ScoutService.Outcome(found: 0, inserted: 0, updated: 0, skipped: 0)
+        // #4335: minted above every sequence the store recorded (on a source, or on a landing record) and
+        // every sequence a journal's NAME carries, pending or set aside as unreadable, so a landing a crash
+        // interrupted before its first save can never have its number handed out again (L186, L371).
         let sequence = givenSequence ?? landings.mintSequence(
-            above: max(sequenceFloor(), highestStoredSequence(in: context)))
+            above: max(sequenceFloor(), highestStoredSequence(in: context), journals?.highestSequence ?? 0))
 
         // #4329 (A12): the read loop below writes NOTHING to the store. Every write it decides for a source (the
         // run's note, a failure, a confirmed quiet page) is captured in that source's slot and applied by the
@@ -340,8 +348,42 @@ enum ScoutExtractIngest {
             onRefused(sequence)
             return outcome
         }
+        // #4335 (A6): the landing's record of itself, written before anything is applied and after the last
+        // await. Its run identity is the results' content hash; decoded results with no file behind them (a
+        // test's) are given one of their own, so every landing is recorded.
+        let runIdentity = identity?.contentHash ?? "decoded-" + UUID().uuidString
+        let journal = LandingJournal(
+            runIdentity: runIdentity, sequence: sequence, entryPoint: .scoutExtractIngest,
+            sources: slots.compactMap { slot -> LandingJournal.Source? in
+                switch slot {
+                case .settled(_, let source?, _): return .init(sourceId: source.sourceId, pageHash: nil)
+                case .settled(_, nil, _): return nil
+                case .pending(let pending):
+                    return .init(sourceId: pending.source.sourceId, pageHash: pending.source.pendingContentHash)
+                }
+            },
+            now: now)
+        // A journal that cannot be written refuses the landing by name before any apply (L258), exactly as the
+        // entry flush's refusal does: the caller keeps the results to land once it can.
+        if let journals {
+            do {
+                try journals.start(journal)
+            } catch {
+                outcome.landingStop = .journalNotWritten(why: HandoffDecodeFailure.describe(error))
+                for slot in slots { reportNotAttempted(slot) }
+                onRefused(sequence)
+                return outcome
+            }
+        }
         let landing = ScoutLandingStore(context: context, read: readProspectTable, saveSource: saveSource,
                                         classify: classifySaveFailure, stampRule: stampRule)
+        // The landing record, inserted here, at the start of the synchronous landing block (the 2026-09-29 L55
+        // decision), so the read phase above stays clean, and carried to disk by the landing's first save. It
+        // is a SETTLED row to the revert: a source whose save fails is put back without taking it, so the
+        // record of a landing that started survives that source.
+        let run = LandingRun.begin(runIdentity: runIdentity, sequence: sequence, entryPoint: .scoutExtractIngest,
+                                   startedAt: now, in: context)
+        landing.noteSettled(run)
         // #4330: the re-validation. A later run landed this source after this one read it, so this reading is
         // the older one and is set aside whole: nothing applied (#4329: not even its note, its failure or its
         // failure streak, which the read loop no longer writes), and the page hash not promoted, so the next
@@ -362,6 +404,10 @@ enum ScoutExtractIngest {
             let source = pending.source
             if setAsideIfSuperseded(source) { return }
             landCaptured(pending.writes, on: source)
+            // #4335: which run landed this source, in the same save as its shows (`apply`'s), so the store says
+            // which sources an interrupted landing finished. A failed save puts these back with the shows.
+            source.lastLandedRunID = runIdentity
+            source.lastLandedSequence = sequence
             let events = pending.events
             let rejection = pending.rejection
             let health = pending.health
@@ -507,15 +553,13 @@ enum ScoutExtractIngest {
         }
         // #4325: the reconcile's writes, and every source's bookkeeping above, saved before the landing
         // returns, through the one closing save the native sweep uses. Nothing saved them before this.
-        // #4336 (A7): the record that these results landed rides the closing save, so it reaches disk with
-        // the landing or not at all. Only a landing nothing failed to save is recorded: a failed save leaves
-        // the results to be offered again, and a record of it would refuse them (L5). A record whose save
-        // failed is taken back out of the context by the closing save's revert (#4334), which deletes every
-        // pending insert, so no later save can persist it.
-        if let identity, !outcome.saveFailed, outcome.landingStop == nil {
-            let run = LandingRun(runIdentity: identity.contentHash, landedAt: now)
-            context.insert(run)
-        }
+        // #4336 (A7): the stamp that these results landed rides the closing save, so it reaches disk with the
+        // landing or not at all. Only a landing nothing failed to save is stamped: a failed save leaves the
+        // results to be offered again, and a stamp would refuse them (L5). A stamp whose save failed is put
+        // back by the closing save's revert (#4334), to the unlanded record the first save carried, or with
+        // the record itself when no save carried it. #4335: the record is the one inserted at landing start.
+        let landed = !outcome.saveFailed && outcome.landingStop == nil
+        if landed { run.landedAt = now }
         // #4334 (A5): a landing that stopped because a source could NOT be put back makes no further save, so
         // nothing it could not restore is saved; any other stop still saves what the sources before it left.
         if case .notReverted? = outcome.landingStop {
@@ -523,6 +567,9 @@ enum ScoutExtractIngest {
         } else if !ScoutService.saveLanding(landing, into: context, save: saveClosing) {
             outcome.saveFailed = true
         }
+        // #4335: a landing whose every save went through has spent its journal. Any other keeps it, for the
+        // recovery to read against what the store says landed.
+        if landed && !outcome.saveFailed { journals?.retire(journal) }
         token.end()
 
         return outcome
@@ -531,10 +578,13 @@ enum ScoutExtractIngest {
     // #4330: the highest sequence any landing has stamped on a source, the store's half of the floor a new
     // sequence is minted above. One sorted fetch of one row. A fetch that fails leaves the floor to this
     // process's own mints; the same store then fails every `row(for:)` below, so nothing lands on it.
+    // #4335: and the highest a landing RECORD carries, which a landing whose sources were all set aside or
+    // put back still saved.
     private static func highestStoredSequence(in context: ModelContext) -> Int {
         var top = FetchDescriptor<WatchedSource>(sortBy: [SortDescriptor(\.lastTouchedSequence, order: .reverse)])
         top.fetchLimit = 1
-        return (try? context.fetch(top))?.first?.lastTouchedSequence ?? 0
+        let touched = (try? context.fetch(top))?.first?.lastTouchedSequence ?? 0
+        return max(touched, (try? LandingRun.highestSequence(in: context)) ?? 0)
     }
 
     // The shared bookkeeping for a source that failed this run, whichever way it failed (a broken verdict
