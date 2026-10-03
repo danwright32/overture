@@ -561,9 +561,8 @@ enum FreezeLog {
         }
     }
 
-    // The file half of the retention, stubbed so the tests beside it fail on behaviour rather than on a
-    // missing symbol. `refusedUnreadableLines` is its own field rather than a flag, because how many lines
-    // could not be read is what a person would need to act on it.
+    // What the file half of the retention did: removed some records, could not rewrite the archive, or had
+    // nothing to remove.
     // ONE discriminated value rather than four fields beside each other, because the fields could express
     // states this function cannot produce (L544). Written as a struct first, and a test composing the
     // notice constructed "refused to read the archive" AND "deleted 412 records from it" at once, which read
@@ -720,8 +719,8 @@ enum FreezeLog {
         // #4398: every line the read could NOT decode is carried through VERBATIM, after the note and before
         // the records. Rewriting from the decoded records alone destroyed them: a line torn by a process
         // killed mid-freeze, which is the ordinary case this file exists for, was in neither the live file
-        // nor the archive afterwards and nothing counted it, while `pruneArchive` refuses on the same
-        // condition (L211, L5). Kept in the LIVE file rather than the archive, because the archive's prune
+        // nor the archive afterwards and nothing counted it, while `pruneArchive` then refused on the
+        // same condition (L211, L5). Kept in the LIVE file rather than the archive, because the archive's prune
         // refused on an unreadable line and one moved there would have stopped the archive ever being
         // bounded. Since #4454 the prune keeps such a line and carries on, so that reason is gone; the live
         // file is still where the line stays, because it is where the reader counts it.
