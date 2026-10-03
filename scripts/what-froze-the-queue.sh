@@ -98,7 +98,7 @@ counted = [r for r in rows if isinstance(r.get("passes"), int)]
 uncounted = [r for r in rows if "passes" not in r or r.get("passes") is None]
 
 if not rows:
-    print(f"what-froze-the-queue: UNMEASURED. {path} holds no records.")
+    print(f"what-froze-the-queue: UNMEASURED. {path} holds no records" + (f" other than {len(idle_work)} idle work stall(s), set aside above." if idle_work else "."))
     if unreadable:
         print(f"  {unreadable} line(s) could not be read.")
     sys.exit(2)

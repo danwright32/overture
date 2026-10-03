@@ -77,7 +77,7 @@ if idle_work_line(idle_work):
     print(idle_work_line(idle_work))
 
 if not rows:
-    print(f"how-often-does-it-freeze: UNMEASURED. {path} holds no records.")
+    print(f"how-often-does-it-freeze: UNMEASURED. {path} holds no records" + (f" other than {len(idle_work)} idle work stall(s), set aside above." if idle_work else "."))
     if unreadable:
         print(f"  {unreadable} line(s) could not be read.")
     sys.exit(2)
