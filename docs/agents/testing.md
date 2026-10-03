@@ -940,6 +940,13 @@ the measurement it came from lives here. Read the entry before the rule decides 
   re-recording is a new `scripts/landing-oracle.sh --freeze <new archive> --out <dir>`, never a compare
   against the old recording. `ScaledCorpusLandsLikeALargerStoreTests` holds that a copy lands exactly as its
   original, on the synthetic corpus.
+- **Since #4481 (2026-10-03) a copy's names take the glue, DOUBLED, in front of EVERY word** ("qaqaWinter
+  qaqaLight"). On the first word alone a copy's title still shared its other words with the original's and
+  the other copies' on the same night, so `GroupNameMatch.isSameNightVariant` made them twins and the #4331
+  rule restamped `ingestedAt` on 538 of the 540 copies an unchanged 4x re-land restamped. Measured with the
+  #4372 probe's `restamped shows ... by the twin key` line; `anUnchangedReLandWritesOnlyTheTwinRuleSRowsAtEverySize`
+  holds that a re-land writes only the twin rule's rows and the reconcile's counted misses, and at 3x exactly three times what it writes at 1x. Three, because 3x (the original plus two copies) is the smallest corpus holding two copies to twin. Archives frozen before
+  #4481 hold the old glue, so the re-freeze above applies again.
 - **A real-arm file can never be pushed.** Its FIRST LINE is exactly the marker, and nothing else counts, so
   every file that talks about the marker builds it from two halves and pushes cleanly (L245, L673).
   `scripts/hooks/pre-push` walks every commit a push carries and refuses one that adds or modifies a marked

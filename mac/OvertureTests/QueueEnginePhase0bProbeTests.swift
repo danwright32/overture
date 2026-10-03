@@ -1020,7 +1020,7 @@ struct QueueEnginePhase0bProbeTests {
             // the same save with nothing dirty. One save, and spread over the landing's 36 saves.
             let glues = label == "live clone" ? [""] : [""] + (1..<4).map { Phase0.glue(forCopy: $0) }
             let keys = Set(restamped.flatMap { r in
-                glues.map { g in identity(g + r.title, r.date, r.venue.map { g + $0 }) }
+                glues.map { g in g.isEmpty ? identity(r.title, r.date, r.venue) : identity(ScaledCorpus.gluedName(r.title, glue: g), r.date, r.venue.map { ScaledCorpus.gluedName($0, glue: g) }) }
             })
             let rows = try ctx.fetch(FetchDescriptor<Prospect>())
                 .filter { keys.contains(identity($0.groupName, $0.performanceDate, $0.venue)) }

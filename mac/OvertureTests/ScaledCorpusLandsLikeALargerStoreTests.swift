@@ -37,12 +37,13 @@ final class ScaledCorpusLandsLikeALargerStoreTests {
         }
     }
 
-    private static let glues = [Phase0.glue(forCopy: 1)]
+    private static let glues = [Phase0.glue(forCopy: 1), Phase0.glue(forCopy: 2)]
 
     private func unglued(_ s: String?) -> String {
         guard let s else { return "nil" }
-        // A name carries its copy's glue in front, an address or id on the end (`ScaledCorpus.gluedName`).
-        for g in Self.glues where s.hasPrefix(g) { return String(s.dropFirst(g.count)) }
+        // A name carries its copy's glue, doubled, in front of every word; an address or id carries it on the end
+        // (`ScaledCorpus.gluedName`). No name in the invented corpus holds either glue of its own.
+        for g in Self.glues where s.contains(g + g) { return s.replacingOccurrences(of: g + g, with: "") }
         for g in Self.glues where s.hasSuffix(g) { return String(s.dropLast(g.count)) }
         return s
     }
@@ -92,6 +93,90 @@ final class ScaledCorpusLandsLikeALargerStoreTests {
         let sources = Set(try read.fetch(FetchDescriptor<WatchedSource>()).map(\.sourceId))
         let unowned = Set(shows.flatMap(\.sourceIds)).subtracting(sources).sorted()
         return Landed(outcome: outcome, rows: rows(shows), showCount: shows.count, unownedSourceIds: unowned)
+    }
+
+    /// What a second, unchanged landing of the same results wrote: every show whose stored values (its
+    /// `ingestedAt` included) moved, and how many of those are explained: the #4331 rule restamps a show
+    /// `MergeCandidateIndex` gives a twin on purpose, and the reconcile counts another miss for a show its
+    /// source still does not list (Old Harbor Revue), which is a real change rather than a needless write.
+    private struct ReLanded {
+        let written: Int
+        let explained: Int
+    }
+
+    private func reLand(_ results: ScoutExtractResults, on url: URL) async throws -> ReLanded {
+        let container = try Phase0.openContainer(at: url)
+        let context = container.mainContext
+        context.autosaveEnabled = false
+        func values(_ p: Prospect) -> String {
+            "\(p.groupName)|\(p.presenter ?? "")|\(p.venue ?? "")|\(p.performanceDate ?? "")|\(p.ingestedAt)|"
+                + "\(p.missedScoutCount)|\(p.statusRaw)|\(p.sourceIds)|\(p.runSourceURLs)|\(p.sourceListingURL ?? "")"
+        }
+        for landing in 1...2 {
+            let stored = try context.fetch(FetchDescriptor<Prospect>())
+            let before = Dictionary(uniqueKeysWithValues: stored.map { ($0.naturalKey, values($0)) })
+            let missedBefore = Dictionary(uniqueKeysWithValues: stored.map { ($0.naturalKey, $0.missedScoutCount) })
+            await ScoutExtractIngest.ingest(results, clients: [], history: [], blocked: .empty,
+                                            today: LandingOracleCorpus.today,
+                                            now: LandingOracleCorpus.now.addingTimeInterval(Double(landing) * 3600),
+                                            into: context)
+            try context.save()
+            guard landing == 2 else { continue }
+            let rows = try ModelContext(container).fetch(FetchDescriptor<Prospect>())
+            let written = rows.filter { before[$0.naturalKey] != values($0) }
+            let index = MergeCandidateIndex(rows: rows, tokens: { p in
+                ([p.sourceListingURL].compactMap { $0 } + p.runSourceURLs).compactMap(ProductionToken.inURL)
+            })
+            let explained = written.filter { p in
+                index.isContested(p) || missedBefore[p.naturalKey].map { $0 != p.missedScoutCount } == true
+            }
+            return ReLanded(written: written.count, explained: explained.count)
+        }
+        return ReLanded(written: -1, explained: -1)
+    }
+
+    /// #4481: an unchanged re-land writes, at three times the size, exactly three times the shows it writes on
+    /// the clone, and at either size only the shows the #4331 rule restamps on purpose (a show with a twin a merge
+    /// reader may compare it against) or whose miss the reconcile counts. THREE times, because the defect lived
+    /// between two COPIES: glued once on the first word, copy one's "qaHamlet" and copy two's "qbHamlet" were
+    /// one typo apart on the same night, so `isSameNightVariant` made them twins (measured on a clone of the live
+    /// store, 1,290 of its 1,372 titles), and a corpus with a single copy has no second copy to twin with.
+    @Test func anUnchangedReLandWritesOnlyTheTwinRuleSRowsAtEverySize() async throws {
+        let seed = try seededStore()
+        let results = LandingOracleCorpus.results()
+        let oneDir = try sandboxes.make(named: "scaled-corpus-4481-x1")
+        let one = oneDir.appendingPathComponent("Overture.store")
+        for suffix in ["", "-wal", "-shm"] where FileManager.default.fileExists(atPath: seed.path + suffix) {
+            try FileManager.default.copyItem(atPath: seed.path + suffix, toPath: one.path + suffix)
+        }
+        let x1 = try await reLand(results, on: one)
+        let three = try Phase0.scaledCopy(of: seed, factor: 3, in: try sandboxes.make(named: "scaled-corpus-4481-x3"))
+        let x3 = try await reLand(Phase0.scaledResults(results, factor: 3), on: three)
+
+        #expect(x1.written > 0 && x1.written == x1.explained,
+                "the clone's re-land wrote \(x1.written) shows, and only \(x1.explained) are a twin or a counted miss")
+        #expect(x3.written == x3.explained,
+                "the 3x re-land wrote \(x3.written) shows, and only \(x3.explained) are a twin or a counted miss")
+        #expect(x3.written == 3 * x1.written, "an unchanged re-land wrote \(x1.written) shows at 1x and \(x3.written) at 3x")
+    }
+
+    /// #4481: a copy's names are no same-night variant of another copy's or the original's, and relate to each
+    /// other inside the copy exactly as the original's do.
+    @Test func aGluedNameIsNoVariantOfAnotherCopysAndKeepsItsOwnCopysRelations() {
+        let qa = Phase0.glue(forCopy: 1), qb = Phase0.glue(forCopy: 2)
+        for title in ["Hamlet", "Winter Light", "The Tin Orchard", "Copper Tide: A Sea Cycle"] {
+            for (a, b) in [(title, ScaledCorpus.gluedName(title, glue: qa)),
+                           (ScaledCorpus.gluedName(title, glue: qa), ScaledCorpus.gluedName(title, glue: qb))] {
+                #expect(!GroupNameMatch.isSameNightVariant(a, b), "\(a) reads as a same-night variant of \(b)")
+            }
+        }
+        let pairs = [("Winter Light", "Winter Light Vespers"), ("Tin Orchard", "The Tin Orchard"),
+                     ("Copper Tide", "Copper Tide: A Sea Cycle")]
+        for (a, b) in pairs {
+            #expect(GroupNameMatch.isSameShowTitle(ScaledCorpus.gluedName(a, glue: qa), ScaledCorpus.gluedName(b, glue: qa))
+                    == GroupNameMatch.isSameShowTitle(a, b), "\(a) against \(b) answers differently inside a copy")
+        }
+        #expect(ScaledCorpus.gluedName("Rock &amp; Roll", glue: qa) == "\(qa)\(qa)Rock &amp; \(qa)\(qa)Roll")
     }
 
     @Test func eachCopyLandsExactlyAsItsOriginalDoes() async throws {
@@ -175,8 +260,8 @@ final class ScaledCorpusLandsLikeALargerStoreTests {
                                            date: "2026-10-24", anchoredVenue: "Harbor Stage", glue: glue, taken: [])
         #expect(drifted == .init(key: "old title|2026-10-24|harbor stage" + glue, kind: .drifted))
         let key = Prospect.makeNaturalKey(groupName: "Paper Lanterns", performanceDate: "2026-10-31", venue: "Harbor Stage")
-        let computed = Prospect.makeNaturalKey(groupName: glue + "Paper Lanterns", performanceDate: "2026-10-31",
-                                               venue: glue + "Harbor Stage")
+        let computed = Prospect.makeNaturalKey(groupName: ScaledCorpus.gluedName("Paper Lanterns", glue: glue), performanceDate: "2026-10-31",
+                                               venue: ScaledCorpus.gluedName("Harbor Stage", glue: glue))
         let taken = ScaledCorpus.copyKey(key: key, anchoredTitle: "Paper Lanterns", date: "2026-10-31",
                                          anchoredVenue: "Harbor Stage", glue: glue, taken: [computed])
         #expect(taken == .init(key: key + glue, kind: .taken))
@@ -221,8 +306,8 @@ final class ScaledCorpusLandsLikeALargerStoreTests {
         let a = ScaledCorpus.KeySource(key: Prospect.makeNaturalKey(groupName: "Encore", performanceDate: "2026-11-01",
                                                                     venue: "Studio Aqa"),
                                        anchoredTitle: "Encore", date: "2026-11-01", anchoredVenue: "Studio Aqa")
-        let computed = Prospect.makeNaturalKey(groupName: glue + "Encore", performanceDate: "2026-11-01",
-                                               venue: glue + "Studio Aqa")
+        let computed = Prospect.makeNaturalKey(groupName: ScaledCorpus.gluedName("Encore", glue: glue), performanceDate: "2026-11-01",
+                                               venue: ScaledCorpus.gluedName("Studio Aqa", glue: glue))
         #expect(computed.hasSuffix(glue), "the fixture needs a computed key ending in the glue: \(computed)")
         let b = ScaledCorpus.KeySource(key: String(computed.dropLast(glue.count)), anchoredTitle: "Unrelated",
                                        date: "2026-11-02", anchoredVenue: nil)
