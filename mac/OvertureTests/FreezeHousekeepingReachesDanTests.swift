@@ -13,7 +13,8 @@ import Foundation
 // that matter, the two FAILURE states most of all, and asks whether a line actually arrives on the
 // masthead. A copy test and its wiring are two separate claims (#887), and the failure states are the ones
 // that were silent: an archive that cannot be written means the live log is no longer bounded, and an
-// archive holding lines nothing can decode means nothing will ever be removed from it.
+// archive the prune cannot rewrite means nothing past its month is being removed from it (#4454; until
+// then this second state was an archive holding lines nothing could decode, which the prune now keeps).
 @Suite("The freeze log's housekeeping reaches Dan (#3793)")
 final class FreezeHousekeepingReachesDanTests {
 
