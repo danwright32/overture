@@ -12,6 +12,12 @@ import SwiftData
 // across the read budget question, where `ScopeMemo` must still serve a refetch. A coverage check fails when
 // a branch was not reached, so a fake that stopped driving one cannot make this pass about less.
 //
+// #4456: and every SAVE made into the store through the read phase is counted (`ReadPhaseSaves`). `hasChanges`
+// cannot see a write made before the read phase's first await: the entry flush (`ScoutService.flushBeforeLanding`)
+// saves it before the background corpus read, so the context is clean again at every await the fakes stand at
+// and at the end. Measured 2026-10-02 by #4335's agent: a `LandingRun` inserted at the sequence mint left this
+// suite green. A read phase that writes nothing saves nothing, so the count must be zero.
+//
 // Every flight here is the test's own (L524), so a store held across a suspension cannot make another test's
 // landing wait, and no deadline waits in real time.
 
@@ -37,6 +43,17 @@ private final class Probe {
         reads += 1
         if context.hasChanges { dirty.append(label) }
     }
+}
+
+// #4456: every save made into ONE store from the moment this is made, through any of its contexts. Made after the
+// fixture's own save, so anything it counts was saved by the code under test. `StoreSaveCount` is the app's own
+// per container count of `ModelContext.didSave`, made fresh here so no other store's saves are read.
+@MainActor
+private final class ReadPhaseSaves {
+    private let counter = StoreSaveCount(center: .default)
+    private let container: ModelContainer
+    init(_ container: ModelContainer) { self.container = container }
+    var count: Int { counter.value(for: container) }
 }
 
 private struct FeedThat: SourceExtractor {
@@ -153,6 +170,7 @@ struct ScoutReadPhaseWritesNothingTests {
         for id in changed { html(id, in: ctx) }
         try ctx.save()
         #expect(!ctx.hasChanges, "the fixture itself left the context dirty, so nothing below would mean anything")
+        let saves = ReadPhaseSaves(c)
 
         let ovationTix = Data("""
             [{"date":"\(night(1))","productions":[{"productionId":1,"name":"Bone Wars"}]}]
@@ -212,6 +230,8 @@ struct ScoutReadPhaseWritesNothingTests {
         // The end of the read phase: every source read, the landing waiting for the store the test holds.
         await waitUntil("the run's landing is waiting for the store") { flight.queue == [.runScoutLanding] }
         #expect(!ctx.hasChanges, "runScout's read phase left writes pending in the main context at its end")
+        #expect(saves.count == 0, Comment(rawValue:
+            "runScout's read phase saved \(saves.count) times into the store before its landing took it"))
         #expect(probe.reads >= changed.count + 6, Comment(rawValue:
             "the fakes read the context \(probe.reads) times, fewer than the awaits they stand at"))
         #expect(probe.dirty.isEmpty, Comment(rawValue:
@@ -271,6 +291,7 @@ struct ScoutReadPhaseWritesNothingTests {
         quiet.pendingContentHash = "q-hash"
         quiet.confirmedEmptyHash = "q-hash"
         try ctx.save()
+        let saves = ReadPhaseSaves(c)
 
         let results = ScoutExtractResults(version: 1, generatedAt: "2026-07-12T00:00:00Z", results: [
             result("ing-ok", .upcomingListings, events: 2, note: "read fine"),
@@ -292,6 +313,8 @@ struct ScoutReadPhaseWritesNothingTests {
         }
         await waitUntil("the ingest's landing is waiting for the store") { flight.queue == [.scoutExtractIngest] }
         #expect(!ctx.hasChanges, "the ingest's read loop left writes pending in the main context at its end")
+        #expect(saves.count == 0, Comment(rawValue:
+            "the ingest's read phase saved \(saves.count) times into the store before its landing took it"))
 
         holder.end()
         let outcome = await ingest.value
@@ -324,6 +347,44 @@ struct ScoutReadPhaseWritesNothingTests {
         let ingest: Set<SourceWrites.Site> = [.runNote, .readFailed, .confirmedEmpty]
         #expect(runScout.union(ingest) == Set(SourceWrites.Site.allCases), Comment(rawValue:
             "no fake reaches \(Set(SourceWrites.Site.allCases).subtracting(runScout.union(ingest)).map(\.rawValue).sorted())"))
+    }
+
+    // MARK: - A write made before the first await (#4456)
+
+    // The guard's own positive control, through the one closure the ingest calls before its first await (the
+    // sequence floor, read at the mint). A row inserted there is saved by the entry flush before the corpus read,
+    // so `hasChanges` reads clean at the end of the read phase, which is the blindness #4456 found; the save count
+    // is what sees it. If this stops counting that one save, the zero the two tests above assert means nothing.
+    @Test func aWriteMadeBeforeTheFirstAwaitIsCountedThoughTheContextReadsClean() async throws {
+        let c = try container()
+        let ctx = c.mainContext
+        html("early", in: ctx)
+        try ctx.save()
+        let saves = ReadPhaseSaves(c)
+
+        let deadlines = HeldDeadlines()
+        let flight = LandingSingleFlight(sleep: { await deadlines.sleep($0) })
+        let holder = try await flight.begin(entryPoint: .runScoutLanding, priority: .scout, deadline: .seconds(1))
+        let results = ScoutExtractResults(version: 1, generatedAt: "2026-07-12T00:00:00Z",
+                                          results: [result("early", .upcomingListings, events: 1, note: "read")])
+        let ingest = Task { @MainActor in
+            await ScoutExtractIngest.ingest(results, clients: [], history: [], blocked: .empty,
+                                            today: ScoutTestClock.beforeAllFixtures, now: now,
+                                            landings: flight,
+                                            sequenceFloor: {
+                                                ctx.insert(LandingRun(runIdentity: "written-at-the-mint", landedAt: nil))
+                                                return 0
+                                            },
+                                            into: ctx)
+        }
+        await waitUntil("the ingest's landing is waiting for the store") { flight.queue == [.scoutExtractIngest] }
+        #expect(!ctx.hasChanges, "the entry flush did not save the early write, so this control shows nothing about #4456")
+        #expect(saves.count == 1, Comment(rawValue:
+            "a row inserted before the first await was saved \(saves.count) times in the read phase, where the guard needs it counted once"))
+
+        holder.end()
+        _ = await ingest.value
+        deadlines.passAll()
     }
 
     // MARK: - A reading a later run overtook leaves the row untouched
