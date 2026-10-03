@@ -403,6 +403,9 @@ final class ScoutLandingStore {
             joinOrder[id] = nil
             tableRows[id] = nil
             judged[id] = nil
+            // #4482: a discarded row's identifier can be handed to a later object once nothing holds it, and a
+            // watched identifier is never marked, so it is forgotten with the row.
+            watched.remove(id)
         }
     }
 
@@ -454,11 +457,53 @@ final class ScoutLandingStore {
 
     // Marks every row SwiftData says has been written, and not yet saved, to be re-checked. Cheap when there
     // is nothing to say, which is the state right after every source's save.
+    //
+    // #4482: and only ONCE per write. SwiftData keeps naming a row as written until its source saves, and the
+    // per event arms read several times an event, so marking every named row on every read re-checked each of a
+    // source's unsaved rows on every read: square in the batch. A row marked here is WATCHED (`watch(_:)`): it is
+    // not marked again until one of the fields the working set derives from it is written, which the watch hears
+    // through the row's own observation, so a second write before the save is still seen.
     private func noteWrittenRows() {
         guard loaded != nil, context.hasChanges else { return }
+        for id in writeWatch.takeWritten() { watched.remove(id) }
         for model in context.changedModelsArray + context.insertedModelsArray {
             guard let p = model as? Prospect else { continue }
+            if watched.contains(ObjectIdentifier(p)) { continue }
             markWritten(p)
+            watch(p)
+        }
+    }
+
+    // #4482: rows marked and not written since, and the rows whose watch has heard a write. The watch's
+    // `onChange` fires on whatever thread wrote, so what it heard is behind a lock (as `ScopeMemo`'s flag is).
+    private var watched: Set<ObjectIdentifier> = []
+    private let writeWatch = WriteWatch()
+    private final class WriteWatch: @unchecked Sendable {
+        private let lock = NSLock()
+        private var written: Set<ObjectIdentifier> = []
+        func heard(_ id: ObjectIdentifier) { lock.lock(); written.insert(id); lock.unlock() }
+        func takeWritten() -> Set<ObjectIdentifier> {
+            lock.lock(); defer { written = []; lock.unlock() }
+            return written
+        }
+    }
+
+    // Watches every field the working set derives from this row: the fold's, the batch tables', the natural key
+    // index's and the merge candidate index's, read here by the SAME derivations those consumers run, so a field
+    // one of them comes to read is watched without being listed twice (L370). Fires once, on the next write, and
+    // is renewed when the row is next marked. A watch that never fires stays on its row until the row's next
+    // write, one per row a landing wrote; the reason per row observation was rejected for EVERY row (#4275) does
+    // not apply to these few.
+    private func watch(_ p: Prospect) {
+        let id = ObjectIdentifier(p)
+        watched.insert(id)
+        withObservationTracking {
+            _ = Fold(p)
+            _ = Self.contribution(of: p, Fold(p))
+            _ = p.naturalKey
+            _ = MergeCandidateIndex.keys(of: p, tokens: [])
+        } onChange: { [writeWatch] in
+            writeWatch.heard(id)
         }
     }
 

@@ -111,7 +111,7 @@ struct LandingBatchTablesTests {
     // every per event arm (a series id, a production token in its listing, a listing URL, and the arrival
     // notes), landed after a warm source over a store padded with `padding` rows on other nights, pages and
     // tokens. Returns the visits the new source cost, and how many rows it inserted.
-    private func newShowVisits(padding: Int, newShows: Int) async throws -> (visits: Int, inserted: Int) {
+    private func newShowVisits(padding: Int, newShows: Int) async throws -> (visits: Int, inserted: Int, validations: Int) {
         let ctx = try context()
         stored(ctx, "Kept Warm", Self.night(5), url: "https://src.example/Kept Warm", sourceIds: ["warm"])
         for k in 0..<padding {
@@ -140,9 +140,9 @@ struct LandingBatchTablesTests {
         let landed = steps.filter { $0.0 != ScoutLandingStore.Counters.afterReconcile }
         guard landed.map(\.0) == ["warm", "fresh"] else {
             Issue.record(Comment(rawValue: "the landing reported \(steps.map(\.0)), not both sources"))
-            return (0, 0)
+            return (0, 0, 0)
         }
-        return (Self.visits(landed[1].1 - landed[0].1), outcome.inserted)
+        return (Self.visits(landed[1].1 - landed[0].1), outcome.inserted, (landed[1].1 - landed[0].1).foldValidations)
     }
 
     // THE GUARD (#4460). A source of new shows visits exactly as many stored rows on a store of 50 as on a store
@@ -161,6 +161,43 @@ struct LandingBatchTablesTests {
             "four new shows visited \(small.visits) rows on a store of 51 and \(large.visits) on a store of 201"))
         #expect(wide.visits <= 4 * large.visits, Comment(rawValue:
             "sixteen new shows visited \(wide.visits) rows where four visited \(large.visits), more than four times as many"))
+    }
+
+    // THE GUARD (#4482). How many cached folds a source of new shows re-checks is set by the rows it writes, not
+    // by how long those rows stay unsaved: a row SwiftData keeps naming as written until its source saves is
+    // re-checked once after each write, never on every read. Seen on the code before #4482, where every read
+    // re-checked every unsaved row of the source, square in the batch.
+    @Test func aSourcesFoldChecksGrowWithItsWritesNotTheirSquare() async throws {
+        let small = try await newShowVisits(padding: 50, newShows: 4)
+        let large = try await newShowVisits(padding: 200, newShows: 4)
+        let wide = try await newShowVisits(padding: 200, newShows: 16)
+        #expect(small.inserted == 4 && wide.inserted == 16, "the new shows were not all inserted")
+        #expect(small.validations == large.validations, Comment(rawValue:
+            "four new shows re-checked \(small.validations) folds on a store of 51 and \(large.validations) on 201"))
+        #expect(wide.validations <= 4 * large.validations, Comment(rawValue:
+            "sixteen new shows re-checked \(wide.validations) folds where four re-checked \(large.validations), "
+            + "more than four times as many"))
+    }
+
+    // A row written AGAIN after it was re-checked, while still unsaved, is re-checked again: the watch that
+    // spares an unchanged row must not spare a changed one (#4482).
+    @Test func anUnsavedRowWrittenAgainIsCheckedAgain() throws {
+        let ctx = try context()
+        stored(ctx, "Twice Written", Self.night(20), url: "https://twice.example/a", sourceIds: ["one"])
+        try ctx.save()
+        let landing = ScoutLandingStore(context: ctx)
+        _ = try landing.batchTablesSnapshot()
+        let row = try #require(try landing.rows().first)
+        row.sourceListingURL = "https://twice.example/b"
+        let first = try landing.rows(.sharingURL(["https://twice.example/b"])).map(ObjectIdentifier.init)
+        row.sourceListingURL = "https://twice.example/c"
+        let second = try landing.rows(.sharingURL(["https://twice.example/c"])).map(ObjectIdentifier.init)
+        let stale = try landing.rows(.sharingURL(["https://twice.example/b"]))
+        #expect(first == [ObjectIdentifier(row)] && second == [ObjectIdentifier(row)] && stale.isEmpty,
+                "a row written twice before its save was looked up where it was, not where it is")
+        let kept = try landing.batchTablesSnapshot()
+        let rebuilt = try landing.rebuiltBatchTablesSnapshot()
+        #expect(kept == rebuilt, Comment(rawValue: "the tables are \(kept), a rebuild is \(rebuilt)"))
     }
 
     // OLD AGAINST NEW, at every step of the oracle corpus's landing, in both Fenwick orders: for every key any
