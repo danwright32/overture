@@ -217,6 +217,41 @@ struct LandingBatchTablesTests {
         #expect(found.isEmpty, Comment(rawValue: found.joined(separator: "\n")))
     }
 
+    // A field no fold carries (the night, the series id, the source ids), written in place on a row whose title,
+    // room and links are unchanged, still reaches the tables: an unchanged row is not rebuilt (#4460), so the
+    // check that decides "unchanged" must read every field the tables are built from, not only the fold's.
+    @Test func aNightSeriesOrSourceWrittenInPlaceReachesTheTables() throws {
+        let ctx = try context()
+        stored(ctx, "Moving Night", Self.night(20), url: "https://moving.example/night", sourceIds: ["one"])
+        try ctx.save()
+        let landing = ScoutLandingStore(context: ctx)
+        _ = try landing.batchTablesSnapshot()
+        let row = try #require(try landing.rows().first)
+        let me = [ObjectIdentifier(row)]
+        // One field at a time, each read back before the next is written, so each is proved on its own.
+        func tablesEqualARebuild(after write: String) throws {
+            let kept = try landing.batchTablesSnapshot()
+            let rebuilt = try landing.rebuiltBatchTablesSnapshot()
+            #expect(kept == rebuilt, Comment(rawValue: "after \(write) the tables are \(kept), a rebuild is \(rebuilt)"))
+        }
+
+        row.performanceDate = Self.night(21)
+        try tablesEqualARebuild(after: "the night")
+        let onNewNight = try landing.rows(.night(Self.night(21))).map(ObjectIdentifier.init)
+        let onOldNight = try landing.rows(.night(Self.night(20)))
+        #expect(onNewNight == me && onOldNight.isEmpty, "the moved night was not looked up where it now is")
+
+        row.seriesId = "series-moved"
+        try tablesEqualARebuild(after: "the series id")
+        let inSeries = try landing.rows(.series("series-moved")).map(ObjectIdentifier.init)
+        #expect(inSeries == me, "the series id written in place was not looked up")
+
+        row.sourceIds = ["one", "two"]
+        try tablesEqualARebuild(after: "the source ids")
+        let spelled = try landing.venueSpellings().used(by: ["two"])
+        #expect(spelled == [Self.room], "the source id written in place did not reach the spellings")
+    }
+
     // THE FAILURE PATH. A store that cannot answer refuses a keyed lookup by throwing, exactly as the walk it
     // replaced did, so the arm refuses the show rather than reading "no match" and inserting it blind (L215).
     @Test func aKeyedLookupOnAStoreThatCannotAnswerThrows() throws {
