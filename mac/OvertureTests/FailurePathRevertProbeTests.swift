@@ -395,6 +395,9 @@ final class FailurePathRevertProbeTests {
         guard let base = try LiveStoreClone.makeClone(in: dir) else {
             throw LiveStoreClone.Refusal.backupFailed("no live store on this machine")
         }
+        // scaled-corpus-lands-unscaled: this lands ONE source on purpose, and since #4427 each copy's shows are
+        // owned by the copy's own sources, which are not in this landing, so the reconcile leaves them alone
+        // exactly as a store four times the size would.
         let url = try Phase0.scaledCopy(of: base, factor: 4, in: dir)
         let loaded = DownbeatBridge.loadWithHealth(from: exportCopy, now: Date())
         let store = RefusingStore(url: url)

@@ -926,6 +926,20 @@ the measurement it came from lives here. Read the entry before the rule decides 
   of its own, with `TEST_RUNNER_SWIFT_DETERMINISTIC_HASHING=1` (it refuses without it): measured 2026-09-30,
   1x reproduces the recording only alone, and 4x differs run to run even so, which is #4397 and blocks any
   equality claim on 4x until it closes.
+- **Since #4427 (2026-10-03) the overlay is FOUR files and the 4x real arm lands four times the results.**
+  `mac/OvertureTests/ScaledCorpus.swift` builds the 4x corpus (`Phase0.scaledCopy` delegates to it) and is
+  overlaid, because `freezeTheInputs` runs at 6d3453d8, where Phase0Corpus.swift is that commit's own and
+  builds that commit's corpus. Each copy now has its own `WatchedSource` rows and `sourceIds`, and
+  `realArmAt4x` lands `ScaledCorpus.results(_:factor: 4)`, a copy of every frozen result per copy, so a 4x
+  landing reads like a store four times the size rather than three quarters of the store looking dropped by
+  its sources. A copy's NAMES (title, presenter, room) now take the glue in front of their first word rather
+  than on the end of their last, and a copy's key is the one its glued values compute, because the landing
+  relates names by their beginnings and on the old glue a copy's events landed differently from its
+  original's. An archive frozen before #4427 has no sources for the copies, and the 4x arm refuses it as
+  `UNMEASURED` naming the re-freeze; the 4x digests recorded on such an archive are of the old corpus, so the
+  re-recording is a new `scripts/landing-oracle.sh --freeze <new archive> --out <dir>`, never a compare
+  against the old recording. `ScaledCorpusLandsLikeALargerStoreTests` holds that a copy lands exactly as its
+  original, on the synthetic corpus.
 - **A real-arm file can never be pushed.** Its FIRST LINE is exactly the marker, and nothing else counts, so
   every file that talks about the marker builds it from two halves and pushes cleanly (L245, L673).
   `scripts/hooks/pre-push` walks every commit a push carries and refuses one that adds or modifies a marked

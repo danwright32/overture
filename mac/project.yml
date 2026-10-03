@@ -104,10 +104,13 @@ targets:
       # declaration in two targets, never a copy (L613).
       - path: OvertureTests/LiveStoreClone.swift
       - path: OvertureTests/Phase0Corpus.swift
+      # #4427: Phase0Corpus.swift delegates the 4x build to ScaledCorpus.swift, a file of its own so the
+      # landing oracle's freeze can overlay it onto 6d3453d8.
+      - path: OvertureTests/ScaledCorpus.swift
     dependencies:
       - target: Overture
       - package: ViewInspector
-      # #4106 probe 0c.8: Phase0Corpus.swift builds the 4x corpus through SQLite directly.
+      # #4106 probe 0c.8: the 4x corpus is built through SQLite directly (ScaledCorpus.swift since #4427).
       - sdk: libsqlite3.tbd
     settings:
       base:
