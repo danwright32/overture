@@ -1269,6 +1269,8 @@ enum ScoutService {
             // the extractor's own now-relative upcoming filter only to be dropped again by applySweep
             // against the real day, so a native-feed run was never fully time-controllable.
             today: QueueModel.easternToday(now),
+            // #4331: and the stamp of every row it changes, from the same instant.
+            now: now,
             sourceIds: [native.sourceId], preClassified: listed.preClassified, landing: landing,
             into: context)
 
@@ -1583,6 +1585,8 @@ enum ScoutService {
         blocked: BlockedCalendar,
         feed: FeedCheck,
         today: String = QueueModel.easternToday(),
+        // #4331: passed straight through to `apply`, which stamps a changed row from it.
+        now: Date = Date(),
         sourceIds: [String] = [],
         // #3884: passed straight through to `apply`. See `readNative`, which runs it off the actor.
         preClassified: PreClassified? = nil,
@@ -1592,7 +1596,7 @@ enum ScoutService {
     ) -> Outcome {
         let landing = landing ?? ScoutLandingStore(context: context)
         var outcome = apply(events: events, clients: clients, history: history, blocked: blocked,
-                            feed: feed, today: today, sourceIds: sourceIds,
+                            feed: feed, today: today, now: now, sourceIds: sourceIds,
                             preClassified: preClassified, landing: landing, into: context)
         if let report = outcome.report {
             // #3071: a reconcile handed an invented empty marks nothing gone and says nothing about it,
@@ -1756,6 +1760,11 @@ enum ScoutService {
         // #798: injected so the upcoming-only guard below is testable against a pinned day instead of
         // the wall clock. The reconcile already needed today's date; now one value serves both.
         today: String = QueueModel.easternToday(),
+        // #4331 (A2): the instant this landing stamps a row it changed or inserted, plus the row's apply ordinal
+        // (`ScoutLandingStore.nextStamp`). Never `scoutNow` below, which is Eastern midnight: a row stamped from it
+        // would read as older than one written by hand earlier the same day. Every shipping caller passes its
+        // own landing's `now` (ingest, `runScout`, the lead paste); the default serves a test landing one batch.
+        now: Date = Date(),
         // #771: the source(s) this run's events came from, stamped onto every prospect it inserts and
         // UNIONED onto every one it updates. Empty means "we did not record it", which is what every
         // prospect predating #800 carries, and what a Prep-created one carries. An empty list can never
@@ -2099,12 +2108,19 @@ enum ScoutService {
                 // and nothing afterwards can say what it was (this is the whole of why #4068 could not
                 // be answered).
                 let titleBefore = existing.groupName
+                // #4331 (A2): whether the row held unsaved writes BEFORE this apply, so a change can be told
+                // from the state the row reaches rather than from a list of the writes that reach it (L247).
+                let wasDirty = existing.hasChanges
                 apply(enriched, to: existing, now: scoutNow,
                       storedByKey: landing.stored(key:))
+                landing.stampTouched(existing, changed: wasDirty || existing.hasChanges, at: now)
                 recordRename(of: existing, from: titleBefore, by: target.matchedArm, at: scoutNow,
                              into: &titleRenames)
                 updated += 1
             case .reKey(let match, _), .reKeyJoiningNights(let match):
+                // #4331 (A2): before ANY write this arm makes, the reopening and the re-key included, so both
+                // count as the change they are.
+                let wasDirty = match.hasChanges
                 // #4029: the token arm alone answers "this is ANOTHER NIGHT of the production this row
                 // holds", so its nights are added to the row's rather than replacing them, and a decision
                 // Dan made about a night he has already spent is reconsidered. Every other arm below says
@@ -2211,11 +2227,12 @@ enum ScoutService {
                 let titleBefore = match.groupName
                 apply(enriched, to: match, now: scoutNow,
                       storedByKey: landing.stored(key:))
+                landing.stampTouched(match, changed: wasDirty || match.hasChanges, at: now)
                 recordRename(of: match, from: titleBefore, by: target.matchedArm, at: scoutNow,
                              into: &titleRenames)
                 updated += 1
             case .insert(let notes):
-                let fresh = make(enriched, key: key)
+                let fresh = make(enriched, key: key, stampedAt: landing.nextStamp(at: now))
                 // #3330: before it goes in, ask whether a stored row on this night at this room is the
                 // same show by the merge's own predicate. The upsert has already decided to INSERT, so
                 // this changes nothing about whether the row is written; it records which row the
@@ -2295,6 +2312,10 @@ enum ScoutService {
         let suppressed = Dictionary(grouping: suppressedShows, by: { $0 })
             .map { SuppressedOrg(orgName: $0.key, showCount: $0.value.count) }
             .sorted { ($0.showCount, $1.orgName) > ($1.showCount, $0.orgName) }
+
+        // #4331 (A2): a row this landing left unstamped because it had no twin when touched is stamped now if a
+        // write since (this source's or an earlier one's) has given it one, before the save that carries it.
+        landing.stampRowsGivenATwin()
 
         do {
             // #4334 (A5): through the landing, so a test can fail one source's save and not the next.
@@ -2766,7 +2787,9 @@ enum ScoutService {
         }
     }
 
-    private static func make(_ p: AssembledProspect, key: String) -> Prospect {
+    // #4331: `stampedAt` is the landing's stamp for this row (`ScoutLandingStore.nextStamp`), so a row inserted
+    // and a row updated by one landing read in the order it applied them. It is also the row's first sighting.
+    private static func make(_ p: AssembledProspect, key: String, stampedAt: Date) -> Prospect {
         let prospect = Prospect(
             naturalKey: key, groupName: p.groupName, discipline: p.discipline, venue: p.venue,
             performanceDate: p.performanceDate, sourceListingURL: p.sourceListingURL,
@@ -2774,6 +2797,7 @@ enum ScoutService {
             coverage: p.coverage, fitScore: p.fitScore, tier: p.tier, fitReason: p.fitReason,
             matchedClientName: p.matchedClientName, possibleMatchSource: p.possibleMatchSource,
             possibleMatchName: p.possibleMatchName,
+            ingestedAt: stampedAt,
             runEndDate: p.runEndDate, partOfRelatedRun: p.partOfRelatedRun, runSourceURLs: p.runSourceURLs,
             runNights: p.runNights)
         // #3495: anchored on the way IN, exactly as `apply` anchors on every re-ingest. These two fields
@@ -3092,10 +3116,9 @@ enum ScoutService {
         // whatever the Set happened to hash to.
         existing.assign(\.sourceIds, Array(Set(existing.sourceIds).union(p.sourceIds)).sorted())
 
-        // #4106 Phase 1a: the one unconditional write left, and deliberately so. It is the named residue
-        // `ScoutReLandWritesNothingTests` allows, until Phase 1b stamps it from the injected clock once per
-        // Eastern day (decision 6(b)).
-        existing.ingestedAt = Date()
+        // #4331 (A2): no `ingestedAt` here. It was the one unconditional write left (#4106 Phase 1a's named
+        // residue); the caller now stamps the row from the landing's `now` only when this apply changed it, or
+        // when a merge reader needs it to mean last seen (`ScoutLandingStore.stampTouched`).
     }
 
     // The days Dan cannot work, from BOTH sources at once (#901): Downbeat's booked shoots, and the days

@@ -291,7 +291,7 @@ final class LeadIntakeModel {
 
         // #859: whatever it found is his, now. No checkboxes, no second pass.
         if case .review(let events, let note) = phase {
-            importAll(events, note: note, into: context, today: today)
+            importAll(events, note: note, into: context, today: today, now: now)
         }
     }
 
@@ -385,8 +385,9 @@ final class LeadIntakeModel {
     // queue, however many shows a page carries. `reconcilesFeed` stays off (#826): one pasted page is
     // not a sweep of anybody's calendar.
     @discardableResult
+    // #4331 (A2): `now` is the paste's own instant, from `start`, which every row it lands is stamped from.
     private func importAll(_ events: [ExtractedEvent], note: String?, into context: ModelContext,
-                           today: String) -> Int {
+                           today: String, now: Date) -> Int {
         guard !events.isEmpty else {
             phase = .added(0, note: note)
             return 0
@@ -403,7 +404,7 @@ final class LeadIntakeModel {
                                          blocked: ScoutService.blockedCalendar(
                                             export: (loaded.bookings, loaded.blockedDates, loaded.health),
                                             context: context),
-                                         today: today, sourceIds: [WatchedSource.manualId],
+                                         today: today, now: now, sourceIds: [WatchedSource.manualId],
                                          into: context)
         let added = outcome.inserted + outcome.updated
 

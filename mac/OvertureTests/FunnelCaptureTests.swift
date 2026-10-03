@@ -6,8 +6,8 @@ import SwiftData
 // build could recover, because the scout overwrites its own inputs on every run.
 //
 //   firstSeenAt   when a show first entered the store. `ingestedAt` looked like this and is not: the
-//                 scout rewrites it every run (ScoutService.apply), including on shows already pitched,
-//                 so a show found in November reads as found last week.
+//                 scout rewrites it whenever a run changes the show (ScoutService.apply, #4331), including
+//                 on shows already pitched, so a show found in November reads as found last week.
 //   dismissedAt   when a show left the queue. The eight dismiss reasons are the whole drop-off side of
 //                 the funnel and none of them carried a date, so a cut could be counted but never dated.
 //   ...AtSend     the ranking features as they stood the moment Dan pitched, frozen like
@@ -62,23 +62,37 @@ struct FunnelCaptureTests {
 
     // MARK: - firstSeenAt
 
-    // The defect itself. A second scout run over the same calendar moves ingestedAt (that is its job:
-    // it means "last read"), and must leave the first sighting untouched. Without this the Sankey's
-    // opening node, "shows sourced this year", cannot be counted at all.
-    @Test func aReScoutMovesIngestedAtAndLeavesFirstSeenAlone() throws {
+    // The defect itself. A later scout run must leave the first sighting untouched, whatever it does to
+    // ingestedAt. Without this the Sankey's opening node, "shows sourced this year", cannot be counted at all.
+    //
+    // #4331 (A2) REVERSED the half of this that asserted a re-run of the SAME calendar moves ingestedAt ("last
+    // read"): it is now "last changed by a scout", so a re-run that changes nothing keeps it and one that
+    // changes the show moves it. Inverted rather than deleted after the L430 check: the decision it defended
+    // was #16's reading of ingestedAt as last read, and #4331 is the recorded reversal of exactly that.
+    @Test func aReScoutMovesIngestedAtOnlyOnAChangeAndLeavesFirstSeenAlone() throws {
         let ctx = ModelContext(try container())
+        let first = Date(timeIntervalSince1970: 1_790_000_000)
         _ = ScoutService.apply(events: liveEvents, clients: [], history: [], blocked: .empty,
-                               today: ScoutTestClock.beforeAllFixtures, into: ctx)
-        let first = try stored(ctx, key: choirKey)
-        let firstSeen = try #require(first.firstSeenAt)
-        let firstIngest = first.ingestedAt
+                               today: ScoutTestClock.beforeAllFixtures, now: first, into: ctx)
+        let row = try stored(ctx, key: choirKey)
+        let firstSeen = try #require(row.firstSeenAt)
+        let firstIngest = row.ingestedAt
 
         _ = ScoutService.apply(events: liveEvents, clients: [], history: [], blocked: .empty,
-                               today: ScoutTestClock.beforeAllFixtures, into: ctx)
+                               today: ScoutTestClock.beforeAllFixtures, now: first.addingTimeInterval(60),
+                               into: ctx)
+        let unchanged = try stored(ctx, key: choirKey)
+        #expect(unchanged.firstSeenAt == firstSeen)      // the first sighting is a fact; it never moves
+        #expect(unchanged.ingestedAt == firstIngest)     // nothing changed, so "last changed" did not move
 
+        var changed = liveEvents
+        changed[0].startTimes = ["19:30"]
+        _ = ScoutService.apply(events: changed, clients: [], history: [], blocked: .empty,
+                               today: ScoutTestClock.beforeAllFixtures, now: first.addingTimeInterval(120),
+                               into: ctx)
         let again = try stored(ctx, key: choirKey)
-        #expect(again.firstSeenAt == firstSeen)      // the first sighting is a fact; it never moves
-        #expect(again.ingestedAt > firstIngest)      // "last read" still tracks the latest run
+        #expect(again.firstSeenAt == firstSeen)
+        #expect(again.ingestedAt > firstIngest)          // a run that changed the show moves it
     }
 
     // A show the scout has just inserted was first seen exactly when it was ingested.

@@ -41,6 +41,7 @@ enum RecentOpenersBuilder {
             guard !text.isEmpty else { continue }
             // Recency for ordering: when it was sent, else when its outcome landed, else when it entered
             // the queue, so an unsent draft can still be placed instead of dropped for lacking a sentAt.
+            // (#4331: `ingestedAt` is when a scout last changed the show, so an unsent draft is placed by that.)
             let date = p.sentAt ?? p.outcomeAt ?? p.ingestedAt
             entries.append(Entry(
                 opener: RecentOpener(naturalKey: p.naturalKey, discipline: p.discipline,

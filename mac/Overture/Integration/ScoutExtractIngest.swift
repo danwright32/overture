@@ -103,6 +103,9 @@ enum ScoutExtractIngest {
                        // `EveryProductLandingKeepsAJournalTests` fails when one does not. nil keeps none, for a
                        // test whose subject is not the journal; a test that is passes its own sandbox (L433).
                        journals: LandingJournals? = nil,
+                       // #4331 (A2): how the landing stamps `ingestedAt`. Only the merge survivor probe passes
+                       // anything but the rule, to measure the rule against the one it replaced.
+                       stampRule: IngestedAtStamp.Rule = .whenChanged,
                        into context: ModelContext) async -> ScoutService.Outcome {
         var outcome = ScoutService.Outcome(found: 0, inserted: 0, updated: 0, skipped: 0)
         // #4335: minted above every sequence the store recorded (on a source, or on a landing record) and
@@ -373,7 +376,7 @@ enum ScoutExtractIngest {
             }
         }
         let landing = ScoutLandingStore(context: context, read: readProspectTable, saveSource: saveSource,
-                                        classify: classifySaveFailure)
+                                        classify: classifySaveFailure, stampRule: stampRule)
         // The landing record, inserted here, at the start of the synchronous landing block (the 2026-09-29 L55
         // decision), so the read phase above stays clean, and carried to disk by the landing's first save. It
         // is a SETTLED row to the revert: a source whose save fails is put back without taking it, so the
@@ -432,7 +435,8 @@ enum ScoutExtractIngest {
                                              // struck for a row that is on the page right now.
                                              structuralGapURLs: rejection.structuralGapURLs,
                                              structuralGapDates: rejection.structuralGapDates),
-                today: today, sourceIds: [source.sourceId],
+                // #4331 (A2): this ingest's own `now`, which every row the landing changes is stamped from.
+                today: today, now: now, sourceIds: [source.sourceId],
                 preClassified: pending.preClassified,
                 landing: landing,
                 into: context)

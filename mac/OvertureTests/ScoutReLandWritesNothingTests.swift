@@ -4,7 +4,8 @@ import Observation
 import SwiftData
 
 // #4106 Phase 1a (plan v5's D1, carried unchanged into v7): a scout re-land that changes nothing writes
-// nothing, except the one field it is still allowed to, `ingestedAt`.
+// nothing. Until #4331 (A2) it still wrote one field, `ingestedAt`; that field is now stamped only on a row
+// the land changed (or one a merge reader must read as last seen, which this fixture holds none of).
 //
 // WHY. SwiftData's generated setter announces a mutation on every ASSIGNMENT, not on every change, and it
 // marks the row dirty for the save to carry. `ScoutService.apply` used to assign roughly forty fields on
@@ -21,17 +22,19 @@ import SwiftData
 // one being cleared, a presenter a sweep wrote, two sources with different precedence keys, a multi night
 // run with per night start times, a show Dan renamed, and a merge survivor.
 //
-// THE RESIDUE is named here and nowhere else: `ingestedAt`, still stamped `Date()` on every applied row
-// until Phase 1b settles it (decision 6(b)). When 1b lands, this set shrinks and the test says so.
+// THE RESIDUE is named here and nowhere else, and since #4331 it is EMPTY: `ingestedAt` used to be stamped
+// `Date()` on every applied row, and is now stamped only on a row the land changed (`IngestedAtStampTests`).
+// The fixture holds no two rows sharing a merge reader's candidate key, so no row is restamped as a twin.
 //
 // A POSITIVE CONTROL in the same fixture changes one input and asserts exactly one field fires, so a
 // harness that could not see a write at all fails rather than passing (L159, L467).
 @MainActor
-@Suite("A scout re-land that changes nothing writes nothing but ingestedAt (#4106 Phase 1a)")
+@Suite("A scout re-land that changes nothing writes nothing (#4106 Phase 1a, #4331)")
 struct ScoutReLandWritesNothingTests {
 
-    // The fields a re-land of unchanged events may still write. Phase 1b (decision 6(b)) empties this.
-    static let residue: Set<String> = ["ingestedAt"]
+    // The fields a re-land of unchanged events may still write. Emptied by #4331 (A2) in the same commit that
+    // stopped the unconditional stamp (L373).
+    static let residue: Set<String> = []
 
     static let today = "2026-10-01"
     static let venue = "Orchard Street Hall"
@@ -239,7 +242,7 @@ struct ScoutReLandWritesNothingTests {
         fired.keys.sorted().map { "\($0): \(fired[$0]!.sorted().joined(separator: ", "))" }.joined(separator: "; ")
     }
 
-    @Test func reLandingTheSameEventsFiresNothingButTheResidue() throws {
+    @Test func reLandingTheSameEventsFiresNothing() throws {
         let (container, ctx) = try Self.seeded()
         defer { withExtendedLifetime(container) {} }
         #expect(!ctx.hasChanges, "the seed left unsaved changes, so the land below is not judged alone")
@@ -270,11 +273,8 @@ struct ScoutReLandWritesNothingTests {
         Self.land(Self.sourceA(), Self.sourceB, into: ctx)
 
         let fired = fires.byRow
-        // The in-fixture proof that the observation sees writes at all: the residue is written on every row
-        // the land applied, so every row must have fired. When Phase 1b empties the residue, this line goes
-        // with it and the positive control below is the only proof left.
-        #expect(fired.count == rows.count, Comment(rawValue:
-            "only \(fired.count) of \(rows.count) rows fired even the residue, so the harness cannot see writes"))
+        // The residue is empty since #4331, so the proof that the observation sees writes at all is now the
+        // positive control below alone, in the same fixture.
         let beyond = fired.compactMapValues { fields -> Set<String>? in
             let extra = fields.subtracting(Self.residue)
             return extra.isEmpty ? nil : extra
@@ -303,8 +303,9 @@ struct ScoutReLandWritesNothingTests {
             "written for a reason other than the residue: " + unexplained.sorted().joined(separator: "; ")))
     }
 
-    // The positive control, in the same fixture: one input changes, and exactly one field of one row fires
-    // beyond the residue. A harness blind to writes would pass the test above and fail this one.
+    // The positive control, in the same fixture: one input changes, and exactly that field of one row fires,
+    // with the stamp a changed row now takes (#4331). A harness blind to writes would pass the test above and
+    // fail this one.
     @Test func changingOneInputFiresExactlyThatField() throws {
         let (container, ctx) = try Self.seeded()
         defer { withExtendedLifetime(container) {} }
@@ -318,8 +319,8 @@ struct ScoutReLandWritesNothingTests {
             return extra.isEmpty ? nil : extra
         }
         let count = beyond.values.reduce(0) { $0 + $1.count }
-        #expect(count == 1 && beyond.values.first == ["location"], Comment(rawValue:
-            "a changed location should fire exactly one field beyond the residue, fired: " + Self.describe(beyond)
+        #expect(count == 2 && beyond.values.first == ["ingestedAt", "location"], Comment(rawValue:
+            "a changed location should fire exactly that field and the stamp, fired: " + Self.describe(beyond)
             + " (armed \(fires.armed), every fire: " + Self.describe(fires.byRow) + ")"))
     }
 
@@ -353,9 +354,10 @@ struct ScoutReLandWritesNothingTests {
         let landing = ScoutLandingStore(context: ctx)
         var reports: [FeedReconcile.SourceReport] = []
 
-        // Source A, with one show the store has never held.
+        // Source A, with one show the store has never held, and one it holds whose location has moved: since
+        // #4331 an unchanged row is not written at all, so that change is what the update half is judged on.
         let fresh = Self.event("Fresh Evening", "2026-11-22")
-        let a = ScoutService.apply(events: Self.sourceA() + [fresh], clients: [Self.client], history: [],
+        let a = ScoutService.apply(events: Self.sourceA(survivorLocation: "Brooklyn, NY") + [fresh], clients: [Self.client], history: [],
                                    blocked: Self.blocked, feed: Self.feed("src-a"), today: Self.today,
                                    sourceIds: ["src-a"], landing: landing, into: ctx)
         reports += a.allReports
@@ -461,8 +463,12 @@ struct ScoutReLandWritesNothingTests {
         #expect(leadBy.count == 1 && (afterA..<afterPaste).contains(leadBy[0]),
                 "the pasted lead's insert was not named by the paste's own save")
         #expect(Set(inserted).count == inserted.count, "an insert was named by more than one save")
-        // Updates: every row the landing restamped is named, and no deleted row is named as updated after it.
-        #expect(!updated.isEmpty && !which(doomedID, in: \.updated).contains { $0 >= afterB - 1 })
+        // Updates: the row the landing changed is named by source A's save, and no deleted row is named as
+        // updated after it. (Until #4331 this read "every row the landing restamped", which was every row.)
+        let survivorID = try #require(stored.first { $0.scoutGroupName == "Survivor Evening" }?.persistentModelID)
+        #expect(which(survivorID, in: \.updated).contains(afterA - 1),
+                "the row source A changed was not named as updated by source A's save")
+        #expect(!which(doomedID, in: \.updated).contains { $0 >= afterB - 1 })
     }
 }
 
@@ -570,7 +576,7 @@ struct ScoutReLandWriteScanTests {
 
     // Writes the scan knows about and why each stands, so the report is only what nobody has looked at.
     static let accounted: [String: String] = [
-        "ingestedAt": "the named residue, Phase 1b (decision 6(b))",
+        "ingestedAt": "stamped by the caller only on a changed row or a merge reader's twin (#4331)",
         "missedScoutCount": "the += 1 always changes the value; FeedBreakEvent buckets on it",
         "mergeSurvivorUnseenAt": "written only on the asked and absent answer, which is always a change",
         "survivedMergeAt": "cleared only where set, or with the answer above",
