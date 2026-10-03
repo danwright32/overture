@@ -293,6 +293,7 @@ enum ScoutService {
             case .recentEditsUnsaved(let rows)?: parts.append(ScoutWarningCopy.recentEditsUnsaved(rows))
             case .notReverted(let source, _)?: parts.append(ScoutWarningCopy.notReverted(source))
             case .journalNotWritten(let why)?: parts.append(ScoutWarningCopy.journalNotWritten(why))
+            case .resultsNotKept(let why)?: parts.append(ScoutWarningCopy.resultsNotKept(why))
             case .storeRefusedASave?, nil: break
             }
             let unreached = notAttemptedSources.count
@@ -916,13 +917,9 @@ enum ScoutService {
                         source.lastLandedSequence = sequence
                     }
                 }
+                // #4335: marks a natively read page read itself, in the same save as its shows.
                 let landed = landNative(native, clients: loaded.clients, history: history, blocked: blocked,
                                         now: now, landing: landing, movementLog: movementLog, into: context)
-                if let hash = native.markReadAs, let source = native.source,
-                   let s = landed.sources.first, case .ingested = s.state {
-                    source.lastContentHash = hash
-                    source.hasUnreadChanges = false
-                }
                 outcome.merge(landed)
             }
         }
@@ -1242,55 +1239,26 @@ enum ScoutService {
         let health = listed.health
         let rejectedCount = rejection.unreadTotal
 
-        // #888 part B: applySweep, because this IS a single-source sweep and it must still reconcile its
-        // own report. `apply` alone no longer reconciles, and using it here would make Carnegie silently
-        // stop marking anything gone: nothing would fail, shows would just quietly linger forever.
-        // #3884: handed the pass `readNative` already ran off the actor, so only the upserts run here.
-        var outcome = applySweep(
-            events: usable, clients: clients, history: history, blocked: blocked,
-            feed: FeedCheck(sourceId: native.sourceId,
-                            baseline: health.baseline,
-                            // No row yet means no history, so it is treated as still in its warmup: it
-                            // can find and rank shows but cannot mark any of them gone, which is exactly
-                            // what "we have no feed history to judge an absence against" should mean.
-                            successfulCheckCount: source?.successfulCheckCount ?? 0,
-                            // #987/#887: guarding this path without this line would have SHIPPED the bug
-                            // it was meant to prevent. A dropped event is absent from the feed the
-                            // reconcile reads, so a run that threw events away is indistinguishable from
-                            // one whose shows were cancelled (#897/#917's live bug class). Handing the
-                            // count over lets #887's tolerance gate forbid this run from concluding that
-                            // anything is gone. It may still add and update.
-                            rejectedCount: rejectedCount,
-                            // #1472: the blank-venue rows this run saw, so the reconcile treats their shows as
-                            // still listed. Without this the exemption above would be the #887 bug it was
-                            // meant to prevent: a Met production whose venue field goes blank between runs
-                            // would look exactly like one that was cancelled.
-                            structuralGapURLs: rejection.structuralGapURLs,
-                            structuralGapDates: rejection.structuralGapDates),
-            // #1302: derive applySweep's upcoming-only 'today' from THIS run's now, not the wall clock.
-            // Without it a scout given an injected now (a test, or any non-real clock) had its events pass
-            // the extractor's own now-relative upcoming filter only to be dropped again by applySweep
-            // against the real day, so a native-feed run was never fully time-controllable.
-            today: QueueModel.easternToday(now),
-            // #4331: and the stamp of every row it changes, from the same instant.
-            now: now,
-            sourceIds: [native.sourceId], preClassified: listed.preClassified, landing: landing,
-            into: context)
-
-        // #4334 (A5): the #499 rule, which this path broke. A source whose save failed is PUT BACK, with the
-        // writes its read captured, and NOTHING that follows a save runs for it: no `recordCheck`, and it is
-        // reported `.saveFailed`, never `.ingested`, so `runScout` neither marks its page read nor clears its
-        // unread flag. Its counts are not carried: none of its shows is in the store.
-        if outcome.saveFailed {
-            var failed = Outcome(found: 0, inserted: 0, updated: 0, skipped: 0)
-            failed.saveFailed = true
-            failed.degradedReads = outcome.degradedReads
-            failed.landingStop = isolateFailedSave(of: native.orgName, scope: outcome.saveFailureScope,
-                                                   landing: landing)
-            failed.sources = [SourceResult(sourceId: native.sourceId, orgName: native.orgName, state: .saveFailed,
-                                           hadBaseline: health.baseline > 0, listingsURL: source?.listingsURL)]
-            return failed
-        }
+        // The report is judged against what the source stood at BEFORE this run's bookkeeping below.
+        let feed = FeedCheck(sourceId: native.sourceId,
+                             baseline: health.baseline,
+                             // No row yet means no history, so it is treated as still in its warmup: it
+                             // can find and rank shows but cannot mark any of them gone, which is exactly
+                             // what "we have no feed history to judge an absence against" should mean.
+                             successfulCheckCount: source?.successfulCheckCount ?? 0,
+                             // #987/#887: guarding this path without this line would have SHIPPED the bug
+                             // it was meant to prevent. A dropped event is absent from the feed the
+                             // reconcile reads, so a run that threw events away is indistinguishable from
+                             // one whose shows were cancelled (#897/#917's live bug class). Handing the
+                             // count over lets #887's tolerance gate forbid this run from concluding that
+                             // anything is gone. It may still add and update.
+                             rejectedCount: rejectedCount,
+                             // #1472: the blank-venue rows this run saw, so the reconcile treats their shows as
+                             // still listed. Without this the exemption above would be the #887 bug it was
+                             // meant to prevent: a Met production whose venue field goes blank between runs
+                             // would look exactly like one that was cancelled.
+                             structuralGapURLs: rejection.structuralGapURLs,
+                             structuralGapDates: rejection.structuralGapDates)
 
         // Fold this run into the source's own feed-health state: a full feed re-baselines immediately,
         // and a feed that stays degraded at a stable smaller level across selfHealThreshold scouts
@@ -1300,7 +1268,12 @@ enum ScoutService {
         // #987: the USABLE count, matching the agent path, which baselines on what came out of its guard
         // rather than what went in. Baselining on the raw feed while ingesting the usable subset would
         // make every guarded run look like a shrinking calendar.
-        // #4335 (RC6): this read's feed movement line, appended only now the save carrying its shows has succeeded.
+        //
+        // #4335 (A6): written BEFORE `applySweep`'s save, with the page's hash marked read, so that one save
+        // carries this source's shows AND its bookkeeping, or (failed, and put back by A5's revert below) none
+        // of them, exactly as the ingest's `land` does. They used to follow the save and ride the next source's,
+        // and its feed movement line was appended before the save that carried it. The line is appended once
+        // that save has succeeded (RC6).
         let movement = recordCheck(on: source, events: usable.count, health: health, now: now,
                     // #891/#987: so a native feed that stopped naming venues says so on the Sources
                     // sheet, exactly as an unreadable HTML source does, instead of going quiet.
@@ -1317,6 +1290,43 @@ enum ScoutService {
                     // path uses. Wired here so this path feeds the placement detector too. (#1029 removed
                     // the Dan-facing line the count fed; the count still records for #970's drift check.)
                     placed: SourcePlacement.placedCount(locations: usable.map(\.location)))
+        // #1295 / #1529: an html page read natively is marked READ only together with its shows: here, in the
+        // same save, so the stamp can never describe bytes whose shows never reached the store.
+        if let hash = native.markReadAs, let source {
+            source.lastContentHash = hash
+            source.hasUnreadChanges = false
+        }
+
+        // #888 part B: applySweep, because this IS a single-source sweep and it must still reconcile its
+        // own report. `apply` alone no longer reconciles, and using it here would make Carnegie silently
+        // stop marking anything gone: nothing would fail, shows would just quietly linger forever.
+        // #3884: handed the pass `readNative` already ran off the actor, so only the upserts run here.
+        var outcome = applySweep(
+            events: usable, clients: clients, history: history, blocked: blocked, feed: feed,
+            // #1302: derive applySweep's upcoming-only 'today' from THIS run's now, not the wall clock.
+            // Without it a scout given an injected now (a test, or any non-real clock) had its events pass
+            // the extractor's own now-relative upcoming filter only to be dropped again by applySweep
+            // against the real day, so a native-feed run was never fully time-controllable.
+            today: QueueModel.easternToday(now),
+            // #4331: and the stamp of every row it changes, from the same instant.
+            now: now,
+            sourceIds: [native.sourceId], preClassified: listed.preClassified, landing: landing,
+            into: context)
+
+        // #4334 (A5): the #499 rule, which this path broke. A source whose save failed is PUT BACK, with the
+        // writes its read captured and (#4335) its bookkeeping and its read mark, and it is reported
+        // `.saveFailed`, never `.ingested`, so its page keeps its unread state. Its counts are not carried: none
+        // of its shows is in the store. No movement line is appended for it.
+        if outcome.saveFailed {
+            var failed = Outcome(found: 0, inserted: 0, updated: 0, skipped: 0)
+            failed.saveFailed = true
+            failed.degradedReads = outcome.degradedReads
+            failed.landingStop = isolateFailedSave(of: native.orgName, scope: outcome.saveFailureScope,
+                                                   landing: landing)
+            failed.sources = [SourceResult(sourceId: native.sourceId, orgName: native.orgName, state: .saveFailed,
+                                           hadBaseline: health.baseline > 0, listingsURL: source?.listingsURL)]
+            return failed
+        }
         if let movement { movementLog.append(movement) }
 
         outcome.sources = [SourceResult(sourceId: native.sourceId, orgName: native.orgName,
@@ -1462,8 +1472,8 @@ enum ScoutService {
     }
 
     // Records that this source was checked, and folds the run into its own feed-health history. Not
-    // saved here: apply() already saved, and the caller's own save covers this (a lost health update is
-    // recoverable, unlike a lost prospect).
+    // saved here: since #4335 the caller writes this just BEFORE `applySweep`, whose save carries it with the
+    // source's shows, or puts both back when it fails.
     //
     // #1001: the shared bookkeeping (the health fold, the #891 readable/unreadable counts, the #986
     // placement detector, the #801 warmup counter) lives on WatchedSource.recordSuccessfulRead, the ONE

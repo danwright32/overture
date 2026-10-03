@@ -151,6 +151,18 @@ enum ScoutWarningCopy {
             + "were not applied. Nothing from the scout changed."
     }
 
+    // #4440: a landing that could not keep a copy of its calendar results before applying them, and so applied
+    // none of them. Where the results still are is said beside it by the landing (`resultsStillInTheReadersFile`).
+    static func resultsNotKept(_ why: String) -> String {
+        "Overture couldn't keep a copy of these calendar results before applying them (\(why)), so none of them "
+            + "were applied. Nothing from the scout changed."
+    }
+
+    // #4440: where the results of that refusal still are, said without "either": the copy that failed is the one
+    // the sentence above already names.
+    static let resultsStillInTheReadersFile = "They are still in the reader's results file until the next read "
+        + "replaces it."
+
     // #4334: that refusal, when the copy that would have kept the calendar results failed too. Says where
     // the results still are, rather than promising they will be offered again.
     static func stoppedWithoutACopy(_ why: String) -> String {

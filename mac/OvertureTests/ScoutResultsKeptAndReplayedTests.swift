@@ -210,7 +210,7 @@ final class ScoutResultsKeptAndReplayedTests {
                                                   readFailures: HandoffReadFailures()))
 
         let landed = try await land(try data(["a"]), into: ctx, f, lines: Lines())
-        guard case .journalNotWritten? = landed.outcome.landingStop else {
+        guard case .resultsNotKept? = landed.outcome.landingStop else {
             Issue.record(Comment(rawValue: "a landing that could not keep its results was not refused: "
                                  + String(describing: landed.outcome.landingStop)))
             return
@@ -221,6 +221,9 @@ final class ScoutResultsKeptAndReplayedTests {
         #expect(try f.journals.list().isEmpty, "a journal was written for a landing that never began")
         #expect(landed.outcome.notLandedYet?.contains("reader's results file") == true, Comment(rawValue:
             "the refusal did not say where the results still are: \(landed.outcome.notLandedYet ?? "nothing")"))
+        // L11: named as the copy that failed, never as the landing record, and the copy is not blamed twice.
+        #expect(landed.outcome.landingStopWarning?.contains("couldn't keep a copy of these calendar results") == true)
+        #expect(landed.outcome.notLandedYet?.contains("either") == false)
     }
 
     // MARK: - #4335: offered again, nothing is counted twice

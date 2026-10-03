@@ -384,7 +384,7 @@ enum ScoutExtractIngest {
         do {
             resultsCopy = try keepResults(sequence)
         } catch {
-            outcome.landingStop = .journalNotWritten(why: HandoffDecodeFailure.describe(error))
+            outcome.landingStop = .resultsNotKept(why: HandoffDecodeFailure.describe(error))
             for slot in slots { reportNotAttempted(slot) }
             onRefused(sequence)
             return outcome
