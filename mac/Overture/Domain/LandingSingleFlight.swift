@@ -47,7 +47,8 @@ final class LandingSingleFlight {
         case runScoutTail
         // ScoutExtractIngest's landing block, through its closing save.
         case scoutExtractIngest
-        // #4339 (A11): the lead paste's landing, from its entry flush through its save. Dan is waiting on it,
+        // #4339 (A11): the lead paste's landing, from the entry flush it takes once the store is held through
+        // its save (its first flush, read phase and classify pass run before it asks). Dan is waiting on it,
         // so it takes its turn at Dan's priority, at the front of the queue.
         case leadPaste
     }
