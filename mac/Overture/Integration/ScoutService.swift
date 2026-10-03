@@ -1742,12 +1742,10 @@ enum ScoutService {
             degraded.append(.producerOverrides)
             corrections = .none
         }
-        return (ProducerGate.VenueBrands(shows: brandShows.map(brandShow), overrides: corrections), degraded)
-    }
-
-    // The corpus's projection of a stored show: the only fields of it the brand judgement reads.
-    nonisolated static func brandShow(_ show: Prospect) -> ProducerGate.Show {
-        ProducerGate.Show(presenter: show.presenter, venue: show.venue)
+        // Through the one projection of a stored show onto the fields the brand judgement reads, shared with
+        // the queue's producer tables (#4357 slice B), so the two corpora cannot come to read different fields.
+        return (ProducerGate.VenueBrands(shows: brandShows.map(ProducerGate.Show.init), overrides: corrections),
+                degraded)
     }
 
     @discardableResult

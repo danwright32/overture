@@ -35,8 +35,7 @@ enum PrepQueueService {
     // producer grouping). Read here, where the corpus is read, so neither build path can forget it.
     static func houses(from context: ModelContext) -> [ProducerGate.House] {
         let all = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
-        return ProducerGate.houses(shows: all.map { ProducerGate.Show(presenter: $0.presenter,
-                                                                      venue: $0.venue) },
+        return ProducerGate.houses(shows: all.map(ProducerGate.Show.init),
                                    overrides: ProducerOverrideEditing.overrides(in: context))
     }
 

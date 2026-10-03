@@ -16,7 +16,8 @@ import SwiftData
 // stale when it should (L40). `RowFactsSchemaCoverageTests` holds the lists to `AppSchema.schema` in both
 // directions, so a property added to a model is a red test until somebody decides which side it is on.
 //
-// NOTHING HERE CHANGES WHAT THE APP SHOWS. No term reads these protocols yet; Phase 3 ports them.
+// NOTHING HERE CHANGES WHAT THE APP SHOWS. Phase 3 (#4357) ports the terms onto these protocols slice by
+// slice, and the inventory comment on that issue lists which terms read them and which still read models.
 
 /// One show's facts: every stored `Prospect` property a queue term may read, its contacts in their one
 /// canonical order, and the keys every cross-row term folds from it, worked out once.
