@@ -22,6 +22,16 @@ import Foundation
 // venue only stored rows hold is still poisoned for a batch at another venue. The stored half is kept already
 // stripped, so a key the batch does not touch is never re-judged.
 //
+// #4460: and the ROWS ON A KEY, for the per event match arms. Each arm a show reaches when it misses its natural
+// key (the concert identity, any shared run URL, the production token, the stable source listing, and the
+// arrival notes' lookalike and already pitched scans) used to walk every stored row for every such show, so a
+// landing bringing N new shows walked the store several times N over. Every one of those arms only ever
+// matches a row carrying one of the show's own keys: a folded URL, a production token, a series id, or its
+// night. So the tables keep, per key, the ORDERED list of the rows carrying it (the landing's row order, the
+// order the walk met them in), and an arm walks only the rows on its keys, its own predicate unchanged. The
+// URL list is the `anywhere` scope's own (its key is the bare folded URL), so no second URL index is kept;
+// tokens, series ids and nights get lists of their own, fed by the same change feed.
+//
 // Pure: the landing (`ScoutLandingStore`) says which rows joined, left or were written, and in what order.
 struct LandingBatchTables {
     typealias Row = ObjectIdentifier
@@ -38,8 +48,64 @@ struct LandingBatchTables {
         var tokens: Set<Token> = []
         var urls: [Link] = []
         var spellings: [Spelling] = []
+        // #4460: the row's series id and its night as stored, for the concert identity arm and the arrival
+        // notes. nil when empty, since every arm asking by either refuses an empty one before it looks.
+        var seriesId: String?
+        var night: String?
 
         static let none = Contribution()
+    }
+
+    // MARK: the rows on a key (#4460)
+
+    // Per key, the rows carrying it, in the landing's order, each once however often it carries the key.
+    struct KeyedRows: Equatable {
+        struct Entry: Equatable { let order: Int; let row: Row }
+        fileprivate(set) var entries: [String: [Entry]] = [:]
+
+        fileprivate mutating func insert(_ row: Row, order: Int, into key: String) {
+            var list = entries[key] ?? []
+            guard !list.contains(where: { $0.row == row }) else { return }
+            let at = list.firstIndex { $0.order > order } ?? list.endIndex
+            list.insert(Entry(order: order, row: row), at: at)
+            entries[key] = list
+        }
+
+        fileprivate mutating func remove(_ row: Row, from key: String) {
+            entries[key]?.removeAll { $0.row == row }
+            if entries[key]?.isEmpty == true { entries[key] = nil }
+        }
+    }
+
+    private(set) var rowsByToken = KeyedRows()
+    private(set) var rowsBySeries = KeyedRows()
+    private(set) var rowsByNight = KeyedRows()
+
+    // The keys a per event arm looks a show up by, already folded the way the arm's own predicate folds them.
+    enum Lookup: Equatable {
+        case sharingURL(Set<String>)
+        case sharingToken(Set<String>)
+        case series(String)
+        case night(String)
+    }
+
+    // The rows carrying any of the lookup's keys, once each, in the landing's order: the rows a walk over every
+    // stored row could find an arm's match among, in the order the walk met them. An empty key is on no row.
+    func rows(_ lookup: Lookup) -> [Row] {
+        var lists: [[(order: Int, row: Row)]]
+        switch lookup {
+        case .sharingURL(let urls):
+            lists = urls.map { (anywhere.entries[$0] ?? []).map { (order: $0.order, row: $0.row) } }
+        case .sharingToken(let tokens):
+            lists = tokens.map { (rowsByToken.entries[$0] ?? []).map { (order: $0.order, row: $0.row) } }
+        case .series(let id):
+            lists = [(rowsBySeries.entries[id] ?? []).map { (order: $0.order, row: $0.row) }]
+        case .night(let night):
+            lists = [(rowsByNight.entries[night] ?? []).map { (order: $0.order, row: $0.row) }]
+        }
+        if lists.count == 1 { return lists[0].map(\.row) }
+        var seen: Set<Row> = []
+        return lists.joined().sorted { $0.order < $1.order }.filter { seen.insert($0.row).inserted }.map(\.row)
     }
 
     // MARK: poison
@@ -156,6 +222,9 @@ struct LandingBatchTables {
                 self[keyPath: scope].rejudge(k)
             }
         }
+        for t in Set(value.tokens.map(\.token)) { rowsByToken.remove(row, from: t) }
+        if let id = value.seriesId { rowsBySeries.remove(row, from: id) }
+        if let night = value.night { rowsByNight.remove(row, from: night) }
     }
 
     private mutating func deposit(_ row: Row, order: Int, _ value: Contribution) {
@@ -168,6 +237,9 @@ struct LandingBatchTables {
                 self[keyPath: scope].rejudge(k)
             }
         }
+        for t in Set(value.tokens.map(\.token)) { rowsByToken.insert(row, order: order, into: t) }
+        if let id = value.seriesId { rowsBySeries.insert(row, order: order, into: id) }
+        if let night = value.night { rowsByNight.insert(row, order: order, into: night) }
     }
 
     private mutating func count(_ t: Contribution.Token, by delta: Int) {
@@ -231,15 +303,21 @@ struct LandingBatchTables {
         let anywhereShows: [String: [String]]
         let atAVenueAmbiguous: Set<String>
         let anywhereAmbiguous: Set<String>
+        // #4460: the rows on each token, series id and night, in order.
+        let tokenRows: [String: [String]]
+        let seriesRows: [String: [String]]
+        let nightRows: [String: [String]]
     }
 
     func snapshot(naming name: (Row) -> String) -> Snapshot {
         func rows(_ s: URLScope) -> [String: [String]] {
             s.entries.mapValues { $0.map { name($0.row) + " " + $0.title } }
         }
+        func rows(_ k: KeyedRows) -> [String: [String]] { k.entries.mapValues { $0.map { name($0.row) } } }
         return Snapshot(titleCounts: titleCounts, poisonedTokens: poisonedTokens, spellingCounts: spellingCounts,
                         atAVenueRows: rows(atAVenue), anywhereRows: rows(anywhere),
                         atAVenueShows: atAVenue.shows, anywhereShows: anywhere.shows,
-                        atAVenueAmbiguous: atAVenue.ambiguous, anywhereAmbiguous: anywhere.ambiguous)
+                        atAVenueAmbiguous: atAVenue.ambiguous, anywhereAmbiguous: anywhere.ambiguous,
+                        tokenRows: rows(rowsByToken), seriesRows: rows(rowsBySeries), nightRows: rows(rowsByNight))
     }
 }
