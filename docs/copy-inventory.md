@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1706 sentences**.
+Every sentence Overture can say to Dan: **1709 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -14,7 +14,7 @@ What is not, and why:
   sentences under tokens nobody reads.
 - **Nothing, if it is written as two literals joined with `+`.** Those ARE joined here, into the
   one sentence the running app says (#3155). What is still only part of what Dan reads is a
-  sentence carrying a VALUE: 633 of the 1706 below hold a
+  sentence carrying a VALUE: 634 of the 1709 below hold a
   `\(...)` where a number or a name goes, so what is printed is the template. They are counted
   here rather than listed again, because the hole is visible in the line itself; what was missing
   was any statement of how much of this document is templates.
@@ -1656,6 +1656,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/StoreShrinkCheck.swift`
 "Overture could not open its data file to check it at \(path). Nothing has been opened or changed. The file may be in use by another program, or its permissions may have changed. Check that file before reopening Overture."
     `App/StoreSchemaGuard.swift`
+"Overture could not open its record of when it stopped responding, so nothing here can say whether it did."
+    `Domain/FreezeReport.swift`
 "Overture could not read kept calendar results at \(path) (\(why))."
     `Domain/LandingSingleFlight.swift`
 "Overture could not save the record of what this run searched for, so it will be lost when the next run starts: \(reason)"
@@ -1786,6 +1788,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ContactRoleClaim.swift`
 "Overture, \(Plural.count(count, "thing")) due"
     `Domain/DueBadge.swift`
+"Part of Overture's record of when it stopped responding could not be opened, so there may have been more."
+    `Domain/FreezeReport.swift`
 "Paste a link to the show, or to the organization's events page."
     `UI/AddLeadSheet.swift`
 "Paused (booked elsewhere)"
@@ -2045,7 +2049,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "Review and send"
     `UI/FollowUpsView.swift`
     `UI/SendConfirmSheet.swift`
-"Rewritten by every scout landing that touches the row, and read only by the merge paths, the \\nre-key target, the first seen backfill and the Prep export (#4106 fact 10). Carrying it would make \\na re-land that changed nothing look like a change to every row it wrote."
+"Rewritten by a scout landing that changes the row, or that lists a row sharing a merge key with \\nanother (#4331), and read only by the merge paths, the re-key target, the first seen backfill and \\nthe Prep export (#4106 fact 10). Carrying it would make a landing look like a change to every \\nduplicate it restamps."
     `Domain/RowFacts.swift`
 "Rooms Overture can't place"
     `UI/SourcesView.swift`
@@ -3581,6 +3585,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "could not read the landing record at \(path): \(why)"
     `Integration/LandingJournal.swift`
 "could not read the landing record at \(url.path): \(newer)"
+    `Integration/LandingJournal.swift`
+"could not read the landing record at \(url.path): \(reason)"
     `Integration/LandingJournal.swift`
 "could not read the landing record at \(url.path): \(why)"
     `Integration/LandingJournal.swift`
