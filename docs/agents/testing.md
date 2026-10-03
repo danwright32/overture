@@ -945,7 +945,7 @@ the measurement it came from lives here. Read the entry before the rule decides 
   the other copies' on the same night, so `GroupNameMatch.isSameNightVariant` made them twins and the #4331
   rule restamped `ingestedAt` on 538 of the 540 copies an unchanged 4x re-land restamped. Measured with the
   #4372 probe's `restamped shows ... by the twin key` line; `anUnchangedReLandWritesOnlyTheTwinRuleSRowsAtEverySize`
-  holds that a re-land writes only the twin rule's rows, twice over at twice the size. Archives frozen before
+  holds that a re-land writes only the twin rule's rows, three times over at three times the size (three, since the twins were between two copies). Archives frozen before
   #4481 hold the old glue, so the re-freeze above applies again.
 - **A real-arm file can never be pushed.** Its FIRST LINE is exactly the marker, and nothing else counts, so
   every file that talks about the marker builds it from two halves and pushes cleanly (L245, L673).
