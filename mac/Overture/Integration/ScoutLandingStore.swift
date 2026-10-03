@@ -655,10 +655,46 @@ final class ScoutLandingStore {
             case .sharingToken(let tokens): return !Set(folded.tokens).isDisjoint(with: tokens)
             case .series(let id): return p.seriesId == id
             case .night(let night): return p.performanceDate == night
+            case .ownedBy(let owners): return !Set(p.sourceIds).isDisjoint(with: owners)
             }
         }
     }
     #endif
+
+    // #4475: the stored rows a reconcile of these reports could change, in this landing's order, in place of every
+    // stored row. `FeedReconcile.reconcile` changes a row only when a report LISTS it (its natural key among the
+    // seen keys, one of its links among the seen links, or a structural gap on its night under one of the
+    // report's sources) or when every source owning it was asked and none had it. Each of those needs the row to
+    // hold a seen key, carry a seen link, or be owned by a report's source, so every row it can change is here,
+    // and the reconcile still decides each one exactly as it did. Rows it cannot change are left out, which is
+    // what stops runScout's per source reconcile walking the whole store once a source (#4475).
+    //
+    // Under `.everyRead` it is every row, freshly read, so the reference stays the code before #4475. Throws when
+    // the store cannot answer, exactly as the read of every row did, so the caller names the failure (#4474).
+    func rows(reconciledBy reports: [FeedReconcile.SourceReport]) throws -> [Prospect] {
+        if policy == .everyRead { return try rows() }
+        // The links folded the way the URL lists are keyed: a row whose raw link is a seen link folds to the same
+        // key, so the lookup holds every row the reconcile's raw comparison can match, and the reconcile decides.
+        let links = Set(reports.flatMap(\.seenSourceURLs).map(ListingURL.fold))
+        var found = try rows(.sharingURL(links)) + rows(.ownedBy(Set(reports.map(\.sourceId))))
+        for key in Set(reports.flatMap(\.seenKeys)) { found += try rowsHolding(key: key) }
+        let tables = try currentTables()
+        var seen: Set<ObjectIdentifier> = []
+        let unique = found.filter { seen.insert(ObjectIdentifier($0)).inserted }
+        return unique.sorted {
+            (tables.order(of: ObjectIdentifier($0)) ?? .max) < (tables.order(of: ObjectIdentifier($1)) ?? .max)
+        }
+    }
+
+    // Every row holding this natural key, from the key index brought current. Compared as Swift compares
+    // strings, as the reconcile's `seenKeys.contains` does, rather than as bytes, which `stored(key:)` uses for
+    // a write: a lookup that matched fewer rows than the reconcile would leave a listed row unreset.
+    private func rowsHolding(key: String) throws -> [Prospect] {
+        _ = try stored(key: key)
+        let held = (keyIndex?[key] ?? []).filter { !$0.isDeleted }
+        counters.rowsLookedUp += held.count
+        return held
+    }
 
     // How the stored rows have spelled their rooms, per source id, for `VenueSpellingLock.locked`.
     struct VenueSpellings {
@@ -761,6 +797,8 @@ final class ScoutLandingStore {
         // #4460: the two keys the concert identity arm and the arrival notes ask by, which no fold carries.
         if let id = p.seriesId, !id.isEmpty { c.seriesId = id }
         if let night = p.performanceDate, !night.isEmpty { c.night = night }
+        // #4475: whoever owns the row, for the reconcile.
+        c.owners = Set(p.sourceIds)
         return c
     }
 
