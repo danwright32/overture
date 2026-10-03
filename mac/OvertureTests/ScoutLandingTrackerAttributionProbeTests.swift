@@ -225,14 +225,20 @@ struct ScoutLandingTrackerAttributionProbeTests {
         // `MEASURE_4372_HISTORICAL_CORPUS` adds the fourfold corpus as it stood when 0b.6 read 1,167 fires
         // (before #4288, every copy sharing its original's listing addresses), in a directory of its own.
         let historical = ProcessInfo.processInfo.environment["MEASURE_4372_HISTORICAL_CORPUS"] != nil
-        var corpora = [("live clone", base)]
-        if !cloneOnly { corpora.append(("4x", try Phase0.scaledCopy(of: base, factor: 4, in: dir))) }
+        // #4427: what each corpus lands. The 4x corpus lands a copy of every result per copy, under the copy's
+        // own source, as a store four times the size would; the historical corpus predates that and lands the
+        // clone's results, as 0b.6 did.
+        var corpora = [("live clone", base, results)]
+        if !cloneOnly {
+            corpora.append(("4x", try Phase0.scaledCopy(of: base, factor: 4, in: dir),
+                            Phase0.scaledResults(results, factor: 4)))
+        }
         if historical {
             let old = try sandboxes.make(named: "tracker4372-historical")
             corpora.append(("4x, listings shared as before #4288",
-                            try Phase0.scaledCopy(of: base, factor: 4, in: old, reidentifyListings: false)))
+                            try Phase0.scaledCopy(of: base, factor: 4, in: old, era: .before4288), results))
         }
-        for (label, url) in corpora {
+        for (label, url, results) in corpora {
             let container = try Phase0.openContainer(at: url)
             let ctx = container.mainContext
             defer { withExtendedLifetime(container) {} }
@@ -240,7 +246,9 @@ struct ScoutLandingTrackerAttributionProbeTests {
             for round in 1...2 {
                 let rows = try ctx.fetch(FetchDescriptor<Prospect>())
                 for r in rows { _ = r.recipients.count }
-                let copyRow = rows.map { p in ["qa", "qb", "qc"].contains { p.naturalKey.hasSuffix($0) } }
+                // #4427: by the title, which every copy glues, rather than the key, which since #4427 a copy
+                // with no venue no longer ends in its glue.
+                let copyRow = rows.map { p in (1..<4).contains { p.groupName.hasPrefix(Phase0.glue(forCopy: $0)) } }
                 let indexOf = Dictionary(rows.enumerated().map { ($1.persistentModelID, $0) }, uniquingKeysWith: { a, _ in a })
                 var clock = Phase0.now()
                 func lap(_ what: String) {

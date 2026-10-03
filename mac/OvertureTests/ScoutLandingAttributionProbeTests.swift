@@ -293,12 +293,15 @@ struct ScoutLandingAttributionProbeTests {
             let saves = Phase0SaveLog(main: ctx)
             let existing = try ctx.fetch(FetchDescriptor<Prospect>())
             let loaded = DownbeatBridge.loadWithHealth(from: exportCopy, now: Date())
+            // #4427: a store `factor` times the size lands `factor` times the results, each copy's under its own
+            // source, so the copies are not read as shows their sources dropped.
+            let scaled = Phase0.scaledResults(results, factor: factor)
             let inputs = Inputs(
-                results: results, clients: loaded.clients,
+                results: scaled, clients: loaded.clients,
                 history: LocalHistory.forMatching(existing: existing, importedFrom: historyCopy),
                 blocked: ScoutService.blockedCalendar(export: (loaded.bookings, loaded.blockedDates, loaded.health),
                                                       context: ctx))
-            LandingProbe.say("x\(factor): \(existing.count) shows, \(events) events over \(results.results.count) "
+            LandingProbe.say("x\(factor): \(existing.count) shows, \(events * factor) events over \(scaled.results.count) "
                              + "sources, \(inputs.clients.count) clients, \(inputs.history.count) history records, "
                              + Phase0.load())
             let settleDeadline = 60 * factor + 60
@@ -456,10 +459,12 @@ struct ScoutLandingAttributionProbeTests {
         guard let base = try LiveStoreClone.makeClone(in: dir) else {
             throw LiveStoreClone.Refusal.backupFailed("no live store on this machine")
         }
-        let position = Dictionary(uniqueKeysWithValues: results.results.enumerated().map { ($1.sourceId, $0 + 1) })
-        let eventsBySource = Dictionary(uniqueKeysWithValues: results.results.map { ($0.sourceId, $0.events.count) })
-
         for factor in LandingProbe.sizes {
+            // #4427: a store `factor` times the size lands `factor` times the results, each copy's under its own
+            // source, so the copies are not read as shows their sources dropped.
+            let scaled = Phase0.scaledResults(results, factor: factor)
+            let position = Dictionary(uniqueKeysWithValues: scaled.results.enumerated().map { ($1.sourceId, $0 + 1) })
+            let eventsBySource = Dictionary(uniqueKeysWithValues: scaled.results.map { ($0.sourceId, $0.events.count) })
             let url = factor == 1 ? base : try Phase0.scaledCopy(of: base, factor: factor, in: dir)
             let container = try Phase0.openContainer(at: url)
             defer { withExtendedLifetime(container) {} }
@@ -467,20 +472,20 @@ struct ScoutLandingAttributionProbeTests {
             let existing = try ctx.fetch(FetchDescriptor<Prospect>())
             let loaded = DownbeatBridge.loadWithHealth(from: exportCopy, now: Date())
             let inputs = Inputs(
-                results: results, clients: loaded.clients,
+                results: scaled, clients: loaded.clients,
                 history: LocalHistory.forMatching(existing: existing, importedFrom: historyCopy),
                 blocked: ScoutService.blockedCalendar(export: (loaded.bookings, loaded.blockedDates, loaded.health),
                                                       context: ctx))
-            LandingProbe.say("counters x\(factor): \(existing.count) shows, \(results.results.count) sources, "
+            LandingProbe.say("counters x\(factor): \(existing.count) shows, \(scaled.results.count) sources, "
                              + Phase0.load())
             // Warm up, unreported: the recorded results were already landed once into the live store, and this
             // makes every landing below a RE-LAND of the same file, as the attribution arms are.
-            _ = await ScoutExtractIngest.ingest(results, clients: inputs.clients, history: inputs.history,
+            _ = await ScoutExtractIngest.ingest(scaled, clients: inputs.clients, history: inputs.history,
                                                 blocked: inputs.blocked, into: ctx)
             try? ctx.save()
 
-            for (variant, landed) in [("reland", results), ("inserting", Self.inserting(results, share: share,
-                                                                                         round: factor))] {
+            for (variant, landed) in [("reland", scaled), ("inserting", Self.inserting(scaled, share: share,
+                                                                                        round: factor))] {
                 let wait = Phase0.waitForLoad(below: 8, deadline: 1800, poll: 5)
                 var steps: [(String, ScoutLandingStore.Counters, Double)] = []
                 let t0 = Phase0.now()
@@ -490,7 +495,7 @@ struct ScoutLandingAttributionProbeTests {
                 let total = Phase0.ms(since: t0)
                 try? ctx.save()
                 let added = landed.results.reduce(0) { $0 + $1.events.count }
-                    - results.results.reduce(0) { $0 + $1.events.count }
+                    - scaled.results.reduce(0) { $0 + $1.events.count }
                 LandingProbe.say("counters x\(factor) \(variant): \(landed.results.count) sources, \(added) synthetic "
                                  + "new-show events added, outcome inserted \(outcome.inserted) updated "
                                  + "\(outcome.updated) skipped \(outcome.skipped), ingest \(LandingProbe.f1(total)) ms; "

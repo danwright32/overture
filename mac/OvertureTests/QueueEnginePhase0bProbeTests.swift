@@ -970,9 +970,16 @@ struct QueueEnginePhase0bProbeTests {
             Phase0b.say("0b.6 UNMEASURED: no readable scout extract results on this machine")
             return
         }
-        let events = results.results.reduce(0) { $0 + $1.events.count }
-        var restamped: Set<String> = []
+        // #4427: the rows a re-land restamps, by title, date and venue rather than by key, because a copy's key
+        // is the one its glued values compute rather than its original's key with the glue appended.
+        func identity(_ title: String, _ date: String?, _ venue: String?) -> String {
+            "\(title)|\(date ?? "")|\(venue ?? "")"
+        }
+        var restamped: [(title: String, date: String?, venue: String?)] = []
         for (label, url) in try corpora("phase0b-6") {
+            // #4427: the 4x corpus lands a copy of every result per copy, under the copy's own source, as a store
+            // four times the size would.
+            let landed = label == "live clone" ? results : Phase0.scaledResults(results, factor: 4)
             let container = try Phase0.openContainer(at: url)
             let ctx = container.mainContext
             defer { withExtendedLifetime(container) {} }
@@ -989,14 +996,15 @@ struct QueueEnginePhase0bProbeTests {
                 let monitor = Phase0bMainTurnMonitor()
                 monitor.start()
                 let start = Phase0.now()
-                let outcome = await ScoutExtractIngest.ingest(results, clients: [], history: [], blocked: .empty, into: ctx)
+                let outcome = await ScoutExtractIngest.ingest(landed, clients: [], history: [], blocked: .empty, into: ctx)
                 let wall = Phase0.ms(since: start)
                 await settle()
                 let turns = monitor.stop()
                 let after = try ctx.fetch(FetchDescriptor<Prospect>())
                 let changed = after.filter { p in before[p.persistentModelID].map { $0 != phase0Values(p) } ?? false }
                 if round == 2 && label == "live clone" {
-                    restamped = Set(after.filter { row in ingestedBefore[row.persistentModelID].map { old in old != row.ingestedAt } ?? false }.map(\.naturalKey))
+                    restamped = after.filter { row in ingestedBefore[row.persistentModelID].map { old in old != row.ingestedAt } ?? false }
+                        .map { ($0.groupName, $0.performanceDate, $0.venue) }
                 }
                 let entries = saves.take()
                 let sizes = entries.map { e in
@@ -1010,9 +1018,12 @@ struct QueueEnginePhase0bProbeTests {
             // The save cost of the ingestedAt writes alone: the rows the unchanged re-land restamps (taken from
             // the clone's round 2, and their three glued copies on the 4x corpus), restamped and saved, against
             // the same save with nothing dirty. One save, and spread over the landing's 36 saves.
-            let keys = label == "live clone" ? restamped
-                : Set(restamped.flatMap { k in [k, k + "qa", k + "qb", k + "qc"] })
-            let rows = try ctx.fetch(FetchDescriptor<Prospect>()).filter { keys.contains($0.naturalKey) }
+            let glues = label == "live clone" ? [""] : [""] + (1..<4).map { Phase0.glue(forCopy: $0) }
+            let keys = Set(restamped.flatMap { r in
+                glues.map { g in identity(g + r.title, r.date, r.venue.map { g + $0 }) }
+            })
+            let rows = try ctx.fetch(FetchDescriptor<Prospect>())
+                .filter { keys.contains(identity($0.groupName, $0.performanceDate, $0.venue)) }
             var oneSave: [Double] = [], spread: [Double] = [], empty: [Double] = []
             // #4384: each timed save's failure is carried out of the stopwatch and ends the probe, so a save that
             // never landed is not timed as one that did, and the next block does not time pending writes.
@@ -1037,7 +1048,7 @@ struct QueueEnginePhase0bProbeTests {
                 try Phase0.requireSaved(failure, step: "0b.6 restamp spread over 36 saves")
             }
             Phase0b.say("""
-                0b.6 [\(label)] \(events) events over \(results.results.count) sources, \(Phase0.load())
+                0b.6 [\(label)] \(landed.results.reduce(0) { $0 + $1.events.count }) events over \(landed.results.count) sources, \(Phase0.load())
                   \(lines.joined(separator: "\n  "))
                   ingestedAt restamp of \(rows.count) rows: one save \(Phase0b.reading(oneSave).text); spread over 36 saves \(Phase0b.reading(spread).text); an empty save \(Phase0b.reading(empty).text)
                   the Phase 1a branch arm  UNMEASURED: Phase 1a is not built, so every number above is today's code, no-op writes included

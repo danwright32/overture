@@ -38,11 +38,14 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 source "${SCRIPT_DIR}/lib/scratch.sh"
 
 # The overlay, and nothing else: the oracle's own test files. Everything they use must already exist at the
-# oracle commit, which is what the build in that worktree proves.
+# oracle commit, which is what the build in that worktree proves. ScaledCorpus.swift (#4427) builds the frozen
+# 4x store and the results landed on it; overlaid so the freeze builds today's corpus, each copy with sources
+# of its own, rather than the one 6d3453d8's Phase0Corpus.swift builds.
 ORACLE_OVERLAY=(
   mac/OvertureTests/LandingOracle.swift
   mac/OvertureTests/LandingOracleCorpus.swift
   mac/OvertureTests/LandingOracleTests.swift
+  mac/OvertureTests/ScaledCorpus.swift
 )
 
 # The synthetic tests the recording runs, one per entry point that lands shows (#4374), and the file each
