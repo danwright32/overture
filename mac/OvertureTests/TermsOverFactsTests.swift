@@ -141,8 +141,6 @@ struct TermsOverFactsTests {
         #expect(findings.isEmpty, Comment(rawValue: findings.joined(separator: "\n")))
     }
 
-    // And the comparison can see a presenter that changed after the row was extracted: the projection, the
-    // venue count and the inherited answer all move.
     // Dan's producer correction reaches the brand table `scope` builds through `ProducerTables(rows:overrides:)`
     // (slice C). Demoting the producer makes it a venue's own brand, so its card stops naming it. Asked
     // through `scope` itself, the path the app takes, because a check on the table alone would not see the
@@ -162,6 +160,8 @@ struct TermsOverFactsTests {
                 "a demoted producer is still named, so the correction never reached the brand table scope built")
     }
 
+    // And the comparison can see a presenter that changed after the row was extracted: the projection, the
+    // venue count and the inherited answer all move.
     @Test func theComparisonSeesAPresenterThatChangedAfterItWasExtracted() throws {
         let ctx = try context()
         let all = try seed(ctx)
