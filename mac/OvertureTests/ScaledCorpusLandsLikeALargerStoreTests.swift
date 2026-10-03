@@ -107,6 +107,19 @@ final class ScaledCorpusLandsLikeALargerStoreTests {
 
         let twoDir = try sandboxes.make(named: "scaled-corpus-4427-x2")
         let two = try Phase0.scaledCopy(of: seed, factor: 2, in: twoDir)
+        // Before anything lands: a copy carries the key its own glued values compute wherever its original does.
+        // Left appended, the landing re-keys every copy through a URL arm and still ends equal below, so the
+        // rows alone cannot see it; the re-key is a write per copy a real store never makes.
+        do {
+            func anchored(_ url: URL) throws -> Int {
+                try ModelContext(Phase0.openContainer(at: url)).fetch(FetchDescriptor<Prospect>())
+                    .filter { $0.naturalKey == $0.scoutAnchoredNaturalKey }.count
+            }
+            let seedAnchored = try anchored(seed)
+            let twoAnchored = try anchored(two)
+            #expect(seedAnchored > 0 && twoAnchored == 2 * seedAnchored,
+                    "shows keyed as the app computes them: seed \(seedAnchored), 2x \(twoAnchored)")
+        }
         let x2 = try await land(Phase0.scaledResults(results, factor: 2), on: two)
 
         // The 1x landing has to have done each thing the comparison is about, or equality proves nothing.
