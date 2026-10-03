@@ -16,7 +16,9 @@ struct TermsOverFactsTests {
     private let asOf = "2026-09-20"
 
     private func context() throws -> ModelContext {
-        ModelContext(try TestModelContainer.inMemory([Prospect.self, Recipient.self]))
+        // `OrgReachabilityAnswer` is named because the T5 tests insert one; leaving it to be reached through
+        // the schema's relationships would make the fixture depend on how SwiftData resolves an unnamed type.
+        ModelContext(try TestModelContainer.inMemory([Prospect.self, Recipient.self, OrgReachabilityAnswer.self]))
     }
 
     @discardableResult
@@ -156,5 +158,31 @@ struct TermsOverFactsTests {
                 "the lost inheritance was not seen in the ledger")
         #expect(!findings.contains { $0.contains("Wexcombe") || $0.contains("Quillon") || $0.contains("Harrowgate") },
                 "a finding named a presenter or a venue rather than the row's identifier")
+    }
+
+    // MARK: T6 (slice C)
+
+    // On top of `seed`: the Lantern Parade run at Harrowgate Hall (closing 2026-10-06) tours on to another
+    // room two nights later, inside the engagement gap, so its three rows form one cross-venue engagement.
+    @Test func theEngagementLinkAnswersTheSameOverFactsAsOverModelsAndSeesAVenueThatMoved() throws {
+        let ctx = try context()
+        _ = try seed(ctx)
+        row(ctx, key: "lantern tour|2026-10-08", title: "Lantern Parade", venue: "Quillon Room", opens: "2026-10-08")
+        let all = try ctx.fetch(FetchDescriptor<Prospect>())
+        // Positive control (L159): the touring row is linked to the hall's rows, and only through T6.
+        let linked = EngagementLink.group(among: all)
+        #expect(linked["lantern tour|2026-10-08"]?.count == 2,
+                "the touring row should be linked to the hall's two Lantern Parade rows")
+        #expect(TermsOverFacts.findings(all, asOf: asOf).isEmpty)
+
+        // Facts taken before the touring row moved into the hall: the engagement no longer spans two rooms
+        // over models, and the comparison has to say so by the row's identifier alone.
+        let stale = all.map(RowFacts.extract)
+        try #require(all.first { $0.naturalKey == "lantern tour|2026-10-08" }).venue = "Harrowgate Hall"
+        let findings = TermsOverFacts.findings(all, facts: stale, asOf: asOf)
+        #expect(findings.contains { $0.hasPrefix("EngagementLink.group members differ") },
+                "a row that stopped touring was not seen by the engagement comparison")
+        #expect(!findings.contains { $0.contains("Lantern") || $0.contains("Quillon") || $0.contains("Harrowgate") },
+                "a finding named a title or a venue rather than the row's identifier")
     }
 }

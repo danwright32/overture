@@ -490,6 +490,20 @@ extension ShowLink.Row {
     }
 }
 
+extension ShowLink {
+    // #4357 slice C: the grouping and the collapse over the rows themselves, which is what `QueueModel.scope`
+    // calls, so the pass hands them live models and the engine (Phase 4) retained `RowFacts`, with the
+    // slicing written once here rather than at each caller.
+    static func group(among rows: [some ProspectFacts]) -> [String: [String]] {
+        group(rows.map(Row.init))
+    }
+
+    static func collapse(among rows: [some ProspectFacts],
+                         drawn: Set<String>? = nil) -> (fronts: [String: [String]], hidden: Set<String>) {
+        collapse(rows.map(Row.init), drawn: drawn)
+    }
+}
+
 // The opaque stable production token, read at query time from a URL already stored. No new field, no
 // writer, no backfill and no recurring cost.
 //
