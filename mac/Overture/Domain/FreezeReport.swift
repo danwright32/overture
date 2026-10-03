@@ -131,8 +131,8 @@ enum FreezeReport {
         // #4335 (A6, L459): a stall recorded while an interrupted landing was being finished at idle is idle
         // work, never a freeze Dan felt. It is counted apart and said in a sentence of its own, so it never
         // enters the count or the longest below. Still said, once, like every new record (L98).
-        let idleWork = fresh.filter { $0.recoveryRunID != nil }
-        let freezes = fresh.filter { $0.recoveryRunID == nil }
+        let idleWork = fresh.filter { $0.recoverySequence != nil }
+        let freezes = fresh.filter { $0.recoverySequence == nil }
         let idleSentence = idleWork.max(by: { $0.seconds < $1.seconds }).map {
             FreezeNoticeCopy.idleWork(count: idleWork.count, longestSeconds: $0.seconds)
         }

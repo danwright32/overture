@@ -424,11 +424,11 @@ struct StallRecord: Codable, Equatable, Sendable {
     let mainThreadWaitingSamples: Int?
 
     // #4335 (A6, L459): this stall happened while Overture was finishing an INTERRUPTED landing, at idle, with
-    // nobody at the Mac: the recovery's run identity, and how long the Mac had been without keyboard or mouse
+    // nobody at the Mac: the interrupted landing's sequence number, and how long the Mac had been without keyboard or mouse
     // input when the recovery started. Idle work, never a freeze Dan felt, so every reader reports these in a
     // group of their own and never inside the freeze distribution milestone 80's bar is read from. Absent on
     // every other record, which is nearly all of them, and on every record written before this shipped.
-    let recoveryRunID: String?
+    let recoverySequence: Int?   // the landing's sequence number, never text: this file is durable (#3435)
     let inputIdleSeconds: Double?
 
     // The whole identity, as one string, because a reader that remembers what it has said has to remember
@@ -441,7 +441,7 @@ struct StallRecord: Codable, Equatable, Sendable {
          asleepSeconds: Double? = nil, runLoopActivity: RunLoopActivity = .notRecorded,
          mainThreadCPUSeconds: Double? = nil, mainThreadRunnableSamples: Int? = nil,
          mainThreadWaitingSamples: Int? = nil,
-         recoveryRunID: String? = nil, inputIdleSeconds: Double? = nil,
+         recoverySequence: Int? = nil, inputIdleSeconds: Double? = nil,
          promotedFromOlderWindow: Bool? = nil) {
         self.session = session
         self.sequence = sequence
@@ -464,7 +464,7 @@ struct StallRecord: Codable, Equatable, Sendable {
         self.mainThreadCPUSeconds = mainThreadCPUSeconds
         self.mainThreadRunnableSamples = mainThreadRunnableSamples
         self.mainThreadWaitingSamples = mainThreadWaitingSamples
-        self.recoveryRunID = recoveryRunID
+        self.recoverySequence = recoverySequence
         self.inputIdleSeconds = inputIdleSeconds
         self.promotedFromOlderWindow = promotedFromOlderWindow
     }
@@ -505,7 +505,7 @@ struct StallRecord: Codable, Equatable, Sendable {
         mainThreadRunnableSamples = try c.decodeIfPresent(Int.self, forKey: .mainThreadRunnableSamples)
         mainThreadWaitingSamples = try c.decodeIfPresent(Int.self, forKey: .mainThreadWaitingSamples)
         // #4335: absent on every record that was not idle work.
-        recoveryRunID = try c.decodeIfPresent(String.self, forKey: .recoveryRunID)
+        recoverySequence = try c.decodeIfPresent(Int.self, forKey: .recoverySequence)
         inputIdleSeconds = try c.decodeIfPresent(Double.self, forKey: .inputIdleSeconds)
         // #4122: absent on a record nobody promoted, which is almost all of them.
         promotedFromOlderWindow = try c.decodeIfPresent(Bool.self, forKey: .promotedFromOlderWindow)

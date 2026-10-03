@@ -77,7 +77,7 @@ final class MainThreadWatchdog: @unchecked Sendable {
     // precedent and for its reason: stamped by the MAIN thread as the recovery starts and cleared as it ends,
     // only ever READ here, so a stall written during it carries it without asking the main actor anything.
     struct IdleWork: Equatable, Sendable {
-        let recoveryRunID: String
+        let recoverySequence: Int   // the interrupted landing's sequence: a number, never free text (#3435)
         let inputIdleSeconds: Double
     }
 
@@ -480,7 +480,7 @@ final class MainThreadWatchdog: @unchecked Sendable {
                                 mainThreadRunnableSamples: mainThreadStates?.runnable,
                                 mainThreadWaitingSamples: mainThreadStates?.waiting,
                                 // #4335 (L459): idle work, stamped so every reader keeps it apart.
-                                recoveryRunID: idle?.recoveryRunID,
+                                recoverySequence: idle?.recoverySequence,
                                 inputIdleSeconds: idle?.inputIdleSeconds)
         // #3812: the decision is the PURE rule's, taken whole. This used to compare the kept set's count
         // before and after, which tied "what is held in memory" to "what is written to the file" and made

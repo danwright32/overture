@@ -64,11 +64,11 @@ def load(path, archive_path):
 
 def split_idle_work(rows):
     """#4335 (A6, L459): the stalls recorded while Overture finished an INTERRUPTED landing at idle, with
-    nobody at the Mac (`recoveryRunID` set), apart from every other record. Idle work, never a freeze Dan
+    nobody at the Mac (`recoverySequence` set), apart from every other record. Idle work, never a freeze Dan
     felt, so it is reported in a group of its own and never inside the distribution milestone 80's bar is
     read from. Returns (the other records, the idle work)."""
-    idle = [r for r in rows if isinstance(r, dict) and r.get("recoveryRunID")]
-    return [r for r in rows if not (isinstance(r, dict) and r.get("recoveryRunID"))], idle
+    idle = [r for r in rows if isinstance(r, dict) and r.get("recoverySequence") is not None]
+    return [r for r in rows if not (isinstance(r, dict) and r.get("recoverySequence") is not None)], idle
 
 
 def idle_work_line(idle):

@@ -2,7 +2,7 @@ import Testing
 import Foundation
 
 // #4335 (A6, L459): a stall recorded while Overture finished an interrupted landing at idle, with nobody at the
-// Mac, is IDLE WORK. The watchdog stamps it with the recovery's run identity and the input idle seconds the
+// Mac, is IDLE WORK. The watchdog stamps it with the interrupted landing's sequence number and the input idle seconds the
 // recovery measured when it started; a stall outside a recovery carries neither; and every reader keeps the two
 // apart, so a recovery's hold never enters the freeze distribution milestone 80's bar is read from.
 //
@@ -35,9 +35,9 @@ struct IdleRecoveryStallsAreIdleWorkTests {
     }
 
     @Test func aStallDuringARecoveryCarriesItsRunAndTheIdleSeconds() async {
-        let records = await freezeOnce(stamping: .init(recoveryRunID: "recovered-run", inputIdleSeconds: 240))
+        let records = await freezeOnce(stamping: .init(recoverySequence: 41, inputIdleSeconds: 240))
         #expect(!records.isEmpty)
-        #expect(records.allSatisfy { $0.recoveryRunID == "recovered-run" && $0.inputIdleSeconds == 240 })
+        #expect(records.allSatisfy { $0.recoverySequence == 41 && $0.inputIdleSeconds == 240 })
     }
 
     // The recovery clears its stamp the moment its replay returns, which is before the ping that measures the
@@ -47,7 +47,7 @@ struct IdleRecoveryStallsAreIdleWorkTests {
         let watchdog = MainThreadWatchdog(session: "idle-work-ended", interval: Self.interval,
                                           loadReading: { (.baseline, 0) },
                                           record: { records.add($0) })
-        watchdog.idleWork.stamp(.init(recoveryRunID: "ended-run", inputIdleSeconds: 200))
+        watchdog.idleWork.stamp(.init(recoverySequence: 42, inputIdleSeconds: 200))
         watchdog.start()
         let freeze = Self.freeze
         let box = watchdog.idleWork
@@ -57,14 +57,14 @@ struct IdleRecoveryStallsAreIdleWorkTests {
         }
         await waitUntil("a stall to be recorded", timeout: .seconds(20)) { !records.all.isEmpty }
         watchdog.stop()
-        #expect(records.all.contains { $0.recoveryRunID == "ended-run" }, Comment(rawValue:
-            "the stall of a replay that had just ended was recorded as a freeze: \(records.all.map(\.recoveryRunID))"))
+        #expect(records.all.contains { $0.recoverySequence == 42 }, Comment(rawValue:
+            "the stall of a replay that had just ended was recorded as a freeze: \(records.all.map(\.recoverySequence))"))
     }
 
     @Test func aStallOutsideARecoveryCarriesNeither() async {
         let records = await freezeOnce(stamping: nil)
         #expect(!records.isEmpty)
-        #expect(records.allSatisfy { $0.recoveryRunID == nil && $0.inputIdleSeconds == nil })
+        #expect(records.allSatisfy { $0.recoverySequence == nil && $0.inputIdleSeconds == nil })
     }
 
     // Absent on every record written before this shipped, and written only when present, so the records
@@ -74,15 +74,15 @@ struct IdleRecoveryStallsAreIdleWorkTests {
                                 seconds: 1.5, surface: .queue, load: .baseline, loadAverage: 3, passes: 0)
         let idle = StallRecord(session: "s", sequence: 2, at: Date(timeIntervalSince1970: 1_790_000_010),
                                seconds: 3.6, surface: .queue, load: .baseline, loadAverage: 3, passes: 0,
-                               recoveryRunID: "r", inputIdleSeconds: 180)
+                               recoverySequence: 43, inputIdleSeconds: 180)
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
         let plainText = String(decoding: try encoder.encode(plain), as: UTF8.self)
-        #expect(!plainText.contains("recoveryRunID") && !plainText.contains("inputIdleSeconds"))
+        #expect(!plainText.contains("recoverySequence") && !plainText.contains("inputIdleSeconds"))
         let back = try decoder.decode(StallRecord.self, from: try encoder.encode(idle))
-        #expect(back.recoveryRunID == "r" && back.inputIdleSeconds == 180)
+        #expect(back.recoverySequence == 43 && back.inputIdleSeconds == 180)
     }
 
     // The launch report keeps idle work out of the freeze count and the longest freeze, and says it apart.
@@ -91,7 +91,7 @@ struct IdleRecoveryStallsAreIdleWorkTests {
             StallRecord(session: "launch-report", sequence: sequence,
                         at: Date(timeIntervalSince1970: 1_790_000_000 + Double(sequence)), seconds: seconds,
                         surface: .queue, load: .baseline, loadAverage: 3, passes: 1,
-                        recoveryRunID: idle ? "r" : nil, inputIdleSeconds: idle ? 300 : nil)
+                        recoverySequence: idle ? 44 : nil, inputIdleSeconds: idle ? 300 : nil)
         }
         let records = [record(1, 1.2, idle: false), record(2, 9.8, idle: true), record(3, 0.4, idle: false)]
         let defaults = try #require(UserDefaults(suiteName: "IdleRecoveryStallsAreIdleWorkTests-\(UUID().uuidString)"))

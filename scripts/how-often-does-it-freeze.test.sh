@@ -215,7 +215,7 @@ assert_contains "and it names the file it could not find" "${out}" "freeze_recor
 # floor a population is judged at.
 mkdir -p "${WORK}/idle"
 { record old 1000 0.400 baseline; record old 2000 0.900 baseline
-  printf '{"session":"idle","sequence":1,"at":"2026-09-11T18:47:20Z","seconds":3.6,"surface":"queue","load":"baseline","loadAverage":3.7,"passes":0,"recoveryRunID":"r1","inputIdleSeconds":240}\n'
+  printf '{"session":"idle","sequence":1,"at":"2026-09-11T18:47:20Z","seconds":3.6,"surface":"queue","load":"baseline","loadAverage":3.7,"passes":0,"recoverySequence":7,"inputIdleSeconds":240}\n'
 } > "${WORK}/idle/log.ndjson"
 out="$("${READER}" --log "${WORK}/idle/log.ndjson" 2>&1)"; status=$?
 assert_contains "idle work is said apart" "${out}" "idle work, not counted below: 1 stall"
