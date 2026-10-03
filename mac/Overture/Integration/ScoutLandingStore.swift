@@ -333,7 +333,13 @@ final class ScoutLandingStore {
     // on it, by name, rather than carry on over rows it could not put back.
     @discardableResult
     func revertFailedSave(closing: Bool) -> LandingRevert.Report {
-        let carried = savingWriteSet ?? .pending(in: context)
+        // #4335: the capture AND what is pending now. A capture can outlive the save that made it when that save
+        // carried nothing (a recovery re-applies a source it already landed, which writes nothing new), and the
+        // source whose injected save failed next was then never put back: found by
+        // `LandingRecoveryTests.aRecoveryThatKeepsFailingStopsAfterTheCap`. After a real failed save the two are
+        // equal (#4334's probe), so this changes nothing there.
+        let pendingNow = LandingRevert.WriteSet.pending(in: context)
+        let carried = savingWriteSet.map { $0.adding(pendingNow) } ?? pendingNow
         savingWriteSet = nil
         let set = closing ? carried : carried.excluding(settledSinceSave)
         let earlierReconciles = closing ? [] : unsavedReconcileResults

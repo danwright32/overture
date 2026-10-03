@@ -64,12 +64,17 @@ path, archive_path = sys.argv[1], sys.argv[2]
 sys.dont_write_bytecode = True
 sys.path.insert(0, sys.argv[3])
 from freeze_records import (BLOCKED, COMPUTING, FREEZE, NOT_A_FREEZE, NOT_RUNNING_UNSPLIT, STARVED, UNMEASURED,
-                            freeze_verdict, load, main_thread_verdict, menu_idle, plural, run_loop_measured,
-                            sleep_measured, slept)
+                            freeze_verdict, idle_work_line, load, main_thread_verdict, menu_idle, plural,
+                            run_loop_measured, sleep_measured, slept, split_idle_work)
 
 # #4122: a compaction note is not a stall. Before #4188 this reader counted it as one, in a session of
 # its own named "?", so every total here was one higher than the stalls it described.
 rows, _notes, unreadable, sources = load(path, archive_path)
+# #4335 (L459): stalls recorded while an interrupted landing was finished at idle are idle work, said in a
+# line of their own and kept out of the freeze distribution below.
+rows, idle_work = split_idle_work(rows)
+if idle_work_line(idle_work):
+    print(idle_work_line(idle_work))
 
 if not rows:
     print(f"how-often-does-it-freeze: UNMEASURED. {path} holds no records.")

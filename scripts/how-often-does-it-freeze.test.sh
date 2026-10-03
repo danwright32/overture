@@ -210,6 +210,18 @@ out="$("${WORK}/nolib/scripts/$(basename "${READER}")" --log "${WORK}/nolib/log.
 assert_equals "a missing shared reader is UNMEASURED, never a result" "2" "${status}"
 assert_contains "and it names the file it could not find" "${out}" "freeze_records.py is missing"
 
+# #4335 (L459): a stall recorded while Overture finished an interrupted landing at idle is idle work. It is
+# said on a line of its own and kept out of the distribution, so it can neither add a freeze nor move the
+# floor a population is judged at.
+mkdir -p "${WORK}/idle"
+{ record old 1000 0.400 baseline; record old 2000 0.900 baseline
+  printf '{"session":"idle","sequence":1,"at":"2026-09-11T18:47:20Z","seconds":3.6,"surface":"queue","load":"baseline","loadAverage":3.7,"passes":0,"recoveryRunID":"r1","inputIdleSeconds":240}\n'
+} > "${WORK}/idle/log.ndjson"
+out="$("${READER}" --log "${WORK}/idle/log.ndjson" 2>&1)"; status=$?
+assert_contains "idle work is said apart" "${out}" "idle work, not counted below: 1 stall"
+assert_contains "and the population is judged without it, exactly as the same log without it is" "${out}" "UNKNOWN floor"
+assert_equals "with the same verdict" "2" "${status}"
+
 if [ "${FAILURES}" -eq 0 ]; then
   echo "how-often-does-it-freeze.test.sh: all passed"
 else

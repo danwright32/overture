@@ -73,6 +73,25 @@ final class MainThreadWatchdog: @unchecked Sendable {
 
     let windows = WindowBox()
 
+    // #4335 (A6, L459): the interrupted landing the recovery is finishing at idle, if any, on SurfaceBox's
+    // precedent and for its reason: stamped by the MAIN thread as the recovery starts and cleared as it ends,
+    // only ever READ here, so a stall written during it carries it without asking the main actor anything.
+    struct IdleWork: Equatable, Sendable {
+        let recoveryRunID: String
+        let inputIdleSeconds: Double
+    }
+
+    final class IdleWorkBox: @unchecked Sendable {
+        private let lock = NSLock()
+        private var value: IdleWork?
+        // Called by the MAIN thread. The only writer.
+        func stamp(_ work: IdleWork?) { lock.withLock { value = work } }
+        // Called by the watchdog. The only reader.
+        var current: IdleWork? { lock.withLock { value } }
+    }
+
+    let idleWork = IdleWorkBox()
+
     // #3760: how many render passes the main thread has run, on the SurfaceBox's precedent exactly.
     //
     // The main thread is the only writer and the watchdog the only reader, for the reason above it: a
@@ -431,6 +450,7 @@ final class MainThreadWatchdog: @unchecked Sendable {
         // which would be a measurement of the timer's own jitter dressed as a freeze.
         guard delay > 0 else { return }
         let reading = loadReading()
+        let idle = idleWork.current
         let stall = StallRecord(session: session, sequence: sequence, at: at, seconds: delay,
                                 surface: surface.current, load: reading.0, loadAverage: reading.1,
                                 passes: passes,
@@ -454,7 +474,10 @@ final class MainThreadWatchdog: @unchecked Sendable {
                                 // this stall lasted. Recorded beside `passSeconds`, never divided into it.
                                 mainThreadCPUSeconds: mainThreadCPU,
                                 mainThreadRunnableSamples: mainThreadStates?.runnable,
-                                mainThreadWaitingSamples: mainThreadStates?.waiting)
+                                mainThreadWaitingSamples: mainThreadStates?.waiting,
+                                // #4335 (L459): idle work, stamped so every reader keeps it apart.
+                                recoveryRunID: idle?.recoveryRunID,
+                                inputIdleSeconds: idle?.inputIdleSeconds)
         // #3812: the decision is the PURE rule's, taken whole. This used to compare the kept set's count
         // before and after, which tied "what is held in memory" to "what is written to the file" and made
         // the session stop recording at its 200th stall.

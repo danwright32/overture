@@ -77,14 +77,19 @@ path, archive_path = sys.argv[1], sys.argv[2]
 # No bytecode cache: importing would otherwise leave a __pycache__ inside the checkout on every run.
 sys.dont_write_bytecode = True
 sys.path.insert(0, sys.argv[3])
-from freeze_records import (BLOCKED, COMPUTING, NOT_RUNNING_UNSPLIT, STARVED, load, main_thread_measured,
-                            main_thread_share, main_thread_verdict, menu_idle, run_loop_measured,
-                            sleep_measured, slept, tracking)
+from freeze_records import (BLOCKED, COMPUTING, NOT_RUNNING_UNSPLIT, STARVED, idle_work_line, load,
+                            main_thread_measured, main_thread_share, main_thread_verdict, menu_idle,
+                            run_loop_measured, sleep_measured, slept, split_idle_work, tracking)
 
 # #4122: the compaction notes the live file carries come back apart from the stalls. A note is not a
 # stall, and letting one into `rows` would add a record with no `seconds` and no `passes` to every
 # population counted below. The archive is read first, so the combined list is roughly chronological.
 rows, notes, unreadable, sources = load(path, archive_path)
+# #4335 (L459): stalls recorded while an interrupted landing was finished at idle are idle work, said in a
+# line of their own and kept out of every count below.
+rows, idle_work = split_idle_work(rows)
+if idle_work_line(idle_work):
+    print(idle_work_line(idle_work))
 
 # A record written before #3760 shipped has no `passes` key at all. That is not a zero: it is a record
 # this tool cannot judge, and folding it into either verdict is the whole thing this exit code exists

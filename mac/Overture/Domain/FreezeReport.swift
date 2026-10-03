@@ -128,9 +128,17 @@ enum FreezeReport {
         }
 
         let somethingUnread = found.couldNotBeRead || archived.couldNotBeRead
-        let message: String?
-        if let worst = fresh.max(by: { $0.seconds < $1.seconds }) {
-            message = FreezeNoticeCopy.report(count: fresh.count,
+        // #4335 (A6, L459): a stall recorded while an interrupted landing was being finished at idle is idle
+        // work, never a freeze Dan felt. It is counted apart and said in a sentence of its own, so it never
+        // enters the count or the longest below. Still said, once, like every new record (L98).
+        let idleWork = fresh.filter { $0.recoveryRunID != nil }
+        let freezes = fresh.filter { $0.recoveryRunID == nil }
+        let idleSentence = idleWork.max(by: { $0.seconds < $1.seconds }).map {
+            FreezeNoticeCopy.idleWork(count: idleWork.count, longestSeconds: $0.seconds)
+        }
+        var message: String?
+        if let worst = freezes.max(by: { $0.seconds < $1.seconds }) {
+            message = FreezeNoticeCopy.report(count: freezes.count,
                                               longestSeconds: worst.seconds,
                                               surface: worst.surface,
                                               load: worst.load,
@@ -149,6 +157,7 @@ enum FreezeReport {
             message = nil
         }
         after.unopenedSaid = somethingUnread && (message != nil || before.unopenedSaid)
+        if let idleSentence { message = [message, idleSentence].compactMap { $0 }.joined(separator: " ") }
 
         remember(after, replacing: before, in: defaults)
         return message
@@ -250,6 +259,16 @@ enum FreezeNoticeCopy {
     // finding rather than mine: a helper call glued to the preceding word produces a CLAUSE, so what
     // lands in `docs/copy-inventory.md` is a line of Swift and the cold read the file exists for cannot
     // be done on it (#2570, #2548). Reading the two forms side by side, the sentences are better anyway.
+    // #4335 (A6, L459): the stalls recorded while Overture finished an interrupted landing with nobody at the
+    // Mac. Said apart from the freezes, and in words that say they were not felt.
+    static func idleWork(count: Int, longestSeconds: Double) -> String {
+        let seconds = String(format: "%.1f", longestSeconds)
+        return count == 1
+            ? "While you were away, finishing an interrupted landing held Overture for \(seconds) seconds."
+            : "While you were away, finishing an interrupted landing held Overture \(count) times, the longest "
+                + "for \(seconds) seconds."
+    }
+
     static func report(count: Int, longestSeconds: Double, surface: StallSurface,
                        load: MachineLoad, unreadableLines: Int,
                        earlierRecordsUnopened: Bool = false) -> String {

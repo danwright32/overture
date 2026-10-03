@@ -48,6 +48,16 @@ enum LandingRevert {
 
         var count: Int { changed.count + inserted.count + deleted.count }
 
+        /// This set and the other, each row once.
+        func adding(_ other: WriteSet) -> WriteSet {
+            func merged(_ a: [any PersistentModel], _ b: [any PersistentModel]) -> [any PersistentModel] {
+                var seen = Set(a.map(\.persistentModelID))
+                return a + b.filter { seen.insert($0.persistentModelID).inserted }
+            }
+            return WriteSet(changed: merged(changed, other.changed), inserted: merged(inserted, other.inserted),
+                            deleted: merged(deleted, other.deleted))
+        }
+
         /// This set without the rows named, which stay pending for a later save.
         func excluding(_ ids: Set<PersistentIdentifier>) -> WriteSet {
             guard !ids.isEmpty else { return self }

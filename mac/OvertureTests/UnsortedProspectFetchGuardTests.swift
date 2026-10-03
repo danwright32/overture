@@ -77,6 +77,9 @@ enum UnsortedProspectFetchAudit {
               why: historyOrdersItself),
         Entry(file: "RootView.swift", scope: "offerPendingScoutIngests", reads: 1, kind: .orderedDownstream,
               why: historyOrdersItself),
+        // #4335: the idle recovery builds the same match history the ingest it replays does.
+        Entry(file: "RootView.swift", scope: "recoverAnInterruptedLandingIfIdle", reads: 1, kind: .orderedDownstream,
+              why: historyOrdersItself),
         Entry(file: "RootView.swift", scope: "syncOmniFocus", reads: 1, kind: .orderFree, why: """
             Every show earns its own tasks, collapsed per send group inside that show, and completions are \
             found by natural key, which is unique.
