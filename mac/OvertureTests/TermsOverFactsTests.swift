@@ -213,4 +213,87 @@ struct TermsOverFactsTests {
                     "ProducerTables(rows:) differs from the shows form with rotation \(start)")
         }
     }
+
+    // MARK: slice D1, the members on the facts protocols
+
+    // Contacts in every state the moved members tell apart: a live emailed pitch, a reply nobody has
+    // answered, a reply answered since, a form pitch with and without an attached conversation, a bounce, a
+    // booking recorded on the contact, and stand-downs of the pitch and of the closing note.
+    private func seedContacts(_ ctx: ModelContext, on p: Prospect) {
+        let at = { (offset: Double) in Date(timeIntervalSince1970: 1_790_000_000 + offset) }
+        func contact(_ id: String, email: String? = nil, form: String? = nil,
+                     _ shape: (Recipient) -> Void) {
+            let r = Recipient(id: id, email: email, provenance: .act, contactFormURL: form)
+            shape(r)
+            ctx.insert(r)
+            p.recipients.append(r)
+        }
+        contact("live@example.invalid", email: "live@example.invalid") {
+            $0.sendState = .sent; $0.sentAt = at(0); $0.gmailMessageId = "m1"; $0.gmailThreadId = "t1"
+            $0.outreachStoodDownAt = at(50)
+        }
+        contact("waiting@example.invalid", email: "waiting@example.invalid") {
+            $0.sendState = .sent; $0.sentAt = at(0); $0.gmailMessageId = "m2"; $0.gmailThreadId = "t2"
+            $0.replied = true; $0.repliedAt = at(100); $0.inboundReplySentAt = at(90)
+        }
+        contact("answered@example.invalid", email: "answered@example.invalid") {
+            $0.sendState = .sent; $0.sentAt = at(0); $0.gmailMessageId = "m3"; $0.gmailThreadId = "t3"
+            $0.replied = true; $0.repliedAt = at(100); $0.replyHandledAt = at(200)
+            $0.closingNoteStoodDownAt = at(300)
+        }
+        contact("form-quiet", form: "https://example.invalid/contact") {
+            $0.sendState = .sent; $0.sentAt = at(0); $0.outreachChannel = .contactForm
+            $0.formOutreachRecordedAt = at(0)
+        }
+        contact("form-attached", form: "https://example.invalid/contact") {
+            $0.sendState = .sent; $0.sentAt = at(0); $0.outreachChannel = .contactForm
+            $0.formOutreachRecordedAt = at(0); $0.gmailThreadId = "t5"
+        }
+        contact("bounced@example.invalid", email: "bounced@example.invalid") {
+            $0.sendState = .sent; $0.sentAt = at(0); $0.gmailMessageId = "m6"; $0.bounced = true
+        }
+        contact("booked@example.invalid", email: "booked@example.invalid") {
+            $0.sendState = .sent; $0.sentAt = at(0); $0.gmailMessageId = "m7"; $0.resolution = .booked
+            $0.outcomeSource = .manual
+        }
+        contact("untried@example.invalid", email: "untried@example.invalid") { _ in }
+    }
+
+    @Test func theMovedMembersAnswerTheSameOverFactsAsOverModelsAndEachTakesBothValues() throws {
+        let ctx = try context()
+        let all = try seed(ctx)
+        let pitched = try #require(all.first { $0.naturalKey == "saltmarsh a" })
+        seedContacts(ctx, on: pitched)
+        pitched.statusRaw = ReviewStatus.contacted.rawValue
+        pitched.outreachStoodDownAt = Date(timeIntervalSince1970: 1_790_000_050)
+        try #require(all.first { $0.naturalKey == "drift|2026-11-01" }).showOutcomeRaw = ShowOutcome.allCases.first?.rawValue
+
+        // Positive controls (L159): across the fixture's contacts, every Boolean member is true for one and
+        // false for another, so a member that answered the same everywhere could not hide behind agreement.
+        let contacts = pitched.factContacts.map(TermsOverFacts.ContactMembers.init)
+        for child in Mirror(reflecting: contacts[0]).children where child.value is Bool {
+            let label = child.label ?? "?"
+            let values = Set(contacts.map { member in
+                Mirror(reflecting: member).children.first { $0.label == label }?.value as? Bool
+            })
+            #expect(values == [true, false], "contact member \(label) takes only \(values) in the fixture")
+        }
+        let shows = all.map(TermsOverFacts.ShowMembers.init)
+        #expect(Set(shows.map(\.isBooked)) == [true, false], "no show in the fixture is booked, or every one is")
+        #expect(Set(shows.map(\.stoodDownBeforeAnyReply)) == [true, false], "no show in the fixture was stood down")
+        #expect(shows.contains { $0.showOutcome != nil }, "no show in the fixture carries an ending")
+
+        let findings = TermsOverFacts.findings(all, asOf: asOf)
+        #expect(findings.isEmpty, Comment(rawValue: findings.joined(separator: "\n")))
+
+        // A contact answered after its facts were taken: the comparison names the member and the contact.
+        let stale = all.map(RowFacts.extract)
+        try #require(pitched.recipients.first { $0.id == "waiting@example.invalid" }).replyHandledAt =
+            Date(timeIntervalSince1970: 1_790_000_500)
+        let staleFindings = TermsOverFacts.findings(all, facts: stale, asOf: asOf)
+        #expect(staleFindings.contains { $0.hasPrefix("contact members") && $0.contains("hasUnhandledReply") },
+                "a reply answered after extraction was not seen by the member comparison")
+        #expect(!staleFindings.contains { $0.contains("example.invalid") },
+                "a finding named a contact's address rather than its identifier")
+    }
 }
