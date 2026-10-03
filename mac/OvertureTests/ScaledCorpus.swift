@@ -92,6 +92,26 @@ enum ScaledCorpus {
                 row.sourceIds = row.sourceIds.map { $0 + glue }
                 report.sourceListsReidentified += 1
             }
+            row.groupName = gluedName(row.groupName, glue: glue)
+            row.scoutGroupName = row.scoutGroupName.map { gluedName($0, glue: glue) }
+            row.presenter = row.presenter.map { gluedName($0, glue: glue) }
+            row.venue = row.venue.map { gluedName($0, glue: glue) }
+            row.scoutVenue = row.scoutVenue.map { gluedName($0, glue: glue) }
+        }
+        if era == .current {
+            // A copied source's names, glued as its shows' are; a copy is the source whose id is an original's
+            // id with a copy's glue on the end.
+            let sources = try context.fetch(FetchDescriptor<WatchedSource>())
+            let ids = Set(sources.map(\.sourceId))
+            for source in sources {
+                guard let k = (1..<max(factor, 1)).first(where: { k in
+                    let g = Phase0.glue(forCopy: k)
+                    return source.sourceId.hasSuffix(g) && ids.contains(String(source.sourceId.dropLast(g.count)))
+                }) else { continue }
+                let glue = Phase0.glue(forCopy: k)
+                source.orgName = gluedName(source.orgName, glue: glue)
+                source.venueName = source.venueName.map { gluedName($0, glue: glue) }
+            }
         }
         try context.save()
         Phase0.say("scaled corpus: \(report.copiedShows) copied shows and \(report.copiedSources) copied sources; "
@@ -138,14 +158,16 @@ enum ScaledCorpus {
         // The NAMES a person reads (title, presenter, room), and in the current era they take the glue in FRONT
         // of their first word (see `gluedName`); before #4427 they took it on the end of their last.
         let showNames: Set<String> = ["ZPRESENTER", "ZVENUE", "ZGROUPNAME", "ZSCOUTGROUPNAME", "ZSCOUTVENUE"]
-        let showPrefixed: Set<String> = current ? showNames : []
+        // #4481: in the current era the names are glued through the model after the copy (`gluedName`), which
+        // SQL cannot express, so SQL copies them as they are.
+        let showPrefixed: Set<String> = []
         let showSuffixed = Set(["ZNATURALKEY", "ZSERIESID", "ZGMAILTHREADID", "ZGMAILMESSAGEID"]
                                + (current ? ["ZSOURCELISTINGURL"] : Array(showNames)))
         let contactPrefixed: Set<String> = ["ZEMAIL", "ZID"]
         let contactSuffixed: Set<String> = ["ZGMAILTHREADID", "ZGMAILMESSAGEID", "ZSENDGROUPID"]
         // A source's identity: its id, its name, and every address or room the landing reads from it. Its names
         // are glued as a show's are, its id and addresses on the end.
-        let sourcePrefixed: Set<String> = ["ZORGNAME", "ZVENUENAME"]
+        let sourcePrefixed: Set<String> = []
         let sourceSuffixed: Set<String> = ["ZSOURCEID", "ZLISTINGSURL", "ZTICKETINGFEEDURL"]
         let showCols = try columns("ZPROSPECT")
         let contactCols = try columns("ZRECIPIENT")
@@ -320,7 +342,30 @@ enum ScaledCorpus {
     /// last word. Glued on the end (as before #4427) "Winter Lightqa" is no prefix of "Winter Light
     /// Vespersqa" and "Weill Recital Hall, Carnegie Hallqa" keys to the ORIGINAL's room, so a copy's events
     /// landed differently from its original's, which `ScaledCorpusLandsLikeALargerStoreTests` measured.
-    nonisolated static func gluedName(_ name: String, glue: String) -> String { glue + name }
+    ///
+    /// #4481: and in front of EVERY word, with the glue doubled ("qaqaWinter qaqaLight"). Glued on the first
+    /// word alone, a copy's title still shared every other word with its original, and with the other copies'
+    /// titles, on the same night (dates are kept); `GroupNameMatch.isSameNightVariant` then read them as one
+    /// show's spellings, so `MergeCandidateIndex` gave every such copy a twin and the #4331 rule restamped it on
+    /// every landing: 538 of 540 restamped copies on an unchanged 4x re-land, measured by the #4372 probe. Every
+    /// word glued shares no word across copies, and doubled ("qaqa" against "qbqb") no one word title is one
+    /// typo from another copy's ("qahamlet" against "qbhamlet" is). Within a copy every word carries the same
+    /// glue, so names relate to each other exactly as the clone's do. A run of letters or digits right after an
+    /// "&" or "#" is an HTML entity and is left alone, so "&amp;" still decodes.
+    nonisolated static func gluedName(_ name: String, glue: String) -> String {
+        let doubled = glue + glue
+        var out = ""
+        var previous: Character? = nil
+        var inRun = false
+        for ch in name {
+            let alnum = ch.isLetter || ch.isNumber
+            if alnum && !inRun && previous != "&" && previous != "#" { out += doubled }
+            inRun = alnum
+            out.append(ch)
+            previous = ch
+        }
+        return out
+    }
 
     /// One event as copy `glue`'s source would publish it: every field the corpus glues on a stored show
     /// (title, presenter, venue, series, listing address) glued the same way, and nothing else.

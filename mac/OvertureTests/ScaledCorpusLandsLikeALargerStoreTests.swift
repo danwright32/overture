@@ -41,8 +41,9 @@ final class ScaledCorpusLandsLikeALargerStoreTests {
 
     private func unglued(_ s: String?) -> String {
         guard let s else { return "nil" }
-        // A name carries its copy's glue in front, an address or id on the end (`ScaledCorpus.gluedName`).
-        for g in Self.glues where s.hasPrefix(g) { return String(s.dropFirst(g.count)) }
+        // A name carries its copy's glue, doubled, in front of every word; an address or id carries it on the end
+        // (`ScaledCorpus.gluedName`). No name in the invented corpus holds either glue of its own.
+        for g in Self.glues where s.contains(g + g) { return s.replacingOccurrences(of: g + g, with: "") }
         for g in Self.glues where s.hasSuffix(g) { return String(s.dropLast(g.count)) }
         return s
     }
@@ -92,6 +93,83 @@ final class ScaledCorpusLandsLikeALargerStoreTests {
         let sources = Set(try read.fetch(FetchDescriptor<WatchedSource>()).map(\.sourceId))
         let unowned = Set(shows.flatMap(\.sourceIds)).subtracting(sources).sorted()
         return Landed(outcome: outcome, rows: rows(shows), showCount: shows.count, unownedSourceIds: unowned)
+    }
+
+    /// What a second, unchanged landing of the same results wrote: every show whose stored values (its
+    /// `ingestedAt` included) moved, and how many of those the #4331 rule restamps on purpose because
+    /// `MergeCandidateIndex` gives them a twin.
+    private struct ReLanded {
+        let written: Int
+        let withATwin: Int
+    }
+
+    private func reLand(_ results: ScoutExtractResults, on url: URL) async throws -> ReLanded {
+        let container = try Phase0.openContainer(at: url)
+        let context = container.mainContext
+        context.autosaveEnabled = false
+        func values(_ p: Prospect) -> String {
+            "\(p.groupName)|\(p.presenter ?? "")|\(p.venue ?? "")|\(p.performanceDate ?? "")|\(p.ingestedAt)|"
+                + "\(p.missedScoutCount)|\(p.statusRaw)|\(p.sourceIds)|\(p.runSourceURLs)|\(p.sourceListingURL ?? "")"
+        }
+        for landing in 1...2 {
+            let before = Dictionary(uniqueKeysWithValues: try context.fetch(FetchDescriptor<Prospect>())
+                .map { ($0.naturalKey, values($0)) })
+            await ScoutExtractIngest.ingest(results, clients: [], history: [], blocked: .empty,
+                                            today: LandingOracleCorpus.today,
+                                            now: LandingOracleCorpus.now.addingTimeInterval(Double(landing) * 3600),
+                                            into: context)
+            try context.save()
+            guard landing == 2 else { continue }
+            let rows = try ModelContext(container).fetch(FetchDescriptor<Prospect>())
+            let written = rows.filter { before[$0.naturalKey] != values($0) }
+            let index = MergeCandidateIndex(rows: rows, tokens: { p in
+                ([p.sourceListingURL].compactMap { $0 } + p.runSourceURLs).compactMap(ProductionToken.inURL)
+            })
+            return ReLanded(written: written.count, withATwin: written.filter { index.isContested($0) }.count)
+        }
+        return ReLanded(written: -1, withATwin: -1)
+    }
+
+    /// #4481: an unchanged re-land writes, at twice the size, exactly twice the shows it writes on the clone, and
+    /// on either it writes only the shows the #4331 rule restamps on purpose (a show with a twin a merge reader
+    /// may compare it against). Before #4481 every copy whose title shared a word with its original's, on the
+    /// same night, read as that show's twin and was restamped on every landing.
+    @Test func anUnchangedReLandWritesOnlyTheTwinRuleSRowsAtEverySize() async throws {
+        let seed = try seededStore()
+        let results = LandingOracleCorpus.results()
+        let oneDir = try sandboxes.make(named: "scaled-corpus-4481-x1")
+        let one = oneDir.appendingPathComponent("Overture.store")
+        for suffix in ["", "-wal", "-shm"] where FileManager.default.fileExists(atPath: seed.path + suffix) {
+            try FileManager.default.copyItem(atPath: seed.path + suffix, toPath: one.path + suffix)
+        }
+        let x1 = try await reLand(results, on: one)
+        let two = try Phase0.scaledCopy(of: seed, factor: 2, in: try sandboxes.make(named: "scaled-corpus-4481-x2"))
+        let x2 = try await reLand(Phase0.scaledResults(results, factor: 2), on: two)
+
+        #expect(x1.written == x1.withATwin,
+                "the clone's re-land wrote \(x1.written) shows, and only \(x1.withATwin) of them have a twin")
+        #expect(x2.written == x2.withATwin,
+                "the 2x re-land wrote \(x2.written) shows, and only \(x2.withATwin) of them have a twin")
+        #expect(x2.written == 2 * x1.written, "an unchanged re-land wrote \(x1.written) shows at 1x and \(x2.written) at 2x")
+    }
+
+    /// #4481: a copy's names are no same-night variant of another copy's or the original's, and relate to each
+    /// other inside the copy exactly as the original's do.
+    @Test func aGluedNameIsNoVariantOfAnotherCopysAndKeepsItsOwnCopysRelations() {
+        let qa = Phase0.glue(forCopy: 1), qb = Phase0.glue(forCopy: 2)
+        for title in ["Hamlet", "Winter Light", "The Tin Orchard", "Copper Tide: A Sea Cycle"] {
+            for (a, b) in [(title, ScaledCorpus.gluedName(title, glue: qa)),
+                           (ScaledCorpus.gluedName(title, glue: qa), ScaledCorpus.gluedName(title, glue: qb))] {
+                #expect(!GroupNameMatch.isSameNightVariant(a, b), "\(a) reads as a same-night variant of \(b)")
+            }
+        }
+        let pairs = [("Winter Light", "Winter Light Vespers"), ("Tin Orchard", "The Tin Orchard"),
+                     ("Copper Tide", "Copper Tide: A Sea Cycle")]
+        for (a, b) in pairs {
+            #expect(GroupNameMatch.isSameShowTitle(ScaledCorpus.gluedName(a, glue: qa), ScaledCorpus.gluedName(b, glue: qa))
+                    == GroupNameMatch.isSameShowTitle(a, b), "\(a) against \(b) answers differently inside a copy")
+        }
+        #expect(ScaledCorpus.gluedName("Rock &amp; Roll", glue: qa) == "\(qa)\(qa)Rock &amp; \(qa)\(qa)Roll")
     }
 
     @Test func eachCopyLandsExactlyAsItsOriginalDoes() async throws {
@@ -175,8 +253,8 @@ final class ScaledCorpusLandsLikeALargerStoreTests {
                                            date: "2026-10-24", anchoredVenue: "Harbor Stage", glue: glue, taken: [])
         #expect(drifted == .init(key: "old title|2026-10-24|harbor stage" + glue, kind: .drifted))
         let key = Prospect.makeNaturalKey(groupName: "Paper Lanterns", performanceDate: "2026-10-31", venue: "Harbor Stage")
-        let computed = Prospect.makeNaturalKey(groupName: glue + "Paper Lanterns", performanceDate: "2026-10-31",
-                                               venue: glue + "Harbor Stage")
+        let computed = Prospect.makeNaturalKey(groupName: ScaledCorpus.gluedName("Paper Lanterns", glue: glue), performanceDate: "2026-10-31",
+                                               venue: ScaledCorpus.gluedName("Harbor Stage", glue: glue))
         let taken = ScaledCorpus.copyKey(key: key, anchoredTitle: "Paper Lanterns", date: "2026-10-31",
                                          anchoredVenue: "Harbor Stage", glue: glue, taken: [computed])
         #expect(taken == .init(key: key + glue, kind: .taken))
@@ -221,8 +299,8 @@ final class ScaledCorpusLandsLikeALargerStoreTests {
         let a = ScaledCorpus.KeySource(key: Prospect.makeNaturalKey(groupName: "Encore", performanceDate: "2026-11-01",
                                                                     venue: "Studio Aqa"),
                                        anchoredTitle: "Encore", date: "2026-11-01", anchoredVenue: "Studio Aqa")
-        let computed = Prospect.makeNaturalKey(groupName: glue + "Encore", performanceDate: "2026-11-01",
-                                               venue: glue + "Studio Aqa")
+        let computed = Prospect.makeNaturalKey(groupName: ScaledCorpus.gluedName("Encore", glue: glue), performanceDate: "2026-11-01",
+                                               venue: ScaledCorpus.gluedName("Studio Aqa", glue: glue))
         #expect(computed.hasSuffix(glue), "the fixture needs a computed key ending in the glue: \(computed)")
         let b = ScaledCorpus.KeySource(key: String(computed.dropLast(glue.count)), anchoredTitle: "Unrelated",
                                        date: "2026-11-02", anchoredVenue: nil)
