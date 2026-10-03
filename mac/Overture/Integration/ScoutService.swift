@@ -1599,16 +1599,22 @@ enum ScoutService {
                             feed: feed, today: today, now: now, sourceIds: sourceIds,
                             preClassified: preClassified, landing: landing, into: context)
         if let report = outcome.report {
-            // #3071: a reconcile handed an invented empty marks nothing gone and says nothing about it,
-            // so a run that could not read its own shows looks exactly like one where none had dropped
-            // out. It is skipped and NAMED instead.
-            if let allStored = readOrRecord(.reconcileStoredShows, into: &outcome.degradedReads,
-                                            { try landing.rows() }) {
-                // #4325: noted on the landing, whose closing save carries it (`saveLanding`).
-                landing.noteReconcile(FeedReconcile.reconcile(stored: allStored, reports: [report], today: today))
-            }
+            reconcileLanded([report], on: landing, today: today, degraded: &outcome.degradedReads)
         }
         return outcome
+    }
+
+    // #4474: the reconcile a landing notes, ONE implementation for both landing paths (this one per source, and
+    // the extract ingest's once per landing), so the two cannot come to treat a failed read differently.
+    // #3071: a reconcile handed an invented empty marks nothing gone and says nothing about it, so a run that
+    // could not read its own shows looks exactly like one where none had dropped out. It is skipped and NAMED
+    // instead. #4325: what it writes is noted on the landing, whose closing save carries it (`saveLanding`).
+    static func reconcileLanded(_ reports: [FeedReconcile.SourceReport], on landing: ScoutLandingStore,
+                                today: String, degraded: inout [StoreRead]) {
+        guard let allStored = readOrRecord(.reconcileStoredShows, into: &degraded, { try landing.rows() }) else {
+            return
+        }
+        landing.noteReconcile(FeedReconcile.reconcile(stored: allStored, reports: reports, today: today))
     }
 
     // #4325: the closing save of a scout landing, ONE implementation for both paths (`runScout`'s native

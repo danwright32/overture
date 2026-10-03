@@ -161,4 +161,53 @@ struct ScoutLandingSavesItsReconcileTests {
         #expect(show.missedScoutCount == 1, Comment(rawValue:
             "a failed closing save put back a miss an earlier save had already committed"))
     }
+
+    // MARK: - A reconcile read that fails is named (#4474)
+
+    // Both landings reconcile through ONE function (`ScoutService.reconcileLanded`), and a read of the stored
+    // shows that fails reconciles nothing and is NAMED as `.reconcileStoredShows` on the run, never handed to
+    // the reconcile as an empty store (#3071, L215). The ingest used to read it as `(try? landing.rows()) ?? []`.
+    @Test func aReconcileReadThatFailsIsNamedAndMarksNothing() throws {
+        struct StoreIsDown: Error {}
+        let c = try container()
+        let landing = ScoutLandingStore(context: c.mainContext, read: { _ in throw StoreIsDown() })
+        var degraded: [ScoutService.StoreRead] = []
+        ScoutService.reconcileLanded([report("kaufman")], on: landing, today: "2026-10-01", degraded: &degraded)
+        #expect(degraded == [.reconcileStoredShows], Comment(rawValue:
+            "a reconcile that could not read the stored shows said \(degraded), not that it could not read them"))
+        #expect(landing.unsavedReconcileWrites.isEmpty, "a reconcile with no stored shows to read noted writes")
+    }
+
+    // The positive half, so the refusal above is not satisfied by a function that never reconciles at all (L159).
+    @Test func aReconcileReadThatSucceedsNotesTheMiss() throws {
+        let c = try container()
+        let ctx = c.mainContext
+        let show = ownedShow(ctx, owner: "kaufman", date: "2099-09-19")
+        try ctx.save()
+        let landing = ScoutLandingStore(context: ctx)
+        var degraded: [ScoutService.StoreRead] = []
+        ScoutService.reconcileLanded([report("kaufman")], on: landing, today: "2026-10-01", degraded: &degraded)
+        #expect(degraded.isEmpty && show.missedScoutCount == 1 && landing.unsavedReconcileWrites.count == 1,
+                Comment(rawValue: "degraded \(degraded), misses \(show.missedScoutCount)"))
+    }
+
+    // Both landing paths reach the reconcile through that one function, and neither reads the stored shows for
+    // it with a `try?` that would turn a failure into an empty store. Read from the two files a landing runs
+    // through, so a third reconcile site, or the swallow coming back, is caught.
+    @Test func bothLandingsReconcileThroughTheOneFunctionThatNamesAFailedRead() {
+        var reconciles = 0
+        for path in ["Overture/Integration/ScoutService.swift", "Overture/Integration/ScoutExtractIngest.swift"] {
+            let source = SourceGuardHelper.source(path)
+            #expect(!source.isEmpty, "\(path) could not be read, so this measured nothing")
+            let code = source.split(separator: "\n").filter { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("//") }
+            #expect(!code.contains { $0.contains("try? landing.rows()") }, Comment(rawValue:
+                "\(path) reads the landing's rows with try?, which turns a failed read into an empty store"))
+            #expect(code.contains { $0.contains("reconcileLanded(") && !$0.contains("func reconcileLanded(") },
+                    Comment(rawValue: "\(path) does not reconcile through ScoutService.reconcileLanded"))
+            reconciles += code.filter { $0.contains("FeedReconcile.reconcile(") }.count
+        }
+        // The one call is the shared function's own.
+        #expect(reconciles == 1, Comment(rawValue:
+            "the landing files call FeedReconcile.reconcile \(reconciles) times, where only reconcileLanded may"))
+    }
 }
