@@ -11,6 +11,11 @@ import SwiftData
 // (`PendingScoutIngests`); once it lands the copy is removed; refused at its deadline the copy stays, and
 // `offerPending` offers it again, from the copy and never from `defaultURL`, at launch and at the end of
 // every landing.
+//
+// #4440: and a landing that never had to wait keeps the same copy, once it holds the store and before it applies
+// anything (`ScoutExtractIngest.ingest`'s `keepResults`), so a source save or a closing save that fails, or a
+// crash, can no longer leave a failed landing over results nobody can land again. Same folder, same key: the run
+// identity A6 (#4335) names its journal by is the content hash the copy is filed under.
 // #4336 (A7): whether results with this identity have already landed. A parameter of the landing whose
 // default is the real lookup on `LandingRun`. `bypassedForMeasurement` exists for one reason: a probe that
 // re-lands ONE frozen results file every round would otherwise measure a refusal from the second round on
@@ -59,8 +64,17 @@ enum ScoutExtractLanding {
                      // #4335 (A6): the landing journal folder, handed straight to the ingest. RootView passes
                      // `.live`; nil keeps none (a test whose subject is not the journal).
                      journals: LandingJournals? = nil,
+                     // #4440: each source's own save, handed straight to the ingest, so a test can fail one.
+                     saveSource: @escaping (ModelContext) throws -> Void = { try $0.save() },
+                     // #4335 (RC6): where each landed source's feed movement line is appended, after its save.
+                     movementLog: any FeedMovementLog.Sink = FeedMovementLog.file,
                      into context: ModelContext) async -> Landed {
         let hash = PendingScoutIngests.contentHash(of: data)
+        // #4440: one identity, one sequence. A copy already kept for these bytes (a landing that waited, was
+        // refused, or stopped part way) is the SAME run, so a fresh landing of them lands under the sequence
+        // that copy was kept with rather than minting a new one: its re-validation and its journal then speak
+        // of one run, and a source an earlier attempt landed is recognised as that run's own.
+        let sequence = sequence ?? (try? pending.entry(hash))?.sequence
         var kept = sequence != nil
         var waited = false
         var copyFailure: String?
@@ -78,13 +92,14 @@ enum ScoutExtractLanding {
             refused.alreadyLandedAt = landedAt
             return removingTheCopy(of: hash, kept: kept, after: refused, pending: pending)
         }
-        func keepACopy(_ runSequence: Int) {
+        func keepACopy(_ runSequence: Int) throws {
             guard !kept else { return }
             do {
                 try pending.record(data, sequence: runSequence, now: now)
                 kept = true
             } catch {
                 copyFailure = String(describing: error)
+                throw error
             }
         }
         var outcome = await ScoutExtractIngest.ingest(
@@ -95,14 +110,24 @@ enum ScoutExtractLanding {
             sequenceFloor: { pending.highestSequence },
             onWait: { runSequence in
                 waited = true
-                keepACopy(runSequence)
+                _ = try? keepACopy(runSequence)
             },
             saveClosing: saveClosing,
+            saveSource: saveSource,
             saveEntry: saveEntry,
             // #4334 (A5, L371): a landing the entry flush refused applied nothing, so its results are kept
             // by content hash, exactly as a landing that waited is, and land once the edits are saved.
-            onRefused: { keepACopy($0) },
+            onRefused: { _ = try? keepACopy($0) },
             journals: journals,
+            // #4440: and a landing that never waited keeps one too, before it applies anything, so a source save
+            // or a closing save that then fails (or a crash) leaves the results to be offered again rather than
+            // reported as failed over results nobody can land (L5, L665). Removed below only once every save
+            // carrying them has succeeded.
+            keepResults: { runSequence in
+                try keepACopy(runSequence)
+                return hash
+            },
+            movementLog: movementLog,
             into: context)
         if outcome.notLandedYet != nil {
             // The refusal's own sentence says a copy was kept. When it was not, that sentence is false, so
@@ -189,6 +214,7 @@ enum ScoutExtractLanding {
                              saveClosing: (ModelContext) throws -> Void = { try $0.save() },
                              // #4335: handed to every landing it makes, as `land` takes it.
                              journals: LandingJournals? = nil,
+                             movementLog: any FeedMovementLog.Sink = FeedMovementLog.file,
                              into context: ModelContext) async -> Offered {
         var offered = Offered(stuckAfter: stuckAfter)
         let listed: [PendingScoutIngests.Listed]
@@ -213,10 +239,16 @@ enum ScoutExtractLanding {
                         path: pending.resultsURL(entry.contentHash).path, why: String(describing: error)))
                     continue
                 }
+                // #4440 / #4335: a copy whose landing STARTED (its journal is still pending) lands with the
+                // `now` it started with, because its results really were read then (L37), and because the
+                // sources it landed before it stopped are applied again with that same instant, which is what
+                // makes that second application write nothing new.
+                let started = journals?.pending(sequence: entry.sequence)?.now
                 let landed = await land(copy.data, copy.results, sequence: entry.sequence,
-                                        clients: clients, history: history, blocked: blocked, now: now,
+                                        clients: clients, history: history, blocked: blocked,
+                                        today: QueueModel.easternToday(started ?? now), now: started ?? now,
                                         landings: landings, pending: pending, saveClosing: saveClosing,
-                                        journals: journals, into: context)
+                                        journals: journals, movementLog: movementLog, into: context)
                 let outcome = landed.outcome
                 if let left = landed.copyLeftBehind { offered.copiesLeftBehind.append(left) }
                 if let landedAt = outcome.alreadyLandedAt {

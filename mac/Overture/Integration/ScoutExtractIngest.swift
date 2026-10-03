@@ -104,6 +104,16 @@ enum ScoutExtractIngest {
                        // `EveryProductLandingKeepsAJournalTests` fails when one does not. nil keeps none, for a
                        // test whose subject is not the journal; a test that is passes its own sandbox (L433).
                        journals: LandingJournals? = nil,
+                       // #4440: called with the run's sequence once the landing holds the store, after the entry
+                       // flush and BEFORE the journal's start write, so the results this landing applies are copied
+                       // before anything is applied (L5): a save that then fails, or a crash, leaves them to be
+                       // landed again from their own copy. Returns the copy's identity, which the journal records;
+                       // a throw refuses the landing by name before anything is applied, like a journal that cannot
+                       // be written (L258). `ScoutExtractLanding`, the caller holding the bytes, keeps the copy.
+                       keepResults: (Int) throws -> String? = { _ in nil },
+                       // #4335 (A6, RC6): where each landed source's feed movement line is appended, only after the
+                       // save carrying that source has succeeded.
+                       movementLog: any FeedMovementLog.Sink = FeedMovementLog.file,
                        // #4331 (A2): how the landing stamps `ingestedAt`. Only the merge survivor probe passes
                        // anything but the rule, to measure the rule against the one it replaced.
                        stampRule: IngestedAtStamp.Rule = .whenChanged,
@@ -349,10 +359,36 @@ enum ScoutExtractIngest {
             onRefused(sequence)
             return outcome
         }
+        // #4440 / #4335: a landing OFFERED AGAIN (a kept copy, landed under the sequence it was minted with) may
+        // follow an earlier attempt of the same run that applied some sources before it stopped or the process
+        // ended. Those sources' own saves carried their shows AND their bookkeeping (see `land` below), so they
+        // carry this run's sequence already: applying their bookkeeping again would count their check, their
+        // empty streak and their failed read twice. They are found BEFORE anything is applied, and the earlier
+        // attempt's journal is read before this one replaces it, because it is the only record of what those
+        // sources stood at when the run first started (L37). Sequence 0 is never a run's own: it is the "oldest
+        // reading" a kept copy whose entry was lost is recovered as, and what every untouched source still holds.
+        let landedEarlier: Set<ObjectIdentifier> = Set(slots.compactMap { slot -> WatchedSource? in
+            switch slot {
+            case .settled(_, let source, _): return source
+            case .pending(let pending): return pending.source
+            }
+        }.filter { sequence > 0 && $0.lastTouchedSequence == sequence }.map { ObjectIdentifier($0) })
+        let earlier = givenSequence == nil ? nil : journals?.pending(sequence: sequence)
         // #4335 (A6): the landing's record of itself, written before anything is applied and after the last
         // await. Its run identity is the results' content hash; decoded results with no file behind them (a
-        // test's) are given one of their own, so every landing is recorded.
-        let runIdentity = identity?.contentHash ?? "decoded-" + UUID().uuidString
+        // test's) take the earlier attempt's, or are given one of their own, so every landing is recorded.
+        let runIdentity = identity?.contentHash ?? earlier?.runIdentity ?? "decoded-" + UUID().uuidString
+        // #4440: the results copied before anything is applied, so a failed save or a crash cannot lose them. A
+        // copy that cannot be kept refuses the landing by name, as a journal that cannot be written does.
+        let resultsCopy: String?
+        do {
+            resultsCopy = try keepResults(sequence)
+        } catch {
+            outcome.landingStop = .journalNotWritten(why: HandoffDecodeFailure.describe(error))
+            for slot in slots { reportNotAttempted(slot) }
+            onRefused(sequence)
+            return outcome
+        }
         let journal = LandingJournal(
             runIdentity: runIdentity, sequence: sequence, entryPoint: .scoutExtractIngest,
             sources: slots.compactMap { slot -> LandingJournal.Source? in
@@ -360,10 +396,19 @@ enum ScoutExtractIngest {
                 case .settled(_, let source?, _): return .init(sourceId: source.sourceId, pageHash: nil)
                 case .settled(_, nil, _): return nil
                 case .pending(let pending):
-                    return .init(sourceId: pending.source.sourceId, pageHash: pending.source.pendingContentHash)
+                    let source = pending.source
+                    let before = earlier?.source(source.sourceId)
+                    // A source an earlier attempt landed has already moved its count and baseline, so what it
+                    // stood at when the run started is the earlier journal's, or unknown.
+                    if landedEarlier.contains(ObjectIdentifier(source)) {
+                        return .init(sourceId: source.sourceId, pageHash: before?.pageHash,
+                                     checksBefore: before?.checksBefore, baselineBefore: before?.baselineBefore)
+                    }
+                    return .init(sourceId: source.sourceId, pageHash: before?.pageHash ?? source.pendingContentHash,
+                                 checksBefore: source.successfulCheckCount, baselineBefore: pending.health.baseline)
                 }
             },
-            now: now)
+            now: now, resultsCopy: resultsCopy)
         // A journal that cannot be written refuses the landing by name before any apply (L258), exactly as the
         // entry flush's refusal does: the caller keeps the results to land once it can.
         if let journals {
@@ -404,54 +449,66 @@ enum ScoutExtractIngest {
         func land(_ pending: Pending) {
             let source = pending.source
             if setAsideIfSuperseded(source) { return }
-            landCaptured(pending.writes, on: source)
-            // #4335: which run landed this source, in the same save as its shows (`apply`'s), so the store says
-            // which sources an interrupted landing finished. A failed save puts these back with the shows.
-            source.lastLandedRunID = runIdentity
-            source.lastLandedSequence = sequence
             let events = pending.events
             let rejection = pending.rejection
             let health = pending.health
             let effectiveVerdict = pending.effectiveVerdict
-            let applied = ScoutService.apply(
-                events: events, clients: clients, history: history, blocked: blocked,
+            // #986: how many of the shows this run KEPT said where they are, by the SAME rule the native
+            // path uses (SourcePlacement.placedCount), so the two ingest doors can never disagree on it.
+            let placedCount = SourcePlacement.placedCount(locations: events.map(\.location))
+            func feed(baseline: Int, checks: Int) -> ScoutService.FeedCheck {
                 // #887: the events this run THREW AWAY are handed over with the ones it kept. They were
                 // rejected for having no venue, which almost always means their own detail page was never
                 // read, so this run does not know what else it failed to reach. It may add and update; it
                 // may not conclude that anything was cancelled. Available here all along
                 // (rejectedEvents(for:) existed for exactly this) and consumed only by the lead sheet,
                 // which is why the scout could quietly mark Dan's live shows gone.
-                feed: ScoutService.FeedCheck(sourceId: source.sourceId,
-                                             baseline: health.baseline,
-                                             successfulCheckCount: source.successfulCheckCount,
-                                             verdict: effectiveVerdict,
-                                             // #1472/#1469: `unreadTotal` is the drops that are still suspected
-                                             // reading failures. An .html source IS read page by page, so a
-                                             // venue-less row stays one of those UNLESS the run itself marked
-                                             // the row as one the page publishes no venue for.
-                                             rejectedCount: rejection.unreadTotal,
-                                             // #1469: those flagged rows travel to the reconcile as still
-                                             // listed, by link where they have one and by night where they do
-                                             // not (a placeholder row links nowhere), so no stored show is
-                                             // struck for a row that is on the page right now.
-                                             structuralGapURLs: rejection.structuralGapURLs,
-                                             structuralGapDates: rejection.structuralGapDates),
-                // #4331 (A2): this ingest's own `now`, which every row the landing changes is stamped from.
-                today: today, now: now, sourceIds: [source.sourceId],
-                preClassified: pending.preClassified,
-                landing: landing,
-                into: context)
-
-            if applied.saveFailed {
-                // #499: everything above was classified and upserted in memory and never persisted. The
-                // hash stays UNSTAMPED and the unread flag stays set, so the next run reads this page
-                // again. Stamp it here instead and the source would fetch fine, report fine, and have
-                // silently ingested nothing since the day the save failed.
-                //
-                // #4334 (A5): and it is PUT BACK, with this source's captured writes, so nothing it wrote is
-                // left pending for a later save to carry, or to fail on again, or for an offer of the same
-                // results to apply a second time. Reported as `.saveFailed`, never `.ingested`, and its counts
-                // are not merged: none of its shows is in the store.
+                ScoutService.FeedCheck(sourceId: source.sourceId,
+                                       baseline: baseline,
+                                       successfulCheckCount: checks,
+                                       verdict: effectiveVerdict,
+                                       // #1472/#1469: `unreadTotal` is the drops that are still suspected
+                                       // reading failures. An .html source IS read page by page, so a
+                                       // venue-less row stays one of those UNLESS the run itself marked
+                                       // the row as one the page publishes no venue for.
+                                       rejectedCount: rejection.unreadTotal,
+                                       // #1469: those flagged rows travel to the reconcile as still
+                                       // listed, by link where they have one and by night where they do
+                                       // not (a placeholder row links nowhere), so no stored show is
+                                       // struck for a row that is on the page right now.
+                                       structuralGapURLs: rejection.structuralGapURLs,
+                                       structuralGapDates: rejection.structuralGapDates)
+            }
+            func applied(_ feed: ScoutService.FeedCheck) -> ScoutService.Outcome {
+                ScoutService.apply(
+                    events: events, clients: clients, history: history, blocked: blocked, feed: feed,
+                    // #4331 (A2): this ingest's own `now`, which every row the landing changes is stamped from.
+                    today: today, now: now, sourceIds: [source.sourceId],
+                    preClassified: pending.preClassified,
+                    landing: landing,
+                    into: context)
+            }
+            func report() -> ScoutService.SourceResult {
+                ScoutService.SourceResult(
+                    sourceId: source.sourceId, orgName: source.orgName,
+                    state: .ingested(found: events.count), hadBaseline: health.baseline > 0,
+                    listingsURL: source.listingsURL,
+                    // #1539: the same two counts recorded on the row, so the end-of-scout warning can tell a
+                    // page that listed nothing from a page whose every row was dropped. Both are drops: a row
+                    // rejected outright and a row the page published no venue for are equally "read, and not
+                    // usable", and neither is a page format that changed.
+                    droppedRowCount: rejection.unreadTotal + rejection.structuralGapCount)
+            }
+            // #499: everything was classified and upserted in memory and never persisted. The hash stays
+            // UNSTAMPED and the unread flag stays set, so the next run reads this page again. Stamp it here
+            // instead and the source would fetch fine, report fine, and have silently ingested nothing since the
+            // day the save failed.
+            //
+            // #4334 (A5): and it is PUT BACK, with this source's captured writes and (#4335) its bookkeeping, so
+            // nothing it wrote is left pending for a later save to carry, or to fail on again, or for an offer of
+            // the same results to apply a second time. Reported as `.saveFailed`, never `.ingested`, and its
+            // counts are not merged: none of its shows is in the store.
+            func failed(_ applied: ScoutService.Outcome) {
                 outcome.saveFailed = true
                 outcome.degradedReads.append(contentsOf: applied.degradedReads)
                 outcome.landingStop = outcome.landingStop ?? ScoutService.isolateFailedSave(
@@ -459,14 +516,44 @@ enum ScoutExtractIngest {
                 outcome.sources.append(ScoutService.SourceResult(
                     sourceId: source.sourceId, orgName: source.orgName,
                     state: .saveFailed, hadBaseline: health.baseline > 0, listingsURL: source.listingsURL))
+            }
+
+            // #4440: an earlier attempt of this run landed this source, and that save carried its shows and its
+            // bookkeeping. Its bookkeeping is not applied again. Its events ARE applied again, which changes
+            // nothing (an upsert of the same events with the same `now` writes what is already there, which
+            // `LandingOracleTests.everyFieldThatDiffersBetweenTwoLandingsIsAClockField` holds), so that its
+            // reconcile report exists for the reconcile below, judged against the count and baseline the source
+            // had when the run first started. Without the earlier journal those are unknown, and the source
+            // contributes no report: the reconcile then asks less of this landing, which can only mark fewer
+            // shows missed, never more.
+            if landedEarlier.contains(ObjectIdentifier(source)) {
+                guard let before = earlier?.source(source.sourceId), let checks = before.checksBefore,
+                      let baseline = before.baselineBefore else {
+                    outcome.sources.append(report())
+                    return
+                }
+                let again = applied(feed(baseline: baseline, checks: checks))
+                if again.saveFailed { return failed(again) }
+                outcome.merge(again)
+                outcome.sources.append(report())
                 return
             }
-            outcome.merge(applied)
 
-            // #986: how many of the shows this run KEPT said where they are, by the SAME rule the native
-            // path uses (SourcePlacement.placedCount), so the two ingest doors can never disagree on it.
-            let placedCount = SourcePlacement.placedCount(locations: events.map(\.location))
-
+            // The report is judged against what the source stood at BEFORE this run's bookkeeping below.
+            let check = feed(baseline: health.baseline, checks: source.successfulCheckCount)
+            landCaptured(pending.writes, on: source)
+            // #4335: which run landed this source, in the same save as its shows (`apply`'s), so the store says
+            // which sources an interrupted landing finished. A failed save puts these back with the shows.
+            source.lastLandedRunID = runIdentity
+            source.lastLandedSequence = sequence
+            // #4335 (A6): the source's bookkeeping is written BEFORE `apply`'s save, so that one save carries
+            // the source's shows, its health, its counts and its page hash together, or (failed, and put back
+            // by A5's revert) none of them. It used to follow the save and ride the NEXT source's, so a landing
+            // stopped between two saves had counted the earlier source's check without its shows, or its shows
+            // without its check, and an offer of it again counted the check twice. The page hash promoted is
+            // the one this run's journal recorded (a kept copy's is the one its results were read from).
+            let promote = journal.source(source.sourceId)?.pageHash ?? source.pendingContentHash
+            var movement: String?
             if effectiveVerdict == .incompleteExtraction {
                 // #1012: real events, so they land, but the run only read PART of this page. Stamping the
                 // hash or clearing the unread flag here would mean never going back for the rest of it:
@@ -476,31 +563,29 @@ enum ScoutExtractIngest {
                                    structuralGaps: rejection.structuralGapCount,
                                    droppedShows: rejection.droppedShows, placed: placedCount)
             } else {
-                recordSuccess(on: source, events: events.count, health: health, now: now,
-                              // #891: recorded on the SAME branch as the run's success, so the count can
-                              // never describe a run other than the one that produced it. A source that
-                              // recovers overwrites this with a zero and stops complaining, which it must:
-                              // a warning that never clears becomes furniture, and this is the one line
-                              // Dan must not skim.
-                              // #1032: the title share rides alongside the total, so the note names a
-                              // titleless drop correctly instead of calling it "no venue".
-                              unreadable: rejection.unreadTotal, titleUnreadable: rejection.titleRelated,
-                              // #1469: rows the PAGE publishes no venue for, disclosed on the row as a plain
-                              // fact rather than counted as pages the run failed to open.
-                              structuralGaps: rejection.structuralGapCount,
-                              // #1471: and WHICH shows they were, so the sheet names the row rather than
-                              // leaving Dan to find it in the raw results file.
-                              droppedShows: rejection.droppedShows, placed: placedCount)
+                movement = recordSuccess(on: source, events: events.count, health: health, now: now,
+                                         promoting: promote,
+                                         // #891: recorded on the SAME branch as the run's success, so the count
+                                         // can never describe a run other than the one that produced it. A
+                                         // source that recovers overwrites this with a zero and stops
+                                         // complaining, which it must: a warning that never clears becomes
+                                         // furniture, and this is the one line Dan must not skim.
+                                         // #1032: the title share rides alongside the total, so the note names
+                                         // a titleless drop correctly instead of calling it "no venue".
+                                         unreadable: rejection.unreadTotal, titleUnreadable: rejection.titleRelated,
+                                         // #1469: rows the PAGE publishes no venue for, disclosed on the row as
+                                         // a plain fact rather than counted as pages the run failed to open.
+                                         structuralGaps: rejection.structuralGapCount,
+                                         // #1471: and WHICH shows they were, so the sheet names the row rather
+                                         // than leaving Dan to find it in the raw results file.
+                                         droppedShows: rejection.droppedShows, placed: placedCount)
             }
-            outcome.sources.append(ScoutService.SourceResult(
-                sourceId: source.sourceId, orgName: source.orgName,
-                state: .ingested(found: events.count), hadBaseline: health.baseline > 0,
-                listingsURL: source.listingsURL,
-                // #1539: the same two counts recorded on the row just above, so the end-of-scout warning
-                // can tell a page that listed nothing from a page whose every row was dropped. Both are
-                // drops: a row rejected outright and a row the page published no venue for are equally
-                // "read, and not usable", and neither is a page format that changed.
-                droppedRowCount: rejection.unreadTotal + rejection.structuralGapCount))
+            let landed = applied(check)
+            if landed.saveFailed { return failed(landed) }
+            // RC6: appended only now the save carrying it has succeeded.
+            if let movement { movementLog.append(movement) }
+            outcome.merge(landed)
+            outcome.sources.append(report())
         }
         for slot in slots {
             // #4334: a landing a failed save stopped lands nothing after it (decision 3).
@@ -515,6 +600,11 @@ enum ScoutExtractIngest {
                     continue
                 }
                 if setAsideIfSuperseded(source) { continue }
+                // #4440: an earlier attempt of this run already wrote this, so it is reported, never applied twice.
+                if landedEarlier.contains(ObjectIdentifier(source)) {
+                    outcome.merge(settled)
+                    continue
+                }
                 landCaptured(writes, on: source)
                 // #4334: not the next source's turn, so that source's failed save leaves these pending.
                 landing.noteSettled(source)
@@ -616,8 +706,9 @@ enum ScoutExtractIngest {
         return SourceWrites(.confirmedEmpty, [.confirmedEmpty(at: now, readHash: source.pendingContentHash)])
     }
 
-    // The page landed. Only now may its hash be promoted, and only now does this count as a check that
-    // worked (the warmup that eventually lets this source mark a show as gone).
+    // The page was read in full. Its hash is promoted, and this counts as a check that worked (the warmup that
+    // eventually lets this source mark a show as gone), in the SAME save as its shows (#4335): written just
+    // before that save, and put back with them by A5's revert when it fails, so neither reaches the store alone.
     //
     // #1001: the health fold, the #891 readable/unreadable counts and the #986 placement detector (all of
     // which the native ScoutService.recordCheck also does) live in ONE place now, on
@@ -625,21 +716,27 @@ enum ScoutExtractIngest {
     // count on this same success branch, so none can describe a run other than the one that produced it,
     // and captures the pre-run placement answer before this run overwrites it. Only the hash promotion is
     // this path's own: the native Algolia feed has no fetched page to hash.
+    // #4335 (A6): `promoting` is the page hash the landing's journal recorded for this source, which for a kept
+    // copy offered again is the page its results were read from, never a newer one a later check left pending.
+    // Returns the read's feed movement line (RC6), for the caller to append once the save has succeeded.
     private static func recordSuccess(on source: WatchedSource, events: Int,
                                       health: FeedReconcile.FeedHealthState, now: Date,
+                                      promoting promoted: String?,
                                       unreadable: Int = 0, titleUnreadable: Int = 0,
                                       structuralGaps: Int = 0, droppedShows: [DroppedShow] = [],
-                                      placed: Int = 0) {
-        source.recordSuccessfulRead(events: events, unreadable: unreadable,
-                                    titleUnreadable: titleUnreadable, structuralGaps: structuralGaps,
-                                    droppedShows: droppedShows, placed: placed, feedHealth: health, now: now)
+                                      placed: Int = 0) -> String {
+        let movement = source.recordSuccessfulRead(events: events, unreadable: unreadable,
+                                                   titleUnreadable: titleUnreadable, structuralGaps: structuralGaps,
+                                                   droppedShows: droppedShows, placed: placed, feedHealth: health,
+                                                   now: now)
 
-        source.lastContentHash = source.pendingContentHash ?? source.lastContentHash
+        source.lastContentHash = promoted ?? source.lastContentHash
         source.pendingContentHash = nil
         // #897: the stitched-month expectation is spent once the run read the page in full. Cleared here on
         // the same success branch as the hash, so it can never carry stale months into a later comparison.
         source.pendingPageMonths = []
         source.hasUnreadChanges = false
+        return movement
     }
 
     // #1012: the run only read PART of this page, so this is neither a failure (real events came back
