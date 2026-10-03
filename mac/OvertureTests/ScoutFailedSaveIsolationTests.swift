@@ -434,7 +434,8 @@ final class ScoutFailedSaveIsolationTests {
     }
 
     private func runInline(_ ctx: ModelContext, saveSource: @escaping (ModelContext) throws -> Void,
-                           classify: @escaping (Error) -> LandingSaveFailure.Scope = LandingSaveFailure.classify)
+                           classify: @escaping (Error) -> LandingSaveFailure.Scope = LandingSaveFailure.classify,
+                           movementLog: any FeedMovementLog.Sink = FeedMovementLog.file)
         async throws -> ScoutService.Outcome {
         try await ScoutService.runScout(
             into: ctx, depth: .readChanged,
@@ -442,7 +443,13 @@ final class ScoutFailedSaveIsolationTests {
             pin: { _, id in URL(fileURLWithPath: "/tmp/\(id).html") }, launch: { _ in },
             now: now, defaults: ScratchDefaults.make("ScoutFailedSaveIsolationTests"),
             landings: LandingSingleFlight(sleep: { _ in }), sequenceFloor: { 0 },
-            saveSource: saveSource, classifySaveFailure: classify)
+            saveSource: saveSource, classifySaveFailure: classify, movementLog: movementLog)
+    }
+
+    private final class Lines: FeedMovementLog.Sink {
+        private(set) var lines: [String] = []
+        func append(_ line: String) { lines.append(line) }
+        func count(_ sourceId: String) -> Int { lines.filter { $0.contains("source=\(sourceId) ") }.count }
     }
 
     @Test func aNativeSourceWhoseSaveFailsIsNeverMarkedRead() async throws {
@@ -451,8 +458,9 @@ final class ScoutFailedSaveIsolationTests {
         for id in ["inline-a", "inline-b"] { html(id, in: ctx) }
         try ctx.save()
         let failing = FailOne("inline-a")
+        let lines = Lines()
 
-        let outcome = try await runInline(ctx, saveSource: failing.save, classify: { _ in .source })
+        let outcome = try await runInline(ctx, saveSource: failing.save, classify: { _ in .source }, movementLog: lines)
 
         #expect(failing.refused == 1, "the native source's save was never refused, so nothing here failed")
         let s = states(outcome)
@@ -466,6 +474,8 @@ final class ScoutFailedSaveIsolationTests {
         #expect(a.hasUnreadChanges, "a native source whose save failed had its unread flag cleared")
         let b = try #require(try ModelContext(c).fetch(FetchDescriptor<WatchedSource>()).first { $0.sourceId == "inline-b" })
         #expect(b.lastContentHash == "inline-new-inline-b.example")
+        // #4335 (RC6): a movement line only for the source whose save went through, appended once.
+        #expect(lines.count("inline-a") == 0 && lines.count("inline-b") == 1, Comment(rawValue: "\(lines.lines)"))
     }
 
     @Test func aStoreLevelFailureOnTheNativePathStopsTheSweepsLanding() async throws {

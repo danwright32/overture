@@ -397,8 +397,7 @@ final class WatchedSource {
     // #4335 (A6, RC6): RETURNS this run's feed movement line (`FeedMovementLog`), computed from the values this
     // run arrived with, where it used to write it. The caller appends it through `FeedMovementLog.Sink` only once
     // the save carrying these writes has succeeded, so a failed save leaves no line describing a read the store
-    // never took.
-    @discardableResult
+    // never took. Not discardable: a caller that ignored it would silently drop #913's evidence.
     func recordSuccessfulRead(events: Int, unreadable: Int, titleUnreadable: Int = 0,
                               structuralGaps: Int = 0, droppedShows: [DroppedShow] = [], placed: Int,
                               feedHealth: FeedReconcile.FeedHealthState, now: Date) -> String {

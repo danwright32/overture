@@ -151,8 +151,14 @@ enum ScoutExtractLanding {
         }
         // #4334: a landing that stopped, or never started, keeps its copy (below); when that copy could not be
         // written, the results are still in the reader's file, which is said.
-        if let copyFailure, outcome.landingStop != nil, !kept {
-            outcome.notLandedYet = ScoutWarningCopy.stoppedWithoutACopy(copyFailure)
+        if let copyFailure, let stop = outcome.landingStop, !kept {
+            // #4440: when the copy that failed is the refusal itself, its sentence already names it, so this one
+            // only says where the results still are.
+            if case .resultsNotKept = stop {
+                outcome.notLandedYet = ScoutWarningCopy.resultsStillInTheReadersFile
+            } else {
+                outcome.notLandedYet = ScoutWarningCopy.stoppedWithoutACopy(copyFailure)
+            }
         }
         return removingTheCopy(of: hash, kept: kept, after: outcome, pending: pending)
     }

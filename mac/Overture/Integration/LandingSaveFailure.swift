@@ -45,13 +45,18 @@ enum LandingStop: Equatable, Sendable {
     // start and nothing from it was applied (L258): a landing a crash could not be recovered from is not
     // begun. Names why the write failed.
     case journalNotWritten(why: String)
+    // #4440: the copy of an ingest's results that the landing keeps before it applies anything could not be
+    // written, so the landing did not start and nothing from it was applied (L5, L258): results a failed save or
+    // a crash could lose are not landed. Its own case rather than `journalNotWritten`, because it is a different
+    // file and a different remedy (L11). Names why the copy failed.
+    case resultsNotKept(why: String)
 
     // A stop that came BEFORE anything was applied, so no source after it went unlanded: the results are
     // kept to land later (the ingest) or read again by the next scout (runScout), and saying "N calendars
     // after it were not landed" would describe a landing that never began.
     var refusedBeforeAnything: Bool {
         switch self {
-        case .recentEditsUnsaved, .journalNotWritten: return true
+        case .recentEditsUnsaved, .journalNotWritten, .resultsNotKept: return true
         case .storeRefusedASave, .notReverted: return false
         }
     }

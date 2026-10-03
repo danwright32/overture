@@ -23,7 +23,7 @@ struct EmptyRunStreakTests {
     }
 
     private func read(_ s: WatchedSource, events: Int, at: Date) {
-        s.recordSuccessfulRead(events: events, unreadable: 0, placed: 0,
+        _ = s.recordSuccessfulRead(events: events, unreadable: 0, placed: 0,
                                feedHealth: .init(baseline: s.baselineFeedCount,
                                                  degradedStreak: s.degradedStreak,
                                                  lastDegradedCount: s.lastDegradedCount),
