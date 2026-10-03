@@ -313,8 +313,6 @@ enum ScaledCorpus {
         return scaled
     }
 
-    /// One event as copy `glue`'s source would publish it: every field the corpus glues on a stored show
-    /// (title, presenter, venue, series, listing address) glued the same way, and nothing else.
     /// A name as copy `glue` holds it: the glue in FRONT of the first word ("Winter Light" becomes "qaWinter
     /// Light"). In front because the landing relates names by their beginnings: a title that is a prefix of
     /// another is the same show with a subtitle (`GroupNameMatch`, the Fenwick triple), a room's key drops
@@ -324,6 +322,8 @@ enum ScaledCorpus {
     /// landed differently from its original's, which `ScaledCorpusLandsLikeALargerStoreTests` measured.
     nonisolated static func gluedName(_ name: String, glue: String) -> String { glue + name }
 
+    /// One event as copy `glue`'s source would publish it: every field the corpus glues on a stored show
+    /// (title, presenter, venue, series, listing address) glued the same way, and nothing else.
     nonisolated static func glued(_ event: ScoutExtractEvent, glue: String) -> ScoutExtractEvent {
         var e = event
         e.title = gluedName(event.title, glue: glue)
