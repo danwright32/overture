@@ -36,6 +36,9 @@ import SwiftData
 //     ambiguous URLs) is answered from tables of the stored rows built once and kept current from the same
 //     written rows, plus the joins and the revert's deletes (#4333, `LandingBatchTables`), so a source walks
 //     its own batch and what changed since the source before it, never every stored row again.
+//   - EVERY PER EVENT MATCH ARM (#4460: the concert identity, run URL, production token and stable source
+//     arms, and the arrival notes) is handed only the rows carrying one of the show's own keys, from the same
+//     tables (`rows(_:)`), never every stored row, so a landing of N new shows no longer walks the store N times.
 //
 // WHICH ROWS ARE RE-CHECKED, and why it is not every row (#4275, second pass). Comparing every cached row
 // on every read was itself about 13% of what was left of a landing (optimised, on a store clone), because
@@ -168,6 +171,9 @@ final class ScoutLandingStore {
         var rowsRead = 0
         var rowsHandedOut = 0
         var rowsWalked = 0
+        // #4460: rows a per event match arm was handed from the rows on its keys (`rows(_:)`), in place of
+        // every stored row. A lookup that had to take the walk counts in `rowsHandedOut`, as the walk always did.
+        var rowsLookedUp = 0
 
         static func - (a: Counters, b: Counters) -> Counters {
             Counters(tableBuilds: a.tableBuilds - b.tableBuilds,
@@ -178,7 +184,8 @@ final class ScoutLandingStore {
                      foldValidations: a.foldValidations - b.foldValidations,
                      rowsRead: a.rowsRead - b.rowsRead,
                      rowsHandedOut: a.rowsHandedOut - b.rowsHandedOut,
-                     rowsWalked: a.rowsWalked - b.rowsWalked)
+                     rowsWalked: a.rowsWalked - b.rowsWalked,
+                     rowsLookedUp: a.rowsLookedUp - b.rowsLookedUp)
         }
     }
     private(set) var counters = Counters()
@@ -198,6 +205,24 @@ final class ScoutLandingStore {
     // already there, in the order inserted, which is the order `loaded` holds them in.
     private var joinOrder: [ObjectIdentifier: Int] = [:]
     private var nextTableOrder = 0
+    // #4460: the row behind each identifier the tables hold, so a keyed lookup can hand back the rows it found.
+    // Kept beside the tables: filled by their build and by every join, emptied by the revert's deletes.
+    private var tableRows: [ObjectIdentifier: Prospect] = [:]
+    // #4460: every field a row's contribution is built from, as it stood when the row was last judged, so a row
+    // named as written that nothing has changed is not rebuilt. The four folded fields come from the row's fold
+    // (already compared against the row by `fold(of:)`), so no archived field is decoded twice.
+    private struct Judged: Equatable {
+        var groupName = "", venue: String?, listing: String?, runs: [String] = []
+        var seriesId: String?, night: String?, sourceIds: [String] = []
+        var isDeleted = false
+        static let deleted = Judged(isDeleted: true)
+        init(isDeleted: Bool) { self.isDeleted = isDeleted }
+        init(_ p: Prospect, _ folded: Fold) {
+            groupName = folded.groupName; venue = folded.venue; listing = folded.sourceListingURL
+            runs = folded.runSourceURLs; seriesId = p.seriesId; night = p.performanceDate; sourceIds = p.sourceIds
+        }
+    }
+    private var judged: [ObjectIdentifier: Judged] = [:]
 
     // #4325: the reconcile writes of this landing that no save has carried yet, oldest first. A successful
     // save of this context empties it (`didSave`, below), whoever saved, so what is left at the closing save
@@ -373,6 +398,8 @@ final class ScoutLandingStore {
             tables?.remove(id)
             tablesToCheck[id] = nil
             joinOrder[id] = nil
+            tableRows[id] = nil
+            judged[id] = nil
         }
     }
 
@@ -505,6 +532,7 @@ final class ScoutLandingStore {
             joinOrder[id] = nextTableOrder
             nextTableOrder += 1
             tablesToCheck[id] = p
+            tableRows[id] = p
         }
         if candidates != nil { candidatesToCheck[ObjectIdentifier(p)] = p }
     }
@@ -598,6 +626,76 @@ final class ScoutLandingStore {
                                           anywhere: tables.anywhere.answer(adding: links))
     }
 
+    // #4460: the stored rows a per event match arm could match, in this landing's order: the rows carrying one
+    // of the show's own keys, from the batch tables, in place of every stored row. The arm applies its own
+    // predicate to them unchanged, and every row that predicate could accept carries one of these keys, so the
+    // first match, and every filter, is the one the walk found. Under `.everyRead` it IS the walk (every row,
+    // freshly read), so the reference the equality tests compare against stays the code before #4460.
+    //
+    // An empty URL is the one empty key a stored row can carry (a blank listing URL folds to itself), and the
+    // tables key no empty URL, so a lookup naming one takes the walk rather than miss that row. Throws when
+    // the store cannot answer, exactly as the walk did, so the arm refuses the show (L215).
+    func rows(_ lookup: LandingBatchTables.Lookup) throws -> [Prospect] {
+        if policy == .everyRead { return try rows() }
+        if case .sharingURL(let urls) = lookup, urls.contains("") { return try rows() }
+        let tables = try currentTables()
+        let found = tables.rows(lookup).compactMap { tableRows[$0] }.filter { !$0.isDeleted }
+        counters.rowsLookedUp += found.count
+        return found
+    }
+
+    #if DEBUG
+    // The walk `rows(_:)` replaced, for the tests' comparison: every row a fresh read returns that carries one of
+    // the lookup's keys, read off a FRESH fold of the row (never the cached one), in this landing's order.
+    func walkedRows(_ lookup: LandingBatchTables.Lookup) throws -> [Prospect] {
+        try currentRows().filter { p in
+            let folded = Fold(p)
+            switch lookup {
+            case .sharingURL(let urls): return !folded.allURLFolds.isDisjoint(with: urls)
+            case .sharingToken(let tokens): return !Set(folded.tokens).isDisjoint(with: tokens)
+            case .series(let id): return p.seriesId == id
+            case .night(let night): return p.performanceDate == night
+            case .ownedBy(let owners): return !Set(p.sourceIds).isDisjoint(with: owners)
+            }
+        }
+    }
+    #endif
+
+    // #4475: the stored rows a reconcile of these reports could change, in this landing's order, in place of every
+    // stored row. `FeedReconcile.reconcile` changes a row only when a report LISTS it (its natural key among the
+    // seen keys, one of its links among the seen links, or a structural gap on its night under one of the
+    // report's sources) or when every source owning it was asked and none had it. Each of those needs the row to
+    // hold a seen key, carry a seen link, or be owned by a report's source, so every row it can change is here,
+    // and the reconcile still decides each one exactly as it did. Rows it cannot change are left out, which is
+    // what stops runScout's per source reconcile walking the whole store once a source (#4475).
+    //
+    // Under `.everyRead` it is every row, freshly read, so the reference stays the code before #4475. Throws when
+    // the store cannot answer, exactly as the read of every row did, so the caller names the failure (#4474).
+    func rows(reconciledBy reports: [FeedReconcile.SourceReport]) throws -> [Prospect] {
+        if policy == .everyRead { return try rows() }
+        // The links folded the way the URL lists are keyed: a row whose raw link is a seen link folds to the same
+        // key, so the lookup holds every row the reconcile's raw comparison can match, and the reconcile decides.
+        let links = Set(reports.flatMap(\.seenSourceURLs).map(ListingURL.fold))
+        var found = try rows(.sharingURL(links)) + rows(.ownedBy(Set(reports.map(\.sourceId))))
+        for key in Set(reports.flatMap(\.seenKeys)) { found += try rowsHolding(key: key) }
+        let tables = try currentTables()
+        var seen: Set<ObjectIdentifier> = []
+        let unique = found.filter { seen.insert(ObjectIdentifier($0)).inserted }
+        return unique.sorted {
+            (tables.order(of: ObjectIdentifier($0)) ?? .max) < (tables.order(of: ObjectIdentifier($1)) ?? .max)
+        }
+    }
+
+    // Every row holding this natural key, from the key index brought current. Compared as Swift compares
+    // strings, as the reconcile's `seenKeys.contains` does, rather than as bytes, which `stored(key:)` uses for
+    // a write: a lookup that matched fewer rows than the reconcile would leave a listed row unreset.
+    private func rowsHolding(key: String) throws -> [Prospect] {
+        _ = try stored(key: key)
+        let held = (keyIndex?[key] ?? []).filter { !$0.isDeleted }
+        counters.rowsLookedUp += held.count
+        return held
+    }
+
     // How the stored rows have spelled their rooms, per source id, for `VenueSpellingLock.locked`.
     struct VenueSpellings {
         fileprivate let lookup: ([String]) -> [String]
@@ -647,7 +745,10 @@ final class ScoutLandingStore {
             counters.rowsWalked += current.count
             var built = LandingBatchTables()
             for (i, p) in current.enumerated() {
-                built.set(ObjectIdentifier(p), order: i, to: Self.contribution(of: p, fold(of: p)))
+                let folded = fold(of: p)
+                built.set(ObjectIdentifier(p), order: i, to: Self.contribution(of: p, folded))
+                tableRows[ObjectIdentifier(p)] = p
+                judged[ObjectIdentifier(p)] = Judged(p, folded)
             }
             nextTableOrder = current.count
             tablesToCheck = [:]
@@ -666,9 +767,18 @@ final class ScoutLandingStore {
             for (id, p) in pending {
                 // A row the landing does not hold (one nobody announced) is in no read, so in no table.
                 guard let order = tables?.order(of: id) ?? joins[id] else { continue }
+                // #4460: a row SwiftData still names as written, but whose every field the tables read is as it was
+                // when it was last judged, is not judged again. An unsaved insert stays in the inserted list until
+                // its source saves, and the per event arms read the tables several times an event, so without this
+                // every insert of a source was rebuilt on every read: square in the batch (measured, 601 visits
+                // for sixteen new shows against 31 for four). Its fold is still validated, as before.
+                let folded = p.isDeleted ? nil : fold(of: p)
+                let now = folded.map { Judged(p, $0) } ?? Judged.deleted
+                if joins[id] == nil, judged[id] == now { continue }
                 counters.tableRowsRejudged += 1
-                let value = p.isDeleted ? LandingBatchTables.Contribution.none : Self.contribution(of: p, fold(of: p))
+                let value = folded.map { Self.contribution(of: p, $0) } ?? LandingBatchTables.Contribution.none
                 tables?.set(id, order: order, to: value)
+                judged[id] = now
             }
         }
         guard let tables else { throw TablesMissing() }
@@ -684,6 +794,11 @@ final class ScoutLandingStore {
         if let venue = p.venue, !venue.isEmpty {
             c.spellings = p.sourceIds.map { .init(sourceId: $0, venue: venue) }
         }
+        // #4460: the two keys the concert identity arm and the arrival notes ask by, which no fold carries.
+        if let id = p.seriesId, !id.isEmpty { c.seriesId = id }
+        if let night = p.performanceDate, !night.isEmpty { c.night = night }
+        // #4475: whoever owns the row, for the reconcile.
+        c.owners = Set(p.sourceIds)
         return c
     }
 
