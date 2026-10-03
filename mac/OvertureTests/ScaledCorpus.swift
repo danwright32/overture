@@ -154,7 +154,6 @@ enum ScaledCorpus {
         // The originals' keys and the values the app computes a key from, read before anything is copied.
         struct Original { let pk: Int64; let key: String; let anchoredTitle: String; let date: String?; let anchoredVenue: String? }
         var originals: [Original] = []
-        var taken = Set<String>()
         do {
             var stmt: OpaquePointer?
             let sql = "SELECT Z_PK, ZNATURALKEY, COALESCE(ZSCOUTGROUPNAME, ZGROUPNAME), ZPERFORMANCEDATE, "
@@ -163,7 +162,6 @@ enum ScaledCorpus {
             defer { sqlite3_finalize(stmt) }
             while sqlite3_step(stmt) == SQLITE_ROW {
                 let key = text(stmt, 1) ?? ""
-                taken.insert(key)
                 originals.append(Original(pk: sqlite3_column_int64(stmt, 0), key: key,
                                           anchoredTitle: text(stmt, 2) ?? "", date: text(stmt, 3),
                                           anchoredVenue: text(stmt, 4)))
@@ -212,23 +210,20 @@ enum ScaledCorpus {
                                      nil) == SQLITE_OK else { throw Failure.sql("prepare key update") }
             defer { sqlite3_finalize(update) }
             let transient = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
-            for k in 1..<factor {
-                let glue = Phase0.glue(forCopy: k)
-                for row in originals {
-                    let decision = copyKey(key: row.key, anchoredTitle: row.anchoredTitle, date: row.date,
-                                           anchoredVenue: row.anchoredVenue, glue: glue, taken: taken)
-                    taken.insert(decision.key)
-                    switch decision.kind {
-                    case .recomputed: report.keysRecomputed += 1
-                    case .drifted: report.keysAppendedAsDrifted += 1
-                    case .taken: report.keysAppendedAsTaken += 1
-                    }
-                    guard decision.kind == .recomputed else { continue }
-                    sqlite3_reset(update)
-                    sqlite3_bind_text(update, 1, decision.key, -1, transient)
-                    sqlite3_bind_int64(update, 2, row.pk + Int64(k * offset))
-                    guard sqlite3_step(update) == SQLITE_DONE else { throw Failure.sql("key update") }
+            let decisions = keyDecisions(originals.map { KeySource(key: $0.key, anchoredTitle: $0.anchoredTitle,
+                                                                   date: $0.date, anchoredVenue: $0.anchoredVenue) },
+                                         factor: factor)
+            for (k, row, decision) in decisions {
+                switch decision.kind {
+                case .recomputed: report.keysRecomputed += 1
+                case .drifted: report.keysAppendedAsDrifted += 1
+                case .taken: report.keysAppendedAsTaken += 1
                 }
+                guard decision.kind == .recomputed else { continue }
+                sqlite3_reset(update)
+                sqlite3_bind_text(update, 1, decision.key, -1, transient)
+                sqlite3_bind_int64(update, 2, originals[row].pk + Int64(k * offset))
+                guard sqlite3_step(update) == SQLITE_DONE else { throw Failure.sql("key update") }
             }
             try exec("UPDATE Z_PRIMARYKEY SET Z_MAX = (SELECT MAX(Z_PK) FROM ZWATCHEDSOURCE) WHERE Z_NAME = 'WatchedSource'")
         }
@@ -245,6 +240,37 @@ enum ScaledCorpus {
             if let key = text(stmt, 0) { copyOf[key] = Int(sqlite3_column_int64(stmt, 1)) }
         }
         return copyOf
+    }
+
+    /// What a key is computed from: the original's key, and the title, date and room the app keys it by.
+    struct KeySource: Equatable, Sendable {
+        let key: String
+        let anchoredTitle: String
+        let date: String?
+        let anchoredVenue: String?
+    }
+
+    /// Every copy's key, as (copy number, original's index, decision). Every copy already sits in the table
+    /// under its appended key when these are written, so a recomputed key is judged against those too, not only
+    /// against the originals and the keys decided so far: one equal to a later copy's appended key would hit the
+    /// unique key on that copy's update.
+    nonisolated static func keyDecisions(_ originals: [KeySource], factor: Int) -> [(Int, Int, KeyDecision)] {
+        var taken = Set(originals.map(\.key))
+        for k in 1..<max(factor, 1) {
+            let glue = Phase0.glue(forCopy: k)
+            for row in originals { taken.insert(row.key + glue) }
+        }
+        var out: [(Int, Int, KeyDecision)] = []
+        for k in 1..<max(factor, 1) {
+            let glue = Phase0.glue(forCopy: k)
+            for (i, row) in originals.enumerated() {
+                let decision = copyKey(key: row.key, anchoredTitle: row.anchoredTitle, date: row.date,
+                                       anchoredVenue: row.anchoredVenue, glue: glue, taken: taken)
+                taken.insert(decision.key)
+                out.append((k, i, decision))
+            }
+        }
+        return out
     }
 
     struct KeyDecision: Equatable {

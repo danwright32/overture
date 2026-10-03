@@ -212,6 +212,26 @@ final class ScaledCorpusLandsLikeALargerStoreTests {
             + "Phase0.scaledResults and without a '\(marker)<reason>' line: \(offenders.sorted())"))
     }
 
+    /// #4427 review: every copy sits in the table under its appended key before any key is recomputed, so a
+    /// recomputed key equal to a LATER copy's appended key must stay appended, or that copy's update collides.
+    @Test func aRecomputedKeyNeverLandsOnAnotherCopysAppendedKey() {
+        let glue = Phase0.glue(forCopy: 1)
+        // A's copy computes a key ending in the glue (its room ends in "Aqa"); B's key is that key without its
+        // glue, so B's copy already sits under exactly the key A's copy would compute.
+        let a = ScaledCorpus.KeySource(key: Prospect.makeNaturalKey(groupName: "Encore", performanceDate: "2026-11-01",
+                                                                    venue: "Studio Aqa"),
+                                       anchoredTitle: "Encore", date: "2026-11-01", anchoredVenue: "Studio Aqa")
+        let computed = Prospect.makeNaturalKey(groupName: glue + "Encore", performanceDate: "2026-11-01",
+                                               venue: glue + "Studio Aqa")
+        #expect(computed.hasSuffix(glue), "the fixture needs a computed key ending in the glue: \(computed)")
+        let b = ScaledCorpus.KeySource(key: String(computed.dropLast(glue.count)), anchoredTitle: "Unrelated",
+                                       date: "2026-11-02", anchoredVenue: nil)
+        let decisions = ScaledCorpus.keyDecisions([a, b], factor: 2)
+        let keys = decisions.map { $0.2.key }
+        #expect(decisions.first?.2.kind == .taken, "A's copy was decided \(decisions.first.map { "\($0.2)" } ?? "nothing")")
+        #expect(Set(keys).count == keys.count, "two copies were given one key: \(keys)")
+    }
+
     @Test func factorOneLeavesTheResultsAsTheyWere() {
         let results = LandingOracleCorpus.results()
         #expect(Phase0.scaledResults(results, factor: 1) == results)
