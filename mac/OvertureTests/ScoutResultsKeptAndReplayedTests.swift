@@ -226,6 +226,27 @@ final class ScoutResultsKeptAndReplayedTests {
         #expect(landed.outcome.notLandedYet?.contains("either") == false)
     }
 
+    // L11: a copy that failed is not tried again through the refusal's own keep a copy path. A retry that then
+    // succeeded would leave the refusal saying no copy was kept while one is.
+    @Test func aCopyThatCannotBeKeptIsNotRetriedBehindItsOwnRefusal() async throws {
+        let c = try container()
+        let ctx = c.mainContext
+        html("a", in: ctx)
+        try ctx.save()
+        struct CopyRefused: Error {}
+        var retried = 0
+        let outcome = await ScoutExtractIngest.ingest(
+            try ScoutExtractResultsDecoder.decode(try data(["a"])), clients: [], history: [], blocked: .empty,
+            today: today, now: now, landings: LandingSingleFlight(sleep: { _ in }), sequenceFloor: { 0 },
+            onRefused: { _ in retried += 1 }, keepResults: { _ in throw CopyRefused() }, into: ctx)
+        guard case .resultsNotKept? = outcome.landingStop else {
+            Issue.record(Comment(rawValue: "a copy that failed was not refused: \(String(describing: outcome.landingStop))"))
+            return
+        }
+        #expect(retried == 0, "the refusal tried the copy that had just failed again")
+        #expect(try titles(c).isEmpty)
+    }
+
     // MARK: - #4335: offered again, nothing is counted twice
 
     // The plan's test: a landing interrupted between source N's save and N+1's, then offered again, moves each

@@ -386,7 +386,8 @@ enum ScoutExtractIngest {
         } catch {
             outcome.landingStop = .resultsNotKept(why: HandoffDecodeFailure.describe(error))
             for slot in slots { reportNotAttempted(slot) }
-            onRefused(sequence)
+            // Not `onRefused`: that would try the copy that just failed again, and a retry that happened to
+            // succeed would leave this refusal saying no copy was kept while one is (L11).
             return outcome
         }
         let journal = LandingJournal(
