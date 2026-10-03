@@ -10,6 +10,8 @@ import UserNotifications
 // .task, is what survives the window closing (the point of the resident rearchitecture).
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
+    // #4464: the settings change observer, held so it lives as long as the app delegate.
+    private var defaultsObserver: NSObjectProtocol?
     // Set by OvertureApp.init once the store has been opened (nil in the degraded/no-store state).
     // Written once on the main thread during launch and read in applicationDidFinishLaunching (also
     // main), so the unchecked isolation is safe.
@@ -104,8 +106,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         // #2115: and whenever the due count changes, since that now decides whether there is a Dock icon
         // at all. Without this the badge would only ever appear on a window event, so work falling due
         // while Dan is away (the case it exists for) would go unshown until he came back anyway.
-        nc.addObserver(self, selector: #selector(windowVisibilityChanged),
-                       name: UserDefaults.didChangeNotification, object: nil)
+        // #4464: through `MainQueueNotification`, never a selector, because a setting written by
+        // background work posts this on that background thread.
+        defaultsObserver = MainQueueNotification.observe(UserDefaults.didChangeNotification) { [weak self] in
+            self?.updateDockPresence()
+        }
         updateDockPresence()
 
         // #270: surface first-run onboarding while Dan is present whenever a grant is missing, so the
