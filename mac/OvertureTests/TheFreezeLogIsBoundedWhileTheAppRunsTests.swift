@@ -191,7 +191,7 @@ final class TheFreezeLogIsBoundedWhileTheAppRunsTests {
         guard let body = SourceGuardHelper.bodyOfFunction(named: "reportWhatWasRecorded", in: rootView) else {
             Issue.record("reportWhatWasRecorded body not found in RootView"); return
         }
-        let guardsTheSecond = SourceGuardHelper.containsCode("if reportAnyFreezes() { return }", in: body)
+        let guardsTheSecond = SourceGuardHelper.containsCode("if await reportAnyFreezes() { return }", in: body)
         #expect(guardsTheSecond, Comment(rawValue:
             "both notices are raised unconditionally, so on a tick carrying both the second overwrites "
             + "the first, and the first's records are already marked as said. Ask whether the freeze "
@@ -199,7 +199,7 @@ final class TheFreezeLogIsBoundedWhileTheAppRunsTests {
 
         // And that is only answerable because each reporter says whether its notice went up. A reporter
         // returning nothing cannot be asked, and the pairing above would be guesswork.
-        #expect(SourceGuardHelper.containsCode("private func reportAnyFreezes() -> Bool", in: rootView))
+        #expect(SourceGuardHelper.containsCode("private func reportAnyFreezes() async -> Bool", in: rootView))
         #expect(SourceGuardHelper.containsCode("private func reportAnyCardDivergences() -> Bool", in: rootView))
     }
 

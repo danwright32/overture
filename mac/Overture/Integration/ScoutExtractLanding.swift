@@ -56,6 +56,9 @@ enum ScoutExtractLanding {
                      saveClosing: (ModelContext) throws -> Void = { try $0.save() },
                      // #4334: the landing's entry flush, injected so a test can make it refuse.
                      saveEntry: (ModelContext) throws -> Void = { try $0.save() },
+                     // #4335 (A6): the landing journal folder, handed straight to the ingest. RootView passes
+                     // `.live`; nil keeps none (a test whose subject is not the journal).
+                     journals: LandingJournals? = nil,
                      into context: ModelContext) async -> Landed {
         let hash = PendingScoutIngests.contentHash(of: data)
         var kept = sequence != nil
@@ -99,6 +102,7 @@ enum ScoutExtractLanding {
             // #4334 (A5, L371): a landing the entry flush refused applied nothing, so its results are kept
             // by content hash, exactly as a landing that waited is, and land once the edits are saved.
             onRefused: { keepACopy($0) },
+            journals: journals,
             into: context)
         if outcome.notLandedYet != nil {
             // The refusal's own sentence says a copy was kept. When it was not, that sentence is false, so
@@ -183,6 +187,8 @@ enum ScoutExtractLanding {
                              landings: LandingSingleFlight = .shared,
                              pending: PendingScoutIngests = .live,
                              saveClosing: (ModelContext) throws -> Void = { try $0.save() },
+                             // #4335: handed to every landing it makes, as `land` takes it.
+                             journals: LandingJournals? = nil,
                              into context: ModelContext) async -> Offered {
         var offered = Offered(stuckAfter: stuckAfter)
         let listed: [PendingScoutIngests.Listed]
@@ -210,7 +216,7 @@ enum ScoutExtractLanding {
                 let landed = await land(copy.data, copy.results, sequence: entry.sequence,
                                         clients: clients, history: history, blocked: blocked, now: now,
                                         landings: landings, pending: pending, saveClosing: saveClosing,
-                                        into: context)
+                                        journals: journals, into: context)
                 let outcome = landed.outcome
                 if let left = landed.copyLeftBehind { offered.copiesLeftBehind.append(left) }
                 if let landedAt = outcome.alreadyLandedAt {

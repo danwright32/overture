@@ -6,7 +6,8 @@ import SwiftData
 //
 // The source is each row's current `ingestedAt`. For a show never re-scouted since it was found, that IS
 // its first sighting. For one the scout has read again, `ingestedAt` has walked forward, so the stamp is
-// an UPPER BOUND: no later than this. It never invents a date nothing observed, and it can only ever be
+// an UPPER BOUND: no later than this. (#4331: it now walks forward only when a scout changes the row, so a
+// newer row's value is closer to its first sighting than an older one's was; still a bound, never exact.) It never invents a date nothing observed, and it can only ever be
 // too late, never too early, so a period report under-counts rather than over-counts. Dan chose this over
 // leaving the rows blank (2026-07-23), knowing the pre-ship months read as approximate.
 //

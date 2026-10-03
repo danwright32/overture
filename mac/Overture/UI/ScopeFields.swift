@@ -465,6 +465,8 @@ extension WatchedSource: ScopeObserved {
         .init(\.lastDroppedShowLabelsRaw),
         .init(\.lastErrorRaw),
         .init(\.lastFetchWasInsecure),
+        .init(\.lastLandedRunID),
+        .init(\.lastLandedSequence),
         .init(\.lastManualReadAt),
         .init(\.lastNonEmptyAt),
         .init(\.lastObservedContentHash),
@@ -506,7 +508,10 @@ extension WeeklyDayOff: ScopeObserved {
 extension LandingRun: ScopeObserved {
     func scopeAccess<V>(_ keyPath: KeyPath<LandingRun, V>) { access(keyPath: keyPath) }
     static let scopeFields: [ScopeField<LandingRun>] = [
+        .init(\.entryPointRaw),
         .init(\.landedAt),
         .init(\.runIdentity),
+        .init(\.sequence),
+        .init(\.startedAt),
     ]
 }

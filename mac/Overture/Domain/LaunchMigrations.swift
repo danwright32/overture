@@ -48,8 +48,8 @@ enum LaunchMigrations {
         WatchedSourceBackfill.run(in: context)
         // #16: stamp a first-sighting date on every prospect predating the field, so the funnel report has
         // a start node for the shows already in the store. Idempotent, and that matters more here than
-        // usual: it runs every launch while `ingestedAt` keeps moving, so a re-stamp would walk the first
-        // sighting forward launch by launch. Guarded by "firstSeenAt is still nil".
+        // usual: it runs every launch while `ingestedAt` keeps moving (on every scout change, #4331), so a
+        // re-stamp would walk the first sighting forward launch by launch. Guarded by "firstSeenAt is still nil".
         FirstSeenBackfill.run(in: context)
         // #16: record the one conversation stage each existing contact can be proven to have reached
         // (the one it is sitting at, and only where Dan set it himself). Idempotent; earlier stages were

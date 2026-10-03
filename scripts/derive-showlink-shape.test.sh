@@ -312,9 +312,10 @@ assert_contains "a member line carries the natural key" "${out}" \
   "key the infinite wrench|2026-10-02|asylum nyc"
 
 # The two misreadings that produced #3766's wrong mechanism, said beside the dates rather than left for
-# a reader to know (L11): firstSeenAt is not unconditionally a mint date, and ingestedAt is the LAST touch.
+# a reader to know (L11): firstSeenAt is not unconditionally a mint date, and ingestedAt is when a scout
+# last CHANGED the row (#4331), not the first sighting.
 assert_contains "the output warns that a first sighting can have been rewritten" "${out}" "NaturalKeyVenueMigration"
-assert_contains "and that ingestedAt is the last touch, not the first" "${out}" "ingestedAt"
+assert_contains "and that ingestedAt is the last change, not the first sighting" "${out}" "last changed by a scout"
 
 # The default output is UNCHANGED, because its four populations are quoted in issue bodies.
 plain="$("${DERIVE}" --store "${WORK}/dates.store" --asof 2026-09-19)"

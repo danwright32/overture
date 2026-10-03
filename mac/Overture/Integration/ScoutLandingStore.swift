@@ -245,6 +245,80 @@ final class ScoutLandingStore {
 
     func noteSettled(_ row: any PersistentModel) { settledSinceSave.insert(row.persistentModelID) }
 
+    // #4331 (A2): the stamp rule, the next apply ordinal, and the merge candidate index. See `IngestedAtStamp`.
+    let stampRule: IngestedAtStamp.Rule
+    private var nextOrdinal = 0
+    private var candidates: MergeCandidateIndex?
+    // Rows SwiftData has named as written, or the landing has inserted, since the index last looked at them.
+    private var candidatesToCheck: [ObjectIdentifier: Prospect] = [:]
+    // Rows this landing touched and did not change, and that had no twin when touched, with the stamp each
+    // would have taken then. Asked again at the end of every later apply, in case a later write gave one a twin.
+    private var unstamped: [ObjectIdentifier: (row: Prospect, stamp: Date)] = [:]
+
+    // The stamp of the next row this landing applies: its `now` plus the apply ordinal, in microseconds.
+    func nextStamp(at now: Date) -> Date {
+        defer { nextOrdinal += 1 }
+        return IngestedAtStamp.at(now, ordinal: nextOrdinal)
+    }
+
+    // A stored row the landing has just applied an event to. Stamped when the apply changed it, or when it
+    // shares a merge reader's candidate key with another row (or the index cannot be read, which stamps, as
+    // every row was stamped before #4331: an unreadable answer must not pass for "no twin", L215).
+    func stampTouched(_ p: Prospect, changed: Bool, at now: Date) {
+        let stamp = nextStamp(at: now)
+        let id = ObjectIdentifier(p)
+        unstamped[id] = nil
+        if changed || stampRule == .everyTouch || hasATwin(p) {
+            p.ingestedAt = stamp
+        } else {
+            unstamped[id] = (row: p, stamp: stamp)
+        }
+    }
+
+    // Run at the end of every apply, before its save: a row left unstamped when touched is stamped, with the
+    // stamp it would have taken then, if a write since has given it a twin.
+    func stampRowsGivenATwin() {
+        guard !unstamped.isEmpty else { candidates?.forgetJoined(); return }
+        let index = try? candidateIndex()
+        for (id, entry) in unstamped {
+            if entry.row.isDeleted { unstamped[id] = nil; continue }
+            let twin: Bool
+            if let index {
+                // The reference policy asks the whole question again over a fresh index; the working set asks
+                // only about the rows that joined since, which the equality tests hold to the same answer.
+                twin = policy == .everyRead ? index.isContested(entry.row) : index.isContestedByARowThatJoined(entry.row)
+            } else {
+                twin = true
+            }
+            if twin {
+                entry.row.ingestedAt = entry.stamp
+                unstamped[id] = nil
+            }
+        }
+        index?.forgetJoined()
+    }
+
+    private func hasATwin(_ p: Prospect) -> Bool {
+        guard let index = try? candidateIndex() else { return true }
+        return index.isContested(p)
+    }
+
+    private func candidateIndex() throws -> MergeCandidateIndex {
+        let rows = try currentRows()
+        if policy == .everyRead { return MergeCandidateIndex(rows: rows, tokens: { Fold($0).tokens }) }
+        if let candidates {
+            for (_, p) in candidatesToCheck {
+                if p.isDeleted { candidates.remove(p) } else { candidates.update(p, tokens: fold(of: p).tokens) }
+            }
+            candidatesToCheck = [:]
+            return candidates
+        }
+        let built = MergeCandidateIndex(rows: rows, tokens: { self.fold(of: $0).tokens })
+        candidates = built
+        candidatesToCheck = [:]
+        return built
+    }
+
     // #4334 (A5): puts back what a failed save was carrying, through `LandingRevert` (committed values read
     // through a fresh context, pending inserts deleted, never `rollback()`), and takes the deleted inserts out
     // of the working set.
@@ -287,6 +361,9 @@ final class ScoutLandingStore {
         members = nil
         for p in rows {
             let id = ObjectIdentifier(p)
+            candidates?.remove(p)
+            candidatesToCheck[id] = nil
+            unstamped[id] = nil
             unindex(p)
             position[id] = nil
             folds[id] = nil
@@ -303,8 +380,10 @@ final class ScoutLandingStore {
          readKey: @escaping ReadKey = { try Prospect.stored(key: $0, in: $1) },
          policy: Policy = .once,
          saveSource: @escaping (ModelContext) throws -> Void = { try $0.save() },
-         classify: @escaping (Error) -> LandingSaveFailure.Scope = LandingSaveFailure.classify) {
+         classify: @escaping (Error) -> LandingSaveFailure.Scope = LandingSaveFailure.classify,
+         stampRule: IngestedAtStamp.Rule = .whenChanged) {
         self.context = context
+        self.stampRule = stampRule
         self.read = read
         self.readKey = readKey
         self.policy = policy
@@ -358,6 +437,9 @@ final class ScoutLandingStore {
         foldsToCheck.insert(id)
         keysToCheck[id] = p
         if tables != nil { tablesToCheck[id] = p }
+        // #4331: the merge candidate index judges the same written rows again (a re-key or a reverted title
+        // can make or break a twin), once the index exists; before then it is built fresh from the store.
+        if candidates != nil { candidatesToCheck[id] = p }
     }
 
     // Every stored show a fresh fetch would return right now, in this landing's order. Throws when the store
@@ -424,6 +506,7 @@ final class ScoutLandingStore {
             nextTableOrder += 1
             tablesToCheck[id] = p
         }
+        if candidates != nil { candidatesToCheck[ObjectIdentifier(p)] = p }
     }
 
     // The stored row holding a natural key, or nil when nobody holds it: what `Prospect.stored(key:in:)`

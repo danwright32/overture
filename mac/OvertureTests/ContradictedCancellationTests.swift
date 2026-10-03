@@ -49,6 +49,14 @@ struct ContradictedCancellationTests {
         return p
     }
 
+    // #4357 (oracle part two on this suite's own fixtures): the generic rule answers the same over the rows
+    // extracted to `RowFacts` as over the live models. The day only matters to the feed break term, which
+    // rides along in the same comparison.
+    private func expectTheSameOverFacts(_ ctx: ModelContext) throws {
+        let findings = TermsOverFacts.findings(try ctx.fetch(FetchDescriptor<Prospect>()), asOf: "2026-08-01")
+        #expect(findings.isEmpty, Comment(rawValue: findings.joined(separator: "\n")))
+    }
+
     // THE RULE. A flagged row whose twin is still listed, at one venue, over overlapping nights.
     @Test func aFlaggedRowIsContradictedByALiveTwin() throws {
         let ctx = try memoryContext()
@@ -60,6 +68,7 @@ struct ContradictedCancellationTests {
                        missed: 0)
         let all = try ctx.fetch(FetchDescriptor<Prospect>())
         #expect(ContradictedCancellation.liveTwin(of: flagged, among: all)?.naturalKey == live.naturalKey)
+        try expectTheSameOverFacts(ctx)
     }
 
     // Every arm of the rule must be load bearing, or it is one condition wearing four names (L178).
@@ -78,6 +87,7 @@ struct ContradictedCancellationTests {
         let all = try ctx.fetch(FetchDescriptor<Prospect>())
         #expect(ContradictedCancellation.liveTwin(of: flagged, among: all) == nil,
                 "a different venue, a different night, a different act and a row that is ALSO flagged must none of them contradict a cancellation")
+        try expectTheSameOverFacts(ctx)
     }
 
     // A row that is not flagged at all has nothing to contradict.
@@ -89,6 +99,7 @@ struct ContradictedCancellationTests {
             opens: "2026-09-04", runEnd: nil, missed: 0)
         let all = try ctx.fetch(FetchDescriptor<Prospect>())
         #expect(ContradictedCancellation.liveTwin(of: healthy, among: all) == nil)
+        try expectTheSameOverFacts(ctx)
     }
 
     // #3278: the SET, computed once over the corpus, which is what the render pass can afford to call.
@@ -128,6 +139,7 @@ struct ContradictedCancellationTests {
         #expect(set == rowByRow, "the indexed answer disagrees with asking each row on its own")
         #expect(set == [gone.naturalKey], "only the row with a live twin is contradicted")
         #expect(!set.contains("other"), "a flagged row with no live twin keeps its warning")
+        try expectTheSameOverFacts(ctx)
     }
 
     // THE WIRING, asked through the whole pass rather than through the rule.

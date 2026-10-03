@@ -411,8 +411,9 @@ if DATES:
     print("produced a wrong mechanism (#3766): firstSeenAt is not unconditionally a MINT date, since")
     print("NaturalKeyVenueMigration pushes the earliest member's value onto a merge survivor and")
     print("FirstSeenBackfill stamps unstamped rows from ingestedAt. And ingestedAt, which is not printed")
-    print("here, is the LAST touch rather than the first, which is the misreading that produced #3766's")
-    print("wrong mechanism in the first place.")
+    print("here, is when the row was last changed by a scout (#4331; before that, its last touch), never")
+    print("its first sighting, which is the misreading that produced #3766's wrong mechanism in the first")
+    print("place.")
     print()
     report_dates("store", rows)
 PY

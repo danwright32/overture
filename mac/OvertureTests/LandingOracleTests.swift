@@ -322,9 +322,12 @@ final class LandingOracleTests {
 
         // And the list itself is measured, not trusted: with nothing excluded, the fields that differ between
         // the two landings must all be on it, and at least one must differ, or this could not see a clock
-        // stamp at all (L159).
+        // stamp at all (L159). #4331: the second lands an hour later, because the stamp is now derived from the
+        // landing's own `now`, so two landings at one `now` stamp alike and the positive control below would
+        // see nothing. The seed is the same in both.
         let unexcludedA = try Self.unexcluded(await LandingOracleCorpus.land(path))
-        let unexcludedB = try Self.unexcluded(await LandingOracleCorpus.land(path))
+        let unexcludedB = try Self.unexcluded(await LandingOracleCorpus.land(
+            path, landedAt: LandingOracleCorpus.now.addingTimeInterval(3_600)))
         var differing = Set<String>()
         for (rowA, rowB) in zip(unexcludedA, unexcludedB) where rowA.entity == rowB.entity {
             for (fa, fb) in zip(rowA.fields, rowB.fields) where fa.name == fb.name && fa.value != fb.value {
@@ -355,6 +358,7 @@ final class LandingOracleTests {
         var out: [LandingOracle.Row] = []
         for type in AppSchema.models {
             guard let observed = type as? any ScopeObserved.Type else { continue }
+            guard LandingOracle.recordsOfTheLanding[String(describing: type)] == nil else { continue }
             out += try rows(observed)
         }
         // Ordered by what the clock cannot touch, so the two landings' rows line up.

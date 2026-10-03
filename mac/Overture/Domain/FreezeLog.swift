@@ -82,6 +82,10 @@ enum FreezeLog {
     // reported again. The app would have gone silent about every freeze after the first session, and
     // silence is what a healthy session looks like (L98). Found 2026-09-06 in Dan's real log: one session,
     // 154 records, sequences 1 to 3412.
+    //
+    // #4453: NO LONGER WRITTEN. It held every identity ever considered, 29,527 of them and a 1,749,034
+    // byte preferences file on 2026-10-02, rewritten on every report. `FreezeReport.said(in:)` reads it
+    // once to migrate and `FreezeReport.saidKey` replaces it; the identity rule above is unchanged.
     static let reportedIdsKey = "freezesReportedIdentities"
 
     // One line. Encoded with a pinned date strategy, because a file read by a later version of the app
@@ -136,6 +140,29 @@ enum FreezeLog {
         // The file was not there at all, which is what a session with no freeze looks like AND what a
         // watchdog that never ran looks like. Kept as its own fact so the reader can say which (L11).
         var fileWasAbsent: Bool = false
+        // #4453: the file IS there and could not be opened. Until this it read as `fileWasAbsent`, so a
+        // file nobody could read and a file that was never written were one silence, and the reader
+        // treated every record in it as never having existed (L11, L98). Every caller that only asks
+        // "is there anything to work on" is unchanged by it: the records are empty either way.
+        var couldNotBeRead: Bool = false
+    }
+
+    // #4453: one line of the file, decoded ONCE, so the whole file reader and the archive's tail reader
+    // cannot come to disagree about what a line is (L263).
+    enum Line: Equatable, Sendable {
+        case record(StallRecord)
+        case note(FreezeLogNote)
+        case unreadable(String)
+    }
+
+    static func decodeLine(_ data: Data, with decoder: JSONDecoder) -> Line {
+        // #4122: the NOTE first, and the order is decided rather than incidental. A note carries a
+        // `note` key that no `StallRecord` has, and a `StallRecord` requires `session`, `sequence`,
+        // `at` and `seconds`, none of which a note carries, so neither can decode as the other and the
+        // order cannot change any verdict. Trying the note first is simply the cheaper miss.
+        if let note = try? decoder.decode(FreezeLogNote.self, from: data) { return .note(note) }
+        if let record = try? decoder.decode(StallRecord.self, from: data) { return .record(record) }
+        return .unreadable(String(decoding: data, as: UTF8.self))
     }
 
     static func read(_ text: String) -> Read {
@@ -146,19 +173,12 @@ enum FreezeLog {
                 out.unreadable.append(String(line))
                 continue
             }
-            // #4122: the NOTE first, and the order is decided rather than incidental. A note carries a
-            // `note` key that no `StallRecord` has, and a `StallRecord` requires `session`, `sequence`,
-            // `at` and `seconds`, none of which a note carries, so neither can decode as the other and the
-            // order cannot change any verdict. Trying the note first is simply the cheaper miss.
-            if let note = try? decoder.decode(FreezeLogNote.self, from: data) {
-                out.notes.append(note)
-                continue
+            switch decodeLine(data, with: decoder) {
+            case .note(let note): out.notes.append(note)
+            case .record(let record): out.records.append(record)
+            // The line as the FILE held it, because `compact` writes it back verbatim (#4398).
+            case .unreadable: out.unreadable.append(String(line))
             }
-            guard let record = try? decoder.decode(StallRecord.self, from: data) else {
-                out.unreadable.append(String(line))
-                continue
-            }
-            out.records.append(record)
         }
         return out
     }
@@ -166,10 +186,146 @@ enum FreezeLog {
     static func read(at url: URL) -> Read {
         guard let text = try? String(contentsOf: url, encoding: .utf8) else {
             var out = Read()
-            out.fileWasAbsent = true
+            if FileManager.default.fileExists(atPath: url.path) {
+                out.couldNotBeRead = true
+            } else {
+                out.fileWasAbsent = true
+            }
             return out
         }
         return read(text)
+    }
+
+    // MARK: - #4453: the archive, read from its END
+
+    // WHY THE ARCHIVE IS NOT READ WHOLE. On 2026-10-02 the archive beside Dan's live log was 9,245,974
+    // bytes and 29,527 records, and the launch notice decoded every one of them on the main thread each
+    // time the window appeared, to learn that almost none were new: 69% of 4,270 main thread samples were
+    // in that read, and the window stopped responding. The archive keeps a month, so the cost grew with
+    // every freeze it exists to report (#4453).
+    //
+    // WHAT MAKES A TAIL READ CORRECT. Records only ever ARRIVE in the live file, from the watchdog. The
+    // archive receives them in exactly one way, `compact` APPENDING what it dropped, and loses them in
+    // exactly one way, `pruneArchive` removing the old ones while keeping the order of the rest. So
+    // everything the archive gained since it was last read sits AFTER the last record it held then, and
+    // nothing before that point can be new to it. The reader remembers the archive's last few records
+    // and reads backwards only until it meets one of them.
+    //
+    // Position, NEVER time. A rule saying "everything older than the newest record already said has been
+    // said" would be cheaper still and is wrong here: `compact` promotes an old stall to the head of the
+    // live file and later displaces it into the archive, so the archive is not in time order, and a clock
+    // that steps backwards would make new records look old and lose them for good (L74, L98).
+    //
+    // An identity paired with its instant, because the files can hold one record twice: a compaction
+    // whose live rewrite failed leaves the same record in both, and it is archived a second time (#3763).
+    struct ArchiveAnchor: Codable, Equatable, Hashable, Sendable {
+        let identity: String
+        let at: Date
+
+        init(identity: String, at: Date) {
+            self.identity = identity
+            self.at = at
+        }
+
+        init(_ record: StallRecord) {
+            self.init(identity: record.identity, at: record.at)
+        }
+    }
+
+    // How many of the archive's last records are remembered, rather than only the last one.
+    //
+    // ONE IS NOT ENOUGH, and the case is specific. When a compaction drops nothing but the stall it had
+    // promoted, that OLD record becomes the archive's last line, and the month's prune can then remove it
+    // while keeping every newer record appended before it. With one anchor the reader finds nothing it
+    // remembers, reads the whole month as new, and announces all of it again (L36). With several, the
+    // next one back is still there. Eight is a constant cost, decoded on every read.
+    static let archiveAnchorDepth = 8
+
+    struct ArchiveTail: Equatable, Sendable {
+        // Every record appended after the remembered position, OLDEST FIRST, the order the file holds them.
+        // With no remembered position found, every record the file holds.
+        var records: [StallRecord] = []
+        // The lines in that same stretch that could not be decoded. Only that stretch: the rest of the
+        // archive was counted when it was new.
+        var unreadableLines: Int = 0
+        // The archive's last records NOW, newest first, which is where the next read starts from.
+        var anchors: [ArchiveAnchor] = []
+        var fileWasAbsent: Bool = false
+        var couldNotBeRead: Bool = false
+    }
+
+    // The lines of `data`, LAST FIRST, without splitting or decoding anything it is not asked for. A
+    // mapped file is paged in only where this walks, so a read that stops after the last few lines costs
+    // the last few lines.
+    struct LinesFromEnd: Sequence, IteratorProtocol {
+        private let data: Data
+        private var end: Data.Index
+
+        init(_ data: Data) {
+            self.data = data
+            self.end = data.endIndex
+        }
+
+        mutating func next() -> Data? {
+            while end > data.startIndex {
+                let newline = data[data.startIndex..<end].lastIndex(of: 0x0A)
+                let start = newline.map { data.index(after: $0) } ?? data.startIndex
+                let line = data[start..<end]
+                end = newline ?? data.startIndex
+                if !line.isEmpty { return Data(line) }
+            }
+            return nil
+        }
+    }
+
+    // The rule, over lines handed to it newest first, so a test can drive it with lines in memory and the
+    // file reader below is only the part that opens the file.
+    //
+    // `decode` is a PARAMETER so a test can count what this decodes, which is the quantity #4453 is about,
+    // rather than timing it on a machine whose load is not under its control (L224, L290).
+    static func archiveTail<Lines: Sequence>(newestFirst lines: Lines, after remembered: [ArchiveAnchor],
+                                            decode: (Data) -> Line) -> ArchiveTail
+        where Lines.Element == Data {
+        var out = ArchiveTail()
+        let wanted = Set(remembered)
+        var newestFirst: [StallRecord] = []
+        var met = false
+        for data in lines {
+            switch decode(data) {
+            case .note:
+                continue
+            case .unreadable:
+                if !met { out.unreadableLines += 1 }
+            case .record(let record):
+                let anchor = ArchiveAnchor(record)
+                if out.anchors.count < archiveAnchorDepth { out.anchors.append(anchor) }
+                if !met, wanted.contains(anchor) { met = true }
+                if !met { newestFirst.append(record) }
+            }
+            // Past the remembered position AND holding enough of the newest records to start from next
+            // time, so nothing further back can change the answer.
+            if met, out.anchors.count >= archiveAnchorDepth { break }
+        }
+        out.records = newestFirst.reversed()
+        return out
+    }
+
+    static func readArchiveTail(at url: URL, after remembered: [ArchiveAnchor],
+                                decode: ((Data) -> Line)? = nil) -> ArchiveTail {
+        guard FileManager.default.fileExists(atPath: url.path) else {
+            return ArchiveTail(fileWasAbsent: true)
+        }
+        // A file that exists and cannot be opened is its own outcome, never an empty archive
+        // (HandoffFileReadTests.noAppSourceSwallowsAFileRead, #2879).
+        let data: Data
+        do {
+            data = try Data(contentsOf: url, options: .mappedIfSafe)
+        } catch {
+            return ArchiveTail(couldNotBeRead: true)
+        }
+        let decoder = decoder()
+        return archiveTail(newestFirst: LinesFromEnd(data), after: remembered,
+                           decode: decode ?? { decodeLine($0, with: decoder) })
     }
 
     // How many records the FILE keeps.

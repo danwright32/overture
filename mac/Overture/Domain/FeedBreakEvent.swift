@@ -71,14 +71,17 @@ enum FeedBreakEvent {
     /// where a render pass already has it. Asking `liveTwin` per member is that member against the whole
     /// corpus, which is the cost that helper exists to remove (L91); the default keeps a test or a script
     /// honest without making every caller thread it through.
-    static func events(among rows: [Prospect], asOf: String,
-                       contradicted: Set<String>? = nil) -> [Event] {
+    ///
+    /// #4357 (plan v7 Phase 3, T3): generic over `ProspectFacts`, one body for live models and retained
+    /// `RowFacts`, for the reason `ContradictedCancellation.liveTwin` records.
+    static func events<Row: ProspectFacts>(among rows: [Row], asOf: String,
+                                           contradicted: Set<String>? = nil) -> [Event] {
         let covered = contradicted ?? ContradictedCancellation.contradictedKeys(among: rows)
         let flagged = rows.filter {
             $0.disappearedFromFeed
                 && max($0.performanceDate ?? "", $0.runEndDate ?? "") >= asOf
         }
-        var buckets: [String: [Prospect]] = [:]
+        var buckets: [String: [Row]] = [:]
         for row in flagged {
             buckets["\(canonicalVenue(row.venue))|\(row.missedScoutCount)", default: []].append(row)
         }
@@ -106,7 +109,7 @@ enum FeedBreakEvent {
     // #4348 (plan v7 decision 13(iv)): the room as most of its members spell it, rather than as whichever
     // member happened to be first in the input. A tie between spellings goes to the one carried by the
     // member with the smallest natural key, so the sentence names the same room on every render.
-    private static func label(of members: [Prospect]) -> String {
+    private static func label<Row: ProspectFacts>(of members: [Row]) -> String {
         var counts: [String: Int] = [:]
         for member in members { counts[member.venue ?? "", default: 0] += 1 }
         let top = counts.values.max() ?? 0

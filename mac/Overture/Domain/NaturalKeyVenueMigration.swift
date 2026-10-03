@@ -115,8 +115,9 @@ enum NaturalKeyVenueMigration {
             // the live store that row reads "no prior relationship, score 7" from two days before #1216
             // taught the matcher to read the presenter field, while its twin reads "booked, score 27"
             // against a real Downbeat client. `ingestedAt` is rewritten on every re-scout, so it means
-            // LAST SEEN, and keeping the earliest kept exactly the stale row: one card, saying he has
-            // never worked with a group he has. The freshest wins instead.
+            // LAST SEEN (#4331 keeps that true here: a row sharing this pass's keys with another is restamped
+            // on every landing that lists it, `IngestedAtStamp`), and keeping the earliest kept exactly the
+            // stale row: one card, saying he has never worked with a group he has. The freshest wins instead.
             // RETIRED, kept because the reasoning is what #2001 overturned and a reader meeting only the
             // new rule would not know it was ever weighed. #1780 made a DISMISSED row outrank a pristine
             // one when neither carried an outreach record, on the grounds that otherwise the freshest wins
@@ -239,8 +240,9 @@ enum NaturalKeyVenueMigration {
         var taken: Set<String> = []
         for (_, anchors) in byDisplay where anchors.count > 1 {
             let members = inOrder(anchors.flatMap { byAnchor[$0] ?? [] })
-            // The freshest row's OWN anchored key. `ingestedAt` is rewritten on every re-scout, so it
-            // means LAST SEEN, which is exactly the question being asked here.
+            // The freshest row's OWN anchored key. `ingestedAt` is rewritten on every re-scout of a row
+            // with a twin (#4331, and every row here has one), so it means LAST SEEN, which is exactly the
+            // question being asked here.
             guard let freshest = members.max(by: { $0.ingestedAt < $1.ingestedAt }) else { continue }
             out.append((key: freshest.scoutAnchoredNaturalKey, members: members))
             taken.formUnion(anchors)
