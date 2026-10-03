@@ -387,6 +387,47 @@ struct ScoutReadPhaseWritesNothingTests {
         deadlines.passAll()
     }
 
+    // The same control for `runScout`, which mints its sequence and flushes on a path of its own, so the ingest's
+    // control says nothing about whether the zero `runScout`'s test asserts can see a write made before its first
+    // await (lessons review of #4456).
+    @Test func aRunScoutWriteMadeBeforeTheFirstAwaitIsCountedThoughTheContextReadsClean() async throws {
+        let c = try container()
+        let ctx = c.mainContext
+        let probe = Probe(ctx)
+        feed("feed-early", in: ctx)
+        try ctx.save()
+        let saves = ReadPhaseSaves(c)
+
+        let deadlines = HeldDeadlines()
+        let flight = LandingSingleFlight(sleep: { await deadlines.sleep($0) })
+        let holder = try await flight.begin(entryPoint: .runScoutLanding, priority: .scout, deadline: .seconds(1))
+        let run = Task { @MainActor in
+            try await ScoutService.runScout(
+                into: ctx, depth: .readChanged,
+                extractorRegistry: { source in
+                    guard let source, source.kind == .algolia else { return nil }
+                    return FeedThat(events: events(source.sourceId), fails: false, probe: probe, label: source.sourceId)
+                },
+                fetch: { url, _, _ in FetchedPage(normalizedHTML: "<p/>", finalURL: url.absoluteString, contentHash: "x") },
+                pin: { _, id in URL(fileURLWithPath: "/tmp/\(id).html") },
+                launch: { _ in },
+                now: now, defaults: ScratchDefaults.make("ScoutReadPhaseWritesNothingTests-runscout-control"),
+                landings: flight,
+                sequenceFloor: {
+                    ctx.insert(LandingRun(runIdentity: "written-at-the-mint", landedAt: nil))
+                    return 0
+                })
+        }
+        await waitUntil("the run's landing is waiting for the store") { flight.queue == [.runScoutLanding] }
+        #expect(!ctx.hasChanges, "the entry flush did not save the early write, so this control shows nothing about #4456")
+        #expect(saves.count == 1, Comment(rawValue:
+            "a row inserted before runScout's first await was saved \(saves.count) times in the read phase, where the guard needs it counted once"))
+
+        holder.end()
+        _ = try await run.value
+        deadlines.passAll()
+    }
+
     // MARK: - A reading a later run overtook leaves the row untouched
 
     // ScoutExtractIngest.swift's old read loop wrote a superseded source's failure (health, notes, the streak)
