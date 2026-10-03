@@ -93,4 +93,68 @@ struct TermsOverFactsTests {
         #expect(!findings.contains { $0.contains("Lantern") || $0.contains("Harrowgate") },
                 "a finding named a title or a venue rather than the row's identifier")
     }
+
+    // MARK: T4 and T5 (slice B)
+
+    private let producer = "Wexcombe Touring Players"
+    private let now = ISO8601DateFormatter().date(from: "2026-09-20T16:00:00Z") ?? Date(timeIntervalSince1970: 0)
+
+    // On top of `seed`: a producer playing two rooms (so it qualifies and its shows inherit), one of its
+    // shows carrying its own paid answer (so it must NOT inherit), a hall's own presenting brand, and a
+    // presenter spelled exactly like a room. One fresh positive answer for the producer.
+    private func seedProducers(_ ctx: ModelContext, _ all: [Prospect]) throws -> TermsOverFacts.Ledger {
+        func row(_ key: String) throws -> Prospect { try #require(all.first { $0.naturalKey == key }) }
+        try row("lantern|2026-10-03").presenter = producer      // Harrowgate Hall
+        try row("saltmarsh a").presenter = producer             // Quillon Room
+        let ownAnswer = try row("copper|2026-10-17")            // Harrowgate Hall, already checked itself
+        ownAnswer.presenter = producer
+        ownAnswer.reachabilityProbedAt = now.addingTimeInterval(-3600)
+        try row("ninefold|2026-10-10").presenter = "Harrowgate Hall Presents"
+        try row("saltmarsh c").presenter = "Quillon Room"
+        let answer = OrgReachabilityAnswer(
+            orgKey: try #require(OrgKey.stored(for: producer)), result: .emailFound,
+            probedAt: now.addingTimeInterval(-86_400), sourceNaturalKey: "lantern|2026-10-03",
+            sourceGroupName: "Lantern Parade", presenterName: producer,
+            foundEmails: ["bookings@example.invalid"])
+        ctx.insert(answer)
+        return TermsOverFacts.Ledger(answers: [answer], now: now)
+    }
+
+    @Test func theProducerTablesAndTheLedgerAnswerTheSameOverFactsAsOverModels() throws {
+        let ctx = try context()
+        let all = try seed(ctx)
+        let ledger = try seedProducers(ctx, all)
+        // Positive controls: each arm of T4 and T5 answered something in this fixture (L159).
+        let tables = QueueModel.ProducerTables(shows: all.map(ProducerGate.Show.init), overrides: .none)
+        #expect(tables.corpus.distinctVenueCount(try #require(ProducerGate.key(producer))) == 2,
+                "the producer should play two rooms")
+        #expect(tables.venueBrands.contains("Harrowgate Hall Presents"), "the fixture holds no venue brand")
+        #expect(tables.venueBrands.isRoomName("Quillon Room"), "the fixture holds no presenter spelled like a room")
+        let inherited = QueueModel.inheritedAnswers(ledger.answers, corpus: all, overrides: .none,
+                                                    refusals: .none, heldKeys: [], now: now)
+        #expect(Set(inherited.keys) == ["lantern|2026-10-03", "saltmarsh a"],
+                "the producer's two shows without their own answer should inherit, and only those")
+
+        let findings = TermsOverFacts.findings(all, asOf: asOf, ledger: ledger)
+        #expect(findings.isEmpty, Comment(rawValue: findings.joined(separator: "\n")))
+    }
+
+    // And the comparison can see a presenter that changed after the row was extracted: the projection, the
+    // venue count and the inherited answer all move.
+    @Test func theComparisonSeesAPresenterThatChangedAfterItWasExtracted() throws {
+        let ctx = try context()
+        let all = try seed(ctx)
+        let ledger = try seedProducers(ctx, all)
+        let stale = all.map(RowFacts.extract)
+        try #require(all.first { $0.naturalKey == "saltmarsh a" }).presenter = "Somebody Else Entirely"
+        let findings = TermsOverFacts.findings(all, facts: stale, asOf: asOf, ledger: ledger)
+        #expect(findings.contains { $0.hasPrefix("ProducerGate.Show differs") },
+                "a presenter that changed was not seen in the projection")
+        #expect(findings.contains { $0.hasPrefix("ProducerTables.corpus venue count differs") },
+                "the producer's lost room was not seen in the corpus")
+        #expect(findings.contains { $0.hasPrefix("OrgAnswerLedger.inherited differs") },
+                "the lost inheritance was not seen in the ledger")
+        #expect(!findings.contains { $0.contains("Wexcombe") || $0.contains("Quillon") || $0.contains("Harrowgate") },
+                "a finding named a presenter or a venue rather than the row's identifier")
+    }
 }

@@ -13,3 +13,23 @@ extension ProspectFacts {
     // partial feed (#133). Cancelled or pulled, not merely a one-off glitch.
     var disappearedFromFeed: Bool { missedScoutCount >= FeedReconcile.goneThreshold }
 }
+
+// #4357 slice B, T4: a stored show as the producer gate reads it, its presenter and its venue and nothing
+// else. Every place that builds the producer tables or the brand list from stored shows projects through
+// this one initialiser (the queue's pass and its memo key, the scout's brand corpus, the prep run's house
+// list, the possible match recheck), so a field the gate starts reading is added once and reaches all of
+// them, and the engine hands it a retained `RowFacts` by the same call.
+extension ProducerGate.Show {
+    init(_ row: some ProspectFacts) {
+        self.init(presenter: row.presenter, venue: row.venue)
+    }
+}
+
+// #4357 slice B, T5: a stored show as the organisation answer ledger reads it. `hasOwnAnswer` is whether the
+// show's own contact check has run, which is what keeps a paid verdict from being overwritten by a fan-out.
+extension OrgAnswerLedger.Show {
+    init(_ row: some ProspectFacts) {
+        self.init(key: row.naturalKey, presenter: row.presenter, venue: row.venue,
+                  hasOwnAnswer: row.reachabilityProbedAt != nil)
+    }
+}

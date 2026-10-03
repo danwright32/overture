@@ -3340,7 +3340,7 @@ enum QueueModel {
         // #3742: built here only when the caller did not hand them in. The shows are mapped once either
         // way, because the caller's key is derived from the same mapping.
         let tables = producerTables ?? ProducerTables(
-            shows: (corpus ?? prospects).map { ProducerGate.Show(presenter: $0.presenter, venue: $0.venue) },
+            shows: (corpus ?? prospects).map(ProducerGate.Show.init),
             overrides: overrides)
         let producerCorpus = tables.corpus
         let inherited = inheritedAnswers(answers, corpus: corpus ?? prospects,
@@ -3864,7 +3864,10 @@ enum QueueModel {
     // it would be a second definition of a measurement nobody took (L107, L507), so the access widened
     // rather than the claim being made. Nothing else calls it, and `ScopeCallsTheLedgerOnceTests` asserts
     // that, so widening the access has not widened what can happen.
-    static func inheritedAnswers(_ answers: [OrgReachabilityAnswer], corpus: [Prospect],
+    // #4357 slice B: generic over `ProspectFacts`, so the pass hands it live models today and the engine
+    // (Phase 4) retained `RowFacts`, through one body. `some` rather than a named parameter so the
+    // declaration still reads `static func inheritedAnswers(`, which `ScopeCallsTheLedgerOnceTests` keys on.
+    static func inheritedAnswers(_ answers: [OrgReachabilityAnswer], corpus: [some ProspectFacts],
                                          overrides: ProducerOverrides,
                                          refusals: ContactRefusal.Ledger,
                                          heldKeys: Set<String>,
@@ -3885,10 +3888,7 @@ enum QueueModel {
         // is left with none, and `OrgAnswerLedger.inherited` already refuses to inherit a positive with
         // nothing to show, so the card stops claiming a way in it cannot offer (L16).
         let usable = refusals.allowedAnswers(flat)
-        let shows = corpus.map {
-            OrgAnswerLedger.Show(key: $0.naturalKey, presenter: $0.presenter, venue: $0.venue,
-                                 hasOwnAnswer: $0.reachabilityProbedAt != nil)
-        }
+        let shows = corpus.map(OrgAnswerLedger.Show.init)
         return OrgAnswerLedger.inherited(from: usable, shows: shows, now: now, heldKeys: heldKeys,
                                          overrides: overrides, corpus: producerCorpus)
     }

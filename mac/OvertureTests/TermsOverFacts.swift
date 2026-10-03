@@ -16,9 +16,21 @@ import SwiftData
 // (L222, the `CardDivergenceRecord` privacy rule). The identifier says which row without saying what it is.
 //
 // ONE PLACE, GROWN BY EACH SLICE. Slice A carries T1 (ShowLink group and collapse), T2
-// (ContradictedCancellation) and T3 (feed breaks). Each later slice adds its terms here, so the fixture
-// suites and the live store suite ask every ported term the same question through one comparison (L370).
+// (ContradictedCancellation) and T3 (feed breaks); slice B adds T4 (the producer tables) and T5 (the
+// organisation answer ledger). Each later slice adds its terms here, so the fixture suites and the live
+// store suite ask every ported term the same question through one comparison (L370).
 enum TermsOverFacts {
+
+    /// T5's inputs other than the rows: the stored organisation answers, the struck addresses, the shows a
+    /// live run holds, and the instant freshness is judged at. Dan's producer corrections are read by T4
+    /// as well, so they are a parameter of `findings` itself. Nil means T5 is not asked, which is right
+    /// for a fixture that seeds no answers: the ledger returns before reading a row when it has none.
+    struct Ledger {
+        var answers: [OrgReachabilityAnswer]
+        var refusals: ContactRefusal.Ledger = .none
+        var heldKeys: Set<String> = []
+        var now: Date
+    }
 
     /// Every place a ported term answered differently over facts than over models, empty when they agree.
     /// `asOf` is the day the feed break term judges "still to come" against, and `drawn` the keys a
@@ -29,7 +41,8 @@ enum TermsOverFacts {
     /// rows: about a second on the clone and over 40 on the 4x copy (measured 2026-10-02), so the 4x arm
     /// compares the indexed set alone, which is what the pass reads.
     static func findings(_ models: [Prospect], facts given: [RowFacts]? = nil, asOf: String,
-                         drawn: Set<String>? = nil, rowByRow: Bool = true) -> [String] {
+                         drawn: Set<String>? = nil, rowByRow: Bool = true,
+                         overrides: ProducerOverrides = .none, ledger: Ledger? = nil) -> [String] {
         let facts = given ?? models.map(RowFacts.extract)
         let pidByKey = Dictionary(models.map { ($0.naturalKey, String(describing: $0.persistentModelID)) },
                                   uniquingKeysWith: { first, _ in first })
@@ -75,7 +88,67 @@ enum TermsOverFacts {
         let eventsModels = FeedBreakEvent.events(among: models, asOf: asOf, contradicted: contradictedModels)
         let eventsFacts = FeedBreakEvent.events(among: facts, asOf: asOf, contradicted: contradictedFacts)
         out += eventFindings(eventsModels, eventsFacts, term: "FeedBreakEvent.events", pid: pid)
+
+        // T4: each row's projection, then the two whole-corpus tables and the memo key built from them.
+        let showsModels = models.map(ProducerGate.Show.init)
+        let showsFacts = facts.map(ProducerGate.Show.init)
+        for (model, (a, b)) in zip(models, zip(showsModels, showsFacts)) where a != b {
+            out.append("ProducerGate.Show differs for row \(pid(model.naturalKey))")
+        }
+        let tablesModels = QueueModel.ProducerTables(shows: showsModels, overrides: overrides)
+        let tablesFacts = QueueModel.ProducerTables(shows: showsFacts, overrides: overrides)
+        out += tableFindings(tablesModels, tablesFacts, rows: models, term: "ProducerTables", pid: pid)
+        if QueueModel.ProducerTables.key(shows: showsModels, overrides: overrides)
+            != QueueModel.ProducerTables.key(shows: showsFacts, overrides: overrides) {
+            out.append("ProducerTables.key differs")
+        }
+
+        // T5: the inherited answer of every show, each arm with its own producer index, as the pass hands it.
+        if let ledger {
+            let inheritedModels = QueueModel.inheritedAnswers(
+                ledger.answers, corpus: models, overrides: overrides, refusals: ledger.refusals,
+                heldKeys: ledger.heldKeys, now: ledger.now, producerCorpus: tablesModels.corpus)
+            let inheritedFacts = QueueModel.inheritedAnswers(
+                ledger.answers, corpus: facts, overrides: overrides, refusals: ledger.refusals,
+                heldKeys: ledger.heldKeys, now: ledger.now, producerCorpus: tablesFacts.corpus)
+            out += inheritedFindings(inheritedModels, inheritedFacts, term: "OrgAnswerLedger.inherited", pid: pid)
+        }
         return out
+    }
+
+    /// Two sets of producer tables compared, naming every row whose presenter the two answer differently
+    /// about: its venue count, whether it is a venue's own brand, whether it is spelled like a room. The
+    /// row's identifier only, never the presenter's name, which is a real organisation on the live store.
+    /// Shared with oracle part one, which asks the same of an old and a new build.
+    static func tableFindings(_ left: QueueModel.ProducerTables, _ right: QueueModel.ProducerTables,
+                              rows: [Prospect], term: String, pid: (String) -> String) -> [String] {
+        var out: [String] = []
+        for row in rows {
+            guard let presenter = row.presenter else { continue }
+            if let key = ProducerGate.key(presenter),
+               left.corpus.distinctVenueCount(key) != right.corpus.distinctVenueCount(key) {
+                out.append("\(term).corpus venue count differs for row \(pid(row.naturalKey))")
+            }
+            if left.venueBrands.contains(presenter) != right.venueBrands.contains(presenter) {
+                out.append("\(term).venueBrands differs for row \(pid(row.naturalKey))")
+            }
+            if left.venueBrands.isRoomName(presenter) != right.venueBrands.isRoomName(presenter) {
+                out.append("\(term).venueBrands room name differs for row \(pid(row.naturalKey))")
+            }
+        }
+        // The whole values too, so a difference on a presenter no row of `rows` carries is still seen.
+        if out.isEmpty, left.corpus != right.corpus { out.append("\(term).corpus differs") }
+        if out.isEmpty, left.venueBrands != right.venueBrands { out.append("\(term).venueBrands differs") }
+        return out
+    }
+
+    /// Two inherited answer tables compared show by show, naming the show by its identifier.
+    static func inheritedFindings(_ left: [String: OrgAnswerLedger.Inherited],
+                                  _ right: [String: OrgAnswerLedger.Inherited], term: String,
+                                  pid: (String) -> String) -> [String] {
+        Set(left.keys).union(right.keys).sorted().compactMap { key in
+            left[key] == right[key] ? nil : "\(term) differs for row \(pid(key))"
+        }
     }
 
     /// Two event lists compared field by field, naming the field and the event's first member by its
