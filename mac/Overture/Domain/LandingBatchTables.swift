@@ -120,8 +120,6 @@ struct LandingBatchTables {
     // Every row's current contribution and its place in the landing's order.
     private var contributions: [Row: (order: Int, value: Contribution)] = [:]
 
-    var rowCount: Int { contributions.count }
-
     func order(of row: Row) -> Int? { contributions[row]?.order }
 
     // MARK: change
