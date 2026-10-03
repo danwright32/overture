@@ -143,6 +143,25 @@ struct TermsOverFactsTests {
 
     // And the comparison can see a presenter that changed after the row was extracted: the projection, the
     // venue count and the inherited answer all move.
+    // Dan's producer correction reaches the brand table `scope` builds through `ProducerTables(rows:overrides:)`
+    // (slice C). Demoting the producer makes it a venue's own brand, so its card stops naming it. Asked
+    // through `scope` itself, the path the app takes, because a check on the table alone would not see the
+    // pass building it without the corrections. Runs in CI: the live store arm that first saw this fault is
+    // gone with the slice C oracle that held it.
+    @Test func aProducerCorrectionReachesTheBrandTableScopeBuilds() throws {
+        let ctx = try context()
+        let all = try seed(ctx)
+        _ = try seedProducers(ctx, all)
+        let key = try #require(ProducerGate.key(producer))
+        func line(_ overrides: ProducerOverrides) throws -> String? {
+            let items = QueueModel.items(from: all, corpus: all, overrides: overrides, now: now)
+            return try #require(items.first { $0.id == "saltmarsh a" }).presenterLine
+        }
+        #expect(try line(.none) == producer, "with no correction the producer is named on its card")
+        #expect(try line(ProducerOverrides(demoted: [key])) == nil,
+                "a demoted producer is still named, so the correction never reached the brand table scope built")
+    }
+
     @Test func theComparisonSeesAPresenterThatChangedAfterItWasExtracted() throws {
         let ctx = try context()
         let all = try seed(ctx)
@@ -282,6 +301,20 @@ struct TermsOverFactsTests {
         #expect(Set(shows.map(\.isBooked)) == [true, false], "no show in the fixture is booked, or every one is")
         #expect(Set(shows.map(\.stoodDownBeforeAnyReply)) == [true, false], "no show in the fixture was stood down")
         #expect(shows.contains { $0.showOutcome != nil }, "no show in the fixture carries an ending")
+
+        // Behaviour, read through the protocol, so these hold the rules themselves once the part one oracle
+        // is deleted (part two cannot: both of its arms run the same body).
+        func member(_ id: String) throws -> TermsOverFacts.ContactMembers {
+            TermsOverFacts.ContactMembers(try #require(pitched.factContacts.first { $0.id == id }))
+        }
+        #expect(try member("form-quiet").hasProvenOutreach, "a recorded form pitch is proven outreach")
+        #expect(try !member("untried@example.invalid").hasProvenOutreach, "an unsent contact is not")
+        #expect(try member("waiting@example.invalid").replyArrivedAt == Date(timeIntervalSince1970: 1_790_000_090),
+                "a reply is dated by when they sent it, not when it was noticed")
+        let leadBooked = try #require(all.first { $0.naturalKey == "ninefold|2026-10-10" })
+        leadBooked.outcomeRaw = Outcome.booked.rawValue
+        #expect(TermsOverFacts.ShowMembers(leadBooked).isBooked,
+                "a booking recorded on the show, with no contact booked, is still a booked show")
 
         let findings = TermsOverFacts.findings(all, asOf: asOf)
         #expect(findings.isEmpty, Comment(rawValue: findings.joined(separator: "\n")))
