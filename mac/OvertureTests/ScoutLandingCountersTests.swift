@@ -198,6 +198,7 @@ extension ScoutLandingStore.Counters: CustomStringConvertible {
     var description: String {
         "table builds \(tableBuilds), rows re-judged \(tableRowsRejudged), first folds \(firstFolds), "
             + "folds changed \(foldsChanged), rows joined \(rowsJoined), fold validations \(foldValidations), "
-            + "rows read \(rowsRead), rows handed out \(rowsHandedOut), rows walked \(rowsWalked)"
+            + "rows read \(rowsRead), rows handed out \(rowsHandedOut), rows walked \(rowsWalked), "
+            + "rows looked up \(rowsLookedUp)"
     }
 }
