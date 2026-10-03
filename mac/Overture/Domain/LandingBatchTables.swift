@@ -62,18 +62,37 @@ struct LandingBatchTables {
     struct KeyedRows: Equatable {
         struct Entry: Equatable { let order: Int; let row: Row }
         fileprivate(set) var entries: [String: [Entry]] = [:]
+        // Which rows each key holds, so asking whether a row is already on a key costs nothing however many rows
+        // the key holds (a source can own hundreds). Lessons review of #4482: a linear test and a linear insert
+        // made building one key of N rows square in N.
+        private var members: [String: Set<Row>] = [:]
 
+        // Changed IN PLACE, never through a copy of the key's list, which would copy the whole list per row. The
+        // common case, the build in order and a row joining at the end, appends; otherwise the place is found by
+        // a binary search for the first entry ordered after it.
         fileprivate mutating func insert(_ row: Row, order: Int, into key: String) {
-            var list = entries[key] ?? []
-            guard !list.contains(where: { $0.row == row }) else { return }
-            let at = list.firstIndex { $0.order > order } ?? list.endIndex
-            list.insert(Entry(order: order, row: row), at: at)
-            entries[key] = list
+            guard members[key, default: []].insert(row).inserted else { return }
+            let entry = Entry(order: order, row: row)
+            guard let last = entries[key]?.last, last.order > order else {
+                entries[key, default: []].append(entry)
+                return
+            }
+            var low = 0
+            var high = entries[key]?.count ?? 0
+            while low < high {
+                let mid = (low + high) / 2
+                if (entries[key]?[mid].order ?? .max) > order { high = mid } else { low = mid + 1 }
+            }
+            entries[key]?.insert(entry, at: low)
         }
 
         fileprivate mutating func remove(_ row: Row, from key: String) {
+            guard members[key]?.remove(row) != nil else { return }
             entries[key]?.removeAll { $0.row == row }
-            if entries[key]?.isEmpty == true { entries[key] = nil }
+            if entries[key]?.isEmpty == true {
+                entries[key] = nil
+                members[key] = nil
+            }
         }
     }
 

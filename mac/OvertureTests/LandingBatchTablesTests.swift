@@ -448,6 +448,32 @@ struct LandingBatchTablesTests {
             "the walk poisoned \(poisoned.sorted()) before the rewrite and \(afterRewrite.sorted()) after it"))
     }
 
+    // MARK: one key's rows, out of order and set twice
+
+    // Rows joining a key out of order (a re-judged row keeps its old place, so it can land ahead of rows already
+    // there), one set again unchanged, and one removed, leave the key's rows in the landing's order, once each.
+    // The append and the binary search are the two paths through `KeyedRows.insert` (lessons review of #4482,
+    // which made building one key no longer square), and removal must drop the row from both of its records.
+    @Test func aKeysRowsStayInOrderOnceEachWhateverOrderTheyJoinIn() {
+        final class Key {}
+        let keys = (0..<5).map { _ in Key() }
+        func night(_ n: String) -> LandingBatchTables.Contribution {
+            var c = LandingBatchTables.Contribution()
+            c.night = n
+            return c
+        }
+        var tables = LandingBatchTables()
+        for (k, order) in [(0, 10), (1, 40), (2, 20), (3, 30), (4, 5)] {
+            tables.set(ObjectIdentifier(keys[k]), order: order, to: night("2026-10-20"))
+        }
+        tables.set(ObjectIdentifier(keys[2]), order: 20, to: night("2026-10-20"))
+        tables.remove(ObjectIdentifier(keys[3]))
+        let held = tables.rows(.night("2026-10-20"))
+        let expected = [4, 0, 2, 1].map { ObjectIdentifier(keys[$0]) }
+        #expect(held == expected, Comment(rawValue:
+            "the key holds \(held.map { id in keys.firstIndex { ObjectIdentifier($0) == id } ?? -1 }), not [4, 0, 2, 1]"))
+    }
+
     // MARK: the pure tables, against a rebuild, over a seeded random history
 
     // Rows on one page and one token at one room, with the triple's three titles among them, set, rewritten
