@@ -141,7 +141,8 @@ enum TermsOverFacts {
         let performanceStatus: PerformanceStatus
         let isBooked: Bool
         let stoodDownBeforeAnyReply: Bool
-        let stoodDownAfterEveryReply: Bool
+        // Whether a reply after the stand-down puts the show back in play, which is the rule's other arm.
+        let reopenedByALaterReply: Bool
 
         init(_ p: some ProspectFacts) {
             status = p.status
@@ -150,7 +151,7 @@ enum TermsOverFacts {
             performanceStatus = p.performanceStatus
             isBooked = p.isBooked
             stoodDownBeforeAnyReply = p.isOutreachStoodDown(asOf: nil)
-            stoodDownAfterEveryReply = p.isOutreachStoodDown(asOf: .distantFuture)
+            reopenedByALaterReply = p.outreachStoodDownAt.map { !p.isOutreachStoodDown(asOf: $0.addingTimeInterval(1)) } ?? false
         }
     }
 

@@ -286,6 +286,8 @@ struct TermsOverFactsTests {
         pitched.statusRaw = ReviewStatus.contacted.rawValue
         pitched.outreachStoodDownAt = Date(timeIntervalSince1970: 1_790_000_050)
         try #require(all.first { $0.naturalKey == "drift|2026-11-01" }).showOutcomeRaw = ShowOutcome.allCases.first?.rawValue
+        let leadBooked = try #require(all.first { $0.naturalKey == "ninefold|2026-10-10" })
+        leadBooked.outcomeRaw = Outcome.booked.rawValue
 
         // Positive controls (L159): across the fixture's contacts, every Boolean member is true for one and
         // false for another, so a member that answered the same everywhere could not hide behind agreement.
@@ -297,10 +299,15 @@ struct TermsOverFactsTests {
             })
             #expect(values == [true, false], "contact member \(label) takes only \(values) in the fixture")
         }
+        // And every show member, whatever its type, takes at least two values across the fixture's shows.
         let shows = all.map(TermsOverFacts.ShowMembers.init)
-        #expect(Set(shows.map(\.isBooked)) == [true, false], "no show in the fixture is booked, or every one is")
-        #expect(Set(shows.map(\.stoodDownBeforeAnyReply)) == [true, false], "no show in the fixture was stood down")
-        #expect(shows.contains { $0.showOutcome != nil }, "no show in the fixture carries an ending")
+        for child in Mirror(reflecting: shows[0]).children {
+            let label = child.label ?? "?"
+            let values = Set(shows.map { member in
+                String(describing: Mirror(reflecting: member).children.first { $0.label == label }?.value)
+            })
+            #expect(values.count >= 2, "show member \(label) takes only \(values) in the fixture")
+        }
 
         // Behaviour, read through the protocol, so these hold the rules themselves once the part one oracle
         // is deleted (part two cannot: both of its arms run the same body).
@@ -311,8 +318,6 @@ struct TermsOverFactsTests {
         #expect(try !member("untried@example.invalid").hasProvenOutreach, "an unsent contact is not")
         #expect(try member("waiting@example.invalid").replyArrivedAt == Date(timeIntervalSince1970: 1_790_000_090),
                 "a reply is dated by when they sent it, not when it was noticed")
-        let leadBooked = try #require(all.first { $0.naturalKey == "ninefold|2026-10-10" })
-        leadBooked.outcomeRaw = Outcome.booked.rawValue
         #expect(TermsOverFacts.ShowMembers(leadBooked).isBooked,
                 "a booking recorded on the show, with no contact booked, is still a booked show")
 
