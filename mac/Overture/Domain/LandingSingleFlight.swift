@@ -47,6 +47,9 @@ final class LandingSingleFlight {
         case runScoutTail
         // ScoutExtractIngest's landing block, through its closing save.
         case scoutExtractIngest
+        // #4339 (A11): the lead paste's landing, from its entry flush through its save. Dan is waiting on it,
+        // so it takes its turn at Dan's priority, at the front of the queue.
+        case leadPaste
     }
 
     enum Priority: Int, Sendable, Comparable {
@@ -67,6 +70,9 @@ final class LandingSingleFlight {
         static let runScoutLanding: Duration = .seconds(10 * 60)
         static let runScoutTail: Duration = .seconds(10 * 60)
         static let scoutExtractIngest: Duration = .seconds(30 * 60)
+        // The paste waits behind at most the landing in progress (it goes to the front of the queue), so the
+        // same bound as a Run press, which is also Dan waiting at the screen.
+        static let leadPaste: Duration = .seconds(10 * 60)
     }
 
     // What a caller gets when its own deadline passes before its turn. It names who was holding the store,
@@ -258,6 +264,9 @@ enum LandingWaitCopy {
         case .scoutExtractIngest:
             return "The calendar results have not landed yet, because another landing was still saving to "
                 + "the store after \(span). Overture kept a copy of them and will offer them again."
+        case .leadPaste:
+            return "The shows from that page were not added, because another landing was still saving to the "
+                + "store after \(span). Nothing from the page changed. Paste it again once it has finished."
         }
     }
 

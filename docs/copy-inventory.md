@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1707 sentences**.
+Every sentence Overture can say to Dan: **1713 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -14,7 +14,7 @@ What is not, and why:
   sentences under tokens nobody reads.
 - **Nothing, if it is written as two literals joined with `+`.** Those ARE joined here, into the
   one sentence the running app says (#3155). What is still only part of what Dan reads is a
-  sentence carrying a VALUE: 632 of the 1707 below hold a
+  sentence carrying a VALUE: 633 of the 1713 below hold a
   `\(...)` where a number or a name goes, so what is printed is the template. They are counted
   here rather than listed again, because the hole is visible in the line itself; what was missing
   was any statement of how much of this document is templates.
@@ -1696,6 +1696,12 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ScoutWarningCopy.swift`
 "Overture couldn't save the link. Try again; if this keeps happening, something's wrong with the local store."
     `Domain/ProposedConversation.swift`
+"Overture couldn't save the shows from that page and couldn't undo every change it had made for them, so some of those changes are still unsaved."
+    `Domain/LeadIntake.swift`
+"Overture couldn't save the shows from that page, so none of them were added. Nothing else changed. Paste it again to try once more."
+    `Domain/LeadIntake.swift`
+"Overture couldn't save your recent edits, so the shows from that page were not added. Nothing from the page changed. Not yet saved: "
+    `Domain/LeadIntake.swift`
 "Overture couldn't save your recent edits, so this scout's results were not applied. Nothing from the scout changed. Not yet saved: "
     `Domain/ScoutWarningCopy.swift`
 "Overture couldn't start the Gmail sign-in on this Mac, so it didn't open your browser."
@@ -2512,6 +2518,10 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/ActionFeedback.swift`
 "The show's status, read from its contacts. Mark a contact below to change it."
     `UI/DraftReviewView.swift`
+"The shows from that page were not added, because another landing was still saving to the store after \(span). Nothing from the page changed. Paste it again once it has finished."
+    `Domain/LandingSingleFlight.swift`
+"The shows from that page were not added, because the paste was stopped while it waited for the store. Nothing from the page changed."
+    `Domain/LeadIntake.swift`
 "The skipped towns sheet was on screen."
     `Domain/FreezeReport.swift`
 "The sources sheet was on screen."
@@ -3721,6 +3731,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ScoutReadBudget.swift`
 "the other one"
     `Domain/ScoutReadBudget.swift`
+"the pasted page"
+    `Integration/LeadPasteLanding.swift`
 "the presenter"
     `UI/QueueView+Model.swift`
 "the production ids it joins a run by"

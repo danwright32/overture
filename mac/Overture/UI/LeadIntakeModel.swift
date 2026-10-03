@@ -291,7 +291,7 @@ final class LeadIntakeModel {
 
         // #859: whatever it found is his, now. No checkboxes, no second pass.
         if case .review(let events, let note) = phase {
-            importAll(events, note: note, into: context, today: today, now: now)
+            await importAll(events, note: note, into: context, today: today, now: now)
         }
     }
 
@@ -384,28 +384,24 @@ final class LeadIntakeModel {
     // and the #798 upcoming-only guard all still apply. Nothing here can smuggle a refused org into his
     // queue, however many shows a page carries. `reconcilesFeed` stays off (#826): one pasted page is
     // not a sweep of anybody's calendar.
-    @discardableResult
     // #4331 (A2): `now` is the paste's own instant, from `start`, which every row it lands is stamped from.
+    // #4339 (A11): lands like the ingest and the scout's own sweep (`LeadPasteLanding`): the whole table reads
+    // off the main thread behind the entry flush, its turn for the store at Dan's priority, and a failed save
+    // put back and said rather than counted as shows added.
+    @discardableResult
     private func importAll(_ events: [ExtractedEvent], note: String?, into context: ModelContext,
-                           today: String, now: Date) -> Int {
+                           today: String, now: Date) async -> Int {
         guard !events.isEmpty else {
             phase = .added(0, note: note)
             return 0
         }
-        let loaded = DownbeatBridge.loadWithHealth(now: Date())
-        let existing = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
-        let outcome = ScoutService.apply(events: events,
-                                         clients: loaded.clients,
-                                         history: LocalHistory.forMatching(existing: existing),
-                                         // #901: the SAME calendar the scout uses, days off included. It
-                                         // used to pass Downbeat's exported dates alone, so a lead Dan
-                                         // pasted was judged against a different, smaller set of blocked
-                                         // days than a scouted show was.
-                                         blocked: ScoutService.blockedCalendar(
-                                            export: (loaded.bookings, loaded.blockedDates, loaded.health),
-                                            context: context),
-                                         today: today, now: now, sourceIds: [WatchedSource.manualId],
-                                         into: context)
+        let outcome: ScoutService.Outcome
+        switch await LeadPasteLanding.landPastedLead(events, today: today, now: now, into: context) {
+        case .landed(let landed): outcome = landed
+        case .refused(let sentence):
+            phase = .problem(sentence)
+            return 0
+        }
         let added = outcome.inserted + outcome.updated
 
         // Recorded only now, not at submit: a link that failed to read is one he must be able to try
