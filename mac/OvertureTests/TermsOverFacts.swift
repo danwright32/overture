@@ -23,8 +23,7 @@ enum TermsOverFacts {
 
     /// T5's inputs other than the rows: the stored organisation answers, the struck addresses, the shows a
     /// live run holds, and the instant freshness is judged at. Dan's producer corrections are read by T4
-    /// as well, so they are a parameter of `findings` itself. Nil means T5 is not asked, which is right
-    /// for a fixture that seeds no answers: the ledger returns before reading a row when it has none.
+    /// as well, so they are a parameter of `findings` itself.
     struct Ledger {
         var answers: [OrgReachabilityAnswer]
         var refusals: ContactRefusal.Ledger = .none
@@ -40,6 +39,9 @@ enum TermsOverFacts {
     /// `rowByRow` also asks `liveTwin` of every flagged row on both arms, which is flagged rows times all
     /// rows: about a second on the clone and over 40 on the 4x copy (measured 2026-10-02), so the 4x arm
     /// compares the indexed set alone, which is what the pass reads.
+    /// `overrides` are Dan's producer corrections, read by T4 and T5. `ledger` nil means T5 is not asked,
+    /// which is right for a fixture that seeds no answers: the ledger returns before reading a row when it
+    /// has none.
     static func findings(_ models: [Prospect], facts given: [RowFacts]? = nil, asOf: String,
                          drawn: Set<String>? = nil, rowByRow: Bool = true,
                          overrides: ProducerOverrides = .none, ledger: Ledger? = nil) -> [String] {
