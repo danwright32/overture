@@ -185,4 +185,32 @@ struct TermsOverFactsTests {
         #expect(!findings.contains { $0.contains("Lantern") || $0.contains("Quillon") || $0.contains("Harrowgate") },
                 "a finding named a title or a venue rather than the row's identifier")
     }
+
+    // The three entry points `scope` calls hand the term EVERY row, in any order. Asked of every rotation,
+    // so each row is last once and first once: a forwarder that dropped or skipped one would be invisible
+    // to oracle part two (both arms share it) and to a live comparison whose dropped row joins nothing,
+    // which is how a dropped last row survived the first mutation run of this slice.
+    @Test func theEntryPointsHandTheTermEveryRowInAnyOrder() throws {
+        let ctx = try context()
+        _ = try seed(ctx)
+        row(ctx, key: "lantern tour|2026-10-08", title: "Lantern Parade", venue: "Quillon Room", opens: "2026-10-08")
+        let all = try ctx.fetch(FetchDescriptor<Prospect>()).sorted { $0.naturalKey < $1.naturalKey }
+        let drawn: Set<String> = ["saltmarsh a", "saltmarsh b"]
+        #expect(!EngagementLink.group(among: all).isEmpty && !ShowLink.group(among: all).isEmpty,
+                "the fixture links nothing, so the rotations below compare empty tables")
+        for start in all.indices {
+            let rotated = Array(all[start...] + all[..<start])
+            #expect(EngagementLink.group(among: rotated) == EngagementLink.group(rotated.map(EngagementLink.Row.init)),
+                    "EngagementLink.group(among:) differs from the term with rotation \(start)")
+            #expect(ShowLink.group(among: rotated) == ShowLink.group(rotated.map(ShowLink.Row.init)),
+                    "ShowLink.group(among:) differs from the term with rotation \(start)")
+            let viaEntry = ShowLink.collapse(among: rotated, drawn: drawn)
+            let viaTerm = ShowLink.collapse(rotated.map(ShowLink.Row.init), drawn: drawn)
+            #expect(viaEntry.fronts == viaTerm.fronts && viaEntry.hidden == viaTerm.hidden,
+                    "ShowLink.collapse(among:) differs from the term with rotation \(start)")
+            #expect(QueueModel.ProducerTables(rows: rotated, overrides: .none)
+                        .corpus == QueueModel.ProducerTables(shows: rotated.map(ProducerGate.Show.init), overrides: .none).corpus,
+                    "ProducerTables(rows:) differs from the shows form with rotation \(start)")
+        }
+    }
 }
