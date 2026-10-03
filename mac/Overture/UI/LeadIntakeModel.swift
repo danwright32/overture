@@ -69,6 +69,11 @@ final class LeadIntakeModel {
     // process that had exited three minutes earlier.
     private let isRunAlive: () -> Bool
     private let defaults: UserDefaults
+    // #4339 (A11): the queue the paste's landing waits its turn in.
+    private let landings: LandingSingleFlight
+    // #4339: bumped by `reset()`, so a landing that finishes after Dan closed or restarted the sheet does not
+    // write its answer over the screen he moved on to.
+    private var generation = 0
 
     init(defaults: UserDefaults = .standard,
          // #858: the lead path, and ONLY the lead path, reads four months of a calendar. It can afford to:
@@ -89,8 +94,10 @@ final class LeadIntakeModel {
                                      recorder: .readWhileBeingWritten,
                                      decode: ScoutExtractResultsDecoder.decode).value
          },
-         isRunAlive: @escaping () -> Bool = { ScoutExtractService.isRunning(now: Date()) }) {
+         isRunAlive: @escaping () -> Bool = { ScoutExtractService.isRunning(now: Date()) },
+         landings: LandingSingleFlight = .shared) {
         self.defaults = defaults
+        self.landings = landings
         self.fetch = fetch
         self.pin = pin
         self.launch = launch
@@ -179,6 +186,7 @@ final class LeadIntakeModel {
     }
 
     func reset() {
+        generation += 1
         phase = .idle
         urlText = ""
         followedFromNote = nil
@@ -395,8 +403,15 @@ final class LeadIntakeModel {
             phase = .added(0, note: note)
             return 0
         }
+        // The landing awaits its read phase and its turn for the store, so the sheet says it is working, with
+        // its own clock, rather than holding the read's answer as though nothing were happening.
+        phase = .working(startedAt: Date())
+        let started = generation
+        let result = await LeadPasteLanding.landPastedLead(events, today: today, now: now, landings: landings,
+                                                           into: context)
+        guard generation == started else { return 0 }
         let outcome: ScoutService.Outcome
-        switch await LeadPasteLanding.landPastedLead(events, today: today, now: now, into: context) {
+        switch result {
         case .landed(let landed): outcome = landed
         case .refused(let sentence):
             phase = .problem(sentence)

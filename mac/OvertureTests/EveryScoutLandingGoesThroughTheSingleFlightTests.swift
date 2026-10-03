@@ -211,7 +211,8 @@ struct EveryScoutLandingGoesThroughTheSingleFlightTests {
         #expect(verdict("ingest") == .throughTheFlight)
         // #4339 (A11): the lead paste awaits now, so it takes its own turn, at Dan's priority.
         #expect(verdict("landPastedLead") == .throughTheFlight, "the lead paste lands without waiting its turn")
-        #expect(verdict("importAll") == nil, "the lead paste's model calls the store directly again")
+        #expect(verdict("importAll") == nil,
+                "importAll is a derived entry point again, so it no longer reaches the store only through landPastedLead")
         #expect(verdict("applySweep") == .exempt)
         #expect(verdict("landNative") == .exempt)
         #expect(derived.verdicts.count >= 6, Comment(rawValue:

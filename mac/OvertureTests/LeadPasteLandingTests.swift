@@ -153,6 +153,45 @@ struct LeadPasteLandingTests {
         #expect(stored.groupName == "Renamed While Waiting", "the put back undid Dan's edit")
     }
 
+    /// #4339 review: through the sheet's model, a paste waiting for the store says it is working, and a sheet
+    /// Dan closed or restarted meanwhile is not overwritten by the landing's answer when it finishes.
+    @Test func theSheetSaysWorkingWhileThePasteWaitsAndAResetIsNotOverwritten() async throws {
+        let (container, context) = try seeded()
+        defer { withExtendedLifetime(container) {} }
+        let flight = LandingSingleFlight(sleep: { _ in try? await Task.sleep(for: .seconds(3600)) })
+        let held = try await flight.begin(entryPoint: .scoutExtractIngest, priority: .scout, deadline: .seconds(60))
+        let url = URL(string: "https://piernine.example/season")!
+        let leadId = LeadIntakeModel.sourceId(for: url)
+        let answer = ScoutExtractResults(version: 1, generatedAt: Self.today + "T12:00:00Z", results: [
+            ScoutExtractResult(sourceId: leadId, verdict: .upcomingListings,
+                               events: [ScoutExtractEvent(title: "Harbor Lights", presenter: "Pier Nine Players",
+                                                          venue: "Pier Nine Room", performanceDate: "2026-11-21",
+                                                          sourceUrl: "https://piernine.example/harbor-lights",
+                                                          location: "New York, NY")],
+                               note: nil)])
+        let model = LeadIntakeModel(
+            defaults: ScratchDefaults.make("LeadPasteLandingTests.reset"),
+            fetch: { FetchedPage(normalizedHTML: LandingOracleCorpus.leadPage, finalURL: $0.absoluteString,
+                                 contentHash: "lead-paste-reset") },
+            pin: { _, _ in URL(fileURLWithPath: "/dev/null/lead-paste-reset.html") },
+            launch: { _ in },
+            readResults: { $0 == leadId ? answer : nil },
+            isRunAlive: { false },
+            landings: flight)
+        model.urlText = url.absoluteString
+        let start = Task { @MainActor in
+            await model.start(into: context, now: Self.now, today: Self.today, pollEvery: 0, giveUpAfter: 0,
+                              sleep: { _ in })
+        }
+        let waiting = await waitUntil("the paste waits its turn", timeout: .seconds(30)) { flight.queue == [.leadPaste] }
+        #expect(waiting, "the paste never queued for the store: \(flight.queue)")
+        if case .working = model.phase {} else { Issue.record("a waiting paste shows \(model.phase), not working") }
+        model.reset()
+        held.end()
+        await start.value
+        #expect(model.phase == .idle, "the landing wrote \(model.phase) over the sheet Dan reset")
+    }
+
     @Test func thePasteWaitsForTheLandingInProgressAtTheFrontOfTheQueue() async throws {
         let (container, context) = try seeded()
         let flight = LandingSingleFlight(sleep: { _ in try? await Task.sleep(for: .seconds(3600)) })
