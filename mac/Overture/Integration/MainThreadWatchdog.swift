@@ -73,6 +73,25 @@ final class MainThreadWatchdog: @unchecked Sendable {
 
     let windows = WindowBox()
 
+    // #4335 (A6, L459): the interrupted landing the recovery is finishing at idle, if any, on SurfaceBox's
+    // precedent and for its reason: stamped by the MAIN thread as the recovery starts and cleared as it ends,
+    // only ever READ here, so a stall written during it carries it without asking the main actor anything.
+    struct IdleWork: Equatable, Sendable {
+        let recoveryRunID: String
+        let inputIdleSeconds: Double
+    }
+
+    final class IdleWorkBox: @unchecked Sendable {
+        private let lock = NSLock()
+        private var value: IdleWork?
+        // Called by the MAIN thread. The only writer.
+        func stamp(_ work: IdleWork?) { lock.withLock { value = work } }
+        // Called by the watchdog. The only reader.
+        var current: IdleWork? { lock.withLock { value } }
+    }
+
+    let idleWork = IdleWorkBox()
+
     // #3760: how many render passes the main thread has run, on the SurfaceBox's precedent exactly.
     //
     // The main thread is the only writer and the watchdog the only reader, for the reason above it: a
@@ -379,6 +398,10 @@ final class MainThreadWatchdog: @unchecked Sendable {
         let passesAtPost = passes.current
         let rootAtPost = rootDraws.current
         let costAtPost = passCost.current
+        // #4335 (L459): whether an idle recovery held the store when this ping was posted. Read here, at the start
+        // of whatever stall follows, because the recovery clears its stamp the moment its replay returns, which
+        // can be before this ping gets its turn; a stall that began inside the replay is still idle work.
+        let idleAtPost = idleWork.current
         // #4153: the sleep total at each end, for the same reason the three counters above are read at
         // each end. Taken here on the watchdog's own queue, which is the half that has to keep working
         // while the main thread is wedged.
@@ -418,7 +441,8 @@ final class MainThreadWatchdog: @unchecked Sendable {
                                      runLoop: self.runLoopActivity.current,
                                      mainThreadCPU: StallLog.cpuSpanned(from: threadAtPost?.cpuSeconds,
                                                                        to: cpuAtRun),
-                                     mainThreadStates: self.mainThreadStates.current)
+                                     mainThreadStates: self.mainThreadStates.current,
+                                     idleWork: idleAtPost ?? self.idleWork.current)
             }
         }
     }
@@ -426,7 +450,7 @@ final class MainThreadWatchdog: @unchecked Sendable {
     private func recordIfStalled(_ delay: TimeInterval, sequence: Int, at: Date, passes: Int?,
                                  rootDraws: Int?, passSeconds: Double?, asleep: Double?,
                                  runLoop: RunLoopActivity, mainThreadCPU: Double?,
-                                 mainThreadStates: MainThreadStateTally?) {
+                                 mainThreadStates: MainThreadStateTally?, idleWork idle: IdleWork?) {
         // A ping that ran EARLY or on time is not a stall. Clamped rather than recorded as a negative,
         // which would be a measurement of the timer's own jitter dressed as a freeze.
         guard delay > 0 else { return }
@@ -454,7 +478,10 @@ final class MainThreadWatchdog: @unchecked Sendable {
                                 // this stall lasted. Recorded beside `passSeconds`, never divided into it.
                                 mainThreadCPUSeconds: mainThreadCPU,
                                 mainThreadRunnableSamples: mainThreadStates?.runnable,
-                                mainThreadWaitingSamples: mainThreadStates?.waiting)
+                                mainThreadWaitingSamples: mainThreadStates?.waiting,
+                                // #4335 (L459): idle work, stamped so every reader keeps it apart.
+                                recoveryRunID: idle?.recoveryRunID,
+                                inputIdleSeconds: idle?.inputIdleSeconds)
         // #3812: the decision is the PURE rule's, taken whole. This used to compare the kept set's count
         // before and after, which tied "what is held in memory" to "what is written to the file" and made
         // the session stop recording at its 200th stall.
