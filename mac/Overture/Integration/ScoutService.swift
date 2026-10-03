@@ -609,7 +609,9 @@ enum ScoutService {
                          // #4335 (A6): where this run keeps its landing journal (`LandingJournal`). RootView passes
                          // `.live`, and `EveryProductLandingKeepsAJournalTests` fails when a product caller does
                          // not. nil keeps none, for a test whose subject is not the journal.
-                         journals: LandingJournals? = nil)
+                         journals: LandingJournals? = nil,
+                         // #4335 (RC6): where each landed source's feed movement line is appended, after its save.
+                         movementLog: any FeedMovementLog.Sink = FeedMovementLog.file)
                          async throws -> Outcome {
         let loaded = DownbeatBridge.loadWithHealth(now: now)
         // History the matcher sees = any one-time legacy import + Overture's own activity,
@@ -915,7 +917,7 @@ enum ScoutService {
                     }
                 }
                 let landed = landNative(native, clients: loaded.clients, history: history, blocked: blocked,
-                                        now: now, landing: landing, into: context)
+                                        now: now, landing: landing, movementLog: movementLog, into: context)
                 if let hash = native.markReadAs, let source = native.source,
                    let s = landed.sources.first, case .ingested = s.state {
                     source.lastContentHash = hash
@@ -1227,6 +1229,7 @@ enum ScoutService {
     // between them, so the screen sees the whole run as ONE change rather than one per source.
     private static func landNative(_ native: NativeRead, clients: [DownbeatClient], history: [HistoryRecord],
                                    blocked: BlockedCalendar, now: Date, landing: ScoutLandingStore,
+                                   movementLog: any FeedMovementLog.Sink,
                                    into context: ModelContext) -> Outcome {
         let listed: NativeRead.Listed
         switch native.read {
@@ -1297,7 +1300,8 @@ enum ScoutService {
         // #987: the USABLE count, matching the agent path, which baselines on what came out of its guard
         // rather than what went in. Baselining on the raw feed while ingesting the usable subset would
         // make every guarded run look like a shrinking calendar.
-        recordCheck(on: source, events: usable.count, health: health, now: now,
+        // #4335 (RC6): this read's feed movement line, appended only now the save carrying its shows has succeeded.
+        let movement = recordCheck(on: source, events: usable.count, health: health, now: now,
                     // #891/#987: so a native feed that stopped naming venues says so on the Sources
                     // sheet, exactly as an unreadable HTML source does, instead of going quiet.
                     unreadable: rejectedCount,
@@ -1313,6 +1317,7 @@ enum ScoutService {
                     // path uses. Wired here so this path feeds the placement detector too. (#1029 removed
                     // the Dan-facing line the count fed; the count still records for #970's drift check.)
                     placed: SourcePlacement.placedCount(locations: usable.map(\.location)))
+        if let movement { movementLog.append(movement) }
 
         outcome.sources = [SourceResult(sourceId: native.sourceId, orgName: native.orgName,
                                         state: .ingested(found: usable.count),
@@ -1465,13 +1470,15 @@ enum ScoutService {
     // copy the agent path also calls. This native path adds only the piece that is genuinely its own: it
     // no-ops when there is no row (Carnegie can scout on a store whose #800 backfill has not run yet, and
     // there is nothing to record onto), where the agent path always has a real row.
+    // #4335 (RC6): returns the read's feed movement line for the caller to append once the save carrying it has
+    // succeeded; nil when there is no row to record onto.
     private static func recordCheck(on source: WatchedSource?, events: Int,
                                     health: FeedReconcile.FeedHealthState, now: Date,
                                     unreadable: Int = 0, titleUnreadable: Int = 0,
                                     structuralGaps: Int = 0, droppedShows: [DroppedShow] = [],
-                                    placed: Int = 0) {
-        guard let source else { return }
-        source.recordSuccessfulRead(events: events, unreadable: unreadable,
+                                    placed: Int = 0) -> String? {
+        guard let source else { return nil }
+        return source.recordSuccessfulRead(events: events, unreadable: unreadable,
                                     titleUnreadable: titleUnreadable, structuralGaps: structuralGaps,
                                     droppedShows: droppedShows, placed: placed, feedHealth: health, now: now)
     }
