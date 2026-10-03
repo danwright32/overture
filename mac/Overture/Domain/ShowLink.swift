@@ -286,11 +286,32 @@ enum ShowLink {
     static func poisonedTokens(_ seen: [(token: String, title: String, venue: String)]) -> Set<String> {
         var titlesPerToken: [String: Set<String>] = [:]
         for one in seen {
-            titlesPerToken[one.token + "|" + one.venue, default: []].insert(one.title)
+            titlesPerToken[poisonKey(token: one.token, venue: one.venue), default: []].insert(one.title)
         }
-        return Set(titlesPerToken.filter { $0.value.count > 1 }.keys.map {
-            String($0.prefix(upTo: $0.range(of: "|", options: .backwards)?.lowerBound ?? $0.endIndex))
-        })
+        return Set(titlesPerToken.filter { $0.value.count > 1 }.keys.map(unscoped))
+    }
+
+    // #4333 (A4): the keys and the one step these two rules are made of, apart, so a landing that keeps the
+    // stored rows' half of each rule as a table (`LandingBatchTables`) keys, folds and strips exactly as the
+    // rules do rather than restating them (L370).
+    static func poisonKey(token: String, venue: String) -> String { token + "|" + venue }
+
+    static func showKey(url: String, venue: String, scopedByVenue: Bool) -> String {
+        scopedByVenue ? url + "|" + venue : url
+    }
+
+    // A key with its venue taken off: everything before the LAST bar, or the whole key when it has none.
+    static func unscoped(_ key: String) -> String {
+        guard let cut = key.range(of: "|", options: .backwards) else { return key }
+        return String(key[key.startIndex..<cut.lowerBound])
+    }
+
+    // One title folded into one key's shows. A title that is the same SHOW as one already there adds nothing:
+    // it is the duplicate the arms are for. Only a title that is a different show makes the URL ambiguous.
+    static func addShow(_ title: String, to shows: inout [String]) {
+        if !shows.contains(where: { GroupNameMatch.isSameShowTitle($0, title) }) {
+            shows.append(title)
+        }
     }
 
     // #4098: the same question asked of a URL, for the two arms that join on one.
@@ -328,23 +349,15 @@ enum ShowLink {
     static func addShows(_ seen: [(url: String, title: String, venue: String)], scopedByVenue: Bool,
                          into showsPerKey: inout [String: [String]]) {
         for one in seen where !one.url.isEmpty {
-            let key = scopedByVenue ? one.url + "|" + one.venue : one.url
+            let key = showKey(url: one.url, venue: one.venue, scopedByVenue: scopedByVenue)
             var shows = showsPerKey[key] ?? []
-            // A title that is the same SHOW as one already seen here adds nothing: it is the duplicate
-            // the arms are for. Only a title that is a different show makes the URL ambiguous.
-            if !shows.contains(where: { GroupNameMatch.isSameShowTitle($0, one.title) }) {
-                shows.append(one.title)
-            }
+            addShow(one.title, to: &shows)
             showsPerKey[key] = shows
         }
     }
 
     static func ambiguousKeys(_ showsPerKey: [String: [String]], scopedByVenue: Bool) -> Set<String> {
-        Set(showsPerKey.filter { $0.value.count > 1 }.keys.map { key in
-            guard scopedByVenue,
-                  let cut = key.range(of: "|", options: .backwards) else { return key }
-            return String(key[key.startIndex..<cut.lowerBound])
-        })
+        Set(showsPerKey.filter { $0.value.count > 1 }.keys.map { scopedByVenue ? unscoped($0) : $0 })
     }
 
     // Every group, including the rows that stand alone, so one walk answers both callers.

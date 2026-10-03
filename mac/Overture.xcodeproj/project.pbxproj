@@ -593,6 +593,7 @@
 		3ACC7D251417FC4721D1E079 /* GmailReplyChecker.swift in Sources */ = {isa = PBXBuildFile; fileRef = CED5B3A0D5D7B33059542583 /* GmailReplyChecker.swift */; };
 		3AEDB71282E1915793341D90 /* SourceYield.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A2220FC365AE8020E30A7A1 /* SourceYield.swift */; };
 		3B3BC134316174A709C526C4 /* ReachedOutAction.swift in Sources */ = {isa = PBXBuildFile; fileRef = 43A1A3F3211BD026CAF1145C /* ReachedOutAction.swift */; };
+		3B417FF3CF8384E5DB3EB8E8 /* LandingBatchTables.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD8252041EFC9FCF68ACB0BD /* LandingBatchTables.swift */; };
 		3B7A97EEF408A04307FC6EC4 /* WrittenOffBacklog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51F5030BEC4EF4B2AD9FC77E /* WrittenOffBacklog.swift */; };
 		3BA3D6E6BA99D391E8ACEE86 /* UpdateCommandFile.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AFD84D7B8C5E3F48789B6EC /* UpdateCommandFile.swift */; };
 		3BAAD9A282F36722D80FF248 /* OutreachFunnel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47F92A7A9F20F890A2695365 /* OutreachFunnel.swift */; };
@@ -1941,6 +1942,7 @@
 		C7775A1D20DC00F8E256642B /* DismissedProspectsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 073482FF171FDD03F329446D /* DismissedProspectsTests.swift */; };
 		C783AA9FB21F6BF7C2AAA235 /* StoreColumns.swift in Sources */ = {isa = PBXBuildFile; fileRef = 386C416A7E63EAC23EF61455 /* StoreColumns.swift */; };
 		C78E7CE4B9742819CA453D81 /* TestDataEmailDomainGuardTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DBB7B3B25AA1EE040DB56C9F /* TestDataEmailDomainGuardTests.swift */; };
+		C7A7444FC35D2B3D9DFE34FF /* LandingBatchTables.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD8252041EFC9FCF68ACB0BD /* LandingBatchTables.swift */; };
 		C7B88BB8454766EB1822AF9A /* ReachabilityProbeCandidateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FEC5BB6BC8704C35648658A2 /* ReachabilityProbeCandidateTests.swift */; };
 		C7C7A622E03F78F82DA6D193 /* OrganisationListingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4AA30A4E3C975BBF29DA61C /* OrganisationListingTests.swift */; };
 		C80DBD8A1155B8E8F211EABE /* QueueContextTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6238E54AE67EF2BEAD50788F /* QueueContextTests.swift */; };
@@ -2425,6 +2427,7 @@
 		F579EEE4A5893C2B8FAE1ED9 /* AStallSaysWhetherTheMainThreadWasRunningTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5DF545950535C60AB9094C0F /* AStallSaysWhetherTheMainThreadWasRunningTests.swift */; };
 		F57C6D1B97AA6717B2499995 /* GenreDropdownTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6E025922B3BF60AE12E23BB /* GenreDropdownTests.swift */; };
 		F58E4C84FECDF7E9D6A5FAF8 /* WatchlistEditing.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC3858D70F3CEA1F6555D5C3 /* WatchlistEditing.swift */; };
+		F59D9EE94CF63D1976F7E891 /* LandingBatchTablesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F42B72E763B10DC5161A6037 /* LandingBatchTablesTests.swift */; };
 		F5C8DB63C2E04D6D499AE31D /* ScoutSweepStep.swift in Sources */ = {isa = PBXBuildFile; fileRef = 613258F27A0FCD40018178F0 /* ScoutSweepStep.swift */; };
 		F5F33E9C73D33641CD3B0AE4 /* WaitUntilTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 617E40670AED4DE127AEFF46 /* WaitUntilTests.swift */; };
 		F5F9C1276FEF5302F31049FC /* HeldBackMarkTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B04E053913D217FB4E87D18 /* HeldBackMarkTests.swift */; };
@@ -4392,6 +4395,7 @@
 		F3A20156426FF5F83D730FDD /* FollowUpsDeepLinkGuardTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FollowUpsDeepLinkGuardTests.swift; sourceTree = "<group>"; };
 		F3EA9AF70E74993B6FD69522 /* DraftCheckTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DraftCheckTests.swift; sourceTree = "<group>"; };
 		F407D87EBFC4C2F0F072918A /* SourceGuard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourceGuard.swift; sourceTree = "<group>"; };
+		F42B72E763B10DC5161A6037 /* LandingBatchTablesTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LandingBatchTablesTests.swift; sourceTree = "<group>"; };
 		F46C5E04143AE04F0D55F345 /* ScoutReadPromptTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScoutReadPromptTests.swift; sourceTree = "<group>"; };
 		F4A846E5CEA3F79C9140936E /* DeadRunSweepTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeadRunSweepTests.swift; sourceTree = "<group>"; };
 		F4C1966045B1235EA61D26D1 /* RowSourceListingLinkTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RowSourceListingLinkTests.swift; sourceTree = "<group>"; };
@@ -4463,6 +4467,7 @@
 		FD2C520DA2246AB9E1973559 /* GmailCredentialsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GmailCredentialsTests.swift; sourceTree = "<group>"; };
 		FD487981CBBF8C44D61938BB /* RankerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RankerTests.swift; sourceTree = "<group>"; };
 		FD6B7A49BB4C01ABD225234B /* PassedShowPenaltyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PassedShowPenaltyTests.swift; sourceTree = "<group>"; };
+		FD8252041EFC9FCF68ACB0BD /* LandingBatchTables.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LandingBatchTables.swift; sourceTree = "<group>"; };
 		FDE384CA19DB8EDF644F0BB8 /* TrailingSlashListingURLTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrailingSlashListingURLTests.swift; sourceTree = "<group>"; };
 		FE0C8313641D465552D088CF /* ShowSummary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShowSummary.swift; sourceTree = "<group>"; };
 		FE262C20F3A2B520E86B7263 /* ScoutExtractIngestTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScoutExtractIngestTests.swift; sourceTree = "<group>"; };
@@ -5120,6 +5125,7 @@
 				42B4E97D9F5346D60137A631 /* KeyBearingFieldCoverageTests.swift */,
 				A1CBBE9B8CF7E9554700E5F0 /* KeyCoverageDeclarationTests.swift */,
 				0F85F2EE97FF4AE0B536B30F /* KeyRealignmentLiveStoreTests.swift */,
+				F42B72E763B10DC5161A6037 /* LandingBatchTablesTests.swift */,
 				034D6DD92A1614565E236C5D /* LandingOracle.swift */,
 				8284FC3AC34A1A2BC787A2EB /* LandingOracleCorpus.swift */,
 				895A42777AB71D681263CEC1 /* LandingOracleTests.swift */,
@@ -6186,6 +6192,7 @@
 				BAE68587375B2CF2131C5032 /* KeptNightDrop.swift */,
 				8AA49BDAA20FC7ED1163A150 /* KeptNights.swift */,
 				DECED61EFFABA8A46A11A394 /* KeyRealignment.swift */,
+				FD8252041EFC9FCF68ACB0BD /* LandingBatchTables.swift */,
 				57ECA364EB381301DC4A4A4F /* LandingRun.swift */,
 				E35EDA2E1DB6AD6EAC73E732 /* LandingSingleFlight.swift */,
 				F19DA8CF2DF7DD6D20C00B94 /* LaunchMigrations.swift */,
@@ -6876,6 +6883,7 @@
 				19523264B6AE4BF2B2F94822 /* KeptNightDrop.swift in Sources */,
 				D11E7876F1411DBFC563FF77 /* KeptNights.swift in Sources */,
 				E3ED61FC29ABB979005D0BFA /* KeyRealignment.swift in Sources */,
+				C7A7444FC35D2B3D9DFE34FF /* LandingBatchTables.swift in Sources */,
 				A2C8D2518C75ADDA95A35BB8 /* LandingJournal.swift in Sources */,
 				78978D8C5273FBB9665934E9 /* LandingRevert.swift in Sources */,
 				C64535CC5EF4101715CD5058 /* LandingRun.swift in Sources */,
@@ -7996,6 +8004,8 @@
 				615F59D383B7796823339BF5 /* KeyCoverageDeclarationTests.swift in Sources */,
 				00BD640071E7615B433804B4 /* KeyRealignment.swift in Sources */,
 				511A44EE7EFE16112E70EBBF /* KeyRealignmentLiveStoreTests.swift in Sources */,
+				3B417FF3CF8384E5DB3EB8E8 /* LandingBatchTables.swift in Sources */,
+				F59D9EE94CF63D1976F7E891 /* LandingBatchTablesTests.swift in Sources */,
 				0176F8771C01886C921395B6 /* LandingJournal.swift in Sources */,
 				944ECF5C385F3E12C754B40C /* LandingOracle.swift in Sources */,
 				6308069BC1521828ED0A981A /* LandingOracleCorpus.swift in Sources */,

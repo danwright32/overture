@@ -81,12 +81,13 @@ enum ScoutExtractIngest {
                        onWait: (Int) -> Void = { _ in },
                        // The closing save, injected so a test can make it fail (`ScoutService.saveLanding`).
                        saveClosing: (ModelContext) throws -> Void = { try $0.save() },
-                       // #4327 step 0.7: handed the working set's cumulative counters after each LANDED source
-                       // (labelled with its source id) and once more after the reconcile's read (labelled
-                       // `Counters.afterReconcile`, and only when a reconcile ran, so a landing that reconciled
-                       // nothing never reports a reconcile), so a probe can say what each source cost. Counting only;
-                       // nil, which every shipping caller passes, reports nothing.
-                       onLandingStep: ((String, ScoutLandingStore.Counters) -> Void)? = nil,
+                       // #4327 step 0.7: handed the working set after each LANDED source (labelled with its source
+                       // id) and once more after the reconcile's read (labelled `Counters.afterReconcile`, and only
+                       // when a reconcile ran, so a landing that reconciled nothing never reports a reconcile), so a
+                       // probe can say what each source cost from its cumulative counters, and #4333's tests can
+                       // compare its batch tables with a rebuild after every source. nil, which every shipping
+                       // caller passes, reports nothing.
+                       onLandingStep: ((String, ScoutLandingStore) -> Void)? = nil,
                        // #4329 (A12): handed each source's captured read-phase writes as the landing applies
                        // them, so a test can prove every branch that writes was driven. nil reports nothing.
                        onApplyCaptured: ((SourceWrites) -> Void)? = nil,
@@ -520,7 +521,7 @@ enum ScoutExtractIngest {
                 outcome.merge(settled)
             case .pending(let pending):
                 land(pending)
-                onLandingStep?(pending.source.sourceId, landing.counters)
+                onLandingStep?(pending.source.sourceId, landing)
             }
         }
 
@@ -549,7 +550,7 @@ enum ScoutExtractIngest {
             // which is what the empty answer this used to fall back to did.
             let allStored = (try? landing.rows()) ?? []
             landing.noteReconcile(FeedReconcile.reconcile(stored: allStored, reports: reports, today: today))
-            onLandingStep?(ScoutLandingStore.Counters.afterReconcile, landing.counters)
+            onLandingStep?(ScoutLandingStore.Counters.afterReconcile, landing)
         }
         // #4325: the reconcile's writes, and every source's bookkeeping above, saved before the landing
         // returns, through the one closing save the native sweep uses. Nothing saved them before this.

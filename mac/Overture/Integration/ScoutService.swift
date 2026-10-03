@@ -1899,8 +1899,9 @@ enum ScoutService {
         // rather than looking like a clean sweep (L42, L11).
         let batchPoisonedTokens: Set<String>
         do {
-            batchPoisonedTokens = try poisonedTokensForBatch(batchRows, storedRows: { try landing.rows() },
-                                                             fold: landing.fold(of:))
+            // #4333 (A4): the stored rows' half from the landing's tables, so this source walks its own batch
+            // and the rows written since the source before it, not every stored row again.
+            batchPoisonedTokens = try landing.poisonedTokens(adding: batchRows)
         } catch {
             degradedReads.append(.productionTokenCorpus)
             batchPoisonedTokens = Set(batchRows.flatMap {
@@ -1909,36 +1910,34 @@ enum ScoutService {
             })
         }
 
-        // #1848 and #4098 both need every stored row, so the store is read ONCE here and both tables
-        // below are built from it. Each used to fetch the whole store for itself, which is two full
-        // reads per sweep for one question about the same rows.
+        // #1848 and #4098 both ask a question of every stored row. Each used to fetch the whole store for
+        // itself, then (#4275) walk the landing's working set once per source; since #4333 (A4) both answers
+        // come from the landing's tables, built once per landing and kept current as each source lands, so
+        // nothing here reads or walks the store.
         //
         // The two want OPPOSITE things from a read that fails, and that is deliberate rather than an
         // inconsistency: the spelling lock can only ever REPLACE a spelling with one the source itself
         // published, so having none simply leaves today's reading alone, while the ambiguity discard
         // exists to REFUSE joins, so an empty set would license every join it is there to prevent (L42,
         // L215). Fail open for the first, fail closed for the second.
-        let storedRowsForBatch = readOrRecord(.reconcileStoredShows, into: &degradedReads,
-                                              { try landing.rows() })
+        let storedSpellings: ScoutLandingStore.VenueSpellings?
+        do {
+            storedSpellings = try landing.venueSpellings()
+        } catch {
+            degradedReads.append(.reconcileStoredShows)
+            storedSpellings = nil
+        }
 
         // #4098: how ambiguous each URL this sweep carries is, for the two URL matching arms.
         let batchAmbiguousURLs: AmbiguousURLs
-        if storedRowsForBatch != nil,
-           let measured = try? ambiguousURLsForBatch(batchRows, landing: landing) {
+        if storedSpellings != nil,
+           let measured = try? landing.ambiguousURLs(adding: batchRows) {
             batchAmbiguousURLs = measured
         } else {
             let everyURL = Set(batchRows.flatMap {
                 ListingURL.foldedSet(($0.sourceListingURL.map { [$0] } ?? []) + $0.runSourceURLs)
             })
             batchAmbiguousURLs = AmbiguousURLs(atAVenue: everyURL, anywhere: everyURL)
-        }
-
-        // #1848: how THIS run's sources have already spelled their own rooms, read once per batch rather
-        // than once per row.
-        var spellingsBySource: [String: [String]] = [:]
-        for row in storedRowsForBatch ?? [] {
-            guard let venue = row.venue, !venue.isEmpty else { continue }
-            for id in row.sourceIds { spellingsBySource[id, default: []].append(venue) }
         }
 
         for gr in grouped {
@@ -2049,7 +2048,9 @@ enum ScoutService {
             // only value this can produce is one the same source has already published.
             enriched.venue = VenueSpellingLock.locked(
                 enriched.venue,
-                spellingsUsedBySource: enriched.sourceIds.flatMap { spellingsBySource[$0] ?? [] })
+                // #1848: how THIS run's sources have already spelled their own rooms, as the stored rows
+                // stood when this source began.
+                spellingsUsedBySource: storedSpellings?.used(by: enriched.sourceIds) ?? [])
             let key = Prospect.makeNaturalKey(groupName: enriched.groupName, performanceDate: enriched.performanceDate, venue: enriched.venue)
             seenKeys.insert(key)
             // #2758 / #2999: ONE decision, taken before anything is written, so a store that cannot answer
@@ -2493,20 +2494,6 @@ enum ScoutService {
                              anywhere: ShowLink.ambiguousURLs(seen, scopedByVenue: false))
     }
 
-    // #4275: the same answer, continuing from the stored rows' shows the landing has already folded
-    // (`ScoutLandingStore.storedShowsPerURL`) rather than walking every stored row again for each source.
-    // Measured after the working set landed: that walk, and its pairwise title test, was 1.7 s of a 3.3 s
-    // landing at 1x, recomputed identically for each of 39 sources.
-    static func ambiguousURLsForBatch(_ incoming: [AssembledProspect],
-                                      landing: ScoutLandingStore) throws -> AmbiguousURLs {
-        var shows = try landing.storedShowsPerURL()
-        let seen = ambiguityEntries(of: incoming)
-        ShowLink.addShows(seen, scopedByVenue: true, into: &shows.atAVenue)
-        ShowLink.addShows(seen, scopedByVenue: false, into: &shows.anywhere)
-        return AmbiguousURLs(atAVenue: ShowLink.ambiguousKeys(shows.atAVenue, scopedByVenue: true),
-                             anywhere: ShowLink.ambiguousKeys(shows.anywhere, scopedByVenue: false))
-    }
-
     // What one stored row contributes to the ambiguity walk: each folded URL it carries, with its title as
     // written and its folded room. ONE builder for both halves of the walk, so the stored rows and the
     // incoming ones cannot come to be entered differently (L370).
@@ -2529,28 +2516,31 @@ enum ScoutService {
     // working one proves nothing about the branch that matters most, which is the one that decides
     // whether an unreadable store refuses every token or none (L140). Same reasoning, and the same
     // shape, as `Prospect.keyAvailability(_:lookup:)`.
-    // #4275: `fold` as for `ambiguousURLsForBatch` above.
+    // #4333: the FROM-SCRATCH walk, every stored row freshly folded. The landing answers from its tables
+    // (`ScoutLandingStore.poisonedTokens(adding:)`); this is what `.everyRead` and the tests compare against.
     static func poisonedTokensForBatch(_ incoming: [AssembledProspect],
-                                       storedRows: () throws -> [Prospect],
-                                       fold: (Prospect) -> ScoutLandingStore.Fold = ScoutLandingStore.Fold.init)
-        throws -> Set<String> {
-        var seen: [(token: String, title: String, venue: String)] = []
+                                       storedRows: () throws -> [Prospect]) throws -> Set<String> {
         let stored = try storedRows()
-        for p in stored {
-            let folded = fold(p)
-            for token in folded.tokens {
-                seen.append((token: token, title: folded.foldedTitle, venue: folded.foldedVenue))
-            }
-        }
-        for p in incoming {
+        return ShowLink.poisonedTokens(stored.flatMap { poisonEntries(of: ScoutLandingStore.Fold($0)) }
+                                       + poisonEntries(of: incoming))
+    }
+
+    // What one stored row, and what a batch, contribute to the token walk. ONE builder for each half, shared
+    // by the walk above and by the landing's tables (`ScoutLandingStore`), so the two cannot come to enter a
+    // row differently (L370).
+    nonisolated static func poisonEntries(of folded: ScoutLandingStore.Fold)
+        -> [(token: String, title: String, venue: String)] {
+        folded.tokens.map { (token: $0, title: folded.foldedTitle, venue: folded.foldedVenue) }
+    }
+
+    nonisolated static func poisonEntries(of incoming: [AssembledProspect])
+        -> [(token: String, title: String, venue: String)] {
+        incoming.flatMap { p -> [(token: String, title: String, venue: String)] in
             let urls = (p.sourceListingURL.map { [$0] } ?? []) + p.runSourceURLs
             let theirTitle = ShowLink.foldedTitle(p.groupName)
             let theirRoom = ShowLink.foldedVenue(p.venue)
-            for token in urls.compactMap(ProductionToken.inURL) {
-                seen.append((token: token, title: theirTitle, venue: theirRoom))
-            }
+            return urls.compactMap(ProductionToken.inURL).map { (token: $0, title: theirTitle, venue: theirRoom) }
         }
-        return ShowLink.poisonedTokens(seen)
     }
 
     private static func matchByProductionToken(_ urls: [String], groupName: String, venue: String?,
