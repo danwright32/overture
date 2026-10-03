@@ -37,7 +37,7 @@ final class ScaledCorpusLandsLikeALargerStoreTests {
         }
     }
 
-    private static let glues = [Phase0.glue(forCopy: 1)]
+    private static let glues = [Phase0.glue(forCopy: 1), Phase0.glue(forCopy: 2)]
 
     private func unglued(_ s: String?) -> String {
         guard let s else { return "nil" }
@@ -135,10 +135,12 @@ final class ScaledCorpusLandsLikeALargerStoreTests {
         return ReLanded(written: -1, explained: -1)
     }
 
-    /// #4481: an unchanged re-land writes, at twice the size, exactly twice the shows it writes on the clone, and
-    /// on either it writes only the shows the #4331 rule restamps on purpose (a show with a twin a merge reader
-    /// may compare it against). Before #4481 every copy whose title shared a word with its original's, on the
-    /// same night, read as that show's twin and was restamped on every landing.
+    /// #4481: an unchanged re-land writes, at three times the size, exactly three times the shows it writes on
+    /// the clone, and at either size only the shows the #4331 rule restamps on purpose (a show with a twin a merge
+    /// reader may compare it against) or whose miss the reconcile counts. THREE times, because the defect lived
+    /// between two COPIES: glued once on the first word, copy one's "qaHamlet" and copy two's "qbHamlet" were
+    /// one typo apart on the same night, so `isSameNightVariant` made them twins (measured on a clone of the live
+    /// store, 1,290 of its 1,372 titles), and a corpus with a single copy has no second copy to twin with.
     @Test func anUnchangedReLandWritesOnlyTheTwinRuleSRowsAtEverySize() async throws {
         let seed = try seededStore()
         let results = LandingOracleCorpus.results()
@@ -148,14 +150,14 @@ final class ScaledCorpusLandsLikeALargerStoreTests {
             try FileManager.default.copyItem(atPath: seed.path + suffix, toPath: one.path + suffix)
         }
         let x1 = try await reLand(results, on: one)
-        let two = try Phase0.scaledCopy(of: seed, factor: 2, in: try sandboxes.make(named: "scaled-corpus-4481-x2"))
-        let x2 = try await reLand(Phase0.scaledResults(results, factor: 2), on: two)
+        let three = try Phase0.scaledCopy(of: seed, factor: 3, in: try sandboxes.make(named: "scaled-corpus-4481-x3"))
+        let x3 = try await reLand(Phase0.scaledResults(results, factor: 3), on: three)
 
         #expect(x1.written > 0 && x1.written == x1.explained,
                 "the clone's re-land wrote \(x1.written) shows, and only \(x1.explained) are a twin or a counted miss")
-        #expect(x2.written == x2.explained,
-                "the 2x re-land wrote \(x2.written) shows, and only \(x2.explained) are a twin or a counted miss")
-        #expect(x2.written == 2 * x1.written, "an unchanged re-land wrote \(x1.written) shows at 1x and \(x2.written) at 2x")
+        #expect(x3.written == x3.explained,
+                "the 3x re-land wrote \(x3.written) shows, and only \(x3.explained) are a twin or a counted miss")
+        #expect(x3.written == 3 * x1.written, "an unchanged re-land wrote \(x1.written) shows at 1x and \(x3.written) at 3x")
     }
 
     /// #4481: a copy's names are no same-night variant of another copy's or the original's, and relate to each
