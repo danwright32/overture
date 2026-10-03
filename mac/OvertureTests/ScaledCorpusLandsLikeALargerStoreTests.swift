@@ -96,11 +96,12 @@ final class ScaledCorpusLandsLikeALargerStoreTests {
     }
 
     /// What a second, unchanged landing of the same results wrote: every show whose stored values (its
-    /// `ingestedAt` included) moved, and how many of those the #4331 rule restamps on purpose because
-    /// `MergeCandidateIndex` gives them a twin.
+    /// `ingestedAt` included) moved, and how many of those are explained: the #4331 rule restamps a show
+    /// `MergeCandidateIndex` gives a twin on purpose, and the reconcile counts another miss for a show its
+    /// source still does not list (Old Harbor Revue), which is a real change rather than a needless write.
     private struct ReLanded {
         let written: Int
-        let withATwin: Int
+        let explained: Int
     }
 
     private func reLand(_ results: ScoutExtractResults, on url: URL) async throws -> ReLanded {
@@ -112,8 +113,9 @@ final class ScaledCorpusLandsLikeALargerStoreTests {
                 + "\(p.missedScoutCount)|\(p.statusRaw)|\(p.sourceIds)|\(p.runSourceURLs)|\(p.sourceListingURL ?? "")"
         }
         for landing in 1...2 {
-            let before = Dictionary(uniqueKeysWithValues: try context.fetch(FetchDescriptor<Prospect>())
-                .map { ($0.naturalKey, values($0)) })
+            let stored = try context.fetch(FetchDescriptor<Prospect>())
+            let before = Dictionary(uniqueKeysWithValues: stored.map { ($0.naturalKey, values($0)) })
+            let missedBefore = Dictionary(uniqueKeysWithValues: stored.map { ($0.naturalKey, $0.missedScoutCount) })
             await ScoutExtractIngest.ingest(results, clients: [], history: [], blocked: .empty,
                                             today: LandingOracleCorpus.today,
                                             now: LandingOracleCorpus.now.addingTimeInterval(Double(landing) * 3600),
@@ -125,9 +127,12 @@ final class ScaledCorpusLandsLikeALargerStoreTests {
             let index = MergeCandidateIndex(rows: rows, tokens: { p in
                 ([p.sourceListingURL].compactMap { $0 } + p.runSourceURLs).compactMap(ProductionToken.inURL)
             })
-            return ReLanded(written: written.count, withATwin: written.filter { index.isContested($0) }.count)
+            let explained = written.filter { p in
+                index.isContested(p) || missedBefore[p.naturalKey].map { $0 != p.missedScoutCount } == true
+            }
+            return ReLanded(written: written.count, explained: explained.count)
         }
-        return ReLanded(written: -1, withATwin: -1)
+        return ReLanded(written: -1, explained: -1)
     }
 
     /// #4481: an unchanged re-land writes, at twice the size, exactly twice the shows it writes on the clone, and
@@ -146,10 +151,10 @@ final class ScaledCorpusLandsLikeALargerStoreTests {
         let two = try Phase0.scaledCopy(of: seed, factor: 2, in: try sandboxes.make(named: "scaled-corpus-4481-x2"))
         let x2 = try await reLand(Phase0.scaledResults(results, factor: 2), on: two)
 
-        #expect(x1.written == x1.withATwin,
-                "the clone's re-land wrote \(x1.written) shows, and only \(x1.withATwin) of them have a twin")
-        #expect(x2.written == x2.withATwin,
-                "the 2x re-land wrote \(x2.written) shows, and only \(x2.withATwin) of them have a twin")
+        #expect(x1.written > 0 && x1.written == x1.explained,
+                "the clone's re-land wrote \(x1.written) shows, and only \(x1.explained) are a twin or a counted miss")
+        #expect(x2.written == x2.explained,
+                "the 2x re-land wrote \(x2.written) shows, and only \(x2.explained) are a twin or a counted miss")
         #expect(x2.written == 2 * x1.written, "an unchanged re-land wrote \(x1.written) shows at 1x and \(x2.written) at 2x")
     }
 
