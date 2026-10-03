@@ -78,22 +78,26 @@ final class OldAgainstNewFactsMembersTests {
             return true
         }
 
+        // Both sides through ONE renderer, so a difference is in the value and never in how an optional
+        // enum prints (the first run read 994 of these, every one a rendering artifact).
+        private static func t(_ value: Any) -> String { OldAgainstNewFactsMembersTests.text(value) }
+
         static func contact(_ r: Recipient) -> [String: String] {
-            ["sendState": "\(sendState(r))", "resolution": "\(String(describing: resolution(r)))",
-             "outcomeSource": "\(String(describing: outcomeSource(r)))", "outreachChannel": "\(outreachChannel(r))",
-             "hasWatchableConversation": "\(hasWatchableConversation(r))",
-             "isUnwatchedFormPitch": "\(isUnwatchedFormPitch(r))", "hasProvenOutreach": "\(hasProvenOutreach(r))",
-             "isSilent": "\(isSilent(r))", "replyWatchConversationIsAttached": "\(replyWatchConversationIsAttached(r))",
-             "isAwaitingFollowUp": "\(isAwaitingFollowUp(r))", "replyArrivedAt": "\(String(describing: replyArrivedAt(r)))",
-             "hasUnhandledReply": "\(hasUnhandledReply(r))", "standing": "\(standing(r))",
-             "isOutreachStoodDown": "\(isOutreachStoodDown(r))", "isClosingNoteStoodDown": "\(isClosingNoteStoodDown(r))"]
+            ["sendState": t(sendState(r)), "resolution": t(resolution(r)),
+             "outcomeSource": t(outcomeSource(r)), "outreachChannel": t(outreachChannel(r)),
+             "hasWatchableConversation": t(hasWatchableConversation(r)),
+             "isUnwatchedFormPitch": t(isUnwatchedFormPitch(r)), "hasProvenOutreach": t(hasProvenOutreach(r)),
+             "isSilent": t(isSilent(r)), "replyWatchConversationIsAttached": t(replyWatchConversationIsAttached(r)),
+             "isAwaitingFollowUp": t(isAwaitingFollowUp(r)), "replyArrivedAt": t(replyArrivedAt(r)),
+             "hasUnhandledReply": t(hasUnhandledReply(r)), "standing": t(standing(r)),
+             "isOutreachStoodDown": t(isOutreachStoodDown(r)), "isClosingNoteStoodDown": t(isClosingNoteStoodDown(r))]
         }
 
         static func show(_ p: Prospect) -> [String: String] {
-            ["status": "\(status(p))", "showOutcome": "\(String(describing: showOutcome(p)))", "outcome": "\(outcome(p))",
-             "performanceStatus": "\(performanceStatus(p))", "isBooked": "\(isBooked(p))",
-             "stoodDownBeforeAnyReply": "\(isOutreachStoodDown(p, asOf: nil))",
-             "stoodDownAfterEveryReply": "\(isOutreachStoodDown(p, asOf: .distantFuture))"]
+            ["status": t(status(p)), "showOutcome": t(showOutcome(p)), "outcome": t(outcome(p)),
+             "performanceStatus": t(performanceStatus(p)), "isBooked": t(isBooked(p)),
+             "stoodDownBeforeAnyReply": t(isOutreachStoodDown(p, asOf: nil)),
+             "stoodDownAfterEveryReply": t(isOutreachStoodDown(p, asOf: .distantFuture))]
         }
     }
 
@@ -104,7 +108,7 @@ final class OldAgainstNewFactsMembersTests {
         })
     }
 
-    private static func text(_ value: Any) -> String {
+    nonisolated static func text(_ value: Any) -> String {
         // Optionals render as `Optional(x)` or `nil` on both sides, matching `String(describing:)` above.
         let mirror = Mirror(reflecting: value)
         if mirror.displayStyle == .optional { return mirror.children.first.map { "Optional(\($0.value))" } ?? "nil" }
