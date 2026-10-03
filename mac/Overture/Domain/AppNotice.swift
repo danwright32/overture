@@ -568,8 +568,8 @@ enum AppNotices {
     // wording of its own, for the reason the shoot-history warning gives about `ShootHistory.warningText`:
     // one fault has one wording.
     //
-    // A WARNING rather than a receipt in all three states it can speak in. Two of them mean the log has
-    // stopped being bounded or stopped being readable, and the third is the only account of records that
+    // A WARNING rather than a receipt in all three states it can speak in. Two of them mean the log or its
+    // archive has stopped being bounded (#4454 replaced "stopped being readable"), and the third is the only account of records that
     // were permanently deleted. None of those is safe to miss.
     static func freezeHousekeepingWarning(_ done: FreezeLog.Housekeeping) -> AppNotice? {
         guard let text = FreezeHousekeepingCopy.notice(done) else { return nil }
