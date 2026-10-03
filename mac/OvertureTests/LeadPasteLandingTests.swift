@@ -129,6 +129,30 @@ struct LeadPasteLandingTests {
         #expect(fresh == ["Harbor Lights", "Renamed By Dan"], "the store holds \(fresh)")
     }
 
+    /// The second entry flush, the one taken once the store is held: an edit Dan makes while the paste reads and
+    /// waits is saved before anything is applied, so the put back of a failed save, which restores COMMITTED
+    /// values, cannot take his edit with it.
+    @Test func anEditMadeWhileThePasteWaitsSurvivesItsFailedSave() async throws {
+        let (container, context) = try seeded()
+        let flight = LandingSingleFlight(sleep: { _ in try? await Task.sleep(for: .seconds(3600)) })
+        let held = try await flight.begin(entryPoint: .scoutExtractIngest, priority: .scout, deadline: .seconds(60))
+        let paste = Task { @MainActor in
+            await LeadPasteLanding.landPastedLead([event("Harbor Lights")], today: Self.today, now: Self.now,
+                                                  landings: flight, saveSource: { _ in throw Refused() },
+                                                  into: context)
+        }
+        let waiting = await waitUntil("the paste waits its turn", timeout: .seconds(30)) { flight.queue == [.leadPaste] }
+        #expect(waiting, "the paste never queued for the store: \(flight.queue)")
+        let stored = try #require(try context.fetch(FetchDescriptor<Prospect>()).first)
+        stored.groupName = "Renamed While Waiting"
+        held.end()
+        let result = await paste.value
+        #expect(result == .refused(LeadIntake.saveFailedMessage), "said \(result)")
+        let fresh = try ModelContext(container).fetch(FetchDescriptor<Prospect>()).map(\.groupName)
+        #expect(fresh == ["Renamed While Waiting"], "the store holds \(fresh) after the paste's failed save")
+        #expect(stored.groupName == "Renamed While Waiting", "the put back undid Dan's edit")
+    }
+
     @Test func thePasteWaitsForTheLandingInProgressAtTheFrontOfTheQueue() async throws {
         let (container, context) = try seeded()
         let flight = LandingSingleFlight(sleep: { _ in try? await Task.sleep(for: .seconds(3600)) })
