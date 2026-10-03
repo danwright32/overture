@@ -16,7 +16,9 @@ struct TermsOverFactsTests {
     private let asOf = "2026-09-20"
 
     private func context() throws -> ModelContext {
-        ModelContext(try TestModelContainer.inMemory([Prospect.self, Recipient.self]))
+        // `OrgReachabilityAnswer` is named because the T5 tests insert one; leaving it to be reached through
+        // the schema's relationships would make the fixture depend on how SwiftData resolves an unnamed type.
+        ModelContext(try TestModelContainer.inMemory([Prospect.self, Recipient.self, OrgReachabilityAnswer.self]))
     }
 
     @discardableResult
@@ -156,5 +158,59 @@ struct TermsOverFactsTests {
                 "the lost inheritance was not seen in the ledger")
         #expect(!findings.contains { $0.contains("Wexcombe") || $0.contains("Quillon") || $0.contains("Harrowgate") },
                 "a finding named a presenter or a venue rather than the row's identifier")
+    }
+
+    // MARK: T6 (slice C)
+
+    // On top of `seed`: the Lantern Parade run at Harrowgate Hall (closing 2026-10-06) tours on to another
+    // room two nights later, inside the engagement gap, so its three rows form one cross-venue engagement.
+    @Test func theEngagementLinkAnswersTheSameOverFactsAsOverModelsAndSeesAVenueThatMoved() throws {
+        let ctx = try context()
+        _ = try seed(ctx)
+        row(ctx, key: "lantern tour|2026-10-08", title: "Lantern Parade", venue: "Quillon Room", opens: "2026-10-08")
+        let all = try ctx.fetch(FetchDescriptor<Prospect>())
+        // Positive control (L159): the touring row is linked to the hall's rows, and only through T6.
+        let linked = EngagementLink.group(among: all)
+        #expect(linked["lantern tour|2026-10-08"]?.count == 2,
+                "the touring row should be linked to the hall's two Lantern Parade rows")
+        #expect(TermsOverFacts.findings(all, asOf: asOf).isEmpty)
+
+        // Facts taken before the touring row moved into the hall: the engagement no longer spans two rooms
+        // over models, and the comparison has to say so by the row's identifier alone.
+        let stale = all.map(RowFacts.extract)
+        try #require(all.first { $0.naturalKey == "lantern tour|2026-10-08" }).venue = "Harrowgate Hall"
+        let findings = TermsOverFacts.findings(all, facts: stale, asOf: asOf)
+        #expect(findings.contains { $0.hasPrefix("EngagementLink.group members differ") },
+                "a row that stopped touring was not seen by the engagement comparison")
+        #expect(!findings.contains { $0.contains("Lantern") || $0.contains("Quillon") || $0.contains("Harrowgate") },
+                "a finding named a title or a venue rather than the row's identifier")
+    }
+
+    // The three entry points `scope` calls hand the term EVERY row, in any order. Asked of every rotation,
+    // so each row is last once and first once: a forwarder that dropped or skipped one would be invisible
+    // to oracle part two (both arms share it) and to a live comparison whose dropped row joins nothing,
+    // which is how a dropped last row survived the first mutation run of this slice.
+    @Test func theEntryPointsHandTheTermEveryRowInAnyOrder() throws {
+        let ctx = try context()
+        _ = try seed(ctx)
+        row(ctx, key: "lantern tour|2026-10-08", title: "Lantern Parade", venue: "Quillon Room", opens: "2026-10-08")
+        let all = try ctx.fetch(FetchDescriptor<Prospect>()).sorted { $0.naturalKey < $1.naturalKey }
+        let drawn: Set<String> = ["saltmarsh a", "saltmarsh b"]
+        #expect(!EngagementLink.group(among: all).isEmpty && !ShowLink.group(among: all).isEmpty,
+                "the fixture links nothing, so the rotations below compare empty tables")
+        for start in all.indices {
+            let rotated = Array(all[start...] + all[..<start])
+            #expect(EngagementLink.group(among: rotated) == EngagementLink.group(rotated.map(EngagementLink.Row.init)),
+                    "EngagementLink.group(among:) differs from the term with rotation \(start)")
+            #expect(ShowLink.group(among: rotated) == ShowLink.group(rotated.map(ShowLink.Row.init)),
+                    "ShowLink.group(among:) differs from the term with rotation \(start)")
+            let viaEntry = ShowLink.collapse(among: rotated, drawn: drawn)
+            let viaTerm = ShowLink.collapse(rotated.map(ShowLink.Row.init), drawn: drawn)
+            #expect(viaEntry.fronts == viaTerm.fronts && viaEntry.hidden == viaTerm.hidden,
+                    "ShowLink.collapse(among:) differs from the term with rotation \(start)")
+            #expect(QueueModel.ProducerTables(rows: rotated, overrides: .none)
+                        .corpus == QueueModel.ProducerTables(shows: rotated.map(ProducerGate.Show.init), overrides: .none).corpus,
+                    "ProducerTables(rows:) differs from the shows form with rotation \(start)")
+        }
     }
 }

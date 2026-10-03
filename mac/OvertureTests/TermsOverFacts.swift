@@ -17,7 +17,8 @@ import SwiftData
 //
 // ONE PLACE, GROWN BY EACH SLICE. Slice A carries T1 (ShowLink group and collapse), T2
 // (ContradictedCancellation) and T3 (feed breaks); slice B adds T4 (the producer tables) and T5 (the
-// organisation answer ledger). Each later slice adds its terms here, so the fixture suites and the live
+// organisation answer ledger); slice C adds T6 (EngagementLink) and moves T1, T4 and T6 onto the entry
+// points `QueueModel.scope` calls, which take the rows themselves. Each later slice adds its terms here, so the fixture suites and the live
 // store suite ask every ported term the same question through one comparison (L370).
 enum TermsOverFacts {
 
@@ -51,15 +52,15 @@ enum TermsOverFacts {
         func pid(_ key: String) -> String { pidByKey[key] ?? "a row no model holds" }
         var out: [String] = []
 
-        // T1: the grouping and the collapse, over the slice both conformers build by one rule.
-        let groupModels = ShowLink.group(models.map(ShowLink.Row.init))
-        let groupFacts = ShowLink.group(facts.map(ShowLink.Row.init))
+        // T1: the grouping and the collapse, through the entry points the pass calls (slice C).
+        let groupModels = ShowLink.group(among: models)
+        let groupFacts = ShowLink.group(among: facts)
         for key in Set(groupModels.keys).union(groupFacts.keys).sorted()
         where Set(groupModels[key] ?? []) != Set(groupFacts[key] ?? []) {
             out.append("ShowLink.group members differ for row \(pid(key))")
         }
-        let collapseModels = ShowLink.collapse(models.map(ShowLink.Row.init), drawn: drawn)
-        let collapseFacts = ShowLink.collapse(facts.map(ShowLink.Row.init), drawn: drawn)
+        let collapseModels = ShowLink.collapse(among: models, drawn: drawn)
+        let collapseFacts = ShowLink.collapse(among: facts, drawn: drawn)
         for key in Set(collapseModels.fronts.keys).union(collapseFacts.fronts.keys).sorted()
         where Set(collapseModels.fronts[key] ?? []) != Set(collapseFacts.fronts[key] ?? []) {
             out.append("ShowLink.collapse fronts differ for row \(pid(key))")
@@ -97,12 +98,19 @@ enum TermsOverFacts {
         for (model, (a, b)) in zip(models, zip(showsModels, showsFacts)) where a != b {
             out.append("ProducerGate.Show differs for row \(pid(model.naturalKey))")
         }
-        let tablesModels = QueueModel.ProducerTables(shows: showsModels, overrides: overrides)
-        let tablesFacts = QueueModel.ProducerTables(shows: showsFacts, overrides: overrides)
+        let tablesModels = QueueModel.ProducerTables(rows: models, overrides: overrides)
+        let tablesFacts = QueueModel.ProducerTables(rows: facts, overrides: overrides)
         out += tableFindings(tablesModels, tablesFacts, rows: models, term: "ProducerTables", pid: pid)
         if QueueModel.ProducerTables.key(shows: showsModels, overrides: overrides)
             != QueueModel.ProducerTables.key(shows: showsFacts, overrides: overrides) {
             out.append("ProducerTables.key differs")
+        }
+
+        // T6: the cross-venue engagements, member lists compared in the order the term returns them.
+        let linkedModels = EngagementLink.group(among: models)
+        let linkedFacts = EngagementLink.group(among: facts)
+        for key in Set(linkedModels.keys).union(linkedFacts.keys).sorted() where linkedModels[key] != linkedFacts[key] {
+            out.append("EngagementLink.group members differ for row \(pid(key))")
         }
 
         // T5: the inherited answer of every show, each arm with its own producer index, as the pass hands it.

@@ -3251,6 +3251,14 @@ enum QueueModel {
             venueBrands = ProducerGate.VenueBrands(corpus: corpus, overrides: overrides)
         }
 
+        /// #4357 slice C: over the rows themselves, which is what `scope` calls, so the pass hands it live
+        /// models and the engine (Phase 4) retained `RowFacts`. A forwarder through `ProducerGate.Show`'s one
+        /// projection, never a second derivation. The memo in `QueueView` keeps the `shows:` form, because it
+        /// keys on the same projected shows it builds from.
+        init(rows: [some ProspectFacts], overrides: ProducerOverrides) {
+            self.init(shows: rows.map(ProducerGate.Show.init), overrides: overrides)
+        }
+
         /// The key these tables are a function of: every `(presenter, venue)` pair, in order, plus the
         /// overrides. Content rather than identity, because a presenter edited IN PLACE changes the
         /// answer and leaves every object where it was.
@@ -3332,16 +3340,16 @@ enum QueueModel {
         // neighbours below judge against `corpus ?? prospects` and each says why; this one carried no
         // reason at all, and an entry with no written reason beside three that each have one is evidence
         // it was never reasoned about rather than deliberately chosen (L233).
-        let linked = EngagementLink.group((rowsForLinking ?? prospects).map(EngagementLink.Row.init))
+        // #4357 slice C: T1, T4 and T6 are handed the rows themselves through their generic entry points,
+        // so this pass and the engine (Phase 4) call one term over models and over retained facts.
+        let linked = EngagementLink.group(among: rowsForLinking ?? prospects)
         // #3743: the presenter-against-venue index, built ONCE and handed to both whole-corpus
         // derivations that need it. `inheritedAnswers` built one and `ProducerGate.VenueBrands` built an
         // equivalent one from the same shows in the same pass; measured on the live store the index alone
         // is 27.2 ms, so it was being paid twice per render.
         // #3742: built here only when the caller did not hand them in. The shows are mapped once either
         // way, because the caller's key is derived from the same mapping.
-        let tables = producerTables ?? ProducerTables(
-            shows: (corpus ?? prospects).map(ProducerGate.Show.init),
-            overrides: overrides)
+        let tables = producerTables ?? ProducerTables(rows: corpus ?? prospects, overrides: overrides)
         let producerCorpus = tables.corpus
         let inherited = inheritedAnswers(answers, corpus: corpus ?? prospects,
                                          overrides: overrides, refusals: refusals,
@@ -3373,7 +3381,7 @@ enum QueueModel {
         // and a duplicate the caller's scope happens to exclude is still a duplicate. Judging it against
         // the caller's rows would make a card stop admitting the fault as soon as Dan dealt with the
         // other half of it.
-        let sameShowGroups = ShowLink.group((corpus ?? prospects).map(ShowLink.Row.init))
+        let sameShowGroups = ShowLink.group(among: corpus ?? prospects)
         // #3330: the title of each stored row, so a card carrying an arrival tag can name the row it
         // looked like. Over the UNFILTERED corpus for the same reason the two tables above are: the row
         // this one resembles may be dismissed or outside the window, and a lookalike the caller's scope
@@ -3391,8 +3399,7 @@ enum QueueModel {
         // two different questions: a group's highest priority row is routinely dismissed or outside the
         // queue's window, and hiding its siblings in favour of a card that is not there would take the
         // show off the surface entirely.
-        let collapse = ShowLink.collapse((corpus ?? prospects).map(ShowLink.Row.init),
-                                         drawn: Set(prospects.map(\.naturalKey)))
+        let collapse = ShowLink.collapse(among: corpus ?? prospects, drawn: Set(prospects.map(\.naturalKey)))
         // #4146: the same walk read backwards. NEWEST FIRST, by the row's own first sighting, because a
         // card that is the target of several pointers names one and counts the rest, and the newest is
         // the one Dan has not seen yet. A row with no `firstSeenAt` (every row written before #1886)

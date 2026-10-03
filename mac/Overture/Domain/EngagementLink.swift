@@ -92,3 +92,12 @@ extension EngagementLink.Row {
                   performanceDate: p.performanceDate, runEndDate: p.runEndDate)
     }
 }
+
+extension EngagementLink {
+    // #4357 slice C: the term over the rows themselves, which is what `QueueModel.scope` calls, so the pass
+    // hands it live models and the engine (Phase 4) retained `RowFacts`, with the slicing written once here
+    // rather than at each caller.
+    static func group(among rows: [some ProspectFacts]) -> [String: [Member]] {
+        group(rows.map(Row.init))
+    }
+}
