@@ -247,8 +247,14 @@ struct ScoutLandingTrackerAttributionProbeTests {
                 let rows = try ctx.fetch(FetchDescriptor<Prospect>())
                 for r in rows { _ = r.recipients.count }
                 // #4427: by the title, which every copy glues, rather than the key, which since #4427 a copy
-                // with no venue no longer ends in its glue.
-                let copyRow = rows.map { p in (1..<4).contains { p.groupName.hasPrefix(Phase0.glue(forCopy: $0)) } }
+                // with no venue no longer ends in its glue. In front on today's corpus, on the end on the
+                // historical one (`ScaledCorpus.gluedName`), so both are asked.
+                let copyRow = rows.map { p in
+                    (1..<4).contains { k in
+                        let glue = Phase0.glue(forCopy: k)
+                        return p.groupName.hasPrefix(glue) || p.groupName.hasSuffix(glue)
+                    }
+                }
                 let indexOf = Dictionary(rows.enumerated().map { ($1.persistentModelID, $0) }, uniquingKeysWith: { a, _ in a })
                 var clock = Phase0.now()
                 func lap(_ what: String) {
