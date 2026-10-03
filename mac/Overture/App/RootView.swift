@@ -2311,6 +2311,8 @@ struct RootView: View {
                                                            loaded.health),
                                                   context: context),
             priority: priority,
+            // #4335 (A6): the landing journal folder, resolved here, at the product call site, once.
+            journals: .live,
             into: context)
         if let left = landed.copyLeftBehind { status.set(left, priority: .warning) }
         let outcome = landed.outcome
@@ -2340,7 +2342,7 @@ struct RootView: View {
             clients: loaded.clients, history: LocalHistory.forMatching(existing: existing),
             blocked: ScoutService.blockedCalendar(export: (loaded.bookings, loaded.blockedDates, loaded.health),
                                                   context: context),
-            pending: pending, into: context)
+            pending: pending, journals: .live, into: context)
         let problems = offered.unreadable + offered.copiesLeftBehind
         if let line = LandingWaitCopy.offered(landed: offered.landed.count, alreadyLanded: offered.alreadyLanded,
                                               stillWaiting: offered.stillWaiting,
@@ -2769,7 +2771,9 @@ struct RootView: View {
                             askReadBudget(ScoutReadAsk(pending: pending) { continuation.resume(returning: $0) })
                         }
                     },
-                    landingPriority: auto ? .scout : .danAction)
+                    landingPriority: auto ? .scout : .danAction,
+                    // #4335 (A6): the landing journal folder, resolved here, at the product call site, once.
+                    journals: .live)
                 guard gen == scoutGeneration else { return }   // superseded by a Retry / newer run
                 scoutSummary = ScoutRunSummary.summary(for: outcome)   // #885
 

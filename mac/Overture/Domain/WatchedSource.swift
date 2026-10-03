@@ -175,6 +175,14 @@ final class WatchedSource {
     // (at least one) is above it.
     var lastTouchedSequence: Int = 0
 
+    // #4335 (A6): the run that last LANDED this source's shows, and its landing sequence, written in the same
+    // save as the shows, so the store says which sources a landing finished, atomic with the data, and an
+    // interrupted landing's journal is read against them. Only a source whose shows were applied gets them:
+    // a source a landing only settled (a failed read, an unchanged page) keeps the run that last landed it.
+    // Defaulted, so existing rows migrate as never landed by a recorded run.
+    var lastLandedRunID: String?
+    var lastLandedSequence: Int = 0
+
     // #891: what the last run that READ this source managed to read, and what it could not (an event whose
     // own detail page was never reached comes back with no venue and is dropped).
     //

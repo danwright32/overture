@@ -1,0 +1,88 @@
+import Testing
+import Foundation
+import SwiftData
+
+// #4335 (A6) migration dry run (L267). Five new columns, all defaulted or optional, so the migration is a
+// lightweight addition: `LandingRun.sequence`, `entryPointRaw` and `startedAt`, and
+// `WatchedSource.lastLandedRunID` and `lastLandedSequence`. This rehearses it against a COPY of the real
+// Release store (never the live file), through the one shared clone and MigrationRehearsal, and proves every
+// existing Prospect, WatchedSource and LandingRun survives, every source reads as never landed by a recorded
+// run, and the migrated store takes the new values and reads them back. It says so when it rehearsed nothing
+// (no live store on this machine) rather than passing silently.
+@MainActor
+@Suite("Landing record columns migration dry run against a clone of the live store (#4335)")
+struct LandingRecordMigrationDryRunTests {
+    private var releaseStoreURL: URL {
+        StoreLocation.storeURL(appSupport: StoreLocation.appSupport, isDebugBuild: false)
+    }
+
+    @Test func addingTheLandingRecordColumnsPreservesEveryRowInACloneOfTheLiveStore() throws {
+        let tmpDir = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("landing-record-dryrun-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: tmpDir, withIntermediateDirectories: true)
+        defer { FileStores.remove(tmpDir) }
+
+        let start = try MigrationRehearsal.begin("the landing record columns", liveStore: releaseStoreURL,
+                                                 into: tmpDir)
+        guard case let .rehearse(copy) = start else {
+            if case let .skipped(said) = start { MigrationRehearsal.report(said) }
+            if case let .cloneFailed(said) = start { MigrationRehearsal.report(said) }
+            return
+        }
+
+        // Counted with SQLite rather than SwiftData, so the count is of the file as Dan's build left it,
+        // before anything this build declares has opened it.
+        let before = try Self.counts(at: copy)
+
+        let container = try FileStores.container(for: AppSchema.schema, configurations: [ModelConfiguration(url: copy)])
+        let ctx = ModelContext(container)
+        let sources = try ctx.fetch(FetchDescriptor<WatchedSource>())
+        #expect(try ctx.fetch(FetchDescriptor<Prospect>()).count == before.prospects)
+        #expect(sources.count == before.sources)
+        #expect(try ctx.fetch(FetchDescriptor<LandingRun>()).count == before.runs)
+        #expect(sources.allSatisfy { $0.lastLandedRunID == nil && $0.lastLandedSequence == 0 },
+                "a migrated source reads as landed by a run nothing recorded")
+        #expect(try ctx.fetch(FetchDescriptor<LandingRun>()).allSatisfy { $0.sequence == 0 && $0.entryPointRaw.isEmpty })
+
+        // The new columns take a write and read it back, which a schema mismatch breaks and an open-and-count
+        // would not notice.
+        let started = Date(timeIntervalSince1970: 1_790_792_040.5)
+        ctx.insert(LandingRun(runIdentity: "dry-run-landing", landedAt: nil, sequence: 9_999,
+                              entryPoint: .runScoutLanding, startedAt: started))
+        if let first = sources.first {
+            first.lastLandedRunID = "dry-run-landing"
+            first.lastLandedSequence = 9_999
+        }
+        try ctx.save()
+        let fresh = ModelContext(container)
+        #expect(try LandingRun.highestSequence(in: fresh) == 9_999)
+        let run = try #require(try fresh.fetch(FetchDescriptor<LandingRun>()).first { $0.runIdentity == "dry-run-landing" })
+        #expect(run.startedAt == started && run.entryPointRaw == "runScoutLanding")
+        if let id = sources.first?.sourceId {
+            let s = try #require(try fresh.fetch(FetchDescriptor<WatchedSource>()).first { $0.sourceId == id })
+            #expect(s.lastLandedRunID == "dry-run-landing" && s.lastLandedSequence == 9_999)
+        }
+    }
+
+    // Row counts of the three tables, read from the file with sqlite3. A table the old build never created
+    // (LandingRun, on a store from before #4336) counts as zero rows.
+    private static func counts(at store: URL) throws -> (prospects: Int, sources: Int, runs: Int) {
+        func count(_ table: String) throws -> Int {
+            let p = Process()
+            p.executableURL = URL(fileURLWithPath: "/usr/bin/sqlite3")
+            p.arguments = ["-readonly", store.path,
+                           "SELECT count(*) FROM sqlite_master WHERE type='table' AND name='\(table)';"
+                           + " SELECT count(*) FROM \(table);"]
+            let out = Pipe()
+            p.standardOutput = out
+            p.standardError = Pipe()
+            try p.run()
+            p.waitUntilExit()
+            let lines = String(decoding: out.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+                .split(separator: "\n").map(String.init)
+            guard lines.first == "1" else { return 0 }
+            return Int(lines.dropFirst().first ?? "") ?? -1
+        }
+        return (try count("ZPROSPECT"), try count("ZWATCHEDSOURCE"), try count("ZLANDINGRUN"))
+    }
+}

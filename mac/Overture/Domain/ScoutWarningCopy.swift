@@ -144,6 +144,13 @@ enum ScoutWarningCopy {
             + "scout changed. Not yet saved: " + rows.joined(separator: ", ") + "."
     }
 
+    // #4335 (A6): the landing could not write the record it keeps of itself outside the store, so it did not
+    // start. Says what that means for Dan's data (nothing changed) rather than naming the file.
+    static func journalNotWritten(_ why: String) -> String {
+        "Overture couldn't write the record it keeps while it saves a scout (\(why)), so this scout's results "
+            + "were not applied. Nothing from the scout changed."
+    }
+
     // #4334: that refusal, when the copy that would have kept the calendar results failed too. Says where
     // the results still are, rather than promising they will be offered again.
     static func stoppedWithoutACopy(_ why: String) -> String {

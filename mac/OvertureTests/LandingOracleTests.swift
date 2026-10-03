@@ -355,6 +355,7 @@ final class LandingOracleTests {
         var out: [LandingOracle.Row] = []
         for type in AppSchema.models {
             guard let observed = type as? any ScopeObserved.Type else { continue }
+            guard LandingOracle.recordsOfTheLanding[String(describing: type)] == nil else { continue }
             out += try rows(observed)
         }
         // Ordered by what the clock cannot touch, so the two landings' rows line up.
