@@ -409,14 +409,86 @@ enum FreezeLog {
     // What a prune keeps and what it removed. The count and both ends of the range are DERIVED from the
     // dropped records rather than stored beside them, so a report cannot describe a different set from the
     // one actually removed (L53, L83).
+    //
+    // #4454: what it keeps is LINES, as the file held them, rather than records decoded and encoded again.
+    // Re-encoding cost a full encode of every survivor every hour, and it also rewrote each one through this
+    // build's `StallRecord`, which drops any field a later build added (L425).
     struct Pruned: Equatable, Sendable {
-        var records: [StallRecord]
+        var keptLines: [Data]
         var droppedRecords: [StallRecord]
         var dropped: Int { droppedRecords.count }
         // nil when nothing was dropped, never a sentinel date: a prune that removed nothing and one that
         // removed a record stamped at the epoch must not read the same (L98, L11).
         var earliestDropped: Date? { droppedRecords.map(\.at).min() }
         var latestDropped: Date? { droppedRecords.map(\.at).max() }
+    }
+
+    // The instant before which an archived record is past its month. One definition, read by the rule below
+    // and by the tests that pin its edge, so the two cannot come to disagree about where the month ends.
+    static func archiveCutoff(now: Date, retentionDays: Int) -> Date {
+        now.addingTimeInterval(-Double(retentionDays) * 60 * 60 * 24)
+    }
+
+    // #4454: the cutoff as the file would WRITE it, rounded UP to the whole second, so a line's stamp can be
+    // compared as bytes. The file stores whole seconds, and for a whole second `at < cutoff` holds exactly
+    // when `at < ceil(cutoff)`, so a stamp at or after this is inside the window and no stamp before it is.
+    // Formatted by the encoder's own formatter rather than a second definition of the format (L263).
+    static func cutoffStamp(_ cutoff: Date) -> [UInt8]? {
+        let whole = Date(timeIntervalSinceReferenceDate: cutoff.timeIntervalSinceReferenceDate.rounded(.up))
+        guard let data = try? encoder().encode(whole), data.count == stampLength + 2 else { return nil }
+        return Array(data.dropFirst().dropLast())
+    }
+
+    // `2026-09-24T15:52:41Z`, which is what `.iso8601` writes and the only shape the stamp reader accepts.
+    static let stampLength = 20
+
+    // The record's own `at`, read from the line's BYTES without decoding it, or nil whenever that cannot be
+    // done with certainty, in which case the caller decodes the line.
+    //
+    // WHY THIS IS SAFE, since it decides which lines are never decoded. Inside a JSON string a quote is
+    // escaped, so the bytes `"at":"` can only be a key named `at` with a string value. A `StallRecord` has
+    // exactly one at its top level and nothing nested that carries one, so a line holding that sequence
+    // EXACTLY once, followed by a stamp of exactly the encoder's shape, has that stamp as its `at`. Two
+    // occurrences, or none, or any other shape, is not guessed at. Searched for anywhere in the line rather
+    // than expected first, because keys are sorted and `asleepSeconds` (#4153) already sorts ahead of `at`.
+    // And it only ever decides that a line is KEPT: a line it says is old is decoded before anything removes
+    // it, so the worst a wrong answer here can do is keep a record, never lose one.
+    static func stamp(of line: Data) -> ArraySlice<UInt8>? {
+        let key: [UInt8] = Array("\"at\":\"".utf8)
+        return line.withUnsafeBytes { raw -> ArraySlice<UInt8>? in
+            let bytes = raw.bindMemory(to: UInt8.self)
+            var found: Int?
+            var index = 0
+            while index + key.count <= bytes.count {
+                if bytes[index] == key[0], bytes[index + 1] == key[1], bytes[index + 2] == key[2],
+                   bytes[index + 3] == key[3], bytes[index + 4] == key[4], bytes[index + 5] == key[5] {
+                    guard found == nil else { return nil }
+                    found = index + key.count
+                    index += key.count
+                } else {
+                    index += 1
+                }
+            }
+            guard let start = found, start + stampLength < bytes.count,
+                  bytes[start + stampLength] == UInt8(ascii: "\"") else { return nil }
+            let stamp = Array(bytes[start..<(start + stampLength)])
+            for (offset, byte) in stamp.enumerated() {
+                let expected: UInt8?
+                switch offset {
+                case 4, 7: expected = UInt8(ascii: "-")
+                case 10: expected = UInt8(ascii: "T")
+                case 13, 16: expected = UInt8(ascii: ":")
+                case 19: expected = UInt8(ascii: "Z")
+                default: expected = nil
+                }
+                if let expected {
+                    guard byte == expected else { return nil }
+                } else {
+                    guard byte >= UInt8(ascii: "0"), byte <= UInt8(ascii: "9") else { return nil }
+                }
+            }
+            return stamp[...]
+        }
     }
 
     // A month means a month, with NO exception for the longest stall, and that is worth stating because the
@@ -427,17 +499,66 @@ enum FreezeLog {
     // stall is precisely the one the live file refuses to drop. So the archive's oldest month can go without
     // putting the maximum at risk, and an exception here would be a second copy of a rule whose single copy
     // already works (L274).
-    static func pruned(_ records: [StallRecord], now: Date,
-                       retentionDays: Int = archiveRetentionDays) -> Pruned {
-        let cutoff = now.addingTimeInterval(-Double(retentionDays) * 60 * 60 * 24)
-        // Order preserved on both sides, so the archive stays roughly chronological after a prune and the
-        // reported range reads in the direction the records were written.
-        var kept: [StallRecord] = []
+    //
+    // #4454: WHAT IT DECODES. Until this it decoded every record in the archive, 29,527 of them on
+    // 2026-10-02, every hour, to remove the few that had aged past the month since the last pass. Now a line
+    // whose stamp is inside the window is kept without being decoded, and only a line whose stamp says old,
+    // or that has no stamp it can read, is decoded and judged by the rule on the decoded record. It still
+    // looks at EVERY line rather than stopping at the first one inside the window, because the archive is
+    // not in time order: `compact` appends a promoted old stall after newer records, measured three times
+    // in a copy of Dan's archive on 2026-10-03, the oldest a week behind its neighbours (#3763).
+    //
+    // WHAT IT KEEPS. Every line it cannot show is a record past the month, verbatim: a line nobody can read,
+    // a note, a record inside the window. Until #4454 the prune refused to touch an archive holding a line it
+    // could not read, which kept that line but stopped the archive ever being bounded again; keeping the
+    // line and removing only what it positively knows is old is #4398's answer for the live file (L211).
+    //
+    // `decode` is a PARAMETER so a test can count what this decodes, on `archiveTail`'s precedent (L224).
+    static func pruned<Lines: Sequence>(lines: Lines, now: Date, retentionDays: Int = archiveRetentionDays,
+                                        decode: (Data) -> Line) -> Pruned where Lines.Element == Data {
+        let cutoff = archiveCutoff(now: now, retentionDays: retentionDays)
+        let window = cutoffStamp(cutoff)
+        // Order preserved, so the archive stays roughly chronological after a prune, the reported range
+        // reads in the direction the records were written, and #4453's tail reader, which relies on a
+        // prune only ever REMOVING lines, stays right.
+        var kept: [Data] = []
         var dropped: [StallRecord] = []
-        for record in records {
-            if record.at < cutoff { dropped.append(record) } else { kept.append(record) }
+        for line in lines {
+            if let window, let stamp = stamp(of: line), !stamp.lexicographicallyPrecedes(window) {
+                kept.append(line)
+                continue
+            }
+            switch decode(line) {
+            case .record(let record) where record.at < cutoff:
+                dropped.append(record)
+            case .record, .note, .unreadable:
+                kept.append(line)
+            }
         }
-        return Pruned(records: kept, droppedRecords: dropped)
+        return Pruned(keptLines: kept, droppedRecords: dropped)
+    }
+
+    // The lines of `data`, FIRST FIRST, the twin of `LinesFromEnd`. Each is a slice sharing the file's
+    // storage rather than a copy, so a line the prune keeps without reading costs no allocation.
+    struct LinesFromStart: Sequence, IteratorProtocol {
+        private let data: Data
+        private var start: Data.Index
+
+        init(_ data: Data) {
+            self.data = data
+            self.start = data.startIndex
+        }
+
+        mutating func next() -> Data? {
+            while start < data.endIndex {
+                let newline = data[start..<data.endIndex].firstIndex(of: 0x0A)
+                let end = newline ?? data.endIndex
+                let line = data[start..<end]
+                start = newline.map { data.index(after: $0) } ?? data.endIndex
+                if !line.isEmpty { return line }
+            }
+            return nil
+        }
     }
 
     // The file half of the retention, stubbed so the tests beside it fail on behaviour rather than on a
@@ -451,42 +572,59 @@ enum FreezeLog {
     enum ArchivePrune: Equatable, Sendable {
         // Nothing old enough to remove, or no archive at all. The ordinary state on most launches.
         case nothingToRemove
-        // The archive holds lines that could not be decoded, so nothing was touched. Carries the count
-        // because how many is what somebody would act on.
-        case refused(unreadableLines: Int)
+        // #4454: records were past their month and the archive could not be rewritten without them, so it
+        // was left exactly as it was and is no longer being bounded until a later pass succeeds. In place of
+        // `refused(unreadableLines:)`, which stopped every prune over a line nobody could read; such a line
+        // is now kept and the prune carries on, so a write is the one thing left that can stop it.
+        case couldNotRewrite
         // Records permanently removed, with the span they covered. Both ends are non-optional here: a
         // removal always has a first and last record, and making them optional would recreate the
         // unrepresentable state this enum exists to close.
         case removed(count: Int, earliest: Date, latest: Date)
     }
 
+    // `decode` and `write` are parameters so a test can count what a pass decodes and fail its write on
+    // demand; production passes neither.
     static func pruneArchive(besideLogAt url: URL, now: Date,
-                            retentionDays: Int = archiveRetentionDays) -> ArchivePrune {
+                            retentionDays: Int = archiveRetentionDays,
+                            decode: ((Data) -> Line)? = nil,
+                            write: (Data, URL) throws -> Void = { try $0.write(to: $1, options: .atomic) })
+        -> ArchivePrune {
         let archive = archiveURL(besideLogAt: url)
-        let read = read(at: archive)
         // No archive is the ordinary state: most installs have never compacted. Nothing to report.
-        guard !read.fileWasAbsent else { return .nothingToRemove }
-
-        // REFUSE on a short read, not only on a failed one. This function rewrites the file from what the
-        // read returned, so every line the read could not decode would be destroyed by the rewrite without
-        // ever being counted, and a file half written by a process killed mid-freeze is the ORDINARY case
-        // here rather than a rare one (L211, L105). The count is reported rather than a bare flag, because
-        // how many lines are unreadable is what somebody would act on.
-        guard read.unreadableLines == 0 else {
-            return .refused(unreadableLines: read.unreadableLines)
+        guard FileManager.default.fileExists(atPath: archive.path) else { return .nothingToRemove }
+        // A file that is there and cannot be opened removes nothing, as it did before #4454, and nothing is
+        // claimed about it here: the compaction beside this is the step that writes this file, and its own
+        // failure is what says the folder is unusable (HandoffFileReadTests.noAppSourceSwallowsAFileRead).
+        let data: Data
+        do {
+            data = try Data(contentsOf: archive, options: .mappedIfSafe)
+        } catch {
+            return .nothingToRemove
         }
 
-        let result = pruned(read.records, now: now, retentionDays: retentionDays)
+        // #4454: as BYTES, line by line, rather than through `read(at:)`, which decoded every record and
+        // whose whole file String read hides the file entirely over one invalid byte (#4411).
+        let decoder = decoder()
+        let result = pruned(lines: LinesFromStart(data), now: now, retentionDays: retentionDays,
+                            decode: decode ?? { decodeLine($0, with: decoder) })
         guard result.dropped > 0 else { return .nothingToRemove }
 
         // Atomically, so a failed write leaves the archive as it was rather than half of it. And the result
         // is only reported as a drop once the write has actually happened: saying records were removed when
         // the write failed would be a report of a deletion nobody performed, which is the mirror of the
-        // silence this whole issue is about (L12).
-        let text = result.records.compactMap(line(for:)).joined(separator: "\n")
-        let payload = result.records.isEmpty ? "" : text + "\n"
-        guard (try? payload.write(to: archive, atomically: true, encoding: .utf8)) != nil else {
-            return .nothingToRemove
+        // silence this whole issue is about (L12). A failure is its own outcome rather than a quiet
+        // `nothingToRemove`, because the archive has stopped being bounded and that is not a quiet hour.
+        var payload = Data()
+        payload.reserveCapacity(data.count)
+        for line in result.keptLines {
+            payload.append(line)
+            payload.append(0x0A)
+        }
+        do {
+            try write(payload, archive)
+        } catch {
+            return .couldNotRewrite
         }
         // Both ends are present whenever anything was dropped, so the fallback can never be reached; it is
         // here because the enum refuses to carry a removal without its span, which is the point of it.
@@ -584,7 +722,9 @@ enum FreezeLog {
         // killed mid-freeze, which is the ordinary case this file exists for, was in neither the live file
         // nor the archive afterwards and nothing counted it, while `pruneArchive` refuses on the same
         // condition (L211, L5). Kept in the LIVE file rather than the archive, because the archive's prune
-        // refuses on an unreadable line and one moved there would stop the archive ever being bounded.
+        // refused on an unreadable line and one moved there would have stopped the archive ever being
+        // bounded. Since #4454 the prune keeps such a line and carries on, so that reason is gone; the live
+        // file is still where the line stays, because it is where the reader counts it.
         let lines = [line(for: note)].compactMap { $0 } + read.unreadable + result.records.compactMap(line(for:))
         let text = lines.joined(separator: "\n") + "\n"
         // The archive already holds these records, so a failed rewrite here leaves them in BOTH files rather

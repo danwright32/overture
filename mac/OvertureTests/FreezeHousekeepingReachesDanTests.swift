@@ -62,23 +62,30 @@ final class FreezeHousekeepingReachesDanTests {
                 "a log nobody is bounding was drawn as a receipt, which is safe to miss")
     }
 
-    // The other failure. The archive holds lines that could not be decoded, so the prune refuses rather
-    // than destroying them in its rewrite, and nothing will ever be removed until somebody looks.
-    @Test("an archive holding lines nothing can read puts a line on the masthead")
-    func aRefusedPruneIsSaidOnTheMasthead() throws {
-        let dir = try sandboxes.make(named: "freeze-housekeeping-unreadable")
+    // The other failure. The archive holds records past their month and the prune could not write the
+    // archive without them, so nothing was removed and the archive is no longer being bounded. #4454 made
+    // this the prune's failure, in place of refusing on a line nobody could read, which it now keeps.
+    // Blocked for real: the folder is made read only, so the temporary file an atomic write needs cannot
+    // be created beside the archive.
+    @Test("an archive the prune could not rewrite puts a line on the masthead")
+    func aFailedPruneIsSaidOnTheMasthead() throws {
+        let dir = try sandboxes.make(named: "freeze-housekeeping-readonly")
         let log = FreezeLog.url(in: dir)
-        writeLog([stall(0.3, sequence: 1)], to: log)
-        try "not json at all\nnor is this\n".write(to: FreezeLog.archiveURL(besideLogAt: log),
-                                                   atomically: true, encoding: .utf8)
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let window = Double(FreezeLog.archiveRetentionDays) * 60 * 60 * 24
+        writeLog([stall(0.3, sequence: 1, at: now)], to: log)
+        _ = FreezeLog.archive([stall(0.5, sequence: 2, at: now.addingTimeInterval(-window - 60))],
+                              besideLogAt: log)
+        try FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: dir.path)
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: dir.path) }
 
-        let done = FreezeLog.housekeeping(at: log, now: Date(timeIntervalSince1970: 1_785_000_000))
-        #expect(done.prune == .refused(unreadableLines: 2),
-                "this did not reach the refusal, so it proves nothing either way")
+        let done = FreezeLog.housekeeping(at: log, now: now)
+        #expect(done.prune == .couldNotRewrite,
+                "this did not reach the failed rewrite, so it proves nothing either way")
 
         let texts = notices(done).map(\.text)
-        #expect(texts.contains(FreezeHousekeepingCopy.pruneRefused(lines: 2)),
-                Comment(rawValue: "a damaged archive nothing can prune said nothing: \(texts)"))
+        #expect(texts.contains(FreezeHousekeepingCopy.pruneCouldNotRewrite),
+                Comment(rawValue: "an archive nothing could prune said nothing: \(texts)"))
     }
 
     // The destructive one. A prune permanently deletes records, so it accounts for itself with the span
