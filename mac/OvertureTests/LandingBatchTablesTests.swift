@@ -188,6 +188,8 @@ struct LandingBatchTablesTests {
             lookups(listing: $0.sourceUrl, runs: [], series: $0.seriesId, night: $0.performanceDate)
         } + LandingOracleCorpus.stored.flatMap {
             lookups(listing: $0.listingURL, runs: $0.runURLs, series: nil, night: $0.date)
+        } + Set(LandingOracleCorpus.sources.map(\.id) + LandingOracleCorpus.stored.flatMap(\.sourceIds)).sorted().map {
+            Lookup.ownedBy([$0])   // #4475: the rows each source owns, which the reconcile reads
         }
         var steps: [String] = []
         var found: [String] = []
@@ -279,6 +281,118 @@ struct LandingBatchTablesTests {
                 try landing.rows(lookup)
             }
         }
+    }
+
+    // MARK: runScout's per source reconcile (#4475)
+
+    // runScout reconciles once a SOURCE (`applySweep`, which `landNative` calls). Three sources each re-list their
+    // own three stored shows over a store padded with `padding` rows they do not own, through one landing, as
+    // runScout lands them. Returns the visits each source after the first cost.
+    private func perSourceSweepVisits(padding: Int) throws -> [Int] {
+        let ctx = try context()
+        let ids = ["one", "two", "three"]
+        for (s, id) in ids.enumerated() {
+            for k in 0..<3 {
+                stored(ctx, "Kept \(s) \(k)", Self.night(30 + s * 3 + k), url: "https://src.example/Kept \(s) \(k)",
+                       sourceIds: [id])
+            }
+        }
+        for k in 0..<padding {
+            stored(ctx, "Padding \(k)", Self.night(60 + k % 200), url: "https://padding.example/\(k)",
+                   venue: "Padding Hall \(k % 7)", sourceIds: ["elsewhere"])
+        }
+        try ctx.save()
+        let landing = ScoutLandingStore(context: ctx)
+        var after: [ScoutLandingStore.Counters] = []
+        for (s, id) in ids.enumerated() {
+            _ = ScoutService.applySweep(
+                events: (0..<3).map { event("Kept \(s) \($0)", 30 + s * 3 + $0).asExtractedEvent },
+                clients: [], history: [], blocked: .empty,
+                feed: ScoutService.FeedCheck(sourceId: id, baseline: 3, successfulCheckCount: WatchedSource.warmupRuns),
+                today: Self.today, sourceIds: [id], landing: landing, into: ctx)
+            after.append(landing.counters)
+        }
+        return (1..<after.count).map { Self.visits(after[$0] - after[$0 - 1]) }
+    }
+
+    // THE GUARD (#4475). A source's sweep, its reconcile included, visits exactly as many stored rows on a store
+    // of 9 shows plus 50 as on one four times larger. Seen on the code before #4475, where each source's
+    // reconcile was handed every stored row.
+    @Test func aSourcesSweepAndReconcileVisitsDoNotGrowWithTheStore() throws {
+        let small = try perSourceSweepVisits(padding: 50)
+        let large = try perSourceSweepVisits(padding: 200)
+        #expect(!small.isEmpty && small == large, Comment(rawValue:
+            "per source visits after the first: \(small) on a store of 59, \(large) on a store of 209"))
+    }
+
+    // OLD AGAINST NEW on the oracle corpus: every source swept in turn through one landing, as runScout lands
+    // them, once reconciling only the rows its report could change and once reconciling every stored row
+    // (`.everyRead`, the code before #4475), over two identical stores. Every field the reconcile writes, and
+    // every field the landing writes, must come out the same on every row.
+    @Test(arguments: [false, true])
+    func theScopedReconcileLandsTheOracleCorpusAsTheWalkDid(fenwickSwapped: Bool) throws {
+        let order = fenwickSwapped ? LandingOracleTests.fenwickSwapped : LandingOracleCorpus.sources.map(\.id)
+        let sources = Dictionary(uniqueKeysWithValues: LandingOracleCorpus.sources.map { ($0.id, $0) })
+        func land(_ policy: ScoutLandingStore.Policy) throws -> [String] {
+            let container = try TestModelContainer.inMemory(AppSchema.models)
+            let ctx = container.mainContext
+            try LandingOracleCorpus.seed(into: ctx)
+            // Rows no corpus source owns, lists or links to, so a reconcile that walked them would have to
+            // leave them exactly as they were.
+            for k in 0..<12 {
+                stored(ctx, "Elsewhere \(k)", LandingOracleCorpus.today, url: "https://elsewhere.example/\(k)",
+                       sourceIds: ["elsewhere"])
+            }
+            try ctx.save()
+            let landing = ScoutLandingStore(context: ctx, policy: policy)
+            for id in order {
+                guard let source = sources[id] else { continue }
+                _ = ScoutService.applySweep(
+                    events: source.events.map(\.asExtractedEvent), clients: [], history: [], blocked: .empty,
+                    feed: ScoutService.FeedCheck(sourceId: id, baseline: source.events.count,
+                                                 successfulCheckCount: WatchedSource.warmupRuns),
+                    today: LandingOracleCorpus.today, now: LandingOracleCorpus.now, sourceIds: [id],
+                    landing: landing, into: ctx)
+            }
+            return try ctx.fetch(FetchDescriptor<Prospect>()).map { p in
+                [p.naturalKey, p.groupName, p.venue ?? "-", p.performanceDate ?? "-", p.runEndDate ?? "-",
+                 p.sourceListingURL ?? "-", p.runSourceURLs.joined(separator: ","), p.sourceIds.joined(separator: ","),
+                 String(p.missedScoutCount), p.survivedMergeAt.map { "\($0)" } ?? "-",
+                 p.mergeSurvivorUnseenAt.map { "\($0)" } ?? "-", p.arrivedLookingLike ?? "-",
+                 p.arrivedOnAPitchedNight ?? "-"].joined(separator: " | ")
+            }.sorted()
+        }
+        let scoped = try land(.once)
+        let walked = try land(.everyRead)
+        #expect(scoped == walked, Comment(rawValue: "the scoped reconcile landed\n\(scoped.joined(separator: "\n"))\n"
+                                          + "where the walk landed\n\(walked.joined(separator: "\n"))"))
+        // The reconcile really marked something, or the equality above compares two stores it never touched (L159).
+        #expect(walked.contains { $0.contains("Old Harbor Revue") && $0.contains("| 1 |") }, Comment(rawValue:
+            "the walk never counted Old Harbor Revue's miss, so the reconcile compared nothing:\n"
+            + walked.joined(separator: "\n")))
+    }
+
+    // A row the reconciling source does not own is still reset when the source LISTS it, by its natural key alone
+    // or by its link alone, so the scoped rows must hold a row reached either way, not only the source's own.
+    @Test func aRowListedOnlyByItsKeyOrOnlyByItsLinkIsStillReset() throws {
+        let ctx = try context()
+        stored(ctx, "Keyed Elsewhere", Self.night(40), url: "https://other.example/keyed", sourceIds: ["other"])
+        stored(ctx, "Linked Elsewhere", Self.night(41), url: "https://other.example/linked", sourceIds: ["other"])
+        let rows = try ctx.fetch(FetchDescriptor<Prospect>())
+        for p in rows { p.missedScoutCount = 1 }
+        try ctx.save()
+        let keyed = try #require(rows.first { $0.groupName == "Keyed Elsewhere" })
+        let linked = try #require(rows.first { $0.groupName == "Linked Elsewhere" })
+        let report = FeedReconcile.SourceReport(sourceId: "one", seenKeys: [keyed.naturalKey],
+                                                seenSourceURLs: ["https://other.example/linked"], feedCount: 2,
+                                                baseline: 2, successfulCheckCount: WatchedSource.warmupRuns,
+                                                verdict: .upcomingListings)
+        let landing = ScoutLandingStore(context: ctx)
+        var degraded: [ScoutService.StoreRead] = []
+        ScoutService.reconcileLanded([report], on: landing, today: Self.today, degraded: &degraded)
+        #expect(degraded.isEmpty)
+        #expect(keyed.missedScoutCount == 0, "a row listed only by its natural key kept its miss")
+        #expect(linked.missedScoutCount == 0, "a row listed only by its link kept its miss")
     }
 
     // MARK: the tables equal a rebuild, and every batch's answers equal the walks, after every source

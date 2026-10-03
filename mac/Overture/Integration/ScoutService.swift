@@ -1611,10 +1611,13 @@ enum ScoutService {
     // instead. #4325: what it writes is noted on the landing, whose closing save carries it (`saveLanding`).
     static func reconcileLanded(_ reports: [FeedReconcile.SourceReport], on landing: ScoutLandingStore,
                                 today: String, degraded: inout [StoreRead]) {
-        guard let allStored = readOrRecord(.reconcileStoredShows, into: &degraded, { try landing.rows() }) else {
+        // #4475: only the rows these reports could change, never every stored row: runScout reconciles once a
+        // SOURCE, so the whole store was walked once per source landed (`ScoutLandingStore.rows(reconciledBy:)`).
+        guard let touchable = readOrRecord(.reconcileStoredShows, into: &degraded,
+                                           { try landing.rows(reconciledBy: reports) }) else {
             return
         }
-        landing.noteReconcile(FeedReconcile.reconcile(stored: allStored, reports: reports, today: today))
+        landing.noteReconcile(FeedReconcile.reconcile(stored: touchable, reports: reports, today: today))
     }
 
     // #4325: the closing save of a scout landing, ONE implementation for both paths (`runScout`'s native

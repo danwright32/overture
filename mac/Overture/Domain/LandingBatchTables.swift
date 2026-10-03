@@ -52,6 +52,9 @@ struct LandingBatchTables {
         // notes. nil when empty, since every arm asking by either refuses an empty one before it looks.
         var seriesId: String?
         var night: String?
+        // #4475: every source id the row carries, for the reconcile, which can change only a row one of its
+        // reports' sources owns, or one it lists by key or by link.
+        var owners: Set<String> = []
 
         static let none = Contribution()
     }
@@ -99,6 +102,7 @@ struct LandingBatchTables {
     private(set) var rowsByToken = KeyedRows()
     private(set) var rowsBySeries = KeyedRows()
     private(set) var rowsByNight = KeyedRows()
+    private(set) var rowsByOwner = KeyedRows()
 
     // The keys a per event arm looks a show up by, already folded the way the arm's own predicate folds them.
     enum Lookup: Equatable {
@@ -106,6 +110,8 @@ struct LandingBatchTables {
         case sharingToken(Set<String>)
         case series(String)
         case night(String)
+        // #4475: the rows any of these source ids owns.
+        case ownedBy(Set<String>)
     }
 
     // The rows carrying any of the lookup's keys, once each, in the landing's order: the rows a walk over every
@@ -121,6 +127,8 @@ struct LandingBatchTables {
             lists = [(rowsBySeries.entries[id] ?? []).map { (order: $0.order, row: $0.row) }]
         case .night(let night):
             lists = [(rowsByNight.entries[night] ?? []).map { (order: $0.order, row: $0.row) }]
+        case .ownedBy(let owners):
+            lists = owners.map { (rowsByOwner.entries[$0] ?? []).map { (order: $0.order, row: $0.row) } }
         }
         if lists.count == 1 { return lists[0].map(\.row) }
         var seen: Set<Row> = []
@@ -244,6 +252,7 @@ struct LandingBatchTables {
         for t in Set(value.tokens.map(\.token)) { rowsByToken.remove(row, from: t) }
         if let id = value.seriesId { rowsBySeries.remove(row, from: id) }
         if let night = value.night { rowsByNight.remove(row, from: night) }
+        for owner in value.owners { rowsByOwner.remove(row, from: owner) }
     }
 
     private mutating func deposit(_ row: Row, order: Int, _ value: Contribution) {
@@ -259,6 +268,7 @@ struct LandingBatchTables {
         for t in Set(value.tokens.map(\.token)) { rowsByToken.insert(row, order: order, into: t) }
         if let id = value.seriesId { rowsBySeries.insert(row, order: order, into: id) }
         if let night = value.night { rowsByNight.insert(row, order: order, into: night) }
+        for owner in value.owners { rowsByOwner.insert(row, order: order, into: owner) }
     }
 
     private mutating func count(_ t: Contribution.Token, by delta: Int) {
@@ -326,6 +336,8 @@ struct LandingBatchTables {
         let tokenRows: [String: [String]]
         let seriesRows: [String: [String]]
         let nightRows: [String: [String]]
+        // #4475: the rows each source id owns, in order.
+        let ownerRows: [String: [String]]
     }
 
     func snapshot(naming name: (Row) -> String) -> Snapshot {
@@ -337,6 +349,7 @@ struct LandingBatchTables {
                         atAVenueRows: rows(atAVenue), anywhereRows: rows(anywhere),
                         atAVenueShows: atAVenue.shows, anywhereShows: anywhere.shows,
                         atAVenueAmbiguous: atAVenue.ambiguous, anywhereAmbiguous: anywhere.ambiguous,
-                        tokenRows: rows(rowsByToken), seriesRows: rows(rowsBySeries), nightRows: rows(rowsByNight))
+                        tokenRows: rows(rowsByToken), seriesRows: rows(rowsBySeries), nightRows: rows(rowsByNight),
+                        ownerRows: rows(rowsByOwner))
     }
 }
