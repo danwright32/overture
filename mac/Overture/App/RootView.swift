@@ -1356,9 +1356,19 @@ struct RootView: View {
     // #4335 (A6): the launch line for a landing the recovery is waiting to finish. Silent when there is none,
     // which is one directory listing to learn.
     private func announceInterruptedLandings() {
-        guard let found = try? LandingRecovery.survey(journals: .live, pending: .live, in: context),
-              let first = found.first(where: { $0.finding == .replay || $0.finding == .sweep }) else { return }
-        status.set(LandingWaitCopy.interruptedWaiting(since: first.startedAt), priority: .info)
+        guard let found = try? LandingRecovery.survey(journals: .live, pending: .live, in: context) else { return }
+        if let first = found.first(where: { $0.finding == .replay || $0.finding == .sweep }) {
+            status.set(LandingWaitCopy.interruptedWaiting(since: first.startedAt), priority: .info)
+            return
+        }
+        // A landing the recovery stopped trying is said at every launch until A10's controls (#4338) can clear
+        // it, because the minute tick no longer works on it and would otherwise never say it again.
+        if let stopped = found.first(where: { if case .stoppedRetrying = $0.finding { return true }; return false }),
+           case .stoppedRetrying(let attempts) = stopped.finding,
+           let line = LandingWaitCopy.recovered(.stoppedRetrying(startedAt: stopped.startedAt, attempts: attempts,
+                                                                 unlanded: stopped.unlanded.count)) {
+            status.set(line, priority: .warning)
+        }
     }
 
     // #4335 (A6, decision 5): idle is no landing holding the store, no scout run in flight (#1027's predicate,
@@ -1372,16 +1382,29 @@ struct RootView: View {
             secondsSinceInput: RecoveryIdle.secondsSinceInput())
         guard case .idle(let quiet) = verdict else { return }
         let journals = LandingJournals.live
-        guard let listed = try? journals.list(), listed.contains(where: {
-            if case .pending = $0 { return true }; return false
-        }) else { return }
-        let loaded = DownbeatBridge.loadWithHealth(now: Date())
-        let existing = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
+        // The judgement first (journals and the watchlist, no show table): a journal that stopped being tried is
+        // pending for good, and must not cost a whole table read every idle minute only to say nothing.
+        guard let found = try? LandingRecovery.survey(journals: journals, pending: .live, in: context) else { return }
+        let actionable = found.filter {
+            switch $0.finding {
+            case .stoppedRetrying: return false
+            default: return true
+            }
+        }
+        guard !actionable.isEmpty else {
+            if found.isEmpty { lastRecoveryLine = nil }
+            return
+        }
+        // What only a replay reads (the client list, the match history, the blocked calendar), built only when
+        // one is waiting.
+        let replays = actionable.contains { $0.finding == .replay }
+        let loaded = replays ? DownbeatBridge.loadWithHealth(now: Date()) : nil
+        let existing = replays ? ((try? context.fetch(FetchDescriptor<Prospect>())) ?? []) : []
         let recovered = await LandingRecovery.recoverNext(
-            journals: journals, pending: .live, clients: loaded.clients,
-            history: LocalHistory.forMatching(existing: existing),
-            blocked: ScoutService.blockedCalendar(export: (loaded.bookings, loaded.blockedDates, loaded.health),
-                                                  context: context),
+            journals: journals, pending: .live, clients: loaded?.clients ?? [],
+            history: replays ? LocalHistory.forMatching(existing: existing) : [],
+            blocked: loaded.map { ScoutService.blockedCalendar(export: ($0.bookings, $0.blockedDates, $0.health),
+                                                               context: context) } ?? .empty,
             sweep: { runScout(auto: true, depth: .watchOnly) },
             // L459: the replay's holds are recorded as idle work, never mixed with freezes Dan felt.
             replaying: { run in

@@ -130,6 +130,8 @@ final class LandingSaveFailureTests {
     static let landingPathFiles: Set<String> = [
         "ScoutService.swift", "ScoutExtractIngest.swift", "ScoutLandingStore.swift", "FeedReconcile.swift",
         "SourceWrites.swift", "SourceSchedule.swift", "ScoutExtractLanding.swift", "LandingRevert.swift",
+        // #4335: the recovery, which writes its attempt count beside a landing and puts it back through the revert.
+        "LandingRecovery.swift",
     ]
     static let deleteExemptions: [String: String] = [
         "LandingRevert.swift": "deletes only the failed turn's pending inserts, which no save carried",

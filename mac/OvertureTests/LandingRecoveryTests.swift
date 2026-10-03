@@ -268,6 +268,49 @@ final class LandingRecoveryTests {
         }
         #expect(why.contains("could not be recorded"))
         #expect(try titles(c) == ["Recital a 0", "Recital a 1"], "an attempt nothing recorded landed anyway")
+        // And the count it raised is put back, so no later save carries a half recorded attempt.
+        try ctx.save()
+        #expect(try ModelContext(c).fetch(FetchDescriptor<LandingRun>()).map(\.attemptCount) == [0],
+                "an attempt that could not be recorded was carried to the store by a later save")
+    }
+
+    // An attempt whose record did not exist yet (the landing never reached its first save) is put back as an
+    // insert, so nothing is left for a later save to carry either.
+    @Test func anUnrecordedFirstAttemptLeavesNoRecordBehind() async throws {
+        let c = try container()
+        let ctx = c.mainContext
+        html("a", in: ctx)
+        try ctx.save()
+        let f = try folders("recover-unrecorded-first")
+        try f.journals.start(LandingJournal(runIdentity: "sweep-first", sequence: 5, entryPoint: .runScoutLanding,
+                                            sources: [.init(sourceId: "a", pageHash: nil)], now: started))
+
+        _ = await recover(ctx, f, saveAttempt: { _ in throw SaveRefused() })
+        try ctx.save()
+        #expect(try ModelContext(c).fetch(FetchDescriptor<LandingRun>()).isEmpty,
+                "the record of an attempt that could not be recorded reached the store")
+    }
+
+    // L5: an ingest whose sources were switched off since keeps its results, and its replay (not the recovery)
+    // decides what lands. Its copy is removed only once that landing has finished.
+    @Test func anIngestWhoseSourcesWereSwitchedOffIsStillReplayedNotDiscarded() async throws {
+        let c = try container()
+        let ctx = c.mainContext
+        for id in ["a", "b"] { html(id, in: ctx) }
+        try ctx.save()
+        let f = try folders("recover-switched-off")
+        try await interruptedIngest(["a", "b"], into: ctx, f)
+        // Every source it named, so no watched row is left to hold the journal open.
+        for s in try ctx.fetch(FetchDescriptor<WatchedSource>()) { WatchlistEditing.stopWatching(s, in: ctx) }
+
+        #expect(try survey(c, f) == [.replay], "switched off sources' results were judged nothing to land")
+        #expect(try f.pending.list().count == 1)
+        guard case .landed? = await recover(ctx, f) else {
+            Issue.record("the replay did not finish")
+            return
+        }
+        #expect(try titles(c).count == 4)
+        #expect(try f.pending.list().isEmpty && f.journals.list().isEmpty)
     }
 
     // A landing whose recovery keeps failing is tried `attemptCap` times, each counted, and then stops, saying so

@@ -89,9 +89,12 @@ enum LandingRecovery {
     static func judge(_ journal: LandingJournal, sources: [String: WatchedSource], pending: PendingScoutIngests,
                       in context: ModelContext) throws -> Interrupted {
         let isIngest = journal.entryPoint == LandingSingleFlight.EntryPoint.scoutExtractIngest.rawValue
-        // The rows the journal named that still exist and are still watched. A source deleted or switched off
-        // since cannot be landed by anybody and holds nothing up.
-        let named = journal.sources.compactMap { sources[$0.sourceId] }.filter { $0.isActive }
+        // The rows the journal named that still exist. For a sweep, only those still watched: the watch-only sweep
+        // that finishes it reads active sources only, so a source switched off since holds nothing up. An ingest
+        // keeps every row, active or not: its results were read while the source was watched, and whether they
+        // land is the ingest's to decide from its own copy, never the recovery's to discard (L5).
+        let rows = journal.sources.compactMap { sources[$0.sourceId] }
+        let named = isIngest ? rows : rows.filter { $0.isActive }
         let unlanded = named.filter { $0.lastTouchedSequence < journal.sequence }.map(\.sourceId)
         let laterTouches = named.map(\.lastTouchedSequence).filter { $0 > journal.sequence }
         let overtaken = !named.isEmpty && laterTouches.count == named.count
@@ -99,7 +102,11 @@ enum LandingRecovery {
         func found(_ finding: Finding) -> Interrupted {
             Interrupted(journal: journal, finding: finding, unlanded: unlanded)
         }
-        if record?.landedAt != nil || named.isEmpty { return found(.finished) }
+        if record?.landedAt != nil { return found(.finished) }
+        // A sweep with no watched source left has nothing for any sweep to finish. An ingest whose rows are all
+        // gone still goes to its replay below, which lands nothing for an id no row answers to and retires its
+        // copy only once that landing has finished.
+        if !isIngest && named.isEmpty { return found(.finished) }
         if overtaken { return found(.superseded(bySequence: laterTouches.min() ?? journal.sequence)) }
         if let record, record.attemptCount >= attemptCap { return found(.stoppedRetrying(attempts: record.attemptCount)) }
         guard isIngest else { return found(.sweep) }
@@ -184,11 +191,17 @@ enum LandingRecovery {
                                       entryPoint: LandingSingleFlight.EntryPoint(rawValue: next.journal.entryPoint)
                                           ?? .scoutExtractIngest,
                                       startedAt: next.journal.now, in: context)
+        let inserted = context.insertedModelsArray.contains { $0.persistentModelID == record.persistentModelID }
         record.attemptCount += 1
         do {
             try saveAttempt(context)
         } catch {
-            record.attemptCount -= 1
+            // Put back exactly what this step wrote, through the one revert the landing path uses (never
+            // `rollback()`): a row it inserted leaves, a count it raised goes back, so no later save carries a
+            // half recorded attempt.
+            _ = LandingRevert.revert(LandingRevert.WriteSet(changed: inserted ? [] : [record],
+                                                        inserted: inserted ? [record] : [], deleted: []),
+                                 in: context)
             return .notFinished(startedAt: next.startedAt, why: "its attempt could not be recorded ("
                                 + HandoffDecodeFailure.describe(error) + ")")
         }
