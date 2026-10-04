@@ -32,6 +32,39 @@ enum TermsOverFacts {
         var now: Date
     }
 
+    // MARK: slice F, the agent input terms
+
+    /// `organisationRowCounts`, `DraftedDeadEnd` and `StalledReplyDraft`, models against facts. The counts are
+    /// keyed by an organisation's folded name, a real organisation on the live store, so a difference names the
+    /// rows whose presenter it is about rather than the name (L222).
+    static func agentInputFindings(_ models: [Prospect], _ facts: [RowFacts], now: Date) -> [String] {
+        var out: [String] = []
+        let countsModels = QueueModel.organisationRowCounts(among: models)
+        let countsFacts = QueueModel.organisationRowCounts(among: facts)
+        if countsModels != countsFacts {
+            let differing = Set(countsModels.keys).union(countsFacts.keys).filter { countsModels[$0] != countsFacts[$0] }
+            let rows = models.filter { ProducerGate.key($0.presenter).map(differing.contains) ?? false }
+            out += rows.map { "organisationRowCounts differs for the organisation of row \($0.persistentModelID)" }
+            if rows.isEmpty { out.append("organisationRowCounts differs for an organisation no model presents") }
+        }
+        for (model, fact) in zip(models, facts)
+        where DraftedDeadEnd.hasNobodyToSendTo(model, contacts: model.factContacts)
+            != DraftedDeadEnd.hasNobodyToSendTo(fact, contacts: fact.factContacts) {
+            out.append("DraftedDeadEnd.hasNobodyToSendTo differs for row \(model.persistentModelID)")
+        }
+        for instant in [now, Date.distantFuture] {
+            let onModels = StalledReplyDraft.dueRecipients(from: models, contacts: { $0.factContacts }, now: instant, runAlive: false)
+            let onFacts = StalledReplyDraft.dueRecipients(from: facts, contacts: { $0.factContacts }, now: instant, runAlive: false)
+            if onModels.map({ "\($0.recipient.persistentModelID) \($0.requestedAt)" })
+                != onFacts.map({ "\($0.recipient.persistentModelID) \($0.requestedAt)" }) {
+                out.append("StalledReplyDraft.dueRecipients differs "
+                           + (instant == now ? "now" : "at the end of time")
+                           + ": \(onModels.count) over models, \(onFacts.count) over facts")
+            }
+        }
+        return out
+    }
+
     /// Every place a ported term answered differently over facts than over models, empty when they agree.
     /// `asOf` is the day the feed break term judges "still to come" against, and `drawn` the keys a
     /// surface draws, which is what the collapse hides rows in favour of (nil means every row is drawn).
@@ -123,6 +156,10 @@ enum TermsOverFacts {
                 heldKeys: ledger.heldKeys, now: ledger.now, producerCorpus: tablesFacts.corpus)
             out += inheritedFindings(inheritedModels, inheritedFacts, term: "OrgAnswerLedger.inherited", pid: pid)
         }
+
+        // Slice F: the agent input terms, judged at noon Eastern on `asOf` so both arms share a clock.
+        out += agentInputFindings(models, facts, now: (EasternDate.date(from: asOf) ?? Date(timeIntervalSince1970: 0))
+            .addingTimeInterval(12 * 3600))
 
         // Slice D1: the computed members the reached-out terms read, on the show and on every contact.
         out += memberFindings(models, facts)
@@ -369,6 +406,10 @@ enum TermsOverFacts {
         let standing: RecipientStanding
         let isOutreachStoodDown: Bool
         let isClosingNoteStoodDown: Bool
+        // Slice F: the two reply draft members `StalledReplyDraft` reads. Stalled is asked at the end of time,
+        // where it is true exactly when a draft is awaited; the fixture holds the timeout itself.
+        let awaitedReplyDraftRequestedAt: Date?
+        let stalledAtTheEndOfTime: Bool
 
         init(_ c: some ContactFacts) {
             sendState = c.sendState
@@ -386,6 +427,8 @@ enum TermsOverFacts {
             standing = c.standing
             isOutreachStoodDown = c.isOutreachStoodDown
             isClosingNoteStoodDown = c.isClosingNoteStoodDown
+            awaitedReplyDraftRequestedAt = c.awaitedReplyDraftRequestedAt
+            stalledAtTheEndOfTime = c.isReplyDraftStalled(now: .distantFuture)
         }
 
         /// The names of the members that differ, so a finding says which rule disagreed.

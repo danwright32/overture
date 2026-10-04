@@ -168,6 +168,32 @@ extension ContactFacts {
         if let repliedAt, repliedAt > stoodDown { return false }
         return true
     }
+
+    // #4357 slice F: the two reply draft members `StalledReplyDraft` reads, moved from `Recipient` unchanged.
+    //
+    // #2966: WHEN the reply draft this contact is still waiting on was asked for, from the one shared rule.
+    // See `ReplyDraftRequest` for why the rule is not spelled here: three places asked this question and
+    // only one of them allowed for a request belonging to an exchange already answered.
+    var awaitedReplyDraftRequestedAt: Date? {
+        ReplyDraftRequest.awaited(requestedAt: replyDraftRequestedAt, draftBody: replyDraftBody,
+                                  replacingDraftOnFile: replyDraftReplacesDraftOnFile,
+                                  answeredAt: replyHandledAt)
+    }
+
+    // True when a reply draft is still awaited and the timeout has elapsed (#431).
+    // #471: `runAlive` is the classify run's real heartbeat (ReplyClassifyService.isRunning); when it's
+    // still alive, past-timeout no longer counts as stalled, since the wall clock alone can't tell a
+    // genuinely dead run from one that's just slower than usual.
+    //
+    // #2966: this used to ask "requested, and nothing stored" for itself, which is the same question
+    // `ReplyPanel.isDrafting` asks with one more guard on it. It reads the shared answer now: an answered
+    // conversation was reading as permanently stalled, and since #2878 that number is on the Follow-ups
+    // pill, the Due header, the toolbar badge, the Dock tile and the menu bar.
+    func isReplyDraftStalled(now: Date, timeout: TimeInterval = Recipient.replyDraftStallTimeout,
+                             runAlive: Bool = false) -> Bool {
+        guard let requested = awaitedReplyDraftRequestedAt else { return false }
+        return !runAlive && now.timeIntervalSince(requested) >= timeout
+    }
 }
 
 extension Recipient {
