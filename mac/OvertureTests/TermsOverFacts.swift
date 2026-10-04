@@ -160,6 +160,9 @@ enum TermsOverFacts {
         // Slice F: the agent input terms, judged at noon Eastern on `asOf` so both arms share a clock.
         out += agentInputFindings(models, facts, now: reachedOutInstant(asOf))
 
+        // Slice E2: the due work terms, at the same instant.
+        out += dueWorkFindings(models, facts, now: reachedOutInstant(asOf))
+
         // Slice D1: the computed members the reached-out terms read, on the show and on every contact.
         out += memberFindings(models, facts)
 
@@ -401,6 +404,125 @@ enum TermsOverFacts {
         }
         for (model, fact) in zip(models, facts) where model.isClosed != fact.isClosed {
             out.append("isClosed differs for row \(pid(model.naturalKey))")
+        }
+        return out
+    }
+
+    // MARK: slice E2, the due work terms
+
+    /// What the due work terms read about one show, through the generic members.
+    struct DueShowAnswers: Equatable {
+        let replyWatchManualOutcome: Bool
+        let replyWatchIsBooked: Bool
+        let nudgesStopped: Bool
+        let hasUnhandledReply: Bool
+
+        init(_ p: some ProspectFacts) {
+            replyWatchManualOutcome = p.replyWatchManualOutcome
+            replyWatchIsBooked = p.replyWatchIsBooked
+            nudgesStopped = FollowUp.nudgesStopped(on: p)
+            hasUnhandledReply = p.hasUnhandledReply(among: p.factContacts)
+        }
+    }
+
+    /// What the due work terms read about one contact. The conversation proposal is rendered by one renderer
+    /// for both arms, and the contact a reply is answered on by its identifier.
+    struct DueContactAnswers: Equatable {
+        let replyWatchManualOutcome: Bool
+        let replyWatchIsBooked: Bool
+        let replyWatchConversationIsOpen: Bool
+        let replySearchAnchor: Date?
+        let replySearchHasConversation: Bool
+        let inSearchScope: Bool
+        let proposal: String
+        let groupKey: String
+        let answering: PersistentIdentifier
+
+        init<C: ContactFacts>(_ r: C, among contacts: [C], now: Date) {
+            replyWatchManualOutcome = r.replyWatchManualOutcome
+            replyWatchIsBooked = r.replyWatchIsBooked
+            replyWatchConversationIsOpen = r.replyWatchConversationIsOpen
+            replySearchAnchor = r.replySearchAnchor
+            replySearchHasConversation = r.replySearchHasConversation
+            inSearchScope = ReplySearchScope.inScope(contact: r, now: now)
+            proposal = String(describing: ProposedConversation.state(of: r, now: now))
+            groupKey = SendGroup.groupKey(r)
+            answering = ReplyIdentity.answering(for: r, among: contacts).persistentModelID
+        }
+
+        func differing(from other: DueContactAnswers) -> [String] {
+            Mirror(reflecting: self).children.compactMap { child in
+                guard let label = child.label,
+                      let theirs = Mirror(reflecting: other).children.first(where: { $0.label == label })
+                else { return nil }
+                return String(describing: child.value) == String(describing: theirs.value) ? nil : label
+            }
+        }
+    }
+
+    /// Each due list as lines of identifiers and the value the list carries, in its order, keyed by list.
+    /// The lines carry a candidate's address, so they are compared and never printed.
+    static func dueLines<Row: ProspectFacts>(_ due: DueWork.Due<Row>) -> [String: [String]] {
+        func id(_ p: Row, _ r: Row.Contact) -> String { "\(p.persistentModelID) \(r.persistentModelID)" }
+        return [
+            "afterTheShow": due.afterTheShow.map { "\(id($0.prospect, $0.recipient)) \($0.prompt)" },
+            "silent": due.silent.map { id($0.prospect, $0.recipient) },
+            "stalledReplyDrafts": due.stalledReplyDrafts.map { "\(id($0.prospect, $0.recipient)) \($0.requestedAt)" },
+            "conversationsToConfirm": due.conversationsToConfirm.map { "\(id($0.prospect, $0.recipient)) \($0.candidate)" },
+            "repliesToAnswer": due.repliesToAnswer.map { conversation in
+                switch conversation {
+                case .show(let p, let r): return id(p, r)
+                case .inquiry(let inquiry): return "inquiry \(inquiry.persistentModelID)"
+                }
+            },
+        ]
+    }
+
+    /// The five due lists, their counts and the next instant the count could change, over models and over
+    /// facts, at `now` and at the end of time (where every awaited draft has stalled and every nudge is
+    /// due), with the reply run dead and alive; then every show's and every contact's answers.
+    static func dueWorkFindings(_ models: [Prospect], _ facts: [RowFacts], now: Date) -> [String] {
+        var out: [String] = []
+        for (instant, label) in [(now, "now"), (Date.distantFuture, "at the end of time")] {
+            for alive in [false, true] {
+                let onModels = DueWork.rows(from: models, contacts: { $0.factContacts }, inquiries: [], now: instant,
+                                            replyRunAlive: alive)
+                let onFacts = DueWork.rows(from: facts, contacts: { $0.factContacts }, inquiries: [], now: instant,
+                                           replyRunAlive: alive)
+                let linesModels = dueLines(onModels), linesFacts = dueLines(onFacts)
+                for list in linesModels.keys.sorted() where linesModels[list] != linesFacts[list] {
+                    out.append("DueWork.rows \(list) differs \(label)\(alive ? " with the reply run alive" : ""): "
+                               + "\(linesModels[list]?.count ?? 0) over models, \(linesFacts[list]?.count ?? 0) over facts")
+                }
+                if onModels.counts != onFacts.counts {
+                    out.append("DueWork.Due.counts differs \(label)\(alive ? " with the reply run alive" : "")")
+                }
+            }
+        }
+        for (instant, label) in [(now, "now"), (Date(timeIntervalSince1970: 0), "from 1970")] {
+            for alive in [false, true] {
+                let onModels = DueWork.nextChange(from: models, contacts: { $0.factContacts }, now: instant, replyRunAlive: alive)
+                let onFacts = DueWork.nextChange(from: facts, contacts: { $0.factContacts }, now: instant, replyRunAlive: alive)
+                if onModels != onFacts {
+                    out.append("DueWork.nextChange differs \(label)\(alive ? " with the reply run alive" : "")")
+                }
+            }
+        }
+        for (model, fact) in zip(models, facts) {
+            if DueShowAnswers(model) != DueShowAnswers(fact) {
+                out.append("due work show answers differ for row \(model.persistentModelID)")
+            }
+            let modelContacts = model.factContacts, factContacts = fact.factContacts
+            let factByID = Dictionary(factContacts.map { ($0.persistentModelID, $0) }, uniquingKeysWith: { first, _ in first })
+            for contact in modelContacts {
+                guard let record = factByID[contact.persistentModelID] else { continue }   // memberFindings names it
+                let names = DueContactAnswers(contact, among: modelContacts, now: now)
+                    .differing(from: DueContactAnswers(record, among: factContacts, now: now))
+                if !names.isEmpty {
+                    out.append("due work contact answers \(names.joined(separator: ", ")) differ for contact "
+                               + String(describing: contact.persistentModelID))
+                }
+            }
         }
         return out
     }

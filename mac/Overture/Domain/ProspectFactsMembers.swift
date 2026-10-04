@@ -34,6 +34,17 @@ extension ProspectFacts {
     // `performanceStatus`. Mirrors `Prospect.isBooked`, which reads the model's own `performanceStatus`.
     var isBooked: Bool { performanceStatus == .booked }
 
+    // #4357 slice E2: the two `ReplyWatchable` members, moved from `Prospect`'s conformance (which they still
+    // satisfy) so a retained show answers the conversation proposal and the nudge list by them.
+    var replyWatchManualOutcome: Bool { outcomeSourceRaw == OutcomeSource.manual.rawValue }
+    var replyWatchIsBooked: Bool { outcome == .booked }
+
+    // #4357 slice E2: `Prospect.hasUnhandledReply` over the contacts handed in, which that property now reads
+    // with its own `recipients`. Somebody wrote back and is waiting, unless the show booked.
+    func hasUnhandledReply(among contacts: [some ContactFacts]) -> Bool {
+        PerformanceStatus.of(self, contacts: contacts) != .booked && contacts.contains(where: \.hasUnhandledReply)
+    }
+
     // In force unless the contact has written back since. Takes the contact's own reply stamp because the
     // reopen is per person: one contact replying does not put the whole show back in play for everyone
     // else, but it does put THAT conversation back in play.

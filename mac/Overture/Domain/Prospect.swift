@@ -1423,7 +1423,7 @@ final class Prospect {
     // judgement about the conversation, it is the conversation having succeeded, and it is a rollup
     // question rather than a per-contact one.
     var hasUnhandledReply: Bool {
-        performanceStatus != .booked && recipients.contains(where: \.hasUnhandledReply)
+        hasUnhandledReply(among: recipients)
     }
 
     // Record a lead outcome as Dan's own call (manual source, timestamped, booking-suggestion
