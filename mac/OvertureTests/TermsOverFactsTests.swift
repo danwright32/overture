@@ -566,4 +566,80 @@ struct TermsOverFactsTests {
         #expect(scout.hasOpened(today: "2026-10-21"))
         #expect(!scout.hasOpened(today: "2026-10-20"), "a run opening tonight has not opened")
     }
+
+    // MARK: slice H, the long tail (T8)
+
+    // Every arm of the long tail answers something here (L159): a dismissed row and a full tie in the queue
+    // order, three later lookalikes of one row (two tied on an unknown sighting, one newer), an unseen merge
+    // survivor still ahead and open beside one closed by a do not contact and one already played, and one
+    // possible match flagged across three shows. Invented names throughout (L155, L222).
+    private func seedLongTail(_ ctx: ModelContext) throws -> [Prospect] {
+        let target = row(ctx, key: "tail target", title: "Harbour Lantern", venue: "Quillon Room", opens: "2026-11-02")
+        let lookalikes: [(key: String, seen: Date?)] = [("tail look b", nil), ("tail look a", nil),
+                                                        ("tail look new", Date(timeIntervalSince1970: 1_790_000_000))]
+        for (key, seen) in lookalikes {
+            let p = row(ctx, key: key, title: "Harbour Lantern Again", venue: "Quillon Room", opens: "2026-11-03")
+            p.arrivedLookingLike = target.naturalKey
+            p.firstSeenAt = seen
+        }
+        let unseen = Date(timeIntervalSince1970: 1_790_000_000)
+        row(ctx, key: "tail survivor open", title: "Tallow Choir", venue: "Quillon Room", opens: "2026-11-10")
+            .mergeSurvivorUnseenAt = unseen
+        let closed = row(ctx, key: "tail survivor closed", title: "Tallow Choir Two", venue: "Quillon Room", opens: "2026-11-11")
+        closed.mergeSurvivorUnseenAt = unseen
+        closed.orgDoNotContact = true
+        row(ctx, key: "tail survivor played", title: "Tallow Choir Three", venue: "Quillon Room", opens: "2026-08-01")
+            .mergeSurvivorUnseenAt = unseen
+        for k in 0..<3 {
+            row(ctx, key: "tail fan \(k)", title: "Fan Act \(k)", venue: "Quillon Room", opens: "2026-12-0\(k + 1)")
+                .possibleMatchName = "Wrenfold Ensemble"
+        }
+        row(ctx, key: "tail tie a", title: "Undated A", venue: nil, opens: nil)
+        row(ctx, key: "tail tie b", title: "Undated B", venue: nil, opens: nil)
+        row(ctx, key: "tail gone", title: "Dismissed Row", venue: nil, opens: "2026-10-01").statusRaw =
+            ReviewStatus.dismissed.rawValue
+        return try ctx.fetch(FetchDescriptor<Prospect>())
+    }
+
+    @Test func theLongTailAnswersTheSameOverFactsAsOverModels() throws {
+        let ctx = try context()
+        let all = try seedLongTail(ctx)
+        // Positive controls (L159).
+        let scope = QueueModel.queueScope(all)
+        #expect(scope.count == all.count - 1, "the dismissed row was not the only one left out of the scope")
+        #expect(QueueModel.laterLookalikes(among: all)["tail target"] == ["tail look new", "tail look a", "tail look b"],
+                "newest first, then the tied sightings by key")
+        #expect(QueueRenderPass.unseenSurvivors(among: all, today: asOf) == ["tail survivor open"],
+                "only the open survivor still ahead is unseen")
+        #expect(QueueRenderPass.fanOutWarning(all) != nil, "the fixture's fan out drew no warning")
+        #expect(QueueModel.nightsByKey(among: all)["tail tie a"] == nil && QueueModel.titlesByKey(among: all).count == all.count)
+        let clean = TermsOverFacts.findings(all, asOf: asOf)
+        #expect(clean.isEmpty, Comment(rawValue: clean.joined(separator: "\n")))
+
+        // Facts taken before the open survivor's organisation asked Dan to stop, and before a lookalike's
+        // pointer moved: the comparison has to say so by the row's identifier alone.
+        let stale = all.map(RowFacts.extract)
+        try #require(all.first { $0.naturalKey == "tail survivor open" }).orgDoNotContact = true
+        try #require(all.first { $0.naturalKey == "tail look new" }).arrivedLookingLike = nil
+        let findings = TermsOverFacts.findings(all, facts: stale, asOf: asOf)
+        #expect(findings.contains { $0.hasPrefix("QueueRenderPass.unseenSurvivors differs") })
+        #expect(findings.contains { $0.hasPrefix("isClosed differs") })
+        #expect(findings.contains { $0.hasPrefix("QueueModel.laterLookalikes differs") })
+        #expect(!findings.contains { $0.contains("Wrenfold") || $0.contains("Tallow") || $0.contains("Harbour") },
+                "a finding named a title or a match rather than an identifier")
+    }
+
+    // The closing rule, held on its own: a do not contact closes a show, a booking closes it, an open show is
+    // open, and the model's member and the protocol's agree on each.
+    @Test func theClosingRuleHoldsItsMeaningOnBothConformers() throws {
+        let ctx = try context()
+        let all = try seedLongTail(ctx)
+        func viaFacts<T: ProspectFacts>(_ t: T) -> Bool { t.isClosed }
+        let open = try #require(all.first { $0.naturalKey == "tail survivor open" })
+        let refused = try #require(all.first { $0.naturalKey == "tail survivor closed" })
+        #expect(!open.isClosed && !viaFacts(open) && !RowFacts.extract(open).isClosed)
+        #expect(refused.isClosed && viaFacts(refused) && RowFacts.extract(refused).isClosed)
+        open.outcomeRaw = Outcome.booked.rawValue
+        #expect(open.isClosed && viaFacts(open), "a booked show is closed")
+    }
 }
