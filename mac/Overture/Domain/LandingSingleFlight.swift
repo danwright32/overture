@@ -22,10 +22,10 @@ import Foundation
 // for how long, so the caller can say why and lose nothing (the ingest keeps a copy of its results; a run
 // press says why it did not start).
 //
-// Today every holder is synchronous (no await between begin and end), so on the main actor a second caller
-// can never actually find the store held and the queue is exercised only by tests. That changes with A6's
-// recovery (its re-read awaits the network) and A11's async lead paste; the queue exists so those can join
-// it rather than interleave with a landing.
+// Every holder's landing block is synchronous (no await between begin and end), but since #4339 (A11) the
+// lead paste awaits its read phase before it asks, so a paste can now find the store held by another landing
+// and wait in the queue at Dan's priority. A6's recovery (its re-read awaits the network) joins it the same
+// way, rather than interleaving with a landing.
 @MainActor
 final class LandingSingleFlight {
     // The one the app uses. Tests that hold the store across a suspension build their own, so a held token

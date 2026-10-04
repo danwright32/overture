@@ -407,24 +407,28 @@ final class LeadIntakeModel {
         // its own clock, rather than holding the read's answer as though nothing were happening.
         phase = .working(startedAt: Date())
         let started = generation
+        // Taken before the await: a reset while the paste lands clears the field, and the link must still be
+        // recorded as handed over if its shows land.
+        let pasted = URL(string: urlText.trimmingCharacters(in: .whitespacesAndNewlines))
         let result = await LeadPasteLanding.landPastedLead(events, today: today, now: now, landings: landings,
                                                            into: context)
-        guard generation == started else { return 0 }
+        // A sheet Dan reset meanwhile keeps the screen he moved on to; what landed is still recorded below.
+        let stillShowing = generation == started
         let outcome: ScoutService.Outcome
         switch result {
         case .landed(let landed): outcome = landed
         case .refused(let sentence):
-            phase = .problem(sentence)
+            if stillShowing { phase = .problem(sentence) }
             return 0
         }
         let added = outcome.inserted + outcome.updated
 
         // Recorded only now, not at submit: a link that failed to read is one he must be able to try
         // again. Only a link that actually produced something counts as handed over.
-        if added > 0, let url = URL(string: urlText.trimmingCharacters(in: .whitespacesAndNewlines)) {
+        if added > 0, let url = pasted {
             LeadSubmissions.record(url, in: defaults)
         }
-        phase = .added(added, note: note)
+        if stillShowing { phase = .added(added, note: note) }
         return added
     }
 

@@ -169,8 +169,9 @@ struct LeadPasteLandingTests {
                                                           sourceUrl: "https://piernine.example/harbor-lights",
                                                           location: "New York, NY")],
                                note: nil)])
+        let defaults = ScratchDefaults.make("LeadPasteLandingTests.reset")
         let model = LeadIntakeModel(
-            defaults: ScratchDefaults.make("LeadPasteLandingTests.reset"),
+            defaults: defaults,
             fetch: { FetchedPage(normalizedHTML: LandingOracleCorpus.leadPage, finalURL: $0.absoluteString,
                                  contentHash: "lead-paste-reset") },
             pin: { _, _ in URL(fileURLWithPath: "/dev/null/lead-paste-reset.html") },
@@ -190,6 +191,9 @@ struct LeadPasteLandingTests {
         held.end()
         await start.value
         #expect(model.phase == .idle, "the landing wrote \(model.phase) over the sheet Dan reset")
+        // The shows landed, so the link is recorded as handed over, reset or not.
+        #expect(try count(container) == 2)
+        #expect(LeadSubmissions.contains(url, in: defaults), "a link whose shows landed was not recorded as handed over")
     }
 
     @Test func thePasteWaitsForTheLandingInProgressAtTheFrontOfTheQueue() async throws {
