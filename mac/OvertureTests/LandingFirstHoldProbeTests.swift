@@ -213,6 +213,14 @@ final class LandingFirstHoldProbeTests {
             // 2. runScout from its first line, with nothing reaching the network.
             // Twice: the second run finds the store as the first left it, so a cost the first run pays once
             // (its flush of what the ingest left, a first use of something) shows as the difference.
+            // The scratch defaults the runs are handed are made HERE, outside every measured window, and timed. The
+            // first `ScratchDefaults.make` in a test process sweeps `~/Library/Preferences` for files a dead test
+            // process left (#3774), and that folder held 72,881 files on 2026-10-04: made inside pass 1's window,
+            // as it used to be, that sweep WAS the "first run in a process" cost, about 2.2 s at 1x, and it is the
+            // test's own, never the product's (runScout is handed `.standard` by RootView).
+            let t00 = Phase0.now()
+            let scratchDefaults = ScratchDefaults.make("LandingFirstHoldProbeTests")
+            Self.say(String(format: "x\(factor) the test's own scratch defaults made: %.1f ms", Phase0.ms(since: t00)))
             // A suspect for the cost runScout's FIRST run in a process pays: its `session` default argument,
             // `URLSession.shared`, is evaluated on every call and first touched here. Timed once, alone.
             if factor == 1 {
@@ -270,7 +278,7 @@ final class LandingFirstHoldProbeTests {
                             FetchedPage(normalizedHTML: "<p/>", finalURL: url.absoluteString, contentHash: "hold4339")
                         },
                         pin: { _, id in URL(fileURLWithPath: "/dev/null/hold4339-\(id).html") }, launch: { _ in },
-                        defaults: ScratchDefaults.make("LandingFirstHoldProbeTests"),
+                        defaults: scratchDefaults,
                         onNativeProgress: { _, done, _ in steps.append(("source \(done)", Phase0.now())) },
                         onNativeStep: { steps.append(($0.rawValue, Phase0.now())) },
                         readProspectTable: { context in
