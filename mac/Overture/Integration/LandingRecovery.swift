@@ -267,9 +267,11 @@ enum LandingRecovery {
             return .notFinished(startedAt: item.startedAt, why: "the kept copy of its results could not be read ("
                                 + HandoffDecodeFailure.describe(error) + ")")
         }
+        // The journal's `now` stamps what lands (its results were read then, L37); what is still UPCOMING is
+        // judged on the day the replay runs, so a night that passed while it waited is not a show to come.
         let landed = await ScoutExtractLanding.land(
             copy.data, copy.results, sequence: journal.sequence, clients: clients, history: history, blocked: blocked,
-            today: QueueModel.easternToday(journal.now), now: journal.now, landings: landings,
+            today: QueueModel.easternToday(now), now: journal.now, landings: landings,
             holdingAs: .landingRecovery, pending: pending, journals: journals, saveSource: saveSource,
             movementLog: movementLog, recoveredAt: now, into: context)
         let outcome = landed.outcome

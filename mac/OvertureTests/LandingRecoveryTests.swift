@@ -159,6 +159,29 @@ final class LandingRecoveryTests {
         #expect(callback.contains("freezeWatch.stampIdleWork(sequence.map"), Comment(rawValue: callback))
     }
 
+    // A replay keeps the interrupted landing's `now` for its stamps but judges what is still UPCOMING on the day
+    // it runs: a night that passed while the landing waited is not ingested as a show still to come (#4480's
+    // review, the same line as `offerPending`'s).
+    @Test func aReplayJudgesUpcomingByTheDayItRunsOn() async throws {
+        let c = try container()
+        let ctx = c.mainContext
+        for id in ["a", "b"] { html(id, in: ctx) }
+        try ctx.save()
+        let f = try folders("recover-later-day")
+        _ = try await interruptedIngest(["a", "b"], into: ctx, f)
+        #expect(try titles(c) == ["Recital a 0", "Recital a 1"])
+
+        // A month later: night(0) has passed, night(1) is that very day.
+        let monthLater = Calendar(identifier: .gregorian).date(byAdding: .day, value: 31, to: started)!
+        let recovered = await recover(ctx, f, at: monthLater)
+        guard case .landed? = recovered else {
+            Issue.record(Comment(rawValue: "the replay gave \(String(describing: recovered))"))
+            return
+        }
+        #expect(try titles(c) == ["Recital a 0", "Recital a 1", "Recital b 1"],
+                "a night that had passed by the day of the replay was ingested")
+    }
+
     // MARK: - finishing an interrupted ingest
 
     // The plan's tests, together: the interrupted landing is finished by the recovery from its own copy, the
