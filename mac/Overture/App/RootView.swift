@@ -1363,18 +1363,8 @@ struct RootView: View {
             sayRecovery(.recordsUnreadable(why: HandoffDecodeFailure.describe(error)))
             return
         }
-        // A landing the recovery stopped trying is said FIRST, at every launch until A10's controls (#4338) can
-        // clear it: the minute tick no longer works on it and would otherwise never say it again, and a landing
-        // still waiting beside it is said by the tick that finishes it.
-        if let stopped = found.first(where: { if case .stoppedRetrying = $0.finding { return true }; return false }),
-           case .stoppedRetrying(let attempts) = stopped.finding,
-           let line = LandingWaitCopy.recovered(.stoppedRetrying(startedAt: stopped.startedAt, attempts: attempts,
-                                                                 unlanded: stopped.unlanded.count)) {
-            status.set(line, priority: .warning)
-            return
-        }
-        if let first = found.first(where: { $0.finding == .replay || $0.finding == .sweep }) {
-            status.set(LandingWaitCopy.interruptedWaiting(since: first.startedAt), priority: .info)
+        if let said = LandingRecovery.launchLine(found) {
+            status.set(said.line, priority: said.needsDan ? .warning : .info)
         }
     }
 

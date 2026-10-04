@@ -148,6 +148,26 @@ enum LandingRecovery {
         }
     }
 
+    // MARK: - the launch line
+
+    // What launch says about interrupted landings, nil when there are none. A landing the recovery stopped
+    // trying is said FIRST, at every launch until A10's controls (#4338) can clear it: the minute tick no longer
+    // works on it and would otherwise never say it again, while a landing still waiting beside it is said by the
+    // tick that finishes it.
+    static func launchLine(_ found: [Interrupted]) -> (line: String, needsDan: Bool)? {
+        for item in found {
+            if case .stoppedRetrying(let attempts) = item.finding,
+               let line = LandingWaitCopy.recovered(.stoppedRetrying(startedAt: item.startedAt, attempts: attempts,
+                                                                     unlanded: item.unlanded.count)) {
+                return (line, true)
+            }
+        }
+        if let first = found.first(where: { $0.finding == .replay || $0.finding == .sweep }) {
+            return (LandingWaitCopy.interruptedWaiting(since: first.startedAt), false)
+        }
+        return nil
+    }
+
     // MARK: - the replay's match history
 
     // What the idle tick hands a replay to match its shows against. A read of the show table that fails is a

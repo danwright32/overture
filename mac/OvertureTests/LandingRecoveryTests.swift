@@ -248,6 +248,32 @@ final class LandingRecoveryTests {
         #expect(!body.contains("try? context.fetch(FetchDescriptor<Prospect>())"), Comment(rawValue: body))
     }
 
+    // Launch says a landing the recovery stopped trying even when another landing is waiting beside it, since
+    // nothing after launch says a stopped one again; the waiting one alone gets the waiting line.
+    @Test func launchSaysAStoppedLandingAheadOfOneStillWaiting() throws {
+        let c = try container()
+        let ctx = c.mainContext
+        for id in ["a", "b"] { html(id, in: ctx) }
+        try ctx.save()
+        let f = try folders("recover-launch-line")
+        try f.journals.start(LandingJournal(runIdentity: "sweep-w", sequence: 21, entryPoint: .runScoutLanding,
+                                            sources: [.init(sourceId: "a", pageHash: nil)], now: started))
+        try f.journals.start(LandingJournal(runIdentity: "sweep-x", sequence: 22, entryPoint: .runScoutLanding,
+                                            sources: [.init(sourceId: "b", pageHash: nil)], now: started))
+        let stoppedRun = LandingRun(runIdentity: "sweep-x", landedAt: nil, sequence: 22,
+                                    entryPoint: .runScoutLanding, startedAt: started)
+        stoppedRun.attemptCount = LandingRecovery.attemptCap
+        ctx.insert(stoppedRun)
+        try ctx.save()
+
+        let found = try LandingRecovery.survey(journals: f.journals, pending: f.pending, in: ctx)
+        let said = try #require(LandingRecovery.launchLine(found))
+        #expect(said.needsDan && said.line.contains("stopped trying"), Comment(rawValue: said.line))
+        let waitingOnly = try #require(LandingRecovery.launchLine(found.filter { $0.finding == .sweep }))
+        #expect(!waitingOnly.needsDan && waitingOnly.line == LandingWaitCopy.interruptedWaiting(since: started))
+        #expect(LandingRecovery.launchLine([]) == nil)
+    }
+
     // MARK: - finishing an interrupted ingest
 
     // The plan's tests, together: the interrupted landing is finished by the recovery from its own copy, the
