@@ -247,7 +247,12 @@ enum ScoutExtractLanding {
                 // here: this sweep runs at launch and at the end of every landing, which is exactly when Dan is
                 // at the Mac, and finishing an ingest is one synchronous block of seconds. The recovery says it
                 // is waiting, so leaving it here is not silence.
-                if journals?.pending(sequence: entry.sequence) != nil { continue }
+                // Still counted, by the same age rule as a copy that was offered and refused, so the stuck
+                // report goes on covering a copy whose recovery has stopped trying (L46).
+                if journals?.pending(sequence: entry.sequence) != nil {
+                    if now.timeIntervalSince(entry.recordedAt) > stuckAfter { offered.stuck += 1 } else { offered.stillWaiting += 1 }
+                    continue
+                }
                 let copy: (data: Data, results: ScoutExtractResults)
                 do {
                     copy = try pending.results(entry)

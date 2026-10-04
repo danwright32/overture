@@ -667,7 +667,10 @@ final class LandingRecoveryTests {
         let offered = await ScoutExtractLanding.offerPending(clients: [], history: [], blocked: .empty, now: later,
                                                             landings: LandingSingleFlight(sleep: { _ in }),
                                                             pending: f.pending, journals: f.journals, into: ctx)
-        #expect(offered.isEmpty, Comment(rawValue: "the launch sweep acted on an interrupted landing: \(offered)"))
+        #expect(offered.landed.isEmpty && offered.alreadyLanded.isEmpty,
+                Comment(rawValue: "the launch sweep acted on an interrupted landing: \(offered)"))
+        // Left, but still counted, so the kept copy stuck report goes on covering it (L46).
+        #expect(offered.stuck + offered.stillWaiting == 1, Comment(rawValue: "the copy left to the recovery was not counted: \(offered)"))
         #expect(try titles(c) == ["Recital a 0", "Recital a 1"])
         #expect(try survey(c, f) == [.replay])
     }
