@@ -112,7 +112,7 @@ enum PostEventPrompt {
         // whole meaning is "never heard back" would assert something false about it.
         guard p.showOutcome == nil else { return nil }
         guard p.status != .dismissed else { return nil }          // #238: a dismissed lead stops nagging
-        guard !s.isBooked else { return nil }
+        guard !s.pitchedAndBooked else { return nil }
         guard r.sentAt != nil, r.hasProvenOutreach else { return nil }
         guard !r.bounced else { return nil }
         // #1740: the closing note Dan closed out by hand, "not sent but also done". A reply reopens it.

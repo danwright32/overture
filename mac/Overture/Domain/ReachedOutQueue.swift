@@ -17,15 +17,23 @@ enum ReachedOutQueue {
     // and WHICH list is walked is the caller's choice: the model entry points hand in `recipients`, the
     // uncounted relationship they always read, so no `WorkTally.recipientReaches` pin moves; a facts caller
     // hands in `factContacts`.
+    //
+    // ONLY WORKED OUT WHERE IT IS ASKED. Every reader of whether the show booked (`isInPlay`, `nextPromptDate`) returns the
+    // same answer booked or not unless the contact it is asking about was provably pitched, so a show with no
+    // such contact never needs the fold, and most rows in the store have none. Folding it for every row cost
+    // 2.8 times the old list on the live clone (measured in this slice's oracle, 2026-10-03); the old terms
+    // only reached `p.isBooked` past those same guards. So the fold runs only when a pitched contact exists,
+    // named for what it holds, and for such a show it is exactly `PerformanceStatus.of(row, contacts:) == .booked`.
     struct Show<Row: ProspectFacts> {
         let row: Row
         let contacts: [Row.Contact]
-        let isBooked: Bool
+        let pitchedAndBooked: Bool
 
         init(_ row: Row, contacts: [Row.Contact]) {
             self.row = row
             self.contacts = contacts
-            isBooked = PerformanceStatus.of(row, contacts: contacts) == .booked
+            pitchedAndBooked = contacts.contains { $0.sentAt != nil && $0.hasProvenOutreach }
+                && PerformanceStatus.of(row, contacts: contacts) == .booked
         }
     }
 
@@ -103,7 +111,7 @@ enum ReachedOutQueue {
         // Asked through `isBooked`, which folds the show's own outcome together with a booking recorded
         // on any one contact, because Dan records his by hand on the contact (L83).
         // #4357 slice D2: worked out once per show in `Show`, by the same rule `Prospect.isBooked` reads.
-        guard !s.isBooked else { return false }
+        guard !s.pitchedAndBooked else { return false }
         // #2396: the SHOW carries how it ended (#2394), and an ended show has nothing left to reach out
         // about whatever its contacts still say. This is what lets the contact-level mirror #2395 left in
         // `recordOutcome` come out: the row leaves because the one field says the show is over, rather than
