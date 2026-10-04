@@ -201,6 +201,15 @@ final class LandingRecoveryTests {
             "an empty survey handed in was taken again: \(String(describing: recovered)), swept \(swept)"))
     }
 
+    // The replay's match history is read through a `do/catch` that says a failure, never a `try?` that would
+    // replay the copy against an empty history and spend it (L215). Asserted inside the idle tick itself.
+    @Test func theIdleTickNeverReplaysAgainstAHistoryItCouldNotRead() throws {
+        let root = SourceGuardHelper.source("Overture/App/RootView.swift")
+        let body = try #require(SourceGuardHelper.bodyOfFunction(named: "recoverAnInterruptedLandingIfIdle", in: root))
+        #expect(!body.contains("try? context.fetch(FetchDescriptor<Prospect>())"), Comment(rawValue: body))
+        #expect(body.contains("existing = try context.fetch(FetchDescriptor<Prospect>())"), Comment(rawValue: body))
+    }
+
     // MARK: - finishing an interrupted ingest
 
     // The plan's tests, together: the interrupted landing is finished by the recovery from its own copy, the
