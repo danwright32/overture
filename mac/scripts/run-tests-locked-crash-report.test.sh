@@ -155,6 +155,17 @@ assert_contains "a pass on the retry says it was a retry" "${retry_note}" "PASSE
 assert_contains "and names the test the host died under" "${retry_note}" "whichPartOfAHostedTestSurvivesIt"
 assert_empty "a first time pass says nothing about retries" "$(passed_on_retry_report "" "")"
 
+# The red end of the same story says only what it measured (L11): "on both attempts" when BOTH were this
+# crash, and the first attempt's own outcome when it was something else, such as a crash that named nothing.
+assert_contains "a host crash on both attempts says so" \
+  "$(host_crashed_final_report "host-crashed")" "on both attempts"
+both_other="$(host_crashed_final_report "crashed")"
+assert_not_contains "a retry that followed a different first outcome does not claim both attempts" \
+  "${both_other}" "on both attempts"
+assert_contains "and names what the first attempt ended as instead" "${both_other}" "ended crashed"
+assert_not_contains "an unretried host crash claims no retry at all" \
+  "$(host_crashed_final_report "")" "attempt"
+
 echo
 if [[ "${FAILURES}" -eq 0 ]]; then
   echo "run-tests-locked-crash-report.test.sh: all assertions passed"

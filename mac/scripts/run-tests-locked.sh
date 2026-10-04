@@ -460,6 +460,22 @@ named_failures_are_only_host_crashes() {
   echo "yes"
 }
 
+# host_crashed_final_report <first attempt's outcome, empty when not retried>. How a run that ENDED
+# host-crashed says so (#4444). "On both attempts" only when both were this crash: a retry can follow a
+# crash that named nothing or a time limit kill, and claiming both would be a sentence the run did not
+# measure (L11).
+host_crashed_final_report() {
+  local first="$1" when=""
+  if [[ "${first}" == "host-crashed" ]]; then
+    when=" on both attempts"
+  elif [[ -n "${first}" ]]; then
+    when=" on the retry (the first attempt ended ${first})"
+  fi
+  echo "the test HOST CRASHED under a named test${when}. The failures listed below are the tests that"
+  echo "were running when it died, not assertions that failed. A crash that repeats is not transient."
+  echo "See #4444 and #4210."
+}
+
 # passed_on_retry_report <first attempt's outcome> <the tests it named>. The sentence a run that PASSED on
 # its retry ends with, and nothing for a run that was never retried (#4444).
 #
@@ -1561,9 +1577,8 @@ main() {
   fi
   if [[ "${outcome}" == "host-crashed" ]]; then
     echo >&2
-    echo "run-tests-locked.sh: the test HOST CRASHED under a named test$([[ -n "${retried_from}" ]] && echo " on both attempts"). The" >&2
-    echo "failures listed below are the tests that were running when it died, not assertions that failed." >&2
-    echo "A crash that repeats on the retry is not transient. See #4444 and #4210." >&2
+    host_crashed_final_report "${retried_from}" \
+      | awk 'NR==1 {print "run-tests-locked.sh: " $0; next} {print}' >&2
   fi
 
   if [[ "${outcome}" == "build-failed" ]]; then
