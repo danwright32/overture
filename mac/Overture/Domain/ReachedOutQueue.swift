@@ -6,6 +6,32 @@ import Foundation
 // whichever is sooner. Returns nil: the recipient drops off the list, once outreach to them should
 // stop: booked, lost, bounced, or nothing left scheduled.
 enum ReachedOutQueue {
+    // #4357 slice D2 (plan v7 Phase 3): every term below is generic over `ProspectFacts`, so the pass runs it
+    // over live models today and the engine (Phase 4) over retained `RowFacts`, through one body. Each keeps a
+    // model entry point taking `(Recipient, Prospect)` for its existing callers, which builds a `Show` and
+    // forwards; the rule is written once, in the generic form.
+    //
+    // A SHOW AS THESE TERMS READ IT: the row, its contacts read ONCE, and whether it booked, worked out once
+    // from those same contacts. Booking folds every contact's standing, and the old model terms asked
+    // `p.isBooked` per contact, walking the relationship again each time. Here the walk happens once per show,
+    // and WHICH list is walked is the caller's choice: the model entry points hand in `recipients`, the
+    // uncounted relationship they always read, so no `WorkTally.recipientReaches` pin moves; a facts caller
+    // hands in `factContacts`.
+    struct Show<Row: ProspectFacts> {
+        let row: Row
+        let contacts: [Row.Contact]
+        let isBooked: Bool
+
+        init(_ row: Row, contacts: [Row.Contact]) {
+            self.row = row
+            self.contacts = contacts
+            isBooked = PerformanceStatus.of(row, contacts: contacts) == .booked
+        }
+    }
+
+    /// A model show as the model entry points read it: its own `recipients`, as they always have.
+    static func show(_ p: Prospect) -> Show<Prospect> { Show(p, contacts: p.recipients) }
+
     // The soonest moment Dan should next reach out to this recipient, or nil if outreach to them has
     // stopped. A past date (overdue) is returned as-is so it sorts to the top of the list.
     //
@@ -15,10 +41,16 @@ enum ReachedOutQueue {
     // cannot drift apart again.
     static func nextReachOut(for r: Recipient, of p: Prospect, now: Date,
                              followUpConfig: FollowUpConfig = .init()) -> Date? {
-        NextReachOut.date(isInPlay: isInPlay(r, of: p), now: now) {
+        nextReachOut(for: r, of: show(p), now: now, followUpConfig: followUpConfig)
+    }
+
+    static func nextReachOut<Row: ProspectFacts>(for r: Row.Contact, of s: Show<Row>, now: Date,
+                                                 followUpConfig: FollowUpConfig = .init()) -> Date? {
+        let p = s.row
+        return NextReachOut.date(isInPlay: isInPlay(r, of: s), now: now) {
             // #2397: the post-event prompt, which is all that is left of the conversation track. Its
             // trigger is the show's DATE, so it never depended on the state that used to key this.
-            let promptDate = PostEventPrompt.nextPromptDate(for: r, of: p)
+            let promptDate = PostEventPrompt.nextPromptDate(for: r, of: s)
             // All three are `.scheduled`: each track has already decided which moment it is asking for.
             // #2118: a reply that has ARRIVED and not been answered is dated through the shared rule, the
             // same one a direct hire inquiry's reply gets, so both kinds of row sit under the same headings.
@@ -45,6 +77,11 @@ enum ReachedOutQueue {
     // Is there anything left to reach out about on this contact at all? The inquiry side asks the same
     // question of itself in its own vocabulary; both hand the answer to the shared rule.
     static func isInPlay(_ r: Recipient, of p: Prospect) -> Bool {
+        isInPlay(r, of: show(p))
+    }
+
+    static func isInPlay<Row: ProspectFacts>(_ r: Row.Contact, of s: Show<Row>) -> Bool {
+        let p = s.row
         guard r.sentAt != nil else { return false }                 // only contacted recipients
         // #331 and #378, now asked through the one shared definition (Recipient.hasProvenOutreach).
         // Both guards said the same thing in two halves: a sent timestamp is not proof of anything, so
@@ -65,7 +102,8 @@ enum ReachedOutQueue {
         //
         // Asked through `isBooked`, which folds the show's own outcome together with a booking recorded
         // on any one contact, because Dan records his by hand on the contact (L83).
-        guard !p.isBooked else { return false }
+        // #4357 slice D2: worked out once per show in `Show`, by the same rule `Prospect.isBooked` reads.
+        guard !s.isBooked else { return false }
         // #2396: the SHOW carries how it ended (#2394), and an ended show has nothing left to reach out
         // about whatever its contacts still say. This is what lets the contact-level mirror #2395 left in
         // `recordOutcome` come out: the row leaves because the one field says the show is over, rather than
@@ -78,13 +116,22 @@ enum ReachedOutQueue {
     // soonest first. The view formats the date with timingLabel.
     static func activeWithDates(from prospects: [Prospect], now: Date,
                                 followUpConfig: FollowUpConfig = .init()) -> [(prospect: Prospect, recipient: Recipient, next: Date)] {
+        activeWithDates(from: prospects, contacts: { $0.recipients }, now: now, followUpConfig: followUpConfig)
+    }
+
+    // #4357 slice D2: `contacts` says which list of each row's contacts is walked, once per row (see `Show`).
+    static func activeWithDates<Row: ProspectFacts>(
+        from prospects: [Row], contacts: (Row) -> [Row.Contact], now: Date,
+        followUpConfig: FollowUpConfig = .init()
+    ) -> [(prospect: Row, recipient: Row.Contact, next: Date)] {
         QueueRenderPass.WorkTally.recordReachedOutSweep()
         return prospects
-            .compactMap { p -> (prospect: Prospect, recipient: Recipient, next: Date)? in
+            .compactMap { p -> (prospect: Row, recipient: Row.Contact, next: Date)? in
+                let s = Show(p, contacts: contacts(p))
                 // #2126: built from the contacts that still have a reach-out date, so a resolved first
                 // contact cannot take a live colleague's whole row down with it.
-                let live = p.recipients.compactMap { r -> (recipient: Recipient, next: Date)? in
-                    nextReachOut(for: r, of: p, now: now, followUpConfig: followUpConfig)
+                let live = s.contacts.compactMap { r -> (recipient: Row.Contact, next: Date)? in
+                    nextReachOut(for: r, of: s, now: now, followUpConfig: followUpConfig)
                         .map { (recipient: r, next: $0) }
                 }
                 guard !live.isEmpty else { return nil }
@@ -105,8 +152,8 @@ enum ReachedOutQueue {
                 // the store's own identifier; with nobody having replied the soonest date, then the address,
                 // then the identifier. So the person the row names, and whether its pill counts it as due,
                 // no longer change between launches on unchanged data.
-                let representative = live.filter { $0.recipient.replied }.min(by: Self.earlierReplier)
-                    ?? live.min(by: Self.dueSooner)
+                let representative = live.filter { $0.recipient.replied }.min { Self.earlierReplier($0, $1) }
+                    ?? live.min { Self.dueSooner($0, $1) }
                 guard let representative else { return nil }
                 // The DATE is the soonest across the whole show, not the representative's own, so a show
                 // cannot sit lower in the list than its most urgent contact deserves.
@@ -121,20 +168,20 @@ enum ReachedOutQueue {
     // #4345: the representative's two orders, named so each branch reads as the rule it is. An address a
     // form contact lacks sorts as empty; the identifier is last and only separates two contacts carrying
     // one address, which is the case an address alone would leave to the relationship's order.
-    private static func earlierReplier(_ a: (recipient: Recipient, next: Date),
-                                       _ b: (recipient: Recipient, next: Date)) -> Bool {
+    private static func earlierReplier<C: ContactFacts>(_ a: (recipient: C, next: Date),
+                                                        _ b: (recipient: C, next: Date)) -> Bool {
         let (ra, rb) = (a.recipient.replyArrivedAt ?? .distantFuture, b.recipient.replyArrivedAt ?? .distantFuture)
         if ra != rb { return ra < rb }
         return addressThenIdentifier(a.recipient, b.recipient)
     }
 
-    private static func dueSooner(_ a: (recipient: Recipient, next: Date),
-                                  _ b: (recipient: Recipient, next: Date)) -> Bool {
+    private static func dueSooner<C: ContactFacts>(_ a: (recipient: C, next: Date),
+                                                   _ b: (recipient: C, next: Date)) -> Bool {
         if a.next != b.next { return a.next < b.next }
         return addressThenIdentifier(a.recipient, b.recipient)
     }
 
-    private static func addressThenIdentifier(_ a: Recipient, _ b: Recipient) -> Bool {
+    private static func addressThenIdentifier<C: ContactFacts>(_ a: C, _ b: C) -> Bool {
         let (ea, eb) = (a.email ?? "", b.email ?? "")
         if ea != eb { return ea < eb }
         return a.persistentModelID < b.persistentModelID
@@ -175,12 +222,17 @@ enum ReachedOutQueue {
     // has not happened yet is held on the stage by the floor alone, with nothing left to count down to.
     static func nextActionableMoment(for r: Recipient, of p: Prospect, now: Date,
                                      followUpConfig: FollowUpConfig = .init()) -> Date? {
-        let nudge = FollowUp.nextDue(eligible: FollowUp.isAwaitingNudge(r, in: p, now: now), sentAt: r.sentAt,
+        nextActionableMoment(for: r, of: show(p), now: now, followUpConfig: followUpConfig)
+    }
+
+    static func nextActionableMoment<Row: ProspectFacts>(for r: Row.Contact, of s: Show<Row>, now: Date,
+                                                         followUpConfig: FollowUpConfig = .init()) -> Date? {
+        let nudge = FollowUp.nextDue(eligible: FollowUp.isAwaitingNudge(r, in: s.row, now: now), sentAt: r.sentAt,
                                      lastFollowUpAt: r.lastFollowUpAt, followUpCount: r.followUpCount,
                                      remindedAt: r.nudgeRemindedAt, config: followUpConfig)
         let candidates = [nudge,
-                          nextFormDecision(for: r, of: p, config: followUpConfig),
-                          PostEventPrompt.nextPromptDate(for: r, of: p),
+                          nextFormDecision(for: r, of: s.row, config: followUpConfig),
+                          PostEventPrompt.nextPromptDate(for: r, of: s),
                           r.hasUnhandledReply ? r.replyArrivedAt : nil]
         return candidates.compactMap { $0 }.min()
     }
@@ -189,6 +241,12 @@ enum ReachedOutQueue {
     // One entry point, so a caller cannot reassemble the pieces into the disagreement this replaces.
     static func timingLabel(for r: Recipient, of p: Prospect, now: Date, today: String,
                             followUpConfig: FollowUpConfig = .init()) -> String {
+        timingLabel(for: r, of: show(p), now: now, today: today, followUpConfig: followUpConfig)
+    }
+
+    static func timingLabel<Row: ProspectFacts>(for r: Row.Contact, of s: Show<Row>, now: Date, today: String,
+                                                followUpConfig: FollowUpConfig = .init()) -> String {
+        let p = s.row
         // #2169: a dated form pitch names the NIGHT, whatever its clock says, because there is no send to
         // count down to. Unchanged, and asked first so the rule stays in one place.
         //
@@ -201,7 +259,7 @@ enum ReachedOutQueue {
            EasternDate.date(from: day) != nil {
             return formNightLabel(eventDay: day, today: today)
         }
-        guard let next = nextActionableMoment(for: r, of: p, now: now, followUpConfig: followUpConfig) else {
+        guard let next = nextActionableMoment(for: r, of: s, now: now, followUpConfig: followUpConfig) else {
             return heldOpenLabel
         }
         // #2710: "Reach out now" is an INSTRUCTION, and it may only appear where a control can carry it
@@ -209,7 +267,7 @@ enum ReachedOutQueue {
         // `.sayHowItEnded`. Asked of the ACTION rather than re-derived here, so the slot and the control
         // beside it cannot disagree about whether this row can send (L16), which is the shape #2207 is
         // about and what `theSlotNeverInstructsWhereTheRowCannotAct` caught the moment the email left.
-        let action = ReachedOutAction.of(r, in: p, now: now, today: today, followUpConfig: followUpConfig)
+        let action = ReachedOutAction.of(r, in: s, now: now, today: today, followUpConfig: followUpConfig)
         return timingLabel(next: next, now: now, awaitingDecision: !action.sendsAnEmail,
                            decisionLabel: action == .sayHowItEnded ? endingLabel : decisionLabel)
     }
@@ -324,7 +382,12 @@ enum ReachedOutQueue {
     // key every open pitch went rust on its own night with nothing owed on it. Nothing owed is not urgent.
     static func isDueNow(for r: Recipient, of p: Prospect, now: Date,
                          followUpConfig: FollowUpConfig = .init()) -> Bool {
-        guard let next = nextActionableMoment(for: r, of: p, now: now, followUpConfig: followUpConfig)
+        isDueNow(for: r, of: show(p), now: now, followUpConfig: followUpConfig)
+    }
+
+    static func isDueNow<Row: ProspectFacts>(for r: Row.Contact, of s: Show<Row>, now: Date,
+                                             followUpConfig: FollowUpConfig = .init()) -> Bool {
+        guard let next = nextActionableMoment(for: r, of: s, now: now, followUpConfig: followUpConfig)
         else { return false }
         return isDueNow(next: next, now: now)
     }
@@ -353,7 +416,7 @@ enum ReachedOutQueue {
     // The one case where yielding is not safe is the same one the paragraph above carves out, for the same
     // reason: an UNDATED show has no floor, so nil-ing this would drop the row out of the only surface
     // that tracks the pitch (L45). The gap clock survives there attached or not.
-    private static func nextFormDecision(for r: Recipient, of p: Prospect,
+    private static func nextFormDecision(for r: some ContactFacts, of p: some ProspectFacts,
                                          config: FollowUpConfig) -> Date? {
         guard r.outreachChannel == .contactForm, let recordedAt = r.formOutreachRecordedAt else { return nil }
         if let night = formDecisionDate(eventDay: p.performanceDate) {
@@ -362,7 +425,7 @@ enum ReachedOutQueue {
         return recordedAt.addingTimeInterval(TimeInterval(config.gapDays) * 86_400)
     }
 
-    private static func nextFollowUp(for r: Recipient, now: Date, config: FollowUpConfig) -> Date? {
+    private static func nextFollowUp(for r: some ContactFacts, now: Date, config: FollowUpConfig) -> Date? {
         guard let sentAt = r.sentAt else { return nil }
         guard r.isAwaitingFollowUp else { return nil }
         guard r.followUpCount < config.maxFollowUps else { return nil }

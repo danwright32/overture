@@ -334,4 +334,96 @@ struct TermsOverFactsTests {
         #expect(!staleFindings.contains { $0.contains("example.invalid") },
                 "a finding named a contact's address rather than its identifier")
     }
+
+    // MARK: slice D2, the reached-out terms
+
+    // Pitches in every state the reached-out terms tell apart, dated against the instant the comparison
+    // judges at (noon Eastern on `asOf`): on a show still to come, a silent contact owed a nudge, a second
+    // silent contact due at the same moment (an address tie), an unwatched form pitch, and two repliers; on
+    // a show already played, a contact who replied (the close-out is owed) and an unwatched form pitch whose
+    // night has passed (Dan is asked what happened).
+    private func seedReachedOut(_ ctx: ModelContext, _ all: [Prospect]) throws {
+        let now = TermsOverFacts.reachedOutInstant(asOf)
+        let daysAgo = { (days: Double) in now.addingTimeInterval(-days * 86_400) }
+        func contact(_ id: String, on p: Prospect, email: String? = nil, form: Bool = false,
+                     _ shape: (Recipient) -> Void = { _ in }) {
+            let r = Recipient(id: id, email: email, provenance: .act,
+                              contactFormURL: form ? "https://example.invalid/contact" : nil)
+            r.sendState = .sent
+            r.sentAt = daysAgo(20)
+            if form {
+                r.outreachChannel = .contactForm
+                r.formOutreachRecordedAt = daysAgo(20)
+            } else {
+                r.gmailMessageId = "m-\(id)"
+                r.gmailThreadId = "t-\(id)"
+            }
+            shape(r)
+            ctx.insert(r)
+            p.recipients.append(r)
+        }
+        let coming = try #require(all.first { $0.naturalKey == "saltmarsh a" })        // 2026-12-04
+        contact("nudge-a@example.invalid", on: coming, email: "nudge-a@example.invalid")
+        contact("nudge-b@example.invalid", on: coming, email: "nudge-b@example.invalid")
+        contact("form-coming", on: coming, form: true)
+        let played = try #require(all.first { $0.naturalKey == "lantern live|2026-10-02" })
+        played.performanceDate = "2026-09-10"
+        played.runEndDate = nil
+        contact("closer@example.invalid", on: played, email: "closer@example.invalid") {
+            $0.replied = true; $0.repliedAt = daysAgo(15); $0.replyHandledAt = daysAgo(14)
+        }
+        contact("form-played", on: played, form: true)
+        let replies = try #require(all.first { $0.naturalKey == "copper|2026-10-17" })
+        replies.missedScoutCount = 0
+        contact("first@example.invalid", on: replies, email: "first@example.invalid") {
+            $0.replied = true; $0.repliedAt = daysAgo(3)
+        }
+        contact("second@example.invalid", on: replies, email: "second@example.invalid") {
+            $0.replied = true; $0.repliedAt = daysAgo(2)
+        }
+    }
+
+    @Test func theReachedOutTermsAnswerTheSameOverFactsAsOverModels() throws {
+        let ctx = try context()
+        let all = try seed(ctx)
+        try seedReachedOut(ctx, all)
+        let now = TermsOverFacts.reachedOutInstant(asOf)
+        // Positive controls (L159): rows on the list, and every action the row's control can take.
+        let rows = ReachedOutQueue.activeWithDates(from: all, now: now)
+        #expect(rows.count == 3, "the fixture should put three shows on the reached-out list")
+        let actions = Set(all.flatMap { p in p.recipients.map { ReachedOutAction.of($0, in: p, now: now, today: asOf) } })
+        #expect(actions == Set(ReachedOutAction.allCases), "the fixture reaches only \(actions)")
+        #expect(rows.first { $0.prospect.naturalKey == "copper|2026-10-17" }?.recipient.id == "first@example.invalid",
+                "the earliest replier should speak for a show two contacts replied on")
+        #expect(rows.first { $0.prospect.naturalKey == "saltmarsh a" }?.recipient.id == "form-coming"
+                    || rows.first { $0.prospect.naturalKey == "saltmarsh a" }?.recipient.id == "nudge-a@example.invalid",
+                "the soonest due contact, address first on a tie, should speak for the show still to come")
+
+        let findings = TermsOverFacts.findings(all, asOf: asOf)
+        #expect(findings.isEmpty, Comment(rawValue: findings.joined(separator: "\n")))
+    }
+
+    // The tie class classifier: facts taken before a reply arrived disagree ACROSS classes (a different reply
+    // instant), and facts taken before a tied contact's address changed disagree only WITHIN one.
+    @Test func theRepresentativeComparisonTellsATieBreakFromARuleFault() throws {
+        let ctx = try context()
+        let all = try seed(ctx)
+        try seedReachedOut(ctx, all)
+        let replies = try #require(all.first { $0.naturalKey == "copper|2026-10-17" })
+        let second = try #require(replies.recipients.first { $0.id == "second@example.invalid" })
+        let stale = all.map(RowFacts.extract)
+        second.repliedAt = TermsOverFacts.reachedOutInstant(asOf).addingTimeInterval(-5 * 86_400)
+        let across = TermsOverFacts.findings(all, facts: stale, asOf: asOf)
+        #expect(across.contains { $0.contains("representative differs across tie classes") },
+                "an earlier reply arriving after extraction was not seen as a different tie class")
+
+        second.repliedAt = try #require(replies.recipients.first { $0.id == "first@example.invalid" }?.repliedAt)
+        let tied = all.map(RowFacts.extract)
+        second.email = "a-second@example.invalid"
+        let within = TermsOverFacts.findings(all, facts: tied, asOf: asOf)
+        #expect(within.contains { $0.contains("representative differs within its tie class") },
+                "a tie broken differently by address was not seen as a tie break")
+        #expect(!(across + within).contains { $0.contains("example.invalid") },
+                "a finding named a contact's address rather than its identifier")
+    }
 }

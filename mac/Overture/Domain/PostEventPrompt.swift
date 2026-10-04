@@ -96,6 +96,13 @@ enum PostEventPrompt {
     // the future: the show has no date to pass, Dan has already recorded how it ended, this contact is
     // out of play, or a note already sent has stepped the prompt forward.
     static func nextPromptDate(for r: Recipient, of p: Prospect) -> Date? {
+        nextPromptDate(for: r, of: ReachedOutQueue.show(p))
+    }
+
+    // #4357 slice D2: generic over the facts protocols, reading the show through `ReachedOutQueue.Show`, so the
+    // booking fold walks the contacts once and the model entry point above walks the ones it always did.
+    static func nextPromptDate<Row: ProspectFacts>(for r: Row.Contact, of s: ReachedOutQueue.Show<Row>) -> Date? {
+        let p = s.row
         // Dan closed it out, so Overture stops asking. The inverse of his own rule that nothing is closed
         // unless he closed it: once he has, leave it alone.
         //
@@ -105,7 +112,7 @@ enum PostEventPrompt {
         // whole meaning is "never heard back" would assert something false about it.
         guard p.showOutcome == nil else { return nil }
         guard p.status != .dismissed else { return nil }          // #238: a dismissed lead stops nagging
-        guard !p.isBooked else { return nil }
+        guard !s.isBooked else { return nil }
         guard r.sentAt != nil, r.hasProvenOutreach else { return nil }
         guard !r.bounced else { return nil }
         // #1740: the closing note Dan closed out by hand, "not sent but also done". A reply reopens it.
@@ -147,14 +154,18 @@ enum PostEventPrompt {
     // The one question that decides it: did anybody write back? Asked of the SHOW rather than this
     // contact, because a colleague's answer is an answer about the event, and offering a note that says
     // "never heard back" on a show somebody replied to would be false whoever replied.
-    static func kind(for r: Recipient, of p: Prospect) -> Kind {
-        p.recipients.contains { $0.replied } ? .closeOut : .closeOutUnanswered
+    static func kind<Row: ProspectFacts>(for r: Row.Contact, of s: ReachedOutQueue.Show<Row>) -> Kind {
+        s.contacts.contains { $0.replied } ? .closeOut : .closeOutUnanswered
     }
 
     static func prompt(for r: Recipient, of p: Prospect, now: Date) -> Prompt? {
+        prompt(for: r, of: ReachedOutQueue.show(p), now: now)
+    }
+
+    static func prompt<Row: ProspectFacts>(for r: Row.Contact, of s: ReachedOutQueue.Show<Row>, now: Date) -> Prompt? {
         // #2646: THIS is where the clock belongs. `nextPromptDate` says when; this says whether it is now.
-        guard let due = nextPromptDate(for: r, of: p), now >= due else { return nil }
-        let kind = kind(for: r, of: p)
+        guard let due = nextPromptDate(for: r, of: s), now >= due else { return nil }
+        let kind = kind(for: r, of: s)
         return Prompt(kind: kind, reason: reason(for: kind))
     }
 

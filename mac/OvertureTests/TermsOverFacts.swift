@@ -126,6 +126,101 @@ enum TermsOverFacts {
 
         // Slice D1: the computed members the reached-out terms read, on the show and on every contact.
         out += memberFindings(models, facts)
+
+        // Slice D2: the reached-out terms, judged at a fixed instant on `asOf` so the two arms share a clock.
+        out += reachedOutFindings(models, facts, now: reachedOutInstant(asOf), today: asOf)
+        return out
+    }
+
+    // MARK: slice D2, the reached-out terms
+
+    /// Noon Eastern on `day`, the instant the reached-out comparison judges at. Fixed by the day rather than
+    /// read off the wall clock, so a fixture run and its rerun ask the same question (L74).
+    static func reachedOutInstant(_ day: String) -> Date {
+        (EasternDate.date(from: day) ?? Date(timeIntervalSince1970: 0)).addingTimeInterval(12 * 3600)
+    }
+
+    /// What a reached-out term says about one contact on one show, read through the generic terms.
+    struct ReachedOutAnswers: Equatable {
+        let isInPlay: Bool
+        let nextReachOut: Date?
+        let nextActionableMoment: Date?
+        let isDueNow: Bool
+        let timingLabel: String
+        let action: ReachedOutAction
+        let isAwaitingNudge: Bool
+        let nextPromptDate: Date?
+        let prompt: PostEventPrompt.Prompt?
+
+        init<Row: ProspectFacts>(_ r: Row.Contact, of show: ReachedOutQueue.Show<Row>, now: Date, today: String) {
+            isInPlay = ReachedOutQueue.isInPlay(r, of: show)
+            nextReachOut = ReachedOutQueue.nextReachOut(for: r, of: show, now: now)
+            nextActionableMoment = ReachedOutQueue.nextActionableMoment(for: r, of: show, now: now)
+            isDueNow = ReachedOutQueue.isDueNow(for: r, of: show, now: now)
+            timingLabel = ReachedOutQueue.timingLabel(for: r, of: show, now: now, today: today)
+            action = ReachedOutAction.of(r, in: show, now: now, today: today)
+            isAwaitingNudge = FollowUp.isAwaitingNudge(r, in: show.row, now: now)
+            nextPromptDate = PostEventPrompt.nextPromptDate(for: r, of: show)
+            prompt = PostEventPrompt.prompt(for: r, of: show, now: now)
+        }
+
+        func differing(from other: ReachedOutAnswers) -> [String] {
+            Mirror(reflecting: self).children.compactMap { child in
+                guard let label = child.label,
+                      let theirs = Mirror(reflecting: other).children.first(where: { $0.label == label })
+                else { return nil }
+                return String(describing: child.value) == String(describing: theirs.value) ? nil : label
+            }
+        }
+    }
+
+    /// The reached-out list over models and over facts, entry by entry, and every contact's answers.
+    ///
+    /// THE REPRESENTATIVE IS COMPARED AS A TIE CLASS (the inventory's word for this slice). Each show's row
+    /// speaks for one contact, chosen by a total order whose last key is the store's identifier. A different
+    /// contact on the two arms is one of two faults, and they are told apart: a contact OUTSIDE the
+    /// representative's tie class (a different reply instant, or a different due date when nobody replied)
+    /// means a fact the order reads came across differently; one INSIDE it means only the tie breaks
+    /// (address, identifier) disagreed. Both are findings; the label says which.
+    static func reachedOutFindings(_ models: [Prospect], _ facts: [RowFacts], now: Date, today: String) -> [String] {
+        var out: [String] = []
+        let onModels = ReachedOutQueue.activeWithDates(from: models, contacts: { $0.factContacts }, now: now)
+        let onFacts = ReachedOutQueue.activeWithDates(from: facts, contacts: { $0.factContacts }, now: now)
+        let factsByKey = Dictionary(onFacts.map { ($0.prospect.naturalKey, $0) }, uniquingKeysWith: { first, _ in first })
+        if onModels.map(\.prospect.naturalKey) != onFacts.map(\.prospect.naturalKey) {
+            out.append("ReachedOutQueue.activeWithDates order or membership differs")
+        }
+        for entry in onModels {
+            let pid = String(describing: entry.prospect.persistentModelID)
+            guard let other = factsByKey[entry.prospect.naturalKey] else {
+                out.append("ReachedOutQueue.activeWithDates drops row \(pid) over facts")
+                continue
+            }
+            if entry.next != other.next { out.append("ReachedOutQueue.activeWithDates date differs for row \(pid)") }
+            if entry.recipient.persistentModelID != other.recipient.persistentModelID {
+                let sameClass = entry.recipient.replied == other.recipient.replied
+                    && (entry.recipient.replied
+                        ? entry.recipient.replyArrivedAt == other.recipient.replyArrivedAt
+                        : ReachedOutQueue.nextReachOut(for: entry.recipient, of: .init(entry.prospect, contacts: entry.prospect.factContacts), now: now)
+                            == ReachedOutQueue.nextReachOut(for: other.recipient, of: .init(other.prospect, contacts: other.prospect.factContacts), now: now))
+                out.append("ReachedOutQueue.activeWithDates representative differs "
+                           + (sameClass ? "within its tie class" : "across tie classes") + " for row \(pid)")
+            }
+        }
+        for (model, fact) in zip(models, facts) {
+            let modelShow = ReachedOutQueue.Show(model, contacts: model.factContacts)
+            let factShow = ReachedOutQueue.Show(fact, contacts: fact.factContacts)
+            let factByID = Dictionary(fact.factContacts.map { ($0.persistentModelID, $0) }, uniquingKeysWith: { first, _ in first })
+            for contact in model.factContacts {
+                guard let record = factByID[contact.persistentModelID] else { continue }   // memberFindings names it
+                let names = ReachedOutAnswers(contact, of: modelShow, now: now, today: today)
+                    .differing(from: ReachedOutAnswers(record, of: factShow, now: now, today: today))
+                if !names.isEmpty {
+                    out.append("reached-out answers \(names.joined(separator: ", ")) differ for contact "
+                               + String(describing: contact.persistentModelID))
+                }
+            }
+        }
         return out
     }
 
