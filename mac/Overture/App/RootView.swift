@@ -1427,6 +1427,7 @@ struct RootView: View {
             replaying: { sequence in
                 freezeWatch.stampIdleWork(sequence.map { .init(recoverySequence: $0, inputIdleSeconds: quiet) })
             },
+            surveyed: found,
             into: context)
         if let recovered { sayRecovery(recovered) }
     }

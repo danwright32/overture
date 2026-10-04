@@ -182,6 +182,25 @@ final class LandingRecoveryTests {
                 "a night that had passed by the day of the replay was ingested")
     }
 
+    // RootView surveys first (to decide what a replay needs), and hands that survey on rather than paying for a
+    // second listing and a second read of each kept copy. What it hands is what is acted on.
+    @Test func aSurveyHandedInIsActedOnRatherThanTakenAgain() async throws {
+        let c = try container()
+        let ctx = c.mainContext
+        html("a", in: ctx)
+        try ctx.save()
+        let f = try folders("recover-surveyed")
+        try f.journals.start(LandingJournal(runIdentity: "sweep-s", sequence: 13, entryPoint: .runScoutLanding,
+                                            sources: [.init(sourceId: "a", pageHash: nil)], now: started))
+        var swept = 0
+        let recovered = await LandingRecovery.recoverNext(
+            journals: f.journals, pending: f.pending, clients: [], history: [], blocked: .empty,
+            landings: LandingSingleFlight(sleep: { _ in }), now: later, sweep: { swept += 1; return true },
+            surveyed: [], into: ctx)
+        #expect(recovered == nil && swept == 0, Comment(rawValue:
+            "an empty survey handed in was taken again: \(String(describing: recovered)), swept \(swept)"))
+    }
+
     // MARK: - finishing an interrupted ingest
 
     // The plan's tests, together: the interrupted landing is finished by the recovery from its own copy, the

@@ -166,12 +166,19 @@ enum LandingRecovery {
                             // L459: called with the run identity as a replay starts and nil as it ends, so the
                             // stall watchdog can record the replay's holds as idle work (`IdleWorkBox`).
                             replaying: (Int?) -> Void = { _ in },
+                            // What a caller already surveyed in the same main actor turn, so an idle minute with
+                            // a landing waiting lists the journals and reads each kept copy once, not twice.
+                            surveyed: [Interrupted]? = nil,
                             into context: ModelContext) async -> Recovered? {
         let found: [Interrupted]
-        do {
-            found = try survey(journals: journals, pending: pending, in: context)
-        } catch {
-            return .recordsUnreadable(why: HandoffDecodeFailure.describe(error))
+        if let surveyed {
+            found = surveyed
+        } else {
+            do {
+                found = try survey(journals: journals, pending: pending, in: context)
+            } catch {
+                return .recordsUnreadable(why: HandoffDecodeFailure.describe(error))
+            }
         }
         var retired: Recovered?
         for item in found {

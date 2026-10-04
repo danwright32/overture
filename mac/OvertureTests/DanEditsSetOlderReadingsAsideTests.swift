@@ -134,7 +134,8 @@ final class DanEditsSetOlderReadingsAsideTests {
     }
 
     // THE RECOVERY. An interrupted landing whose unlanded source Dan then edited is not replayed onto it: the
-    // recovery finishes nothing for b, and with every source either landed or overtaken it retires the journal.
+    // recovery replays only the closing step a landed (its reconcile and the landing record), and lands nothing
+    // for b, whose edit stands.
     @Test(arguments: Edit.allCases)
     func theRecoveryDoesNotReplayAReadingOverAnEdit(_ edit: Edit) async throws {
         let c = try container()
