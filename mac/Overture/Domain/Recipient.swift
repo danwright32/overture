@@ -628,8 +628,10 @@ final class Recipient {
         set { provenanceRaw = newValue.rawValue }
     }
 
+    // #4357 slice D1: the three typed views below read their one body on `ContactFacts`
+    // (ContactFactsMembers.swift); the setter is all that is left here, because the model writes through it.
     var sendState: SendState {
-        get { SendState(rawValue: sendStateRaw) ?? .pending }
+        get { asContactFacts.sendState }
         set { sendStateRaw = newValue.rawValue }
     }
 
@@ -641,12 +643,12 @@ final class Recipient {
     }
 
     var resolution: RecipientResolution? {
-        get { resolutionRaw.flatMap(RecipientResolution.init) }
+        get { asContactFacts.resolution }
         set { resolutionRaw = newValue?.rawValue }
     }
 
     var outcomeSource: OutcomeSource? {
-        get { outcomeSourceRaw.flatMap(OutcomeSource.init) }
+        get { asContactFacts.outcomeSource }
         set { outcomeSourceRaw = newValue?.rawValue }
     }
 
@@ -660,74 +662,6 @@ final class Recipient {
     var contactConfidence: ContactConfidence? {
         get { contactConfidenceRaw.flatMap(ContactConfidence.init) }
         set { contactConfidenceRaw = newValue?.rawValue }
-    }
-
-    // #1630: this contact was provably reached, whichever way it happened. An emailed contact proves it
-    // with a Gmail message id against a real address (#331/#378: a bare `sentAt` with neither is a
-    // staged or corrupt record that was never actually sent, and that guard is unchanged). A form
-    // contact proves it with Dan's own confirmation, which is a different KIND of evidence, not the
-    // absence of any. The one place that question is answered, so a surface cannot admit an outreach
-    // the next surface refuses.
-    var hasProvenOutreach: Bool {
-        if formOutreachRecordedAt != nil { return true }
-        return gmailMessageId != nil && (email?.isEmpty == false)
-    }
-
-    // Sent, no reply, not bounced: the only recipients that receive follow-ups or reminders.
-    var isSilent: Bool { sendState == .sent && !replied && !bounced }
-
-    // The contacts the follow-up sequencer may nudge (#418 D): silent AND not hand-resolved. A contact
-    // Dan marked Closed/Booked (resolution set) or otherwise judged by hand (outcomeSource == .manual)
-    // is still "silent" by the raw definition but must never be nudged again.
-    // #1630: and never a form outreach. A nudge is an EMAIL, sent onto the original thread; a form
-    // contact has neither an address nor a thread, so the whole sequence is unsendable for it. Offering
-    // one would put a button in Follow-ups that can only fail, about a pitch that is perfectly fine. Its
-    // own decide clock (ReachedOutQueue) covers it instead.
-    // #2716: re-decided, and deliberately unchanged, now that a form pitch can carry an attached
-    // conversation and an address learned from it. It asks the CHANNEL, which is history and never flips,
-    // and that is the right question here: a nudge is an email onto the conversation Overture itself
-    // started, and it anchors on `sentAt`, which for a form pitch is when Dan recorded it by hand and is
-    // typically weeks old. Reading the attach as "this is an email contact now" would make the nudge
-    // instantly OVERDUE, count it in the Due pill, and send a real cold nudge onto a stranger's
-    // conversation. Do not "fix" this to consult the address or the thread.
-    // #3712: and never onto a conversation Overture did not send on. This is the OPPOSITE direction to
-    // the paragraph above and does not weaken it: that one refuses to read an attach as "this is an email
-    // contact now", which would make a form pitch instantly nudgeable. This one refuses to go on treating
-    // an EMAIL contact as nudgeable once a link has moved it onto somebody else's thread and somebody
-    // else's address. The nudge is a cold chase, threaded onto the conversation Overture itself started,
-    // and after a replacing attach the row holds neither: it would arrive as a chase of a pitch the writer
-    // never received, on a conversation Overture never opened. It heals with the predicate, so a row
-    // Overture has since answered on is nudgeable again exactly as it was.
-    var isAwaitingFollowUp: Bool {
-        isSilent && resolution == nil && outcomeSource != .manual && outreachChannel == .email
-            && !replyWatchConversationIsAttached
-    }
-
-    // #677: this contact replied and nobody has dealt with it yet: replied, no resolution recorded,
-    // and it didn't bounce. Was independently recomputed in OmniFocusSync, ReachedOutQueue, and
-    // ConversationReminder (plus inline in Prospect.hasUnhandledReply); now the one shared source. A
-    // manually hand-set conversation state (#653) is NOT excluded here: only two of the four call
-    // sites need that exclusion, so they layer `&& conversationStateSource != .manual` on top.
-    // #2170: and Dan has not ANSWERED it. Nothing in the model used to mean that, so the Answer button
-    // went on offering itself after it had been pressed and succeeded, and the row said somebody was
-    // waiting on him two hours after he had written back (L44, L11).
-    //
-    // Compared against when their message ARRIVED rather than being a plain flag, so a second reply on
-    // the same thread re-opens it. Without that the whole back half of a conversation would be
-    // unanswerable from the queue. It is the same shape freezeSentReply already uses to decide whether
-    // they have written again since the last capture.
-    // #2910, Dan's call: an ending recorded on the SHOW deliberately does NOT come into this. Closing a
-    // show out records what happened to the show; it does not mean he wrote back to the person who took
-    // the trouble to reply, so it must not answer them on his behalf. #2900 briefly made an ending close
-    // the reply here, and that also made a reply arriving AFTER the ending silent, which is the reply
-    // most worth hearing. What makes leaving it open safe is that clearing one no longer needs an ending
-    // to stand in for it: answering in Overture, answering from his mail client (#2865), ticking the
-    // triage task off in OmniFocus (#2899), or standing the contact down all retire it.
-    var hasUnhandledReply: Bool {
-        guard replied, resolution == nil, !bounced else { return false }
-        guard let handled = replyHandledAt else { return true }
-        guard let theirs = replyArrivedAt else { return false }
-        return theirs > handled
     }
 
     // #2919: they wrote, Dan answered, and nothing has arrived since. The state #2170 created and no
@@ -1190,13 +1124,8 @@ final class Recipient {
         outreachStoodDownAt = nil
     }
 
-    // The closing note was closed out by hand. Same reply-reopens rule as the pitch stand-down: if they
-    // write back, there is a live conversation again and it is not done after all.
-    var isClosingNoteStoodDown: Bool {
-        guard let stoodDown = closingNoteStoodDownAt else { return false }
-        if let repliedAt, repliedAt > stoodDown { return false }
-        return true
-    }
+    // `isClosingNoteStoodDown` and `isOutreachStoodDown`, whether either stand-down is in force, live on
+    // `ContactFacts` (ContactFactsMembers.swift) since #4357 slice D1.
 
     // #1840: a reply is new information, so it takes the stand-down AND the state that stand-down
     // recorded. A contact who wrote back is not a closed lead, and reporting one against a live
@@ -1217,19 +1146,6 @@ final class Recipient {
 
     func standDownClosingNote(now: Date) { closingNoteStoodDownAt = now }
     func resumeClosingNote() { closingNoteStoodDownAt = nil }
-
-    // Whether the stand-down is IN FORCE, which is not the same as whether it was ever made.
-    //
-    // A reply that lands afterwards puts the contact back in play, and that is derived here from the two
-    // stamps rather than cleared by whoever records the reply. If it were a mutation, every present and
-    // future reply path would have to remember it, and the failure would be the expensive direction: a
-    // contact stood down in June writes back in July and the app stays quiet about it. That costs a
-    // booking, where the other direction costs an unsent nudge.
-    var isOutreachStoodDown: Bool {
-        guard let stoodDown = outreachStoodDownAt else { return false }
-        if let repliedAt, repliedAt > stoodDown { return false }
-        return true
-    }
 
     // "Remind me later" for the silent nudge track. Deliberately its own stamp rather than moving
     // `lastFollowUpAt`: that field means a nudge actually WENT, and a record of the past must not be

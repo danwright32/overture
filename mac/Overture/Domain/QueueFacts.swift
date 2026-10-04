@@ -165,7 +165,7 @@ protocol ProspectFacts {
 }
 
 /// One contact's facts: every stored `Recipient` property a queue term may read.
-protocol ContactFacts {
+protocol ContactFacts: ReplyArrivalFacts {
     var persistentModelID: PersistentIdentifier { get }
 
     var attachDisplacedEmail: String? { get }

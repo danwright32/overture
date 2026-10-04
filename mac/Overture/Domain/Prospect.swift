@@ -825,14 +825,8 @@ final class Prospect {
     // the NEXT event, and a reply always reopens the show.
     var outreachStoodDownAt: Date? = nil
 
-    // In force unless the contact has written back since. Takes the contact's own reply stamp because the
-    // reopen is per person: one contact replying does not put the whole show back in play for everyone
-    // else, but it does put THAT conversation back in play.
-    func isOutreachStoodDown(asOf repliedAt: Date?) -> Bool {
-        guard let stoodDown = outreachStoodDownAt else { return false }
-        if let repliedAt, repliedAt > stoodDown { return false }
-        return true
-    }
+    // Whether this stand-down is in force, `isOutreachStoodDown(asOf:)`, lives on `ProspectFacts`
+    // (ProspectFactsMembers.swift) since #4357 slice D1.
 
     func standDownOutreach(now: Date) { outreachStoodDownAt = now }
     func resumeOutreach() { outreachStoodDownAt = nil }
@@ -997,8 +991,9 @@ final class Prospect {
     }
 
     // #2394: the typed ending, the one field every reader shares.
+    // #4357 slice D1: read through its one body on `ProspectFacts`; the setter stays for the writers.
     var showOutcome: ShowOutcome? {
-        get { showOutcomeRaw.flatMap(ShowOutcome.init(rawValue:)) }
+        get { asProspectFacts.showOutcome }
         set { showOutcomeRaw = newValue?.rawValue }
     }
 
@@ -1154,8 +1149,9 @@ final class Prospect {
         self.runNights = runNights
     }
 
+    // #4357 slice D1: read through its one body on `ProspectFacts`; the setter stays for the writers.
     var status: ReviewStatus {
-        get { ReviewStatus(rawValue: statusRaw) ?? .new }
+        get { asProspectFacts.status }
         set { statusRaw = newValue.rawValue }
     }
 
@@ -1388,8 +1384,9 @@ final class Prospect {
             .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    // #4357 slice D1: read through its one body on `ProspectFacts`; the setter stays for the writers.
     var outcome: Outcome {
-        get { Outcome.fromStored(outcomeRaw) }
+        get { asProspectFacts.outcome }
         set { outcomeRaw = newValue.rawValue }
     }
 
