@@ -179,10 +179,21 @@ enum PostEventPrompt {
     struct DueRecipient { let prospect: Prospect; let recipient: Recipient; let prompt: Prompt }
 
     static func dueRecipients(from prospects: [Prospect], now: Date) -> [DueRecipient] {
-        var due: [DueRecipient] = []
-        for p in prospects {
-            let here = p.recipients.compactMap { r -> DueRecipient? in
-                prompt(for: r, of: p, now: now).map { DueRecipient(prospect: p, recipient: r, prompt: $0) }
+        dueRecipients(from: prospects, contacts: { $0.recipients }, now: now)
+            .map { DueRecipient(prospect: $0.prospect, recipient: $0.recipient, prompt: $0.prompt) }
+    }
+
+    // #4357 slice E2: the same over any rows, with the contacts handed in, so the model entry point above walks
+    // the recipients it always did and a retained row answers by the one body. The show is built once per
+    // row and every contact is asked against it, where the model path used to build it once per contact.
+    static func dueRecipients<Row: ProspectFacts>(
+        from rows: [Row], contacts: (Row) -> [Row.Contact], now: Date
+    ) -> [(prospect: Row, recipient: Row.Contact, prompt: Prompt)] {
+        var due: [(prospect: Row, recipient: Row.Contact, prompt: Prompt)] = []
+        for p in rows {
+            let show = ReachedOutQueue.Show(p, contacts: contacts(p))
+            let here = show.contacts.compactMap { r -> (prospect: Row, recipient: Row.Contact, prompt: Prompt)? in
+                prompt(for: r, of: show, now: now).map { (prospect: p, recipient: r, prompt: $0) }
             }
             // #2126: one row per EMAIL. Everyone on one send is reading one thread, so it is one thing for
             // Dan to act on; two rows asked him the same question twice.

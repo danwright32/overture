@@ -88,6 +88,15 @@ extension ContactFacts {
         return outreachChannel == .contactForm && gmailMessageId == nil
     }
 
+    // #4357 slice E2: three `ReplyWatchableRecipient` members, moved from `Recipient`'s conformance (which they
+    // still satisfy) so a retained contact answers the reply search and the conversation proposal by them.
+    var replyWatchManualOutcome: Bool { outcomeSourceRaw == OutcomeSource.manual.rawValue }
+    var replyWatchIsBooked: Bool { resolution == .booked }
+    // #2196: nothing has closed it out. Deliberately the same three facts `hasUnhandledReply` reads
+    // before it asks anything else, so a conversation that could still put itself in front of Dan is
+    // exactly the one still being watched, and the two cannot disagree about which those are.
+    var replyWatchConversationIsOpen: Bool { resolution == nil && !bounced }
+
     // The contacts the follow-up sequencer may nudge (#418 D): silent AND not hand-resolved. A contact
     // Dan marked Closed/Booked (resolution set) or otherwise judged by hand (outcomeSource == .manual)
     // is still "silent" by the raw definition but must never be nudged again.

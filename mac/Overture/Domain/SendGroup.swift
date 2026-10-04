@@ -12,8 +12,13 @@ enum SendGroup {
     // A contact who received their own email is a group of ONE rather than a special case, so a caller
     // never has to ask whether a group exists.
     static func peers(of recipient: Recipient, in prospect: Prospect) -> [Recipient] {
+        peers(of: recipient, among: prospect.recipients)
+    }
+
+    // #4357 slice E2: the same over any contacts, handed in, so a retained row answers it by the one body.
+    static func peers<C: ContactFacts>(of recipient: C, among contacts: [C]) -> [C] {
         guard let id = recipient.sendGroupId, !id.isEmpty else { return [recipient] }
-        return prospect.recipients.filter { $0.sendGroupId == id }.sorted { $0.id < $1.id }
+        return contacts.filter { $0.sendGroupId == id }.sorted { $0.id < $1.id }
     }
 
     // #2063: who Dan's REPLY reaches, which is a different question from who his original email reached.
@@ -44,7 +49,7 @@ enum SendGroup {
 
     // Which conversation a contact belongs to. Its send group when it has one, otherwise itself: a contact
     // emailed alone is a group of one rather than a special case.
-    static func groupKey(_ recipient: Recipient) -> String {
+    static func groupKey(_ recipient: some ContactFacts) -> String {
         if let id = recipient.sendGroupId, !id.isEmpty { return id }
         return recipient.id
     }
@@ -63,7 +68,7 @@ enum SendGroup {
     // caller's idea of eligible, which is the thing that differs. So the order is inverted instead: each
     // list filters to what it wants FIRST and collapses after, and the row it keeps is the lowest id among
     // those, which is stable across launches for the same reason the old rule was.
-    static func oneRowPerGroup<T>(_ qualifying: [T], recipient: (T) -> Recipient) -> [T] {
+    static func oneRowPerGroup<T, C: ContactFacts>(_ qualifying: [T], recipient: (T) -> C) -> [T] {
         var seen = Set<String>()
         return qualifying
             .sorted { recipient($0).id < recipient($1).id }
