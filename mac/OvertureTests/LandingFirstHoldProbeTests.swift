@@ -105,6 +105,21 @@ final class LandingFirstHoldProbeTests {
                       results: results)
     }
 
+    // Whole table reads inside a run, from whatever thread they run on.
+    private final class TableReadLog: @unchecked Sendable {
+        private let lock = NSLock()
+        private var all: [(onMain: Bool, from: UInt64, to: UInt64)] = []
+        func note(onMain: Bool, from: UInt64, to: UInt64) { lock.withLock { all.append((onMain, from, to)) } }
+        func text(since start: UInt64) -> String {
+            lock.withLock {
+                all.isEmpty ? "none" : all.map {
+                    String(format: "%@ %.1f to %.1f ms", $0.onMain ? "main" : "off main",
+                           Double($0.from &- start) / 1_000_000, Double($0.to &- start) / 1_000_000)
+                }.joined(separator: ", ")
+            }
+        }
+    }
+
     private struct NoFeed: SourceExtractor {
         func extract() async throws -> ExtractedListing { ExtractedListing(events: [], verdict: .noDatedContent) }
     }
@@ -228,6 +243,10 @@ final class LandingFirstHoldProbeTests {
                 // Where the run spent its time: a stamp at each tail step, so the tail's own fetches are timed
                 // inside the run rather than only alone, and what the run reported about itself.
                 var steps: [(String, UInt64)] = []
+                // The timeline inside the first hold: every whole table read (which thread, when it started and
+                // ended) and each source as the sweep reaches it, so the first hold can be attributed to a step.
+                let reads = TableReadLog()
+                let pendingBefore = ctx.hasChanges
                 let stepStart = Phase0.now()
                 let (facts, sweepHold) = try await measure { () -> String in
                     let outcome = try await ScoutService.runScout(
@@ -237,15 +256,27 @@ final class LandingFirstHoldProbeTests {
                         },
                         pin: { _, id in URL(fileURLWithPath: "/dev/null/hold4339-\(id).html") }, launch: { _ in },
                         defaults: ScratchDefaults.make("LandingFirstHoldProbeTests"),
+                        onNativeProgress: { _, done, _ in steps.append(("source \(done)", Phase0.now())) },
                         onNativeStep: { steps.append(($0.rawValue, Phase0.now())) },
+                        readProspectTable: { context in
+                            let t0 = Phase0.now()
+                            defer { reads.note(onMain: Thread.isMainThread, from: t0, to: Phase0.now()) }
+                            return try ScoutService.readProspectTable(context)
+                        },
                         landings: LandingSingleFlight())
                     return "\(outcome.sources.count) sources reported, save failed \(outcome.saveFailed), "
                         + "stop \(outcome.landingStop.map { "\($0)" } ?? "none"), "
                         + "client warning \(outcome.clientListWarning == nil ? "none" : "set")"
                 }
                 let end = Phase0.now()
-                var marks = steps.map { ($0.0, Double($0.1 &- stepStart) / 1_000_000) }
+                // Every source reached is a mark; only the first, the last and the steps are printed.
+                let sourceMarks = steps.filter { $0.0.hasPrefix("source ") }
+                let kept = steps.filter { !$0.0.hasPrefix("source ") }
+                    + [sourceMarks.first, sourceMarks.last].compactMap { $0 }.map { ("sweep " + $0.0, $0.1) }
+                var marks = kept.sorted { $0.1 < $1.1 }.map { ($0.0, Double($0.1 &- stepStart) / 1_000_000) }
                 marks.append(("returned", Double(end &- stepStart) / 1_000_000))
+                Self.say("x\(factor) runScout pass \(pass): pending before \(pendingBefore); table reads "
+                         + reads.text(since: stepStart))
                 Self.say("x\(factor) runScout pass \(pass) (\(facts)): " + sweepHold.text + "; steps at "
                          + marks.map { String(format: "%@ %.1f", $0.0, $0.1) }.joined(separator: ", ") + " ms")
             }
