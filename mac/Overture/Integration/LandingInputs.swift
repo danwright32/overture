@@ -39,11 +39,9 @@ enum LandingInputs {
     static func read(exportURL: URL = DownbeatBridge.defaultURL, historyURL: URL = LocalHistory.importedURL,
                      now: Date = Date(),
                      readProspectTable: @escaping ScoutLandingStore.SendableRead = ScoutService.readProspectTable,
-                     saveEntry: (ModelContext) throws -> Void = { try $0.save() },
                      into context: ModelContext) async -> Inputs {
         let loaded = DownbeatBridge.loadWithHealth(from: exportURL, now: now)
-        let history = await history(importedFrom: historyURL, readProspectTable: readProspectTable,
-                                    saveEntry: saveEntry, into: context)
+        let history = await history(importedFrom: historyURL, readProspectTable: readProspectTable, into: context)
         let records: [HistoryRecord]
         var degraded: [ScoutService.StoreRead] = []
         switch history {
@@ -64,19 +62,19 @@ enum LandingInputs {
     }
 
     // The history the matcher sees: the show table, read ONCE, plus the imported booking history. OFF the main
-    // thread through a context of its own, which reads only what is SAVED, so the entry flush runs first (its
-    // one implementation, `ScoutService.flushBeforeLanding`). A flush that cannot save leaves Dan's edits
-    // pending, and the history is then read on the main thread exactly as before, where the context sees them;
-    // the landing's own flush, later, refuses by name. The failure of the table read is returned, never folded
-    // into an empty history: `runScout` refuses on it (`StoreReadFailure`) and the ingest records it.
+    // thread through a context of its own, which reads only what is SAVED, so only while the main context holds
+    // nothing pending. With an edit of Dan's pending, the read stays on the main thread exactly as before, where
+    // the context sees it: this read phase SAVES NOTHING (`ScoutReadPhaseWriteScanTests`), so it never flushes
+    // to make the background read possible; the landing's own entry flush, later, is the one that saves. The
+    // failure of the table read is returned, never folded into an empty history: `runScout` refuses on it
+    // (`StoreReadFailure`) and the ingest records it.
     static func history(importedFrom historyURL: URL = LocalHistory.importedURL,
                         readProspectTable: @escaping ScoutLandingStore.SendableRead = ScoutService.readProspectTable,
-                        saveEntry: (ModelContext) throws -> Void = { try $0.save() },
                         into context: ModelContext) async -> Swift.Result<[HistoryRecord], ShowTableUnreadable> {
-        guard ScoutService.flushBeforeLanding(context, save: saveEntry) == nil else {
+        guard !context.hasChanges else {
             do {
-                return .success(LocalHistory.forMatching(existing: try readProspectTable(context),
-                                                         importedFrom: historyURL))
+                let rows = try readProspectTable(context)
+                return .success(LocalHistory.forMatching(existing: rows, importedFrom: historyURL))
             } catch {
                 return .failure(ShowTableUnreadable(description: String(describing: error)))
             }
@@ -93,7 +91,10 @@ enum LandingInputs {
         await Task.detached(priority: .userInitiated) {
             let context = ModelContext(container)
             do {
-                return .success(LocalHistory.forMatching(existing: try read(context), importedFrom: historyURL))
+                // The context is handed to the injected read alone, on a line of its own, so the guard that
+                // follows a second context's hand-ons (`OnlyTheMainContextWritesGuardTests`) can see it only reads.
+                let rows = try read(context)
+                return .success(LocalHistory.forMatching(existing: rows, importedFrom: historyURL))
             } catch {
                 return .failure(ShowTableUnreadable(description: String(describing: error)))
             }

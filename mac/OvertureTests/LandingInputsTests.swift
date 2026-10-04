@@ -57,22 +57,21 @@ final class LandingInputsTests {
         #expect(inputs.history == LocalHistory.forMatching(existing: [], importedFrom: absentHistory))
     }
 
-    @Test func aPendingEditIsSavedBeforeTheBackgroundReadAndAFlushThatFailsReadsOnTheMainThread() async throws {
+    // The read phase saves nothing: with an edit of Dan's pending, the history is read on the main thread, where
+    // the context sees the edit, and the edit is left pending for the landing's own flush to save.
+    @Test func aPendingEditKeepsTheReadOnTheMainThreadAndIsNotSaved() async throws {
         let (container, ctx) = try seeded()
         defer { withExtendedLifetime(container) {} }
         let stored = try #require(try ctx.fetch(FetchDescriptor<Prospect>()).first)
         stored.groupName = "Renamed By Dan"
         let threads = Threads()
-        // A flush that cannot save: the edit stays pending, and the read happens where it can see it.
         _ = await LandingInputs.history(importedFrom: absentHistory,
                                         readProspectTable: { threads.note(); return try ScoutService.readProspectTable($0) },
-                                        saveEntry: { _ in throw Unreadable() }, into: ctx)
-        #expect(threads.all == [true], "a read behind a failed flush ran on \(threads.all), where the edit is unseen")
-        #expect(ctx.hasChanges, "the failed flush touched Dan's pending edit")
-        // A flush that saves: the background read sees the edit, because it is in the store.
-        _ = await LandingInputs.history(importedFrom: absentHistory, into: ctx)
+                                        into: ctx)
+        #expect(threads.all == [true], "a read with an edit pending ran on \(threads.all), where the edit is unseen")
+        #expect(ctx.hasChanges, "the read phase saved Dan's pending edit")
         let fresh = try ModelContext(container).fetch(FetchDescriptor<Prospect>()).map(\.groupName)
-        #expect(fresh == ["Renamed By Dan"], "the edit was not saved before the background read: \(fresh)")
+        #expect(fresh == ["Stored Show"], "the read phase wrote the store: \(fresh)")
     }
 
     @Test func runScoutReadsItsHistoryOffTheMainThread() async throws {

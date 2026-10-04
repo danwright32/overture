@@ -155,9 +155,10 @@ final class BrandCorpusOffTheMainActorTests {
             defaults: ScratchDefaults.make("BrandCorpusOffTheMainActorTests"),
             readProspectTable: { context in log.record(); return try ScoutService.readProspectTable(context) })
         #expect(outcome.inserted == 4, Comment(rawValue: "only \(outcome.inserted) shows landed"))
-        #expect(log.offMain == 1, Comment(rawValue: "the corpus was read off the main actor \(log.offMain) times"))
-        // The history and the working set stay on the main actor (A11 moves the history).
-        #expect(log.onMain == 2, Comment(rawValue: "the show table was read on the main actor \(log.onMain) times"))
+        // #4339 (A11) moved the history off the main actor, as this test's comment said it would: the corpus and
+        // the history are read off it, and only the landing's working set stays on it.
+        #expect(log.offMain == 2, Comment(rawValue: "the corpus and the history were read off the main actor \(log.offMain) times"))
+        #expect(log.onMain == 1, Comment(rawValue: "the show table was read on the main actor \(log.onMain) times"))
     }
 
     // MARK: - The entry flush before the background read
