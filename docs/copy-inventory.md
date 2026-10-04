@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1710 sentences**.
+Every sentence Overture can say to Dan: **1711 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -14,7 +14,7 @@ What is not, and why:
   sentences under tokens nobody reads.
 - **Nothing, if it is written as two literals joined with `+`.** Those ARE joined here, into the
   one sentence the running app says (#3155). What is still only part of what Dan reads is a
-  sentence carrying a VALUE: 634 of the 1710 below hold a
+  sentence carrying a VALUE: 635 of the 1711 below hold a
   `\(...)` where a number or a name goes, so what is printed is the template. They are counted
   here rather than listed again, because the hole is visible in the line itself; what was missing
   was any statement of how much of this document is templates.
@@ -1648,7 +1648,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/OmniFocusSync.swift`
 "Overture could not check whether it stopped responding this session, so nothing here can say whether it did."
     `Domain/FreezeReport.swift`
-"Overture could not keep a copy of these calendar results either (\(why)). They are still in the reader's results file until the next read replaces it."
+"Overture could not keep a copy of these calendar results either (\(why)). "
     `Domain/ScoutWarningCopy.swift`
 "Overture could not open its backup folder, so there is nothing to compare against. Nothing has been changed. Check that folder before working."
     `App/StoreShrinkCheck.swift`
@@ -3733,6 +3733,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Integration/ScoutService.swift`
 "the queue"
     `UI/ProspectMutations.swift`
+"the record of the copy already kept at \(path) could not be read: \(why)"
+    `Integration/PendingScoutIngests.swift`
 "the record of which calendar results already landed"
     `Integration/ScoutService.swift`
 "the record of who you have shot before"
