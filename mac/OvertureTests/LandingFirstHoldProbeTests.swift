@@ -17,8 +17,8 @@ import SwiftData
 //   - the calendar ingest: `LandingInputs.readResultsFile` and `LandingInputs.read`, then
 //     `ScoutExtractLanding.land`, which is `RootView.ingestScoutExtract`'s whole body;
 //   - `runScout`, from its first line;
-//   - the lead paste, `LeadIntakeModel.importAll`'s landing, with the largest single source's events from the
-//     recorded results and with one event.
+//   - NOT YET the lead paste: its landing (`LeadPasteLanding`, #4493) is not on this branch's base, so measuring
+//     it with the largest single source's events and with one event is the next change to this probe.
 // The FIRST HOLD is the time from the call until the main thread is first given up: a block queued on the main
 // queue just before the call runs at the first suspension that actually yields it. The WORST TURN is the
 // longest main thread turn over the whole call, from the same one-millisecond ping `Phase0bMainTurnMonitor`

@@ -2310,7 +2310,9 @@ struct RootView: View {
             into: context)
         if let left = landed.copyLeftBehind { status.set(left, priority: .warning) }
         var outcome = landed.outcome
-        // #4339: a show table the read phase could not read, recorded on the run it judged.
+        // #4339: a show table the read phase could not read, said on this run's summary, the same place the
+        // ingest's own degraded reads are said. Only the summary carries it: like those, it is not written to
+        // the landing's record or journal.
         outcome.degradedReads.append(contentsOf: inputs.degradedReads)
 
         scoutSummary = ScoutRunSummary.watchedCalendarSummary(for: outcome)   // #885
@@ -2333,15 +2335,14 @@ struct RootView: View {
             return
         }
         let inputs = await LandingInputs.read(into: context)
-        // #4339: the kept results land against the imported history alone when the show table could not be
-        // read, so that is said rather than read as an empty store (L215).
-        if !inputs.degradedReads.isEmpty {
-            status.set(ScoutWarningCopy.degradedReads(inputs.degradedReads.map(\.label)), priority: .warning)
-        }
         let offered = await ScoutExtractLanding.offerPending(
             clients: inputs.clients, history: inputs.history, blocked: inputs.blocked,
             pending: pending, journals: .live, into: context)
-        let problems = offered.unreadable + offered.copiesLeftBehind
+        // #4339: the kept results landed against the imported history alone when the show table could not be
+        // read, so that is said, in the same one line as the rest, rather than read as an empty store (L215).
+        let degraded = inputs.degradedReads.isEmpty
+            ? [] : [ScoutWarningCopy.degradedReads(inputs.degradedReads.map(\.label))]
+        let problems = offered.unreadable + offered.copiesLeftBehind + degraded
         if let line = LandingWaitCopy.offered(landed: offered.landed.count, alreadyLanded: offered.alreadyLanded,
                                               stillWaiting: offered.stillWaiting,
                                               stuck: offered.stuck, stuckAfter: offered.stuckAfter) {
