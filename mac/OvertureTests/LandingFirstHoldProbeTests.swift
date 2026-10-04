@@ -219,6 +219,21 @@ final class LandingFirstHoldProbeTests {
                 let t0 = Phase0.now()
                 _ = URLSession.shared.configuration
                 Self.say(String(format: "x1 first touch of URLSession.shared: %.1f ms", Phase0.ms(since: t0)))
+                // The rest of what runScout does on the main thread before its first await, each touched once
+                // here first: the LIVE Downbeat export (runScout reads the real one, the members above a copy), and
+                // the context's pending state. If one of them is the one-time cost, it shows here and leaves pass 1.
+                let t1 = Phase0.now()
+                _ = DownbeatBridge.loadWithHealth(now: Date())
+                Self.say(String(format: "x1 first live Downbeat export load: %.1f ms", Phase0.ms(since: t1)))
+                let t2 = Phase0.now()
+                _ = ctx.hasChanges
+                Self.say(String(format: "x1 first pending check: %.1f ms", Phase0.ms(since: t2)))
+                // `TEST_RUNNER_MEASURE_4339_SETTLE=<seconds>`: leave the main thread idle that long before pass 1, so a
+                // cost the ingest leaves running in the background (not runScout's own) finishes before it starts.
+                if let settle = ProcessInfo.processInfo.environment["MEASURE_4339_SETTLE"].flatMap(Double.init) {
+                    try? await Task.sleep(for: .seconds(settle))
+                    Self.say("x1 settled \(settle) s before pass 1")
+                }
             }
             // The history read alone, measured as runScout's first hold is, before runScout's first run: if the
             // one-time cost is this read's (its flush, or the first background context's), it shows here and leaves
