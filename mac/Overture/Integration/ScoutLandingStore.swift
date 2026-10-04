@@ -777,6 +777,29 @@ final class ScoutLandingStore {
         return LandingBatchTables.rebuilt(rows.map { (ObjectIdentifier($0), Self.contribution(of: $0, Fold($0))) })
             .snapshot(naming: { String(describing: $0) })
     }
+
+    // #4512: the table build's loop over these rows, in its parts, each summed over every row in nanoseconds:
+    // the fold, the row's judged fields, the contribution built from them, and the table write. The probe
+    // reads it to attribute the build; it writes nothing the landing keeps. Debug only.
+    static func buildPartsNanoseconds(_ rows: [Prospect], clock: () -> UInt64) -> [String: UInt64] {
+        var parts: [String: UInt64] = ["fold": 0, "judged": 0, "contribution": 0, "set": 0]
+        var built = LandingBatchTables()
+        for (i, p) in rows.enumerated() {
+            var t = clock()
+            let folded = Fold(p)
+            parts["fold", default: 0] += clock() &- t
+            t = clock()
+            let judged = Judged(p, folded)
+            parts["judged", default: 0] += clock() &- t
+            t = clock()
+            let c = contribution(of: judged, folded)
+            parts["contribution", default: 0] += clock() &- t
+            t = clock()
+            built.set(ObjectIdentifier(p), order: i, to: c)
+            parts["set", default: 0] += clock() &- t
+        }
+        return parts
+    }
     #endif
 
     // Tables that should exist and do not: never answered as empty, which would poison nothing and call no

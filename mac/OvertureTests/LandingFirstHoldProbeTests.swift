@@ -353,6 +353,9 @@ final class LandingFirstHoldProbeTests {
                     t = Phase0.now()
                     for p in rows { _ = ScoutLandingStore.Fold(p) }
                     parts["the folds of every show alone", default: []].append(Phase0.ms(since: t))
+                    for (part, ns) in ScoutLandingStore.buildPartsNanoseconds(rows, clock: Phase0.now) {
+                        parts["build part: " + part, default: []].append(Double(ns) / 1_000_000)
+                    }
                 }
                 for (name, runs) in parts.sorted(by: { $0.key < $1.key }) {
                     Self.say(String(format: "x\(factor) poison term, %@: %.1f ms (runs %@)", name, runs.sorted()[1],
