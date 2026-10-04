@@ -26,7 +26,8 @@ struct AgentStatus: Equatable, Identifiable, Sendable {
     var needsGmailConnect: Bool = false
 }
 
-struct AgentInputs: Sendable {
+// #4357 slice I1: Equatable so two passes' inputs compare by value (`RenderDataComparison`).
+struct AgentInputs: Sendable, Equatable {
     var toTriage: Int        // #370: freshly scouted, undecided (status .new), awaiting keep/dismiss
     var keptToPrep: Int      // kept, no draft yet, waiting on a Prep run
     // #2614: WHICH detached run holds the single slot, or nil for none. Deliberately one value rather

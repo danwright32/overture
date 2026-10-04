@@ -269,3 +269,25 @@ enum QueueEngineGraph {
         }
     }
 }
+
+// #4357 slice I1 (plan v7 Phase 3, step 7): two readers are EQUAL when every stored table and the visibility
+// narrowing are equal, which is exactly when they answer every keyed read alike. The read log is left out on
+// purpose: it records what a reader was ASKED, the history of whoever read it, not what it holds, so a reader
+// that has been read and a fresh one over the same tables are the same reader. Written here, beside the
+// tables, because they are private and must stay so (`TableReaderIsTheOnlyWayInTests`).
+extension TableReader: Equatable {
+    static func == (lhs: TableReader, rhs: TableReader) -> Bool {
+        lhs.storedLinked == rhs.storedLinked
+            && lhs.storedInherited == rhs.storedInherited
+            && lhs.storedVenueBrands == rhs.storedVenueBrands
+            && lhs.storedRowCounts == rhs.storedRowCounts
+            && lhs.storedContradicted == rhs.storedContradicted
+            && lhs.storedSameShowGroups == rhs.storedSameShowGroups
+            && lhs.storedTitles == rhs.storedTitles
+            && lhs.storedCollapsedFronts == rhs.storedCollapsedFronts
+            && lhs.storedCollapsedHidden == rhs.storedCollapsedHidden
+            && lhs.storedLaterLookalikes == rhs.storedLaterLookalikes
+            && lhs.storedNights == rhs.storedNights
+            && lhs.visible == rhs.visible
+    }
+}
