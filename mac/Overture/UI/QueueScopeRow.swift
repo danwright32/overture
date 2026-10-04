@@ -16,7 +16,7 @@ import Foundation
 // `QueueItem` conforms too, and that is not a loophole: it is what lets today's callers, and the parity
 // oracle, pass a card where a row is expected and get the same answer. The narrowing that matters is on
 // the FUNCTIONS, which can no longer see anything else.
-protocol QueueScopeFacts {
+protocol QueueScopeFacts: SendableMetatype {
     var id: String { get }
     var groupName: String { get }
     var discipline: String { get }
