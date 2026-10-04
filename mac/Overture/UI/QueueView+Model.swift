@@ -1127,11 +1127,14 @@ enum QueueModel {
     // keys, so the guard is the comparison against a real fetch in that suite rather than this sentence.
     // The STABILITY half is guaranteed by the code and asserted separately, so it holds whatever SQLite
     // decides to do later.
-    static func queueScope(_ all: [Prospect]) -> [Prospect] {
-        all.enumerated()
+    // #4357 slice H: over any `ProspectFacts`, sorted by `queueScopeOrder(for:)` (QueueLongTailTerms.swift),
+    // the same two descriptors written over the conformer; see there for why `queueScopeOrder` stays beside it.
+    static func queueScope<Row: ProspectFacts>(_ all: [Row]) -> [Row] {
+        let order = queueScopeOrder(for: Row.self)
+        return all.enumerated()
             .filter { $0.element.statusRaw != "dismissed" }
             .sorted { lhs, rhs in
-                for descriptor in queueScopeOrder {
+                for descriptor in order {
                     switch descriptor.compare(lhs.element, rhs.element) {
                     case .orderedAscending: return true
                     case .orderedDescending: return false
@@ -3396,8 +3399,8 @@ enum QueueModel {
         // This table is ALSO what resolves the tag at READ time. A key naming a row that is no longer
         // stored, which is what the launch merge leaves behind when it collapses the pair, is simply
         // absent here, so the note stops drawing with nothing needing to clear the field (L200).
-        let titlesByKey = Dictionary((corpus ?? prospects).map { ($0.naturalKey, $0.groupName) },
-                                     uniquingKeysWith: { first, _ in first })
+        // #4357 slice H: one generic term (QueueLongTailTerms.swift), over models here and facts in the engine.
+        let titlesByKey = QueueModel.titlesByKey(among: corpus ?? prospects)
         // #4030: over the UNFILTERED corpus, exactly like `sameShowGroups` above, and through the same
         // `ShowLink` rule: what joins two rows for display is decided in one place and nothing else
         // joins them. The collapse deletes nothing and re-keys nothing; a wrong join costs a re-render.
@@ -3410,28 +3413,14 @@ enum QueueModel {
         // card that is the target of several pointers names one and counts the rest, and the newest is
         // the one Dan has not seen yet. A row with no `firstSeenAt` (every row written before #1886)
         // sorts last rather than being dropped: it is still half of a pair.
-        var laterLookalikesByKey: [String: [Prospect]] = [:]
-        for row in (corpus ?? prospects) {
-            guard let target = row.arrivedLookingLike else { continue }
-            laterLookalikesByKey[target, default: []].append(row)
-        }
         //
         // #4349 (plan v7 Step T, decision 13(vi)): equal sightings, which is every pair of rows written before
         // #1886, fall back to the natural key, so the title the note NAMES is the same on every render
         // rather than whichever of the tied rows the corpus happened to hand over first.
-        let laterLookalikes = laterLookalikesByKey.mapValues { rows in
-            rows.sorted {
-                let (left, right) = ($0.firstSeenAt ?? .distantPast, $1.firstSeenAt ?? .distantPast)
-                return left != right ? left > right : $0.naturalKey < $1.naturalKey
-            }.map(\.naturalKey)
-        }
+        // #4357 slice H: the term lives in QueueLongTailTerms.swift, over any `ProspectFacts`.
+        let laterLookalikes = QueueModel.laterLookalikes(among: corpus ?? prospects)
         // #4042: the same walk, the same scope, and the same read-time resolution.
-        let nightsByKey = Dictionary(
-            (corpus ?? prospects).compactMap { row -> (String, String)? in
-                guard let night = row.performanceDate, !night.isEmpty else { return nil }
-                return (row.naturalKey, night)
-            },
-            uniquingKeysWith: { first, _ in first })
+        let nightsByKey = QueueModel.nightsByKey(among: corpus ?? prospects)
         let built = CardPreamble(linked: linked, inherited: inherited, venueBrands: venueBrands,
                                  rowCounts: rowCounts, calendarBySourceId: calendarBySourceId,
                                  overrides: overrides, clients: clients,
