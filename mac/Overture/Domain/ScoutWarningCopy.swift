@@ -165,8 +165,8 @@ enum ScoutWarningCopy {
 
     // #4334: that refusal, when the copy that would have kept the calendar results failed too. Says where
     // the results still are, rather than promising they will be offered again.
+    // Built from the one sentence above, so where the results are is said in one wording only.
     static func stoppedWithoutACopy(_ why: String) -> String {
-        "Overture could not keep a copy of these calendar results either (\(why)). They are still in the "
-            + "reader's results file until the next read replaces it."
+        "Overture could not keep a copy of these calendar results either (\(why)). " + resultsStillInTheReadersFile
     }
 }

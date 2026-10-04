@@ -74,7 +74,12 @@ enum ScoutExtractLanding {
         // refused, or stopped part way) is the SAME run, so a fresh landing of them lands under the sequence
         // that copy was kept with rather than minting a new one: its re-validation and its journal then speak
         // of one run, and a source an earlier attempt landed is recognised as that run's own.
-        let sequence = sequence ?? (try? pending.entry(hash))?.sequence
+        // A kept copy whose record cannot be read gives no sequence here, and the copy step below then REFUSES
+        // (`PendingScoutIngests.record` will not write over it), so the landing stops before applying anything
+        // and names the record's path; nothing is minted over it and nothing counted twice.
+        let keptSequence: Int?
+        do { keptSequence = try pending.existingEntry(hash)?.sequence } catch { keptSequence = nil }
+        let sequence = sequence ?? keptSequence
         var kept = sequence != nil
         var waited = false
         var copyFailure: String?
@@ -248,11 +253,12 @@ enum ScoutExtractLanding {
                 // #4440 / #4335: a copy whose landing STARTED (its journal is still pending) lands with the
                 // `now` it started with, because its results really were read then (L37), and because the
                 // sources it landed before it stopped are applied again with that same instant, which is what
-                // makes that second application write nothing new.
+                // makes that second application write nothing new. What is still UPCOMING is judged on the day
+                // it is offered, though: a night that passed in between is not a show still to come.
                 let started = journals?.pending(sequence: entry.sequence)?.now
                 let landed = await land(copy.data, copy.results, sequence: entry.sequence,
                                         clients: clients, history: history, blocked: blocked,
-                                        today: QueueModel.easternToday(started ?? now), now: started ?? now,
+                                        today: QueueModel.easternToday(now), now: started ?? now,
                                         landings: landings, pending: pending, saveClosing: saveClosing,
                                         journals: journals, movementLog: movementLog, into: context)
                 let outcome = landed.outcome

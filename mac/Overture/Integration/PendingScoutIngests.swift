@@ -58,7 +58,9 @@ struct PendingScoutIngests {
     @discardableResult
     func record(_ data: Data, sequence: Int, now: Date) throws -> Entry {
         let hash = Self.contentHash(of: data)
-        if let existing = try? entry(hash) { return existing }
+        // An entry that is there and cannot be read is NOT absent (L215): written over, it would lose the
+        // sequence the run was kept with, so the copy refuses instead and the landing stops before applying.
+        if let existing = try existingEntry(hash) { return existing }
         let fm = FileManager.default
         try fm.createDirectory(at: directory, withIntermediateDirectories: true)
         let incoming = directory.appendingPathComponent(".incoming-\(UUID().uuidString)", isDirectory: true)
@@ -87,6 +89,24 @@ struct PendingScoutIngests {
         let destination = folder(hash)
         if fm.fileExists(atPath: destination.path) { try fm.removeItem(at: destination) }
         try fm.moveItem(at: incoming, to: destination)
+    }
+
+    // nil only when no entry was ever written there; an entry that is there and cannot be read THROWS,
+    // naming its path, so no caller can read a damaged record as a missing one.
+    func existingEntry(_ hash: String) throws -> Entry? {
+        let url = entryURL(hash)
+        guard FileManager.default.fileExists(atPath: url.path) else { return nil }
+        do {
+            return try entry(hash)
+        } catch {
+            throw UnreadableEntry(path: url.path, why: String(describing: error))
+        }
+    }
+
+    struct UnreadableEntry: Error, CustomStringConvertible {
+        let path: String
+        let why: String
+        var description: String { "the record of the copy already kept at \(path) could not be read: \(why)" }
     }
 
     func entry(_ hash: String) throws -> Entry {
@@ -121,7 +141,15 @@ struct PendingScoutIngests {
         }
         let names = try fm.contentsOfDirectory(atPath: directory.path).filter { !$0.hasPrefix(".") }.sorted()
         let listed: [Listed] = names.map { name in
-            if let found = try? entry(name) { return .entry(found) }
+            // Recovered only when its entry was never WRITTEN; one that is there and cannot be read is
+            // reported by path and left, never rewritten as sequence 0 (which forgets which run it was).
+            do {
+                if let found = try existingEntry(name) { return .entry(found) }
+            } catch let unreadable as UnreadableEntry {
+                return .unreadable(path: unreadable.path, why: unreadable.why)
+            } catch {
+                return .unreadable(path: entryURL(name).path, why: String(describing: error))
+            }
             do { return .entry(try recoverEntry(name)) } catch {
                 return .unreadable(path: folder(name).path, why: String(describing: error))
             }
@@ -157,9 +185,15 @@ struct PendingScoutIngests {
             data = read
         }
         let hash = Self.contentHash(of: data)
-        if (try? entry(hash)) != nil {
-            try? fm.removeItem(at: incoming)
-            return nil
+        do {
+            if try existingEntry(hash) != nil {
+                try? fm.removeItem(at: incoming)
+                return nil
+            }
+        } catch {
+            // A copy of these bytes is in place with a record nobody can read: moving this one over it would
+            // remove it, so both are left and the damaged one is reported.
+            return .unreadable(path: entryURL(hash).path, why: String(describing: error))
         }
         do {
             try moveIntoPlace(incoming, hash: hash)
