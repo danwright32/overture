@@ -17,8 +17,8 @@ import SwiftData
 //   - the calendar ingest: `LandingInputs.readResultsFile` and `LandingInputs.read`, then
 //     `ScoutExtractLanding.land`, which is `RootView.ingestScoutExtract`'s whole body;
 //   - `runScout`, from its first line;
-//   - NOT YET the lead paste: its landing (`LeadPasteLanding`, #4493) is not on this branch's base, so measuring
-//     it with the largest single source's events and with one event is the next change to this probe.
+//   - the lead paste, `LeadPasteLanding.landPastedLead` (what `LeadIntakeModel.importAll` awaits), with ONE event
+//     and with the events of the largest single source in the results file, the two sizes the plan names.
 // The FIRST HOLD is the time from the call until the main thread is first given up: a block queued on the main
 // queue just before the call runs at the first suspension that actually yields it. The WORST TURN is the
 // longest main thread turn over the whole call, from the same one-millisecond ping `Phase0bMainTurnMonitor`
@@ -252,6 +252,30 @@ final class LandingFirstHoldProbeTests {
             if let sampler {
                 sampler.waitUntilExit()
                 Self.say("x1 first run sampled (exit \(sampler.terminationStatus)) to MEASURE_4339_SAMPLE")
+            }
+            // 4. The lead paste, from its entry point, after the runs above: one event, then the largest single
+            //    source's events in the results file (a page's size does not grow with the store, so the same
+            //    events at both factors). They are already in the clone, so the paste re-lands them, as a paste
+            //    of a page Overture already watches does.
+            if let largest = inputs.results.results.max(by: { $0.events.count < $1.events.count }) {
+                let pageEvents = inputs.results.events(for: largest.sourceId)
+                for (label, events) in [("one event", Array(pageEvents.prefix(1))),
+                                        ("largest single source", pageEvents)] where !events.isEmpty {
+                    let (said, pasteHold) = try await measure { () -> String in
+                        let result = await LeadPasteLanding.landPastedLead(
+                            events, today: EasternDate.today(Date()), now: Date(), landings: LandingSingleFlight(),
+                            loadExport: { DownbeatBridge.loadWithHealth(from: inputs.exportURL, now: Date()) },
+                            importedHistory: inputs.historyURL, into: ctx)
+                        switch result {
+                        case .landed(let outcome):
+                            return "landed, \(outcome.inserted) inserted, \(outcome.updated) updated"
+                        case .refused: return "REFUSED"
+                        }
+                    }
+                    Self.say("x\(factor) lead paste, \(label) (\(events.count) events, \(said)): " + pasteHold.text)
+                }
+            } else {
+                Self.say("x\(factor) lead paste: UNMEASURED, the results file holds no source")
             }
             // 3. runScout's tail, its two whole table fetches timed alone on the main thread as the tail meets
             //    them: after a landing, with the store's rows already registered in the context.

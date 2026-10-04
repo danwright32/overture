@@ -1027,10 +1027,19 @@ enum ScoutService {
         // 200 and 216 ms on the main thread at 1,372 shows, 801 and 866 at 5,500, measured inside the run by
         // `LandingFirstHoldProbeTests`. The landing's working set already holds every show as it now stands,
         // so with no await between the landing block and here that could have let another landing in, both are
-        // handed it instead. With one (the read budget question, or a wait for the tail's token), they fetch
-        // afresh, as they always did, so a show another landing added meanwhile is still judged.
-        let tailRows: [Prospect]? = tailMayHaveBeenInterleaved
-            ? nil : (try? landing.rows())?.filter { !$0.isDeleted }
+        // handed it instead. With one (the read budget question, or a wait for the tail's token), the table is
+        // read afresh, ONCE for both, so a show another landing added meanwhile is still judged. A read that
+        // fails is recorded on the run and judges nothing, where each pass used to read it as an empty store
+        // on its own (`(try? fetch) ?? []`, L215).
+        let tailRows: [Prospect]
+        do {
+            tailRows = tailMayHaveBeenInterleaved ? try readProspectTable(context) : try landing.rows()
+        } catch {
+            tailRows = []
+            if !outcome.degradedReads.contains(.reconcileStoredShows) {
+                outcome.degradedReads.append(.reconcileStoredShows)
+            }
+        }
 
         if !toRead.isEmpty && !isCancelled() {
             onNativeStep(.handingPagesToTheReader)
