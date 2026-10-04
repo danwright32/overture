@@ -79,6 +79,13 @@ assert_contains "and it names the issue rather than describing a coincidence" "$
 # reader that went on asserting censorship would be claiming something it cannot measure (L11, L440).
 assert_contains "and it says the two readings cannot be told apart" "${out}" "cannot be told"
 assert_not_contains "and it no longer says the write still stops there" "${out}" "stops a session writing"
+# #4335: the cap counts every record the session WROTE, idle work included, since the in-memory cap did.
+mkdir -p "${WORK}/capped-idle"
+{ for i in $(seq 1 199); do record capidle "$((i * 10))" 0.150 baseline; done
+  printf '{"session":"capidle","sequence":2000,"at":"2026-09-11T18:47:20Z","seconds":0.15,"surface":"queue","load":"baseline","loadAverage":3.7,"passes":0,"recoverySequence":9,"inputIdleSeconds":240}\n'
+} > "${WORK}/capped-idle/log.ndjson"
+out="$("${READER}" --log "${WORK}/capped-idle/log.ndjson" 2>&1)"; status=$?
+assert_contains "a session at the cap with idle work among its records still says so" "${out}" "UNDERSTATED"
 
 # 7. A session one record short of the cap is NOT censored, which is the other half: a warning that
 #    fires on every session says nothing, and one that fires on none is the defect it exists to catch

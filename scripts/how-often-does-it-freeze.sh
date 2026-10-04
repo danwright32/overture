@@ -263,7 +263,7 @@ print("  fewer are issued during a long freeze. The per hour figure is therefore
 # so this reader cannot tell the two apart and says so rather than choosing (L11, L440). The mirror of
 # `StallLog.cap` below is held against the app's own constant by `TheCapThisReaderNamesTests`.
 CAP = 200
-at_the_cap = [n for n, g in sessions.items() if len(g) == CAP]
+at_the_cap = [n for n in sessions if len(whole[n]) == CAP]   # every record it wrote, idle work included
 if at_the_cap:
     print()
     verb = "holds" if len(at_the_cap) == 1 else "hold"
@@ -273,7 +273,7 @@ if at_the_cap:
     print("  and nothing is missing. No record says which build wrote it, so the two cannot be told")
     print("  apart from this file.")
     for name in at_the_cap:
-        print(f"    {name[:8]}  last record {max(r.get('at', '') for r in sessions[name])[:19]}")
+        print(f"    {name[:8]}  last record {max(r.get('at', '') for r in whole[name])[:19]}")
 
 if unreadable:
     print()
