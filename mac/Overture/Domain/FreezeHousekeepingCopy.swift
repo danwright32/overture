@@ -38,8 +38,8 @@ enum FreezeHousekeepingCopy {
         switch done.prune {
         case .nothingToRemove:
             break
-        case .refused(let lines):
-            sentences.append(pruneRefused(lines: lines))
+        case .couldNotRewrite:
+            sentences.append(pruneCouldNotRewrite)
         case .removed(let count, let earliest, let latest):
             sentences.append(pruned(count: count, earliest: earliest, latest: latest))
             // ITS OWN SENTENCE, appended here rather than interpolated into the one above. Glued in as
@@ -55,12 +55,12 @@ enum FreezeHousekeepingCopy {
         "Overture could not set aside the oldest freeze records, so it left the log alone rather than lose them. "
         + "The log will keep growing until that works."
 
-    static func pruneRefused(lines: Int) -> String {
-        if lines == 1 {
-            return "A line in the freeze archive could not be read, so nothing was deleted from the archive."
-        }
-        return "\(lines) lines in the freeze archive could not be read, so nothing was deleted from the archive."
-    }
+    // #4454: in place of the sentence about lines that could not be read, which the prune now keeps and
+    // works around rather than stopping on. "Nothing was deleted" names the archive, so beside the
+    // compaction's sentence it cannot read as a claim about the log (L605).
+    static let pruneCouldNotRewrite =
+        "Overture could not rewrite the freeze archive without its records older than a month, so nothing was "
+        + "deleted from the archive. It tries again every hour."
 
     // ONE and SEVERAL are different sentences. A single record has no span, and "1 records" reads as a
     // plural somebody forgot to fix.

@@ -93,6 +93,11 @@ struct UnaccountedAddressGuardTests {
 @Suite("An unaccounted address is written by the run and blocks the send (#2624)")
 struct UnaccountedAddressWiringTests {
 
+    // The send gate refuses a show whose last night has passed, so every send question here is asked as of
+    // this day, the snapshot's own, never the wall clock: the fixture night (2026-10-03) went by on
+    // 2026-10-04 and turned this suite red on every branch (L130).
+    private static let today = "2026-08-13"
+
     private func context() throws -> ModelContext {
         ModelContext(try ModelContainer(for: AppSchema.schema,
                                         configurations: [ModelConfiguration(isStoredInMemoryOnly: true)]))
@@ -134,7 +139,7 @@ struct UnaccountedAddressWiringTests {
         #expect(r.isLooksLikeAnotherPersons)
         #expect(r.isHeldByAGuard)
         #expect(r.holdReason == .unaccountedAddress)
-        #expect(!r.isSendablePending)
+        #expect(!r.isSendablePending(today: Self.today))
         // And it is visible as somebody still waiting rather than a show that reads as finished (#792).
         #expect(r.isBlockedAwaitingReview)
     }
@@ -149,7 +154,7 @@ struct UnaccountedAddressWiringTests {
 
         let r = try #require(p.recipients.first)
         #expect(!r.isLooksLikeAnotherPersons)
-        #expect(r.isSendablePending)
+        #expect(r.isSendablePending(today: Self.today))
     }
 
     // Dan's overrule. He can look at an address and judge it, so the hold is answerable, exactly like the
@@ -164,7 +169,7 @@ struct UnaccountedAddressWiringTests {
         r.looksLikeAnotherPersonsDismissed = true
 
         #expect(!r.isLooksLikeAnotherPersons)
-        #expect(r.isSendablePending)
+        #expect(r.isSendablePending(today: Self.today))
         #expect(r.holdReason == nil)
     }
 
@@ -202,6 +207,6 @@ struct UnaccountedAddressWiringTests {
 
         let untouched = try #require(p.recipients.first { $0.provenance == .manual })
         #expect(!untouched.isLooksLikeAnotherPersons)
-        #expect(untouched.isSendablePending)
+        #expect(untouched.isSendablePending(today: Self.today))
     }
 }

@@ -987,6 +987,7 @@ struct QueueEnginePhase0ProbeTests {
             Phase0.say("p6 UNMEASURED: no readable scout extract results on this machine")
             return
         }
+        // scaled-corpus-lands-unscaled: p6 lands on the clone alone; the probes reading this file's scaled corpora land nothing.
         let container = try Phase0.openContainer(at: try clone("phase0-p6"))
         let ctx = container.mainContext
         let saves = Phase0SaveLog(main: ctx)

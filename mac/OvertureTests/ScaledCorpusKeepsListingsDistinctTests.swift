@@ -78,7 +78,7 @@ struct ScaledCorpusKeepsListingsDistinctTests {
             #expect(base.listing > 0 && base.run > 0,
                     "the clone holds no listing addresses, so nothing below measured anything")
 
-            let scaled = try Phase0.scaledCopy(of: clone, factor: 2, in: dir, reidentifyListings: false)
+            let scaled = try Phase0.scaledCopy(of: clone, factor: 2, in: dir, era: .before4288)
             let got = listings(try ModelContext(Phase0.openContainer(at: scaled)).fetch(FetchDescriptor<Prospect>()))
 
             #expect(got.listing == base.listing,

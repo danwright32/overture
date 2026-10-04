@@ -1,6 +1,5 @@
 import Foundation
 import SwiftData
-import SQLite3
 #if OVERTURE_HOSTED_TESTS
 @testable import Overture
 #endif
@@ -148,111 +147,29 @@ enum Phase0 {
     /// Listings are part of that identity too (#4106, found by the #4275 attribution): a copy's
     /// `sourceListingURL` and every one of its `runSourceURLs` carry the copy's glue, so a listing holding N
     /// shows in the clone holds N in each copy rather than 4N in one. `ScaledCorpusKeepsListingsDistinctTests`
-    /// holds that. `runSourceURLs` is an archived blob SQL cannot edit, so it is rewritten through the model
-    /// after the rows are copied.
+    /// holds that.
     ///
-    /// `reidentifyListings: false` leaves every copy holding its original's `sourceListingURL` and
-    /// `runSourceURLs`, which is the corpus as it stood before #4288. Only #4372's attribution probe asks for
-    /// it, to reproduce the reading probe 0b.6 took on that corpus; every other caller takes the default.
+    /// And so are sources (#4427): each copy has its own `WatchedSource` rows and its own `sourceIds`, and a
+    /// landing on the corpus lands `scaledResults(_:factor:)`, a copy of every result per copy, so a 4x
+    /// landing reads like a store four times the size. `ScaledCorpusLandsLikeALargerStoreTests` holds that.
+    /// The work is in `ScaledCorpus`, a file of its own so the landing oracle's freeze builds this corpus
+    /// rather than 6d3453d8's (the reason is written there).
+    ///
+    /// `era: .before4288` is the corpus as it stood before #4288 (and so before #4427). Only #4372's
+    /// attribution probe asks for it, to reproduce the reading probe 0b.6 took on that corpus; every other
+    /// caller takes the default.
     nonisolated static func scaledCopy(of clone: URL, factor: Int, in dir: URL,
-                                       reidentifyListings: Bool = true) throws -> URL {
-        let out = dir.appendingPathComponent("Overture-x\(factor).store")
-        for suffix in ["", "-wal", "-shm"] {
-            let from = URL(fileURLWithPath: clone.path + suffix)
-            if FileManager.default.fileExists(atPath: from.path) {
-                try FileManager.default.copyItem(at: from, to: URL(fileURLWithPath: out.path + suffix))
-            }
-        }
-        var db: OpaquePointer?
-        guard sqlite3_open_v2(out.path, &db, SQLITE_OPEN_READWRITE, nil) == SQLITE_OK else {
-            throw ScaleError.sql("open failed")
-        }
-        var closed = false
-        defer { if !closed { sqlite3_close(db) } }
-        func columns(_ table: String) throws -> [String] {
-            var stmt: OpaquePointer?
-            guard sqlite3_prepare_v2(db, "PRAGMA table_info(\(table))", -1, &stmt, nil) == SQLITE_OK else {
-                throw ScaleError.sql("table_info \(table)")
-            }
-            defer { sqlite3_finalize(stmt) }
-            var names: [String] = []
-            while sqlite3_step(stmt) == SQLITE_ROW {
-                names.append(String(cString: sqlite3_column_text(stmt, 1)))
-            }
-            return names
-        }
-        func exec(_ sql: String) throws {
-            var err: UnsafeMutablePointer<CChar>?
-            guard sqlite3_exec(db, sql, nil, nil, &err) == SQLITE_OK else {
-                let message = err.map { String(cString: $0) } ?? "unknown"
-                sqlite3_free(err)
-                throw ScaleError.sql(message)
-            }
-        }
-        let offset = 100_000
-        let showSuffixed = Set(["ZNATURALKEY", "ZPRESENTER", "ZVENUE", "ZGROUPNAME", "ZSCOUTGROUPNAME",
-                                "ZSCOUTVENUE", "ZSERIESID", "ZGMAILTHREADID", "ZGMAILMESSAGEID"]
-                               + (reidentifyListings ? ["ZSOURCELISTINGURL"] : []))
-        let contactPrefixed: Set<String> = ["ZEMAIL", "ZID"]
-        let contactSuffixed: Set<String> = ["ZGMAILTHREADID", "ZGMAILMESSAGEID", "ZSENDGROUPID"]
-        let showCols = try columns("ZPROSPECT")
-        let contactCols = try columns("ZRECIPIENT")
-        try exec("BEGIN")
-        for k in 1..<factor {
-            let shift = k * offset
-            // GLUED onto the last word, never a new word: a shared " x1" word would put every copied name
-            // into one bucket of any word-indexed term (`ProducerGate.VenueKeyIndex`), which made the first
-            // reading of this corpus superlinear for a reason no real store has. Glued, "Hall" becomes
-            // "Hallqa", so names share words within a copy exactly as they do in the clone.
-            let glue = Self.glue(forCopy: k)
-            let showExprs = showCols.map { c -> String in
-                if c == "Z_PK" { return "Z_PK + \(shift)" }
-                if showSuffixed.contains(c) { return "\(c) || '\(glue)'" }
-                return c
-            }
-            try exec("INSERT INTO ZPROSPECT (\(showCols.joined(separator: ","))) SELECT "
-                     + "\(showExprs.joined(separator: ",")) FROM ZPROSPECT WHERE Z_PK < \(offset)")
-            let contactExprs = contactCols.map { c -> String in
-                if c == "Z_PK" || c == "ZPROSPECT" { return "\(c) + \(shift)" }
-                if contactPrefixed.contains(c) { return "'x\(k).' || \(c)" }
-                if contactSuffixed.contains(c) { return "\(c) || '\(glue)'" }
-                return c
-            }
-            try exec("INSERT INTO ZRECIPIENT (\(contactCols.joined(separator: ","))) SELECT "
-                     + "\(contactExprs.joined(separator: ",")) FROM ZRECIPIENT WHERE Z_PK < \(offset)")
-        }
-        try exec("UPDATE Z_PRIMARYKEY SET Z_MAX = (SELECT MAX(Z_PK) FROM ZPROSPECT) WHERE Z_NAME = 'Prospect'")
-        try exec("UPDATE Z_PRIMARYKEY SET Z_MAX = (SELECT MAX(Z_PK) FROM ZRECIPIENT) WHERE Z_NAME = 'Recipient'")
-        try exec("COMMIT")
-
-        // Which copy each copied row belongs to, by its (already glued) natural key, for the blob rewrite.
-        var copyOf: [String: Int] = [:]
-        var stmt: OpaquePointer?
-        guard sqlite3_prepare_v2(db, "SELECT ZNATURALKEY, Z_PK / \(offset) FROM ZPROSPECT WHERE Z_PK >= \(offset)",
-                                 -1, &stmt, nil) == SQLITE_OK else { throw ScaleError.sql("copied keys") }
-        while sqlite3_step(stmt) == SQLITE_ROW {
-            if let key = sqlite3_column_text(stmt, 0) {
-                copyOf[String(cString: key)] = Int(sqlite3_column_int64(stmt, 1))
-            }
-        }
-        sqlite3_finalize(stmt)
-        sqlite3_close(db)
-        closed = true
-
-        let context = ModelContext(try openContainer(at: out))
-        var rewritten = 0
-        for row in try context.fetch(FetchDescriptor<Prospect>()) {
-            guard reidentifyListings, let k = copyOf[row.naturalKey], !row.runSourceURLs.isEmpty else { continue }
-            let glue = Self.glue(forCopy: k)
-            row.runSourceURLs = row.runSourceURLs.map { $0.isEmpty ? $0 : $0 + glue }
-            rewritten += 1
-        }
-        try context.save()
-        say("scaled corpus: \(copyOf.count) copied shows, run listings re-identified on \(rewritten)")
-        return out
+                                       era: ScaledCorpus.Era = .current) throws -> URL {
+        try ScaledCorpus.build(of: clone, factor: factor, in: dir, era: era)
     }
 
-    enum ScaleError: Error { case sql(String) }
+    /// The scout results to land on a corpus `factor` times the clone (#4427): every result once per copy,
+    /// under that copy's own source, its events glued as the copy's rows are. Factor 1 returns them unchanged,
+    /// so a probe looping over sizes calls this at every size.
+    nonisolated static func scaledResults(_ results: ScoutExtractResults, factor: Int) -> ScoutExtractResults {
+        ScaledCorpus.results(results, factor: factor)
+    }
+
 
     /// The shape a scaled corpus must keep (L48): printed side by side for the clone and the copy.
     static func shape(_ rows: [Prospect]) -> String {

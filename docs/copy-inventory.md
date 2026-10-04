@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1706 sentences**.
+Every sentence Overture can say to Dan: **1716 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -14,7 +14,7 @@ What is not, and why:
   sentences under tokens nobody reads.
 - **Nothing, if it is written as two literals joined with `+`.** Those ARE joined here, into the
   one sentence the running app says (#3155). What is still only part of what Dan reads is a
-  sentence carrying a VALUE: 633 of the 1706 below hold a
+  sentence carrying a VALUE: 634 of the 1716 below hold a
   `\(...)` where a number or a name goes, so what is printed is the template. They are counted
   here rather than listed again, because the hole is visible in the line itself; what was missing
   was any statement of how much of this document is templates.
@@ -463,8 +463,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/BlockedCalendar.swift`
 "A later night of this run is out: you're already shooting on \(day)."
     `Domain/BlockedCalendar.swift`
-"A line in the freeze archive could not be read, so nothing was deleted from the archive."
-    `Domain/FreezeHousekeepingCopy.swift`
 "A message bounced in the conversation you linked for \(p.replyWatchDisplayName). Overture didn't send that message, so it cannot tell which address failed. Check it in Gmail"
     `Integration/BounceService.swift`
 "A nudge will arrive as a new email"
@@ -1582,6 +1580,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/LandingSingleFlight.swift`
 "One set of calendar results is still waiting for the store."
     `Domain/LandingSingleFlight.swift`
+"One show on that page wasn't added, because Overture couldn't check it against the shows it already has. Paste the page again to add it."
+    `Domain/LeadIntake.swift`
 "One show was left out of this run. The local store stopped answering, so Overture could not tell whether it was a new show or a card you have already decided on, and it would rather skip it than write over one. Run the scout again to pick it up."
     `Domain/ScoutWarningCopy.swift`
 "One source couldn't be checked."
@@ -1656,8 +1656,12 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/StoreShrinkCheck.swift`
 "Overture could not open its data file to check it at \(path). Nothing has been opened or changed. The file may be in use by another program, or its permissions may have changed. Check that file before reopening Overture."
     `App/StoreSchemaGuard.swift`
+"Overture could not open its record of when it stopped responding, so nothing here can say whether it did."
+    `Domain/FreezeReport.swift`
 "Overture could not read kept calendar results at \(path) (\(why))."
     `Domain/LandingSingleFlight.swift`
+"Overture could not rewrite the freeze archive without its records older than a month, so nothing was deleted from the archive. It tries again every hour."
+    `Domain/FreezeHousekeepingCopy.swift`
 "Overture could not save the record of what this run searched for, so it will be lost when the next run starts: \(reason)"
     `App/PrepRunArchive.swift`
 "Overture could not save the records of what this run searched for on each show, so they will be lost when the next run starts: \(reason)"
@@ -1686,6 +1690,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/AppNotice.swift`
 "Overture couldn't read \(first.file), so whatever it held has not been used."
     `Domain/AppNotice.swift`
+"Overture couldn't read the shows it already has, so it couldn't tell whether the ones on that page are new, and none of them were added. Paste it again to try once more."
+    `Domain/LeadIntake.swift`
 "Overture couldn't read this message, which usually means it's an image or an attachment. Open it in Gmail."
     `Domain/ReplyPanel.swift`
 "Overture couldn't refresh your Gmail sign-in, so it stopped checking for replies and can't tell whether anyone replied. Reconnect Gmail."
@@ -1694,6 +1700,12 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ScoutWarningCopy.swift`
 "Overture couldn't save the link. Try again; if this keeps happening, something's wrong with the local store."
     `Domain/ProposedConversation.swift`
+"Overture couldn't save the shows from that page and couldn't undo every change it had made for them, so some of those changes are still unsaved."
+    `Domain/LeadIntake.swift`
+"Overture couldn't save the shows from that page, so none of them were added. Nothing else changed. Paste it again to try once more."
+    `Domain/LeadIntake.swift`
+"Overture couldn't save your recent edits, so the shows from that page were not added. Nothing from the page changed. Not yet saved: "
+    `Domain/LeadIntake.swift`
 "Overture couldn't save your recent edits, so this scout's results were not applied. Nothing from the scout changed. Not yet saved: "
     `Domain/ScoutWarningCopy.swift`
 "Overture couldn't start the Gmail sign-in on this Mac, so it didn't open your browser."
@@ -1786,6 +1798,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ContactRoleClaim.swift`
 "Overture, \(Plural.count(count, "thing")) due"
     `Domain/DueBadge.swift`
+"Part of Overture's record of when it stopped responding could not be opened, so there may have been more."
+    `Domain/FreezeReport.swift`
 "Paste a link to the show, or to the organization's events page."
     `UI/AddLeadSheet.swift`
 "Paused (booked elsewhere)"
@@ -2045,7 +2059,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "Review and send"
     `UI/FollowUpsView.swift`
     `UI/SendConfirmSheet.swift`
-"Rewritten by every scout landing that touches the row, and read only by the merge paths, the \\nre-key target, the first seen backfill and the Prep export (#4106 fact 10). Carrying it would make \\na re-land that changed nothing look like a change to every row it wrote."
+"Rewritten by a scout landing that changes the row, or that lists a row sharing a merge key with \\nanother (#4331), and read only by the merge paths, the re-key target, the first seen backfill and \\nthe Prep export (#4106 fact 10). Carrying it would make a landing look like a change to every \\nduplicate it restamps."
     `Domain/RowFacts.swift`
 "Rooms Overture can't place"
     `UI/SourcesView.swift`
@@ -2508,6 +2522,10 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/ActionFeedback.swift`
 "The show's status, read from its contacts. Mark a contact below to change it."
     `UI/DraftReviewView.swift`
+"The shows from that page were not added, because another landing was still saving to the store after \(span). Nothing from the page changed. Paste it again once it has finished."
+    `Domain/LandingSingleFlight.swift`
+"The shows from that page were not added, because the paste was stopped while it waited for the store. Nothing from the page changed."
+    `Domain/LeadIntake.swift`
 "The skipped towns sheet was on screen."
     `Domain/FreezeReport.swift`
 "The sources sheet was on screen."
@@ -3090,6 +3108,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/GenreGate.swift`
 "\(count) shows on \(dateLabel) have no genre read. Set them before dismissing the night."
     `Domain/GenreGate.swift`
+"\(count) shows on that page weren't added, because Overture couldn't check them against the shows it already has. Paste the page again to add them."
+    `Domain/LeadIntake.swift`
 "\(count) shows stored a reason with no answer recorded beside them at all, which is a fault in the check rather than a finding about those shows."
     `UI/EmptyAnswerSection.swift`
 "\(count) shows were left out of this run. The local store stopped answering, so Overture could not tell whether they were new shows or cards you have already decided on, and it would rather skip them than write over one. Run the scout again to pick them up."
@@ -3196,8 +3216,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/RunBoundaryViolations.swift`
 "\(lines) earlier records could not be read, which is what force quitting Overture while it is frozen leaves behind."
     `Domain/FreezeReport.swift`
-"\(lines) lines in the freeze archive could not be read, so nothing was deleted from the archive."
-    `Domain/FreezeHousekeepingCopy.swift`
 "\(list(runs)) run past \(dateLabel), so dismissing them takes their later nights too."
     `Domain/BulkDismiss.swift`
 "\(list) has listed shows before and came back with nothing this run. Its page format may have changed."
@@ -3719,6 +3737,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ScoutReadBudget.swift`
 "the other one"
     `Domain/ScoutReadBudget.swift`
+"the pasted page"
+    `Integration/LeadPasteLanding.swift`
 "the presenter"
     `UI/QueueView+Model.swift`
 "the production ids it joins a run by"

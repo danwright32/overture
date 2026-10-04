@@ -148,7 +148,9 @@ enum FollowUp {
     // takes an optional reason, so a dismissal can leave no recorded ending, and such a row passes
     // `ReachedOutQueue.isInPlay`'s `showOutcome == nil` guard. The dismissal is the decision; the
     // outcome is only what it was labelled.
-    static func isAwaitingNudge(_ r: Recipient, in p: Prospect, now: Date) -> Bool {
+    // #4357 slice D2: generic over the facts protocols, so a live model and a retained row are asked by one
+    // body. Every read here is the row's own or the contact's own, so no `Show` is needed.
+    static func isAwaitingNudge<Row: ProspectFacts>(_ r: Row.Contact, in p: Row, now: Date) -> Bool {
         guard p.status != .dismissed else { return false }
         guard r.isAwaitingFollowUp, !r.isOutreachStoodDown else { return false }
         guard !hasPerformed(p, now: now) else { return false }
@@ -157,7 +159,7 @@ enum FollowUp {
 
     // Has the whole run been and gone, as of `now`? Its own function so the gate above and any later
     // reader ask it one way.
-    static func hasPerformed(_ p: Prospect, now: Date) -> Bool {
+    static func hasPerformed(_ p: some ProspectFacts, now: Date) -> Bool {
         EasternDate.runHasPassed(
             lastNight: EasternDate.runLastNight(runEndDate: p.runEndDate,
                                                 performanceDate: p.performanceDate),

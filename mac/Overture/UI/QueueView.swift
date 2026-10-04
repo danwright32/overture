@@ -622,7 +622,7 @@ struct QueueView: View {
     // The overrides arrive as an argument, built by the caller from the two queries it read outside the
     // render memo's build, for the reason written above that memo's key.
     private func producerTables(overrides: ProducerOverrides, now: Date) -> QueueModel.ProducerTables {
-        let shows = allProspects.map { ProducerGate.Show(presenter: $0.presenter, venue: $0.venue) }
+        let shows = allProspects.map(ProducerGate.Show.init)
         return producerTablesMemo.value(
             fingerprint: QueueModel.ProducerTables.key(shows: shows, overrides: overrides),
             // NO clock window. These tables read no clock at all, so a staleness bound here would be

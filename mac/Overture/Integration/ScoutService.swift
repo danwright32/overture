@@ -1599,16 +1599,25 @@ enum ScoutService {
                             feed: feed, today: today, now: now, sourceIds: sourceIds,
                             preClassified: preClassified, landing: landing, into: context)
         if let report = outcome.report {
-            // #3071: a reconcile handed an invented empty marks nothing gone and says nothing about it,
-            // so a run that could not read its own shows looks exactly like one where none had dropped
-            // out. It is skipped and NAMED instead.
-            if let allStored = readOrRecord(.reconcileStoredShows, into: &outcome.degradedReads,
-                                            { try landing.rows() }) {
-                // #4325: noted on the landing, whose closing save carries it (`saveLanding`).
-                landing.noteReconcile(FeedReconcile.reconcile(stored: allStored, reports: [report], today: today))
-            }
+            reconcileLanded([report], on: landing, today: today, degraded: &outcome.degradedReads)
         }
         return outcome
+    }
+
+    // #4474: the reconcile a landing notes, ONE implementation for both landing paths (this one per source, and
+    // the extract ingest's once per landing), so the two cannot come to treat a failed read differently.
+    // #3071: a reconcile handed an invented empty marks nothing gone and says nothing about it, so a run that
+    // could not read its own shows looks exactly like one where none had dropped out. It is skipped and NAMED
+    // instead. #4325: what it writes is noted on the landing, whose closing save carries it (`saveLanding`).
+    static func reconcileLanded(_ reports: [FeedReconcile.SourceReport], on landing: ScoutLandingStore,
+                                today: String, degraded: inout [StoreRead]) {
+        // #4475: only the rows these reports could change, never every stored row: runScout reconciles once a
+        // SOURCE, so the whole store was walked once per source landed (`ScoutLandingStore.rows(reconciledBy:)`).
+        guard let touchable = readOrRecord(.reconcileStoredShows, into: &degraded,
+                                           { try landing.rows(reconciledBy: reports) }) else {
+            return
+        }
+        landing.noteReconcile(FeedReconcile.reconcile(stored: touchable, reports: reports, today: today))
     }
 
     // #4325: the closing save of a scout landing, ONE implementation for both paths (`runScout`'s native
@@ -1742,12 +1751,10 @@ enum ScoutService {
             degraded.append(.producerOverrides)
             corrections = .none
         }
-        return (ProducerGate.VenueBrands(shows: brandShows.map(brandShow), overrides: corrections), degraded)
-    }
-
-    // The corpus's projection of a stored show: the only fields of it the brand judgement reads.
-    nonisolated static func brandShow(_ show: Prospect) -> ProducerGate.Show {
-        ProducerGate.Show(presenter: show.presenter, venue: show.venue)
+        // Through the one projection of a stored show onto the fields the brand judgement reads, shared with
+        // the queue's producer tables (#4357 slice B), so the two corpora cannot come to read different fields.
+        return (ProducerGate.VenueBrands(shows: brandShows.map(ProducerGate.Show.init), overrides: corrections),
+                degraded)
     }
 
     @discardableResult
@@ -2083,7 +2090,11 @@ enum ScoutService {
                     // ONE fetch, both answers. Two separate closures would walk the store twice for
                     // every genuinely new show, and this arm already runs only when every match arm
                     // above has missed.
-                    let stored = try landing.rows()
+                    // #4460: both scans match only a row on this show's own NIGHT, so they are handed the
+                    // rows on that night rather than every stored row. An empty night is on no row, and both
+                    // scans answer nil for one before they look; the lookup still reads the store, so an
+                    // unreadable one refuses this show exactly as the walk did.
+                    let stored = try landing.rows(.night(enriched.performanceDate ?? ""))
                     return ArrivalNotes(
                         lookingLike: LookalikeOnArrival.amongStored(
                             stored.map {
@@ -2382,7 +2393,8 @@ enum ScoutService {
         guard !candidates.isEmpty else { return nil }
         // #4275: the landing's working set and its cached folds, rather than a whole table fetch and a
         // fresh fold of every row for each event that reaches this arm.
-        let all = try landing.rows()
+        // #4460: and only the rows carrying one of these URLs, in the landing's order, rather than every row.
+        let all = try landing.rows(.sharingURL(candidates))
         let room = venueKey(venue)
         return all.first { p in
             let folded = landing.fold(of: p)
@@ -2550,7 +2562,8 @@ enum ScoutService {
         guard !incoming.isEmpty else { return nil }
         let usable = incoming.subtracting(poisoned)
         guard !usable.isEmpty else { return nil }
-        let all = try landing.rows()
+        // #4460: only the rows carrying a usable token, in the landing's order.
+        let all = try landing.rows(.sharingToken(usable))
         let title = ShowLink.foldedTitle(groupName)
         let room = venueKey(venue)
 
@@ -2614,7 +2627,8 @@ enum ScoutService {
                                                openingNight: String?, runEndDate: String?, venue: String?,
                                                landing: ScoutLandingStore) throws -> Prospect? {
         guard let seriesId, !seriesId.isEmpty else { return nil }
-        let all = try landing.rows()
+        // #4460: only the rows holding this series id, in the landing's order.
+        let all = try landing.rows(.series(seriesId))
         let room = venueKey(venue)
         let sharing = all.filter { $0.seriesId == seriesId && landing.fold(of: $0).venueKey == room }
 
@@ -2731,7 +2745,9 @@ enum ScoutService {
         // than one show IN THIS ROOM, which is exactly the season page shape #4032 was reproduced on.
         let foldedURL = ListingURL.fold(url)
         let pageCarriesMoreThanOneShow = ambiguous.contains(foldedURL)
-        let all = try landing.rows()
+        // #4460: only the rows carrying this page, in the landing's order; the listing test below still
+        // decides, since a row may carry it as a run URL rather than its listing.
+        let all = try landing.rows(.sharingURL([foldedURL]))
         let room = venueKey(venue)
         return all.first {
             // #4116: both sides FOLDED rather than compared raw, so one page addressed with and without

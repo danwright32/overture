@@ -48,6 +48,12 @@ enum ReachedOutAction: String, Equatable, Sendable, CaseIterable {
     // Asked of the row the list stands on.
     static func of(_ recipient: Recipient, in prospect: Prospect, now: Date, today: String,
                    followUpConfig: FollowUpConfig = .init()) -> ReachedOutAction {
+        of(recipient, in: ReachedOutQueue.show(prospect), now: now, today: today, followUpConfig: followUpConfig)
+    }
+
+    // #4357 slice D2: generic over the facts protocols, so a live model and a retained row are asked by one body.
+    static func of<Row: ProspectFacts>(_ recipient: Row.Contact, in show: ReachedOutQueue.Show<Row>, now: Date,
+                                       today: String, followUpConfig: FollowUpConfig = .init()) -> ReachedOutAction {
         // A form pitch with no conversation attached has no thread and no send: the only thing that moves
         // it forward is Dan saying where it stands, and a send button here would promise something
         // Overture cannot do.
@@ -57,7 +63,7 @@ enum ReachedOutAction: String, Equatable, Sendable, CaseIterable {
         // no thread and no send") became false the moment #2715 let one be attached, so no post-event
         // prompt could ever be offered on a contact holding a live conversation (L55).
         if recipient.isUnwatchedFormPitch {
-            guard let next = ReachedOutQueue.nextReachOut(for: recipient, of: prospect, now: now,
+            guard let next = ReachedOutQueue.nextReachOut(for: recipient, of: show, now: now,
                                                           followUpConfig: followUpConfig),
                   ReachedOutQueue.isDueNow(next: next, now: now) else { return .none }
             return .sayWhatHappened
@@ -71,12 +77,12 @@ enum ReachedOutAction: String, Equatable, Sendable, CaseIterable {
         // existed because the closing note threads off `gmailMessageId`, which an attached form or DM
         // pitch never carries, so the button could only refuse. With nothing to send, every post-event
         // row is the same row.
-        if PostEventPrompt.prompt(for: recipient, of: prospect, now: now) != nil {
+        if PostEventPrompt.prompt(for: recipient, of: show, now: now) != nil {
             return .sayHowItEnded
         }
 
         // The silent-nudge sequence.
-        if FollowUp.isDue(eligible: FollowUp.isAwaitingNudge(recipient, in: prospect, now: now),
+        if FollowUp.isDue(eligible: FollowUp.isAwaitingNudge(recipient, in: show.row, now: now),
                           sentAt: recipient.sentAt, lastFollowUpAt: recipient.lastFollowUpAt,
                           followUpCount: recipient.followUpCount, remindedAt: recipient.nudgeRemindedAt,
                           now: now, config: followUpConfig) {

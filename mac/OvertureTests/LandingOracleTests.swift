@@ -539,6 +539,9 @@ final class LandingOracleTests {
     // What a landing reads besides the store, which an archive must hold for the real arm to run on it.
     static let requiredInputs = ["overture-scout-extract-results.json", "downbeat-export.json", "overture-history.json"]
 
+    /// The corpus factor an archive size names: "x1" is 1, "x4" is 4.
+    static func factor(of size: String) -> Int { Int(size.dropFirst()) ?? 1 }
+
     @Test func realArmAt1x() async throws { try await realArm(size: "x1") }
     @Test func realArmAt4x() async throws { try await realArm(size: "x4") }
 
@@ -580,10 +583,28 @@ final class LandingOracleTests {
             try FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: to.path)
         }
         let data = try Data(contentsOf: work.appendingPathComponent("overture-scout-extract-results.json"))
-        let results = try ScoutExtractResultsDecoder.decode(data)
+        // #4427: the 4x store lands four times the results, every copy's under the copy's own source, as a real
+        // store four times the size would. Derived from the frozen results, so it is the same file every run.
+        let frozenResults = try ScoutExtractResultsDecoder.decode(data)
+        let results = ScaledCorpus.results(frozenResults, factor: Self.factor(of: size))
         let container = try Phase0.openContainer(at: work.appendingPathComponent(storeName))
         let context = container.mainContext
         context.autosaveEnabled = false
+        // An archive frozen before #4427 has no sources for the copies, so every copy's results would land under
+        // an id nobody queued and the comparison would measure that instead. Said, rather than compared.
+        let held = Set(try context.fetch(FetchDescriptor<WatchedSource>()).map(\.sourceId))
+        // Only a COPY whose original the store holds is judged: a frozen result for a source since removed is
+        // the same at every size, and the landing reports it as it would on the clone.
+        let originals = frozenResults.results.count
+        let missing = results.results.indices.dropFirst(originals).filter { i in
+            !held.contains(results.results[i].sourceId) && held.contains(results.results[i % originals].sourceId)
+        }
+        guard missing.isEmpty else {
+            Issue.record(Comment(rawValue: "UNMEASURED: the \(size) store holds no source for \(missing.count) of "
+                + "\(results.results.count) results; an archive frozen before #4427 gave the copies no sources of "
+                + "their own, so freeze a new one with scripts/landing-oracle.sh --freeze"))
+            return
+        }
         let existing = try context.fetch(FetchDescriptor<Prospect>())
         let loaded = DownbeatBridge.loadWithHealth(from: work.appendingPathComponent("downbeat-export.json"), now: now)
         let history = LocalHistory.forMatching(existing: existing,
@@ -648,7 +669,10 @@ final class LandingOracleTests {
         let scratch = try sandboxes.make(named: "landing-oracle-freeze")
         let scratchBase = scratch.appendingPathComponent("Overture.store")
         try FileManager.default.copyItem(at: base, to: scratchBase)
-        let scaled = try Phase0.scaledCopy(of: scratchBase, factor: 4, in: scratch)
+        // #4427: through `ScaledCorpus`, never `Phase0.scaledCopy`. This runs in scripts/landing-oracle.sh's
+        // worktree of 6d3453d8, where Phase0Corpus.swift is that commit's and builds that commit's corpus;
+        // ScaledCorpus.swift is in the overlay, so the archive holds today's corpus, its copies with sources.
+        let scaled = try ScaledCorpus.build(of: scratchBase, factor: 4, in: scratch)
         for suffix in ["", "-wal", "-shm"] {
             let from = URL(fileURLWithPath: scaled.path + suffix)
             if FileManager.default.fileExists(atPath: from.path) {

@@ -16,9 +16,21 @@ import SwiftData
 // (L222, the `CardDivergenceRecord` privacy rule). The identifier says which row without saying what it is.
 //
 // ONE PLACE, GROWN BY EACH SLICE. Slice A carries T1 (ShowLink group and collapse), T2
-// (ContradictedCancellation) and T3 (feed breaks). Each later slice adds its terms here, so the fixture
-// suites and the live store suite ask every ported term the same question through one comparison (L370).
+// (ContradictedCancellation) and T3 (feed breaks); slice B adds T4 (the producer tables) and T5 (the
+// organisation answer ledger); slice C adds T6 (EngagementLink) and moves T1, T4 and T6 onto the entry
+// points `QueueModel.scope` calls, which take the rows themselves. Each later slice adds its terms here, so the fixture suites and the live
+// store suite ask every ported term the same question through one comparison (L370).
 enum TermsOverFacts {
+
+    /// T5's inputs other than the rows: the stored organisation answers, the struck addresses, the shows a
+    /// live run holds, and the instant freshness is judged at. Dan's producer corrections are read by T4
+    /// as well, so they are a parameter of `findings` itself.
+    struct Ledger {
+        var answers: [OrgReachabilityAnswer]
+        var refusals: ContactRefusal.Ledger = .none
+        var heldKeys: Set<String> = []
+        var now: Date
+    }
 
     /// Every place a ported term answered differently over facts than over models, empty when they agree.
     /// `asOf` is the day the feed break term judges "still to come" against, and `drawn` the keys a
@@ -28,23 +40,27 @@ enum TermsOverFacts {
     /// `rowByRow` also asks `liveTwin` of every flagged row on both arms, which is flagged rows times all
     /// rows: about a second on the clone and over 40 on the 4x copy (measured 2026-10-02), so the 4x arm
     /// compares the indexed set alone, which is what the pass reads.
+    /// `overrides` are Dan's producer corrections, read by T4 and T5. `ledger` nil means T5 is not asked,
+    /// which is right for a fixture that seeds no answers: the ledger returns before reading a row when it
+    /// has none.
     static func findings(_ models: [Prospect], facts given: [RowFacts]? = nil, asOf: String,
-                         drawn: Set<String>? = nil, rowByRow: Bool = true) -> [String] {
+                         drawn: Set<String>? = nil, rowByRow: Bool = true,
+                         overrides: ProducerOverrides = .none, ledger: Ledger? = nil) -> [String] {
         let facts = given ?? models.map(RowFacts.extract)
         let pidByKey = Dictionary(models.map { ($0.naturalKey, String(describing: $0.persistentModelID)) },
                                   uniquingKeysWith: { first, _ in first })
         func pid(_ key: String) -> String { pidByKey[key] ?? "a row no model holds" }
         var out: [String] = []
 
-        // T1: the grouping and the collapse, over the slice both conformers build by one rule.
-        let groupModels = ShowLink.group(models.map(ShowLink.Row.init))
-        let groupFacts = ShowLink.group(facts.map(ShowLink.Row.init))
+        // T1: the grouping and the collapse, through the entry points the pass calls (slice C).
+        let groupModels = ShowLink.group(among: models)
+        let groupFacts = ShowLink.group(among: facts)
         for key in Set(groupModels.keys).union(groupFacts.keys).sorted()
         where Set(groupModels[key] ?? []) != Set(groupFacts[key] ?? []) {
             out.append("ShowLink.group members differ for row \(pid(key))")
         }
-        let collapseModels = ShowLink.collapse(models.map(ShowLink.Row.init), drawn: drawn)
-        let collapseFacts = ShowLink.collapse(facts.map(ShowLink.Row.init), drawn: drawn)
+        let collapseModels = ShowLink.collapse(among: models, drawn: drawn)
+        let collapseFacts = ShowLink.collapse(among: facts, drawn: drawn)
         for key in Set(collapseModels.fronts.keys).union(collapseFacts.fronts.keys).sorted()
         where Set(collapseModels.fronts[key] ?? []) != Set(collapseFacts.fronts[key] ?? []) {
             out.append("ShowLink.collapse fronts differ for row \(pid(key))")
@@ -75,7 +91,271 @@ enum TermsOverFacts {
         let eventsModels = FeedBreakEvent.events(among: models, asOf: asOf, contradicted: contradictedModels)
         let eventsFacts = FeedBreakEvent.events(among: facts, asOf: asOf, contradicted: contradictedFacts)
         out += eventFindings(eventsModels, eventsFacts, term: "FeedBreakEvent.events", pid: pid)
+
+        // T4: each row's projection, then the two whole-corpus tables and the memo key built from them.
+        let showsModels = models.map(ProducerGate.Show.init)
+        let showsFacts = facts.map(ProducerGate.Show.init)
+        for (model, (a, b)) in zip(models, zip(showsModels, showsFacts)) where a != b {
+            out.append("ProducerGate.Show differs for row \(pid(model.naturalKey))")
+        }
+        let tablesModels = QueueModel.ProducerTables(rows: models, overrides: overrides)
+        let tablesFacts = QueueModel.ProducerTables(rows: facts, overrides: overrides)
+        out += tableFindings(tablesModels, tablesFacts, rows: models, term: "ProducerTables", pid: pid)
+        if QueueModel.ProducerTables.key(shows: showsModels, overrides: overrides)
+            != QueueModel.ProducerTables.key(shows: showsFacts, overrides: overrides) {
+            out.append("ProducerTables.key differs")
+        }
+
+        // T6: the cross-venue engagements, member lists compared in the order the term returns them.
+        let linkedModels = EngagementLink.group(among: models)
+        let linkedFacts = EngagementLink.group(among: facts)
+        for key in Set(linkedModels.keys).union(linkedFacts.keys).sorted() where linkedModels[key] != linkedFacts[key] {
+            out.append("EngagementLink.group members differ for row \(pid(key))")
+        }
+
+        // T5: the inherited answer of every show, each arm with its own producer index, as the pass hands it.
+        if let ledger {
+            let inheritedModels = QueueModel.inheritedAnswers(
+                ledger.answers, corpus: models, overrides: overrides, refusals: ledger.refusals,
+                heldKeys: ledger.heldKeys, now: ledger.now, producerCorpus: tablesModels.corpus)
+            let inheritedFacts = QueueModel.inheritedAnswers(
+                ledger.answers, corpus: facts, overrides: overrides, refusals: ledger.refusals,
+                heldKeys: ledger.heldKeys, now: ledger.now, producerCorpus: tablesFacts.corpus)
+            out += inheritedFindings(inheritedModels, inheritedFacts, term: "OrgAnswerLedger.inherited", pid: pid)
+        }
+
+        // Slice D1: the computed members the reached-out terms read, on the show and on every contact.
+        out += memberFindings(models, facts)
+
+        // Slice D2: the reached-out terms, judged at a fixed instant on `asOf` so the two arms share a clock.
+        out += reachedOutFindings(models, facts, now: reachedOutInstant(asOf), today: asOf)
         return out
+    }
+
+    // MARK: slice D2, the reached-out terms
+
+    /// Noon Eastern on `day`, the instant the reached-out comparison judges at. Fixed by the day rather than
+    /// read off the wall clock, so a fixture run and its rerun ask the same question (L74).
+    static func reachedOutInstant(_ day: String) -> Date {
+        (EasternDate.date(from: day) ?? Date(timeIntervalSince1970: 0)).addingTimeInterval(12 * 3600)
+    }
+
+    /// What a reached-out term says about one contact on one show, read through the generic terms.
+    struct ReachedOutAnswers: Equatable {
+        let isInPlay: Bool
+        let nextReachOut: Date?
+        let nextActionableMoment: Date?
+        let isDueNow: Bool
+        let timingLabel: String
+        let action: ReachedOutAction
+        let isAwaitingNudge: Bool
+        let nextPromptDate: Date?
+        let prompt: PostEventPrompt.Prompt?
+
+        init<Row: ProspectFacts>(_ r: Row.Contact, of show: ReachedOutQueue.Show<Row>, now: Date, today: String) {
+            isInPlay = ReachedOutQueue.isInPlay(r, of: show)
+            nextReachOut = ReachedOutQueue.nextReachOut(for: r, of: show, now: now)
+            nextActionableMoment = ReachedOutQueue.nextActionableMoment(for: r, of: show, now: now)
+            isDueNow = ReachedOutQueue.isDueNow(for: r, of: show, now: now)
+            timingLabel = ReachedOutQueue.timingLabel(for: r, of: show, now: now, today: today)
+            action = ReachedOutAction.of(r, in: show, now: now, today: today)
+            isAwaitingNudge = FollowUp.isAwaitingNudge(r, in: show.row, now: now)
+            nextPromptDate = PostEventPrompt.nextPromptDate(for: r, of: show)
+            prompt = PostEventPrompt.prompt(for: r, of: show, now: now)
+        }
+
+        func differing(from other: ReachedOutAnswers) -> [String] {
+            Mirror(reflecting: self).children.compactMap { child in
+                guard let label = child.label,
+                      let theirs = Mirror(reflecting: other).children.first(where: { $0.label == label })
+                else { return nil }
+                return String(describing: child.value) == String(describing: theirs.value) ? nil : label
+            }
+        }
+    }
+
+    /// The reached-out list over models and over facts, entry by entry, and every contact's answers.
+    ///
+    /// THE REPRESENTATIVE IS COMPARED AS A TIE CLASS (the inventory's word for this slice). Each show's row
+    /// speaks for one contact, chosen by a total order whose last key is the store's identifier. A different
+    /// contact on the two arms is one of two faults, and they are told apart: a contact OUTSIDE the
+    /// representative's tie class (a different reply instant, or a different due date when nobody replied)
+    /// means a fact the order reads came across differently; one INSIDE it means only the tie breaks
+    /// (address, identifier) disagreed. Both are findings; the label says which.
+    static func reachedOutFindings(_ models: [Prospect], _ facts: [RowFacts], now: Date, today: String) -> [String] {
+        var out: [String] = []
+        let onModels = ReachedOutQueue.activeWithDates(from: models, contacts: { $0.factContacts }, now: now)
+        let onFacts = ReachedOutQueue.activeWithDates(from: facts, contacts: { $0.factContacts }, now: now)
+        let factsByKey = Dictionary(onFacts.map { ($0.prospect.naturalKey, $0) }, uniquingKeysWith: { first, _ in first })
+        if onModels.map(\.prospect.naturalKey) != onFacts.map(\.prospect.naturalKey) {
+            out.append("ReachedOutQueue.activeWithDates order or membership differs")
+        }
+        for entry in onModels {
+            let pid = String(describing: entry.prospect.persistentModelID)
+            guard let other = factsByKey[entry.prospect.naturalKey] else {
+                out.append("ReachedOutQueue.activeWithDates drops row \(pid) over facts")
+                continue
+            }
+            if entry.next != other.next { out.append("ReachedOutQueue.activeWithDates date differs for row \(pid)") }
+            if entry.recipient.persistentModelID != other.recipient.persistentModelID {
+                let sameClass = entry.recipient.replied == other.recipient.replied
+                    && (entry.recipient.replied
+                        ? entry.recipient.replyArrivedAt == other.recipient.replyArrivedAt
+                        : ReachedOutQueue.nextReachOut(for: entry.recipient, of: .init(entry.prospect, contacts: entry.prospect.factContacts), now: now)
+                            == ReachedOutQueue.nextReachOut(for: other.recipient, of: .init(other.prospect, contacts: other.prospect.factContacts), now: now))
+                out.append("ReachedOutQueue.activeWithDates representative differs "
+                           + (sameClass ? "within its tie class" : "across tie classes") + " for row \(pid)")
+            }
+        }
+        for (model, fact) in zip(models, facts) {
+            let modelShow = ReachedOutQueue.Show(model, contacts: model.factContacts)
+            let factShow = ReachedOutQueue.Show(fact, contacts: fact.factContacts)
+            let factByID = Dictionary(fact.factContacts.map { ($0.persistentModelID, $0) }, uniquingKeysWith: { first, _ in first })
+            for contact in model.factContacts {
+                guard let record = factByID[contact.persistentModelID] else { continue }   // memberFindings names it
+                let names = ReachedOutAnswers(contact, of: modelShow, now: now, today: today)
+                    .differing(from: ReachedOutAnswers(record, of: factShow, now: now, today: today))
+                if !names.isEmpty {
+                    out.append("reached-out answers \(names.joined(separator: ", ")) differ for contact "
+                               + String(describing: contact.persistentModelID))
+                }
+            }
+        }
+        return out
+    }
+
+    // MARK: slice D1, the members on the facts protocols
+
+    /// Every computed show member slice D1 moved onto `ProspectFacts`, read through the protocol, which is how
+    /// a generic term reads them. On a `Prospect` this deliberately reaches the protocol's body rather than
+    /// any same-named member the model keeps for its setter, so the comparison is of the one rule.
+    struct ShowMembers: Equatable {
+        let status: ReviewStatus
+        let showOutcome: ShowOutcome?
+        let outcome: Outcome
+        let performanceStatus: PerformanceStatus
+        let isBooked: Bool
+        let stoodDownBeforeAnyReply: Bool
+        // Whether a reply after the stand-down puts the show back in play, which is the rule's other arm.
+        let reopenedByALaterReply: Bool
+
+        init(_ p: some ProspectFacts) {
+            status = p.status
+            showOutcome = p.showOutcome
+            outcome = p.outcome
+            performanceStatus = p.performanceStatus
+            isBooked = p.isBooked
+            stoodDownBeforeAnyReply = p.isOutreachStoodDown(asOf: nil)
+            reopenedByALaterReply = p.outreachStoodDownAt.map { !p.isOutreachStoodDown(asOf: $0.addingTimeInterval(1)) } ?? false
+        }
+    }
+
+    /// The same for every computed contact member slice D1 moved onto `ContactFacts`.
+    struct ContactMembers: Equatable {
+        let sendState: SendState
+        let resolution: RecipientResolution?
+        let outcomeSource: OutcomeSource?
+        let outreachChannel: OutreachChannel
+        let hasWatchableConversation: Bool
+        let isUnwatchedFormPitch: Bool
+        let hasProvenOutreach: Bool
+        let isSilent: Bool
+        let replyWatchConversationIsAttached: Bool
+        let isAwaitingFollowUp: Bool
+        let replyArrivedAt: Date?
+        let hasUnhandledReply: Bool
+        let standing: RecipientStanding
+        let isOutreachStoodDown: Bool
+        let isClosingNoteStoodDown: Bool
+
+        init(_ c: some ContactFacts) {
+            sendState = c.sendState
+            resolution = c.resolution
+            outcomeSource = c.outcomeSource
+            outreachChannel = c.outreachChannel
+            hasWatchableConversation = c.hasWatchableConversation
+            isUnwatchedFormPitch = c.isUnwatchedFormPitch
+            hasProvenOutreach = c.hasProvenOutreach
+            isSilent = c.isSilent
+            replyWatchConversationIsAttached = c.replyWatchConversationIsAttached
+            isAwaitingFollowUp = c.isAwaitingFollowUp
+            replyArrivedAt = c.replyArrivedAt
+            hasUnhandledReply = c.hasUnhandledReply
+            standing = c.standing
+            isOutreachStoodDown = c.isOutreachStoodDown
+            isClosingNoteStoodDown = c.isClosingNoteStoodDown
+        }
+
+        /// The names of the members that differ, so a finding says which rule disagreed.
+        func differing(from other: ContactMembers) -> [String] {
+            Mirror(reflecting: self).children.compactMap { child in
+                guard let label = child.label,
+                      let theirs = Mirror(reflecting: other).children.first(where: { $0.label == label })
+                else { return nil }
+                return String(describing: child.value) == String(describing: theirs.value) ? nil : label
+            }
+        }
+    }
+
+    /// Each show's members and each of its contacts' members, models against facts. Contacts are paired by
+    /// their persistent identifier, and findings name identifiers only (L222).
+    static func memberFindings(_ models: [Prospect], _ facts: [RowFacts]) -> [String] {
+        var out: [String] = []
+        for (model, fact) in zip(models, facts) {
+            let pid = String(describing: model.persistentModelID)
+            if ShowMembers(model) != ShowMembers(fact) {
+                out.append("show members differ for row \(pid)")
+            }
+            let factByID = Dictionary(fact.factContacts.map { ($0.persistentModelID, $0) },
+                                      uniquingKeysWith: { first, _ in first })
+            for contact in model.factContacts {
+                let cid = String(describing: contact.persistentModelID)
+                guard let record = factByID[contact.persistentModelID] else {
+                    out.append("contact \(cid) of row \(pid) has no extracted record")
+                    continue
+                }
+                let names = ContactMembers(contact).differing(from: ContactMembers(record))
+                if !names.isEmpty {
+                    out.append("contact members \(names.joined(separator: ", ")) differ for contact \(cid)")
+                }
+            }
+        }
+        return out
+    }
+
+    /// Two sets of producer tables compared, naming every row whose presenter the two answer differently
+    /// about: its venue count, whether it is a venue's own brand, whether it is spelled like a room. The
+    /// row's identifier only, never the presenter's name, which is a real organisation on the live store.
+    /// Shared with oracle part one, which asks the same of an old and a new build.
+    static func tableFindings(_ left: QueueModel.ProducerTables, _ right: QueueModel.ProducerTables,
+                              rows: [Prospect], term: String, pid: (String) -> String) -> [String] {
+        var out: [String] = []
+        for row in rows {
+            guard let presenter = row.presenter else { continue }
+            if let key = ProducerGate.key(presenter),
+               left.corpus.distinctVenueCount(key) != right.corpus.distinctVenueCount(key) {
+                out.append("\(term).corpus venue count differs for row \(pid(row.naturalKey))")
+            }
+            if left.venueBrands.contains(presenter) != right.venueBrands.contains(presenter) {
+                out.append("\(term).venueBrands differs for row \(pid(row.naturalKey))")
+            }
+            if left.venueBrands.isRoomName(presenter) != right.venueBrands.isRoomName(presenter) {
+                out.append("\(term).venueBrands room name differs for row \(pid(row.naturalKey))")
+            }
+        }
+        // The whole values too, so a difference on a presenter no row of `rows` carries is still seen.
+        if out.isEmpty, left.corpus != right.corpus { out.append("\(term).corpus differs") }
+        if out.isEmpty, left.venueBrands != right.venueBrands { out.append("\(term).venueBrands differs") }
+        return out
+    }
+
+    /// Two inherited answer tables compared show by show, naming the show by its identifier.
+    static func inheritedFindings(_ left: [String: OrgAnswerLedger.Inherited],
+                                  _ right: [String: OrgAnswerLedger.Inherited], term: String,
+                                  pid: (String) -> String) -> [String] {
+        Set(left.keys).union(right.keys).sorted().compactMap { key in
+            left[key] == right[key] ? nil : "\(term) differs for row \(pid(key))"
+        }
     }
 
     /// Two event lists compared field by field, naming the field and the event's first member by its

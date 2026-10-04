@@ -128,6 +128,60 @@ enum TrackerAttribution {
         return armed
     }
 
+    // MARK: - Why a row was restamped (#4481)
+
+    /// For the rows whose `ingestedAt` moved, which of `MergeCandidateIndex`'s twin keys another row shares with
+    /// it (the #4331 rule restamps a row with a twin on every touch), and whether that twin is a row of ANOTHER
+    /// corpus copy, which no real store has. Read from the landed rows with the index's own key function.
+    @MainActor
+    static func twinKinds(rows: [Prospect], copyRow: [Bool], restamped: Set<Int>) -> String {
+        func copyOf(_ i: Int) -> Int {
+            for k in 1..<4 {
+                let g = Phase0.glue(forCopy: k)
+                if rows[i].groupName.contains(g + g) || rows[i].groupName.hasSuffix(g) { return k }
+            }
+            return 0
+        }
+        let keys = rows.map { p in
+            MergeCandidateIndex.keys(of: p, tokens: ([p.sourceListingURL].compactMap { $0 } + p.runSourceURLs)
+                .compactMap(ProductionToken.inURL))
+        }
+        var byExact: [String: [Int]] = [:]
+        var byNight: [String: [Int]] = [:]
+        for (i, k) in keys.enumerated() {
+            for e in k.exact { byExact[e, default: []].append(i) }
+            if let n = k.night { byNight[n, default: []].append(i) }
+        }
+        var kinds: [String: (rows: Int, crossCopy: Int)] = [:]
+        var none = 0
+        for i in restamped.sorted() {
+            var found: [String: Bool] = [:]
+            for e in keys[i].exact {
+                for j in byExact[e] ?? [] where j != i {
+                    let kind = String(e.prefix { $0 != " " })
+                    found[kind] = (found[kind] ?? false) || copyOf(j) != copyOf(i)
+                }
+            }
+            if let n = keys[i].night {
+                for j in byNight[n] ?? [] where j != i
+                    && GroupNameMatch.isSameNightVariant(keys[i].title, keys[j].title) {
+                    found["night"] = (found["night"] ?? false) || copyOf(j) != copyOf(i)
+                }
+            }
+            if found.isEmpty { none += 1 }
+            for (kind, cross) in found {
+                var e = kinds[kind] ?? (0, 0)
+                e.rows += 1
+                if cross { e.crossCopy += 1 }
+                kinds[kind] = e
+            }
+        }
+        let parts = kinds.sorted { $0.key < $1.key }
+            .map { "\($0.key) \($0.value.rows) (\($0.value.crossCopy) with a twin in another copy)" }
+        return "restamped shows \(restamped.count) (\(restamped.filter { copyRow[$0] }.count) copies), by the twin key "
+            + "that restamps them: \(parts.isEmpty ? "none" : parts.joined(separator: ", ")); no twin \(none)"
+    }
+
     // MARK: - Naming the writer behind a stack
 
     // Only ever touched from the report, on the main actor.
@@ -225,14 +279,20 @@ struct ScoutLandingTrackerAttributionProbeTests {
         // `MEASURE_4372_HISTORICAL_CORPUS` adds the fourfold corpus as it stood when 0b.6 read 1,167 fires
         // (before #4288, every copy sharing its original's listing addresses), in a directory of its own.
         let historical = ProcessInfo.processInfo.environment["MEASURE_4372_HISTORICAL_CORPUS"] != nil
-        var corpora = [("live clone", base)]
-        if !cloneOnly { corpora.append(("4x", try Phase0.scaledCopy(of: base, factor: 4, in: dir))) }
+        // #4427: what each corpus lands. The 4x corpus lands a copy of every result per copy, under the copy's
+        // own source, as a store four times the size would; the historical corpus predates that and lands the
+        // clone's results, as 0b.6 did.
+        var corpora = [("live clone", base, results)]
+        if !cloneOnly {
+            corpora.append(("4x", try Phase0.scaledCopy(of: base, factor: 4, in: dir),
+                            Phase0.scaledResults(results, factor: 4)))
+        }
         if historical {
             let old = try sandboxes.make(named: "tracker4372-historical")
             corpora.append(("4x, listings shared as before #4288",
-                            try Phase0.scaledCopy(of: base, factor: 4, in: old, reidentifyListings: false)))
+                            try Phase0.scaledCopy(of: base, factor: 4, in: old, era: .before4288), results))
         }
-        for (label, url) in corpora {
+        for (label, url, results) in corpora {
             let container = try Phase0.openContainer(at: url)
             let ctx = container.mainContext
             defer { withExtendedLifetime(container) {} }
@@ -240,7 +300,15 @@ struct ScoutLandingTrackerAttributionProbeTests {
             for round in 1...2 {
                 let rows = try ctx.fetch(FetchDescriptor<Prospect>())
                 for r in rows { _ = r.recipients.count }
-                let copyRow = rows.map { p in ["qa", "qb", "qc"].contains { p.naturalKey.hasSuffix($0) } }
+                // #4427: by the title, which every copy glues, rather than the key, which since #4427 a copy
+                // with no venue no longer ends in its glue. In front on today's corpus, on the end on the
+                // historical one (`ScaledCorpus.gluedName`), so both are asked.
+                let copyRow = rows.map { p in
+                    (1..<4).contains { k in
+                        let glue = Phase0.glue(forCopy: k)
+                        return p.groupName.contains(glue + glue) || p.groupName.hasSuffix(glue)
+                    }
+                }
                 let indexOf = Dictionary(rows.enumerated().map { ($1.persistentModelID, $0) }, uniquingKeysWith: { a, _ in a })
                 var clock = Phase0.now()
                 func lap(_ what: String) {
@@ -330,6 +398,8 @@ struct ScoutLandingTrackerAttributionProbeTests {
         }
         let fieldLines = byField.sorted { $0.value.fires > $1.value.fires }.prefix(30)
             .map { "\($0.key) \($0.value.fires) fired, \($0.value.moved) moved" }
+        let twinLine = TrackerAttribution.twinKinds(rows: rows, copyRow: copyRow,
+                                                    restamped: Set(before.keys.filter { $0.field == "ingestedAt" && $0.contact == nil && moved($0) }.map(\.row)))
         TrackerAttribution.say("""
             [\(label)] round \(round): \(rows.count) shows (\(copyRow.filter { $0 }.count) copies), \(armed) trackers armed, \(Phase0.load())
               outcome inserted \(outcome.inserted) updated \(outcome.updated) skipped \(outcome.skipped); \(steps) landing steps
@@ -342,6 +412,7 @@ struct ScoutLandingTrackerAttributionProbeTests {
                 \(writerLines.joined(separator: "\n    "))
               by field (top 30):
                 \(fieldLines.joined(separator: "\n    "))
+              \(twinLine)
             """)
     }
 }
