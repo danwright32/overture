@@ -252,7 +252,8 @@ final class BrandCorpusOffTheMainActorTests {
             readProspectTable: { context in log.record(); return try ScoutService.readProspectTable(context) },
             saveEntry: { _ in throw StoreSaysNo() })
         #expect(outcome.inserted == 0, "the refused landing applied shows")
-        // The history read sits above the flush and is the run's own (A11 moves it); nothing reads after it.
+        // The history read sits above the flush and is the run's own; with this edit pending it stays on the main
+        // thread (#4339: a background read would not see the edit). Nothing reads after the refused flush.
         #expect(log.offMain == 0, "the refused landing still read the corpus")
         #expect(outcome.landingStop == .recentEditsUnsaved(rows: ["Stored stored-0"]), Comment(rawValue:
             "\(String(describing: outcome.landingStop))"))
