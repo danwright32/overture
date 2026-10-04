@@ -154,12 +154,14 @@ final class RenderDataComparisonTests {
 @Suite("Two table readers are equal exactly when every table they hold is (#4357)")
 struct TableReaderEqualityTests {
 
-    private static func reader(rowCounts: [String: Int] = [:], contradicted: Set<String> = [],
+    private static func reader(linked: [String: [EngagementLink.Member]] = [:],
+                               inherited: [String: OrgAnswerLedger.Inherited] = [:],
+                               rowCounts: [String: Int] = [:], contradicted: Set<String> = [],
                                sameShowGroups: [String: [String]] = [:], titles: [String: String] = [:],
                                collapsedFronts: [String: [String]] = [:], collapsedHidden: Set<String> = [],
                                laterLookalikes: [String: [String]] = [:], nights: [String: String] = [:])
         -> TableReader {
-        TableReader(linked: [:], inherited: [:], venueBrands: .none, rowCounts: rowCounts,
+        TableReader(linked: linked, inherited: inherited, venueBrands: .none, rowCounts: rowCounts,
                     contradicted: contradicted, sameShowGroups: sameShowGroups, titles: titles,
                     collapsedFronts: collapsedFronts, collapsedHidden: collapsedHidden,
                     laterLookalikes: laterLookalikes, nights: nights)
@@ -168,9 +170,14 @@ struct TableReaderEqualityTests {
     @Test func aReaderDifferingInAnyOneTableIsUnequal() {
         let base = Self.reader()
         #expect(base == Self.reader(), "two readers over the same empty tables differ")
-        // `linked`, `inherited` and `venueBrands` hold domain values built by their own terms; the other eight
-        // are plain collections, so each is moved alone here.
+        // Every table that can be set from outside is moved alone. `venueBrands` has no public builder (it is a
+        // judgement object built by its own term), so its clause is held by the source check below instead.
+        let inherited = OrgAnswerLedger.Inherited(result: .emailFound, probedAt: Date(timeIntervalSince1970: 0),
+                                                  organisation: "o", emails: [])
         let variants: [(String, TableReader)] = [
+            ("linked", Self.reader(linked: ["a": [EngagementLink.Member(venue: "v", date: "2026-10-01")]])),
+            ("inherited", Self.reader(inherited: ["a": inherited])),
+            ("visible", Self.reader().answeringOnly([])),
             ("rowCounts", Self.reader(rowCounts: ["a": 1])),
             ("contradicted", Self.reader(contradicted: ["a"])),
             ("sameShowGroups", Self.reader(sameShowGroups: ["a": ["b"]])),
@@ -183,6 +190,20 @@ struct TableReaderEqualityTests {
         for (table, variant) in variants {
             #expect(variant != base, Comment(rawValue: "a reader differing only in \(table) compared equal"))
         }
+    }
+
+    // The equality is written by hand, so its clauses are held to the reader's REAL stored members, derived by
+    // Mirror (L96): every stored member but the read log must be compared in `==`, as `lhs.<member> ==
+    // rhs.<member>`. A table added later, or a clause dropped, fails here by name.
+    @Test func theEqualityComparesEveryStoredMemberButTheLog() {
+        let labels = Mirror(reflecting: Self.reader()).children.compactMap(\.label).filter { $0 != "log" }
+        #expect(labels.count >= 12, "the walk of TableReader found too few members to have checked anything")
+        let source = SourceGuardHelper.source("Overture/Domain/TableReader.swift")
+        let body = source.components(separatedBy: "extension TableReader: Equatable").last ?? ""
+        #expect(!body.isEmpty && body.count < source.count, "the equality's source was not found")
+        let missing = labels.filter { !body.contains("lhs.\($0) == rhs.\($0)") }
+        #expect(missing.isEmpty, Comment(rawValue: "TableReader's == never compares these stored members, so two "
+            + "readers differing only there compare equal: " + missing.joined(separator: ", ")))
     }
 
     @Test func readingAReaderDoesNotChangeWhatItEquals() {
