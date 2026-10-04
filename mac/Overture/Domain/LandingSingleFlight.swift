@@ -366,10 +366,12 @@ enum LandingWaitCopy {
             return "Overture could not read its records of interrupted landings (\(why)), so it cannot finish one "
                 + "yet. It will try again when you are away from the Mac."
         case .stoppedRetrying(let startedAt, let attempts, let unlanded):
+            let stopped = "Overture stopped trying to finish the landing that was interrupted at "
+                + "\(landedTime(startedAt)) after \(attempts) attempts."
+            // Only its closing step was left: every calendar in it had been saved, so none waits to be read.
+            guard unlanded > 0 else { return stopped + " Every calendar in it had already been saved." }
             let calendars = unlanded == 1 ? "The calendar it had not saved stays" : "The \(unlanded) calendars it had not saved stay"
-            return "Overture stopped trying to finish the landing that was interrupted at \(landedTime(startedAt)) "
-                + "after \(attempts) attempts. \(calendars) unread, and your next scout reads "
-                + (unlanded == 1 ? "it" : "them") + " again."
+            return stopped + " \(calendars) unread, and your next scout reads " + (unlanded == 1 ? "it" : "them") + " again."
         }
     }
 

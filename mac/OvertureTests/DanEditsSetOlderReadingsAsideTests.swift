@@ -133,9 +133,6 @@ final class DanEditsSetOlderReadingsAsideTests {
         #expect(editStands(edit, on: try source("b", c)), "the \(edit) was overwritten by a stale reading")
     }
 
-    // L2: the edits' floor reads the kept copies and the journals through `.live`, which under tests must be
-    // this run's own handoff folder in the temp directory, never Dan's. Checked rather than assumed, so these
-    // tests (and every test of an edit) can never depend on, or touch, his real landing state.
     // THE RECOVERY. An interrupted landing whose unlanded source Dan then edited is not replayed onto it: the
     // recovery finishes nothing for b, and with every source either landed or overtaken it retires the journal.
     @Test(arguments: Edit.allCases)
@@ -180,6 +177,9 @@ final class DanEditsSetOlderReadingsAsideTests {
         #expect(try f.journals.list().isEmpty && f.pending.list().isEmpty)
     }
 
+    // L2: the edits' floor reads the kept copies and the journals through `.live`, which under tests must be
+    // this run's own handoff folder in the temp directory, never Dan's. Checked rather than assumed, so these
+    // tests (and every test of an edit) can never depend on, or touch, his real landing state.
     @Test func theFloorAnEditMintsAboveNeverReadsDansFolders() {
         let testRun = StoreLocation.testRunHandoffDirectory.standardizedFileURL.path
         for folder in [PendingScoutIngests.live.directory, LandingJournals.live.directory] {

@@ -197,13 +197,8 @@ enum LandingRecovery {
             }
             return retired
         }
-        // A sweep is an ordinary scout, which cannot end the process the way a replay's landing can, so it is
-        // counted only once it has actually STARTED: a sweep that could not start (another run, the reader) uses
-        // up nothing of the cap, and says so.
-        if next.finding == .sweep, !sweep() {
-            return .notFinished(startedAt: next.startedAt, why: "the scout that would finish it could not start yet")
-        }
-        // Counted and saved BEFORE the attempt, so an attempt that ends the process still counts.
+        // Counted and saved BEFORE the attempt, so an attempt that ends the process still counts, and a sweep is
+        // never running while the line says its attempt could not be recorded (L11).
         let record = LandingRun.begin(runIdentity: next.journal.runIdentity, sequence: next.journal.sequence,
                                       entryPoint: LandingSingleFlight.EntryPoint(rawValue: next.journal.entryPoint)
                                           ?? .scoutExtractIngest,
@@ -225,7 +220,19 @@ enum LandingRecovery {
         let replayed: Recovered
         switch next.finding {
         case .sweep:
-            // Started above, before it was counted.
+            guard sweep() else {
+                // A sweep that could not start (another run, the reader) uses up nothing of the cap: the count
+                // just recorded is taken back in a save of its own. If that save fails too, the count stands,
+                // which errs toward stopping rather than toward retrying for ever.
+                record.attemptCount -= 1
+                do {
+                    try saveAttempt(context)
+                } catch {
+                    _ = LandingRevert.revert(LandingRevert.WriteSet(changed: [record], inserted: [], deleted: []),
+                                             in: context)
+                }
+                return .notFinished(startedAt: next.startedAt, why: "the scout that would finish it could not start yet")
+            }
             return .sweepRequested(startedAt: next.startedAt)
         case .copyMissing(let why):
             replayed = .notFinished(startedAt: next.startedAt, why: why)

@@ -456,6 +456,37 @@ final class LandingRecoveryTests {
         #expect(try survey(c, f) == [.sweep], "the journal stopped being tried without a sweep ever starting")
     }
 
+    // The other order. The attempt is recorded BEFORE the sweep is asked for, so a sweep is never running while
+    // the line says its attempt could not be recorded, and a started sweep can never escape the cap (L11).
+    @Test func aSweepIsNotStartedWhenItsAttemptCannotBeRecorded() async throws {
+        let c = try container()
+        let ctx = c.mainContext
+        html("a", in: ctx)
+        try ctx.save()
+        let f = try folders("recover-sweep-unrecorded")
+        try f.journals.start(LandingJournal(runIdentity: "sweep-z", sequence: 11, entryPoint: .runScoutLanding,
+                                            sources: [.init(sourceId: "a", pageHash: nil)], now: started))
+        var swept = 0
+        let recovered = await recover(ctx, f, sweep: { swept += 1; return true },
+                                      saveAttempt: { _ in throw SaveRefused() })
+        guard case .notFinished(_, let why)? = recovered else {
+            Issue.record(Comment(rawValue: "an attempt that could not be recorded gave \(String(describing: recovered))"))
+            return
+        }
+        #expect(why.contains("could not be recorded"), Comment(rawValue: why))
+        #expect(swept == 0, "a sweep was started although its attempt could not be recorded")
+    }
+
+    // A landing stopped with nothing of it left unread (only its closing step was left) says so, rather than
+    // "The 0 calendars it had not saved stay unread" (L11).
+    @Test func aStoppedLandingWithNothingUnreadSaysSo() throws {
+        let none = try #require(LandingWaitCopy.recovered(.stoppedRetrying(startedAt: started, attempts: 3, unlanded: 0)))
+        #expect(!none.contains("0 calendars") && !none.contains("reads them again"), Comment(rawValue: none))
+        #expect(none.contains("after 3 attempts"), Comment(rawValue: none))
+        let one = try #require(LandingWaitCopy.recovered(.stoppedRetrying(startedAt: started, attempts: 3, unlanded: 1)))
+        #expect(one.contains("The calendar it had not saved stays unread"), Comment(rawValue: one))
+    }
+
     // MARK: - one folder per landing (L433, L463)
 
     @Test func twoJournalFoldersNeverSeeEachOthersLandings() async throws {
