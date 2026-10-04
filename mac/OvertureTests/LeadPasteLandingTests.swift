@@ -99,13 +99,8 @@ struct LeadPasteLandingTests {
         let result = await LeadPasteLanding.landPastedLead(
             [event("Harbor Lights")], today: Self.today, now: Self.now, landings: LandingSingleFlight(),
             readProspectTable: { _ in throw Refused() }, into: context)
-        guard case .landed(let outcome) = result else {
-            Issue.record("the paste did not come back with an outcome: \(result)")
-            return
-        }
-        #expect(outcome.inserted == 0 && outcome.storeUnreadable == 1,
-                "inserted \(outcome.inserted), store unreadable \(outcome.storeUnreadable)")
-        #expect(outcome.degradedReads.contains(.reconcileStoredShows), "degraded: \(outcome.degradedReads)")
+        // Said as a failed read, never as a page with nothing new on it (L215).
+        #expect(result == .refused(LeadIntake.storeUnreadableMessage), "said \(result)")
         #expect(try count(container) == 1)
     }
 

@@ -132,6 +132,11 @@ enum LeadIntake {
     static let notRevertedMessage =
         "Overture couldn't save the shows from that page and couldn't undo every change it had made for them, so some of those changes are still unsaved."
 
+    // The store could not say whether the page's shows were new, so none were added (each is counted store
+    // unreadable on the outcome). Not "no new shows": that would read a failed read as a quiet page (L215).
+    static let storeUnreadableMessage =
+        "Overture couldn't read the shows it already has, so it couldn't tell whether the ones on that page are new, and none of them were added. Paste it again to try once more."
+
     // The paste was stopped (its task cancelled) while it waited for the store, so it never landed.
     static let stoppedWhileWaitingMessage =
         "The shows from that page were not added, because the paste was stopped while it waited for the store. Nothing from the page changed."

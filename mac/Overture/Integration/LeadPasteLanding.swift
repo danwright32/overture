@@ -88,7 +88,14 @@ enum LeadPasteLanding {
             today: today, now: now, sourceIds: [WatchedSource.manualId],
             preClassified: ScoutService.PreClassified(result: pass, degradedReads: read.corpus.degradedReads),
             landing: landing, into: context)
-        guard outcome.saveFailed else { return .landed(outcome) }
+        if !outcome.saveFailed {
+            // A paste that added nothing because the store could not say whether its shows were new is a failed
+            // read, never "nothing new on that page" (L215, #4339 review).
+            if outcome.storeUnreadable > 0 && outcome.inserted + outcome.updated == 0 {
+                return .refused(LeadIntake.storeUnreadableMessage)
+            }
+            return .landed(outcome)
+        }
         // Put back, so nothing it wrote is left pending for a later save to carry (#4334's rule).
         switch ScoutService.isolateFailedSave(of: "the pasted page", scope: outcome.saveFailureScope,
                                               landing: landing) {

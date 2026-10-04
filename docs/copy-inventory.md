@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1713 sentences**.
+Every sentence Overture can say to Dan: **1714 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -14,7 +14,7 @@ What is not, and why:
   sentences under tokens nobody reads.
 - **Nothing, if it is written as two literals joined with `+`.** Those ARE joined here, into the
   one sentence the running app says (#3155). What is still only part of what Dan reads is a
-  sentence carrying a VALUE: 633 of the 1713 below hold a
+  sentence carrying a VALUE: 633 of the 1714 below hold a
   `\(...)` where a number or a name goes, so what is printed is the template. They are counted
   here rather than listed again, because the hole is visible in the line itself; what was missing
   was any statement of how much of this document is templates.
@@ -1688,6 +1688,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/AppNotice.swift`
 "Overture couldn't read \(first.file), so whatever it held has not been used."
     `Domain/AppNotice.swift`
+"Overture couldn't read the shows it already has, so it couldn't tell whether the ones on that page are new, and none of them were added. Paste it again to try once more."
+    `Domain/LeadIntake.swift`
 "Overture couldn't read this message, which usually means it's an image or an attachment. Open it in Gmail."
     `Domain/ReplyPanel.swift`
 "Overture couldn't refresh your Gmail sign-in, so it stopped checking for replies and can't tell whether anyone replied. Reconnect Gmail."
