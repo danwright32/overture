@@ -70,6 +70,13 @@ from freeze_records import (BLOCKED, COMPUTING, FREEZE, NOT_A_FREEZE, NOT_RUNNIN
 # #4122: a compaction note is not a stall. Before #4188 this reader counted it as one, in a session of
 # its own named "?", so every total here was one higher than the stalls it described.
 rows, _notes, unreadable, sources = load(path, archive_path)
+# Every record's ping number, idle work included, is evidence of how long its session was WATCHED (L711): the
+# idle record is often a session's latest, and dropping it would shrink the hours the stalls are divided by.
+last_ping = {}
+for r in rows:
+    if isinstance(r, dict):
+        name = r.get("session", "?")
+        last_ping[name] = max(last_ping.get(name, 0), r.get("sequence", 0))
 # #4335 (L459): stalls recorded while an interrupted landing was finished at idle are idle work, said in a
 # line of their own and kept out of the freeze distribution below.
 rows, idle_work = split_idle_work(rows)
@@ -82,9 +89,15 @@ if not rows:
         print(f"  {unreadable} line(s) could not be read.")
     sys.exit(2)
 
-sessions = {}
+sessions, whole = {}, {}
 for r in rows:
     sessions.setdefault(r.get("session", "?"), []).append(r)
+# A session watched only while a recovery ran still watched: it is listed with no stalls rather than left out
+# of the hours, and its floor is read from every record it holds, since the interval is the session's.
+for r in idle_work:
+    sessions.setdefault(r.get("session", "?"), [])
+for r in rows + idle_work:
+    whole.setdefault(r.get("session", "?"), []).append(r)
 
 
 def quantile(values, p):
@@ -115,15 +128,15 @@ print()
 # them so a session whose stalled time is one long sleep cannot pass for a session that froze (L116).
 print("  session    floor   watched   stalls   per hour   stalled    share   not freezes   unjudged")
 modern, modern_watched, unknown_floor = [], 0.0, 0
-for name, group in sorted(sessions.items(), key=lambda kv: kv[1][0].get("at", "")):
-    interval = interval_of(group)
+for name, group in sorted(sessions.items(), key=lambda kv: whole[kv[0]][0].get("at", "")):
+    interval = interval_of(whole[name])
     if interval is None:
         unknown_floor += 1
         print(f"  {name[:8]}      ?    UNKNOWN floor, so not comparable ({len(group)} record(s), "
-              f"smallest {min(r.get('seconds', 0) for r in group):.3f}s)")
+              f"smallest {min(r.get('seconds', 0) for r in whole[name]):.3f}s)")
         continue
     # The sequence counts PINGS, not stalls, so this is watching time rather than a count of anything.
-    watched = max(r.get("sequence", 0) for r in group) * interval
+    watched = last_ping.get(name, 0) * interval
     stalled = sum(r.get("seconds", 0) for r in group)
     if watched <= 0:
         print(f"  {name[:8]}   {interval * 1000:3.0f}ms   UNMEASURED (no sequence to size it by)")

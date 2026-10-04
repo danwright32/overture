@@ -222,6 +222,26 @@ assert_contains "idle work is said apart" "${out}" "idle work, not counted below
 assert_contains "and the population is judged without it, exactly as the same log without it is" "${out}" "UNKNOWN floor"
 assert_equals "with the same verdict" "2" "${status}"
 
+# But the TIME a session was watched is the session's, idle work included (L711): an idle record that is
+# the session's latest ping still says the watchdog was watching until then. One freeze at ping 18,000 and
+# an idle stall at ping 36,000, at 0.1s, is one stall over ONE hour, never over the half hour before it.
+mkdir -p "${WORK}/idle-watched"
+{ record mix 18000 0.150 baseline
+  printf '{"session":"mix","sequence":36000,"at":"2026-09-11T19:47:20Z","seconds":3.6,"surface":"queue","load":"baseline","loadAverage":3.7,"passes":0,"recoverySequence":7,"inputIdleSeconds":240}\n'
+} > "${WORK}/idle-watched/log.ndjson"
+out="$("${READER}" --log "${WORK}/idle-watched/log.ndjson" 2>&1)"; status=$?
+assert_contains "the watched time runs to the session's last ping, idle work included" "${out}" \
+  "1 stall(s) over 1.00h watched, 1.0 per hour"
+
+# And a session whose only records are idle work was still watched: its hours count, with no stalls.
+mkdir -p "${WORK}/idle-only"
+{ record busy 18000 0.150 baseline
+  printf '{"session":"quiet","sequence":18000,"at":"2026-09-11T20:47:20Z","seconds":0.15,"surface":"queue","load":"baseline","loadAverage":3.7,"passes":0,"recoverySequence":8,"inputIdleSeconds":240}\n'
+} > "${WORK}/idle-only/log.ndjson"
+out="$("${READER}" --log "${WORK}/idle-only/log.ndjson" 2>&1)"; status=$?
+assert_contains "a session holding only idle work still adds its watched hours" "${out}" \
+  "1 stall(s) over 1.00h watched, 1.0 per hour"
+
 if [ "${FAILURES}" -eq 0 ]; then
   echo "how-often-does-it-freeze.test.sh: all passed"
 else
