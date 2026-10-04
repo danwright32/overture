@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1714 sentences**.
+Every sentence Overture can say to Dan: **1716 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -14,7 +14,7 @@ What is not, and why:
   sentences under tokens nobody reads.
 - **Nothing, if it is written as two literals joined with `+`.** Those ARE joined here, into the
   one sentence the running app says (#3155). What is still only part of what Dan reads is a
-  sentence carrying a VALUE: 633 of the 1714 below hold a
+  sentence carrying a VALUE: 634 of the 1716 below hold a
   `\(...)` where a number or a name goes, so what is printed is the template. They are counted
   here rather than listed again, because the hole is visible in the line itself; what was missing
   was any statement of how much of this document is templates.
@@ -1580,6 +1580,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/LandingSingleFlight.swift`
 "One set of calendar results is still waiting for the store."
     `Domain/LandingSingleFlight.swift`
+"One show on that page wasn't added, because Overture couldn't check it against the shows it already has. Paste the page again to add it."
+    `Domain/LeadIntake.swift`
 "One show was left out of this run. The local store stopped answering, so Overture could not tell whether it was a new show or a card you have already decided on, and it would rather skip it than write over one. Run the scout again to pick it up."
     `Domain/ScoutWarningCopy.swift`
 "One source couldn't be checked."
@@ -3106,6 +3108,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/GenreGate.swift`
 "\(count) shows on \(dateLabel) have no genre read. Set them before dismissing the night."
     `Domain/GenreGate.swift`
+"\(count) shows on that page weren't added, because Overture couldn't check them against the shows it already has. Paste the page again to add them."
+    `Domain/LeadIntake.swift`
 "\(count) shows stored a reason with no answer recorded beside them at all, which is a fault in the check rather than a finding about those shows."
     `UI/EmptyAnswerSection.swift`
 "\(count) shows were left out of this run. The local store stopped answering, so Overture could not tell whether they were new shows or cards you have already decided on, and it would rather skip them than write over one. Run the scout again to pick them up."

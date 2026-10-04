@@ -104,6 +104,18 @@ struct LeadPasteLandingTests {
         #expect(try count(container) == 1)
     }
 
+    /// #4339 review: a paste where some shows landed and some could not be checked against the store says so
+    /// beside the run's note, rather than reporting the added count as the whole page.
+    @Test func aPartlyUnreadablePasteNamesTheShowsItCouldNotAdd() {
+        #expect(LeadIntake.withUnreadableShows("Read two months.", count: 0) == "Read two months.")
+        #expect(LeadIntake.withUnreadableShows(nil, count: 0) == nil)
+        let one = LeadIntake.withUnreadableShows(nil, count: 1)
+        #expect(one?.hasPrefix("One show on that page wasn't added") == true, "said \(one ?? "nothing")")
+        let three = LeadIntake.withUnreadableShows("Read two months.", count: 3)
+        #expect(three?.hasPrefix("Read two months. 3 shows on that page weren't added") == true,
+                "said \(three ?? "nothing")")
+    }
+
     @Test func aSaveThatFailsIsPutBackAndSaidAndCountsNoShows() async throws {
         let (container, context) = try seeded()
         let result = await LeadPasteLanding.landPastedLead(

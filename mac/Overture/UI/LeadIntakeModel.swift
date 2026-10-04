@@ -428,7 +428,9 @@ final class LeadIntakeModel {
         if added > 0, let url = pasted {
             LeadSubmissions.record(url, in: defaults)
         }
-        if stillShowing { phase = .added(added, note: note) }
+        if stillShowing {
+            phase = .added(added, note: LeadIntake.withUnreadableShows(note, count: outcome.storeUnreadable))
+        }
         return added
     }
 

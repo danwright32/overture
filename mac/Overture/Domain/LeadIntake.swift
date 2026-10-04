@@ -137,6 +137,17 @@ enum LeadIntake {
     static let storeUnreadableMessage =
         "Overture couldn't read the shows it already has, so it couldn't tell whether the ones on that page are new, and none of them were added. Paste it again to try once more."
 
+    // Some shows landed and some could not be checked against the store, so those were not added. Said beside
+    // the run's own note, so a partial read is never reported as the whole page (L215, #4339 review).
+    static func withUnreadableShows(_ note: String?, count: Int) -> String? {
+        guard count > 0 else { return note }
+        let line = count == 1
+            ? "One show on that page wasn't added, because Overture couldn't check it against the shows it already has. Paste the page again to add it."
+            : "\(count) shows on that page weren't added, because Overture couldn't check them against the shows it already has. Paste the page again to add them."
+        guard let note, !note.isEmpty else { return line }
+        return note + " " + line
+    }
+
     // The paste was stopped (its task cancelled) while it waited for the store, so it never landed.
     static let stoppedWhileWaitingMessage =
         "The shows from that page were not added, because the paste was stopped while it waited for the store. Nothing from the page changed."
