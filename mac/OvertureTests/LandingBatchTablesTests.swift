@@ -250,6 +250,19 @@ struct LandingBatchTablesTests {
         try tablesEqualARebuild(after: "the source ids")
         let spelled = try landing.venueSpellings().used(by: ["two"])
         #expect(spelled == [Self.room], "the source id written in place did not reach the spellings")
+
+        // And each of the fold's own fields, alone, the other half of what a contribution is built from (lessons
+        // review of #4460: every field the contribution reads must be one the unchanged check compares).
+        row.venue = "Moving Hall"
+        try tablesEqualARebuild(after: "the room")
+        row.runSourceURLs = ["https://moving.example/run"]
+        try tablesEqualARebuild(after: "the run links")
+        let onRunLink = try landing.rows(.sharingURL(["https://moving.example/run"])).map(ObjectIdentifier.init)
+        #expect(onRunLink == me, "a run link written in place was not looked up")
+        row.groupName = "Moving Night Again"
+        try tablesEqualARebuild(after: "the title")
+        row.sourceListingURL = "https://moving.example/elsewhere"
+        try tablesEqualARebuild(after: "the listing link")
     }
 
     // THE FAILURE PATH. A store that cannot answer refuses a keyed lookup by throwing, exactly as the walk it

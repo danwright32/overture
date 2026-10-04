@@ -211,6 +211,9 @@ final class ScoutLandingStore {
     // #4460: every field a row's contribution is built from, as it stood when the row was last judged, so a row
     // named as written that nothing has changed is not rebuilt. The four folded fields come from the row's fold
     // (already compared against the row by `fold(of:)`), so no archived field is decoded twice.
+    // It is the contribution's ONLY input beside the fold (`contribution(of:_:)` takes it, never the row), so a field
+    // the contribution comes to read has to be added here first, and the unchanged check cannot fall behind the
+    // contribution it guards (lessons review of #4460: a second hand written list would, L41).
     private struct Judged: Equatable {
         var groupName = "", venue: String?, listing: String?, runs: [String] = []
         var seriesId: String?, night: String?, sourceIds: [String] = []
@@ -740,7 +743,7 @@ final class ScoutLandingStore {
                 let now = folded.map { Judged(p, $0) } ?? Judged.deleted
                 if joins[id] == nil, judged[id] == now { continue }
                 counters.tableRowsRejudged += 1
-                let value = folded.map { Self.contribution(of: p, $0) } ?? LandingBatchTables.Contribution.none
+                let value = folded.map { Self.contribution(of: now, $0) } ?? LandingBatchTables.Contribution.none
                 tables?.set(id, order: order, to: value)
                 judged[id] = now
             }
@@ -749,19 +752,24 @@ final class ScoutLandingStore {
         return tables
     }
 
-    // One row's part in each pass, from the SAME entry builders the from-scratch walks use (L370).
-    private static func contribution(of p: Prospect, _ folded: Fold) -> LandingBatchTables.Contribution {
+    // One row's part in each pass, from the SAME entry builders the from-scratch walks use (L370). Built from the
+    // row's `Judged` fields and its fold, never the row itself, so the unchanged check reads what this reads.
+    private static func contribution(of row: Judged, _ folded: Fold) -> LandingBatchTables.Contribution {
         var c = LandingBatchTables.Contribution()
         c.tokens = Set(tokens(ScoutService.poisonEntries(of: folded)))
         c.urls = links(ScoutService.ambiguityEntries(of: folded)).sorted { $0.url < $1.url }
         // #1848's walk reads the row's own venue and source ids, which no fold carries.
-        if let venue = p.venue, !venue.isEmpty {
-            c.spellings = p.sourceIds.map { .init(sourceId: $0, venue: venue) }
+        if let venue = row.venue, !venue.isEmpty {
+            c.spellings = row.sourceIds.map { .init(sourceId: $0, venue: venue) }
         }
         // #4460: the two keys the concert identity arm and the arrival notes ask by, which no fold carries.
-        if let id = p.seriesId, !id.isEmpty { c.seriesId = id }
-        if let night = p.performanceDate, !night.isEmpty { c.night = night }
+        if let id = row.seriesId, !id.isEmpty { c.seriesId = id }
+        if let night = row.night, !night.isEmpty { c.night = night }
         return c
+    }
+
+    private static func contribution(of p: Prospect, _ folded: Fold) -> LandingBatchTables.Contribution {
+        contribution(of: Judged(p, folded), folded)
     }
 
     private static func tokens(_ entries: [(token: String, title: String, venue: String)])
