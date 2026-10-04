@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1738 sentences**.
+Every sentence Overture can say to Dan: **1740 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -14,7 +14,7 @@ What is not, and why:
   sentences under tokens nobody reads.
 - **Nothing, if it is written as two literals joined with `+`.** Those ARE joined here, into the
   one sentence the running app says (#3155). What is still only part of what Dan reads is a
-  sentence carrying a VALUE: 651 of the 1738 below hold a
+  sentence carrying a VALUE: 652 of the 1740 below hold a
   `\(...)` where a number or a name goes, so what is printed is the template. They are counted
   here rather than listed again, because the hole is visible in the line itself; what was missing
   was any statement of how much of this document is templates.
@@ -330,6 +330,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/ActionFeedback.swift`
 " Confirm you've checked it and it's fine to send as-is."
     `Domain/DraftReviewNotes.swift`
+" Every calendar in it had already been saved."
+    `Domain/LandingSingleFlight.swift`
 " How busy this Mac was at the time could not be read, so a busy Mac cannot be ruled out as the cause."
     `Domain/FreezeReport.swift`
 " It has about \(PrepStatus.duration(seconds: remaining)) left. Press Run scout again once it finishes."
@@ -348,6 +350,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/HistoryMatch.swift`
 " This Mac was busy with something else at the time, so it may say more about the machine than about Overture."
     `Domain/FreezeReport.swift`
+" \(calendars) unread, and your next scout reads "
+    `Domain/LandingSingleFlight.swift`
 " \(coveredByAnotherCard) of them \(coveredByAnotherCard == 1 ? "is" : "are") already on another card."
     `Domain/FeedBreakEvent.swift`
 " \(others) other matches are flagged the same way."
@@ -1790,7 +1794,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/FreezeReport.swift`
 "Overture stopped responding for \(seconds) seconds."
     `Domain/FreezeReport.swift`
-"Overture stopped trying to finish the landing that was interrupted at \(landedTime(startedAt)) after \(attempts) attempts. \(calendars) unread, and your next scout reads "
+"Overture stopped trying to finish the landing that was interrupted at \(landedTime(startedAt)) after \(attempts) attempts."
     `Domain/LandingSingleFlight.swift`
 "Overture was not checking for replies or bookings for \(PrepStatus.duration(seconds: seconds)), and resumed \(PrepStatus.relative(from: endedAt, to: now))"
     `Domain/WatchGap.swift`
