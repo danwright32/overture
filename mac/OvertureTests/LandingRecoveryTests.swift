@@ -201,13 +201,51 @@ final class LandingRecoveryTests {
             "an empty survey handed in was taken again: \(String(describing: recovered)), swept \(swept)"))
     }
 
-    // The replay's match history is read through a `do/catch` that says a failure, never a `try?` that would
-    // replay the copy against an empty history and spend it (L215). Asserted inside the idle tick itself.
-    @Test func theIdleTickNeverReplaysAgainstAHistoryItCouldNotRead() throws {
+    // THE FAILURE PATH. The show table cannot be read: the replay is refused, said with the interrupted
+    // landing's own time, and nothing is spent. The journal is still pending and the kept copy is still there,
+    // so the next idle minute can try again (L215).
+    @Test func aReplayWhoseShowsCannotBeReadIsRefusedAndKeepsItsCopy() async throws {
+        struct TableUnreadable: Error {}
+        let c = try container()
+        let ctx = c.mainContext
+        for id in ["a", "b"] { html(id, in: ctx) }
+        try ctx.save()
+        let f = try folders("recover-shows-unreadable")
+        _ = try await interruptedIngest(["a", "b"], into: ctx, f)
+        let waiting = try #require(try LandingRecovery.survey(journals: f.journals, pending: f.pending, in: ctx).first)
+        #expect(waiting.finding == .replay)
+
+        guard case .refused(let said) = LandingRecovery.showsForReplay(waiting, fetch: { throw TableUnreadable() })
+        else {
+            Issue.record("a show table that could not be read was handed on as a history")
+            return
+        }
+        guard case .notFinished(let startedAt, let why) = said else {
+            Issue.record(Comment(rawValue: "an unreadable show table was said as \(said)"))
+            return
+        }
+        #expect(startedAt == started)
+        #expect(why.contains("could not be read"), Comment(rawValue: why))
+        #expect(try survey(c, f) == [.replay], "the interrupted landing was spent although nothing was replayed")
+        #expect(try f.pending.list().count == 1, "the kept copy was removed although nothing was replayed")
+        #expect(try titles(c) == ["Recital a 0", "Recital a 1"])
+
+        // The positive control in the same fixture (L159): a table that reads is handed on as it is.
+        guard case .read(let shows) = LandingRecovery.showsForReplay(waiting, fetch: { try ModelContext(c).fetch(
+            FetchDescriptor<Prospect>()) }) else {
+            Issue.record("a show table that reads was refused")
+            return
+        }
+        #expect(shows.map(\.groupName).filter { $0.hasPrefix("Recital") }.sorted() == ["Recital a 0", "Recital a 1"])
+    }
+
+    // And the idle tick asks through that one door, so the refusal above is the one Dan meets (L135: inside the
+    // tick's own body, never anywhere in the file).
+    @Test func theIdleTickReadsTheReplayHistoryThroughTheRefusingRead() throws {
         let root = SourceGuardHelper.source("Overture/App/RootView.swift")
         let body = try #require(SourceGuardHelper.bodyOfFunction(named: "recoverAnInterruptedLandingIfIdle", in: root))
+        #expect(body.contains("LandingRecovery.showsForReplay("), Comment(rawValue: body))
         #expect(!body.contains("try? context.fetch(FetchDescriptor<Prospect>())"), Comment(rawValue: body))
-        #expect(body.contains("existing = try context.fetch(FetchDescriptor<Prospect>())"), Comment(rawValue: body))
     }
 
     // MARK: - finishing an interrupted ingest

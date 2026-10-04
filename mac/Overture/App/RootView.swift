@@ -1412,16 +1412,14 @@ struct RootView: View {
         // one is waiting.
         let replays = actionable.contains { $0.finding == .replay }
         let loaded = replays ? DownbeatBridge.loadWithHealth(now: Date()) : nil
-        // The match history a replay is judged against. A read that fails is SAID and the replay waits, never
-        // run against an empty history that would land the copy matched against nothing (L215).
+        // The match history a replay is judged against. A read that fails is SAID and the replay waits with its
+        // copy kept, never run against an empty history that would land it matched against nothing (L215).
         var existing: [Prospect] = []
         if replays, let waiting = actionable.first(where: { $0.finding == .replay }) {
-            do {
-                existing = try context.fetch(FetchDescriptor<Prospect>())
-            } catch {
-                sayRecovery(.notFinished(startedAt: waiting.startedAt,
-                                         why: "the shows Overture already has could not be read ("
-                                             + HandoffDecodeFailure.describe(error) + ")"))
+            switch LandingRecovery.showsForReplay(waiting, fetch: { try context.fetch(FetchDescriptor<Prospect>()) }) {
+            case .read(let shows): existing = shows
+            case .refused(let said):
+                sayRecovery(said)
                 return
             }
         }
