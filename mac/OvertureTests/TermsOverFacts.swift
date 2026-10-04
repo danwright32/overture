@@ -129,6 +129,8 @@ enum TermsOverFacts {
 
         // Slice D2: the reached-out terms, judged at a fixed instant on `asOf` so the two arms share a clock.
         out += reachedOutFindings(models, facts, now: reachedOutInstant(asOf), today: asOf)
+        // Slice H: the long tail (T8).
+        out += longTailFindings(models, facts, asOf: asOf)
         return out
     }
 
@@ -220,6 +222,47 @@ enum TermsOverFacts {
                                + String(describing: contact.persistentModelID))
                 }
             }
+        }
+        return out
+    }
+
+    // MARK: slice H, the long tail (T8)
+
+    /// The queue scope's membership and order, the three read-time tables `scope` builds over the corpus, the
+    /// possible match fan out line, the unseen merge survivors at `asOf`, and each row's `isClosed`, over
+    /// models against facts. Findings name a term and an identifier, never a title, a venue or a match's name,
+    /// which the fan out line carries (L222).
+    static func longTailFindings(_ models: [Prospect], _ facts: [RowFacts], asOf: String) -> [String] {
+        var out: [String] = []
+        let pidByKey = Dictionary(models.map { ($0.naturalKey, String(describing: $0.persistentModelID)) },
+                                  uniquingKeysWith: { first, _ in first })
+        func pid(_ key: String) -> String { pidByKey[key] ?? "a row no model holds" }
+
+        if QueueModel.queueScope(models).map(\.persistentModelID) != QueueModel.queueScope(facts).map(\.persistentModelID) {
+            out.append("QueueModel.queueScope membership or order differs")
+        }
+        let titlesM = QueueModel.titlesByKey(among: models), titlesF = QueueModel.titlesByKey(among: facts)
+        for key in Set(titlesM.keys).union(titlesF.keys).sorted() where titlesM[key] != titlesF[key] {
+            out.append("QueueModel.titlesByKey differs for row \(pid(key))")
+        }
+        let laterM = QueueModel.laterLookalikes(among: models), laterF = QueueModel.laterLookalikes(among: facts)
+        for key in Set(laterM.keys).union(laterF.keys).sorted() where laterM[key] != laterF[key] {
+            out.append("QueueModel.laterLookalikes differs for the row \(pid(key)) points at")
+        }
+        let nightsM = QueueModel.nightsByKey(among: models), nightsF = QueueModel.nightsByKey(among: facts)
+        for key in Set(nightsM.keys).union(nightsF.keys).sorted() where nightsM[key] != nightsF[key] {
+            out.append("QueueModel.nightsByKey differs for row \(pid(key))")
+        }
+        if QueueRenderPass.fanOutWarning(models) != QueueRenderPass.fanOutWarning(facts) {
+            out.append("QueueRenderPass.fanOutWarning differs")
+        }
+        let survivorsM = QueueRenderPass.unseenSurvivors(among: models, today: asOf)
+        let survivorsF = QueueRenderPass.unseenSurvivors(among: facts, today: asOf)
+        for key in Set(survivorsM).symmetricDifference(survivorsF).sorted() {
+            out.append("QueueRenderPass.unseenSurvivors differs for row \(pid(key))")
+        }
+        for (model, fact) in zip(models, facts) where model.isClosed != fact.isClosed {
+            out.append("isClosed differs for row \(pid(model.naturalKey))")
         }
         return out
     }

@@ -1418,24 +1418,9 @@ final class Prospect {
     // Closed for routine follow-ups/reminders: booked, every contact resolved (derived), or Dan closed
     // the lead by hand / with a closing note (a lead lostSoft/lostHard not yet written through to a
     // contact). A fresh reply still surfaces independently via `hasUnhandledReply`.
-    var isClosed: Bool {
-        // #769: the org asked Dan to stop. Nothing routine may fire again, on any of their shows. This
-        // is the load-bearing line: without it a do-not-contact org would keep receiving follow-ups
-        // and reminders on a show already sent, which is precisely the email that issue exists to
-        // prevent. Suppressing the untried recipients only stops FIRST sends.
-        if orgDoNotContact { return true }
-        switch performanceStatus {
-        // #1840: a show Dan stopped working is closed for ROUTINE follow-ups, same as the two lost
-        // states. The one thing it keeps raising, its post-event closing note, is carved out inside
-        // ConversationReminder rather than here, so this stays the plain "no routine work" answer and
-        // the exception lives in exactly one place.
-        // #3669: the three ended states come from `endedWithoutAShoot`, the same answer the self booking
-        // check reads, so the two cannot drift apart over which endings count as closed.
-        case .booked: return true
-        case .lostDoorOpen, .lostNotInterested, .stoodDown, .active, .new:
-            return performanceStatus.endedWithoutAShoot || outcome == .lostSoft || outcome == .lostHard
-        }
-    }
+    // #4357 slice H: the rule is on `ProspectFacts` (QueueLongTailTerms.swift), with its reasons; this hands it
+    // the model's own performance status, read over its `recipients` uncounted, as it always was.
+    var isClosed: Bool { isClosed(given: performanceStatus) }
 
     // A contact replied and nobody has answered it: not booked, and some replied / unresolved /
     // un-bounced contact still owes a reply. Per-recipient (#653), so answering one contact never masks
