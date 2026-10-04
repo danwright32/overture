@@ -64,22 +64,40 @@ path, archive_path = sys.argv[1], sys.argv[2]
 sys.dont_write_bytecode = True
 sys.path.insert(0, sys.argv[3])
 from freeze_records import (BLOCKED, COMPUTING, FREEZE, NOT_A_FREEZE, NOT_RUNNING_UNSPLIT, STARVED, UNMEASURED,
-                            freeze_verdict, load, main_thread_verdict, menu_idle, plural, run_loop_measured,
-                            sleep_measured, slept)
+                            freeze_verdict, idle_work_line, load, main_thread_verdict, menu_idle, plural,
+                            run_loop_measured, sleep_measured, slept, split_idle_work)
 
 # #4122: a compaction note is not a stall. Before #4188 this reader counted it as one, in a session of
 # its own named "?", so every total here was one higher than the stalls it described.
 rows, _notes, unreadable, sources = load(path, archive_path)
+# Every record's ping number, idle work included, is evidence of how long its session was WATCHED (L711): the
+# idle record is often a session's latest, and dropping it would shrink the hours the stalls are divided by.
+last_ping = {}
+for r in rows:
+    if isinstance(r, dict):
+        name = r.get("session", "?")
+        last_ping[name] = max(last_ping.get(name, 0), r.get("sequence", 0))
+# #4335 (L459): stalls recorded while an interrupted landing was finished at idle are idle work, said in a
+# line of their own and kept out of the freeze distribution below.
+rows, idle_work = split_idle_work(rows)
+if idle_work_line(idle_work):
+    print(idle_work_line(idle_work))
 
 if not rows:
-    print(f"how-often-does-it-freeze: UNMEASURED. {path} holds no records.")
+    print(f"how-often-does-it-freeze: UNMEASURED. {path} holds no records" + (f" other than {len(idle_work)} idle work stall(s), set aside above." if idle_work else "."))
     if unreadable:
         print(f"  {unreadable} line(s) could not be read.")
     sys.exit(2)
 
-sessions = {}
+sessions, whole = {}, {}
 for r in rows:
     sessions.setdefault(r.get("session", "?"), []).append(r)
+# A session watched only while a recovery ran still watched: it is listed with no stalls rather than left out
+# of the hours, and its floor is read from every record it holds, since the interval is the session's.
+for r in idle_work:
+    sessions.setdefault(r.get("session", "?"), [])
+for r in rows + idle_work:
+    whole.setdefault(r.get("session", "?"), []).append(r)
 
 
 def quantile(values, p):
@@ -102,7 +120,11 @@ def interval_of(group):
     return 0.1 if min(r.get("seconds", 0) for r in group) < 0.25 else None
 
 
-print(f"how-often-does-it-freeze: {len(rows)} record(s) over {plural(len(sessions), 'session')}.")
+# The sessions the records came from, with any watched only while a recovery ran named apart, so the count
+# beside the records describes them and the extra hours below are accounted for.
+idle_only = sum(1 for group in sessions.values() if not group)
+print(f"how-often-does-it-freeze: {len(rows)} record(s) over {plural(len(sessions) - idle_only, 'session')}"
+      + (f", and {plural(idle_only, 'session')} watched only while a recovery ran." if idle_only else "."))
 print(f"  read from: {', '.join(sources)}")
 print()
 # #4188: `not freezes` is how many of a session's stalls say of themselves that they are not one, and
@@ -110,15 +132,15 @@ print()
 # them so a session whose stalled time is one long sleep cannot pass for a session that froze (L116).
 print("  session    floor   watched   stalls   per hour   stalled    share   not freezes   unjudged")
 modern, modern_watched, unknown_floor = [], 0.0, 0
-for name, group in sorted(sessions.items(), key=lambda kv: kv[1][0].get("at", "")):
-    interval = interval_of(group)
+for name, group in sorted(sessions.items(), key=lambda kv: whole[kv[0]][0].get("at", "")):
+    interval = interval_of(whole[name])
     if interval is None:
         unknown_floor += 1
         print(f"  {name[:8]}      ?    UNKNOWN floor, so not comparable ({len(group)} record(s), "
-              f"smallest {min(r.get('seconds', 0) for r in group):.3f}s)")
+              f"smallest {min(r.get('seconds', 0) for r in whole[name]):.3f}s)")
         continue
     # The sequence counts PINGS, not stalls, so this is watching time rather than a count of anything.
-    watched = max(r.get("sequence", 0) for r in group) * interval
+    watched = last_ping.get(name, 0) * interval
     stalled = sum(r.get("seconds", 0) for r in group)
     if watched <= 0:
         print(f"  {name[:8]}   {interval * 1000:3.0f}ms   UNMEASURED (no sequence to size it by)")
@@ -241,7 +263,7 @@ print("  fewer are issued during a long freeze. The per hour figure is therefore
 # so this reader cannot tell the two apart and says so rather than choosing (L11, L440). The mirror of
 # `StallLog.cap` below is held against the app's own constant by `TheCapThisReaderNamesTests`.
 CAP = 200
-at_the_cap = [n for n, g in sessions.items() if len(g) == CAP]
+at_the_cap = [n for n in sessions if len(whole[n]) == CAP]   # every record it wrote, idle work included
 if at_the_cap:
     print()
     verb = "holds" if len(at_the_cap) == 1 else "hold"
@@ -251,7 +273,7 @@ if at_the_cap:
     print("  and nothing is missing. No record says which build wrote it, so the two cannot be told")
     print("  apart from this file.")
     for name in at_the_cap:
-        print(f"    {name[:8]}  last record {max(r.get('at', '') for r in sessions[name])[:19]}")
+        print(f"    {name[:8]}  last record {max(r.get('at', '') for r in whole[name])[:19]}")
 
 if unreadable:
     print()

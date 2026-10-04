@@ -128,9 +128,17 @@ enum FreezeReport {
         }
 
         let somethingUnread = found.couldNotBeRead || archived.couldNotBeRead
-        let message: String?
-        if let worst = fresh.max(by: { $0.seconds < $1.seconds }) {
-            message = FreezeNoticeCopy.report(count: fresh.count,
+        // #4335 (A6, L459): a stall recorded while an interrupted landing was being finished at idle is idle
+        // work, never a freeze Dan felt. It is counted apart and said in a sentence of its own, so it never
+        // enters the count or the longest below. Still said, once, like every new record (L98).
+        let idleWork = fresh.filter { $0.recoverySequence != nil }
+        let freezes = fresh.filter { $0.recoverySequence == nil }
+        let idleSentence = idleWork.max(by: { $0.seconds < $1.seconds }).map {
+            FreezeNoticeCopy.idleWork(count: idleWork.count, longestSeconds: $0.seconds)
+        }
+        var message: String?
+        if let worst = freezes.max(by: { $0.seconds < $1.seconds }) {
+            message = FreezeNoticeCopy.report(count: freezes.count,
                                               longestSeconds: worst.seconds,
                                               surface: worst.surface,
                                               load: worst.load,
@@ -149,6 +157,7 @@ enum FreezeReport {
             message = nil
         }
         after.unopenedSaid = somethingUnread && (message != nil || before.unopenedSaid)
+        if let idleSentence { message = [message, idleSentence].compactMap { $0 }.joined(separator: " ") }
 
         remember(after, replacing: before, in: defaults)
         return message
@@ -226,7 +235,9 @@ enum FreezeReport {
     // Returns nil when there is nothing to answer with, which the CALLER has to tell apart from a session
     // with no freezes; `newlyReported` above is where that distinction is made in words.
     static func floor(in support: URL, read: (URL) -> FreezeLog.Read = FreezeLog.read(at:)) -> StallRecord? {
-        read(FreezeLog.url(in: support)).records.max(by: { $0.seconds < $1.seconds })
+        read(FreezeLog.url(in: support)).records
+            .filter { $0.recoverySequence == nil }   // #4335: idle work is not a freeze the gate may read
+            .max(by: { $0.seconds < $1.seconds })
     }
 }
 
@@ -272,6 +283,16 @@ enum FreezeNoticeCopy {
             sentence += partUnopened
         }
         return sentence
+    }
+
+    // #4335 (A6, L459): the stalls recorded while Overture finished an interrupted landing with nobody at the
+    // Mac. Said apart from the freezes, and in words that say they were not felt.
+    static func idleWork(count: Int, longestSeconds: Double) -> String {
+        let seconds = String(format: "%.1f", longestSeconds)
+        return count == 1
+            ? "While you were away, finishing an interrupted landing held Overture for \(seconds) seconds."
+            : "While you were away, finishing an interrupted landing held Overture \(count) times, the longest "
+                + "for \(seconds) seconds."
     }
 
     // #4453: a file of these records exists and could not be OPENED, which is a different fact from a

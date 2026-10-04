@@ -372,6 +372,23 @@ out="$("${WORK}/nolib/scripts/$(basename "${READER}")" --log "${WORK}/nolib/log.
 assert_equals "a missing shared reader is UNMEASURED, never a result" "2" "${status}"
 assert_contains "and it names the file it could not find" "${out}" "freeze_records.py is missing"
 
+# #4335 (L459): a stall recorded while Overture finished an interrupted landing at idle is idle work. It is
+# said in a line of its own and kept out of the population every count below is taken over.
+record 0.31 1 > "${WORK}/idle.ndjson"
+printf '{"session":"s","sequence":2,"at":"2026-09-10T17:48:37Z","seconds":3.60,"surface":"queue","load":"baseline","loadAverage":3.7,"passes":0,"recoverySequence":7,"inputIdleSeconds":240}\n' >> "${WORK}/idle.ndjson"
+out="$("${READER}" --log "${WORK}/idle.ndjson" 2>&1)"; status=$?
+assert_equals "a log holding idle work still reports" "0" "${status}"
+assert_contains "and it says the idle work is there, apart" "${out}" "idle work, not counted below: 1 stall"
+assert_contains "and how long the longest was" "${out}" "longest 3.60s"
+assert_contains "and the population is the other record alone" "${out}" "of 1 record(s)"
+assert_not_contains "and the idle stall, which counted no pass, is not triaged as a freeze" "${out}" "UNATTRIBUTED"
+
+# And a log holding ONLY idle work is not called empty (L11): it names what it set aside.
+printf '{"session":"s","sequence":2,"at":"2026-09-10T17:48:37Z","seconds":3.60,"surface":"queue","load":"baseline","loadAverage":3.7,"passes":0,"recoverySequence":7,"inputIdleSeconds":240}\n' > "${WORK}/only-idle.ndjson"
+out="$("${READER}" --log "${WORK}/only-idle.ndjson" 2>&1)"; status=$?
+assert_equals "a log of only idle work is UNMEASURED" "2" "${status}"
+assert_contains "and it says the record it holds was set aside, not that it holds none" "${out}" "other than 1 idle work stall(s), set aside above"
+
 if [ "${FAILURES}" -eq 0 ]; then
   echo "what-froze-the-queue.test.sh: all passed"
 else

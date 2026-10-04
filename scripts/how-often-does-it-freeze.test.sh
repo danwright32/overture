@@ -79,6 +79,13 @@ assert_contains "and it names the issue rather than describing a coincidence" "$
 # reader that went on asserting censorship would be claiming something it cannot measure (L11, L440).
 assert_contains "and it says the two readings cannot be told apart" "${out}" "cannot be told"
 assert_not_contains "and it no longer says the write still stops there" "${out}" "stops a session writing"
+# #4335: the cap counts every record the session WROTE, idle work included, since the in-memory cap did.
+mkdir -p "${WORK}/capped-idle"
+{ for i in $(seq 1 199); do record capidle "$((i * 10))" 0.150 baseline; done
+  printf '{"session":"capidle","sequence":2000,"at":"2026-09-11T18:47:20Z","seconds":0.15,"surface":"queue","load":"baseline","loadAverage":3.7,"passes":0,"recoverySequence":9,"inputIdleSeconds":240}\n'
+} > "${WORK}/capped-idle/log.ndjson"
+out="$("${READER}" --log "${WORK}/capped-idle/log.ndjson" 2>&1)"; status=$?
+assert_contains "a session at the cap with idle work among its records still says so" "${out}" "UNDERSTATED"
 
 # 7. A session one record short of the cap is NOT censored, which is the other half: a warning that
 #    fires on every session says nothing, and one that fires on none is the defect it exists to catch
@@ -209,6 +216,40 @@ printf '{"session":"s","sequence":1,"at":"2026-09-10T17:47:37Z","seconds":0.2,"l
 out="$("${WORK}/nolib/scripts/$(basename "${READER}")" --log "${WORK}/nolib/log.ndjson" 2>&1)"; status=$?
 assert_equals "a missing shared reader is UNMEASURED, never a result" "2" "${status}"
 assert_contains "and it names the file it could not find" "${out}" "freeze_records.py is missing"
+
+# #4335 (L459): a stall recorded while Overture finished an interrupted landing at idle is idle work. It is
+# said on a line of its own and kept out of the distribution, so it can neither add a freeze nor move the
+# floor a population is judged at.
+mkdir -p "${WORK}/idle"
+{ record old 1000 0.400 baseline; record old 2000 0.900 baseline
+  printf '{"session":"idle","sequence":1,"at":"2026-09-11T18:47:20Z","seconds":3.6,"surface":"queue","load":"baseline","loadAverage":3.7,"passes":0,"recoverySequence":7,"inputIdleSeconds":240}\n'
+} > "${WORK}/idle/log.ndjson"
+out="$("${READER}" --log "${WORK}/idle/log.ndjson" 2>&1)"; status=$?
+assert_contains "idle work is said apart" "${out}" "idle work, not counted below: 1 stall"
+assert_contains "and the population is judged without it, exactly as the same log without it is" "${out}" "UNKNOWN floor"
+assert_equals "with the same verdict" "2" "${status}"
+
+# But the TIME a session was watched is the session's, idle work included (L711): an idle record that is
+# the session's latest ping still says the watchdog was watching until then. One freeze at ping 18,000 and
+# an idle stall at ping 36,000, at 0.1s, is one stall over ONE hour, never over the half hour before it.
+mkdir -p "${WORK}/idle-watched"
+{ record mix 18000 0.150 baseline
+  printf '{"session":"mix","sequence":36000,"at":"2026-09-11T19:47:20Z","seconds":3.6,"surface":"queue","load":"baseline","loadAverage":3.7,"passes":0,"recoverySequence":7,"inputIdleSeconds":240}\n'
+} > "${WORK}/idle-watched/log.ndjson"
+out="$("${READER}" --log "${WORK}/idle-watched/log.ndjson" 2>&1)"; status=$?
+assert_contains "the watched time runs to the session's last ping, idle work included" "${out}" \
+  "1 stall(s) over 1.00h watched, 1.0 per hour"
+
+# And a session whose only records are idle work was still watched: its hours count, with no stalls.
+mkdir -p "${WORK}/idle-only"
+{ record busy 18000 0.150 baseline
+  printf '{"session":"quiet","sequence":18000,"at":"2026-09-11T20:47:20Z","seconds":0.15,"surface":"queue","load":"baseline","loadAverage":3.7,"passes":0,"recoverySequence":8,"inputIdleSeconds":240}\n'
+} > "${WORK}/idle-only/log.ndjson"
+out="$("${READER}" --log "${WORK}/idle-only/log.ndjson" 2>&1)"; status=$?
+assert_contains "a session holding only idle work still adds its watched hours" "${out}" \
+  "1 stall(s) over 1.00h watched, 1.0 per hour"
+assert_contains "and the header counts the sessions its records came from, naming the idle only one apart" "${out}" \
+  "1 record(s) over 1 session, and 1 session watched only while a recovery ran."
 
 if [ "${FAILURES}" -eq 0 ]; then
   echo "how-often-does-it-freeze.test.sh: all passed"
