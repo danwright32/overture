@@ -358,7 +358,9 @@ struct ArchiveView: View {
              dayOffOffer: DayOffOfferRequest = DayOffOfferRequest(), outboundSendSince: Date? = nil) -> some View {
         let item = cards.card(for: scopeRow)
         // #3690: a closure, so the array is read on a press rather than captured per row.
-        return ProspectRowFactory.row(item, today: today, prospects: { prospects }, context: context, feedback: feedback,
+        // #4357 slice G1: the day and instant the cards were built at, not the wall clock read while drawing.
+        return ProspectRowFactory.row(item, today: cards.preamble.day, now: cards.preamble.now,
+                              prospects: { prospects }, context: context, feedback: feedback,
                               dayOffOffer: dayOffOffer,
                               // #1770: read once from the cache here rather than by each card it builds.
                               gmailConnected: GmailConnection.shared.isConnected,

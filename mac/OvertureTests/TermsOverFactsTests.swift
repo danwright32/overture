@@ -804,4 +804,76 @@ struct TermsOverFactsTests {
         #expect(!staleFindings.contains { $0.contains("example.invalid") },
                 "a finding named a contact's address rather than its identifier")
     }
+
+    // MARK: slice G1, the row and the reachability members it reads
+
+    // One show for each of the five verdicts the contacts can derive (an open address, an address a guard
+    // holds, a form on the act's own site, a social profile Dan confirmed, and only a name-match guess), and
+    // one already pitched, which keeps its stored verdict whatever its contacts now say. Each show's stored
+    // verdict is "no email found", so every unpitched one re-derives.
+    private func seedRows(_ ctx: ModelContext, _ all: [Prospect]) throws {
+        func contact(_ id: String, on key: String, email: String? = nil, form: String? = nil,
+                     _ shape: (Recipient) -> Void = { _ in }) throws {
+            let p = try #require(all.first { $0.naturalKey == key })
+            p.reachabilityResult = .noEmailFound
+            let r = Recipient(id: id, email: email, provenance: .act, contactFormURL: form)
+            shape(r)
+            ctx.insert(r)
+            p.recipients.append(r)
+        }
+        try contact("open@example.invalid", on: "lantern|2026-10-03", email: "open@example.invalid")
+        try contact("front-desk@example.invalid", on: "ninefold|2026-10-10", email: "front-desk@example.invalid") {
+            $0.looksLikeVenue = true
+        }
+        try contact("form", on: "copper|2026-10-17", form: "https://coppermoth.example/contact")
+        try contact("confirmed-profile", on: "drift live|2026-11-01", form: "https://instagram.com/driftwoodchoir") {
+            $0.nameMatchOnly = true; $0.nameMatchOnlyDismissed = true
+        }
+        try contact("guessed-profile", on: "drift|2026-11-01", form: "https://instagram.com/driftwoodchoirs") {
+            $0.nameMatchOnly = true
+        }
+        try contact("pitched@example.invalid", on: "saltmarsh a", email: "pitched@example.invalid") {
+            $0.sendState = .sent; $0.sentAt = Date(timeIntervalSince1970: 1_790_000_000)
+        }
+        try #require(all.first { $0.naturalKey == "saltmarsh a" }).sentAt = Date(timeIntervalSince1970: 1_790_000_000)
+    }
+
+    @Test func theRowAndItsReachabilityAnswerTheSameOverFactsAsOverModels() throws {
+        let ctx = try context()
+        let all = try seed(ctx)
+        try seedRows(ctx, all)
+        // Positive controls (L159): every verdict the contacts can derive, each on the show built for it, and
+        // the pitched show keeping its stored one.
+        func show(_ key: String) throws -> Prospect { try #require(all.first { $0.naturalKey == key }) }
+        #expect(try show("lantern|2026-10-03").reachabilityResultFromRecipients == .emailFound)
+        #expect(try show("ninefold|2026-10-10").reachabilityResultFromRecipients == .weakContactOnly,
+                "an address the venue guard holds is not a weak contact")
+        #expect(try show("copper|2026-10-17").reachabilityResultFromRecipients == .contactFormOnly)
+        #expect(try show("drift live|2026-11-01").reachabilityResultFromRecipients == .socialOnly,
+                "a profile Dan confirmed is not a social route")
+        #expect(try show("drift|2026-11-01").reachabilityResultFromRecipients == .noEmailFound,
+                "a name-match guess counted as a route")
+        let pitched = try show("saltmarsh a")
+        #expect(pitched.reachabilityResultFromRecipients == .emailFound)
+        #expect(pitched.reachabilityResultAsHeld == .noEmailFound, "a pitched show re-derived its stored verdict")
+        #expect(try show("lantern|2026-10-03").reachabilityResultAsHeld == .emailFound,
+                "an unpitched show kept its stored verdict rather than re-deriving it")
+        let rows = all.map { QueueScopeRow($0, facts: RecipientFacts.of($0)) }
+        #expect(Set(rows.compactMap(\.reachabilityResult)) == Set(Reachability.ProbeResult.allCases),
+                "the rows do not carry every verdict")
+
+        let findings = TermsOverFacts.findings(all, asOf: asOf)
+        #expect(findings.isEmpty, Comment(rawValue: findings.joined(separator: "\n")))
+
+        // A guard lifted after the facts were taken: the contact, the row's facts and the row all see it.
+        let stale = all.map(RowFacts.extract)
+        try #require(all.flatMap(\.recipients).first { $0.id == "front-desk@example.invalid" }).looksLikeVenueDismissed = true
+        let staleFindings = TermsOverFacts.findings(all, facts: stale, asOf: asOf)
+        for prefix in ["RecipientFacts.of differs", "QueueScopeRow differs", "the row's reachability answers differ",
+                       "the address members differ"] {
+            #expect(staleFindings.contains { $0.hasPrefix(prefix) }, "a guard lifted after extraction was not seen by \(prefix)")
+        }
+        #expect(!staleFindings.contains { $0.contains("example") },
+                "a finding named an address or a URL rather than an identifier")
+    }
 }

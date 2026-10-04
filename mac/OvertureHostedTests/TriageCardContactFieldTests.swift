@@ -30,7 +30,7 @@ struct TriageCardContactFieldTests {
     }
 
     private func placeholders(_ item: QueueItem) throws -> [String] {
-        let view = ProspectRowView(item: item, today: "2026-07-09", onKeep: {}, onDismiss: { _ in })
+        let view = ProspectRowView(item: item, today: "2026-07-09", now: Date(), onKeep: {}, onDismiss: { _ in })
         return try view.inspect().findAll(ViewType.TextField.self).compactMap {
             try? $0.labelView().text().string()
         }

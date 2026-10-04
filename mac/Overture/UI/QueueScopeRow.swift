@@ -260,9 +260,13 @@ extension RecipientFacts {
     // arm; anything asking about a single show on its own takes the arm above. ONE definition of what a
     // row knows about a show's contacts, because two would drift and only one of them would be the one
     // the pass actually uses (L107, L263).
-    static func of(_ p: Prospect, contacts: [Recipient]) -> RecipientFacts {
+    //
+    // #4357 slice G1: generic over the row, so a retained show and its contacts reduce by the same body. The
+    // badge verdict is now asked of THESE contacts too, where it used to walk the model's `recipients` a
+    // second time: the same contacts in canonical order, and the verdict does not depend on order.
+    static func of<Row: ProspectFacts>(_ p: Row, contacts: [Row.Contact]) -> RecipientFacts {
         RecipientFacts(standings: contacts.map(\.standing),
-                       reachabilityAsHeld: p.reachabilityResultAsHeld,
+                       reachabilityAsHeld: p.reachabilityResultAsHeld(among: contacts),
                        // #3655: gathered in the SAME walk as the standings above, which is what keeps a
                        // searchable row at the one recipient reach `RecipientWalkCountTests` pins.
                        searchableContacts: contacts.map { SearchableContact(name: $0.name, email: $0.email) })
@@ -275,7 +279,9 @@ extension QueueScopeRow {
     // The facts are HANDED IN rather than gathered here, which is the whole reason this is cheap: the
     // pass gathers them once per show and gives the same value to this and to the card, so building both
     // is one walk rather than two and `RecipientWalkCountTests`'s pin still holds.
-    init(_ p: Prospect, facts: RecipientFacts,
+    //
+    // #4357 slice G1: generic over the row, so a retained show builds its row by the same body.
+    init(_ p: some ProspectFacts, facts: RecipientFacts,
          // #3653: the organisation's answer, which is NOT a fact about this show's own contacts and so
          // cannot come from the walk. It is derived once per pass from the whole-store ledger
          // (`QueueModel.inheritedAnswers`) and handed in, exactly as the card receives it, so the row and

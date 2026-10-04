@@ -40,7 +40,7 @@ struct RecheckControlOnTheRowTests {
     private func texts(_ item: QueueItem, checkRunning: Bool = false,
                        probeRunning: Bool = false,
                        checkRunSince: Date? = nil, checkLookups: Int? = nil) throws -> [String] {
-        let view = ProspectRowView(item: item, today: "2026-08-07", onKeep: {}, onDismiss: { _ in },
+        let view = ProspectRowView(item: item, today: "2026-08-07", now: Date(), onKeep: {}, onDismiss: { _ in },
                                    checkRunning: checkRunning, probeRunning: probeRunning,
                                    checkRunSince: checkRunSince, checkLookups: checkLookups)
         return try view.inspect().findAll(ViewType.Text.self).map { try $0.string() }

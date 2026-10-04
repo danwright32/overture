@@ -363,7 +363,7 @@ struct DraftReviewView: View {
         // stands down on Dan's own text (#2131, #459) because when he writes a sentence he means it. That
         // reasoning holds for a judgment about wording and fails for a contradicted fact: he cannot have
         // meant July 18 for a July 25 show, and the sent draft that proved it had `draftEditedByDan` set.
-        if let dateWarning = item.eventDateWarning() {
+        if let dateWarning = item.eventDateWarning(today: today) {
             DraftIssueFlags(findings: [], notes: [dateWarning])
             skippedNightControl
         }
@@ -406,7 +406,7 @@ struct DraftReviewView: View {
     }
 
     // #3326 (plan 2.8): the skipped night this draft names, asked once per render of the card.
-    private var skippedNight: String? { item.skippedNightNamedInDraft() }
+    private var skippedNight: String? { item.skippedNightNamedInDraft(today: today) }
 
     // The second way out, beside the finding that names the night (the first is Edit, already on the row).
     @ViewBuilder private var skippedNightControl: some View {

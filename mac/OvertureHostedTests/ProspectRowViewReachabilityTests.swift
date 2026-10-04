@@ -36,7 +36,7 @@ struct ProspectRowViewReachabilityTests {
     }
 
     private func texts(_ item: QueueItem) throws -> [String] {
-        let view = ProspectRowView(item: item, today: "2026-07-09", onKeep: {}, onDismiss: { _ in })
+        let view = ProspectRowView(item: item, today: "2026-07-09", now: Date(), onKeep: {}, onDismiss: { _ in })
         return try view.inspect().findAll(ViewType.Text.self).map { try $0.string() }
     }
 
@@ -124,7 +124,7 @@ struct ProspectRowViewReachabilityTests {
     // This one pins the structure instead: find the row that holds Keep, and assert the badge is NOT in it.
     @Test func theReachabilityBadgeIsNotInsideTheKeepAndDismissRow() throws {
         let item = item(presenter: "Aurora Strings", sourceListingURL: nil, probed: true, hasEmail: true)
-        let view = ProspectRowView(item: item, today: "2026-07-09", onKeep: {}, onDismiss: { _ in })
+        let view = ProspectRowView(item: item, today: "2026-07-09", now: Date(), onKeep: {}, onDismiss: { _ in })
         // findAll, not find: `find` returns the OUTERMOST match, which is the whole row (left column plus
         // actions) and therefore contains the badge no matter where it sits. The button row is the
         // innermost HStack holding Keep, so take the candidate with the fewest text descendants.
@@ -227,8 +227,28 @@ struct ProspectRowViewReachabilityTests {
         i.contacts = [RecipientSnapshot(id: "r0", name: "Booking", email: nil, role: nil, provenance: .act,
                                         sendState: .pending, replied: false, lastReplyText: nil,
                                         resolution: nil, bounced: false, outcomeSource: .auto)]
-        let view = ProspectRowView(item: i, today: "2026-07-09", onKeep: {}, onDismiss: { _ in })
+        let view = ProspectRowView(item: i, today: "2026-07-09", now: Date(), onKeep: {}, onDismiss: { _ in })
         let t = try view.inspect().findAll(ViewType.Text.self).map { try $0.string() }
         #expect(!t.contains(""))
+    }
+
+    // #4357 slice G1 (the #4356 part 3 note): the row judges the probe against the instant it is HANDED, the
+    // render pass's, and never the wall clock. Both ends are pinned, so this cannot rot with real time (L130):
+    // one probe, a day old at the first instant and twice the window old at the second.
+    @Test func theBadgeJudgesTheProbeAgainstTheInstantTheRowIsHanded() throws {
+        var i = item(presenter: "Aurora Strings", sourceListingURL: "https://carnegiehall.org/calendar/x",
+                     probed: true, hasEmail: true)
+        let probedAt = Date(timeIntervalSince1970: 1_780_000_000)
+        i.reachabilityProbedAt = probedAt
+        func texts(at now: Date) throws -> [String] {
+            try ProspectRowView(item: i, today: "2026-07-09", now: now, onKeep: {}, onDismiss: { _ in })
+                .inspect().findAll(ViewType.Text.self).map { try $0.string() }
+        }
+        let fresh = try texts(at: probedAt.addingTimeInterval(86_400))
+        #expect(fresh.contains { $0.contains(ReachabilityCopy.emailFoundBadge) },
+                "a probe a day old at the handed instant did not read as current")
+        let stale = try texts(at: probedAt.addingTimeInterval(Reachability.probeFreshness * 2))
+        #expect(stale.contains { $0.contains(ReachabilityCopy.staleProbeBadge) },
+                "a probe twice the window old at the handed instant did not read as out of date")
     }
 }

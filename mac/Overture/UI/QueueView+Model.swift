@@ -234,12 +234,12 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     // that proved it had `draftEditedByDan` set.
     //
     // `today` is a parameter so a test pins both ends of the comparison rather than one (L130).
-    func eventDateWarning(today: String = EasternDate.today(Date())) -> String? {
+    func eventDateWarning(today: String) -> String? {
         eventDateFinding(today: today)?.message
     }
 
     // #3326: the one finding, asked once, so the warning and the send block read the same answer (L16).
-    func eventDateFinding(today: String = EasternDate.today(Date())) -> EventDateFinding? {
+    func eventDateFinding(today: String) -> EventDateFinding? {
         guard let body = draftBody else { return nil }
         let playing = PlayingNights.of(runNights: runNights, performanceDate: performanceDate,
                                        runEndDate: runEndDate)
@@ -251,7 +251,7 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     }
 
     // #3326 (plan 2.8): the skipped night this draft names, which holds the send. Nil when it names none.
-    func skippedNightNamedInDraft(today: String = EasternDate.today(Date())) -> String? {
+    func skippedNightNamedInDraft(today: String) -> String? {
         // Asked through `blocksTheSend`, the one place that says which findings hold a send, so a finding
         // added later that also blocks cannot be missed here while the warning shows it.
         guard let finding = eventDateFinding(today: today), finding.blocksTheSend,
@@ -397,8 +397,9 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     // is still a candidate (not yet pitched, not booked); a sent or booked show was clearly reachable.
     // #1325: a method (not a property) so staleness is decided against an injectable `now`, keeping the
     // freshness logic testable rather than reading the wall clock from inside the view (the #863 lesson).
-    // The view calls it with the default; tests pass a fixed `now`.
-    func reachabilityBadge(now: Date = Date()) -> Reachability.Badge {
+    // #4357 slice G1: no default any more. The row passes the render pass's instant, so the badge and the card
+    // it sits on judge staleness at the same moment, and tests pass a fixed `now`.
+    func reachabilityBadge(now: Date) -> Reachability.Badge {
         guard sentAt == nil && !isBooked else { return .none }
         return Reachability.badge(result: reachabilityResult,
                                   probeIsStale: Reachability.probeIsStale(probedAt: reachabilityProbedAt, now: now),
@@ -515,7 +516,7 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     //
     // A contact that HAS an address is still never offered a form: its address is the way in, and the
     // form beside it would be a second control for the same person.
-    var displayedContactForms: [URL] { displayedContactRoutes().map(\.url) }
+    func displayedContactForms(now: Date) -> [URL] { displayedContactRoutes(now: now).map(\.url) }
 
     // #2912: the same list, each link carrying whether the card has to say ON ITS OWN LINE that this one
     // is a guess. Derived from this rather than restated beside it, exactly as `displayedContactEmails`
@@ -540,7 +541,7 @@ struct QueueItem: Identifiable, Equatable, Sendable {
         var id: URL { url }
     }
 
-    func displayedContactRoutes(now: Date = Date()) -> [DisplayedRoute] {
+    func displayedContactRoutes(now: Date) -> [DisplayedRoute] {
         let routes = contacts
             .filter { ($0.email ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
             .compactMap { c -> (URL, Bool, String)? in
@@ -744,7 +745,7 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     // write to". Two negatives, one under the other, the second adding nothing (L118, #843). Every other
     // badge already qualifies the find itself, and "Only a venue or press address" in particular is
     // already saying this in its own words.
-    func contactAuthorityGap(now: Date = Date()) -> ContactTier? {
+    func contactAuthorityGap(now: Date) -> ContactTier? {
         guard reachabilityBadge(now: now) == .emailFound else { return nil }
         guard let best = ContactTier.best(of: contacts.map(\.contactTier)), best != .primary else {
             return nil

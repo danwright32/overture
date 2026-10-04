@@ -109,12 +109,12 @@ struct ConfirmAGuessedProfileTests {
     @Test func theCardStopsMarkingAProfileHeHasConfirmed() throws {
         let ctx = try context()
         let p = show(ctx)
-        let before = QueueItem(p).displayedContactRoutes().map(\.isNameMatchOnly)
+        let before = QueueItem(p).displayedContactRoutes(now: Date()).map(\.isNameMatchOnly)
         #expect(before == [true])
 
         ProspectMutations.confirmGuessedProfile(QueueItem(p), "form:" + handle,
                                                 prospects: [p], context: ctx, feedback: ActionFeedback())
-        let after = QueueItem(p).displayedContactRoutes().map(\.isNameMatchOnly)
+        let after = QueueItem(p).displayedContactRoutes(now: Date()).map(\.isNameMatchOnly)
         #expect(after == [false])
     }
 
@@ -124,7 +124,7 @@ struct ConfirmAGuessedProfileTests {
     @Test func aProfileNobodyDoubtedOffersNothingToConfirm() throws {
         let ctx = try context()
         let p = show(ctx, nameMatchOnly: false)
-        #expect(QueueItem(p).displayedContactRoutes().map(\.offersConfirmation) == [false])
+        #expect(QueueItem(p).displayedContactRoutes(now: Date()).map(\.offersConfirmation) == [false])
     }
 
     // Wired, not merely built: the mutation is reachable and its own tests would stay green while no
@@ -147,7 +147,7 @@ struct ConfirmAGuessedProfileTests {
     @Test func aguessOffersTheConfirmation() throws {
         let ctx = try context()
         let p = show(ctx)
-        let route = try #require(QueueItem(p).displayedContactRoutes().first)
+        let route = try #require(QueueItem(p).displayedContactRoutes(now: Date()).first)
         #expect(route.offersConfirmation)
         #expect(route.recipientId == "form:" + handle)
     }

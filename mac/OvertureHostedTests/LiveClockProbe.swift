@@ -3,8 +3,10 @@ import Foundation
 
 /// Probe instants for the hosted card tests, expressed against the LIVE clock (#3169).
 ///
-/// `ProspectRowView` renders its reachability badge from `item.reachabilityBadge()`, called with no
-/// `now`, so it reads the wall clock at render time and there is no seam a hosted test can pin. A
+/// `ProspectRowView` renders its reachability badge from `item.reachabilityBadge(now:)` with the `now` it
+/// is handed: the render pass's instant in the app since #4357 slice G1, and `Date()` in these tests, so
+/// here it still reads the wall clock at render time (as it did with no `now` before G1), and
+/// `Reachability.recheckState` takes no `now` at all. A
 /// fixture written as a fixed instant therefore means "probed on that day", while what these tests mean
 /// is "probed recently", and the two agree only until real time walks past
 /// `Reachability.probeFreshness`.

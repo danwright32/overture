@@ -66,7 +66,7 @@ struct PerformerMatchVisibilityTests {
                              performerMatchNote: p.performerMatchNote,
                              performerMatchDismissed: p.performerMatchDismissed,
                              performerMatchReviewed: p.performerMatchReviewed)
-        let view = ProspectRowView(item: item, today: "2026-07-11", onKeep: {}, onDismiss: { _ in })
+        let view = ProspectRowView(item: item, today: "2026-07-11", now: Date(), onKeep: {}, onDismiss: { _ in })
         let texts = try view.inspect().findAll(ViewType.Text.self).map { try $0.string() }
         return texts.contains { $0.contains("Matched performer") }
     }
