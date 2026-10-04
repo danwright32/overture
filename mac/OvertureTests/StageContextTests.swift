@@ -57,7 +57,7 @@ struct StageContextTests {
     func equalityIgnoresTheResolvedMemo() {
         let refusals = GeoRefusals(userExcludedTowns: ["philadelphia"])
         let fresh = StageContext(now: Self.afternoon, geo: refusals, clients: .none)
-        let worked = StageContext(now: Self.afternoon, geo: refusals.resolving([]), clients: .none)
+        let worked = StageContext(now: Self.afternoon, geo: refusals.resolving([] as [Prospect]), clients: .none)
         #expect(fresh == worked)
     }
 
@@ -82,7 +82,8 @@ struct StageContextTests {
     @Test("resolving places keeps the day and the instant the context was built with")
     func resolvingPlacesKeepsTheClock() {
         let pinned = StageContext(now: Self.afternoon, geo: .none, clients: .none, today: "2027-01-15")
-        let resolved = pinned.resolvingPlaces(of: [])
+        // Typed, because since #4357 slice E1 this takes rows of any `ProspectFacts`, and an empty literal names none.
+        let resolved = pinned.resolvingPlaces(of: [] as [Prospect])
         #expect(resolved.today == "2027-01-15")
         #expect(resolved.now == Self.afternoon)
     }

@@ -47,7 +47,8 @@ struct GeoRefusals: Equatable, Sendable {
 
     // A copy carrying the verdict for every distinct place these shows sit in. Built once per render pass
     // and shared by every sweep in it.
-    func resolving(_ prospects: [Prospect]) -> GeoRefusals {
+    // #4357 slice E1: over any `ProspectFacts`, so the engine's retained rows resolve through the same body.
+    func resolving(_ prospects: [some ProspectFacts]) -> GeoRefusals {
         var copy = self
         for p in prospects {
             let discipline = Discipline(rawValue: p.discipline) ?? .other
@@ -92,7 +93,8 @@ struct GeoRefusals: Equatable, Sendable {
     // outreach on is its to hide: an approved or contacted show carries live work (a send error, a
     // reply to watch for), and burying that behind a geography rule would lose it silently. Same line
     // ExcludedTownRetirement draws before it dismisses anything, shared here so the two cannot drift.
-    func hidesFromQueue(_ p: Prospect) -> Bool {
+    // #4357 slice E1: over any `ProspectFacts`, so a live model and a retained row are judged by one body.
+    func hidesFromQueue(_ p: some ProspectFacts) -> Bool {
         guard GeoRefusals.isOvertureToCut(p.status) else { return false }
         // #1658: a row this app was showing, whose GENRE then moved it onto the stricter rule, is judged
         // by the loose rule it was already being judged by. Dan's call: re-reading a genre must never be
