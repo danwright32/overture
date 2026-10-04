@@ -69,6 +69,11 @@ final class LeadIntakeModel {
     // process that had exited three minutes earlier.
     private let isRunAlive: () -> Bool
     private let defaults: UserDefaults
+    // #4339 (A11): the queue the paste's landing waits its turn in.
+    private let landings: LandingSingleFlight
+    // #4339: bumped by `reset()`, so a landing that finishes after Dan closed or restarted the sheet does not
+    // write its answer over the screen he moved on to.
+    private var generation = 0
 
     init(defaults: UserDefaults = .standard,
          // #858: the lead path, and ONLY the lead path, reads four months of a calendar. It can afford to:
@@ -89,8 +94,10 @@ final class LeadIntakeModel {
                                      recorder: .readWhileBeingWritten,
                                      decode: ScoutExtractResultsDecoder.decode).value
          },
-         isRunAlive: @escaping () -> Bool = { ScoutExtractService.isRunning(now: Date()) }) {
+         isRunAlive: @escaping () -> Bool = { ScoutExtractService.isRunning(now: Date()) },
+         landings: LandingSingleFlight = .shared) {
         self.defaults = defaults
+        self.landings = landings
         self.fetch = fetch
         self.pin = pin
         self.launch = launch
@@ -179,6 +186,7 @@ final class LeadIntakeModel {
     }
 
     func reset() {
+        generation += 1
         phase = .idle
         urlText = ""
         followedFromNote = nil
@@ -291,7 +299,7 @@ final class LeadIntakeModel {
 
         // #859: whatever it found is his, now. No checkboxes, no second pass.
         if case .review(let events, let note) = phase {
-            importAll(events, note: note, into: context, today: today, now: now)
+            await importAll(events, note: note, into: context, today: today, now: now)
         }
     }
 
@@ -384,36 +392,45 @@ final class LeadIntakeModel {
     // and the #798 upcoming-only guard all still apply. Nothing here can smuggle a refused org into his
     // queue, however many shows a page carries. `reconcilesFeed` stays off (#826): one pasted page is
     // not a sweep of anybody's calendar.
-    @discardableResult
     // #4331 (A2): `now` is the paste's own instant, from `start`, which every row it lands is stamped from.
+    // #4339 (A11): lands like the ingest and the scout's own sweep (`LeadPasteLanding`): the whole table reads
+    // off the main thread behind the entry flush, its turn for the store at Dan's priority, and a failed save
+    // put back and said rather than counted as shows added.
+    @discardableResult
     private func importAll(_ events: [ExtractedEvent], note: String?, into context: ModelContext,
-                           today: String, now: Date) -> Int {
+                           today: String, now: Date) async -> Int {
         guard !events.isEmpty else {
             phase = .added(0, note: note)
             return 0
         }
-        let loaded = DownbeatBridge.loadWithHealth(now: Date())
-        let existing = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
-        let outcome = ScoutService.apply(events: events,
-                                         clients: loaded.clients,
-                                         history: LocalHistory.forMatching(existing: existing),
-                                         // #901: the SAME calendar the scout uses, days off included. It
-                                         // used to pass Downbeat's exported dates alone, so a lead Dan
-                                         // pasted was judged against a different, smaller set of blocked
-                                         // days than a scouted show was.
-                                         blocked: ScoutService.blockedCalendar(
-                                            export: (loaded.bookings, loaded.blockedDates, loaded.health),
-                                            context: context),
-                                         today: today, now: now, sourceIds: [WatchedSource.manualId],
-                                         into: context)
+        // The landing awaits its read phase and its turn for the store, so the sheet says it is working, with
+        // its own clock, rather than holding the read's answer as though nothing were happening.
+        phase = .working(startedAt: Date())
+        let started = generation
+        // Taken before the await: a reset while the paste lands clears the field, and the link must still be
+        // recorded as handed over if its shows land.
+        let pasted = URL(string: urlText.trimmingCharacters(in: .whitespacesAndNewlines))
+        let result = await LeadPasteLanding.landPastedLead(events, today: today, now: now, landings: landings,
+                                                           into: context)
+        // A sheet Dan reset meanwhile keeps the screen he moved on to; what landed is still recorded below.
+        let stillShowing = generation == started
+        let outcome: ScoutService.Outcome
+        switch result {
+        case .landed(let landed): outcome = landed
+        case .refused(let sentence):
+            if stillShowing { phase = .problem(sentence) }
+            return 0
+        }
         let added = outcome.inserted + outcome.updated
 
         // Recorded only now, not at submit: a link that failed to read is one he must be able to try
         // again. Only a link that actually produced something counts as handed over.
-        if added > 0, let url = URL(string: urlText.trimmingCharacters(in: .whitespacesAndNewlines)) {
+        if added > 0, let url = pasted {
             LeadSubmissions.record(url, in: defaults)
         }
-        phase = .added(added, note: note)
+        if stillShowing {
+            phase = .added(added, note: LeadIntake.withUnreadableShows(note, count: outcome.storeUnreadable))
+        }
         return added
     }
 

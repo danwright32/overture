@@ -22,10 +22,10 @@ import Foundation
 // for how long, so the caller can say why and lose nothing (the ingest keeps a copy of its results; a run
 // press says why it did not start).
 //
-// Today every holder is synchronous (no await between begin and end), so on the main actor a second caller
-// can never actually find the store held and the queue is exercised only by tests. That changes with A6's
-// recovery (its re-read awaits the network) and A11's async lead paste; the queue exists so those can join
-// it rather than interleave with a landing.
+// Every holder's landing block is synchronous (no await between begin and end), but since #4339 (A11) the
+// lead paste awaits its read phase before it asks, so a paste can now find the store held by another landing
+// and wait in the queue at Dan's priority. A6's recovery (its re-read awaits the network) joins it the same
+// way, rather than interleaving with a landing.
 @MainActor
 final class LandingSingleFlight {
     // The one the app uses. Tests that hold the store across a suspension build their own, so a held token
@@ -47,6 +47,10 @@ final class LandingSingleFlight {
         case runScoutTail
         // ScoutExtractIngest's landing block, through its closing save.
         case scoutExtractIngest
+        // #4339 (A11): the lead paste's landing, from the entry flush it takes once the store is held through
+        // its save (its first flush, read phase and classify pass run before it asks). Dan is waiting on it,
+        // so it takes its turn at Dan's priority, at the front of the queue.
+        case leadPaste
     }
 
     enum Priority: Int, Sendable, Comparable {
@@ -67,6 +71,9 @@ final class LandingSingleFlight {
         static let runScoutLanding: Duration = .seconds(10 * 60)
         static let runScoutTail: Duration = .seconds(10 * 60)
         static let scoutExtractIngest: Duration = .seconds(30 * 60)
+        // The paste waits behind at most the landing in progress (it goes to the front of the queue), so the
+        // same bound as a Run press, which is also Dan waiting at the screen.
+        static let leadPaste: Duration = .seconds(10 * 60)
     }
 
     // What a caller gets when its own deadline passes before its turn. It names who was holding the store,
@@ -258,6 +265,9 @@ enum LandingWaitCopy {
         case .scoutExtractIngest:
             return "The calendar results have not landed yet, because another landing was still saving to "
                 + "the store after \(span). Overture kept a copy of them and will offer them again."
+        case .leadPaste:
+            return "The shows from that page were not added, because another landing was still saving to the "
+                + "store after \(span). Nothing from the page changed. Paste it again once it has finished."
         }
     }
 
