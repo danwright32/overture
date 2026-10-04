@@ -126,6 +126,109 @@ enum TermsOverFacts {
 
         // Slice D1: the computed members the reached-out terms read, on the show and on every contact.
         out += memberFindings(models, facts)
+
+        // Slice E1: the stage placement, the geography and client window it reads, and its members.
+        out += stageFindings(models, facts, asOf: asOf)
+        return out
+    }
+
+    // MARK: slice E1, the stage placement and the members it reads
+
+    /// The context the stage comparison judges against: the day `asOf` at noon in New York, Overture's own
+    /// geography rules with no refusals of Dan's, and a client window holding every other source id the rows
+    /// carry (sorted, so it is the same set every run), so the client arm of the lead time rule is asked on
+    /// both sides of its line rather than never.
+    static func stageContext(for models: [Prospect], asOf: String) -> StageContext {
+        let sources = Set(models.flatMap(\.sourceIds)).sorted()
+        let clients = Set(sources.enumerated().filter { $0.offset % 2 == 0 }.map(\.element))
+        let noon = (EasternDate.date(from: asOf) ?? Date(timeIntervalSince1970: 0)).addingTimeInterval(12 * 3600)
+        return StageContext(now: noon, geo: .none, clients: ClientWindow(clientSourceIds: clients), today: asOf)
+    }
+
+    /// Every show member slice E1 moved onto `ProspectFacts`, read through the protocol.
+    struct StageMembers: Equatable {
+        let hasDraft: Bool
+        let hasOpened: Bool
+        let isReprepQueued: Bool
+        let sendsTogether: Bool
+        let greetingAudienceSize: Int
+        let blockedContactCount: Int
+        let hasEnteredSendHalf: Bool
+        let hiddenByGeography: Bool
+        let isPastClientShow: Bool
+
+        init(_ p: some ProspectFacts, context: StageContext) {
+            hasDraft = p.hasDraft
+            hasOpened = p.hasOpened(today: context.today)
+            isReprepQueued = p.isReprepQueued
+            sendsTogether = p.sendsTogether
+            greetingAudienceSize = p.greetingAudienceSize
+            blockedContactCount = p.blockedContactCount
+            hasEnteredSendHalf = p.hasEnteredSendHalf
+            hiddenByGeography = context.geo.hidesFromQueue(p)
+            isPastClientShow = context.clients.isPastClientShow(p)
+        }
+    }
+
+    /// Every contact rule slice E1 moved onto `ContactFacts`, each judged on the show's draft and audience.
+    struct StageContactMembers: Equatable {
+        let isLooksLikeAnotherPersons: Bool
+        let isSendStuck: Bool
+        let draftLintBlockers: [DraftIssue]
+        let isBlockedByGreeting: Bool
+        let isBlockedAwaitingReview: Bool
+
+        init(_ c: some ContactFacts, body: String?, audience: Int, now: Date) {
+            isLooksLikeAnotherPersons = c.isLooksLikeAnotherPersons
+            isSendStuck = c.isSendStuck(now: now)
+            draftLintBlockers = c.draftLintBlockers(body: body)
+            isBlockedByGreeting = c.isBlockedByGreeting(body: body, audience: audience)
+            isBlockedAwaitingReview = c.isBlockedAwaitingReview(body: body, audience: audience,
+                                                                lintBlockers: c.draftLintBlockers(body: body))
+        }
+    }
+
+    /// The placement over models (each row's own `recipients`, as the pass reads them) against the placement
+    /// over facts (`factContacts`), focus by focus, then the members, then the resolved geography. Findings
+    /// name a focus, a member and an identifier, never a title, a venue or an address (L222).
+    static func stageFindings(_ models: [Prospect], _ facts: [RowFacts], asOf: String) -> [String] {
+        let context = stageContext(for: models, asOf: asOf)
+        var out: [String] = []
+        let pidByKey = Dictionary(models.map { ($0.naturalKey, String(describing: $0.persistentModelID)) },
+                                  uniquingKeysWith: { first, _ in first })
+        let onModels = StageNavigation.placements(in: models, context: context)
+        let onFacts = StageNavigation.placements(in: facts, context: context)
+        if onModels.count != onFacts.count {
+            out.append("StageNavigation.placements placed \(onModels.count) row(s) one way and \(onFacts.count) the other")
+        }
+        for focus in StageFocus.allCases {
+            let a = Set(StageNavigation.naturalKeys(for: focus, in: onModels))
+            let b = Set(StageNavigation.naturalKeys(for: focus, in: onFacts))
+            for key in a.symmetricDifference(b).sorted() {
+                out.append("StageNavigation.placements \(focus.rawValue) differs for row \(pidByKey[key] ?? "a row no model holds")")
+            }
+        }
+        for (model, fact) in zip(models, facts) {
+            let pid = String(describing: model.persistentModelID)
+            if StageMembers(model, context: context) != StageMembers(fact, context: context) {
+                out.append("stage members differ for row \(pid)")
+            }
+            let modelAudience = model.greetingAudienceSize(among: model.recipients)
+            let factAudience = fact.greetingAudienceSize(among: fact.factContacts)
+            let factByID = Dictionary(fact.factContacts.map { ($0.persistentModelID, $0) },
+                                      uniquingKeysWith: { first, _ in first })
+            for contact in model.recipients {
+                guard let record = factByID[contact.persistentModelID] else { continue }
+                if StageContactMembers(contact, body: model.draftBody, audience: modelAudience, now: context.now)
+                    != StageContactMembers(record, body: fact.draftBody, audience: factAudience, now: context.now) {
+                    out.append("stage contact members differ for contact \(String(describing: contact.persistentModelID))")
+                }
+            }
+        }
+        if context.resolvingPlaces(of: models).geo.resolvedPlaceCount
+            != context.resolvingPlaces(of: facts).geo.resolvedPlaceCount {
+            out.append("StageContext.resolvingPlaces resolved a different number of places")
+        }
         return out
     }
 
