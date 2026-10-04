@@ -169,20 +169,51 @@ struct LandingBatchTables {
             if entries[key]?.isEmpty == true { entries[key] = nil }
         }
 
-        fileprivate mutating func insert(_ entry: Entry, into key: String) {
-            var list = entries[key] ?? []
-            let at = list.firstIndex { $0.order > entry.order } ?? list.endIndex
-            list.insert(entry, at: at)
-            entries[key] = list
+        // #4512: the steps of `ShowLink.addShow` the stored half has taken, so a test can pin that building a
+        // key of N rows in order costs N steps rather than the square of N.
+        fileprivate(set) var titleSteps = 0
+
+        // Changed IN PLACE, never through a copy of the key's list (#4512: the copy and the linear search made
+        // building one key square in its rows). Returns whether the entry went on the END, the build's case and
+        // a row joining, which is the case `extend` can answer without walking the key again.
+        fileprivate mutating func insert(_ entry: Entry, into key: String) -> Bool {
+            guard let last = entries[key]?.last, last.order > entry.order else {
+                entries[key, default: []].append(entry)
+                return true
+            }
+            var low = 0
+            var high = entries[key]?.count ?? 0
+            while low < high {
+                let mid = (low + high) / 2
+                if (entries[key]?[mid].order ?? .max) > entry.order { high = mid } else { low = mid + 1 }
+            }
+            entries[key]?.insert(entry, at: low)
+            return false
+        }
+
+        // An entry appended at the END of a key's list: the walk over the whole list is the walk over the list
+        // before it, which `shows[key]` already holds, followed by this one title, so only that step is taken.
+        // Identical to `rejudge` by construction; any other change re-walks the key.
+        fileprivate mutating func extend(_ key: String, with title: String) {
+            let wasAmbiguous = (shows[key]?.count ?? 0) > 1
+            titleSteps += 1
+            ShowLink.addShow(title, to: &shows[key, default: []])
+            noteAmbiguity(key, was: wasAmbiguous, is: (shows[key]?.count ?? 0) > 1)
         }
 
         // The walk `ShowLink.addShows` makes, over this key's list alone.
         fileprivate mutating func rejudge(_ key: String) {
             let wasAmbiguous = (shows[key]?.count ?? 0) > 1
             var folded: [String] = []
-            for e in entries[key] ?? [] { ShowLink.addShow(e.title, to: &folded) }
+            for e in entries[key] ?? [] {
+                titleSteps += 1
+                ShowLink.addShow(e.title, to: &folded)
+            }
             shows[key] = folded.isEmpty ? nil : folded
-            let isAmbiguous = folded.count > 1
+            noteAmbiguity(key, was: wasAmbiguous, is: folded.count > 1)
+        }
+
+        private mutating func noteAmbiguity(_ key: String, was wasAmbiguous: Bool, is isAmbiguous: Bool) {
             guard wasAmbiguous != isAmbiguous else { return }
             let url = answer(key)
             let n = (ambiguousKeysPerURL[url] ?? 0) + (isAmbiguous ? 1 : -1)
@@ -205,6 +236,9 @@ struct LandingBatchTables {
             return out
         }
     }
+
+    // #4512: every `ShowLink.addShow` step the two scopes have taken.
+    var titleSteps: Int { atAVenue.titleSteps + anywhere.titleSteps }
 
     private(set) var atAVenue = URLScope(scopedByVenue: true)
     private(set) var anywhere = URLScope(scopedByVenue: false)
@@ -261,8 +295,11 @@ struct LandingBatchTables {
         for u in value.urls where !u.url.isEmpty {
             for scope in Self.scopes {
                 let k = self[keyPath: scope].key(u)
-                self[keyPath: scope].insert(URLScope.Entry(order: order, row: row, title: u.title), into: k)
-                self[keyPath: scope].rejudge(k)
+                if self[keyPath: scope].insert(URLScope.Entry(order: order, row: row, title: u.title), into: k) {
+                    self[keyPath: scope].extend(k, with: u.title)
+                } else {
+                    self[keyPath: scope].rejudge(k)
+                }
             }
         }
         for t in Set(value.tokens.map(\.token)) { rowsByToken.insert(row, order: order, into: t) }

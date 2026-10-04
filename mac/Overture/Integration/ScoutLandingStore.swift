@@ -817,9 +817,11 @@ final class ScoutLandingStore {
             var built = LandingBatchTables()
             for (i, p) in current.enumerated() {
                 let folded = fold(of: p)
-                built.set(ObjectIdentifier(p), order: i, to: Self.contribution(of: p, folded))
+                // The row's judged fields read once, for its contribution and for the unchanged check alike.
+                let now = Judged(p, folded)
+                built.set(ObjectIdentifier(p), order: i, to: Self.contribution(of: now, folded))
                 tableRows[ObjectIdentifier(p)] = p
-                judged[ObjectIdentifier(p)] = Judged(p, folded)
+                judged[ObjectIdentifier(p)] = now
             }
             nextTableOrder = current.count
             tablesToCheck = [:]
