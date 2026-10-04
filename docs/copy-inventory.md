@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1707 sentences**.
+Every sentence Overture can say to Dan: **1710 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -14,7 +14,7 @@ What is not, and why:
   sentences under tokens nobody reads.
 - **Nothing, if it is written as two literals joined with `+`.** Those ARE joined here, into the
   one sentence the running app says (#3155). What is still only part of what Dan reads is a
-  sentence carrying a VALUE: 632 of the 1707 below hold a
+  sentence carrying a VALUE: 634 of the 1710 below hold a
   `\(...)` where a number or a name goes, so what is printed is the template. They are counted
   here rather than listed again, because the hole is visible in the line itself; what was missing
   was any statement of how much of this document is templates.
@@ -1674,6 +1674,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/LaunchMigrations.swift`
 "Overture couldn't get this reply ready to send."
     `Domain/ReplyPanel.swift`
+"Overture couldn't keep a copy of these calendar results before applying them (\(why)), so none of them were applied. Nothing from the scout changed."
+    `Domain/ScoutWarningCopy.swift`
 "Overture couldn't move its data to \(newStoreURL.path): \(error.localizedDescription). Your data is safe and unchanged at \(legacyStoreURL.path)."
     `App/StoreRelocation.swift`
 "Overture couldn't reach Gmail while looking for replies to the pitches you sent through a form or a DM."
@@ -2553,6 +2555,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/BulkDismiss.swift`
 "They all lose \(dateLabel), filed as \(reason.label), and turn up again under their next night."
     `Domain/BulkDismiss.swift`
+"They are still in the reader's results file until the next read replaces it."
+    `Domain/ScoutWarningCopy.swift`
 "They got back to me"
     `Domain/HandMarkedReply.swift`
 "They include \(named.joined(separator: " and ")), and \(others) \(plural)."
@@ -3583,6 +3587,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "could not read the landing record at \(path): \(why)"
     `Integration/LandingJournal.swift`
 "could not read the landing record at \(url.path): \(newer)"
+    `Integration/LandingJournal.swift`
+"could not read the landing record at \(url.path): \(reason)"
     `Integration/LandingJournal.swift`
 "could not read the landing record at \(url.path): \(why)"
     `Integration/LandingJournal.swift`
