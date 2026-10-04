@@ -117,7 +117,9 @@ jobs:
   # against the old one starts being satisfied again rather than silently naming nothing.
   swift-tests:
     runs-on: macos-26
-    timeout-minutes: 60
+    # Room for ONE retry (#4444): the runner retries a run whose test host crashed, and measured on
+    # 2026-10-04 a first attempt is about 38 minutes, a retry about 22 more, and the Release compile 4.
+    timeout-minutes: 90
 
 
     steps:

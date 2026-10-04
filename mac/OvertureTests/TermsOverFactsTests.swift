@@ -254,6 +254,7 @@ struct TermsOverFactsTests {
         contact("waiting@example.invalid", email: "waiting@example.invalid") {
             $0.sendState = .sent; $0.sentAt = at(0); $0.gmailMessageId = "m2"; $0.gmailThreadId = "t2"
             $0.replied = true; $0.repliedAt = at(100); $0.inboundReplySentAt = at(90)
+            $0.replyDraftRequestedAt = at(150)   // slice F: a reply draft still awaited, so it can stall
         }
         contact("answered@example.invalid", email: "answered@example.invalid") {
             $0.sendState = .sent; $0.sentAt = at(0); $0.gmailMessageId = "m3"; $0.gmailThreadId = "t3"
@@ -565,5 +566,156 @@ struct TermsOverFactsTests {
         #expect(review.isReprepQueued, "a requested redraft is queued Prep work")
         #expect(scout.hasOpened(today: "2026-10-21"))
         #expect(!scout.hasOpened(today: "2026-10-20"), "a run opening tonight has not opened")
+    }
+
+    // MARK: slice F, the agent input terms
+
+    // A drafted show with nobody to send to and one with somebody; reply drafts asked for an hour before the
+    // judging instant (stalled), a minute before it (still inside the five minute timeout), once before an
+    // answer was sent (not awaited at all), and once with a draft already on file (not awaited either).
+    private func seedAgentInputs(_ ctx: ModelContext, _ all: [Prospect]) throws {
+        let now = TermsOverFacts.reachedOutInstant(asOf)
+        try #require(all.first { $0.naturalKey == "lantern|2026-10-03" }).statusRaw = ReviewStatus.drafted.rawValue
+        let drafted = try #require(all.first { $0.naturalKey == "ninefold|2026-10-10" })
+        drafted.statusRaw = ReviewStatus.drafted.rawValue
+        drafted.presenter = "Wexcombe Touring Players"
+        func contact(_ id: String, _ shape: (Recipient) -> Void) {
+            let r = Recipient(id: id, email: id, provenance: .act)
+            shape(r)
+            ctx.insert(r)
+            drafted.recipients.append(r)
+        }
+        contact("stalled@example.invalid") { $0.replyDraftRequestedAt = now.addingTimeInterval(-3600) }
+        contact("fresh@example.invalid") { $0.replyDraftRequestedAt = now.addingTimeInterval(-60) }
+        contact("answered@example.invalid") {
+            $0.replyDraftRequestedAt = now.addingTimeInterval(-7200); $0.replyHandledAt = now.addingTimeInterval(-3600)
+        }
+        contact("drafted@example.invalid") {
+            $0.replyDraftRequestedAt = now.addingTimeInterval(-7200); $0.replyDraftBody = "Thanks, see you there."
+        }
+    }
+
+    @Test func theAgentInputTermsAnswerTheSameOverFactsAsOverModels() throws {
+        let ctx = try context()
+        let all = try seed(ctx)
+        try seedAgentInputs(ctx, all)
+        let now = TermsOverFacts.reachedOutInstant(asOf)
+        // Positive controls (L159), and the rules themselves, which part two cannot hold.
+        #expect(DraftedDeadEnd.count(in: all) == 1, "exactly the drafted show with no contacts is a dead end")
+        // Named, not only counted: an inverted rule swaps which drafted show it picks and keeps the count.
+        let deadEnd = try #require(all.first { $0.naturalKey == "lantern|2026-10-03" })
+        let withContacts = try #require(all.first { $0.naturalKey == "ninefold|2026-10-10" })
+        #expect(DraftedDeadEnd.hasNobodyToSendTo(deadEnd), "the drafted show with no contacts is not a dead end")
+        #expect(!DraftedDeadEnd.hasNobodyToSendTo(withContacts), "a drafted show with contacts reads as a dead end")
+        // The organisation count's entry point hands its term every row in any order (the slice C rotation).
+        let sorted = all.sorted { $0.naturalKey < $1.naturalKey }
+        for start in sorted.indices {
+            let rotated = Array(sorted[start...] + sorted[..<start])
+            #expect(QueueModel.organisationRowCounts(among: rotated) == QueueModel.organisationRowCounts(rotated.map(\.presenter)),
+                    "organisationRowCounts(among:) differs from the term with rotation \(start)")
+        }
+        let stalled = StalledReplyDraft.dueRecipients(from: all, now: now, runAlive: false)
+        #expect(stalled.map(\.recipient.id) == ["stalled@example.invalid"],
+                "only the draft asked for an hour ago is stalled; the fresh, answered and delivered ones are not")
+        #expect(StalledReplyDraft.dueRecipients(from: all, now: now, runAlive: true).isEmpty,
+                "a live reply run means nothing is stalled yet")
+        #expect(StalledReplyDraft.dueRecipients(from: all, now: .distantFuture, runAlive: false).count == 2,
+                "at the end of time both awaited drafts are stalled and the two that are not awaited are not")
+        #expect(!QueueModel.organisationRowCounts(among: all).isEmpty, "the fixture presents no organisation")
+
+        let findings = TermsOverFacts.findings(all, asOf: asOf)
+        #expect(findings.isEmpty, Comment(rawValue: findings.joined(separator: "\n")))
+
+        // A draft delivered after the facts were taken: the stalled list and the member comparison both see it.
+        let stale = all.map(RowFacts.extract)
+        try #require(all.flatMap(\.recipients).first { $0.id == "stalled@example.invalid" }).replyDraftBody = "Late, but here."
+        let staleFindings = TermsOverFacts.findings(all, facts: stale, asOf: asOf)
+        #expect(staleFindings.contains { $0.hasPrefix("StalledReplyDraft.dueRecipients differs") },
+                "a draft delivered after extraction was not seen by the stalled list comparison")
+        #expect(!staleFindings.contains { $0.contains("example.invalid") },
+                "a finding named a contact's address rather than its identifier")
+    }
+
+    // MARK: slice E2, the due work terms
+
+    // On top of the reached-out pitches, one of each thing the due lists settle between them: a form pitch on
+    // the played show with a proposed conversation (the confirm question wins over the post-event prompt), a
+    // reply on the played show nobody has answered (the answer comes before how the show ended), the two
+    // repliers on the show still to come made one joint email the second of them answered (one row, standing
+    // on the writer), a reply whose requested draft died (listed once, as the stalled draft), and a silent
+    // pitch on a show Dan resolved by hand (its nudges stopped).
+    private func seedDueWork(_ ctx: ModelContext, _ all: [Prospect]) throws {
+        try seedReachedOut(ctx, all)
+        let now = TermsOverFacts.reachedOutInstant(asOf)
+        let daysAgo = { (days: Double) in now.addingTimeInterval(-days * 86_400) }
+        func contact(_ id: String, on p: Prospect, _ shape: (Recipient) -> Void = { _ in }) {
+            let r = Recipient(id: id, email: id, provenance: .act)
+            r.sendState = .sent
+            r.sentAt = daysAgo(20)
+            r.gmailMessageId = "m-\(id)"
+            r.gmailThreadId = "t-\(id)"
+            shape(r)
+            ctx.insert(r)
+            p.recipients.append(r)
+        }
+        let played = try #require(all.first { $0.naturalKey == "lantern live|2026-10-02" })
+        let form = try #require(played.recipients.first { $0.id == "form-played" })
+        form.replyProposedMessageId = "proposed-message"
+        form.replyProposedThreadId = "proposed-thread"
+        form.replyProposedFromAddress = "proposer@example.invalid"
+        form.replyProposedSentAt = daysAgo(4)
+        contact("late@example.invalid", on: played) { $0.replied = true; $0.repliedAt = daysAgo(1) }
+        let replies = try #require(all.first { $0.naturalKey == "copper|2026-10-17" })
+        for r in replies.recipients {
+            r.sendGroupId = "copper-group"
+            r.replyFromAddress = "second@example.invalid"
+        }
+        let stalledShow = try #require(all.first { $0.naturalKey == "saltmarsh b" })
+        contact("stalled-reply@example.invalid", on: stalledShow) {
+            $0.replied = true; $0.repliedAt = daysAgo(1); $0.replyDraftRequestedAt = now.addingTimeInterval(-3600)
+        }
+        let resolved = try #require(all.first { $0.naturalKey == "saltmarsh c" })
+        resolved.outcomeSourceRaw = OutcomeSource.manual.rawValue
+        contact("resolved-show@example.invalid", on: resolved)
+    }
+
+    @Test func theDueWorkTermsAnswerTheSameOverFactsAsOverModels() throws {
+        let ctx = try context()
+        let all = try seed(ctx)
+        try seedDueWork(ctx, all)
+        let now = TermsOverFacts.reachedOutInstant(asOf)
+        // Positive controls (L159): every list holds a row, and each settles what it should against the others.
+        let rows = DueWork.rows(prospects: all, inquiries: [], now: now, replyRunAlive: false)
+        #expect(rows.afterTheShow.map(\.recipient.id) == ["closer@example.invalid"],
+                "only the replier who was answered is owed the post-event question; the proposal and the waiting reply come first")
+        #expect(rows.conversationsToConfirm.map(\.recipient.id) == ["form-played"],
+                "the form pitch with a proposed conversation is the one to confirm")
+        #expect(rows.stalledReplyDrafts.map(\.recipient.id) == ["stalled-reply@example.invalid"],
+                "the reply whose requested draft died is the stalled one")
+        let waiting = rows.repliesToAnswer.compactMap { conversation -> String? in
+            guard case .show(_, let r) = conversation else { return nil }
+            return r.id
+        }
+        #expect(waiting == ["second@example.invalid", "late@example.invalid"],
+                "the joint email is one row standing on its writer, the stalled reply is not listed twice, longest wait first")
+        let silent = Set(rows.silent.map(\.recipient.id))
+        #expect(silent.isSuperset(of: ["nudge-a@example.invalid", "nudge-b@example.invalid"]), "the silent pitches are not owed a nudge")
+        #expect(!silent.contains("resolved-show@example.invalid"), "a show Dan resolved by hand still nudges")
+        #expect(DueWork.nextChange(prospects: all, now: now, replyRunAlive: false) == EasternDate.date(from: "2026-10-18"),
+                "the next change is the day after the earliest show with a pitch still owed its post-event question")
+
+        let findings = TermsOverFacts.findings(all, asOf: asOf)
+        #expect(findings.isEmpty, Comment(rawValue: findings.joined(separator: "\n")))
+
+        // A reply answered after the facts were taken: both lists it moves between see it.
+        let stale = all.map(RowFacts.extract)
+        try #require(all.flatMap(\.recipients).first { $0.id == "late@example.invalid" }).replyHandledAt = now
+        let staleFindings = TermsOverFacts.findings(all, facts: stale, asOf: asOf)
+        #expect(staleFindings.contains { $0.hasPrefix("DueWork.rows repliesToAnswer differs") },
+                "a reply answered after extraction was not seen by the replies comparison")
+        #expect(staleFindings.contains { $0.hasPrefix("DueWork.rows afterTheShow differs") },
+                "a reply answered after extraction was not seen by the post-event comparison")
+        #expect(!staleFindings.contains { $0.contains("example.invalid") },
+                "a finding named a contact's address rather than its identifier")
     }
 }

@@ -2265,6 +2265,12 @@ enum QueueModel {
         return counts
     }
 
+    // #4357 slice F: over the rows themselves, which is what `scope` calls, so the pass hands it live models
+    // and the engine (Phase 4) retained `RowFacts`, the slice C pattern.
+    static func organisationRowCounts(among rows: [some ProspectFacts]) -> [String: Int] {
+        organisationRowCounts(rows.map(\.presenter))
+    }
+
     // What the menu says. One sentence per state, each naming the organisation, so the line Dan reads is
     // about a specific name rather than a rule in the abstract. Kept out of the view with every other
     // sentence the app can say (#915).
@@ -3364,7 +3370,7 @@ enum QueueModel {
         // #1732: how many rows each organisation carries, over the SAME unfiltered corpus venueBrands
         // judges against, so a dismissal cannot quietly take an organisation under the bar and remove the
         // control from the rows still showing. Built once here for the same reason as venueBrands above.
-        let rowCounts = organisationRowCounts((corpus ?? prospects).map(\.presenter))
+        let rowCounts = organisationRowCounts(among: corpus ?? prospects)
         // #1825: built ONCE, for the same reason as venueBrands above. Every row resolves its own sources
         // through this rather than walking the watchlist per card.
         // #2816: the table lives on QueueModel now, because the reached-out and follow-up rows resolve

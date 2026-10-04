@@ -69,7 +69,10 @@ struct HandedRowsStayLiveTests {
         let hosting = NSHostingView(rootView: AnyView(view))
         hosting.frame = window.contentLayoutRect
         window.contentView = hosting
-        window.makeKeyAndOrderFront(nil)
+        // #4444: OFF screen, like every other hosted suite. This line used to order the window front, and
+        // an on-screen window's teardown runs on later turns of the run loop, in whichever test turns it
+        // next: 18 of the 24 CI host deaths found on 2026-10-04 came straight after this test.
+        // `HostedWindowsStayOffScreenGuardTests` keeps it that way.
         window.layoutIfNeeded()
         hosting.layoutSubtreeIfNeeded()
         return (window, hosting)
@@ -89,7 +92,10 @@ struct HandedRowsStayLiveTests {
             window = host(Harness(container: c)).window
             pumpUntilRowsDerived()
         }
-        defer { window?.close() }
+        // #4444: closed, and its pending work run, while `c` is still alive. This test returns the moment
+        // its rows are derived, so the queue screen still has work scheduled; left alone, that work ran in
+        // the NEXT test's run loop turns, after this container was gone.
+        defer { Self.closeWhileAlive(window, holding: c) }
         #expect(firstDraw.queueRows > 0,
                 "the queue never derived anything, so nothing below measures the hand-down")
 
@@ -103,6 +109,18 @@ struct HandedRowsStayLiveTests {
             "a prospect was saved and the queue derived \(afterSave.queueRows) rows, so taking its own "
             + "@Query away has left it drawing a list that no longer follows the store. That is the "
             + "silent half of #3846: every cost reading would keep improving while the screen went stale"))
+    }
+
+    // Close the window and turn the run loop a fixed number of times while `container` is held, so the
+    // work its close and the queue screen scheduled runs here rather than inside the next test. A count of
+    // turns rather than a wait on a condition, because there is no observable "nothing left pending" to
+    // wait on; each turn returns as soon as it has nothing to do.
+    private static func closeWhileAlive(_ window: NSWindow?, holding container: ModelContainer) {
+        window?.close()
+        for _ in 0..<20 {
+            autoreleasepool { _ = RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.01)) }
+        }
+        withExtendedLifetime(container) {}
     }
 
     // The body runs on a LATER turn of the run loop, so a tally closed at the end of the synchronous save

@@ -88,6 +88,15 @@ extension ContactFacts {
         return outreachChannel == .contactForm && gmailMessageId == nil
     }
 
+    // #4357 slice E2: three `ReplyWatchableRecipient` members, moved from `Recipient`'s conformance (which they
+    // still satisfy) so a retained contact answers the reply search and the conversation proposal by them.
+    var replyWatchManualOutcome: Bool { outcomeSourceRaw == OutcomeSource.manual.rawValue }
+    var replyWatchIsBooked: Bool { resolution == .booked }
+    // #2196: nothing has closed it out. Deliberately the same three facts `hasUnhandledReply` reads
+    // before it asks anything else, so a conversation that could still put itself in front of Dan is
+    // exactly the one still being watched, and the two cannot disagree about which those are.
+    var replyWatchConversationIsOpen: Bool { resolution == nil && !bounced }
+
     // The contacts the follow-up sequencer may nudge (#418 D): silent AND not hand-resolved. A contact
     // Dan marked Closed/Booked (resolution set) or otherwise judged by hand (outcomeSource == .manual)
     // is still "silent" by the raw definition but must never be nudged again.
@@ -167,6 +176,32 @@ extension ContactFacts {
         guard let stoodDown = outreachStoodDownAt else { return false }
         if let repliedAt, repliedAt > stoodDown { return false }
         return true
+    }
+
+    // #4357 slice F: the two reply draft members `StalledReplyDraft` reads, moved from `Recipient` unchanged.
+    //
+    // #2966: WHEN the reply draft this contact is still waiting on was asked for, from the one shared rule.
+    // See `ReplyDraftRequest` for why the rule is not spelled here: three places asked this question and
+    // only one of them allowed for a request belonging to an exchange already answered.
+    var awaitedReplyDraftRequestedAt: Date? {
+        ReplyDraftRequest.awaited(requestedAt: replyDraftRequestedAt, draftBody: replyDraftBody,
+                                  replacingDraftOnFile: replyDraftReplacesDraftOnFile,
+                                  answeredAt: replyHandledAt)
+    }
+
+    // True when a reply draft is still awaited and the timeout has elapsed (#431).
+    // #471: `runAlive` is the classify run's real heartbeat (ReplyClassifyService.isRunning); when it's
+    // still alive, past-timeout no longer counts as stalled, since the wall clock alone can't tell a
+    // genuinely dead run from one that's just slower than usual.
+    //
+    // #2966: this used to ask "requested, and nothing stored" for itself, which is the same question
+    // `ReplyPanel.isDrafting` asks with one more guard on it. It reads the shared answer now: an answered
+    // conversation was reading as permanently stalled, and since #2878 that number is on the Follow-ups
+    // pill, the Due header, the toolbar badge, the Dock tile and the menu bar.
+    func isReplyDraftStalled(now: Date, timeout: TimeInterval = Recipient.replyDraftStallTimeout,
+                             runAlive: Bool = false) -> Bool {
+        guard let requested = awaitedReplyDraftRequestedAt else { return false }
+        return !runAlive && now.timeIntervalSince(requested) >= timeout
     }
 }
 
