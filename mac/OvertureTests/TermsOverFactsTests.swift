@@ -451,6 +451,11 @@ struct TermsOverFactsTests {
                 "a claim as old as the send timeout is stuck")
         #expect(!stuck.isSendStuck(now: Date(timeIntervalSince1970: 1_700_000_000 + RunTimeouts.send - 1)),
                 "a claim a second younger is not")
+        // Only a claim still SENDING is stuck: a contact the send finished for is not, whatever claim it carries.
+        let sent = try #require(byKey["degraded"]?.recipients.first)
+        sent.sendClaimedAt = Date(timeIntervalSince1970: 1_700_000_000)
+        #expect(!sent.isSendStuck(now: Date(timeIntervalSince1970: 1_700_000_000 + 10 * RunTimeouts.send)),
+                "a sent contact carrying an old claim was called stuck")
         let review = try #require(byKey["review"])
         let prep = try #require(byKey["prep"])
         #expect(review.hasDraft && !prep.hasDraft)
