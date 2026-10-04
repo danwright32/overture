@@ -512,8 +512,15 @@ enum ScoutExtractIngest {
             func failed(_ applied: ScoutService.Outcome) {
                 outcome.saveFailed = true
                 outcome.degradedReads.append(contentsOf: applied.degradedReads)
-                outcome.landingStop = outcome.landingStop ?? ScoutService.isolateFailedSave(
-                    of: source.orgName, scope: applied.saveFailureScope, landing: landing)
+                // Written as an `if`, never `?? isolateFailedSave(...)`: the right side of `??` is an autoclosure,
+                // and the Release compiler on Xcode 26.6 (CI's) refuses the non-Sendable source captured in an
+                // autoclosure inside this local function ("sending 'source' risks causing data races"). Same
+                // behaviour: the failed save is put back only when no earlier stop was recorded.
+                let orgName = source.orgName
+                if outcome.landingStop == nil {
+                    outcome.landingStop = ScoutService.isolateFailedSave(
+                        of: orgName, scope: applied.saveFailureScope, landing: landing)
+                }
                 outcome.sources.append(ScoutService.SourceResult(
                     sourceId: source.sourceId, orgName: source.orgName,
                     state: .saveFailed, hadBaseline: health.baseline > 0, listingsURL: source.listingsURL))
