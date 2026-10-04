@@ -123,6 +123,108 @@ enum TermsOverFacts {
                 heldKeys: ledger.heldKeys, now: ledger.now, producerCorpus: tablesFacts.corpus)
             out += inheritedFindings(inheritedModels, inheritedFacts, term: "OrgAnswerLedger.inherited", pid: pid)
         }
+
+        // Slice D1: the computed members the reached-out terms read, on the show and on every contact.
+        out += memberFindings(models, facts)
+        return out
+    }
+
+    // MARK: slice D1, the members on the facts protocols
+
+    /// Every computed show member slice D1 moved onto `ProspectFacts`, read through the protocol, which is how
+    /// a generic term reads them. On a `Prospect` this deliberately reaches the protocol's body rather than
+    /// any same-named member the model keeps for its setter, so the comparison is of the one rule.
+    struct ShowMembers: Equatable {
+        let status: ReviewStatus
+        let showOutcome: ShowOutcome?
+        let outcome: Outcome
+        let performanceStatus: PerformanceStatus
+        let isBooked: Bool
+        let stoodDownBeforeAnyReply: Bool
+        // Whether a reply after the stand-down puts the show back in play, which is the rule's other arm.
+        let reopenedByALaterReply: Bool
+
+        init(_ p: some ProspectFacts) {
+            status = p.status
+            showOutcome = p.showOutcome
+            outcome = p.outcome
+            performanceStatus = p.performanceStatus
+            isBooked = p.isBooked
+            stoodDownBeforeAnyReply = p.isOutreachStoodDown(asOf: nil)
+            reopenedByALaterReply = p.outreachStoodDownAt.map { !p.isOutreachStoodDown(asOf: $0.addingTimeInterval(1)) } ?? false
+        }
+    }
+
+    /// The same for every computed contact member slice D1 moved onto `ContactFacts`.
+    struct ContactMembers: Equatable {
+        let sendState: SendState
+        let resolution: RecipientResolution?
+        let outcomeSource: OutcomeSource?
+        let outreachChannel: OutreachChannel
+        let hasWatchableConversation: Bool
+        let isUnwatchedFormPitch: Bool
+        let hasProvenOutreach: Bool
+        let isSilent: Bool
+        let replyWatchConversationIsAttached: Bool
+        let isAwaitingFollowUp: Bool
+        let replyArrivedAt: Date?
+        let hasUnhandledReply: Bool
+        let standing: RecipientStanding
+        let isOutreachStoodDown: Bool
+        let isClosingNoteStoodDown: Bool
+
+        init(_ c: some ContactFacts) {
+            sendState = c.sendState
+            resolution = c.resolution
+            outcomeSource = c.outcomeSource
+            outreachChannel = c.outreachChannel
+            hasWatchableConversation = c.hasWatchableConversation
+            isUnwatchedFormPitch = c.isUnwatchedFormPitch
+            hasProvenOutreach = c.hasProvenOutreach
+            isSilent = c.isSilent
+            replyWatchConversationIsAttached = c.replyWatchConversationIsAttached
+            isAwaitingFollowUp = c.isAwaitingFollowUp
+            replyArrivedAt = c.replyArrivedAt
+            hasUnhandledReply = c.hasUnhandledReply
+            standing = c.standing
+            isOutreachStoodDown = c.isOutreachStoodDown
+            isClosingNoteStoodDown = c.isClosingNoteStoodDown
+        }
+
+        /// The names of the members that differ, so a finding says which rule disagreed.
+        func differing(from other: ContactMembers) -> [String] {
+            Mirror(reflecting: self).children.compactMap { child in
+                guard let label = child.label,
+                      let theirs = Mirror(reflecting: other).children.first(where: { $0.label == label })
+                else { return nil }
+                return String(describing: child.value) == String(describing: theirs.value) ? nil : label
+            }
+        }
+    }
+
+    /// Each show's members and each of its contacts' members, models against facts. Contacts are paired by
+    /// their persistent identifier, and findings name identifiers only (L222).
+    static func memberFindings(_ models: [Prospect], _ facts: [RowFacts]) -> [String] {
+        var out: [String] = []
+        for (model, fact) in zip(models, facts) {
+            let pid = String(describing: model.persistentModelID)
+            if ShowMembers(model) != ShowMembers(fact) {
+                out.append("show members differ for row \(pid)")
+            }
+            let factByID = Dictionary(fact.factContacts.map { ($0.persistentModelID, $0) },
+                                      uniquingKeysWith: { first, _ in first })
+            for contact in model.factContacts {
+                let cid = String(describing: contact.persistentModelID)
+                guard let record = factByID[contact.persistentModelID] else {
+                    out.append("contact \(cid) of row \(pid) has no extracted record")
+                    continue
+                }
+                let names = ContactMembers(contact).differing(from: ContactMembers(record))
+                if !names.isEmpty {
+                    out.append("contact members \(names.joined(separator: ", ")) differ for contact \(cid)")
+                }
+            }
+        }
         return out
     }
 

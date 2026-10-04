@@ -546,10 +546,10 @@ enum ScoutExtractIngest {
         // #4334: a stopped landing reconciles nothing, since not every source it was given was asked.
         let reports = outcome.allReports
         if !reports.isEmpty && outcome.landingStop == nil {
-            // The working set, which is the store as it now stands. A read that fails reconciles nothing,
-            // which is what the empty answer this used to fall back to did.
-            let allStored = (try? landing.rows()) ?? []
-            landing.noteReconcile(FeedReconcile.reconcile(stored: allStored, reports: reports, today: today))
+            // The working set, which is the store as it now stands. A read that fails reconciles nothing and is
+            // named on the run (#4474), through the one reconcile both landings share; it used to be read as an
+            // empty store with `try?`, which reconciled nothing too but said nothing about why.
+            ScoutService.reconcileLanded(reports, on: landing, today: today, degraded: &outcome.degradedReads)
             onLandingStep?(ScoutLandingStore.Counters.afterReconcile, landing)
         }
         // #4325: the reconcile's writes, and every source's bookkeeping above, saved before the landing

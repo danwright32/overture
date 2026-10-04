@@ -12,6 +12,43 @@ extension ProspectFacts {
     // Gone from the feed: absent across enough consecutive scouts to rule out a transient
     // partial feed (#133). Cancelled or pulled, not merely a one-off glitch.
     var disappearedFromFeed: Bool { missedScoutCount >= FeedReconcile.goneThreshold }
+
+    // #4357 slice D1: the typed views and rules the reached-out terms read about the SHOW, with one body for
+    // both conformers. As on `ContactFacts` (ContactFactsMembers.swift), `status`, `showOutcome` and
+    // `outcome` keep get/set properties on `Prospect` for the writers, and their getters read these bodies
+    // through `Prospect.asProspectFacts`.
+    var status: ReviewStatus { ReviewStatus(rawValue: statusRaw) ?? .new }
+
+    // #2394: the typed ending, the one field every reader shares.
+    var showOutcome: ShowOutcome? { showOutcomeRaw.flatMap(ShowOutcome.init(rawValue:)) }
+
+    var outcome: Outcome { Outcome.fromStored(outcomeRaw) }
+
+    // Over `factContacts`, which on a model is the COUNTED accessor, so a generic term asking this pays for
+    // the contacts it reads in `WorkTally.recipientReaches`. `Prospect.performanceStatus` keeps reading its
+    // own `recipients` uncounted, as it did, through the same rule (`PerformanceStatus.of(_:contacts:)`), so
+    // no count the existing surfaces are pinned at moves.
+    var performanceStatus: PerformanceStatus { PerformanceStatus.of(self, contacts: factContacts) }
+
+    // #2225/#2226: the ONE place that answers "has this show booked", folded from both levels by
+    // `performanceStatus`. Mirrors `Prospect.isBooked`, which reads the model's own `performanceStatus`.
+    var isBooked: Bool { performanceStatus == .booked }
+
+    // In force unless the contact has written back since. Takes the contact's own reply stamp because the
+    // reopen is per person: one contact replying does not put the whole show back in play for everyone
+    // else, but it does put THAT conversation back in play.
+    func isOutreachStoodDown(asOf repliedAt: Date?) -> Bool {
+        guard let stoodDown = outreachStoodDownAt else { return false }
+        if let repliedAt, repliedAt > stoodDown { return false }
+        return true
+    }
+}
+
+extension Prospect {
+    /// #4357 slice D1: this show seen only as `ProspectFacts`, so a member read through it reaches the
+    /// protocol's one body above rather than the same-named property this model keeps for its setter.
+    /// Without it, a getter on `Prospect` that named its own property would call itself.
+    var asProspectFacts: some ProspectFacts { self }
 }
 
 // #4357 slice B, T4: a stored show as the producer gate reads it, its presenter and its venue and nothing
