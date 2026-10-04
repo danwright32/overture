@@ -404,8 +404,9 @@ struct TermsOverFactsTests {
         #expect(actions == Set(ReachedOutAction.allCases), "the fixture reaches only \(actions)")
         #expect(rows.first { $0.prospect.naturalKey == "copper|2026-10-17" }?.recipient.id == "first@example.invalid",
                 "the earliest replier should speak for a show two contacts replied on")
-        #expect(rows.first { $0.prospect.naturalKey == "saltmarsh a" }?.recipient.id == "form-coming"
-                    || rows.first { $0.prospect.naturalKey == "saltmarsh a" }?.recipient.id == "nudge-a@example.invalid",
+        // Both nudges fell due 14 days before `now` and the form pitch's clock is the night itself, months
+        // out, so the two nudges tie on the soonest date and the address breaks the tie.
+        #expect(rows.first { $0.prospect.naturalKey == "saltmarsh a" }?.recipient.id == "nudge-a@example.invalid",
                 "the soonest due contact, address first on a tie, should speak for the show still to come")
 
         let findings = TermsOverFacts.findings(all, asOf: asOf)
