@@ -43,10 +43,15 @@ enum ReplyIdentity {
     //
     // Resolved through the writer recorded on every peer (#2113), so any row of the group answers the same.
     static func answering(for recipient: Recipient, in prospect: Prospect) -> Recipient {
+        answering(for: recipient, among: prospect.recipients)
+    }
+
+    // #4357 slice E2: the same over any contacts, handed in, so a retained row answers it by the one body.
+    static func answering<C: ContactFacts>(for recipient: C, among contacts: [C]) -> C {
         guard recipient.hasUnhandledReply, let writer = recipient.replyFromAddress, !writer.isEmpty else {
             return recipient
         }
-        return SendGroup.peers(of: recipient, in: prospect)
+        return SendGroup.peers(of: recipient, among: contacts)
             .first { ReplyDetection.isSameAddress($0.email, writer) } ?? recipient
     }
 

@@ -27,11 +27,24 @@ enum DraftedDeadEnd {
     // stage's ordinary state; saying it there would fire on the common case and be ignored within a day
     // (L93).
     static func hasNobodyToSendTo(_ p: Prospect) -> Bool {
-        p.status == .drafted && p.recipients.isEmpty
+        hasNobodyToSendTo(p, contacts: p.recipients)
     }
 
     static func count(in prospects: [Prospect]) -> Int {
-        prospects.filter(hasNobodyToSendTo).count
+        count(in: prospects, contacts: { $0.recipients })
+    }
+
+    // #4357 slice F: generic over the facts protocols, with the contacts handed in, so the pass and the engine
+    // ask one body. The model entry points above hand in `recipients`, the uncounted relationship they always
+    // read, so no `WorkTally.recipientReaches` pin moves (the same choice `ReachedOutQueue.Show` makes).
+    static func hasNobodyToSendTo<Row: ProspectFacts>(_ p: Row, contacts: @autoclosure () -> [Row.Contact]) -> Bool {
+        // The contacts are read only for a drafted show, as the model version always did, so a pass over
+        // every row does not walk every row's contacts to answer a question about a handful.
+        p.status == .drafted && contacts().isEmpty
+    }
+
+    static func count<Row: ProspectFacts>(in rows: [Row], contacts: (Row) -> [Row.Contact]) -> Int {
+        rows.filter { hasNobodyToSendTo($0, contacts: contacts($0)) }.count
     }
 }
 

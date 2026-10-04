@@ -254,6 +254,7 @@ struct TermsOverFactsTests {
         contact("waiting@example.invalid", email: "waiting@example.invalid") {
             $0.sendState = .sent; $0.sentAt = at(0); $0.gmailMessageId = "m2"; $0.gmailThreadId = "t2"
             $0.replied = true; $0.repliedAt = at(100); $0.inboundReplySentAt = at(90)
+            $0.replyDraftRequestedAt = at(150)   // slice F: a reply draft still awaited, so it can stall
         }
         contact("answered@example.invalid", email: "answered@example.invalid") {
             $0.sendState = .sent; $0.sentAt = at(0); $0.gmailMessageId = "m3"; $0.gmailThreadId = "t3"
@@ -434,6 +435,373 @@ struct TermsOverFactsTests {
         #expect(within.contains { $0.contains("representative differs within its tie class") },
                 "a tie broken differently by address was not seen as a tie break")
         #expect(!(across + within).contains { $0.contains("example.invalid") },
+                "a finding named a contact's address rather than its identifier")
+    }
+
+    // MARK: slice E1, the stage placement and the members it reads
+
+    // One show in each stage the placement counts, plus a past client's show offered beyond the ordinary
+    // window, so every arm of `matches` answers true somewhere (L159). Invented names throughout (L155, L222).
+    private func seedStages(_ ctx: ModelContext) throws -> [Prospect] {
+        func show(_ key: String, opens: String = "2026-10-20", status: ReviewStatus,
+                  _ shape: (Prospect) -> Void = { _ in }) -> Prospect {
+            let p = row(ctx, key: key, title: "Stage \(key)", venue: "Quillon Room", opens: opens)
+            p.statusRaw = status.rawValue
+            shape(p)
+            return p
+        }
+        func contact(_ id: String, on p: Prospect, _ shape: (Recipient) -> Void) {
+            let r = Recipient(id: id, email: "\(id)@example.invalid", provenance: .act)
+            shape(r)
+            ctx.insert(r)
+            p.recipients.append(r)
+        }
+        let claimed = Date(timeIntervalSince1970: 1_700_000_000)
+        _ = show("scout", status: .new)
+        _ = show("client", opens: "2027-03-01", status: .new) { $0.sourceIds = ["client-a"] }
+        _ = show("prep", status: .queued)
+        _ = show("review", status: .drafted) { $0.draftBody = "Hi there,\n\nA short note." }
+        _ = show("approved", status: .approved) { $0.draftBody = "Hi there,\n\nA short note." }
+        let blocked = show("blocked", status: .contacted) { $0.draftBody = "Hi there,\n\nA short note." }
+        contact("held", on: blocked) { $0.looksLikeVenue = true }
+        contact("sent", on: blocked) { $0.sendState = .sent; $0.sentAt = claimed }
+        _ = show("errored", status: .approved) { $0.sendError = "refused" }
+        contact("stuck", on: show("stuck", status: .contacted)) { $0.sendState = .sending; $0.sendClaimedAt = claimed }
+        contact("degraded", on: show("degraded", status: .contacted)) {
+            $0.sendState = .sent; $0.replyTrackingDegraded = true
+        }
+        contact("threading", on: show("threading", status: .contacted)) {
+            $0.sendState = .sent; $0.threadingDegraded = true
+        }
+        return try ctx.fetch(FetchDescriptor<Prospect>())
+    }
+
+    @Test func theStagePlacementAnswersTheSameOverFactsAsOverModelsInEveryStage() throws {
+        let ctx = try context()
+        let all = try seedStages(ctx)
+        let stageContext = TermsOverFacts.stageContext(for: all, asOf: asOf)
+        let placed = StageNavigation.placements(in: all, context: stageContext)
+        // Positive controls (L159): every counted stage holds a show here, and the past client's far show is
+        // offered for triage, which only the client window can do.
+        for focus in StageNavigation.countedFocuses {
+            #expect(!StageNavigation.naturalKeys(for: focus, in: placed).isEmpty,
+                    "no show in the fixture is placed under \(focus.rawValue)")
+        }
+        #expect(StageNavigation.naturalKeys(for: .scout, in: placed).contains("client"),
+                "the past client's show beyond the ordinary window was not offered")
+        let clean = TermsOverFacts.findings(all, asOf: asOf)
+        #expect(clean.isEmpty, Comment(rawValue: clean.joined(separator: "\n")))
+
+        // A contact claimed for sending after its facts were taken: the stuck stage and the contact's own
+        // rule both move over models and not over the retained facts, and the findings say so by identifier.
+        let stale = all.map(RowFacts.extract)
+        let quiet = try #require(all.first { $0.naturalKey == "degraded" }?.recipients.first)
+        quiet.sendState = .sending
+        quiet.sendClaimedAt = Date(timeIntervalSince1970: 1_700_000_000)
+        let findings = TermsOverFacts.findings(all, facts: stale, asOf: asOf)
+        #expect(findings.contains { $0.hasPrefix("StageNavigation.placements sendStuck differs") },
+                "a contact that became stuck after extraction was not seen by the placement comparison")
+        #expect(findings.contains { $0.hasPrefix("stage contact members differ") },
+                "a contact that became stuck after extraction was not seen by the member comparison")
+        #expect(!findings.contains { $0.contains("example.invalid") || $0.contains("Stage ") },
+                "a finding named an address or a title rather than an identifier")
+    }
+
+    // A show's status, read on the model, through `ProspectFacts`, through `PrepEligibilityFacts` and through the
+    // view the stage predicate hands Prep, returns, and every route returns the same. A first cut of this slice
+    // made `ProspectFacts` refine `PrepEligibilityFacts`, and `Prospect.status` then dispatched back into itself
+    // until the stack ran out, crashing the test host 261 times in one run. A recursion here is a crash, not a
+    // red expectation, so this test passing at all is the assertion that matters.
+    @Test func aShowsStatusReadThroughEveryRouteReturnsAndAgrees() throws {
+        let ctx = try context()
+        let all = try seedStages(ctx)
+        func viaPrep<T: PrepEligibilityFacts>(_ t: T) -> ReviewStatus { t.status }
+        func viaFacts<T: ProspectFacts>(_ t: T) -> ReviewStatus { t.status }
+        for p in all {
+            let direct = p.status
+            #expect(viaPrep(p) == direct && viaFacts(p) == direct && viaPrep(PrepEligibilityView(row: p)) == direct
+                    && viaPrep(PrepEligibilityView(row: RowFacts.extract(p))) == direct,
+                    Comment(rawValue: "a route disagreed about the status of row \(p.persistentModelID)"))
+            func draftViaPrep<T: PrepEligibilityFacts>(_ t: T) -> Bool { t.hasDraft }
+            #expect(draftViaPrep(p) == p.hasDraft && draftViaPrep(PrepEligibilityView(row: p)) == p.hasDraft)
+        }
+        #expect(Set(all.map(\.status)).count > 2, "the fixture holds too few statuses for this to compare anything")
+    }
+
+    // The rules the placement reads, held on their own once oracle part one is deleted.
+    @Test func theMovedStageRulesHoldTheirMeaning() throws {
+        let ctx = try context()
+        let all = try seedStages(ctx)
+        let byKey = Dictionary(uniqueKeysWithValues: all.map { ($0.naturalKey, $0) })
+        let blocked = try #require(byKey["blocked"])
+        let scout = try #require(byKey["scout"])
+        #expect(blocked.blockedContactCount == 1, "one held contact on a show already sent to is one blocked contact")
+        #expect(blocked.hasEnteredSendHalf, "a contacted show has entered the send half")
+        #expect(!scout.hasEnteredSendHalf, "an untriaged show has not")
+        #expect(blocked.greetingAudienceSize == 1, "one pending reachable contact is an audience of one")
+        // Two pending, reachable contacts: one send reaches both together, and one each when sent separately.
+        let pair = try #require(byKey["scout"])
+        for id in ["first", "second"] {
+            let r = Recipient(id: id, email: "\(id)@example.invalid", provenance: .act)
+            ctx.insert(r)
+            pair.recipients.append(r)
+        }
+        #expect(pair.sendsTogether && pair.greetingAudienceSize == 2, "together, one send reaches both")
+        pair.sendsTogetherOverride = false
+        #expect(!pair.sendsTogether && pair.greetingAudienceSize == 1, "separately, each send reaches one")
+        let stuck = try #require(byKey["stuck"]?.recipients.first)
+        #expect(stuck.isSendStuck(now: Date(timeIntervalSince1970: 1_700_000_000 + RunTimeouts.send)),
+                "a claim as old as the send timeout is stuck")
+        #expect(!stuck.isSendStuck(now: Date(timeIntervalSince1970: 1_700_000_000 + RunTimeouts.send - 1)),
+                "a claim a second younger is not")
+        // Only a claim still SENDING is stuck: a contact the send finished for is not, whatever claim it carries.
+        let sent = try #require(byKey["degraded"]?.recipients.first)
+        sent.sendClaimedAt = Date(timeIntervalSince1970: 1_700_000_000)
+        #expect(!sent.isSendStuck(now: Date(timeIntervalSince1970: 1_700_000_000 + 10 * RunTimeouts.send)),
+                "a sent contact carrying an old claim was called stuck")
+        let review = try #require(byKey["review"])
+        let prep = try #require(byKey["prep"])
+        #expect(review.hasDraft && !prep.hasDraft)
+        review.reprepDraftRequested = true
+        #expect(review.isReprepQueued, "a requested redraft is queued Prep work")
+        #expect(scout.hasOpened(today: "2026-10-21"))
+        #expect(!scout.hasOpened(today: "2026-10-20"), "a run opening tonight has not opened")
+    }
+
+    // MARK: slice F, the agent input terms
+
+    // A drafted show with nobody to send to and one with somebody; reply drafts asked for an hour before the
+    // judging instant (stalled), a minute before it (still inside the five minute timeout), once before an
+    // answer was sent (not awaited at all), and once with a draft already on file (not awaited either).
+    private func seedAgentInputs(_ ctx: ModelContext, _ all: [Prospect]) throws {
+        let now = TermsOverFacts.reachedOutInstant(asOf)
+        try #require(all.first { $0.naturalKey == "lantern|2026-10-03" }).statusRaw = ReviewStatus.drafted.rawValue
+        let drafted = try #require(all.first { $0.naturalKey == "ninefold|2026-10-10" })
+        drafted.statusRaw = ReviewStatus.drafted.rawValue
+        drafted.presenter = "Wexcombe Touring Players"
+        func contact(_ id: String, _ shape: (Recipient) -> Void) {
+            let r = Recipient(id: id, email: id, provenance: .act)
+            shape(r)
+            ctx.insert(r)
+            drafted.recipients.append(r)
+        }
+        contact("stalled@example.invalid") { $0.replyDraftRequestedAt = now.addingTimeInterval(-3600) }
+        contact("fresh@example.invalid") { $0.replyDraftRequestedAt = now.addingTimeInterval(-60) }
+        contact("answered@example.invalid") {
+            $0.replyDraftRequestedAt = now.addingTimeInterval(-7200); $0.replyHandledAt = now.addingTimeInterval(-3600)
+        }
+        contact("drafted@example.invalid") {
+            $0.replyDraftRequestedAt = now.addingTimeInterval(-7200); $0.replyDraftBody = "Thanks, see you there."
+        }
+    }
+
+    @Test func theAgentInputTermsAnswerTheSameOverFactsAsOverModels() throws {
+        let ctx = try context()
+        let all = try seed(ctx)
+        try seedAgentInputs(ctx, all)
+        let now = TermsOverFacts.reachedOutInstant(asOf)
+        // Positive controls (L159), and the rules themselves, which part two cannot hold.
+        #expect(DraftedDeadEnd.count(in: all) == 1, "exactly the drafted show with no contacts is a dead end")
+        // Named, not only counted: an inverted rule swaps which drafted show it picks and keeps the count.
+        let deadEnd = try #require(all.first { $0.naturalKey == "lantern|2026-10-03" })
+        let withContacts = try #require(all.first { $0.naturalKey == "ninefold|2026-10-10" })
+        #expect(DraftedDeadEnd.hasNobodyToSendTo(deadEnd), "the drafted show with no contacts is not a dead end")
+        #expect(!DraftedDeadEnd.hasNobodyToSendTo(withContacts), "a drafted show with contacts reads as a dead end")
+        // The organisation count's entry point hands its term every row in any order (the slice C rotation).
+        let sorted = all.sorted { $0.naturalKey < $1.naturalKey }
+        for start in sorted.indices {
+            let rotated = Array(sorted[start...] + sorted[..<start])
+            #expect(QueueModel.organisationRowCounts(among: rotated) == QueueModel.organisationRowCounts(rotated.map(\.presenter)),
+                    "organisationRowCounts(among:) differs from the term with rotation \(start)")
+        }
+        let stalled = StalledReplyDraft.dueRecipients(from: all, now: now, runAlive: false)
+        #expect(stalled.map(\.recipient.id) == ["stalled@example.invalid"],
+                "only the draft asked for an hour ago is stalled; the fresh, answered and delivered ones are not")
+        #expect(StalledReplyDraft.dueRecipients(from: all, now: now, runAlive: true).isEmpty,
+                "a live reply run means nothing is stalled yet")
+        #expect(StalledReplyDraft.dueRecipients(from: all, now: .distantFuture, runAlive: false).count == 2,
+                "at the end of time both awaited drafts are stalled and the two that are not awaited are not")
+        #expect(!QueueModel.organisationRowCounts(among: all).isEmpty, "the fixture presents no organisation")
+
+        let findings = TermsOverFacts.findings(all, asOf: asOf)
+        #expect(findings.isEmpty, Comment(rawValue: findings.joined(separator: "\n")))
+
+        // A draft delivered after the facts were taken: the stalled list and the member comparison both see it.
+        let stale = all.map(RowFacts.extract)
+        try #require(all.flatMap(\.recipients).first { $0.id == "stalled@example.invalid" }).replyDraftBody = "Late, but here."
+        let staleFindings = TermsOverFacts.findings(all, facts: stale, asOf: asOf)
+        #expect(staleFindings.contains { $0.hasPrefix("StalledReplyDraft.dueRecipients differs") },
+                "a draft delivered after extraction was not seen by the stalled list comparison")
+        #expect(!staleFindings.contains { $0.contains("example.invalid") },
+                "a finding named a contact's address rather than its identifier")
+    }
+
+    // MARK: slice H, the long tail (T8)
+
+    // Every arm of the long tail answers something here (L159): a dismissed row and a full tie in the queue
+    // order, three later lookalikes of one row (two tied on an unknown sighting, one newer), an unseen merge
+    // survivor still ahead and open beside one closed by a do not contact and one already played, and one
+    // possible match flagged across three shows. Invented names throughout (L155, L222).
+    private func seedLongTail(_ ctx: ModelContext) throws -> [Prospect] {
+        let target = row(ctx, key: "tail target", title: "Harbour Lantern", venue: "Quillon Room", opens: "2026-11-02")
+        let lookalikes: [(key: String, seen: Date?)] = [("tail look b", nil), ("tail look a", nil),
+                                                        ("tail look new", Date(timeIntervalSince1970: 1_790_000_000))]
+        for (key, seen) in lookalikes {
+            let p = row(ctx, key: key, title: "Harbour Lantern Again", venue: "Quillon Room", opens: "2026-11-03")
+            p.arrivedLookingLike = target.naturalKey
+            p.firstSeenAt = seen
+        }
+        let unseen = Date(timeIntervalSince1970: 1_790_000_000)
+        row(ctx, key: "tail survivor open", title: "Tallow Choir", venue: "Quillon Room", opens: "2026-11-10")
+            .mergeSurvivorUnseenAt = unseen
+        let closed = row(ctx, key: "tail survivor closed", title: "Tallow Choir Two", venue: "Quillon Room", opens: "2026-11-11")
+        closed.mergeSurvivorUnseenAt = unseen
+        closed.orgDoNotContact = true
+        row(ctx, key: "tail survivor played", title: "Tallow Choir Three", venue: "Quillon Room", opens: "2026-08-01")
+            .mergeSurvivorUnseenAt = unseen
+        for k in 0..<3 {
+            row(ctx, key: "tail fan \(k)", title: "Fan Act \(k)", venue: "Quillon Room", opens: "2026-12-0\(k + 1)")
+                .possibleMatchName = "Wrenfold Ensemble"
+        }
+        row(ctx, key: "tail tie a", title: "Undated A", venue: nil, opens: nil)
+        row(ctx, key: "tail tie b", title: "Undated B", venue: nil, opens: nil)
+        row(ctx, key: "tail empty night", title: "Blank Night", venue: nil, opens: nil).performanceDate = ""
+        row(ctx, key: "tail gone", title: "Dismissed Row", venue: nil, opens: "2026-10-01").statusRaw =
+            ReviewStatus.dismissed.rawValue
+        return try ctx.fetch(FetchDescriptor<Prospect>())
+    }
+
+    @Test func theLongTailAnswersTheSameOverFactsAsOverModels() throws {
+        let ctx = try context()
+        let all = try seedLongTail(ctx)
+        // Positive controls (L159).
+        let scope = QueueModel.queueScope(all)
+        #expect(scope.count == all.count - 1, "the dismissed row was not the only one left out of the scope")
+        #expect(QueueModel.laterLookalikes(among: all)["tail target"] == ["tail look new", "tail look a", "tail look b"],
+                "newest first, then the tied sightings by key")
+        #expect(QueueRenderPass.unseenSurvivors(among: all, today: asOf) == ["tail survivor open"],
+                "only the open survivor still ahead is unseen")
+        #expect(QueueRenderPass.fanOutWarning(all) != nil, "the fixture's fan out drew no warning")
+        #expect(QueueModel.nightsByKey(among: all)["tail tie a"] == nil && QueueModel.titlesByKey(among: all).count == all.count)
+        #expect(QueueModel.nightsByKey(among: all)["tail empty night"] == nil, "a night stored as the empty string is no night")
+        #expect(QueueModel.nightsByKey(among: all)["tail target"] == "2026-11-02")
+        let clean = TermsOverFacts.findings(all, asOf: asOf)
+        #expect(clean.isEmpty, Comment(rawValue: clean.joined(separator: "\n")))
+
+        // Facts taken before the open survivor's organisation asked Dan to stop, and before a lookalike's
+        // pointer moved: the comparison has to say so by the row's identifier alone.
+        let stale = all.map(RowFacts.extract)
+        try #require(all.first { $0.naturalKey == "tail survivor open" }).orgDoNotContact = true
+        try #require(all.first { $0.naturalKey == "tail look new" }).arrivedLookingLike = nil
+        let findings = TermsOverFacts.findings(all, facts: stale, asOf: asOf)
+        #expect(findings.contains { $0.hasPrefix("QueueRenderPass.unseenSurvivors differs") })
+        #expect(findings.contains { $0.hasPrefix("isClosed differs") })
+        #expect(findings.contains { $0.hasPrefix("QueueModel.laterLookalikes differs") })
+        #expect(!findings.contains { $0.contains("Wrenfold") || $0.contains("Tallow") || $0.contains("Harbour") },
+                "a finding named a title or a match rather than an identifier")
+    }
+
+    // The closing rule, held on its own: a do not contact closes a show, a booking closes it, an open show is
+    // open, and the model's member and the protocol's agree on each.
+    @Test func theClosingRuleHoldsItsMeaningOnBothConformers() throws {
+        let ctx = try context()
+        let all = try seedLongTail(ctx)
+        func viaFacts<T: ProspectFacts>(_ t: T) -> Bool { t.isClosed }
+        let open = try #require(all.first { $0.naturalKey == "tail survivor open" })
+        let refused = try #require(all.first { $0.naturalKey == "tail survivor closed" })
+        #expect(!open.isClosed && !viaFacts(open) && !RowFacts.extract(open).isClosed)
+        #expect(refused.isClosed && viaFacts(refused) && RowFacts.extract(refused).isClosed)
+        open.outcomeRaw = Outcome.booked.rawValue
+        #expect(open.isClosed && viaFacts(open), "a booked show is closed")
+        // A lead Dan closed by hand, softly or for good, on a show with no contact yet: only the outcome says so.
+        for lost in [Outcome.lostSoft, .lostHard] {
+            open.outcomeRaw = lost.rawValue
+            #expect(open.performanceStatus == .new, "the fixture should leave the outcome as the only closing fact")
+            #expect(open.isClosed && viaFacts(open) && RowFacts.extract(open).isClosed,
+                    Comment(rawValue: "a lead closed as \(lost.rawValue) still reads as open"))
+        }
+    }
+
+    // MARK: slice E2, the due work terms
+
+    // On top of the reached-out pitches, one of each thing the due lists settle between them: a form pitch on
+    // the played show with a proposed conversation (the confirm question wins over the post-event prompt), a
+    // reply on the played show nobody has answered (the answer comes before how the show ended), the two
+    // repliers on the show still to come made one joint email the second of them answered (one row, standing
+    // on the writer), a reply whose requested draft died (listed once, as the stalled draft), and a silent
+    // pitch on a show Dan resolved by hand (its nudges stopped).
+    private func seedDueWork(_ ctx: ModelContext, _ all: [Prospect]) throws {
+        try seedReachedOut(ctx, all)
+        let now = TermsOverFacts.reachedOutInstant(asOf)
+        let daysAgo = { (days: Double) in now.addingTimeInterval(-days * 86_400) }
+        func contact(_ id: String, on p: Prospect, _ shape: (Recipient) -> Void = { _ in }) {
+            let r = Recipient(id: id, email: id, provenance: .act)
+            r.sendState = .sent
+            r.sentAt = daysAgo(20)
+            r.gmailMessageId = "m-\(id)"
+            r.gmailThreadId = "t-\(id)"
+            shape(r)
+            ctx.insert(r)
+            p.recipients.append(r)
+        }
+        let played = try #require(all.first { $0.naturalKey == "lantern live|2026-10-02" })
+        let form = try #require(played.recipients.first { $0.id == "form-played" })
+        form.replyProposedMessageId = "proposed-message"
+        form.replyProposedThreadId = "proposed-thread"
+        form.replyProposedFromAddress = "proposer@example.invalid"
+        form.replyProposedSentAt = daysAgo(4)
+        contact("late@example.invalid", on: played) { $0.replied = true; $0.repliedAt = daysAgo(1) }
+        let replies = try #require(all.first { $0.naturalKey == "copper|2026-10-17" })
+        for r in replies.recipients {
+            r.sendGroupId = "copper-group"
+            r.replyFromAddress = "second@example.invalid"
+        }
+        let stalledShow = try #require(all.first { $0.naturalKey == "saltmarsh b" })
+        contact("stalled-reply@example.invalid", on: stalledShow) {
+            $0.replied = true; $0.repliedAt = daysAgo(1); $0.replyDraftRequestedAt = now.addingTimeInterval(-3600)
+        }
+        let resolved = try #require(all.first { $0.naturalKey == "saltmarsh c" })
+        resolved.outcomeSourceRaw = OutcomeSource.manual.rawValue
+        contact("resolved-show@example.invalid", on: resolved)
+    }
+
+    @Test func theDueWorkTermsAnswerTheSameOverFactsAsOverModels() throws {
+        let ctx = try context()
+        let all = try seed(ctx)
+        try seedDueWork(ctx, all)
+        let now = TermsOverFacts.reachedOutInstant(asOf)
+        // Positive controls (L159): every list holds a row, and each settles what it should against the others.
+        let rows = DueWork.rows(prospects: all, inquiries: [], now: now, replyRunAlive: false)
+        #expect(rows.afterTheShow.map(\.recipient.id) == ["closer@example.invalid"],
+                "only the replier who was answered is owed the post-event question; the proposal and the waiting reply come first")
+        #expect(rows.conversationsToConfirm.map(\.recipient.id) == ["form-played"],
+                "the form pitch with a proposed conversation is the one to confirm")
+        #expect(rows.stalledReplyDrafts.map(\.recipient.id) == ["stalled-reply@example.invalid"],
+                "the reply whose requested draft died is the stalled one")
+        let waiting = rows.repliesToAnswer.compactMap { conversation -> String? in
+            guard case .show(_, let r) = conversation else { return nil }
+            return r.id
+        }
+        #expect(waiting == ["second@example.invalid", "late@example.invalid"],
+                "the joint email is one row standing on its writer, the stalled reply is not listed twice, longest wait first")
+        let silent = Set(rows.silent.map(\.recipient.id))
+        #expect(silent.isSuperset(of: ["nudge-a@example.invalid", "nudge-b@example.invalid"]), "the silent pitches are not owed a nudge")
+        #expect(!silent.contains("resolved-show@example.invalid"), "a show Dan resolved by hand still nudges")
+        #expect(DueWork.nextChange(prospects: all, now: now, replyRunAlive: false) == EasternDate.date(from: "2026-10-18"),
+                "the next change is the day after the earliest show with a pitch still owed its post-event question")
+
+        let findings = TermsOverFacts.findings(all, asOf: asOf)
+        #expect(findings.isEmpty, Comment(rawValue: findings.joined(separator: "\n")))
+
+        // A reply answered after the facts were taken: both lists it moves between see it.
+        let stale = all.map(RowFacts.extract)
+        try #require(all.flatMap(\.recipients).first { $0.id == "late@example.invalid" }).replyHandledAt = now
+        let staleFindings = TermsOverFacts.findings(all, facts: stale, asOf: asOf)
+        #expect(staleFindings.contains { $0.hasPrefix("DueWork.rows repliesToAnswer differs") },
+                "a reply answered after extraction was not seen by the replies comparison")
+        #expect(staleFindings.contains { $0.hasPrefix("DueWork.rows afterTheShow differs") },
+                "a reply answered after extraction was not seen by the post-event comparison")
+        #expect(!staleFindings.contains { $0.contains("example.invalid") },
                 "a finding named a contact's address rather than its identifier")
     }
 }

@@ -267,6 +267,14 @@ run_outcome() {
   local named
   named="$(failing_test_names "${output}" | grep -c . || true)"
   if [[ "${named}" -gt 0 ]]; then
+    # #4444: a named failure that is ONLY the host dying. When the host crashes, xcodebuild restarts it
+    # and names the test that was running as failed ("Test crashed with signal trap"), so counting names
+    # alone called 30 of September's 77 red CI runs "failed" and none was retried. Told apart here, by
+    # name, rather than folded into "crashed": the run did name a test, and the reports below say which.
+    if [[ -n "$(named_failures_are_only_host_crashes "${output}")" ]]; then
+      echo "host-crashed"
+      return
+    fi
     echo "failed"
     return
   fi
@@ -398,11 +406,86 @@ nothing_executed_report() {
 # Only these two causes. A run short for any OTHER reason is never retried, because only these are known
 # to be transient and a retry over an unexplained short run would paper over exactly the blindness the
 # short-run gate exists to remove.
+#
+# #4444: and "host-crashed", a run whose only NAMED failures are tests that were in flight when the host
+# died. It has a crash's cause and a failure's shape, and the same one retry under the same cap.
 should_retry() {
   local outcome="$1" attempt="$2" max_attempts="$3" time_limit_kill="${4:-}"
   [[ "${attempt}" -lt "${max_attempts}" ]] || return 0
-  [[ "${outcome}" == "crashed" || -n "${time_limit_kill}" ]] && echo "retry"
+  [[ "${outcome}" == "crashed" || "${outcome}" == "host-crashed" || -n "${time_limit_kill}" ]] && echo "retry"
   return 0
+}
+
+# tests_in_flight_at_restart <output>. Every test that had STARTED and not yet finished when xcodebuild
+# printed its restart line, one per line, spelled as the log spells it (`name()`), each once (#4444).
+#
+# A SET rather than one "current" test, because Swift Testing runs tests concurrently in one process, so
+# several can be in flight when it dies. Read from the plain `Test name() started` and `Test name() passed
+# after` / `failed after` lines, without the status marker in front of them, as crash_restart_report does.
+# A display name in quotes is not matched, which only ever makes a run look LESS like a host crash.
+tests_in_flight_at_restart() {
+  awk '
+    match($0, /Test [A-Za-z0-9_]+\(\) started/) {
+      inflight[substr($0, RSTART + 5, RLENGTH - 13)] = 1; next
+    }
+    match($0, /Test [A-Za-z0-9_]+\(\) (passed|failed) after/) {
+      done_line = substr($0, RSTART + 5)
+      delete inflight[substr(done_line, 1, index(done_line, "()") + 1)]; next
+    }
+    /Restarting after unexpected exit/ {
+      for (t in inflight) print t
+      split("", inflight)
+    }
+  ' <<< "$1" | sort -u
+}
+
+# named_failures_are_only_host_crashes <output>. Prints "yes" when the run restarted its host and EVERY
+# test xcodebuild named as failing was in flight at a restart, and nothing otherwise (#4444).
+#
+# Every one, so a genuine assertion failure anywhere in the run keeps it "failed" and unretried: the retry
+# must never paper over a real red (L42 in spirit, #1331's rule). A named test that FINISHED before the
+# restart was not killed by it, so it does not count as the crash either.
+named_failures_are_only_host_crashes() {
+  local output="$1" names inflight name short
+  grep -qa 'Restarting after unexpected exit' <<< "${output}" || return 0
+  names="$(failing_test_names "${output}")"
+  [[ -n "${names}" ]] || return 0
+  inflight="$(tests_in_flight_at_restart "${output}")"
+  [[ -n "${inflight}" ]] || return 0
+  while IFS= read -r name; do
+    [[ -n "${name}" ]] || continue
+    short="${name##*.}"
+    grep -qxF -- "${short}" <<< "${inflight}" || return 0
+  done <<< "${names}"
+  echo "yes"
+}
+
+# host_crashed_final_report <first attempt's outcome, empty when not retried>. How a run that ENDED
+# host-crashed says so (#4444). "On both attempts" only when both were this crash: a retry can follow a
+# crash that named nothing or a time limit kill, and claiming both would be a sentence the run did not
+# measure (L11).
+host_crashed_final_report() {
+  local first="$1" when=""
+  if [[ "${first}" == "host-crashed" ]]; then
+    when=" on both attempts"
+  elif [[ -n "${first}" ]]; then
+    when=" on the retry (the first attempt ended ${first})"
+  fi
+  echo "the test HOST CRASHED under a named test${when}. The failures listed below are the tests that"
+  echo "were running when it died, not assertions that failed. A crash that repeats is not transient."
+  echo "See #4444 and #4210."
+}
+
+# passed_on_retry_report <first attempt's outcome> <the tests it named>. The sentence a run that PASSED on
+# its retry ends with, and nothing for a run that was never retried (#4444).
+#
+# Never a silent pass: a green reached on the second attempt is a different fact from a green on the
+# first, and the crash it absorbed is a real defect somebody still has to fix (#4210).
+passed_on_retry_report() {
+  local first="$1" named="$2"
+  [[ -n "${first}" ]] || return 0
+  echo "PASSED ON A RETRY. The first attempt ended ${first}$([[ -n "${named}" ]] && echo ", naming: $(tr '\n' ' ' <<< "${named}" | sed 's/ *$//')")."
+  echo "The retry passed, so the change is not what failed, but the crash it absorbed is still a defect (#4210)."
 }
 
 # should_probe_pure_suite <outcome>. Prints "probe" when the pure suite's verdict is worth asking for.
@@ -1018,6 +1101,8 @@ main() {
   # #1331: run the suite, and if the HOST crashes (the run died with no named test failure, a known
   # self-hosted flake) retry once. A genuine failure or a pass is never retried (see should_retry).
   local test_exit_code=0 outcome="" attempt=1 max_attempts=2 output_file pid
+  # #4444: set only when an attempt is retried, and read once the loop ends.
+  local retried_from="" retried_names=""
   local host_pid="" started_at=0 log_window=60 last_output=""
   # #3392: set inside the loop below and read after it. Declared here so a retry cannot inherit the
   # previous attempt's reading, which is the same reason `last_output` is per attempt.
@@ -1150,7 +1235,16 @@ main() {
     [[ "${outcome}" == "stalled" ]] && break
     [[ -z "$(should_retry "${outcome}" "${attempt}" "${max_attempts}" "${TIME_LIMIT_KILL}")" ]] && break
     echo >&2
-    if [[ -n "${TIME_LIMIT_KILL}" ]]; then
+    # #4444: what the attempt being retried met, so a pass on the retry can say so rather than read as a
+    # first-time green.
+    retried_from="${outcome:-truncated}"
+    retried_names="$(failing_test_names "${last_output}")"
+    if [[ "${outcome}" == "host-crashed" && -z "${TIME_LIMIT_KILL}" ]]; then
+      echo "run-tests-locked.sh: the test HOST CRASHED while these tests were running, and they are the" >&2
+      echo "only failures this attempt named (#4444, the crash itself is #4210):" >&2
+      sed 's/^/  /' <<< "${retried_names}" >&2
+      echo "Retrying once (attempt $((attempt + 1)) of ${max_attempts}). This is a RETRY, not a pass." >&2
+    elif [[ -n "${TIME_LIMIT_KILL}" ]]; then
       # NAMED, always. A test killed on every run would otherwise be paid for twice per run forever with
       # nothing on screen saying which one it is (#3392, #3386).
       echo "run-tests-locked.sh: this run was TRUNCATED. ${TIME_LIMIT_KILL} exceeded its execution time" >&2
@@ -1471,6 +1565,19 @@ main() {
   if [[ "${outcome}" == "stalled" ]]; then
     echo >&2
     stalled_run_report "${stall_record}" \
+      | awk 'NR==1 {print "run-tests-locked.sh: " $0; next} {print}' >&2
+  fi
+
+  # #4444: a run that passed only on its retry ends saying so, and a run whose host died under a named
+  # test on EVERY attempt ends saying that, rather than as an ordinary failure.
+  if [[ -z "${outcome}" && -n "${retried_from}" ]]; then
+    echo >&2
+    passed_on_retry_report "${retried_from}" "${retried_names}" \
+      | awk 'NR==1 {print "run-tests-locked.sh: " $0; next} {print}' >&2
+  fi
+  if [[ "${outcome}" == "host-crashed" ]]; then
+    echo >&2
+    host_crashed_final_report "${retried_from}" \
       | awk 'NR==1 {print "run-tests-locked.sh: " $0; next} {print}' >&2
   fi
 

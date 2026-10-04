@@ -121,6 +121,43 @@ enum LeadIntake {
     static let unreadableMessage =
         "I can't read that page: the site builds its calendar with JavaScript, so the shows aren't in what I download. Nothing's wrong with your link. Try the venue's page for the show, or a ticket link (Eventbrite and the like) if there is one."
 
+    // #4339 (A11): the paste's landing stopped. Each says what it left in the store, because each leaves a
+    // different state (L11), and none says "added": a show is only added once its save has landed (L12).
+    //
+    // The save failed and everything it wrote was put back, so the store is as it was before the paste.
+    static let saveFailedMessage =
+        "Overture couldn't save the shows from that page, so none of them were added. Nothing else changed. Paste it again to try once more."
+
+    // The save failed and some of what it wrote could not be put back.
+    static let notRevertedMessage =
+        "Overture couldn't save the shows from that page and couldn't undo every change it had made for them, so some of those changes are still unsaved."
+
+    // The store could not say whether the page's shows were new, so none were added (each is counted store
+    // unreadable on the outcome). Not "no new shows": that would read a failed read as a quiet page (L215).
+    static let storeUnreadableMessage =
+        "Overture couldn't read the shows it already has, so it couldn't tell whether the ones on that page are new, and none of them were added. Paste it again to try once more."
+
+    // Some shows landed and some could not be checked against the store, so those were not added. Said beside
+    // the run's own note, so a partial read is never reported as the whole page (L215, #4339 review).
+    static func withUnreadableShows(_ note: String?, count: Int) -> String? {
+        guard count > 0 else { return note }
+        let line = count == 1
+            ? "One show on that page wasn't added, because Overture couldn't check it against the shows it already has. Paste the page again to add it."
+            : "\(count) shows on that page weren't added, because Overture couldn't check them against the shows it already has. Paste the page again to add them."
+        guard let note, !note.isEmpty else { return line }
+        return note + " " + line
+    }
+
+    // The paste was stopped (its task cancelled) while it waited for the store, so it never landed.
+    static let stoppedWhileWaitingMessage =
+        "The shows from that page were not added, because the paste was stopped while it waited for the store. Nothing from the page changed."
+
+    // The entry flush: edits Dan made before the paste could not be saved, so the paste did not start.
+    static func recentEditsUnsaved(_ rows: [String]) -> String {
+        "Overture couldn't save your recent edits, so the shows from that page were not added. Nothing from the page changed. Not yet saved: "
+            + rows.joined(separator: ", ") + "."
+    }
+
     // A DIFFERENT cause needs a different message. Instagram and Facebook do not draw their content
     // with JavaScript so much as hide it behind a login: a raw fetch returns ~600KB of sign-in page.
     // Telling Dan his ensemble's site "builds its calendar with JavaScript" when he pasted an Instagram

@@ -605,7 +605,7 @@ final class Prospect {
     // default he asked for. Nil is "he has not said", and that reads as together.
     var sendsTogetherOverride: Bool? = nil
 
-    var sendsTogether: Bool { sendsTogetherOverride ?? true }
+    // `sendsTogether` is on `ProspectFacts` since #4357 slice E1 (StagePlacementFacts.swift).
 
     // #2545: how many people ONE send reaches, which is what decides whether a greeting may name
     // somebody. Sending separately is one email each however many contacts the show carries, so the
@@ -616,12 +616,9 @@ final class Prospect {
     // asking it this question would have the two read each other without end. This counts who could
     // receive the mail from the fields alone, which is also the honest reading: a contact held by some
     // OTHER guard is still a person the greeting has to be right for once that guard clears.
-    var greetingAudienceSize: Int {
-        let reachable = recipients.filter {
-            $0.sendState == .pending && $0.email?.isEmpty == false && !$0.pausedByReply
-        }
-        return sendsTogether ? reachable.count : min(reachable.count, 1)
-    }
+    // #4357 slice E1: the rule is on `ProspectFacts` (StagePlacementFacts.swift), over contacts it is handed;
+    // this hands it this show's own `recipients`, uncounted, as it always read them.
+    var greetingAudienceSize: Int { greetingAudienceSize(among: recipients) }
 
     // #367: Dan asked for a re-prep on a prospect that already has a draft. Independent flags so he
     // can request just a redraft, just a fresh contact search, or both; PrepQueueBuilder.needsPrep
@@ -972,23 +969,21 @@ final class Prospect {
     // #792: contacts on this show held back by a review guard and waiting on Dan. A show can be
     // genuinely contacted (somebody was emailed) AND still have somebody waiting, and both facts have to
     // survive at once: the bug was that the first silently erased the second.
-    var blockedContactCount: Int { blockedContactCount { $0.draftLintBlockers } }
+    // #4357 slice E1: through the rule on `ProspectFacts`, over this show's own `recipients`, uncounted.
+    var blockedContactCount: Int { blockedContactCount(among: recipients) }
 
     // #3498: the same count, given a way to look up each contact's lint findings rather than deriving
     // them. `Recipient.draftLintBlockers` runs a whole pass of DraftCheck and memoises nothing, and a
     // card build already holds the answer for its pending contacts. ONE definition of what counts as
     // blocked, two spellings, so a change to the rule cannot leave the two disagreeing (L263).
     func blockedContactCount(lintBlockers: (Recipient) -> [DraftIssue]) -> Int {
-        recipients.filter { $0.isBlockedAwaitingReview(lintBlockers: lintBlockers($0)) }.count
+        blockedContactCount(among: recipients, lintBlockers: lintBlockers)
     }
 
     // #1797: whether this show has reached the half of the funnel a send belongs to, which is what decides
     // who speaks for a held contact (Send issues, or the triage card). One rule, in SendHalf, so the stage
     // and the card cannot disagree and leave a held contact spoken for by nobody.
-    var hasEnteredSendHalf: Bool {
-        SendHalf.entered(status: status, sentAt: sentAt,
-                         hasSentRecipient: recipients.contains { $0.sendState == .sent })
-    }
+    var hasEnteredSendHalf: Bool { hasEnteredSendHalf(among: recipients) }
 
     // #2394: the typed ending, the one field every reader shares.
     // #4357 slice D1: read through its one body on `ProspectFacts`; the setter stays for the writers.
@@ -1048,9 +1043,8 @@ final class Prospect {
     // not a lead he will work, whatever nights remain on it. A run opening TONIGHT has not opened yet.
     // An UNDATED show has not opened: "date to be confirmed" is a normal state on a season page, and
     // treating it as gone would silently throw away a real lead whose date is not announced yet.
-    func hasOpened(today: String) -> Bool {
-        EasternDate.runHasOpened(openingNight: performanceDate, today: today)
-    }
+    // `hasOpened(today:)` is on `ProspectFacts` since #4357 slice E1 (StagePlacementFacts.swift), where the
+    // reasoning above now sits beside its one body.
 
     // Consecutive scouts where this prospect's source was scouted but it was absent from the
     // feed (#133). Reset to 0 whenever it reappears. Past performances are never counted.
@@ -1158,14 +1152,8 @@ final class Prospect {
     // `disappearedFromFeed` lives on `ProspectFacts` (ProspectFactsMembers.swift) since #4357, so a live model and a
     // retained `RowFacts` answer it by one body.
 
-    var hasDraft: Bool { draftBody != nil }
+    // `hasDraft` and `isReprepQueued` are on `ProspectFacts` since #4357 slice E1 (StagePlacementFacts.swift).
 
-    // #1940: a Prep run has work queued on this show. Through the same shared definition QueueItem's badge
-    // reads, so the badge Dan sees and the stage he finds the show under are one rule.
-    var isReprepQueued: Bool {
-        ReprepRequest.isQueued(draftRequested: reprepDraftRequested,
-                               contactsRequested: reprepContactsRequested)
-    }
 
     // MARK: - The date conflict (#901)
 
@@ -1418,24 +1406,9 @@ final class Prospect {
     // Closed for routine follow-ups/reminders: booked, every contact resolved (derived), or Dan closed
     // the lead by hand / with a closing note (a lead lostSoft/lostHard not yet written through to a
     // contact). A fresh reply still surfaces independently via `hasUnhandledReply`.
-    var isClosed: Bool {
-        // #769: the org asked Dan to stop. Nothing routine may fire again, on any of their shows. This
-        // is the load-bearing line: without it a do-not-contact org would keep receiving follow-ups
-        // and reminders on a show already sent, which is precisely the email that issue exists to
-        // prevent. Suppressing the untried recipients only stops FIRST sends.
-        if orgDoNotContact { return true }
-        switch performanceStatus {
-        // #1840: a show Dan stopped working is closed for ROUTINE follow-ups, same as the two lost
-        // states. The one thing it keeps raising, its post-event closing note, is carved out inside
-        // ConversationReminder rather than here, so this stays the plain "no routine work" answer and
-        // the exception lives in exactly one place.
-        // #3669: the three ended states come from `endedWithoutAShoot`, the same answer the self booking
-        // check reads, so the two cannot drift apart over which endings count as closed.
-        case .booked: return true
-        case .lostDoorOpen, .lostNotInterested, .stoodDown, .active, .new:
-            return performanceStatus.endedWithoutAShoot || outcome == .lostSoft || outcome == .lostHard
-        }
-    }
+    // #4357 slice H: the rule is on `ProspectFacts` (QueueLongTailTerms.swift), with its reasons; this hands it
+    // the model's own performance status, read over its `recipients` uncounted, as it always was.
+    var isClosed: Bool { isClosed(given: performanceStatus) }
 
     // A contact replied and nobody has answered it: not booked, and some replied / unresolved /
     // un-bounced contact still owes a reply. Per-recipient (#653), so answering one contact never masks
@@ -1450,7 +1423,7 @@ final class Prospect {
     // judgement about the conversation, it is the conversation having succeeded, and it is a rollup
     // question rather than a per-contact one.
     var hasUnhandledReply: Bool {
-        performanceStatus != .booked && recipients.contains(where: \.hasUnhandledReply)
+        hasUnhandledReply(among: recipients)
     }
 
     // Record a lead outcome as Dan's own call (manual source, timestamped, booking-suggestion

@@ -471,18 +471,9 @@ enum QueueRenderPass {
         // halves it needs. FUTURE and OPEN only, which is what stops the finding standing for ever on a
         // show that has since played or that Dan has closed (the notice's own comment says so).
         let today = EasternDate.today(i.context.now)
-        let unseenSurvivors = everyProspect
-            .filter { p in
-                guard p.mergeSurvivorUnseenAt != nil, !p.isClosed else { return false }
-                // The same live-run rule `FeedReconcile.isFuture` applies, through the same helper, so
-                // the pass that RECORDS the finding and the pass that SHOWS it cannot come to disagree
-                // about which shows are still ahead (L16).
-                return EasternDate.runIsLive(
-                    lastNight: EasternDate.runLastNight(runEndDate: p.runEndDate,
-                                                        performanceDate: p.performanceDate),
-                    today: today)
-            }
-            .map(\.naturalKey)
+        // #4357 slice H: one term over any `ProspectFacts` (QueueLongTailTerms.swift); the models' entry reads
+        // each show's own `isClosed`, uncounted, as this did.
+        let unseenSurvivors = QueueRenderPass.unseenSurvivors(among: everyProspect, today: today)
         let mergeSurvivorsDropped = AppNotices.mergeSurvivorsTheFeedDropped(
             unseenSurvivors, shownInQueue: { inAStage.contains($0) })
         // #4106 view workstream: the masthead's two whole-queue answers, taken HERE and nowhere else
@@ -583,7 +574,8 @@ enum QueueRenderPass {
     // #1694: one possible-match record flagged across a crowd of shows, which is the tell that the rule
     // locked onto something those shows SHARE rather than onto the act. Counted over every prospect
     // rather than the visible rows, because a flagged show has usually already left the queue.
-    static func fanOutWarning(_ prospects: [Prospect]) -> String? {
+    // #4357 slice H: over any `ProspectFacts`; it reads two stored facts both conformers carry.
+    static func fanOutWarning(_ prospects: [some ProspectFacts]) -> String? {
         PossibleMatchFanOut.warningLine(
             PossibleMatchFanOut.findings(rows: prospects.compactMap { p in
                 p.possibleMatchName.map { (act: p.groupName, match: $0) }

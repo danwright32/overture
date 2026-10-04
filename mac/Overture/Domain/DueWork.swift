@@ -75,14 +75,51 @@ enum DueWork {
     // than a compile error.
     static func rows(prospects: [Prospect], inquiries: [Inquiry], now: Date, replyRunAlive: Bool,
                      followUp: FollowUpConfig = .init()) -> Rows {
+        let due = rows(from: prospects, contacts: { $0.recipients }, inquiries: inquiries, now: now,
+                       replyRunAlive: replyRunAlive, followUp: followUp)
+        return Rows(
+            afterTheShow: due.afterTheShow.map {
+                PostEventPrompt.DueRecipient(prospect: $0.prospect, recipient: $0.recipient, prompt: $0.prompt)
+            },
+            silent: due.silent.map { FollowUp.DueRecipient(prospect: $0.prospect, recipient: $0.recipient) },
+            stalledReplyDrafts: due.stalledReplyDrafts.map {
+                StalledReplyDraft.DueRecipient(prospect: $0.prospect, recipient: $0.recipient, requestedAt: $0.requestedAt)
+            },
+            conversationsToConfirm: due.conversationsToConfirm.map {
+                ProposedConversation.DueRecipient(prospect: $0.prospect, recipient: $0.recipient, candidate: $0.candidate)
+            },
+            repliesToAnswer: due.repliesToAnswer)
+    }
+
+    // #4357 slice E2: the five lists over any rows, with the contacts handed in, so the model entry point
+    // above walks the recipients it always did and a retained row answers by the one body. Each list keeps
+    // its term's own row shape; the model entry point wraps them in the structs the sheet draws.
+    struct Due<Row: ProspectFacts> {
+        var afterTheShow: [(prospect: Row, recipient: Row.Contact, prompt: PostEventPrompt.Prompt)]
+        var silent: [(prospect: Row, recipient: Row.Contact)]
+        var stalledReplyDrafts: [(prospect: Row, recipient: Row.Contact, requestedAt: Date)]
+        var conversationsToConfirm: [(prospect: Row, recipient: Row.Contact, candidate: ProposedConversation.Candidate)]
+        var repliesToAnswer: [ReplyToAnswer.Conversation<Row>]
+
+        var counts: Counts {
+            Counts(followUps: silent.count, afterTheShow: afterTheShow.count,
+                   conversationsToConfirm: conversationsToConfirm.count,
+                   stalledReplyDrafts: stalledReplyDrafts.count,
+                   repliesToAnswer: repliesToAnswer.count)
+        }
+    }
+
+    static func rows<Row: ProspectFacts>(from shows: [Row], contacts: (Row) -> [Row.Contact], inquiries: [Inquiry],
+                                         now: Date, replyRunAlive: Bool,
+                                         followUp: FollowUpConfig = .init()) -> Due<Row> {
         // #2967 state 2: one form pitch on a show that has been and gone is owed BOTH questions at
         // once, and counting it twice put "Due 2" over one contact. The confirm question wins and the
         // post-event prompt yields, because how a show ended cannot be answered honestly while it is
         // still unsettled whether the act ever replied; answering the confirm re-decides what the other
         // prompt should even say. Suppressed here, in the one place that decides what the sheet holds,
         // rather than in the view, so the number and the rows cannot disagree about it (L16).
-        let toConfirm = ProposedConversation.dueRecipients(from: prospects, now: now)
-        let confirmKeys = Set(toConfirm.map(\.recipient.id))
+        let toConfirm = ProposedConversation.dueRecipients(from: shows, contacts: contacts, now: now)
+        let confirmKeys = Set(toConfirm.map { $0.recipient.id })
         // #3890: two more of the same shape, each settled here for the same reason.
         //
         // A reply whose requested draft DIED is already listed, as the stalled draft with its own remedy,
@@ -92,9 +129,9 @@ enum DueWork {
         // that conversation yields until Dan has answered, then comes back. Dan's call, 2026-09-15, on
         // the same reasoning as the confirm rule above: how a show ended is often exactly what the reply
         // is about, so it is asked once the conversation is dealt with rather than beside it.
-        let stalled = StalledReplyDraft.dueRecipients(from: prospects, now: now, runAlive: replyRunAlive)
+        let stalled = StalledReplyDraft.dueRecipients(from: shows, contacts: contacts, now: now, runAlive: replyRunAlive)
         let stalledConversations = Set(stalled.map { SendGroup.groupKey($0.recipient) })
-        let replies = ReplyToAnswer.dueConversations(prospects: prospects, inquiries: inquiries)
+        let replies = ReplyToAnswer.dueConversations(prospects: shows, contacts: contacts, inquiries: inquiries)
             .filter { conversation in
                 guard case .show(_, let r) = conversation else { return true }
                 return !stalledConversations.contains(SendGroup.groupKey(r))
@@ -103,12 +140,12 @@ enum DueWork {
             guard case .show(let p, let r) = conversation else { return nil }
             return "\(p.naturalKey)|\(SendGroup.groupKey(r))"
         })
-        return Rows(afterTheShow: PostEventPrompt.dueRecipients(from: prospects, now: now)
+        return Due(afterTheShow: PostEventPrompt.dueRecipients(from: shows, contacts: contacts, now: now)
                 .filter { !confirmKeys.contains($0.recipient.id) }
                 .filter { !waitingConversations.contains("\($0.prospect.naturalKey)|\(SendGroup.groupKey($0.recipient))") },
              // Oldest pitch first, which is the order the sheet showed before this ordering moved here
              // from its body: one place decides what the list holds AND what order it is in.
-             silent: FollowUp.dueRecipients(from: prospects, now: now, config: followUp)
+             silent: FollowUp.dueRecipients(from: shows, contacts: contacts, now: now, config: followUp)
                 .sorted { ($0.recipient.sentAt ?? .distantPast) < ($1.recipient.sentAt ?? .distantPast) },
              stalledReplyDrafts: stalled,
              // The SAME function the Reached out row is built from, never a second predicate that
@@ -179,18 +216,27 @@ extension DueWork {
     // this makes the common case immediate instead of making the backstop unnecessary.
     static func nextChange(prospects: [Prospect], now: Date, replyRunAlive: Bool,
                            followUp: FollowUpConfig = .init()) -> Date? {
+        nextChange(from: prospects, contacts: { $0.recipients }, now: now, replyRunAlive: replyRunAlive,
+                   followUp: followUp)
+    }
+
+    // #4357 slice E2: the same over any rows, with the contacts handed in. The show the post-event prompt
+    // reads is built once per row, where the model path used to build it once per contact.
+    static func nextChange<Row: ProspectFacts>(from shows: [Row], contacts: (Row) -> [Row.Contact], now: Date,
+                                               replyRunAlive: Bool, followUp: FollowUpConfig = .init()) -> Date? {
         var soonest: Date?
         func consider(_ moment: Date?) {
             guard let moment, moment > now else { return }   // already passed is already counted
             if let best = soonest, best <= moment { return }
             soonest = moment
         }
-        for p in prospects {
+        for p in shows {
             // The same two stoppers `FollowUp.dueRecipients` applies to a whole show, so this cannot
             // arm a republish for a show whose follow-ups have stopped.
-            let followUpsStopped = p.outcomeSourceRaw == OutcomeSource.manual.rawValue || p.outcome == .booked
-            for r in p.recipients {
-                consider(PostEventPrompt.nextPromptDate(for: r, of: p))
+            let followUpsStopped = FollowUp.nudgesStopped(on: p)
+            let show = ReachedOutQueue.Show(p, contacts: contacts(p))
+            for r in show.contacts {
+                consider(PostEventPrompt.nextPromptDate(for: r, of: show))
                 if !followUpsStopped {
                     consider(FollowUp.nextDue(eligible: FollowUp.isAwaitingNudge(r, in: p, now: now),
                                               sentAt: r.sentAt, lastFollowUpAt: r.lastFollowUpAt,
