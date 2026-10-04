@@ -55,8 +55,8 @@ struct RecheckControlOnTheRowTests {
     // per-round figure. A card could sit there saying a healthy deep run looked stuck, which is #1530's
     // defect and the one this family of warnings cannot afford (#2577, #2929).
     //
-    // Against the LIVE clock, because `ProspectRowView` has no clock seam and reads the wall clock at
-    // render time; the fixture is expressed relative to it for #3169's reason.
+    // Against the LIVE clock, because these tests hand `ProspectRowView` `Date()` as its `now`, and the
+    // recheck state it draws takes no `now` at all; the fixture is expressed relative to it for #3169's reason.
     private func runningRow(startedMinutesAgo: Double, pressedMinutesAgo: Double) -> QueueItem {
         var row = item(requestedAt: Date().addingTimeInterval(-pressedMinutesAgo * 60))
         row.reachabilityProbedAt = LiveClockProbe.fresh

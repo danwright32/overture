@@ -22,8 +22,8 @@ struct ProspectRowViewReachabilityTests {
         i.presenter = presenter
         i.sentAt = sentAt
         if probed {
-            // #3169: against the LIVE clock, because ProspectRowView asks for the badge with no
-            // `now` and reads the wall clock at render time. A pinned instant here means "probed on
+            // #3169: against the LIVE clock, because these tests hand ProspectRowView `Date()` as the
+            // `now` its badge judges against (#4357 slice G1). A pinned instant here means "probed on
             // that day", which stopped meaning "probed recently" the moment real time walked past
             // the freshness window, and eight tests in this file went red on an untouched main.
             i.reachabilityProbedAt = LiveClockProbe.fresh
