@@ -106,14 +106,14 @@ final class LandingBatchTablesRealArmTests {
 
     // MARK: the real arm, opt in, on the frozen inputs
 
-    @Test func realArmAt1x() async throws { try await realArm(size: "x1") }
-    @Test func realArmAt4x() async throws { try await realArm(size: "x4") }
+    // Opt in, and reported as SKIPPED when not asked for, never as a pass: a green line with nothing compared
+    // reads as the real arm having been checked (L411).
+    @Test(.enabled(if: Self.env["MEASURE_4275"] != nil, "opt in: set TEST_RUNNER_MEASURE_4275=1 and TEST_RUNNER_MEASURE_4275_INPUTS"))
+    func realArmAt1x() async throws { try await realArm(size: "x1") }
+    @Test(.enabled(if: Self.env["MEASURE_4275"] != nil, "opt in: set TEST_RUNNER_MEASURE_4275=1 and TEST_RUNNER_MEASURE_4275_INPUTS"))
+    func realArmAt4x() async throws { try await realArm(size: "x4") }
 
     private func realArm(size: String) async throws {
-        guard Self.env["MEASURE_4275"] != nil else {
-            print("landing-tables-real-arm: not measured. Set TEST_RUNNER_MEASURE_4275=1 and TEST_RUNNER_MEASURE_4275_INPUTS.")
-            return
-        }
         guard let inputs = Self.env["MEASURE_4275_INPUTS"] else {
             Issue.record("UNMEASURED: TEST_RUNNER_MEASURE_4275_INPUTS must name the frozen archive")
             return
