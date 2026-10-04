@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1710 sentences**.
+Every sentence Overture can say to Dan: **1738 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -14,7 +14,7 @@ What is not, and why:
   sentences under tokens nobody reads.
 - **Nothing, if it is written as two literals joined with `+`.** Those ARE joined here, into the
   one sentence the running app says (#3155). What is still only part of what Dan reads is a
-  sentence carrying a VALUE: 634 of the 1710 below hold a
+  sentence carrying a VALUE: 651 of the 1738 below hold a
   `\(...)` where a number or a name goes, so what is printed is the template. They are counted
   here rather than listed again, because the hole is visible in the line itself; what was missing
   was any statement of how much of this document is templates.
@@ -453,6 +453,10 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/DraftReviewView.swift`
 "A hard bounce means the mail was rejected outright, so the show has stopped being chased and nobody has seen the pitch. Open the show to fix the address and pitch again. If the address is fine and the bounce was wrong, Not really bounced on the contact clears it."
     `Domain/AppNotice.swift`
+"A landing interrupted at \(landedTime(startedAt)) had been overtaken by a later scout, so there was nothing left of it to finish."
+    `Domain/LandingSingleFlight.swift`
+"A landing was interrupted at \(landedTime(startedAt)). Overture will finish it when you are away from the Mac."
+    `Domain/LandingSingleFlight.swift`
 "A later listing looks like the same show: \"\(newest)\"."
     `UI/QueueView+Model.swift`
 "A later night of this run is out: you blocked \(day) (\(name))."
@@ -1648,6 +1652,10 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/OmniFocusSync.swift`
 "Overture could not check whether it stopped responding this session, so nothing here can say whether it did."
     `Domain/FreezeReport.swift`
+"Overture could not finish an interrupted landing yet, because another landing was still saving to the store after \(span). It kept the results and will try again when you are away from the Mac."
+    `Domain/LandingSingleFlight.swift`
+"Overture could not finish the landing that was interrupted at \(landedTime(startedAt)) yet (\(why)). It will try again when you are away from the Mac."
+    `Domain/LandingSingleFlight.swift`
 "Overture could not keep a copy of these calendar results either (\(why)). They are still in the reader's results file until the next read replaces it."
     `Domain/ScoutWarningCopy.swift`
 "Overture could not open its backup folder, so there is nothing to compare against. Nothing has been changed. Check that folder before working."
@@ -1656,6 +1664,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/StoreSchemaGuard.swift`
 "Overture could not open its record of when it stopped responding, so nothing here can say whether it did."
     `Domain/FreezeReport.swift`
+"Overture could not read its records of interrupted landings (\(why)), so it cannot finish one yet. It will try again when you are away from the Mac."
+    `Domain/LandingSingleFlight.swift`
 "Overture could not read kept calendar results at \(path) (\(why))."
     `Domain/LandingSingleFlight.swift`
 "Overture could not rewrite the freeze archive without its records older than a month, so nothing was deleted from the archive. It tries again every hour."
@@ -1716,6 +1726,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/AttachedConversation.swift`
 "Overture doesn't record whether a check was told the organisation's name, so this counts every show carrying one, not only the ones where the name went unsearched."
     `Domain/EmptyAnswerReport.swift`
+"Overture finished the landing that was interrupted at \(landedTime(startedAt))."
+    `Domain/LandingSingleFlight.swift`
 "Overture found this conversation in your Gmail, from the address you logged, and is watching it for replies."
     `Domain/InquiryCopy.swift`
 "Overture gave up waiting for Gmail while looking for replies to the pitches you sent through a form or a DM."
@@ -1734,6 +1746,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ProposedConversation.swift`
 "Overture hasn't read your inbox for a reply to this one yet."
     `Domain/ProposedConversation.swift`
+"Overture is checking your calendars again to finish the landing that was interrupted at \(landedTime(startedAt))."
+    `Domain/LandingSingleFlight.swift`
 "Overture is out of date"
     `Domain/BuildFreshnessPanel.swift`
 "Overture is reading your inbox for a reply to this one and hasn't found a likely match yet."
@@ -1776,6 +1790,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/FreezeReport.swift`
 "Overture stopped responding for \(seconds) seconds."
     `Domain/FreezeReport.swift`
+"Overture stopped trying to finish the landing that was interrupted at \(landedTime(startedAt)) after \(attempts) attempts. \(calendars) unread, and your next scout reads "
+    `Domain/LandingSingleFlight.swift`
 "Overture was not checking for replies or bookings for \(PrepStatus.duration(seconds: seconds)), and resumed \(PrepStatus.relative(from: endedAt, to: now))"
     `Domain/WatchGap.swift`
 "Overture was not running for \(PrepStatus.duration(seconds: seconds)), and started again \(PrepStatus.relative(from: endedAt, to: now))"
@@ -2366,12 +2382,16 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/DownbeatExport.swift`
 "The Prep run finished but didn't produce any results. It may have hit an error or found no contacts."
     `Domain/DetachedRunOutcome.swift`
+"The \(unlanded) calendars it had not saved stay"
+    `Domain/LandingSingleFlight.swift`
 "The act takes messages through the form on their own site. You'd fill that in yourself; Overture can't send it for you."
     `Domain/Reachability.swift`
 "The address found here is in a different name from the contact on this show, and no page was recorded showing it reaches them. A pitch would greet one person and arrive with another, so Overture is holding it. If it does reach them, clear the flag on the contact and it is sendable again."
     `Domain/Reachability.swift`
 "The archive was on screen."
     `Domain/FreezeReport.swift`
+"The calendar it had not saved stays"
+    `Domain/LandingSingleFlight.swift`
 "The calendar reader ran but produced nothing this run."
     `Domain/ScoutWarnings.swift`
 "The calendar results have not landed yet, because another landing was still saving to the store after \(span). Overture kept a copy of them and will offer them again."
@@ -2818,6 +2838,10 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/PrepSelectionCopy.swift`
 "Which message is their reply?"
     `Domain/ProposedConversation.swift`
+"While you were away, finishing an interrupted landing held Overture \(count) times, the longest for \(seconds) seconds."
+    `Domain/FreezeReport.swift`
+"While you were away, finishing an interrupted landing held Overture for \(seconds) seconds."
+    `Domain/FreezeReport.swift`
 "Who Overture thinks puts each show on, and who it reads as the building."
     `App/RootView.swift`
 "Who this goes to"
@@ -2973,6 +2997,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "Your reply went out, but Gmail didn't tell Overture which conversation it landed in, so an answer to it won't be spotted automatically. Watch your inbox for this one and mark it here yourself."
     `Domain/InquiryCopy.swift`
 "Your scout did not start, because another landing was still saving to the store after \(span). Nothing was changed. Run the scout again once it has finished."
+    `Domain/LandingSingleFlight.swift`
+"Your scout will start as soon as the interrupted landing finishes."
     `Domain/LandingSingleFlight.swift`
 "Your scout will start as soon as the landing in progress finishes."
     `Domain/LandingSingleFlight.swift`
@@ -3441,6 +3467,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/DepartureCopy.swift`
 "\(shows) waiting on this"
     `UI/SourcesView.swift`
+"\(source) could not be put back after its save failed"
+    `Integration/LandingRecovery.swift`
 "\(source.droppedRowCount) shows"
     `Domain/ScoutWarningCopy.swift`
 "\(source.orgName) listed \(shows) this run and every one was dropped, so its page is being read fine. Open Sources to see why they were dropped."
@@ -3530,6 +3558,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ScoutWarningCopy.swift`
 "_(Removed: the auto-generated guidance contained a specific name and was quarantined; it will regenerate on the next Prep run.)_"
     `Domain/VoiceGuidanceGuard.swift`
+"a copy of its results could not be kept: \(why)"
+    `Integration/LandingRecovery.swift`
 "a field is the wrong type"
     `Domain/ResponseBody.swift`
 "a field the response should carry is missing: \(key.stringValue)"
@@ -3540,6 +3570,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/HandoffDecodeFailure.swift`
 "a required field is missing: \(path(context, adding: key))"
     `Domain/HandoffDecodeFailure.swift`
+"a save failed"
+    `Integration/LandingRecovery.swift`
 "a show no longer in the queue"
     `Domain/StruckAddressListing.swift`
 "a show that wrote back"
@@ -3566,6 +3598,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/LandingSingleFlight.swift`
 "an organisation no show names any more"
     `Domain/StruckAddressListing.swift`
+"another landing was holding the store"
+    `Integration/LandingRecovery.swift`
 "another record"
     `Integration/ScoutService.swift`
 "another show"
@@ -3584,6 +3618,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/OmniFocusSyncStatus.swift`
 "could not be removed after its landing finished: "
     `Integration/LandingJournal.swift`
+"could not be removed after its landing was finished: "
+    `Integration/LandingRecovery.swift`
 "could not read the landing record at \(path): \(why)"
     `Integration/LandingJournal.swift`
 "could not read the landing record at \(url.path): \(newer)"
@@ -3644,6 +3680,10 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/RunInstructionCompliance.swift`
 "its 1 contact with a role and a cited page never says whether the role is quoted, so a summary reads as a quote"
     `Domain/RunInstructionCompliance.swift`
+"its attempt could not be recorded ("
+    `Integration/LandingRecovery.swift`
+"its landing record could not be written: \(why)"
+    `Integration/LandingRecovery.swift`
 "just now"
     `Domain/PrepStatus.swift`
 "landing record version \(version) is not one this build reads"
@@ -3719,6 +3759,16 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "the contact"
     `App/ActionFeedback.swift`
     `Domain/OmniFocusSync.swift`
+"the kept copy it names is not the results this landing started with"
+    `Integration/LandingRecovery.swift`
+"the kept copy of its results at \(pending.resultsURL(hash).path) could not be read ("
+    `Integration/LandingRecovery.swift`
+"the kept copy of its results at \(pending.resultsURL(hash).path) has changed since"
+    `Integration/LandingRecovery.swift`
+"the kept copy of its results could not be read ("
+    `Integration/LandingRecovery.swift`
+"the landing record names no kept copy of its results"
+    `Integration/LandingRecovery.swift`
 "the list of calendars it watches"
     `Integration/ScoutService.swift`
 "the one contact it found carries no tier, so the fit score is guessing"
@@ -3737,10 +3787,14 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Integration/ScoutService.swift`
 "the record of who you have shot before"
     `Integration/ScoutService.swift`
+"the scout that would finish it could not start yet"
+    `Integration/LandingRecovery.swift`
 "the show you checked never got an answer and is still unchecked"
     `Domain/ReachabilityRunSummary.swift`
 "the shows it already had"
     `Integration/ScoutService.swift`
+"the store refused to save \(source)"
+    `Integration/LandingRecovery.swift`
 "the venue"
     `UI/QueueView+Model.swift`
 "the venue names it matches against"
@@ -3783,3 +3837,5 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Integration/ScoutService.swift`
 "your queue"
     `App/ActionFeedback.swift`
+"your recent edits could not be saved first"
+    `Integration/LandingRecovery.swift`

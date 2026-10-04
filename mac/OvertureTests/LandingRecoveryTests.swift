@@ -154,7 +154,7 @@ final class LandingRecoveryTests {
     @Test func theIdleRecoveryStampsTheStallWatchdogWhileItReplays() throws {
         let root = SourceGuardHelper.source("Overture/App/RootView.swift")
         let body = try #require(SourceGuardHelper.bodyOfFunction(named: "recoverAnInterruptedLandingIfIdle", in: root))
-        let callback = try #require(SourceGuardHelper.propertyBody("replaying: { sequence in", in: body),
+        let callback = try #require(SourceGuardHelper.propertyBody("replaying: {", in: body),
                                     "the recovery is handed no replaying callback")
         #expect(callback.contains("freezeWatch.stampIdleWork(sequence.map"), Comment(rawValue: callback))
     }
