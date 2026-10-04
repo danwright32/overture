@@ -98,7 +98,10 @@ struct RefusedSourceIsImmutableTests {
             }),
             ("confirmEmpty", { s, ctx in _ = WatchlistEditing.confirmEmpty(s, in: ctx) }),
             ("stopWatching", { s, ctx in WatchlistEditing.stopWatching(s, in: ctx) }),
-            ("resumeWatching", { s, ctx in _ = WatchlistEditing.resumeWatching(s, in: ctx) })
+            ("resumeWatching", { s, ctx in _ = WatchlistEditing.resumeWatching(s, in: ctx) }),
+            // #4404: the stamp an edit leaves so older readings are set aside. A refused row is never edited, so
+            // it is never stamped either.
+            ("touchedByDan", { s, ctx in WatchlistEditing.touchedByDan(s, in: ctx) })
         ]
     }
 
