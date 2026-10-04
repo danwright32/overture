@@ -83,4 +83,18 @@ struct SkippedNightSendBlockTests {
         #expect(KeptNights.skippedNightNamed(subject: p.draftSubject, body: p.draftBody ?? "", on: p,
                                              today: today) == nil)
     }
+
+    // #4502: a send is judged on the day of the `now` it is handed, never the wall clock beside it. Handed a
+    // moment after the run's last night, the same pitch the control above sends is refused, because that
+    // run has passed on that day. Without this, the control above would turn red on its own the day real
+    // time walks past October 20 (L130), and a send handed one clock would answer for another.
+    @Test func aSendIsJudgedOnTheDayOfTheMomentItIsHanded() async throws {
+        let ctx = try context()
+        let p = try show(ctx, body: "Hello,\n\nI'd be glad to photograph October 6 and October 20.")
+        let afterTheRun = Date(timeIntervalSince1970: 1_793_000_000)   // 2026-10-26, after every night above
+        let sender = CountingSender()
+        let sent = await SendService.sendOne(p, now: afterTheRun, sender: sender)
+        #expect(sent == false, "a run that had passed on the send's own day was sent")
+        #expect(sender.sent.isEmpty)
+    }
 }

@@ -151,10 +151,10 @@ enum SendGroup {
     // rather than trusted from the ticks, because a guard that only lives on a screen is not a guard
     // (#2052): this is the one filter both the sheet's promise and the send itself go through, so what he
     // reads and what leaves cannot differ.
-    static func sendableFor(_ prospect: Prospect, ids: [String]) -> [Recipient] {
+    static func sendableFor(_ prospect: Prospect, ids: [String], today: String) -> [Recipient] {
         let wanted = Set(ids)
         return Recipient.inSendOrder(
-            prospect.recipients.filter { wanted.contains($0.id) && $0.isSendablePending })
+            prospect.recipients.filter { wanted.contains($0.id) && $0.isSendablePending(today: today) })
     }
 
     // #2049: the same group WITHOUT the approval gate, for showing what the email will look like rather

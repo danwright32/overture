@@ -253,7 +253,7 @@ struct SendPickerTests {
         let ben = try #require(p.recipients.first { $0.email == "ben@org.example" })
         ben.looksLikeVenue = true
 
-        let chosen = SendGroup.sendableFor(p, ids: ["ann@org.example", "ben@org.example"])
+        let chosen = SendGroup.sendableFor(p, ids: ["ann@org.example", "ben@org.example"], today: "2082-06-01")
 
         #expect(chosen.map(\.email) == ["ann@org.example"])
     }

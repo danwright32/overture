@@ -1634,7 +1634,7 @@ enum ProspectMutations {
         guard let model = model(forKey: naturalKey, org: nil, in: prospects, feedback: feedback) else { return }
         // Written at the COMMIT, not as he flips it, so cancelling the sheet changes nothing about the show.
         if let together { model.sendsTogetherOverride = together }
-        let chosen = selecting.map { SendGroup.sendableFor(model, ids: $0) }
+        let chosen = selecting.map { SendGroup.sendableFor(model, ids: $0, today: EasternDate.today(Date())) }
         markSending(naturalKey)
         Task {
             // #1208: pull the current Gmail signature right before composing, so an email Dan sends after

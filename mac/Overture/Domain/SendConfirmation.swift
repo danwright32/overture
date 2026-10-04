@@ -90,7 +90,7 @@ struct SendConfirmation: Equatable {
             : SendGroup.pendingGroup(of: prospect, together: sendsTogether, today: today)
         // A ticked contact must still clear every guard: `sendableFor` filters to the ones that could
         // actually go, so a held contact cannot be talked past by being named here (#2052).
-        let group = selecting.map { SendGroup.sendableFor(prospect, ids: $0) } ?? defaultGroup
+        let group = selecting.map { SendGroup.sendableFor(prospect, ids: $0, today: today) } ?? defaultGroup
         // #2052: no sheet at all for a draft with no subject line, where this used to render
         // "(no subject)" beside a live Send button. The placeholder was itself the detection that the
         // value was missing, so it had to stop the send rather than label it (L67). Dan, on finding it:

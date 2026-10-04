@@ -14,9 +14,13 @@ enum SendService {
     // #2015: `nonisolated` so the QUEUE CARD can ask the same question the send asks, and the two can
     // never disagree about who is about to be emailed. It reads stored properties and decides; none of
     // the Gmail work the rest of this service does is involved.
-    nonisolated static func nextPendingRecipient(for prospect: Prospect) -> Recipient? {
+    // #4502: `today` is the day the send is judged on. A send passes the one it derives from its own `now`,
+    // so a send handed a clock answers for that clock rather than for the wall clock beside it (L130); the
+    // queue card asks about today.
+    nonisolated static func nextPendingRecipient(for prospect: Prospect,
+                                                 today: String = EasternDate.today(Date())) -> Recipient? {
         guard prospect.status == .approved, prospect.draftBody != nil else { return nil }
-        return sendOrdered(prospect.recipients).first(where: \.isSendablePending)
+        return sendOrdered(prospect.recipients).first(where: { $0.isSendablePending(today: today) })
     }
 
     // #2033: what pressing Send does, once. It is the ONE place the together-or-separately choice is
@@ -33,12 +37,12 @@ enum SendService {
     static func sendNext(_ prospect: Prospect, to chosen: [Recipient]? = nil,
                          now: Date, sender: MailSender) async -> Bool {
         guard let chosen else {
-            let group = SendGroup.pendingGroup(of: prospect, today: EasternDate.today(Date()))
+            let group = SendGroup.pendingGroup(of: prospect, today: EasternDate.today(now))
             guard group.count > 1 else { return await sendOne(prospect, now: now, sender: sender) }
             return await sendJointly(prospect, to: group, now: now, sender: sender)
         }
         // Re-filtered rather than trusted: the ticks were read off a screen, and the guards decide.
-        let group = SendGroup.sendableFor(prospect, ids: chosen.map(\.id))
+        let group = SendGroup.sendableFor(prospect, ids: chosen.map(\.id), today: EasternDate.today(now))
         guard !group.isEmpty else { return false }
         guard group.count > 1 else { return await deliver(group[0], of: prospect, now: now, sender: sender) }
         guard prospect.sendsTogether else {
@@ -56,7 +60,7 @@ enum SendService {
     // the next pending recipient. Manual approval is its own pacing, so no drip needed.
     @discardableResult
     static func sendOne(_ prospect: Prospect, now: Date, sender: MailSender) async -> Bool {
-        guard let recipient = nextPendingRecipient(for: prospect) else { return false }
+        guard let recipient = nextPendingRecipient(for: prospect, today: EasternDate.today(now)) else { return false }
         return await deliver(recipient, of: prospect, now: now, sender: sender)
     }
 
@@ -140,7 +144,7 @@ enum SendService {
             // Per-click only (no autonomous drip): the show stays approved while any recipient is still
             // sendable, so the Send button persists for the next one. Once the last one goes, it is
             // contacted.
-            if !prospect.recipients.contains(where: \.isSendablePending) {
+            if !prospect.recipients.contains(where: { $0.isSendablePending(today: EasternDate.today(now)) }) {
                 prospect.status = .contacted
             }
             return true
@@ -428,7 +432,7 @@ enum SendService {
         // out a draft Dan never approved. Caught by #2015's own card guard, which noticed an unapproved
         // draft naming contacts it was about to email.
         guard prospect.status == .approved else { return false }
-        let group = sendOrdered(recipients.filter(\.isSendablePending))
+        let group = sendOrdered(recipients.filter { $0.isSendablePending(today: EasternDate.today(now)) })
         guard !group.isEmpty,
               let pitch = OutgoingPitch.text(forGroup: group, of: prospect),
               // #3549: the show's one letter, read from the show rather than from whichever contact
@@ -487,7 +491,7 @@ enum SendService {
             }
             prospect.freezeSentCopy(subject: mail.subject, body: sharedBody)
             prospect.sendError = nil
-            if !prospect.recipients.contains(where: \.isSendablePending) {
+            if !prospect.recipients.contains(where: { $0.isSendablePending(today: EasternDate.today(now)) }) {
                 prospect.status = .contacted
             }
             return true
