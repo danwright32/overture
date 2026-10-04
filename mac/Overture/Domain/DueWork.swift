@@ -160,13 +160,6 @@ enum DueWork {
              followUp: followUp).counts
     }
 
-    static func counts<Row: ProspectFacts>(from shows: [Row], contacts: (Row) -> [Row.Contact], inquiries: [Inquiry],
-                                           now: Date, replyRunAlive: Bool,
-                                           followUp: FollowUpConfig = .init()) -> Counts {
-        rows(from: shows, contacts: contacts, inquiries: inquiries, now: now, replyRunAlive: replyRunAlive,
-             followUp: followUp).counts
-    }
-
     // #4110: the toolbar badge's number AND the instant it could next change, worked out together.
     //
     // ONE VALUE rather than two calls, and that is the whole point. Both halves are whole-store sweeps
