@@ -331,6 +331,35 @@ final class LandingFirstHoldProbeTests {
             } else {
                 Self.say("x\(factor) lead paste: UNMEASURED, the results file holds no source")
             }
+            // 5. #4512: the landing's `poisonedTokens` term, apart. A sample put most of runScout's landing block
+            //    there; this times each part alone on a fresh working set, as a landing meets them: the working set
+            //    read, the FIRST call (which builds the batch tables over every stored show), a later call, and
+            //    the folds of every show alone. Three fresh working sets, each part's median.
+            do {
+                var parts: [String: [Double]] = [:]
+                var builds = 0
+                for _ in 0..<3 {
+                    let landing = ScoutLandingStore(context: ctx)
+                    var t = Phase0.now()
+                    let rows = try landing.rows()
+                    parts["working set read", default: []].append(Phase0.ms(since: t))
+                    t = Phase0.now()
+                    _ = try landing.poisonedTokens(adding: [])
+                    parts["first poisonedTokens (builds the tables)", default: []].append(Phase0.ms(since: t))
+                    t = Phase0.now()
+                    _ = try landing.poisonedTokens(adding: [])
+                    parts["a later poisonedTokens", default: []].append(Phase0.ms(since: t))
+                    builds = landing.counters.tableBuilds
+                    t = Phase0.now()
+                    for p in rows { _ = ScoutLandingStore.Fold(p) }
+                    parts["the folds of every show alone", default: []].append(Phase0.ms(since: t))
+                }
+                for (name, runs) in parts.sorted(by: { $0.key < $1.key }) {
+                    Self.say(String(format: "x\(factor) poison term, %@: %.1f ms (runs %@)", name, runs.sorted()[1],
+                                    runs.map { String(format: "%.1f", $0) }.joined(separator: ", ")))
+                }
+                Self.say("x\(factor) poison term: \(builds) table build per working set")
+            }
             // 3. runScout's tail, its two whole table fetches timed alone on the main thread as the tail meets
             //    them: after a landing, with the store's rows already registered in the context.
             member("tail: booking entities fetch") { _ = DownbeatBooking.bookingEntities(in: ctx) }
