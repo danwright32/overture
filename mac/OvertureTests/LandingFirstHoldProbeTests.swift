@@ -66,6 +66,12 @@ final class LandingFirstHoldProbeTests {
         monitor.start()
         let result = try await work()
         let wall = Phase0.ms(since: start)
+        // Let the main queue drain first: a ping that waited behind the call's LAST hold runs only once the
+        // main thread is free, which is after this function resumes, so stopping here would drop that hold.
+        // The control above measured exactly that (a 500 ms block read as 0.0 ms) before this drain.
+        await withCheckedContinuation { (done: CheckedContinuation<Void, Never>) in
+            DispatchQueue.main.async { done.resume() }
+        }
         let turns = monitor.stop()
         let stamped = await waitUntil("the first hold's stamp runs", timeout: .seconds(60)) { stamp.value != 0 }
         #expect(stamped, "the main queue never ran the stamp, so the first hold was not measured")
@@ -117,6 +123,15 @@ final class LandingFirstHoldProbeTests {
         guard let base = try LiveStoreClone.makeClone(in: dir) else {
             throw LiveStoreClone.Refusal.backupFailed("no live store on this machine")
         }
+        // The instrument's own control: a known 500 ms block on the main thread AFTER the first yield must show
+        // as a worst turn of about 500 ms, or the worst turn misses later holds and only the first is real.
+        let (_, control) = try await measure { () -> Int in
+            await Task.yield()
+            let until = Phase0.now() + 500_000_000
+            while Phase0.now() < until {}
+            return 0
+        }
+        Self.say("control, a 500 ms block after the first yield: " + control.text)
         for factor in [1, 4] {
             let url = factor == 1 ? base : try Phase0.scaledCopy(of: base, factor: factor, in: dir)
             let container = try Phase0.openContainer(at: url)
@@ -183,18 +198,60 @@ final class LandingFirstHoldProbeTests {
             // 2. runScout from its first line, with nothing reaching the network.
             // Twice: the second run finds the store as the first left it, so a cost the first run pays once
             // (its flush of what the ingest left, a first use of something) shows as the difference.
+            // A suspect for the cost runScout's FIRST run in a process pays: its `session` default argument,
+            // `URLSession.shared`, is evaluated on every call and first touched here. Timed once, alone.
+            if factor == 1 {
+                let t0 = Phase0.now()
+                _ = URLSession.shared.configuration
+                Self.say(String(format: "x1 first touch of URLSession.shared: %.1f ms", Phase0.ms(since: t0)))
+            }
+            // The history read alone, measured as runScout's first hold is, before runScout's first run: if the
+            // one-time cost is this read's (its flush, or the first background context's), it shows here and leaves
+            // pass 1 below.
+            if factor == 1 && ProcessInfo.processInfo.environment["MEASURE_4339_HISTORY_FIRST"] != nil {
+                Self.say("x1 before the history read: context has changes \(ctx.hasChanges)")
+                let (_, historyHold) = try await measure { await LandingInputs.history(into: ctx) }
+                Self.say("x1 history read alone: " + historyHold.text)
+            }
+            // `TEST_RUNNER_MEASURE_4339_SAMPLE=<dir outside any checkout>`: the first run in this process at 1x is
+            // sampled with /usr/bin/sample for three seconds, so its one-time cost can be read from its stacks.
+            var sampler: Process?
+            if factor == 1, let out = ProcessInfo.processInfo.environment["MEASURE_4339_SAMPLE"] {
+                let process = Process()
+                process.executableURL = URL(fileURLWithPath: "/usr/bin/sample")
+                process.arguments = ["\(getpid())", "20", "1", "-mayDie", "-file", out + "/runscout-first-run.sample.txt"]
+                try process.run()
+                sampler = process
+                try? await Task.sleep(for: .seconds(5))   // sample attaches slowly; the run starts once it has
+            }
             for pass in 1...2 {
-                let (swept, sweepHold) = try await measure { () -> Int in
+                // Where the run spent its time: a stamp at each tail step, so the tail's own fetches are timed
+                // inside the run rather than only alone, and what the run reported about itself.
+                var steps: [(String, UInt64)] = []
+                let stepStart = Phase0.now()
+                let (facts, sweepHold) = try await measure { () -> String in
                     let outcome = try await ScoutService.runScout(
                         into: ctx, depth: .watchOnly, extractor: NoFeed(), extractorRegistry: { _ in nil },
                         fetch: { url, _, _ in
                             FetchedPage(normalizedHTML: "<p/>", finalURL: url.absoluteString, contentHash: "hold4339")
                         },
                         pin: { _, id in URL(fileURLWithPath: "/dev/null/hold4339-\(id).html") }, launch: { _ in },
-                        defaults: ScratchDefaults.make("LandingFirstHoldProbeTests"), landings: LandingSingleFlight())
-                    return outcome.sources.count
+                        defaults: ScratchDefaults.make("LandingFirstHoldProbeTests"),
+                        onNativeStep: { steps.append(($0.rawValue, Phase0.now())) },
+                        landings: LandingSingleFlight())
+                    return "\(outcome.sources.count) sources reported, save failed \(outcome.saveFailed), "
+                        + "stop \(outcome.landingStop.map { "\($0)" } ?? "none"), "
+                        + "client warning \(outcome.clientListWarning == nil ? "none" : "set")"
                 }
-                Self.say("x\(factor) runScout pass \(pass) (\(swept) sources reported): " + sweepHold.text)
+                let end = Phase0.now()
+                var marks = steps.map { ($0.0, Double($0.1 &- stepStart) / 1_000_000) }
+                marks.append(("returned", Double(end &- stepStart) / 1_000_000))
+                Self.say("x\(factor) runScout pass \(pass) (\(facts)): " + sweepHold.text + "; steps at "
+                         + marks.map { String(format: "%@ %.1f", $0.0, $0.1) }.joined(separator: ", ") + " ms")
+            }
+            if let sampler {
+                sampler.waitUntilExit()
+                Self.say("x1 first run sampled (exit \(sampler.terminationStatus)) to MEASURE_4339_SAMPLE")
             }
             // 3. runScout's tail, its two whole table fetches timed alone on the main thread as the tail meets
             //    them: after a landing, with the store's rows already registered in the context.
