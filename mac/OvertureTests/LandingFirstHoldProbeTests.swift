@@ -252,7 +252,7 @@ final class LandingFirstHoldProbeTests {
                 Self.say("x1 history read alone: " + historyHold.text)
             }
             // `TEST_RUNNER_MEASURE_4339_SAMPLE=<dir outside any checkout>`: the first run in this process at 1x is
-            // sampled with /usr/bin/sample for three seconds, so its one-time cost can be read from its stacks.
+            // sampled with /usr/bin/sample for twenty seconds (attached five seconds early), so its one-time cost can be read from its stacks.
             var sampler: Process?
             if factor == 1, let out = ProcessInfo.processInfo.environment["MEASURE_4339_SAMPLE"] {
                 let process = Process()

@@ -7,10 +7,6 @@ import SwiftData
 // 801 and 866 at 5,500 (`LandingFirstHoldProbeTests`). When the tail had to wait for the store (another landing
 // may have added shows meanwhile) it reads the table afresh, once for both passes, and a read that fails is
 // recorded on the run rather than read as an empty store.
-private struct NoFeed: SourceExtractor {
-    func extract() async throws -> ExtractedListing { ExtractedListing(events: [], verdict: .noDatedContent) }
-}
-
 private struct ListedFeed: SourceExtractor {
     let events: [ExtractedEvent]
     func extract() async throws -> ExtractedListing { ExtractedListing(events: events, verdict: .upcomingListings) }
