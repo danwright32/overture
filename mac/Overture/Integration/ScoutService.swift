@@ -616,8 +616,14 @@ enum ScoutService {
         // so repeat-client recognition stays current as Dan sends and books (#19).
         // #3071: REQUIRED, not swallowed. An empty answer here means a repeat client is not recognised
         // as one, so a show Dan has already shot reads as cold and gets pitched as a stranger.
-        let existing = try required(.repeatClientHistory) { try readProspectTable(context) }
-        let history = LocalHistory.forMatching(existing: existing)
+        // #4339 (A11): read OFF the main thread, behind the entry flush (`LandingInputs.history`): measured on a
+        // live store clone the table read and the history built from it were 204.5 and 40.0 ms of this first
+        // hold at 1,372 shows, 812.8 and 203.1 at 4x. Still REQUIRED: an unreadable table refuses the run here.
+        let history: [HistoryRecord]
+        switch await LandingInputs.history(readProspectTable: readProspectTable, saveEntry: saveEntry, into: context) {
+        case .success(let read): history = read
+        case .failure(let unreadable): throw StoreReadFailure(read: .repeatClientHistory, underlying: unreadable)
+        }
         let blocked = blockedCalendar(export: (loaded.bookings, loaded.blockedDates, loaded.health),
                                       context: context)
 
