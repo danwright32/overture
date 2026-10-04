@@ -32,6 +32,14 @@ final class LandingRun {
     var entryPointRaw: String = ""
     // #4335: the landing's own `now`, the time it stamps its rows with (L37). nil on A7's rows.
     var startedAt: Date?
+    // #4335 (A6, the recovery): how many times an interrupted landing has been STARTED again by the recovery
+    // (`LandingRecovery`), counted and saved BEFORE each attempt, so an attempt that ends the process (a SQLite
+    // trigger, measured by #4327 step 0.8) still counts and the cap of `LandingRecovery.attemptCap` is reached
+    // rather than retried for ever. 0 on every landing that was never interrupted.
+    var attemptCount: Int = 0
+    // #4335: when the recovery finished this landing, nil while it has not and on every landing that finished
+    // by itself. With `startedAt`, the delay between the two is what an interrupted landing cost.
+    var recoveredAt: Date?
 
     init(runIdentity: String, landedAt: Date?, sequence: Int = 0,
          entryPoint: LandingSingleFlight.EntryPoint? = nil, startedAt: Date? = nil) {
@@ -40,6 +48,14 @@ final class LandingRun {
         self.sequence = sequence
         self.entryPointRaw = entryPoint?.rawValue ?? ""
         self.startedAt = startedAt
+    }
+
+    // #4335: the record of the landing with this identity and sequence, the newest first if a failed read ever
+    // left two (`begin` says when that can happen). nil when the landing never reached its first save. Throws on a
+    // failed read, which is never "no record" (L215).
+    static func record(_ identity: String, sequence: Int, in context: ModelContext) throws -> LandingRun? {
+        let rows = FetchDescriptor<LandingRun>(predicate: #Predicate { $0.runIdentity == identity && $0.sequence == sequence })
+        return try context.fetch(rows).sorted { ($0.landedAt ?? .distantPast) > ($1.landedAt ?? .distantPast) }.first
     }
 
     // #4335: the highest sequence any landing has recorded, the store's half of the floor a new sequence is

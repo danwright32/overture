@@ -62,13 +62,18 @@ struct LandingRecordMigrationDryRunTests {
             #expect(sources.allSatisfy { $0.lastLandedRunID == nil && $0.lastLandedSequence == 0 },
                     "a migrated source reads as landed by a run nothing recorded")
             #expect(runs.allSatisfy { $0.sequence == 0 && $0.entryPointRaw.isEmpty })
+            // #4335 (the recovery): two more columns, a count and a time, both reading as never recovered.
+            #expect(runs.allSatisfy { $0.attemptCount == 0 && $0.recoveredAt == nil })
         }
 
         // The new columns take a write and read it back, which a schema mismatch breaks and an open-and-count
         // would not notice.
         let started = Date(timeIntervalSince1970: 1_790_792_040.5)
-        ctx.insert(LandingRun(runIdentity: "dry-run-landing", landedAt: nil, sequence: 9_999,
-                              entryPoint: .runScoutLanding, startedAt: started))
+        let dry = LandingRun(runIdentity: "dry-run-landing", landedAt: nil, sequence: 9_999,
+                             entryPoint: .runScoutLanding, startedAt: started)
+        dry.attemptCount = 2
+        dry.recoveredAt = started.addingTimeInterval(60)
+        ctx.insert(dry)
         if let first = sources.first {
             first.lastLandedRunID = "dry-run-landing"
             first.lastLandedSequence = 9_999
@@ -78,6 +83,7 @@ struct LandingRecordMigrationDryRunTests {
         #expect(try LandingRun.highestSequence(in: fresh) == 9_999)
         let run = try #require(try fresh.fetch(FetchDescriptor<LandingRun>()).first { $0.runIdentity == "dry-run-landing" })
         #expect(run.startedAt == started && run.entryPointRaw == "runScoutLanding")
+        #expect(run.attemptCount == 2 && run.recoveredAt == started.addingTimeInterval(60))
         if let id = sources.first?.sourceId {
             let s = try #require(try fresh.fetch(FetchDescriptor<WatchedSource>()).first { $0.sourceId == id })
             #expect(s.lastLandedRunID == "dry-run-landing" && s.lastLandedSequence == 9_999)

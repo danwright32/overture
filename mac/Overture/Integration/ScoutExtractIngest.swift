@@ -65,6 +65,10 @@ enum ScoutExtractIngest {
                        // #4330 (A13): the queue the landing block waits its turn in, and at what priority.
                        landings: LandingSingleFlight = .shared,
                        priority: LandingSingleFlight.Priority = .scout,
+                       // #4335 (A6): who this landing holds the store as. `.landingRecovery` when the recovery finishes an
+                       // interrupted landing, so a Run press waiting behind it says so; the journal keeps the entry point
+                       // the landing STARTED as either way.
+                       holdingAs: LandingSingleFlight.EntryPoint = .scoutExtractIngest,
                        // #4336 (A7): the identity of the results being landed and the check to judge it by.
                        // `ScoutExtractLanding` always passes one, being the only caller holding the bytes the
                        // identity is the hash of (AlreadyLandedBypassIsTestOnlyTests holds the app to that).
@@ -117,6 +121,10 @@ enum ScoutExtractIngest {
                        // #4331 (A2): how the landing stamps `ingestedAt`. Only the merge survivor probe passes
                        // anything but the rule, to measure the rule against the one it replaced.
                        stampRule: IngestedAtStamp.Rule = .whenChanged,
+                       // #4335 (A6): when the recovery is finishing this landing, the time it does so, stamped on the
+                       // landing record (`LandingRun.recoveredAt`) in the same closing save as `landedAt`. nil for every
+                       // other landing.
+                       recoveredAt: Date? = nil,
                        into context: ModelContext) async -> ScoutService.Outcome {
         var outcome = ScoutService.Outcome(found: 0, inserted: 0, updated: 0, skipped: 0)
         // #4335: minted above every sequence the store recorded (on a source, or on a landing record) and
@@ -322,7 +330,7 @@ enum ScoutExtractIngest {
         // results to offer again (`ScoutExtractLanding`), so nothing is lost.
         let token: LandingSingleFlight.Token
         do {
-            token = try await landings.begin(entryPoint: .scoutExtractIngest, priority: priority,
+            token = try await landings.begin(entryPoint: holdingAs, priority: priority,
                                              deadline: LandingSingleFlight.Deadline.scoutExtractIngest,
                                              onWait: { onWait(sequence) })
         } catch is CancellationError {
@@ -651,7 +659,10 @@ enum ScoutExtractIngest {
         // back by the closing save's revert (#4334), to the unlanded record the first save carried, or with
         // the record itself when no save carried it. #4335: the record is the one inserted at landing start.
         let landed = !outcome.saveFailed && outcome.landingStop == nil
-        if landed { run.landedAt = now }
+        if landed {
+            run.landedAt = now
+            if let recoveredAt { run.recoveredAt = recoveredAt }
+        }
         // #4334 (A5): a landing that stopped because a source could NOT be put back makes no further save, so
         // nothing it could not restore is saved; any other stop still saves what the sources before it left.
         if case .notReverted? = outcome.landingStop {

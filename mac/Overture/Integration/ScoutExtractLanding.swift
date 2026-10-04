@@ -56,6 +56,8 @@ enum ScoutExtractLanding {
                      today: String = QueueModel.easternToday(), now: Date = Date(),
                      landings: LandingSingleFlight = .shared,
                      priority: LandingSingleFlight.Priority = .scout,
+                     // #4335 (A6): handed straight to the ingest; the recovery passes `.landingRecovery`.
+                     holdingAs: LandingSingleFlight.EntryPoint = .scoutExtractIngest,
                      pending: PendingScoutIngests = .live,
                      alreadyLanded: AlreadyLandedCheck = .lookUp,
                      saveClosing: (ModelContext) throws -> Void = { try $0.save() },
@@ -68,6 +70,8 @@ enum ScoutExtractLanding {
                      saveSource: @escaping (ModelContext) throws -> Void = { try $0.save() },
                      // #4335 (RC6): where each landed source's feed movement line is appended, after its save.
                      movementLog: any FeedMovementLog.Sink = FeedMovementLog.file,
+                     // #4335 (A6): handed straight to the ingest; set only by the recovery.
+                     recoveredAt: Date? = nil,
                      into context: ModelContext) async -> Landed {
         let hash = PendingScoutIngests.contentHash(of: data)
         // #4440: one identity, one sequence. A copy already kept for these bytes (a landing that waited, was
@@ -104,7 +108,7 @@ enum ScoutExtractLanding {
         }
         var outcome = await ScoutExtractIngest.ingest(
             results, clients: clients, history: history, blocked: blocked, today: today, now: now,
-            landings: landings, priority: priority,
+            landings: landings, priority: priority, holdingAs: holdingAs,
             identity: LandedResultsIdentity(contentHash: hash, check: alreadyLanded),
             sequence: sequence,
             sequenceFloor: { pending.highestSequence },
@@ -128,6 +132,7 @@ enum ScoutExtractLanding {
                 return hash
             },
             movementLog: movementLog,
+            recoveredAt: recoveredAt,
             into: context)
         if outcome.notLandedYet != nil {
             // The refusal's own sentence says a copy was kept. When it was not, that sentence is false, so
@@ -237,6 +242,12 @@ enum ScoutExtractLanding {
                 offered.unreadable.append(LandingWaitCopy.pendingUnreadable(path: path, why: why))
             case .entry(let entry):
                 guard inFlight[entry.contentHash] == nil else { continue }
+                // #4335 (A6, decision 5): a copy whose landing STARTED (its journal is still pending) is an
+                // INTERRUPTED landing, and finishing it is the recovery's (`LandingRecovery`), at idle, never
+                // here: this sweep runs at launch and at the end of every landing, which is exactly when Dan is
+                // at the Mac, and finishing an ingest is one synchronous block of seconds. The recovery says it
+                // is waiting, so leaving it here is not silence.
+                if journals?.pending(sequence: entry.sequence) != nil { continue }
                 let copy: (data: Data, results: ScoutExtractResults)
                 do {
                     copy = try pending.results(entry)
@@ -245,14 +256,8 @@ enum ScoutExtractLanding {
                         path: pending.resultsURL(entry.contentHash).path, why: String(describing: error)))
                     continue
                 }
-                // #4440 / #4335: a copy whose landing STARTED (its journal is still pending) lands with the
-                // `now` it started with, because its results really were read then (L37), and because the
-                // sources it landed before it stopped are applied again with that same instant, which is what
-                // makes that second application write nothing new.
-                let started = journals?.pending(sequence: entry.sequence)?.now
                 let landed = await land(copy.data, copy.results, sequence: entry.sequence,
-                                        clients: clients, history: history, blocked: blocked,
-                                        today: QueueModel.easternToday(started ?? now), now: started ?? now,
+                                        clients: clients, history: history, blocked: blocked, now: now,
                                         landings: landings, pending: pending, saveClosing: saveClosing,
                                         journals: journals, movementLog: movementLog, into: context)
                 let outcome = landed.outcome

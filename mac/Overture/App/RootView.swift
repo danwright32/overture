@@ -198,6 +198,9 @@ struct RootView: View {
     // completion can record {sources, elapsed} for the "~X remaining" pace. Kept alongside readingStartedAt
     // because both describe the same run.
     @State private var readingSourceCount = 0
+    // #4335 (A6): the last thing the landing recovery said, so a recovery that reads the same every minute (one
+    // that stopped being tried) is said once rather than every minute.
+    @State private var lastRecoveryLine: String?
 
     // #885: one definition of "due", shared with the sheet this badge opens (DueWork). Summed here in
     // the body before, and summed again in FollowUpsView's own body: the pill Dan clicks and the list he
@@ -1337,6 +1340,106 @@ struct RootView: View {
                 // instead of waited out for an hour.
                 await HourlyMaintenance.run { hourlyMaintenance() }
             }
+            .task {
+                guard AppEnvironment.shouldStartBackgroundServices else { return }
+                // #4335 (A6, decision 5): an interrupted scout landing is finished automatically, but only when
+                // Dan is away from the Mac, because finishing one is a block of seconds the window cannot draw
+                // through. Said at launch, so the wait is visible, then looked at once a minute.
+                announceInterruptedLandings()
+                while !Task.isCancelled {
+                    try? await Task.sleep(nanoseconds: 60 * 1_000_000_000)
+                    await recoverAnInterruptedLandingIfIdle()
+                }
+            }
+    }
+
+    // #4335 (A6): the launch line for a landing the recovery is waiting to finish. Silent when there is none,
+    // which is one directory listing to learn.
+    private func announceInterruptedLandings() {
+        let found: [LandingRecovery.Interrupted]
+        do {
+            found = try LandingRecovery.survey(journals: .live, pending: .live, in: context)
+        } catch {
+            sayRecovery(.recordsUnreadable(why: HandoffDecodeFailure.describe(error)))
+            return
+        }
+        if let first = found.first(where: { $0.finding == .replay || $0.finding == .sweep }) {
+            status.set(LandingWaitCopy.interruptedWaiting(since: first.startedAt), priority: .info)
+            return
+        }
+        // A landing the recovery stopped trying is said at every launch until A10's controls (#4338) can clear
+        // it, because the minute tick no longer works on it and would otherwise never say it again.
+        if let stopped = found.first(where: { if case .stoppedRetrying = $0.finding { return true }; return false }),
+           case .stoppedRetrying(let attempts) = stopped.finding,
+           let line = LandingWaitCopy.recovered(.stoppedRetrying(startedAt: stopped.startedAt, attempts: attempts,
+                                                                 unlanded: stopped.unlanded.count)) {
+            status.set(line, priority: .warning)
+        }
+    }
+
+    // #4335 (A6, decision 5): idle is no landing holding the store, no scout run in flight (#1027's predicate,
+    // which covers the detached read) and no input to the Mac for `RecoveryIdle.quietFor`. Anything else waits
+    // for the next minute. The cheap questions are asked first, and the journals are listed before anything is
+    // read from the store, so the ordinary minute (nothing interrupted) costs a directory listing.
+    private func recoverAnInterruptedLandingIfIdle() async {
+        let verdict = RecoveryIdle.judge(
+            landingHeld: LandingSingleFlight.shared.isHeld,
+            scoutRunning: isScanning || readingStartedAt != nil || ScoutExtractService.isRunning(now: Date()),
+            secondsSinceInput: RecoveryIdle.secondsSinceInput())
+        guard case .idle(let quiet) = verdict else { return }
+        let journals = LandingJournals.live
+        // The judgement first (journals and the watchlist, no show table): a journal that stopped being tried is
+        // pending for good, and must not cost a whole table read every idle minute only to say nothing.
+        let found: [LandingRecovery.Interrupted]
+        do {
+            found = try LandingRecovery.survey(journals: journals, pending: .live, in: context)
+        } catch {
+            // Said, never skipped in silence: a folder nothing can list is a landing nothing will ever finish.
+            sayRecovery(.recordsUnreadable(why: HandoffDecodeFailure.describe(error)))
+            return
+        }
+        let actionable = found.filter {
+            switch $0.finding {
+            case .stoppedRetrying: return false
+            default: return true
+            }
+        }
+        guard !actionable.isEmpty else {
+            if found.isEmpty { lastRecoveryLine = nil }
+            return
+        }
+        // What only a replay reads (the client list, the match history, the blocked calendar), built only when
+        // one is waiting.
+        let replays = actionable.contains { $0.finding == .replay }
+        let loaded = replays ? DownbeatBridge.loadWithHealth(now: Date()) : nil
+        let existing = replays ? ((try? context.fetch(FetchDescriptor<Prospect>())) ?? []) : []
+        let recovered = await LandingRecovery.recoverNext(
+            journals: journals, pending: .live, clients: loaded?.clients ?? [],
+            history: replays ? LocalHistory.forMatching(existing: existing) : [],
+            blocked: loaded.map { ScoutService.blockedCalendar(export: ($0.bookings, $0.blockedDates, $0.health),
+                                                               context: context) } ?? .empty,
+            // Started when the scout flag went up; a run press or a reader in flight keeps it down.
+            sweep: {
+                runScout(auto: true, depth: .watchOnly)
+                return isScanning
+            },
+            // L459: the replay's holds are recorded as idle work, never mixed with freezes Dan felt.
+            replaying: { sequence in
+                freezeWatch.stampIdleWork(sequence.map { .init(recoverySequence: $0, inputIdleSeconds: quiet) })
+            },
+            into: context)
+        if let recovered { sayRecovery(recovered) }
+    }
+
+    // Said once: a landing that stopped being tried, or records that cannot be read, read the same every minute,
+    // and a line repeated every minute is one Dan learns to skim (L36).
+    private func sayRecovery(_ recovered: LandingRecovery.Recovered) {
+        guard let line = LandingWaitCopy.recovered(recovered), line != lastRecoveryLine else { return }
+        lastRecoveryLine = line
+        switch recovered {
+        case .notFinished, .stoppedRetrying, .recordsUnreadable: status.set(line, priority: .warning)
+        default: status.set(line, priority: .info)
+        }
     }
 
     // Everything that stops Dan with a question or a failure.
