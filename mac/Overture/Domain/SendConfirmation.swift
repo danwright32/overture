@@ -122,7 +122,7 @@ struct SendConfirmation: Equatable {
         // promise on an email reaching two people, so a group gets its own, naming how many.
         // #2017: follows the ticks AND the together-or-separately choice, both changeable on this sheet.
         reassurance = SendConfirmCopy.reassurance(chosen: group.count, together: sendsTogether)
-        candidates = SendGroup.candidates(of: prospect)
+        candidates = SendGroup.candidates(of: prospect, today: today)
         selected = group.map(\.id)
         // #4168: the CHOICE this confirmation was composed for, which is what the write route used to
         // leave on the model for this line to read back. The sheet seeds its picker from the confirmation

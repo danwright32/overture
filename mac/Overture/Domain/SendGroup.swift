@@ -137,13 +137,15 @@ enum SendGroup {
     // #2017: every contact the send sheet offers, in send order. A contact a review guard is holding is
     // INCLUDED and marked, rather than dropped: a list that silently omits somebody on the show under-reports
     // who is on it, which is the same defect #2015 fixed on the draft card.
-    static func candidates(of prospect: Prospect) -> [SendCandidate] {
+    // #4502: judged on the same `today` as the selection and the send, so the sheet never offers a contact
+    // the send would then drop, or marks one held that would go.
+    static func candidates(of prospect: Prospect, today: String) -> [SendCandidate] {
         Recipient.inSendOrder(
-            prospect.recipients.filter { $0.isSendablePending || $0.isBlockedAwaitingReview })
+            prospect.recipients.filter { $0.isSendablePending(today: today) || $0.isBlockedAwaitingReview })
             .compactMap { r in
                 guard let email = r.email, !email.isEmpty else { return nil }
                 return SendCandidate(id: r.id, name: r.name ?? email, email: email,
-                                     isHeld: !r.isSendablePending)
+                                     isHeld: !r.isSendablePending(today: today))
             }
     }
 
