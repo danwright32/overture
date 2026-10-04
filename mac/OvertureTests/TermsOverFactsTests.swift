@@ -381,6 +381,13 @@ struct TermsOverFactsTests {
         contact("second@example.invalid", on: replies, email: "second@example.invalid") {
             $0.replied = true; $0.repliedAt = daysAgo(2)
         }
+        // A show that BOOKED through one contact: its other, still silent, pitch is no longer anything to
+        // reach out about, so the show stays off the list.
+        let booked = try #require(all.first { $0.naturalKey == "drift live|2026-11-01" })
+        contact("silent-on-booked@example.invalid", on: booked, email: "silent-on-booked@example.invalid")
+        contact("booker@example.invalid", on: booked, email: "booker@example.invalid") {
+            $0.resolution = .booked
+        }
     }
 
     @Test func theReachedOutTermsAnswerTheSameOverFactsAsOverModels() throws {
@@ -391,6 +398,8 @@ struct TermsOverFactsTests {
         // Positive controls (L159): rows on the list, and every action the row's control can take.
         let rows = ReachedOutQueue.activeWithDates(from: all, now: now)
         #expect(rows.count == 3, "the fixture should put three shows on the reached-out list")
+        #expect(!rows.contains { $0.prospect.naturalKey == "drift live|2026-11-01" },
+                "a show booked through one contact still put its other pitch on the reached-out list")
         let actions = Set(all.flatMap { p in p.recipients.map { ReachedOutAction.of($0, in: p, now: now, today: asOf) } })
         #expect(actions == Set(ReachedOutAction.allCases), "the fixture reaches only \(actions)")
         #expect(rows.first { $0.prospect.naturalKey == "copper|2026-10-17" }?.recipient.id == "first@example.invalid",
