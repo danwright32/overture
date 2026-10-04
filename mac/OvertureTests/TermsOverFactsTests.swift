@@ -862,6 +862,7 @@ struct TermsOverFactsTests {
         #expect(card.contacts.first { $0.id == "zz-act@example.invalid" }?.replyIsAnswered == true)
         #expect(card.contacts.first { $0.id == "zz-act@example.invalid" }?.replyPostdatesDraftRequest == true)
         #expect(card.showSummaryAbsence == .noListingPage)
+        #expect(card.greetingAudienceSize == 3, "the card's greeting audience is not the show's three pending addresses")
         let blocked = try show("ninefold|2026-10-10")
         #expect(blocked.draftIsMissingSubject, "a draft with no subject line is not missing one")
         #expect(blocked.conflictNote != nil, "an uncleared day off says nothing on the card")
