@@ -84,8 +84,6 @@ enum UnsortedProspectFetchAudit {
         Entry(file: "RootView.swift", scope: "ingestPrep", reads: 1, kind: .orderFree, why: """
             Read into a set of forbidden terms (`VoiceGuidanceGuard.forbiddenTerms`).
             """),
-        Entry(file: "LeadIntakeModel.swift", scope: "importAll", reads: 1, kind: .orderedDownstream,
-              why: historyOrdersItself),
         Entry(file: "FollowUpsView.swift", scope: "#Preview", reads: 1, kind: .orderFree, why: """
             An Xcode preview over a container it owns; nothing ships from it.
             """),
