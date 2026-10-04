@@ -602,6 +602,18 @@ struct TermsOverFactsTests {
         let now = (EasternDate.date(from: asOf) ?? Date()).addingTimeInterval(12 * 3600)
         // Positive controls (L159), and the rules themselves, which part two cannot hold.
         #expect(DraftedDeadEnd.count(in: all) == 1, "exactly the drafted show with no contacts is a dead end")
+        // Named, not only counted: an inverted rule swaps which drafted show it picks and keeps the count.
+        let deadEnd = try #require(all.first { $0.naturalKey == "lantern|2026-10-03" })
+        let withContacts = try #require(all.first { $0.naturalKey == "ninefold|2026-10-10" })
+        #expect(DraftedDeadEnd.hasNobodyToSendTo(deadEnd), "the drafted show with no contacts is not a dead end")
+        #expect(!DraftedDeadEnd.hasNobodyToSendTo(withContacts), "a drafted show with contacts reads as a dead end")
+        // The organisation count's entry point hands its term every row in any order (the slice C rotation).
+        let sorted = all.sorted { $0.naturalKey < $1.naturalKey }
+        for start in sorted.indices {
+            let rotated = Array(sorted[start...] + sorted[..<start])
+            #expect(QueueModel.organisationRowCounts(among: rotated) == QueueModel.organisationRowCounts(rotated.map(\.presenter)),
+                    "organisationRowCounts(among:) differs from the term with rotation \(start)")
+        }
         let stalled = StalledReplyDraft.dueRecipients(from: all, now: now, runAlive: false)
         #expect(stalled.map(\.recipient.id) == ["stalled@example.invalid"],
                 "only the draft asked for an hour ago is stalled; the fresh, answered and delivered ones are not")
