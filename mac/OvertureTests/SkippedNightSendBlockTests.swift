@@ -99,7 +99,7 @@ struct SkippedNightSendBlockTests {
         }
         #expect(!calls.isEmpty, "no shipping call to the send was found, so this measured nothing")
         for found in calls {
-            #expect(found.contains("now: Date()"), Comment(rawValue: "a send handed some other moment: \(found)"))
+            #expect(found.contains("now: Date(),"), Comment(rawValue: "a send handed some other moment: \(found)"))
         }
     }
 
