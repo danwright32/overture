@@ -36,7 +36,9 @@ struct ReachabilityCascadeHasOneDefinitionTests {
 
     /// The app files allowed to consume the cascade, each because it has been read and is not a second
     /// definition of it. Grows deliberately: Phase 3c's `RecipientFacts` is the next expected entry.
-    private static let recordedConsumers: Set<String> = ["Prospect.swift"]
+    /// #4357 slice G1 MOVED the one consumer rather than adding one: `reachabilityResultFromRecipients(among:)`
+    /// now lives on `ProspectFacts`, and `Prospect.swift` only forwards to it with its own contacts.
+    private static let recordedConsumers: Set<String> = ["ProspectFactsMembers.swift"]
 
     /// The four facts together. Any file naming ALL of them is either the rule or something deciding the
     /// same question from the same inputs, which is the shape a second definition takes.

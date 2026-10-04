@@ -17,7 +17,7 @@ struct ProspectRowViewOrgDoNotContactTests {
     }
 
     private func row(_ item: QueueItem) -> ProspectRowView {
-        ProspectRowView(item: item, today: "2026-07-11", onKeep: {}, onDismiss: { _ in })
+        ProspectRowView(item: item, today: "2026-07-11", now: Date(), onKeep: {}, onDismiss: { _ in })
     }
 
     private func texts(_ view: ProspectRowView) throws -> [String] {

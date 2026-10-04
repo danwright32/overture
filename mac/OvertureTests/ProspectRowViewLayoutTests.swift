@@ -30,12 +30,12 @@ struct ProspectRowViewLayoutTests {
     }
 
     @Test func aRowWithAPathologicallyLongGroupNameRendersMeaningfullyTallerThanAShortOne() {
-        let short = ProspectRowView(item: item(groupName: "Aurora Strings"), today: "2026-07-09",
+        let short = ProspectRowView(item: item(groupName: "Aurora Strings"), today: "2026-07-09", now: Date(),
                                     onKeep: {}, onDismiss: { _ in })
         // A long, unbroken hyphenated string (no spaces to wrap on except the hyphens), mirroring
         // the exact pathological case the #379/#489 diagnostic already confirmed wraps cleanly.
         let longName = String(repeating: "Aurora-Chamber-Strings-Ensemble-Ensemble-", count: 4)
-        let long = ProspectRowView(item: item(groupName: longName), today: "2026-07-09",
+        let long = ProspectRowView(item: item(groupName: longName), today: "2026-07-09", now: Date(),
                                    onKeep: {}, onDismiss: { _ in })
 
         let shortHeight = renderedHeight(short)
@@ -46,10 +46,10 @@ struct ProspectRowViewLayoutTests {
     }
 
     @Test func aRowWithALongFitReasonRendersMeaningfullyTallerThanAShortOne() {
-        let short = ProspectRowView(item: item(fitReason: "Strong fit"), today: "2026-07-09",
+        let short = ProspectRowView(item: item(fitReason: "Strong fit"), today: "2026-07-09", now: Date(),
                                     onKeep: {}, onDismiss: { _ in })
         let longReason = String(repeating: "This performance matches Dan's usual coverage profile closely and merits a look. ", count: 6)
-        let long = ProspectRowView(item: item(fitReason: longReason), today: "2026-07-09",
+        let long = ProspectRowView(item: item(fitReason: longReason), today: "2026-07-09", now: Date(),
                                    onKeep: {}, onDismiss: { _ in })
 
         let shortHeight = renderedHeight(short)

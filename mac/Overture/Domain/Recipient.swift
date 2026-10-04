@@ -235,11 +235,8 @@ final class Recipient {
     // route list and refusing it again would change nothing.
     var nameMatchOnlyDismissed: Bool = false
 
-    // #2937: whether the app may still treat this route as a guess. ONE predicate, because four readers
-    // ask it (the social route list, the stored verdict, the card's own line, and whether a DM can be
-    // recorded), and four spellings of one question is how they come to disagree about a single row
-    // (L16).
-    var isUnconfirmedNameMatch: Bool { nameMatchOnly && !nameMatchOnlyDismissed }
+    // `isUnconfirmedNameMatch` (#2937) reads the two fields above, and lives on `ContactFacts`
+    // (ContactFactsMembers.swift) since #4357 slice G1, so a retained contact answers it by the same body.
     // #3078: the run's declaration that `role` is its OWN summary rather than a phrase the cited page
     // carries. Stored, because the card reads it and the ingest is the only writer, and re-derived on
     // every ingest rather than latched, exactly like `nameMatchOnly` above: a later run that quotes the
@@ -721,43 +718,9 @@ final class Recipient {
     // #789 adds the draft lint: a recipient whose OWN outgoing text carries a blocking finding is
     // held back until Dan either fixes the text or deliberately overrides it, the same way #407's
     // salutation flag blocks above.
-    // #1798: an address that EXISTS and is held back by one of the guards, which is a different fact from
-    // having no address at all. One definition, because the verdict on the row and the card's own answer
-    // were two copies of this rule and both listed two of the three guards; the measured cost was a card
-    // reading "No email found" in rust with `office@frigid.nyc` printed underneath it.
-    //
-    // The three members are exactly the three `isSendablePending` refuses on below, so the two can never
-    // drift apart again: anything held there is held here.
-    var isHeldByAGuard: Bool {
-        email?.isEmpty == false
-            && ((looksLikeVenue && !looksLikeVenueDismissed)
-                || (looksLikePressContact && !looksLikePressContactDismissed)
-                || (looksLikeDuplicateContact && !looksLikeDuplicateContactDismissed)
-                || isLooksLikeAnotherPersons)
-    }
-
-    // #3387 / milestone 61 Phase 0.1. Does an ADDRESS exist that no research guard is holding.
-    //
-    // Deliberately NOT `isSendablePending`. That answers whether this may go out RIGHT NOW and folds in
-    // an uncleared calendar conflict (#901), a blank subject line (#2052), the lint and greeting holds
-    // (#2545), `pausedByReply` and this row's send state, none of which is a fact about whether a way to
-    // contact anybody exists. Measured on the live store 2026-08-31: 9 prospects held an unguarded
-    // address while their stored verdict denied it, 7 of them masked by an open calendar conflict.
-    //
-    // Dan's rule, 2026-08-31: "It should only be impacted by whether or not I'm physically capable of
-    // contacting them."
-    //
-    // ADDRESS ONLY, on purpose. It is substituted into the FIRST arm of the verdict cascade, and a
-    // route bearing predicate there would report every form-only and social-only show as `emailFound`.
-    // `Prospect.hasAnyRoute` is the "a way in of any kind" question and is derived from the whole
-    // cascade rather than written beside it.
-    //
-    // The FIFTH hold state is decided here rather than left to be discovered. `isHeldDownToUnverified`
-    // is in neither `isHeldByAGuard` nor `isSendablePending`; it drives warnings only. So a held down
-    // address IS a route here, which matches today's behaviour and is the right answer: the hold down
-    // describes confidence in WHO is on the end, which the card already warns about, and withholding
-    // the route as well would silently remove a show Dan can judge in seconds.
-    var hasUnguardedAddress: Bool { email?.isEmpty == false && !isHeldByAGuard }
+    // `isHeldByAGuard` (#1798) and `hasUnguardedAddress` (#3387) live on `ContactFacts`
+    // (ContactFactsMembers.swift) since #4357 slice G1, comments and bodies unchanged, so a retained contact
+    // answers both by the same body.
 
     // #1798: WHICH kind of hold, so the card's sentence can be true of the row that produced it. Measured
     // on the live store 2026-07-31: the one row in this state was held by the duplicate guard alone, with

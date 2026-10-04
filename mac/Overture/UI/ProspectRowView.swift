@@ -13,6 +13,9 @@ struct ProspectRowView: View {
 
     let item: QueueItem
     let today: String
+    // #4357 slice G1: the render pass's instant, which the badge, the route list and the authority gap judge
+    // staleness against, so they read the clock the card was built at rather than the wall clock.
+    let now: Date
     let onKeep: () -> Void
     let onDismiss: (ShowOutcome) -> Void
     var onUnapprove: () -> Void = {}
@@ -226,7 +229,7 @@ struct ProspectRowView: View {
             // every row with no contact, because a control on a card that did not ask for one is the
             // noise #1595 cut back, and a card telling him another check is worth more would be
             // contradicted by a field inviting a search (L109).
-            if !item.hasDraft, item.reachabilityBadge() == .noEmailFound,
+            if !item.hasDraft, item.reachabilityBadge(now: now) == .noEmailFound,
                ReachabilityCopy.adviceAsksForAHandAddedContact(item.reachabilityEmptyReason) {
                 handAddedContactField
             }
@@ -775,7 +778,7 @@ struct ProspectRowView: View {
     }
 
     @ViewBuilder private var reachabilityFlag: some View {
-        switch item.reachabilityBadge() {
+        switch item.reachabilityBadge(now: now) {
         case .none:
             EmptyView()
         case .hardToReach:
@@ -951,7 +954,7 @@ struct ProspectRowView: View {
             // second line costs height, which this row has, where the caveat that broke this column three
             // times was competing for its WIDTH. Only when the badge above cannot say it for the whole
             // row; the model decides that, so a card can never say it twice or not at all.
-            ForEach(item.displayedContactRoutes()) { route in
+            ForEach(item.displayedContactRoutes(now: now)) { route in
                 VStack(alignment: .trailing, spacing: 0) {
                     if route.marksUnconfirmed {
                         Text(ReachabilityCopy.unconfirmedProfileNote)
@@ -996,7 +999,7 @@ struct ProspectRowView: View {
     // One render site covers all three surfaces the issue asks about: Queue (every stage, Reached out
     // included) and Archive both draw their rows through ProspectRowFactory, which builds this view.
     @ViewBuilder private var contactAuthorityFlag: some View {
-        if let gap = item.contactAuthorityGap() {
+        if let gap = item.contactAuthorityGap(now: now) {
             reachabilityNote(icon: "person.crop.circle.badge.questionmark",
                              text: ReachabilityCopy.noAuthorityBadge,
                              tone: .tentative,

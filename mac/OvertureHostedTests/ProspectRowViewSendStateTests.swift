@@ -39,13 +39,13 @@ struct ProspectRowViewSendStateTests {
     }
 
     @Test func aRowWithNoDraftShowsNoSendButtonAtAll() throws {
-        let view = ProspectRowView(item: approvedItemWithNoDraft(), today: "2026-07-09", onKeep: {}, onDismiss: { _ in })
+        let view = ProspectRowView(item: approvedItemWithNoDraft(), today: "2026-07-09", now: Date(), onKeep: {}, onDismiss: { _ in })
 
         #expect((try? view.inspect().find(button: SendConfirmCopy.openReview)) == nil)
     }
 
     @Test func aRowWithADraftAndNoInFlightSendShowsTheSendButton() throws {
-        let view = ProspectRowView(item: approvedItemWithDraft(), today: "2026-07-09", onKeep: {}, onDismiss: { _ in },
+        let view = ProspectRowView(item: approvedItemWithDraft(), today: "2026-07-09", now: Date(), onKeep: {}, onDismiss: { _ in },
                                    outboundSendSince: nil)
 
         _ = try view.inspect().find(button: SendConfirmCopy.openReview)   // throws (fails the test) if not present
@@ -56,7 +56,7 @@ struct ProspectRowViewSendStateTests {
     // handed the prop directly (already covered by DraftReviewViewSendStateTests).
     @Test func aRowWithAnInFlightOutboundSendShowsTheLiveLabelInsteadOfTheButton() throws {
         let since = Date(timeIntervalSince1970: 1000)
-        let view = ProspectRowView(item: approvedItemWithDraft(), today: "2026-07-09", onKeep: {}, onDismiss: { _ in },
+        let view = ProspectRowView(item: approvedItemWithDraft(), today: "2026-07-09", now: Date(), onKeep: {}, onDismiss: { _ in },
                                    outboundSendSince: since)
 
         #expect((try? view.inspect().find(button: SendConfirmCopy.openReview)) == nil)
