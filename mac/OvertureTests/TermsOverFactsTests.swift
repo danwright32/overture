@@ -466,6 +466,7 @@ struct TermsOverFactsTests {
         }
         row(ctx, key: "tail tie a", title: "Undated A", venue: nil, opens: nil)
         row(ctx, key: "tail tie b", title: "Undated B", venue: nil, opens: nil)
+        row(ctx, key: "tail empty night", title: "Blank Night", venue: nil, opens: nil).performanceDate = ""
         row(ctx, key: "tail gone", title: "Dismissed Row", venue: nil, opens: "2026-10-01").statusRaw =
             ReviewStatus.dismissed.rawValue
         return try ctx.fetch(FetchDescriptor<Prospect>())
@@ -483,6 +484,8 @@ struct TermsOverFactsTests {
                 "only the open survivor still ahead is unseen")
         #expect(QueueRenderPass.fanOutWarning(all) != nil, "the fixture's fan out drew no warning")
         #expect(QueueModel.nightsByKey(among: all)["tail tie a"] == nil && QueueModel.titlesByKey(among: all).count == all.count)
+        #expect(QueueModel.nightsByKey(among: all)["tail empty night"] == nil, "a night stored as the empty string is no night")
+        #expect(QueueModel.nightsByKey(among: all)["tail target"] == "2026-11-02")
         let clean = TermsOverFacts.findings(all, asOf: asOf)
         #expect(clean.isEmpty, Comment(rawValue: clean.joined(separator: "\n")))
 
@@ -511,5 +514,12 @@ struct TermsOverFactsTests {
         #expect(refused.isClosed && viaFacts(refused) && RowFacts.extract(refused).isClosed)
         open.outcomeRaw = Outcome.booked.rawValue
         #expect(open.isClosed && viaFacts(open), "a booked show is closed")
+        // A lead Dan closed by hand, softly or for good, on a show with no contact yet: only the outcome says so.
+        for lost in [Outcome.lostSoft, .lostHard] {
+            open.outcomeRaw = lost.rawValue
+            #expect(open.performanceStatus == .new, "the fixture should leave the outcome as the only closing fact")
+            #expect(open.isClosed && viaFacts(open) && RowFacts.extract(open).isClosed,
+                    Comment(rawValue: "a lead closed as \(lost.rawValue) still reads as open"))
+        }
     }
 }
