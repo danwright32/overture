@@ -108,6 +108,22 @@ describe("the CI workflow's triggers", () => {
     );
   });
 
+  it("gives the Mac job room for the one retry the runner takes after a host crash (#4444)", () => {
+    // `run-tests-locked.sh` retries a run whose host crashed, once. Measured 2026-10-04 (run 37213143450):
+    // the suite step took 38 minutes, its tests 20 of them, and the Release compile after it 4 more. A
+    // retry repeats the tests on an already built tree, so a retried run needs about 38 + 22 + 4 = 64
+    // minutes, and a 60 minute job limit would kill exactly the run the retry exists to rescue.
+    const lines = source.split("\n");
+    const at = lines.findIndex((l) => /^\s{2}swift-tests:\s*$/.test(l));
+    expect(at, "no swift-tests job").toBeGreaterThanOrEqual(0);
+    const after = lines.slice(at + 1);
+    const nextJob = after.findIndex((l) => /^\s{2}\S[^:]*:\s*$/.test(l) || /^\S/.test(l));
+    const job = nextJob === -1 ? after : after.slice(0, nextJob);
+    const timeout = job.map((l) => /^\s+timeout-minutes:\s*(\d+)\s*$/.exec(l)).find((m) => m !== null);
+    expect(timeout, "swift-tests declares no timeout-minutes").toBeDefined();
+    expect(Number(timeout?.[1])).toBeGreaterThanOrEqual(80);
+  });
+
   it("scans every commit of a pull request for a real-arm file, over full history (#4328)", () => {
     // A real-arm file is a hashed snapshot of Dan's real data. The pre-push hook refuses one, but a hook can
     // be skipped with --no-verify and this repository is public, so CI walks the pull request's COMMITS,
