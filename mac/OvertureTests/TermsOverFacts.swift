@@ -158,8 +158,7 @@ enum TermsOverFacts {
         }
 
         // Slice F: the agent input terms, judged at noon Eastern on `asOf` so both arms share a clock.
-        out += agentInputFindings(models, facts, now: (EasternDate.date(from: asOf) ?? Date(timeIntervalSince1970: 0))
-            .addingTimeInterval(12 * 3600))
+        out += agentInputFindings(models, facts, now: reachedOutInstant(asOf))
 
         // Slice D1: the computed members the reached-out terms read, on the show and on every contact.
         out += memberFindings(models, facts)

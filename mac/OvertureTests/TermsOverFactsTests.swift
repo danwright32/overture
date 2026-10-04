@@ -574,7 +574,7 @@ struct TermsOverFactsTests {
     // judging instant (stalled), a minute before it (still inside the five minute timeout), once before an
     // answer was sent (not awaited at all), and once with a draft already on file (not awaited either).
     private func seedAgentInputs(_ ctx: ModelContext, _ all: [Prospect]) throws {
-        let now = (EasternDate.date(from: asOf) ?? Date()).addingTimeInterval(12 * 3600)
+        let now = TermsOverFacts.reachedOutInstant(asOf)
         try #require(all.first { $0.naturalKey == "lantern|2026-10-03" }).statusRaw = ReviewStatus.drafted.rawValue
         let drafted = try #require(all.first { $0.naturalKey == "ninefold|2026-10-10" })
         drafted.statusRaw = ReviewStatus.drafted.rawValue
@@ -599,7 +599,7 @@ struct TermsOverFactsTests {
         let ctx = try context()
         let all = try seed(ctx)
         try seedAgentInputs(ctx, all)
-        let now = (EasternDate.date(from: asOf) ?? Date()).addingTimeInterval(12 * 3600)
+        let now = TermsOverFacts.reachedOutInstant(asOf)
         // Positive controls (L159), and the rules themselves, which part two cannot hold.
         #expect(DraftedDeadEnd.count(in: all) == 1, "exactly the drafted show with no contacts is a dead end")
         // Named, not only counted: an inverted rule swaps which drafted show it picks and keeps the count.
