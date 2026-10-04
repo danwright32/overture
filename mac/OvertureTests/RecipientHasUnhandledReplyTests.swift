@@ -80,8 +80,13 @@ struct RecipientHasUnhandledReplyCallSiteGuardTests {
     // does not ask this question at all (it turns on the show's DATE), and the one place that still reads an
     // unhandled reply is ReachedOutQueue, guarded above.
 
+    // #4357 slice E2: the show's rollup is one body on `ProspectFacts` (ProspectFactsMembers.swift), which
+    // `Prospect.hasUnhandledReply` reads with its own contacts, so the guard reads the file holding the rule
+    // and checks the model still answers through it.
     @Test func prospectHasUnhandledReplyUsesTheSharedProperty() {
-        let src = Self.code(of: "Overture/Domain/Prospect.swift")
+        #expect(Self.code(of: "Overture/Domain/Prospect.swift").contains("hasUnhandledReply(among: recipients)"),
+                "Prospect.hasUnhandledReply must answer through the one rollup on ProspectFacts (#4357).")
+        let src = Self.code(of: "Overture/Domain/ProspectFactsMembers.swift")
         #expect(!src.isEmpty)
         #expect(!src.contains(Self.oldRecipientTriplet),
                 "Prospect.hasUnhandledReply must not re-derive the unhandled-reply triplet inline; use Recipient.hasUnhandledReply (#677).")

@@ -317,7 +317,7 @@ enum ProposedConversation {
 
     // MARK: reading
 
-    static func stored(on r: Recipient) -> Candidate? {
+    static func stored(on r: some ContactFacts) -> Candidate? {
         guard let messageId = r.replyProposedMessageId,
               let threadId = r.replyProposedThreadId,
               let from = r.replyProposedFromAddress,
@@ -327,16 +327,16 @@ enum ProposedConversation {
                          sentAt: sentAt, score: r.replyProposedScore)
     }
 
-    static func declined(_ r: Recipient) -> Set<String> { Set(r.dismissedConversationIds ?? []) }
+    static func declined(_ r: some ContactFacts) -> Set<String> { Set(r.dismissedConversationIds ?? []) }
 
     // Is this a contact the question can even be asked about? The same scope the search uses: a pitch
     // sent by hand, with no conversation Overture is already watching.
-    static func isAskable(_ r: Recipient) -> Bool {
+    static func isAskable(_ r: some ContactFacts) -> Bool {
         r.formOutreachRecordedAt != nil && !r.hasWatchableConversation
     }
 
     // #4356: `now` is required, because the render pass reaches this through DueWork.
-    static func state(of r: Recipient, now: Date) -> State {
+    static func state(of r: some ContactFacts, now: Date) -> State {
         if r.conversationAttachedAt != nil {
             // #2806: the second branch used to be `.notApplicable`. An attach that also stamped
             // `replyHandledAt` is the completely successful case and was the silent one.
@@ -356,7 +356,7 @@ enum ProposedConversation {
         if !declined(r).isEmpty { return .allDeclined }
         // Asked of the same predicate the search selects by, so the row cannot say Overture is reading
         // for a reply on a pitch the search has already dropped (L16).
-        guard ReplySearchScope.inScope(r, now: now) else { return .stoppedLooking }
+        guard ReplySearchScope.inScope(contact: r, now: now) else { return .stoppedLooking }
         return .none(searched: r.replyCandidateSearchedAt != nil)
     }
 
@@ -410,13 +410,22 @@ enum ProposedConversation {
     // #4356: at the caller's instant, like the other members of `DueWork.Counts`, because the render pass
     // reaches this through DueWork and must not read the wall clock for itself.
     static func dueRecipients(from prospects: [Prospect], now: Date) -> [DueRecipient] {
-        prospects.flatMap { p -> [DueRecipient] in
+        dueRecipients(from: prospects, contacts: { $0.recipients }, now: now)
+            .map { DueRecipient(prospect: $0.prospect, recipient: $0.recipient, candidate: $0.candidate) }
+    }
+
+    // #4357 slice E2: the same over any rows, with the contacts handed in, so the model entry point above walks
+    // the recipients it always did and a retained row answers by the one body.
+    static func dueRecipients<Row: ProspectFacts>(
+        from rows: [Row], contacts: (Row) -> [Row.Contact], now: Date
+    ) -> [(prospect: Row, recipient: Row.Contact, candidate: Candidate)] {
+        rows.flatMap { p -> [(prospect: Row, recipient: Row.Contact, candidate: Candidate)] in
             // A show Dan has closed out or booked is not asking him anything.
             guard !p.replyWatchManualOutcome, !p.replyWatchIsBooked else { return [] }
-            return p.recipients.compactMap { r in
+            return contacts(p).compactMap { r in
                 guard case .proposed(let c) = state(of: r, now: now) else { return nil }
                 guard r.replyWatchConversationIsOpen else { return nil }
-                return DueRecipient(prospect: p, recipient: r, candidate: c)
+                return (prospect: p, recipient: r, candidate: c)
             }
         }
     }
