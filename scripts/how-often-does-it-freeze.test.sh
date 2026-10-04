@@ -241,6 +241,8 @@ mkdir -p "${WORK}/idle-only"
 out="$("${READER}" --log "${WORK}/idle-only/log.ndjson" 2>&1)"; status=$?
 assert_contains "a session holding only idle work still adds its watched hours" "${out}" \
   "1 stall(s) over 1.00h watched, 1.0 per hour"
+assert_contains "and the header counts the sessions its records came from, naming the idle only one apart" "${out}" \
+  "1 record(s) over 1 session, and 1 session watched only while a recovery ran."
 
 if [ "${FAILURES}" -eq 0 ]; then
   echo "how-often-does-it-freeze.test.sh: all passed"

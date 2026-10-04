@@ -120,7 +120,11 @@ def interval_of(group):
     return 0.1 if min(r.get("seconds", 0) for r in group) < 0.25 else None
 
 
-print(f"how-often-does-it-freeze: {len(rows)} record(s) over {plural(len(sessions), 'session')}.")
+# The sessions the records came from, with any watched only while a recovery ran named apart, so the count
+# beside the records describes them and the extra hours below are accounted for.
+idle_only = sum(1 for group in sessions.values() if not group)
+print(f"how-often-does-it-freeze: {len(rows)} record(s) over {plural(len(sessions) - idle_only, 'session')}"
+      + (f", and {plural(idle_only, 'session')} watched only while a recovery ran." if idle_only else "."))
 print(f"  read from: {', '.join(sources)}")
 print()
 # #4188: `not freezes` is how many of a session's stalls say of themselves that they are not one, and
