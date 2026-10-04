@@ -2205,6 +2205,7 @@
 		DF27014BAB58010585C71F1B /* PrepRunArchive.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC1C7928E9B04D533991658B /* PrepRunArchive.swift */; };
 		DF299106CB04F590F7361004 /* ScoutProgressModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8921E0451FCE8A38DD2CC993 /* ScoutProgressModel.swift */; };
 		DF29C323DA1550670F39B0D4 /* OVCapsuleActionGuardTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5935B68EAA469B53F220382C /* OVCapsuleActionGuardTests.swift */; };
+		DF37B307FEF485087610FF7E /* AWorkingSetReadFailureIsRecordedTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE63B8F21BD6F7F23AC77D8E /* AWorkingSetReadFailureIsRecordedTests.swift */; };
 		DF67C6FB454BD408DF125A71 /* SameVenueOneNightSweepTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA30B0252AA10B94B5F4F157 /* SameVenueOneNightSweepTests.swift */; };
 		DF87EB94B271AED98114EBB1 /* PrepSelectionCopy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8C663328A4439204E25862A0 /* PrepSelectionCopy.swift */; };
 		DF9069647F653F6DB3F3F456 /* BounceDetection.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF05EC0BA918EF0073F0AF09 /* BounceDetection.swift */; };
@@ -4135,6 +4136,7 @@
 		CDE3C95FB7FD4D5ADD18D261 /* ScoutReadAsk.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScoutReadAsk.swift; sourceTree = "<group>"; };
 		CE18BD29C32E44484D0642CA /* GmailThreadingRepairTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GmailThreadingRepairTests.swift; sourceTree = "<group>"; };
 		CE30A66A8FEB0577318966B7 /* QueueScopeRowParityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QueueScopeRowParityTests.swift; sourceTree = "<group>"; };
+		CE63B8F21BD6F7F23AC77D8E /* AWorkingSetReadFailureIsRecordedTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AWorkingSetReadFailureIsRecordedTests.swift; sourceTree = "<group>"; };
 		CE691FE057A27E4DFDA467B9 /* DetachedRunActivity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DetachedRunActivity.swift; sourceTree = "<group>"; };
 		CE7F5139BBC52847A367ED02 /* TimingReadability.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimingReadability.swift; sourceTree = "<group>"; };
 		CE889E00693587740A5C0BE0 /* DebugSeedTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugSeedTests.swift; sourceTree = "<group>"; };
@@ -4815,6 +4817,7 @@
 				2A5EE624A6FAD2EAE43CF9B8 /* AvailabilitySnapshotTests.swift */,
 				3B208EE95AC7DE1E635D8C18 /* AwaitedReplyDraftIsOnePredicateTests.swift */,
 				E86872C2D168C0DEF8984DA2 /* AwayAlertTests.swift */,
+				CE63B8F21BD6F7F23AC77D8E /* AWorkingSetReadFailureIsRecordedTests.swift */,
 				694D5E32D7521B59A78C9414 /* BackgroundServicesGateTests.swift */,
 				AB62D50D07E41F362DEB407B /* BackupLogHonestyTests.swift */,
 				3D7175F39EFAD9B028A73318 /* BatchWidePoisonMapTests.swift */,
@@ -7431,6 +7434,7 @@
 				25BDAAEE8510C90A389B1725 /* AStallSaysWhetherAWindowWasOpenTests.swift in Sources */,
 				F579EEE4A5893C2B8FAE1ED9 /* AStallSaysWhetherTheMainThreadWasRunningTests.swift in Sources */,
 				DA123F7748D5E26DC6B6D994 /* ATimingRunSaysWhetherItCanBeJudgedTests.swift in Sources */,
+				DF37B307FEF485087610FF7E /* AWorkingSetReadFailureIsRecordedTests.swift in Sources */,
 				561F6A8CD42F99D4EC517FD7 /* AcknowledgeOnlyWhenSavedTests.swift in Sources */,
 				D21D326A5A2718BFD722DD1E /* ActIsThePartyRealignment.swift in Sources */,
 				AE95BE5D457E152DFE6BCAC5 /* ActIsThePartyRealignmentTests.swift in Sources */,
