@@ -84,6 +84,25 @@ struct SkippedNightSendBlockTests {
                                              today: today) == nil)
     }
 
+    // #4502: in the shipping app the send is judged on exactly the day the wall clock gave it before, because
+    // every call the app makes hands it the moment of the press. Derived from the app's own sources (L96), so a
+    // new caller handing the send any other moment, which would send or hold differently, fails here. Refuses to
+    // pass on finding none (L98).
+    @Test func everyShippingSendIsHandedTheMomentOfThePress() throws {
+        let call = try NSRegularExpression(pattern: #"SendService\.(sendNext|sendOne|sendJointly)\("#)
+        var calls: [String] = []
+        for file in AppSourceWalk.appFiles() {
+            for line in file.text.components(separatedBy: "\n")
+            where call.firstMatch(in: line, range: NSRange(line.startIndex..., in: line)) != nil {
+                calls.append("\(file.name): \(line.trimmingCharacters(in: .whitespaces))")
+            }
+        }
+        #expect(!calls.isEmpty, "no shipping call to the send was found, so this measured nothing")
+        for found in calls {
+            #expect(found.contains("now: Date()"), Comment(rawValue: "a send handed some other moment: \(found)"))
+        }
+    }
+
     // #4502: a send is judged on the day of the `now` it is handed, never the wall clock beside it. Handed a
     // moment after the run's last night, the same pitch the control above sends is refused, because that
     // run has passed on that day. Without this, the control above would turn red on its own the day real
