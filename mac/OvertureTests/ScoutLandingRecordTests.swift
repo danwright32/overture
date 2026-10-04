@@ -425,6 +425,12 @@ final class ScoutLandingRecordTests {
         // what its sources stood at, and reads back saying so.
         #expect(journal.resultsCopy == nil)
         #expect(journal.sources.allSatisfy { $0.checksBefore == nil && $0.baselineBefore == nil })
+        // Written again (a kept copy offered again writes the same run's journal again), it is written in the
+        // shape this build writes, under the version that names that shape, never "version 1" over v2 fields
+        // that the next read would then decode as version 1 and drop (L1010).
+        let rewritten = try LandingJournals.decode(LandingJournals.encoded(journal))
+        #expect(rewritten.version == LandingJournal.currentVersion)
+        #expect(rewritten.runIdentity == journal.runIdentity && rewritten.sources == journal.sources)
     }
 
     // #4440: version 2, the results copy and what each landing source's report is judged against.

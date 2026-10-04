@@ -322,7 +322,12 @@ struct LandingJournals: Sendable {
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .deferredToDate
         encoder.outputFormatting = [.sortedKeys]
-        return try encoder.encode(journal)
+        // Always the shape this build writes, under the version that names it: a journal read from an older
+        // version is carried forward in memory, and writing it back under its old number would label v2
+        // fields as version 1 (L1010).
+        var current = journal
+        current.version = LandingJournal.currentVersion
+        return try encoder.encode(current)
     }
 
     // fsync(2) on a file or a folder, so the rename above is durable rather than sitting in the cache.
