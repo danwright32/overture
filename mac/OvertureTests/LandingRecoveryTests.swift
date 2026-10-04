@@ -660,8 +660,14 @@ final class LandingRecoveryTests {
         // A reading the system did not give is never idle (L42).
         #expect(RecoveryIdle.judge(landingHeld: false, scoutRunning: false, secondsSinceInput: nil) == .inputUnmeasured)
         #expect(RecoveryIdle.judge(landingHeld: false, scoutRunning: false, secondsSinceInput: .nan) == .inputUnmeasured)
-        // The real reading is a number on this Mac (measured 2026-10-03, see `RecoveryIdle.quietFor`).
-        #expect(RecoveryIdle.secondsSinceInput().map { $0 >= 0 } == true)
+        // The real reading, where the machine gives one, is a number of seconds (measured 2026-10-03 on Dan's
+        // Mac, see `RecoveryIdle.quietFor`). A runner with no input session gives none, which `judge` above
+        // already treats as never idle, so that is reported as unmeasured rather than failed (L411).
+        if let reading = RecoveryIdle.secondsSinceInput() {
+            #expect(reading >= 0, Comment(rawValue: "the input reading was \(reading)"))
+        } else {
+            print("RecoveryIdle.secondsSinceInput: UNMEASURED on this machine (no input session); judged by the injected readings above.")
+        }
     }
 
     // A Run press that has to wait behind the recovery says it is waiting for the interrupted landing (L703).

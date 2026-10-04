@@ -2,9 +2,9 @@ import Testing
 import Foundation
 import SwiftData
 
-// #4335 (A6) migration dry run (L267). Five new columns, all defaulted or optional, so the migration is a
-// lightweight addition: `LandingRun.sequence`, `entryPointRaw` and `startedAt`, and
-// `WatchedSource.lastLandedRunID` and `lastLandedSequence`. This rehearses it against a COPY of the real
+// #4335 (A6) migration dry run (L267). Seven new columns, all defaulted or optional, so the migration is a
+// lightweight addition: `LandingRun.sequence`, `entryPointRaw` and `startedAt`, the recovery's
+// `LandingRun.attemptCount` and `recoveredAt`, and `WatchedSource.lastLandedRunID` and `lastLandedSequence`. This rehearses it against a COPY of the real
 // Release store (never the live file), through the one shared clone and MigrationRehearsal, and proves every
 // existing Prospect, WatchedSource and LandingRun survives, and the migrated store takes the new values and
 // reads them back. It says so when it rehearsed nothing (no live store on this machine) rather than passing
