@@ -436,4 +436,129 @@ struct TermsOverFactsTests {
         #expect(!(across + within).contains { $0.contains("example.invalid") },
                 "a finding named a contact's address rather than its identifier")
     }
+
+    // MARK: slice E1, the stage placement and the members it reads
+
+    // One show in each stage the placement counts, plus a past client's show offered beyond the ordinary
+    // window, so every arm of `matches` answers true somewhere (L159). Invented names throughout (L155, L222).
+    private func seedStages(_ ctx: ModelContext) throws -> [Prospect] {
+        func show(_ key: String, opens: String = "2026-10-20", status: ReviewStatus,
+                  _ shape: (Prospect) -> Void = { _ in }) -> Prospect {
+            let p = row(ctx, key: key, title: "Stage \(key)", venue: "Quillon Room", opens: opens)
+            p.statusRaw = status.rawValue
+            shape(p)
+            return p
+        }
+        func contact(_ id: String, on p: Prospect, _ shape: (Recipient) -> Void) {
+            let r = Recipient(id: id, email: "\(id)@example.invalid", provenance: .act)
+            shape(r)
+            ctx.insert(r)
+            p.recipients.append(r)
+        }
+        let claimed = Date(timeIntervalSince1970: 1_700_000_000)
+        _ = show("scout", status: .new)
+        _ = show("client", opens: "2027-03-01", status: .new) { $0.sourceIds = ["client-a"] }
+        _ = show("prep", status: .queued)
+        _ = show("review", status: .drafted) { $0.draftBody = "Hi there,\n\nA short note." }
+        _ = show("approved", status: .approved) { $0.draftBody = "Hi there,\n\nA short note." }
+        let blocked = show("blocked", status: .contacted) { $0.draftBody = "Hi there,\n\nA short note." }
+        contact("held", on: blocked) { $0.looksLikeVenue = true }
+        contact("sent", on: blocked) { $0.sendState = .sent; $0.sentAt = claimed }
+        _ = show("errored", status: .approved) { $0.sendError = "refused" }
+        contact("stuck", on: show("stuck", status: .contacted)) { $0.sendState = .sending; $0.sendClaimedAt = claimed }
+        contact("degraded", on: show("degraded", status: .contacted)) {
+            $0.sendState = .sent; $0.replyTrackingDegraded = true
+        }
+        contact("threading", on: show("threading", status: .contacted)) {
+            $0.sendState = .sent; $0.threadingDegraded = true
+        }
+        return try ctx.fetch(FetchDescriptor<Prospect>())
+    }
+
+    @Test func theStagePlacementAnswersTheSameOverFactsAsOverModelsInEveryStage() throws {
+        let ctx = try context()
+        let all = try seedStages(ctx)
+        let stageContext = TermsOverFacts.stageContext(for: all, asOf: asOf)
+        let placed = StageNavigation.placements(in: all, context: stageContext)
+        // Positive controls (L159): every counted stage holds a show here, and the past client's far show is
+        // offered for triage, which only the client window can do.
+        for focus in StageNavigation.countedFocuses {
+            #expect(!StageNavigation.naturalKeys(for: focus, in: placed).isEmpty,
+                    "no show in the fixture is placed under \(focus.rawValue)")
+        }
+        #expect(StageNavigation.naturalKeys(for: .scout, in: placed).contains("client"),
+                "the past client's show beyond the ordinary window was not offered")
+        let clean = TermsOverFacts.findings(all, asOf: asOf)
+        #expect(clean.isEmpty, Comment(rawValue: clean.joined(separator: "\n")))
+
+        // A contact claimed for sending after its facts were taken: the stuck stage and the contact's own
+        // rule both move over models and not over the retained facts, and the findings say so by identifier.
+        let stale = all.map(RowFacts.extract)
+        let quiet = try #require(all.first { $0.naturalKey == "degraded" }?.recipients.first)
+        quiet.sendState = .sending
+        quiet.sendClaimedAt = Date(timeIntervalSince1970: 1_700_000_000)
+        let findings = TermsOverFacts.findings(all, facts: stale, asOf: asOf)
+        #expect(findings.contains { $0.hasPrefix("StageNavigation.placements sendStuck differs") },
+                "a contact that became stuck after extraction was not seen by the placement comparison")
+        #expect(findings.contains { $0.hasPrefix("stage contact members differ") },
+                "a contact that became stuck after extraction was not seen by the member comparison")
+        #expect(!findings.contains { $0.contains("example.invalid") || $0.contains("Stage ") },
+                "a finding named an address or a title rather than an identifier")
+    }
+
+    // A show's status, read on the model, through `ProspectFacts`, through `PrepEligibilityFacts` and through the
+    // view the stage predicate hands Prep, returns, and every route returns the same. A first cut of this slice
+    // made `ProspectFacts` refine `PrepEligibilityFacts`, and `Prospect.status` then dispatched back into itself
+    // until the stack ran out, crashing the test host 261 times in one run. A recursion here is a crash, not a
+    // red expectation, so this test passing at all is the assertion that matters.
+    @Test func aShowsStatusReadThroughEveryRouteReturnsAndAgrees() throws {
+        let ctx = try context()
+        let all = try seedStages(ctx)
+        func viaPrep<T: PrepEligibilityFacts>(_ t: T) -> ReviewStatus { t.status }
+        func viaFacts<T: ProspectFacts>(_ t: T) -> ReviewStatus { t.status }
+        for p in all {
+            let direct = p.status
+            #expect(viaPrep(p) == direct && viaFacts(p) == direct && viaPrep(PrepEligibilityView(row: p)) == direct
+                    && viaPrep(PrepEligibilityView(row: RowFacts.extract(p))) == direct,
+                    Comment(rawValue: "a route disagreed about the status of row \(p.persistentModelID)"))
+            func draftViaPrep<T: PrepEligibilityFacts>(_ t: T) -> Bool { t.hasDraft }
+            #expect(draftViaPrep(p) == p.hasDraft && draftViaPrep(PrepEligibilityView(row: p)) == p.hasDraft)
+        }
+        #expect(Set(all.map(\.status)).count > 2, "the fixture holds too few statuses for this to compare anything")
+    }
+
+    // The rules the placement reads, held on their own once oracle part one is deleted.
+    @Test func theMovedStageRulesHoldTheirMeaning() throws {
+        let ctx = try context()
+        let all = try seedStages(ctx)
+        let byKey = Dictionary(uniqueKeysWithValues: all.map { ($0.naturalKey, $0) })
+        let blocked = try #require(byKey["blocked"])
+        let scout = try #require(byKey["scout"])
+        #expect(blocked.blockedContactCount == 1, "one held contact on a show already sent to is one blocked contact")
+        #expect(blocked.hasEnteredSendHalf, "a contacted show has entered the send half")
+        #expect(!scout.hasEnteredSendHalf, "an untriaged show has not")
+        #expect(blocked.greetingAudienceSize == 1, "one pending reachable contact is an audience of one")
+        // Two pending, reachable contacts: one send reaches both together, and one each when sent separately.
+        let pair = try #require(byKey["scout"])
+        for id in ["first", "second"] {
+            let r = Recipient(id: id, email: "\(id)@example.invalid", provenance: .act)
+            ctx.insert(r)
+            pair.recipients.append(r)
+        }
+        #expect(pair.sendsTogether && pair.greetingAudienceSize == 2, "together, one send reaches both")
+        pair.sendsTogetherOverride = false
+        #expect(!pair.sendsTogether && pair.greetingAudienceSize == 1, "separately, each send reaches one")
+        let stuck = try #require(byKey["stuck"]?.recipients.first)
+        #expect(stuck.isSendStuck(now: Date(timeIntervalSince1970: 1_700_000_000 + RunTimeouts.send)),
+                "a claim as old as the send timeout is stuck")
+        #expect(!stuck.isSendStuck(now: Date(timeIntervalSince1970: 1_700_000_000 + RunTimeouts.send - 1)),
+                "a claim a second younger is not")
+        let review = try #require(byKey["review"])
+        let prep = try #require(byKey["prep"])
+        #expect(review.hasDraft && !prep.hasDraft)
+        review.reprepDraftRequested = true
+        #expect(review.isReprepQueued, "a requested redraft is queued Prep work")
+        #expect(scout.hasOpened(today: "2026-10-21"))
+        #expect(!scout.hasOpened(today: "2026-10-20"), "a run opening tonight has not opened")
+    }
 }

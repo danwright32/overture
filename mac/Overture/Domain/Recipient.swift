@@ -164,7 +164,7 @@ final class Recipient {
     var looksLikeAnotherPersons: Bool = false
     var looksLikeAnotherPersonsDismissed: Bool = false
 
-    var isLooksLikeAnotherPersons: Bool { looksLikeAnotherPersons && !looksLikeAnotherPersonsDismissed }
+    // `isLooksLikeAnotherPersons` is on `ContactFacts` since #4357 slice E1 (StagePlacementFacts.swift).
 
     // #1866: the fourth guard on a contact, recorded the way the three above are. ContactConfidenceGuard
     // (#1856) rewrites a `high` find down to `low` when it names no page it was read off, and used to store
@@ -835,20 +835,13 @@ final class Recipient {
     // #789: the blocking lint findings in that text. Derived live rather than stored at ingest on
     // purpose: it is a pure function of text already on disk, so it can never go stale, it needs no
     // migration, and it covers Dan's own edits and a performer's override body for free.
-    var draftLintBlockers: [DraftIssue] {
-        guard let body = effectiveBody, !body.isEmpty else { return [] }
-        // #2048: counted at the point the lint really runs, AFTER the empty-body guard above, so the
-        // number is the work done rather than the times the question was asked. A recipient with no body
-        // costs nothing here and must not read as if it did.
-        QueueRenderPass.WorkTally.recordDraftLintRun()
-        return DraftCheck.blockingFindings(in: body)
-    }
+    // #4357 slice E1: the rule lives on `ContactFacts` (StagePlacementFacts.swift), over the body it is
+    // handed; this hands it this contact's show's draft.
+    var draftLintBlockers: [DraftIssue] { draftLintBlockers(body: effectiveBody) }
 
     // True only when the current outgoing text is the EXACT text Dan overrode; a mismatch (edited
     // since, or never overridden) means the block still applies.
-    var isLintOverridden: Bool {
-        lintOverriddenBody != nil && lintOverriddenBody == effectiveBody
-    }
+    var isLintOverridden: Bool { isLintOverridden(body: effectiveBody) }
 
     var isBlockedByDraftLint: Bool { isBlockedByDraftLint(lintBlockers: draftLintBlockers) }
 
@@ -857,7 +850,7 @@ final class Recipient {
     // the same question pays for it three times. A caller holding the findings already passes them here;
     // the property above is the ordinary spelling and stays the only definition of the RULE (L263).
     func isBlockedByDraftLint(lintBlockers: @autoclosure () -> [DraftIssue]) -> Bool {
-        !lintBlockers().isEmpty && !isLintOverridden
+        isBlockedByDraftLint(body: effectiveBody, lintBlockers: lintBlockers())
     }
 
     // #2545: the body must open with a greeting, because nothing composes one above it any more. Judged
@@ -866,10 +859,7 @@ final class Recipient {
     //
     // A missing body is not this guard's business (the send already refuses one), so it answers false
     // rather than claiming a greeting is absent from text that does not exist.
-    var draftIsMissingGreeting: Bool {
-        guard let body = effectiveBody, !body.isEmpty else { return false }
-        return !DraftGreeting.opensWithAGreeting(body)
-    }
+    var draftIsMissingGreeting: Bool { draftIsMissingGreeting(body: effectiveBody) }
 
     // #2545: a greeting that names one person on an email more than one person receives.
     //
@@ -881,13 +871,13 @@ final class Recipient {
     // Only the wrong direction is held. A plain "Hello," to one person is not an error, and on a shared
     // inbox it is the correct opening, with the `Attn:` block above it naming the desk.
     var greetingMisaddressed: Bool {
-        guard let prospect else { return false }
+        greetingMisaddressed(body: effectiveBody, audience: prospect?.greetingAudienceSize)
+        // The rule, on `ContactFacts` since #4357 slice E1, answers false for a contact with no show.
         // #3549 removed the performer carve-out that used to sit here. It stood on a performer having
         // a letter of their OWN, which went to them alone, making a name in it right by construction.
         // With one letter per show that premise is gone: a body naming the performer, on a show that
         // also emails a presenter, is misaddressed for exactly the reason this guard exists. A single
         // contact show is unaffected, since the audience is then one and the size test is false.
-        return prospect.greetingAudienceSize > 1 && DraftGreeting.namesSomeone(effectiveBody)
     }
 
     // #2579: the greeting names somebody who is clearly not this contact.
@@ -902,25 +892,20 @@ final class Recipient {
     // The performer carve-out is deliberately NOT repeated here. A performer's own second-person letter
     // goes to them alone, which makes a name in it right by construction for the audience question, and
     // makes it exactly as wrong as any other if it is the wrong name.
-    var greetingNamesSomeoneElse: Bool {
-        DraftGreeting.namesSomeoneElse(greeting: effectiveBody, contactName: name)
-    }
+    var greetingNamesSomeoneElse: Bool { greetingNamesSomeoneElse(body: effectiveBody) }
 
     // #2545: Dan's deliberate override of the two greeting holds, pinned to the EXACT text he took it
     // on, the same shape as `lintOverriddenBody` above. Editing the body afterwards re-arms the hold
     // rather than carrying an approval forward onto words nobody has read.
     var greetingOverriddenBody: String? = nil
 
-    var isGreetingOverridden: Bool {
-        greetingOverriddenBody != nil && greetingOverriddenBody == effectiveBody
-    }
+    var isGreetingOverridden: Bool { isGreetingOverridden(body: effectiveBody) }
 
     var isBlockedByGreeting: Bool {
         // #2579 joins this disjunction rather than standing beside it, so it inherits the override Dan
         // already has for a greeting hold. A third hold with no way past it would be the one that made
         // him stop trusting the other two.
-        (draftIsMissingGreeting || greetingMisaddressed || greetingNamesSomeoneElse)
-            && !isGreetingOverridden
+        isBlockedByGreeting(body: effectiveBody, audience: prospect?.greetingAudienceSize)
     }
 
     // RETAINED STORAGE, read by nothing (#2545). This held Dan's own opening for THIS contact, back when
@@ -1005,18 +990,11 @@ final class Recipient {
     // before the guard could refuse it. Measured 2026-09-03: that cost 24 extra lint runs per render,
     // making a change meant to remove work add it (L62: a guard on a function's first line cannot
     // protect against the cost of building its arguments).
+    // #4357 slice E1: the rule is on `ContactFacts` (StagePlacementFacts.swift); this hands it this contact's
+    // show's draft and audience, the latter only if the rule gets that far.
     func isBlockedAwaitingReview(lintBlockers: @autoclosure () -> [DraftIssue]) -> Bool {
-        guard sendState == .pending, email?.isEmpty == false, !pausedByReply else { return false }
-        // #2545: the greeting hold takes the place of #407's, which policed the same thing from the
-        // other side. It belongs HERE and not only in `isSendablePending` for the reason above: a body
-        // that forgot its greeting is one edit from sendable, so the person behind it is waiting, not
-        // finished, and a show must not leave the queue reading as fully sent on their behalf.
-        return isBlockedByGreeting
-            || (looksLikeVenue && !looksLikeVenueDismissed)
-            || (looksLikePressContact && !looksLikePressContactDismissed)
-            || (looksLikeDuplicateContact && !looksLikeDuplicateContactDismissed)
-            || isLooksLikeAnotherPersons
-            || isBlockedByDraftLint(lintBlockers: lintBlockers())
+        isBlockedAwaitingReview(body: effectiveBody, audience: prospect?.greetingAudienceSize,
+                                lintBlockers: lintBlockers())
     }
 
     // Deterministic send order. SwiftData to-many relationships are UNORDERED, so the send queue and
@@ -1195,10 +1173,7 @@ final class Recipient {
     // normal brief send (#475/#476): the app was interrupted (crash, or a save that never landed)
     // between claiming the send and recording its outcome. Must be surfaced for Dan to check Gmail
     // and resolve by hand: never auto-resent (still not .pending) and never auto-assumed sent.
-    func isSendStuck(now: Date, timeout: TimeInterval = RunTimeouts.send) -> Bool {
-        guard sendState == .sending, let claimed = sendClaimedAt else { return false }
-        return now.timeIntervalSince(claimed) >= timeout
-    }
+    // `isSendStuck(now:timeout:)` is on `ContactFacts` since #4357 slice E1 (StagePlacementFacts.swift).
 
     // Apply Dan's edit to the AI reply draft (#459), mirroring Prospect.applyEdit for the cold draft:
     // his text wins and the deterministic DraftCheck warnings stop nagging on it.
