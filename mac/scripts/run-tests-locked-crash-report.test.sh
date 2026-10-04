@@ -94,6 +94,7 @@ echo
 # the test starts, the host dies, xcodebuild restarts it, the rest passes, and the `Failing tests:` block
 # names only the test that was in flight.
 HOST_CRASH_RUN="$(cat <<'EOF'
+DIAMONDMARK Test aStoreChangeStillReachesAQueueThatNoLongerQueriesTheStore() started.
 TICKMARK Test aStoreChangeStillReachesAQueueThatNoLongerQueriesTheStore() passed after 0.061 seconds.
 DIAMONDMARK Suite "A hosted test releases its view tree (#3874)" started.
 DIAMONDMARK Test whichPartOfAHostedTestSurvivesIt() started.
