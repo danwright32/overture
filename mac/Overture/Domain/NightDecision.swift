@@ -133,10 +133,14 @@ enum NightState: Equatable, Sendable {
     case notInRun
 }
 
-extension Prospect {
-
+// #4357 slice G2: the two decision lists read only stored nights, so they live on `ProspectFacts` and a
+// retained show answers them by the same body.
+extension ProspectFacts {
     var pitchedNightDecisions: [NightDecision] { NightDecision.all(pitchedRunNights) }
     var skippedNightDecisions: [NightDecision] { NightDecision.all(skippedRunNights) }
+}
+
+extension Prospect {
 
     func nightState(_ night: String) -> NightState {
         if DroppedNight.all(on: self).contains(where: { $0.night == night }) { return .dropped }

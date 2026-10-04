@@ -27,7 +27,8 @@ struct QueueItemConstructionGuardTests {
         // CLOSING line. Anchoring on the opening one would start the scan inside the parameter list, and
         // `self.init(` is found from there either way, so it would still have worked and would have been
         // reading a region nobody meant it to (L70).
-        guard let start = text.range(of: "contacts: [Recipient]? = nil) {") else {
+        // #4357 slice G2: the memberwise call lives in the generic initialiser the model's forwards to.
+        guard let start = text.range(of: "among contactsOnce: [Row.Contact]) {") else {
             return nil
         }
         let rest = text[start.upperBound...]

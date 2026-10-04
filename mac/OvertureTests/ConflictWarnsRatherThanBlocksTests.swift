@@ -44,8 +44,9 @@ struct ConflictWarnsRatherThanBlocksTests {
     // taken back, so it still refuses and confirms rather than warning past silently. If this ever goes
     // green the decision has been half-applied.
     @Test func theSendGateStillRefusesAnUnclearedClash() {
-        let sendable = SourceGuardHelper.source("Overture/Domain/Recipient.swift")
-        #expect(sendable.contains("prospect?.hasUnclearedConflict != true"))
+        // #4357 slice G2: the send gate's body lives on `ContactFacts`, asked of the contact's own show.
+        let sendable = SourceGuardHelper.source("Overture/Domain/ContactFactsMembers.swift")
+        #expect(sendable.contains("show?.hasUnclearedConflict != true"))
     }
 
     // The clash is still SAID, on the card, which is the whole of what "warn" means here.

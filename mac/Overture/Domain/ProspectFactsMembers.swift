@@ -131,6 +131,65 @@ extension ProspectFacts {
         }
     }
 
+    // #4357 slice G2: the show members the card reads, moved from `Prospect` with their comments.
+    // A day of this run Dan cannot work, that he has NOT waved through. This is the one every gate asks:
+    // it keeps the show out of the Prep run (no money is spent drafting a show he cannot shoot) and out
+    // of the send (a conflict can turn up AFTER the draft exists, which a prep-only gate would miss).
+    var hasUnclearedConflict: Bool { conflictOpen }
+
+    // #1501: which night of this show's run the clash is on. Read off the stored key and this show's own
+    // date, so the pill and the sentence below are two renderings of ONE decision rather than two rules.
+    var conflictScope: ConflictScope? {
+        ConflictScope.of(blockedDate: conflictKey.flatMap { BlockedCalendar.Day(key: $0) }?.date,
+                         performanceDate: performanceDate)
+    }
+
+    // What Dan reads on the row: "You blocked Nov 14 (Vacation)." / "You're already shooting X on Nov 14."
+    // Composed from the key, never stored, so it can never be a stale quotation of older copy.
+    //
+    // #1501: and framed by WHICH night of the run is blocked, because under a date-group header the old
+    // sentence read as a claim about that header's date even when the clash was a week later.
+    var conflictNote: String? {
+        guard let day = conflictKey.flatMap({ BlockedCalendar.Day(key: $0) }) else { return nil }
+        return day.reason(scope: conflictScope ?? .thisNight)
+    }
+
+    var showSummaryAbsence: ShowSummaryAbsence? {
+        showSummaryAbsentReasonRaw.flatMap(ShowSummaryAbsence.init(rawValue:))
+    }
+
+    var reachabilityEmptyReason: Reachability.EmptyReason? {
+        reachabilityEmptyReasonRaw.flatMap(Reachability.EmptyReason.init(rawValue:))
+    }
+
+    func contactRouteForScoring(now: Date) -> ContactRoute {
+        if Reachability.probeIsStale(probedAt: reachabilityProbedAt, now: now) { return .unchecked }
+        // Deliberately the STORED verdict, not `reachabilityResultAsHeld` which the badge reads.
+        //
+        // #2664 briefly made this follow the badge, on the reasoning that a card saying "No email found"
+        // beside a score still paying route points is a contradiction. Dan's call, 2026-08-13, on being
+        // shown that this went further than the decision he actually made: the badge was what he chose,
+        // and ranking stays tied to what the paid check CONCLUDED.
+        //
+        // The two questions really are different, which is why they may answer differently here. The badge
+        // asks "can I reach this show right now", and a contact deleted by hand changes that. The score
+        // asks "what did the research find", and a hand delete is not a research finding: the score moves
+        // when a re-check moves it. Staleness is still shared, so they cannot disagree about whether an
+        // answer is CURRENT, which was #1648's point and is untouched.
+        return ContactRoute(probeResult: reachabilityResult)
+    }
+
+    // #2052: a written email with no subject line. The one definition of that state, read by the send
+    // predicate (Recipient.isSendablePending) and by the note beside the greyed Send button, so what
+    // holds the send and what explains it can never be two different rules.
+    //
+    // It asks about a DRAFT, not about the show: a show with no draft at all has no subject because it
+    // has no email yet, and treating that as missing would make every un-prepped contact unsendable and
+    // change what the whole queue says about who is reachable.
+    var draftIsMissingSubject: Bool {
+        draftBody != nil && (draftSubject ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
     // In force unless the contact has written back since. Takes the contact's own reply stamp because the
     // reopen is per person: one contact replying does not put the whole show back in play for everyone
     // else, but it does put THAT conversation back in play.
