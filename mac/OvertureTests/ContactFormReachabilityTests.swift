@@ -50,8 +50,8 @@ struct ContactFormReachabilityTests {
         var item = QueueItem(p)
         item.reachabilityProbedAt = Date()
         item.reachabilityResult = .contactFormOnly
-        #expect(item.reachabilityBadge() == .contactFormOnly)
-        #expect(item.displayedContactForms.map(\.absoluteString) == ["https://sorrelmanemagic.com/contact"])
+        #expect(item.reachabilityBadge(now: Date()) == .contactFormOnly)
+        #expect(item.displayedContactForms(now: Date()).map(\.absoluteString) == ["https://sorrelmanemagic.com/contact"])
     }
 
     // The row labels the link with the site, because the pill above it already says "contact form" and
@@ -76,7 +76,7 @@ struct ContactFormReachabilityTests {
         #expect(p.reachabilityResultFromRecipients == .socialOnly)
         var item = QueueItem(p)
         item.reachabilityResult = .socialOnly
-        #expect(item.displayedContactForms.map(\.absoluteString) == ["https://www.instagram.com/heybaylor/"])
+        #expect(item.displayedContactForms(now: Date()).map(\.absoluteString) == ["https://www.instagram.com/heybaylor/"])
     }
 
     @Test func anEmailStillBeatsAForm() throws {
@@ -106,7 +106,7 @@ struct ContactFormReachabilityTests {
         item.reachabilityResult = .contactFormOnly
         item.reachabilityProbedAt = Date()
 
-        #expect(item.reachabilityBadge() != .emailFound)
+        #expect(item.reachabilityBadge(now: Date()) != .emailFound)
     }
 
     // Only a found EMAIL travels across an organisation (#1598). A form answer stays on its own show

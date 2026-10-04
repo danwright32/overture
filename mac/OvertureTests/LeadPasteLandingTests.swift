@@ -133,6 +133,47 @@ struct LeadPasteLandingTests {
         #expect(try count(container) == 1)
     }
 
+    /// #4339: a failed save that could not all be put back tells Dan to paste again, and says what that does:
+    /// the next paste runs the entry flush first, which saves what was left or names the shows it still cannot
+    /// save, before adding anything. Both halves of that sentence are driven here, so it cannot promise a step
+    /// the paste does not take.
+    @Test func aSaveThatCannotBePutBackSaysToPasteAgainAndTheNextPasteDoesWhatItSays() async throws {
+        let (container, context) = try seeded()
+        // The deletion is the injected save's own: nothing on the landing path deletes a committed row, and a
+        // committed row deleted cannot be brought back without `rollback()`, which is banned.
+        let first = await LeadPasteLanding.landPastedLead(
+            [event("Harbor Lights")], today: Self.today, now: Self.now, landings: LandingSingleFlight(),
+            saveSource: { ctx in
+                if let stored = try? ctx.fetch(FetchDescriptor<Prospect>()).first(where: { $0.groupName == "Stored Show" }) {
+                    ctx.delete(stored)
+                }
+                throw Refused()
+            }, into: context)
+        #expect(first == .refused(LeadIntake.notRevertedMessage), "said \(first)")
+        #expect(LeadIntake.notRevertedMessage.contains("Paste the page again"),
+                "the not reverted sentence gives Dan nothing to do: \(LeadIntake.notRevertedMessage)")
+        #expect(context.hasChanges, "nothing was left unsaved, so this proves nothing about the next paste")
+
+        // "or tells you which shows it still can't save": a flush that cannot save names them and adds nothing.
+        let refused = await LeadPasteLanding.landPastedLead(
+            [event("Harbor Lights")], today: Self.today, now: Self.now, landings: LandingSingleFlight(),
+            saveEntry: { _ in throw Refused() }, into: context)
+        #expect(refused == .refused(LeadIntake.recentEditsUnsaved(["Stored Show"])), "said \(refused)")
+        #expect(try count(container) == 1, "a paste that could not save what was left added shows")
+
+        // "Overture saves what is left first": the next paste that can save does, then adds the page.
+        let landed = await LeadPasteLanding.landPastedLead(
+            [event("Harbor Lights")], today: Self.today, now: Self.now, landings: LandingSingleFlight(),
+            into: context)
+        guard case .landed = landed else {
+            Issue.record("the paste after a not reverted save did not land: \(landed)")
+            return
+        }
+        #expect(!context.hasChanges, "the paste left the earlier failure's changes unsaved")
+        let fresh = try ModelContext(container).fetch(FetchDescriptor<Prospect>()).map(\.groupName).sorted()
+        #expect(fresh == ["Harbor Lights"], "the store holds \(fresh)")
+    }
+
     @Test func aPendingEditIsSavedBeforeThePasteLandsAndAFlushThatFailsRefusesIt() async throws {
         let (container, context) = try seeded()
         let stored = try #require(try context.fetch(FetchDescriptor<Prospect>()).first)

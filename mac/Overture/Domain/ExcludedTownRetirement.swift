@@ -34,13 +34,16 @@ enum ExcludedTownRetirement {
 
     // Returns how many shows it retired, so a caller can report what it actually did. Idempotent: a
     // retired show is dismissed, and dismissed shows are excluded, so a second pass finds nothing.
+    // #4339 (A11): `rows` is passed by a caller already holding every show (runScout's tail, from its landing's
+    // working set), so the table is not fetched a second time on the main thread; a caller with none in hand
+    // omits it. Measured on a live store clone: the fetch it skips is 216 ms at 1,372 shows, 866 at 5,500.
     @discardableResult
-    static func run(in context: ModelContext) -> Int {
+    static func run(rows: [Prospect]? = nil, in context: ModelContext) -> Int {
         // Fetched directly (not via ExcludedTownEditing's @MainActor helpers) so this stays a nonisolated
         // synchronous pass like WentByRetirement, callable from launch, the scout, and the row action.
         let userExcluded = Set(((try? context.fetch(FetchDescriptor<ExcludedTown>())) ?? []).map(\.town))
         let allowedSeed = Set(((try? context.fetch(FetchDescriptor<AllowedSeedTown>())) ?? []).map(\.town))
-        let all = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
+        let all = rows ?? (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
         let retire = all.filter {
             shouldRetire(status: $0.status, location: $0.location,
                          discipline: Discipline(rawValue: $0.discipline) ?? .other,

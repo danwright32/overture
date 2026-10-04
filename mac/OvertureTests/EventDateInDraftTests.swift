@@ -182,12 +182,12 @@ struct EventDateInDraftTests {
             Issue.record("draftCheckFlags not found in DraftReviewView")
             return
         }
-        #expect(body.contains("item.eventDateWarning()"))
+        #expect(body.contains("item.eventDateWarning(today: today)"))
 
         // And OUTSIDE the voice suppression, which is the whole point: a contradicted date must show on a
         // draft Dan has edited. Positional, because that is what "outside the gate" means in this file:
         // the warning has to be rendered before the suppression is consulted.
-        guard let warning = body.range(of: "item.eventDateWarning()"),
+        guard let warning = body.range(of: "item.eventDateWarning(today: today)"),
               let suppression = body.range(of: "DraftReviewNotes.showsVoiceFindings(") else {
             Issue.record("expected both the date warning and the voice suppression in draftCheckFlags")
             return

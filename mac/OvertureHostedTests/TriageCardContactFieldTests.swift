@@ -20,8 +20,8 @@ struct TriageCardContactFieldTests {
                           profile: "strong", coverage: "likely_uncovered", fitScore: 6, tier: "mid",
                           fitReason: "r", matchedClientName: nil, possibleMatchSource: nil,
                           possibleMatchName: nil, status: .new)
-        // Against the LIVE clock, for #3169's reason: the row asks for the badge with no `now` and reads
-        // the wall clock at render time, so a pinned instant stops meaning "probed recently" the moment
+        // Against the LIVE clock, for #3169's reason: this test hands the row `Date()` as the `now` its badge
+        // judges against (#4357 slice G1), so a pinned instant stops meaning "probed recently" the moment
         // real time walks past the freshness window.
         i.reachabilityProbedAt = LiveClockProbe.fresh
         i.reachabilityResult = .noEmailFound
@@ -30,7 +30,7 @@ struct TriageCardContactFieldTests {
     }
 
     private func placeholders(_ item: QueueItem) throws -> [String] {
-        let view = ProspectRowView(item: item, today: "2026-07-09", onKeep: {}, onDismiss: { _ in })
+        let view = ProspectRowView(item: item, today: "2026-07-09", now: Date(), onKeep: {}, onDismiss: { _ in })
         return try view.inspect().findAll(ViewType.TextField.self).compactMap {
             try? $0.labelView().text().string()
         }

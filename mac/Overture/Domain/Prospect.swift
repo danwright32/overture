@@ -333,32 +333,10 @@ final class Prospect {
         return Recipient.inCanonicalOrder(recipients)
     }
 
+    // #4357 slice G1: the rule lives on `ProspectFacts` (ProspectFactsMembers.swift) over the contacts handed
+    // in; the model reads it with its own `recipients`, as it always has, so no reach count moves.
     var reachabilityResultFromRecipients: Reachability.ProbeResult {
-        // #3653: the cascade itself lives in `Reachability.result(from:)` so a tier-one row can ask the
-        // same question without hand-rolling a second copy of it. What stays here is gathering the facts,
-        // which is the only part that needs a model.
-        //
-        // ONE WALK, not four. Each arm used to ask the contacts separately (`hasUnguardedAddress`,
-        // `isHeldByAGuard`, `usableContactFormURLs`, `socialRouteURLs`), and short-circuiting only helped
-        // the rows that answered early. The two URL lists are still computed lazily, because a row with
-        // an address never needs them and they are the expensive pair.
-        //
-        // #3387: `hasUnguardedAddress`, not `isSendablePending`. This asks whether an address exists that
-        // no research guard is holding; the send predicate folds in a calendar conflict, a blank subject
-        // and two lint judgements, none of which is a fact about reachability.
-        // #1798: guarded through the ONE shared definition (`Recipient.isHeldByAGuard`), which lists every
-        // guard that can hold an address. This rule once listed two of the three, so an address held only
-        // as a possible duplicate fell through to "no address at all".
-        var unguarded = false
-        var guarded = false
-        for r in recipients {
-            if r.hasUnguardedAddress { unguarded = true; break }
-            if r.isHeldByAGuard { guarded = true }
-        }
-        if unguarded { return Reachability.result(from: .init(hasUnguardedAddress: true)) }
-        if guarded { return Reachability.result(from: .init(hasGuardedAddress: true)) }
-        return Reachability.result(from: .init(hasUsableContactForm: !usableContactFormURLs.isEmpty,
-                                               hasSocialRoute: !socialRouteURLs.isEmpty))
+        reachabilityResultFromRecipients(among: recipients)
     }
 
     // #3387 / milestone 61 Phase 0.1. Does a way in of ANY kind exist: an address, a form on the act's
@@ -370,52 +348,15 @@ final class Prospect {
     // form-only and social-only show as holding an address.
     var hasAnyRoute: Bool { reachabilityResultFromRecipients != .noEmailFound }
 
-    // #2612: the social profiles Dan will actually DM. Judged through the SAME venue and press guards as
-    // the form list below, so a room's own Instagram or a press account is no more a route here than it
-    // is there; only the social-host test differs, and it is inverted.
-    // #2912: and never a profile the run itself called a NAME MATCH ONLY. This list is what makes the
-    // show read as reachable (the stored verdict, the fit score, the organisation ledger, and whether
-    // Dan can record a DM he sent by hand), and every one of those is Overture ASSERTING that a way in
-    // exists. An account carrying the right name and nothing tying it to this show cannot support that
-    // claim, so the assertion side sees exactly what it saw when such a profile was refused outright
-    // (#2147, L75). The CARD still shows the handle, marked, because looking at it costs Dan seconds.
-    var socialRouteURLs: [String] {
-        recipients.compactMap { r -> String? in
-            guard !r.isUnconfirmedNameMatch,
-                  let raw = r.contactFormURL?.trimmingCharacters(in: .whitespacesAndNewlines),
-                  !raw.isEmpty, Reachability.isSocialOnly(raw),
-                  !VenueContactGuard.looksLikeVenue(formURL: raw, venue: venue),
-                  !PressContactGuard.looksLikePressContact(formURL: raw) else { return nil }
-            return raw
-        }
-    }
+    // #4357 slice G1: `socialRouteURLs` (#2612, #2912) and `usableContactFormURLs` (#1626, #1629, #1636) live on
+    // `ProspectFacts` over the contacts handed in, with their comments; the model reads them with its own
+    // `recipients`.
+    var socialRouteURLs: [String] { socialRouteURLs(among: recipients) }
 
-    // #1626: the contact forms Dan would actually use, which is a form on the ACT's own site. An
-    // Instagram or another login-walled page is a dead end (his rule, 2026-07-27), judged through the
-    // one shared social-host list rather than a second copy of it.
-    //
-    // #1629: and never the ROOM's own booking form, judged through the same VenueContactGuard
-    // comparison the email path has used since #388. Without it a check that returned the host venue's
-    // form gave a card reading "Contact form only" that pointed Dan straight at the room, which is the
-    // oldest standing rule in the product (#368: a room's own address is never a real contact, not even
-    // a named booking person). Excluding it here means the show falls through to `noEmailFound`, the
-    // same answer he would get if the check had returned the room's email address.
-    var usableContactFormURLs: [String] {
-        recipients.compactMap { r -> String? in
-            guard let raw = r.contactFormURL?.trimmingCharacters(in: .whitespacesAndNewlines),
-                  !raw.isEmpty, !Reachability.isSocialOnly(raw),
-                  !VenueContactGuard.looksLikeVenue(formURL: raw, venue: venue),
-                  // #1636: nor a press or media page, the same rule the email path applies to a
-                  // "press@" address (#722/#635). The venue guard above cannot cover this: the live case
-                  // is a press office on a domain that is not this show's room at all.
-                  !PressContactGuard.looksLikePressContact(formURL: raw),
-                  let url = URL(string: raw), url.scheme != nil else { return nil }
-            return raw
-        }
-    }
+    var usableContactFormURLs: [String] { usableContactFormURLs(among: recipients) }
 
     var reachabilityResult: Reachability.ProbeResult? {
-        get { reachabilityResultRaw.flatMap(Reachability.ProbeResult.init(rawValue:)) }
+        get { asProspectFacts.reachabilityResult }
         set { reachabilityResultRaw = newValue?.rawValue }
     }
 
@@ -446,11 +387,9 @@ final class Prospect {
     // and a form pitch always has one. Which is the right answer (the show WAS unreachable when it was
     // pitched, and the badge is a record of that) but it is right by accident rather than by design, so it
     // is written down here: do not "fix" this into re-deriving on a sent show.
-    var reachabilityResultAsHeld: Reachability.ProbeResult? {
-        guard let stored = reachabilityResult else { return nil }
-        guard sentAt == nil, !isBooked else { return stored }
-        return reachabilityResultFromRecipients
-    }
+    // #4357 slice G1: the rule lives on `ProspectFacts` over the contacts handed in; the model reads it with its
+    // own `recipients`, the list `isBooked` and `reachabilityResultFromRecipients` read here before.
+    var reachabilityResultAsHeld: Reachability.ProbeResult? { reachabilityResultAsHeld(among: recipients) }
 
     // #1722. An unrecognised stored value reads as nil (no reason given), which the copy degrades to the
     // old sentence, so a newer producer's vocabulary can never put a claim on the card this build cannot

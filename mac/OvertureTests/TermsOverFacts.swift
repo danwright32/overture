@@ -172,6 +172,9 @@ enum TermsOverFacts {
         out += stageFindings(models, facts, asOf: asOf)
         // Slice H: the long tail (T8).
         out += longTailFindings(models, facts, asOf: asOf)
+
+        // Slice G1: the row, the contact facts it is built from, and the reachability members they read.
+        out += rowFindings(models, facts)
         return out
     }
 
@@ -404,6 +407,66 @@ enum TermsOverFacts {
         }
         for (model, fact) in zip(models, facts) where model.isClosed != fact.isClosed {
             out.append("isClosed differs for row \(pid(model.naturalKey))")
+        }
+        return out
+    }
+
+    // MARK: slice G1, the row and the reachability members it reads
+
+    /// What the row's reachability reads about one show, over that show's own contacts.
+    struct RowShowAnswers: Equatable {
+        let reachabilityResult: Reachability.ProbeResult?
+        let fromRecipients: Reachability.ProbeResult
+        let asHeld: Reachability.ProbeResult?
+        let socialRoutes: [String]
+        let contactForms: [String]
+
+        init(_ p: some ProspectFacts) {
+            let contacts = p.factContacts
+            reachabilityResult = p.reachabilityResult
+            fromRecipients = p.reachabilityResultFromRecipients(among: contacts)
+            asHeld = p.reachabilityResultAsHeld(among: contacts)
+            socialRoutes = p.socialRouteURLs(among: contacts)
+            contactForms = p.usableContactFormURLs(among: contacts)
+        }
+    }
+
+    /// The three address members slice G1 moved onto `ContactFacts`.
+    struct RowContactAnswers: Equatable {
+        let isUnconfirmedNameMatch: Bool
+        let isHeldByAGuard: Bool
+        let hasUnguardedAddress: Bool
+
+        init(_ r: some ContactFacts) {
+            isUnconfirmedNameMatch = r.isUnconfirmedNameMatch
+            isHeldByAGuard = r.isHeldByAGuard
+            hasUnguardedAddress = r.hasUnguardedAddress
+        }
+    }
+
+    /// Every row's contact facts and the row built from them, over models and over facts, then each show's
+    /// and each contact's reachability answers. Findings name identifiers only: the contact facts carry names
+    /// and addresses, and the route lists carry URLs.
+    static func rowFindings(_ models: [Prospect], _ facts: [RowFacts]) -> [String] {
+        var out: [String] = []
+        for (model, fact) in zip(models, facts) {
+            let pid = String(describing: model.persistentModelID)
+            let onModel = RecipientFacts.of(model, contacts: model.factContacts)
+            let onFact = RecipientFacts.of(fact, contacts: fact.factContacts)
+            if onModel != onFact { out.append("RecipientFacts.of differs for row \(pid)") }
+            if QueueScopeRow(model, facts: onModel) != QueueScopeRow(fact, facts: onFact) {
+                out.append("QueueScopeRow differs for row \(pid)")
+            }
+            if RowShowAnswers(model) != RowShowAnswers(fact) {
+                out.append("the row's reachability answers differ for row \(pid)")
+            }
+            let factByID = Dictionary(fact.factContacts.map { ($0.persistentModelID, $0) }, uniquingKeysWith: { first, _ in first })
+            for contact in model.factContacts {
+                guard let record = factByID[contact.persistentModelID] else { continue }   // memberFindings names it
+                if RowContactAnswers(contact) != RowContactAnswers(record) {
+                    out.append("the address members differ for contact " + String(describing: contact.persistentModelID))
+                }
+            }
         }
         return out
     }

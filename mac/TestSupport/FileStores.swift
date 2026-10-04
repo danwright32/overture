@@ -49,8 +49,12 @@ enum FileStores {
     /// Refuses to release anything outside the per-user temp folder: `deleteAllData()` destroys the
     /// store it is pointed at, so it must never be able to reach Dan's live store, whatever a caller
     /// passes (L42). A path outside the temp folder is left open and reported as open.
+    ///
+    /// `mainQueueDeadline` bounds the one wait in here, for the main queue to drop a main context's changes
+    /// when the close runs off the main thread (#4395, below). Past it nothing is destroyed: the stores stay
+    /// open and are reported open, so `remove(_:)` leaves the directory in place rather than unlinking it.
     @discardableResult
-    static func close(under dir: URL) -> [String] {
+    static func close(under dir: URL, mainQueueDeadline: TimeInterval = 10) -> [String] {
         guard let root = realPath(dir) else {
             // The directory is already gone, so there is nothing on disk to close or protect; its recorded
             // containers are only forgotten, by their configured path, so they are not held for the life of
@@ -84,14 +88,33 @@ enum FileStores {
         // full suite run). Its changes are dropped first where that is legal, on the main thread; a context a
         // test made itself is out of reach here and, built with `ModelContext(container)` inside a test
         // process, does not autosave (measured the same day).
-        // Off the main thread (a sandbox released by an async test) the same step is sent to the main queue
-        // rather than skipped. It then lands just after `deleteAllData()`, which is safe: measured the same
-        // day, a destroyed store with an unsaved change pending did not fault, it only logged.
+        // Off the main thread (a sandbox released by an async test, or a suite instance released on a worker)
+        // the same step is sent to the main queue rather than skipped, and this WAITS for it before anything is
+        // destroyed (#4395). It used to be posted and left, on the reading that landing just after
+        // `deleteAllData()` was safe, and that reading was about an unsaved change, not about the hop itself:
+        // the hop could run on the main thread WHILE `deleteAllData()` ran here, reach the main context mid
+        // teardown, and hit SwiftData's own trap, "Container does not have any data stores"
+        // (ModelContext.swift:324). That killed the CI test worker in 6 of the last 100 failed runs (all in
+        // `DebugStagingTests`, whose file-backed test is not on the main actor), and once in 200 local
+        // repetitions of that suite on 2026-10-04, crash report xctest-2026-10-04-144533.ips, whose trapping
+        // frame is `dropMainContextChanges` called from this hop. A deadline rather than an unbounded wait,
+        // so a main thread that is itself blocked cannot hang the test process (L110); past it, nothing is
+        // destroyed and the files are reported still open.
         if Thread.isMainThread {
             MainActor.assumeIsolated { for container in closing { dropMainContextChanges(container) } }
         } else if !closing.isEmpty {
+            let dropped = DispatchSemaphore(value: 0)
             DispatchQueue.main.async {
                 MainActor.assumeIsolated { for container in closing { dropMainContextChanges(container) } }
+                dropped.signal()
+            }
+            guard dropped.wait(timeout: .now() + mainQueueDeadline) == .success else {
+                print("FileStores: the main queue did not drop \(closing.count) container(s)' main context "
+                      + "changes within \(mainQueueDeadline)s, so their stores under \(dir.lastPathComponent) "
+                      + "were left open rather than destroyed under a hop still waiting to run (#4395)")
+                // Back in the registry, so the next close of this directory, or of a parent, still finds them.
+                lock.withLock { held.append(contentsOf: closing.map(WeakContainer.init)) }
+                return openFiles(under: dir)
             }
         }
         if #available(macOS 15, *) {

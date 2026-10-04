@@ -3,9 +3,10 @@ import Foundation
 
 // #3169: a probe instant in a HOSTED test must not be one the live clock is about to walk past.
 //
-// The hosted target renders real SwiftUI views. `ProspectRowView` asks `item.reachabilityBadge()` and
-// `Reachability.recheckState` with no `now`, so both read the wall clock at render time and a hosted test
-// has no seam to pin the other end of the pair with. A fixture written as a fixed instant therefore means
+// The hosted target renders real SwiftUI views. `ProspectRowView` asks `item.reachabilityBadge(now:)`
+// with the `now` it is handed (`Date()` in the hosted tests, the render pass's instant in the app since
+// #4357 slice G1) and `Reachability.recheckState` with no `now`, so both read the wall clock at render time
+// in a hosted test and it has no seam to pin the other end of the pair with. A fixture written as a fixed instant therefore means
 // "probed on that day" while the test means "probed recently", and the two agree only until real time
 // walks past `Reachability.probeFreshness`.
 //

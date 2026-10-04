@@ -125,6 +125,6 @@ struct PressContactFormGuardTests {
         let p = show(ctx)
         p.setRecipients([formContact("https://www.carnegiehall.org/About/Press/Ticket-and-Media-Guidelines")])
 
-        #expect(QueueItem(p).displayedContactForms.isEmpty)
+        #expect(QueueItem(p).displayedContactForms(now: Date()).isEmpty)
     }
 }

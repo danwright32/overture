@@ -149,6 +149,64 @@ struct FileStoresTests {
         FileStores.remove(dir)
     }
 
+    // #4395: an off-main close must not destroy a store while its main-queue hop has yet to run. The hop
+    // reaches the container's main context, and run concurrently with `deleteAllData()` that is SwiftData's
+    // own trap, "Container does not have any data stores" (ModelContext.swift:324), which killed the CI test
+    // worker in 6 of the last 100 failed runs, all in `DebugStagingTests`, and once in 200 local repetitions
+    // of that suite (xctest-2026-10-04-144533.ips: the trapping frame is `dropMainContextChanges`, called from
+    // the hop). The race itself cannot be scheduled from a test, so this pins the ORDER that removes it: with
+    // the main thread held busy, the hop cannot run, and the close must give up WITHOUT destroying anything,
+    // where the old code destroyed the store at once and left the hop to land on it later.
+    @MainActor
+    @Test func anOffMainCloseDestroysNothingWhileItsMainQueueHopIsStillWaiting() async throws {
+        let dir = try scratch("file-stores-off-main-waiting")
+        let container = try Self.writeAndReadBack(in: dir)
+        // The premise (L159): its files are open, so the close has something it could destroy.
+        #expect(!FileStores.openFiles(under: dir).isEmpty, "nothing was open, so the close had nothing to destroy")
+        let path = dir
+        let left = try #require(Self.closeOffMainWhileMainIsBusy(path), "the close never returned")
+        #expect(!left.isEmpty, "the store was destroyed while the main queue hop to its main context had not run")
+        // Released, the hop runs on an intact store, and a second close then destroys it and removes the folder.
+        await withCheckedContinuation { (done: CheckedContinuation<Void, Never>) in
+            DispatchQueue.main.async { done.resume() }
+        }
+        withExtendedLifetime(container) {
+            #expect(FileStores.remove(dir), "the folder could not be removed once the hop had run")
+        }
+    }
+
+    // Closes `dir` on a thread of its own while holding THIS thread, the main one, for the whole close, so the
+    // hop the close posts to the main queue cannot run until the close has returned. Nil when it never returned.
+    private static func closeOffMainWhileMainIsBusy(_ dir: URL) -> [String]? {
+        let finished = DispatchSemaphore(value: 0)
+        nonisolated(unsafe) var left: [String] = []
+        Thread.detachNewThread {
+            left = FileStores.close(under: dir, mainQueueDeadline: 0.3)
+            finished.signal()
+        }
+        guard finished.wait(timeout: .now() + 10) == .success else { return nil }
+        return left
+    }
+
+    private static func writeAndReadBack(in dir: URL) throws -> ModelContainer {
+        let schema = Schema([Prospect.self, Recipient.self])
+        let container = try FileStores.container(for: schema, configurations: [
+            ModelConfiguration(schema: schema, url: dir.appendingPathComponent("probe.store"), cloudKitDatabase: .none)])
+        let write = ModelContext(container)
+        let show = Prospect(naturalKey: "file-stores-untouched", groupName: "Ensemble", discipline: "music",
+                            venue: "Hall", performanceDate: "2027-01-01", sourceListingURL: nil,
+                            priorRelationship: "none", production: "presenter", profile: "strong",
+                            coverage: "likely_uncovered", fitScore: 5, tier: "mid", fitReason: "original",
+                            matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
+                            status: .drafted)
+        show.setRecipients([Recipient(id: "a@example.invalid", email: "a@example.invalid", provenance: .act)])
+        write.insert(show)
+        try write.save()
+        let read = ModelContext(container)
+        _ = try read.fetch(FetchDescriptor<Prospect>()).first?.recipients.count
+        return container
+    }
+
     // A directory already gone leaves nothing to close, and its containers are forgotten, not held for ever.
     @Test func aDirectoryAlreadyGoneForgetsItsContainers() throws {
         let dir = try scratch("file-stores-gone")

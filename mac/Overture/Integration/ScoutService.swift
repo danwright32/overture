@@ -997,7 +997,11 @@ enum ScoutService {
         // .readChanged, so toRead is empty on the free daily watch and the ask is unreachable from it.
         // A scoped "read this one" run cannot reach it either, being a single source.
         var declined: [WatchedSource] = []
+        // #4339 (A11): whether anything could have landed between this run's landing block and its tail. Only
+        // when nothing could does the tail take its rows from the landing's working set; otherwise it fetches.
+        var tailMayHaveBeenInterleaved = false
         if case .ask(let pending) = ScoutReadBudget.decide(pending: toRead.count), !isCancelled() {
+            tailMayHaveBeenInterleaved = true
             let chosen = ScoutReadBudget.pagesToRead(toRead, choice: await askReadBudget(pending))
             // Whatever he did not take keeps its unread flag and its older fairness clock, so it is not
             // lost: it is reported as waiting below and sorts to the front of the next press. Backing out
@@ -1013,8 +1017,28 @@ enum ScoutService {
         let tailToken = try await landings.begin(
             entryPoint: .runScoutTail, priority: landingPriority,
             deadline: LandingSingleFlight.Deadline.runScoutTail,
-            onWait: { onNativeStep(.waitingForTheLandingInProgress) })
+            onWait: {
+                tailMayHaveBeenInterleaved = true
+                onNativeStep(.waitingForTheLandingInProgress)
+            })
         defer { tailToken.end() }
+        // #4339 (A11): the tail's two whole table fetches (the booking reconcile's, the town retirement's) were
+        // 200 and 216 ms on the main thread at 1,372 shows, 801 and 866 at 5,500, measured inside the run by
+        // `LandingFirstHoldProbeTests`. The landing's working set already holds every show as it now stands,
+        // so with no await between the landing block and here that could have let another landing in, both are
+        // handed it instead. With one (the read budget question, or a wait for the tail's token), the table is
+        // read afresh, ONCE for both, so a show another landing added meanwhile is still judged. A read that
+        // fails is recorded on the run and judges nothing, where each pass used to read it as an empty store
+        // on its own (`(try? fetch) ?? []`, L215).
+        let tailRows: [Prospect]
+        do {
+            tailRows = tailMayHaveBeenInterleaved ? try readProspectTable(context) : try landing.rows()
+        } catch {
+            tailRows = []
+            if !outcome.degradedReads.contains(.reconcileStoredShows) {
+                outcome.degradedReads.append(.reconcileStoredShows)
+            }
+        }
 
         if !toRead.isEmpty && !isCancelled() {
             onNativeStep(.handingPagesToTheReader)
@@ -1052,13 +1076,13 @@ enum ScoutService {
         onNativeStep(.checkingBookings)
         // #4329 (A12): the booking reconcile and the blocked town retirement each used to save on their own;
         // both fold into the tail's one save below (save two), which carries them with the fairness clock.
-        _ = DownbeatBooking.reconcileBooked(entities: DownbeatBooking.bookingEntities(in: context),
+        _ = DownbeatBooking.reconcileBooked(entities: DownbeatBooking.bookingEntities(prospects: tailRows, in: context),
                                             clients: loaded.clients, bookings: loaded.bookings,
                                             health: loaded.health, now: Date())
         // #1238: retire any show a blocked town this run may have (re-)surfaced, so blocking a town keeps
         // future scouts out too, not just the shows present when Dan blocked it. Idempotent.
         onNativeStep(.clearingBlockedTowns)
-        _ = ExcludedTownRetirement.run(in: context)
+        _ = ExcludedTownRetirement.run(rows: tailRows, in: context)
         onNativeStep(.saving)
         // #4330 / #4329: SAVE TWO, the tail's own, so the fairness clock, the booking reconcile (#41) and the
         // retirement are on disk before its token is released, rather than left to autosave. Its own save,
