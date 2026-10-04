@@ -196,6 +196,10 @@ final class LandingFirstHoldProbeTests {
                 }
                 Self.say("x\(factor) runScout pass \(pass) (\(swept) sources reported): " + sweepHold.text)
             }
+            // 3. runScout's tail, its two whole table fetches timed alone on the main thread as the tail meets
+            //    them: after a landing, with the store's rows already registered in the context.
+            member("tail: booking entities fetch") { _ = DownbeatBooking.bookingEntities(in: ctx) }
+            member("tail: blocked town retirement") { _ = ExcludedTownRetirement.run(in: ctx) }
         }
     }
 }
