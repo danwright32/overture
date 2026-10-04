@@ -667,10 +667,14 @@ enum StallLog {
         // The HIGH WATER is judged BEFORE the floor, deliberately. A session whose worst stall is under
         // the floor still has a worst stall, and reporting none would say a session was clean when what
         // happened is that nothing crossed a threshold (L98).
-        if let current = next.highWater {
-            if stall.seconds > current.seconds { next.highWater = stall }
-        } else {
-            next.highWater = stall
+        // #4335 (A6): idle work (a recovery's hold, nobody at the Mac) never becomes the session's worst stall,
+        // because the gate reading it decides an escalation by freezes Dan could feel. Still written below.
+        if stall.recoverySequence == nil {
+            if let current = next.highWater {
+                if stall.seconds > current.seconds { next.highWater = stall }
+            } else {
+                next.highWater = stall
+            }
         }
         guard stall.seconds >= floor else {
             next.belowFloor += 1

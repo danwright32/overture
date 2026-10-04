@@ -61,6 +61,52 @@ struct IdleRecoveryStallsAreIdleWorkTests {
             "the stall of a replay that had just ended was recorded as a freeze: \(records.all.map(\.recoverySequence))"))
     }
 
+    // The other end. A freeze already under way when a recovery starts is a freeze Dan could have felt, so it
+    // is judged by the state when its ping was POSTED, never by a stamp that arrived while it was blocked.
+    // Erring this way can only count idle work as a freeze, the harmless direction (L648); the other way
+    // would take a real freeze out of milestone 80's distribution.
+    @Test func aFreezeARecoveryStartedDuringIsStillAFreeze() async {
+        let records = Records()
+        let watchdog = MainThreadWatchdog(session: "idle-work-started-late", interval: Self.interval,
+                                          loadReading: { (.baseline, 0) },
+                                          record: { records.add($0) })
+        watchdog.start()
+        let freeze = Self.freeze
+        let box = watchdog.idleWork
+        DispatchQueue.main.async {
+            Thread.sleep(forTimeInterval: freeze)   // the ping is posted while this blocks, with no stamp
+            box.stamp(.init(recoverySequence: 45, inputIdleSeconds: 150))
+            Thread.sleep(forTimeInterval: freeze)
+        }
+        await waitUntil("a stall to be recorded", timeout: .seconds(20)) { !records.all.isEmpty }
+        watchdog.stop()
+        box.stamp(nil)
+        let first = records.all.first
+        #expect(first?.recoverySequence == nil, Comment(rawValue:
+            "a freeze under way before the recovery started was recorded as idle work: \(records.all.map(\.recoverySequence))"))
+    }
+
+    // #3439's gate reads the session's worst stall through two readers, the in-memory high water and the
+    // file's longest record. Idle work is in neither, or one recovery's hold would decide the escalation.
+    @Test func idleWorkNeverSetsTheWorstStallTheGateReads() {
+        func record(_ sequence: Int, _ seconds: Double, idle: Bool) -> StallRecord {
+            StallRecord(session: "gate", sequence: sequence,
+                        at: Date(timeIntervalSince1970: 1_790_000_000 + Double(sequence)), seconds: seconds,
+                        surface: .queue, load: .baseline, loadAverage: 3, passes: 1,
+                        recoverySequence: idle ? 46 : nil, inputIdleSeconds: idle ? 300 : nil)
+        }
+        var kept = StallLog.Kept(records: [], highWater: nil, evicted: 0, belowFloor: 0)
+        kept = StallLog.adding(record(1, 1.2, idle: false), to: kept).kept
+        let admitted = StallLog.adding(record(2, 9.8, idle: true), to: kept)
+        #expect(admitted.kept.highWater?.seconds == 1.2,
+                Comment(rawValue: "an idle stall became the session's worst: \(String(describing: admitted.kept.highWater))"))
+        #expect(admitted.write, "idle work is still written to the file, where every reader can set it apart")
+
+        let read = FreezeLog.Read(records: [record(1, 1.2, idle: false), record(2, 9.8, idle: true)])
+        let worst = FreezeReport.floor(in: URL(fileURLWithPath: NSTemporaryDirectory()), read: { _ in read })
+        #expect(worst?.seconds == 1.2, Comment(rawValue: "the file's longest was idle work: \(String(describing: worst))"))
+    }
+
     @Test func aStallOutsideARecoveryCarriesNeither() async {
         let records = await freezeOnce(stamping: nil)
         #expect(!records.isEmpty)

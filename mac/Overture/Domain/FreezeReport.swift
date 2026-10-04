@@ -235,7 +235,9 @@ enum FreezeReport {
     // Returns nil when there is nothing to answer with, which the CALLER has to tell apart from a session
     // with no freezes; `newlyReported` above is where that distinction is made in words.
     static func floor(in support: URL, read: (URL) -> FreezeLog.Read = FreezeLog.read(at:)) -> StallRecord? {
-        read(FreezeLog.url(in: support)).records.max(by: { $0.seconds < $1.seconds })
+        read(FreezeLog.url(in: support)).records
+            .filter { $0.recoverySequence == nil }   // #4335: idle work is not a freeze the gate may read
+            .max(by: { $0.seconds < $1.seconds })
     }
 }
 

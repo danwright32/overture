@@ -401,6 +401,8 @@ final class MainThreadWatchdog: @unchecked Sendable {
         // #4335 (L459): whether an idle recovery held the store when this ping was posted. Read here, at the start
         // of whatever stall follows, because the recovery clears its stamp the moment its replay returns, which
         // can be before this ping gets its turn; a stall that began inside the replay is still idle work.
+        // And ONLY here: a stamp that arrives while the main thread is already blocked does not turn a freeze
+        // under way into idle work. Judged at one end, the error can only count idle work as a freeze (L648).
         let idleAtPost = idleWork.current
         // #4153: the sleep total at each end, for the same reason the three counters above are read at
         // each end. Taken here on the watchdog's own queue, which is the half that has to keep working
@@ -442,7 +444,7 @@ final class MainThreadWatchdog: @unchecked Sendable {
                                      mainThreadCPU: StallLog.cpuSpanned(from: threadAtPost?.cpuSeconds,
                                                                        to: cpuAtRun),
                                      mainThreadStates: self.mainThreadStates.current,
-                                     idleWork: idleAtPost ?? self.idleWork.current)
+                                     idleWork: idleAtPost)
             }
         }
     }
