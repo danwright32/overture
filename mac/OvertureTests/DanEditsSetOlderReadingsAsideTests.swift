@@ -5,7 +5,7 @@ import SwiftData
 // #4404: an edit Dan makes to a watched source outside any landing (an address correction, a resume, a
 // confirmed empty page, a venue answer) makes every reading of that source taken BEFORE it the older one. A
 // landing whose read phase came before the edit (a detached read in flight, a kept copy offered again) sets that
-// reading aside, and Dan's edit stands. #4335's idle recovery of an interrupted landing adds its own case here.
+// reading aside, and Dan's edit stands. #4335's idle recovery of an interrupted landing adds its own case here when it lands.
 //
 // Before #4404 the edits left `lastTouchedSequence` where it was, so the landing's re-validation could not tell
 // a reading of the old address from one of the new, and landed the old page over the correction. Every name is
@@ -13,9 +13,7 @@ import SwiftData
 @MainActor
 @Suite("An edit Dan makes sets every older reading of that source aside (#4404)")
 final class DanEditsSetOlderReadingsAsideTests {
-    private let sandboxes = TemporarySandboxes()
     private let started = Date(timeIntervalSince1970: 1_790_000_000.25)
-    private struct SaveRefused: Error {}
 
     // Each edit kind, applied to source "b" on a context, and what it leaves that a stale landing would undo.
     enum Edit: String, CaseIterable, CustomStringConvertible {
@@ -74,19 +72,6 @@ final class DanEditsSetOlderReadingsAsideTests {
                                },
                                note: "read \(id)")
         }))
-    }
-
-    private struct Folders {
-        let pending: PendingScoutIngests
-        let journals: LandingJournals
-    }
-
-    private func folders(_ name: String) throws -> Folders {
-        let root = try sandboxes.make(named: name)
-        return Folders(pending: PendingScoutIngests(directory: root.appendingPathComponent("pending"),
-                                                    readFailures: HandoffReadFailures()),
-                       journals: LandingJournals(directory: root.appendingPathComponent("journals"),
-                                                 readFailures: HandoffReadFailures()))
     }
 
     private func titles(_ c: ModelContainer) throws -> [String] {
