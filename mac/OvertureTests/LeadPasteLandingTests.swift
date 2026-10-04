@@ -90,6 +90,25 @@ struct LeadPasteLandingTests {
         #expect(outcome.degradedReads.contains(.venueBrandCorpus), "degraded: \(outcome.degradedReads)")
     }
 
+    /// #4490: a show table that cannot be read at all, the landing's own working set included, is a recorded
+    /// outcome (the show counted as store unreadable, the reads named), never a trap. The trap first reported
+    /// there was this file releasing its container; this holds the real behaviour.
+    @Test func aShowTableUnreadableEverywhereIsRecordedNotATrap() async throws {
+        let (container, context) = try seeded()
+        defer { withExtendedLifetime(container) {} }
+        let result = await LeadPasteLanding.landPastedLead(
+            [event("Harbor Lights")], today: Self.today, now: Self.now, landings: LandingSingleFlight(),
+            readProspectTable: { _ in throw Refused() }, into: context)
+        guard case .landed(let outcome) = result else {
+            Issue.record("the paste did not come back with an outcome: \(result)")
+            return
+        }
+        #expect(outcome.inserted == 0 && outcome.storeUnreadable == 1,
+                "inserted \(outcome.inserted), store unreadable \(outcome.storeUnreadable)")
+        #expect(outcome.degradedReads.contains(.reconcileStoredShows), "degraded: \(outcome.degradedReads)")
+        #expect(try count(container) == 1)
+    }
+
     @Test func aSaveThatFailsIsPutBackAndSaidAndCountsNoShows() async throws {
         let (container, context) = try seeded()
         let result = await LeadPasteLanding.landPastedLead(
