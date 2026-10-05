@@ -14,9 +14,12 @@ enum SendService {
     // #2015: `nonisolated` so the QUEUE CARD can ask the same question the send asks, and the two can
     // never disagree about who is about to be emailed. It reads stored properties and decides; none of
     // the Gmail work the rest of this service does is involved.
-    nonisolated static func nextPendingRecipient(for prospect: Prospect) -> Recipient? {
+    // #4502: `today` is the day the send is judged on, REQUIRED (L168): a send passes the one it derives from
+    // its own `now`, so a send handed a clock answers for that clock rather than for the wall clock beside it
+    // (L130), and no caller can reach the wall clock by leaving the argument out.
+    nonisolated static func nextPendingRecipient(for prospect: Prospect, today: String) -> Recipient? {
         guard prospect.status == .approved, prospect.draftBody != nil else { return nil }
-        return sendOrdered(prospect.recipients).first(where: \.isSendablePending)
+        return sendOrdered(prospect.recipients).first(where: { $0.isSendablePending(today: today) })
     }
 
     // #2033: what pressing Send does, once. It is the ONE place the together-or-separately choice is
@@ -30,34 +33,43 @@ enum SendService {
     // 2026-08-04: "It should send all three now but also give me the option to put them all on the same
     // email", the second half of which is the together switch he can flip on the same sheet.
     @discardableResult
+    // #4502: `now` is the moment of the send (it stamps what is sent); `today` is the day the press is judged
+    // on, handed down from the press so the ticks and the send agree. nil derives it ONCE from this send's own
+    // `now`, never the wall clock beside it, and every step below is handed that one day.
     static func sendNext(_ prospect: Prospect, to chosen: [Recipient]? = nil,
-                         now: Date, sender: MailSender) async -> Bool {
+                         now: Date, today: String? = nil, sender: MailSender) async -> Bool {
+        let today = today ?? EasternDate.today(now)
         guard let chosen else {
-            let group = SendGroup.pendingGroup(of: prospect, today: EasternDate.today(Date()))
-            guard group.count > 1 else { return await sendOne(prospect, now: now, sender: sender) }
-            return await sendJointly(prospect, to: group, now: now, sender: sender)
+            let group = SendGroup.pendingGroup(of: prospect, today: today)
+            guard group.count > 1 else { return await sendOne(prospect, now: now, today: today, sender: sender) }
+            return await sendJointly(prospect, to: group, now: now, today: today, sender: sender)
         }
         // Re-filtered rather than trusted: the ticks were read off a screen, and the guards decide.
-        let group = SendGroup.sendableFor(prospect, ids: chosen.map(\.id))
+        let group = SendGroup.sendableFor(prospect, ids: chosen.map(\.id), today: today)
         guard !group.isEmpty else { return false }
-        guard group.count > 1 else { return await deliver(group[0], of: prospect, now: now, sender: sender) }
+        guard group.count > 1 else {
+            return await deliver(group[0], of: prospect, now: now, today: today, sender: sender)
+        }
         guard prospect.sendsTogether else {
             // One each. Every one is attempted even if an earlier one fails, so a single bad address cannot
             // silently swallow the rest of what he ticked, and the result says whether ANY got out.
             var anySent = false
-            for r in group where await deliver(r, of: prospect, now: now, sender: sender) { anySent = true }
+            for r in group where await deliver(r, of: prospect, now: now, today: today, sender: sender) { anySent = true }
             return anySent
         }
-        return await sendJointly(prospect, to: group, now: now, sender: sender)
+        return await sendJointly(prospect, to: group, now: now, today: today, sender: sender)
     }
 
     // Sends ONE recipient of a performance immediately, bypassing the throttle. This is the manual
     // per-draft "Send" Dan clicks (one click = one email); for a multi-recipient show each click sends
     // the next pending recipient. Manual approval is its own pacing, so no drip needed.
     @discardableResult
-    static func sendOne(_ prospect: Prospect, now: Date, sender: MailSender) async -> Bool {
-        guard let recipient = nextPendingRecipient(for: prospect) else { return false }
-        return await deliver(recipient, of: prospect, now: now, sender: sender)
+    // `today` is the day `sendNext` already derived for this press; nil derives it here, once, from this send's
+    // own `now`, never from the wall clock beside it (it is a default from the moment handed, not from nothing).
+    static func sendOne(_ prospect: Prospect, now: Date, today: String? = nil, sender: MailSender) async -> Bool {
+        let today = today ?? EasternDate.today(now)
+        guard let recipient = nextPendingRecipient(for: prospect, today: today) else { return false }
+        return await deliver(recipient, of: prospect, now: now, today: today, sender: sender)
     }
 
     // Deliver to one recipient over the shared, salutation-free body (#393), composing that recipient's
@@ -66,7 +78,7 @@ enum SendService {
     // only when no sendable recipient remains. Records the error on the recipient for retry on failure.
     @discardableResult
     private static func deliver(_ recipient: Recipient, of prospect: Prospect,
-                                now: Date, sender: MailSender) async -> Bool {
+                                now: Date, today: String, sender: MailSender) async -> Bool {
         guard let email = recipient.email, !email.isEmpty, prospect.draftBody != nil else { return false }
         // #641 (#634 Phase C): a directly-addressed performer's own second-person draft wins over the
         // shared third-person body, for BOTH the actual outgoing mail and the voice-learning snapshot
@@ -86,7 +98,7 @@ enum SendService {
         // #3326 (plan 2.8): a pitch naming a night Dan skipped never leaves, whatever the screen allowed.
         // Refused here, before the claim, so nothing is left at `.sending`.
         guard KeptNights.skippedNightNamed(subject: mail.subject, body: pitch, on: prospect,
-                                           today: EasternDate.dayString(from: now)) == nil
+                                           today: today) == nil
         else { return false }
 
         // Claim this recipient before the network await (#475/#476). Nothing here awaits, so on the
@@ -140,7 +152,7 @@ enum SendService {
             // Per-click only (no autonomous drip): the show stays approved while any recipient is still
             // sendable, so the Send button persists for the next one. Once the last one goes, it is
             // contacted.
-            if !prospect.recipients.contains(where: \.isSendablePending) {
+            if !prospect.recipients.contains(where: { $0.isSendablePending(today: today) }) {
                 prospect.status = .contacted
             }
             return true
@@ -421,14 +433,16 @@ enum SendService {
     // their own email is never written to twice, and a contact held by a guard is never quietly included
     // in somebody else's message.
     @discardableResult
+    // `today` as for `sendOne`: the press's one day, or nil to derive it here, once, from this send's own `now`.
     static func sendJointly(_ prospect: Prospect, to recipients: [Recipient],
-                            now: Date, sender: MailSender) async -> Bool {
+                            now: Date, today: String? = nil, sender: MailSender) async -> Bool {
+        let today = today ?? EasternDate.today(now)
         // #2033: the show-level gate too, not only the per-contact one. `isSendablePending` says this
         // CONTACT is ready; it does not say the show is approved, and a send that skipped that would put
         // out a draft Dan never approved. Caught by #2015's own card guard, which noticed an unapproved
         // draft naming contacts it was about to email.
         guard prospect.status == .approved else { return false }
-        let group = sendOrdered(recipients.filter(\.isSendablePending))
+        let group = sendOrdered(recipients.filter { $0.isSendablePending(today: today) })
         guard !group.isEmpty,
               let pitch = OutgoingPitch.text(forGroup: group, of: prospect),
               // #3549: the show's one letter, read from the show rather than from whichever contact
@@ -439,7 +453,7 @@ enum SendService {
         else { return false }
         // #3326: the same refusal as the single send, on the one email the whole group shares.
         guard KeptNights.skippedNightNamed(subject: mail.subject, body: pitch, on: prospect,
-                                           today: EasternDate.dayString(from: now)) == nil
+                                           today: today) == nil
         else { return false }
 
         // Claim ALL of them or none, before the network call, on the same reasoning as `deliver`'s single
@@ -487,7 +501,7 @@ enum SendService {
             }
             prospect.freezeSentCopy(subject: mail.subject, body: sharedBody)
             prospect.sendError = nil
-            if !prospect.recipients.contains(where: \.isSendablePending) {
+            if !prospect.recipients.contains(where: { $0.isSendablePending(today: today) }) {
                 prospect.status = .contacted
             }
             return true

@@ -194,7 +194,7 @@ final class DebugStagingTests {
         try ctx.save()
 
         // The whole point: after approval the real Send button has a target, so a live send goes to self.
-        #expect(SendService.nextPendingRecipient(for: p) != nil)
+        #expect(SendService.nextPendingRecipient(for: p, today: ScoutTestClock.beforeAllFixtures) != nil)
     }
 
     @Test func clearDebugLeadsRemovesTheSelfSendLead() throws {
@@ -363,9 +363,9 @@ final class DebugStagingTests {
 
         // Both recipients are pending with real addresses, so the real Send button must offer both in
         // turn, act before presenter (the #366/#368 contact ladder), so two Send clicks reach two inboxes.
-        #expect(SendService.nextPendingRecipient(for: p)?.provenance == .act)
-        SendService.nextPendingRecipient(for: p)?.sendState = .sent
-        #expect(SendService.nextPendingRecipient(for: p)?.provenance == .presenter)
+        #expect(SendService.nextPendingRecipient(for: p, today: ScoutTestClock.beforeAllFixtures)?.provenance == .act)
+        SendService.nextPendingRecipient(for: p, today: ScoutTestClock.beforeAllFixtures)?.sendState = .sent
+        #expect(SendService.nextPendingRecipient(for: p, today: ScoutTestClock.beforeAllFixtures)?.provenance == .presenter)
     }
 
     @Test func clearDebugLeadsRemovesTheMultiRecipientSelfSendLead() throws {

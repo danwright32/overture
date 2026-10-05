@@ -74,6 +74,19 @@ struct SendPickerTests {
 
     // MARK: - What the sheet offers
 
+    // #4502: the sheet's offered list is judged on the day it is handed, the same day as the send, never the
+    // wall clock: before the night every contact is offered and none is held; after it, nobody is offered
+    // at all.
+    @Test func theOfferedContactsAreJudgedOnTheDayTheyAreHanded() throws {
+        let ctx = ModelContext(try container())
+        let p = show(ctx)
+        let before = SendGroup.candidates(of: p, today: "2082-06-01")
+        #expect(before.map(\.email) == ["ann@org.example", "ben@org.example", "cara@org.example"])
+        #expect(before.allSatisfy { !$0.isHeld })
+        let after = SendGroup.candidates(of: p, today: "2082-07-02")
+        #expect(after.isEmpty, Comment(rawValue: "offered after the night: \(after)"))
+    }
+
     @Test func everySendableContactIsOffered() throws {
         let ctx = ModelContext(try container())
         let p = show(ctx)
@@ -253,7 +266,7 @@ struct SendPickerTests {
         let ben = try #require(p.recipients.first { $0.email == "ben@org.example" })
         ben.looksLikeVenue = true
 
-        let chosen = SendGroup.sendableFor(p, ids: ["ann@org.example", "ben@org.example"])
+        let chosen = SendGroup.sendableFor(p, ids: ["ann@org.example", "ben@org.example"], today: "2082-06-01")
 
         #expect(chosen.map(\.email) == ["ann@org.example"])
     }
