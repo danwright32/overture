@@ -71,7 +71,8 @@ struct InquiryQueueTests {
 
     // The rows group by date, which is what puts an inquiry under the night it is about. Grouping keeps
     // the order it is handed, so a caller wanting date order sorts first: that used to be
-    // combinedQueueRows' job and is now the view's.
+    // combinedQueueRows' job, was nobody's after #2348 deleted it, and is `QueueModel.inquiryRows`'s
+    // since #4357 slice I3 (`RenderPassTotalOrderTests`).
     @Test func inquiryRowsGroupUnderTheirOwnDates() {
         let groups = QueueModel.groupRowsByDate([inquiryRow(id: "i17", date: "2026-07-17"),
                                                  inquiryRow(id: "i18", date: "2026-07-18"),
