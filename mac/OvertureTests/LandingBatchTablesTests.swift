@@ -638,6 +638,55 @@ struct LandingBatchTablesTests {
             "the key holds \(held.map { id in keys.firstIndex { ObjectIdentifier($0) == id } ?? -1 }), not [4, 0, 2, 1]"))
     }
 
+    // MARK: building one URL key (#4512)
+
+    // Building a key of N rows in order takes N title steps per scope, not the square of N: each row joining at
+    // the end continues the key's shows by its own title instead of walking the key again. Measured on the live
+    // store clone before this, the table writes were 174 ms of a 335 ms build at 1x.
+    @Test func buildingOneKeyInOrderTakesOneTitleStepPerRow() {
+        final class Key {}
+        let keys = (0..<200).map { _ in Key() }
+        var tables = LandingBatchTables()
+        for (i, k) in keys.enumerated() {
+            var c = LandingBatchTables.Contribution()
+            c.urls = [.init(url: "https://page.example/season", title: "Show \(i % 7)", venue: "chapel")]
+            tables.set(ObjectIdentifier(k), order: i, to: c)
+        }
+        #expect(tables.titleSteps == 2 * keys.count, Comment(rawValue:
+            "building one key of \(keys.count) rows took \(tables.titleSteps) title steps, not \(2 * keys.count)"))
+    }
+
+    // The shows a key holds when its rows join in order are the from-scratch walk's (`ShowLink.addShows`) over the
+    // same titles, in every order of a non-transitive triple and a fourth title, at a venue and anywhere. The
+    // walk is the independent reference: a rebuild goes through the same code as the kept tables.
+    @Test func aKeyBuiltInOrderHoldsTheShowsTheWalkFinds() {
+        final class Key {}
+        let titles = ["Winter Light Vespers", "Winter Light Carols", "Winter Light", "Ember Psalms"]
+        func orders(_ items: [String]) -> [[String]] {
+            items.count <= 1 ? [items] : items.indices.flatMap { i in
+                orders(items.enumerated().filter { $0.offset != i }.map(\.element)).map { [items[i]] + $0 }
+            }
+        }
+        var wrong: [String] = []
+        for order in orders(titles) {
+            let keys = order.map { _ in Key() }
+            var tables = LandingBatchTables()
+            let seen = order.map { (url: "https://page.example/season", title: $0, venue: "chapel") }
+            for (i, title) in order.enumerated() {
+                var c = LandingBatchTables.Contribution()
+                c.urls = [.init(url: seen[i].url, title: title, venue: seen[i].venue)]
+                tables.set(ObjectIdentifier(keys[i]), order: i, to: c)
+            }
+            for scoped in [true, false] {
+                var walk: [String: [String]] = [:]
+                ShowLink.addShows(seen, scopedByVenue: scoped, into: &walk)
+                let held = scoped ? tables.atAVenue.shows : tables.anywhere.shows
+                if held != walk { wrong.append("\(order) scoped \(scoped): \(held) against \(walk)") }
+            }
+        }
+        #expect(wrong.isEmpty, Comment(rawValue: "a key built in order left the walk: \(wrong.prefix(3))"))
+    }
+
     // MARK: the pure tables, against a rebuild, over a seeded random history
 
     // Rows on one page and one token at one room, with the triple's three titles among them, set, rewritten
