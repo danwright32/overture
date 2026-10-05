@@ -222,6 +222,16 @@ struct LandingSingleFlightTests {
         #expect(line(3_600).contains("stuck for over an hour"))
     }
 
+    // #4485 review, Dan's call 2026-10-05: a stuck copy may be one the idle recovery has stopped trying, so
+    // the sentence may say only that it is kept, never that Overture will go on offering it (L11).
+    @Test func theStuckSentenceNeverPromisesToKeepOffering() {
+        for stuck in [1, 3] {
+            let line = LandingWaitCopy.offered(landed: 0, stillWaiting: 0, stuck: stuck, stuckAfter: 86_400) ?? ""
+            #expect(line.contains(stuck == 1 ? "It is kept." : "They are kept."), Comment(rawValue: line))
+            #expect(!line.localizedCaseInsensitiveContains("keep offering"), Comment(rawValue: line))
+        }
+    }
+
     @Test func theSequenceClimbsAboveTheStoreAndAboveEverythingMintedBefore() {
         let flight = LandingSingleFlight(sleep: { _ in })
         #expect(flight.mintSequence(above: 0) == 1)

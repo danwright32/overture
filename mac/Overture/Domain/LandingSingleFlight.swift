@@ -405,10 +405,12 @@ enum LandingWaitCopy {
             parts.append(stillWaiting == 1 ? "One set of calendar results is still waiting for the store."
                                            : "\(stillWaiting) sets of calendar results are still waiting for the store.")
         }
+        // Says only that a stuck copy is kept: one the idle recovery has stopped trying is counted here too,
+        // and the recovery's own launch line says when it stopped (#4485 review, L11).
         if stuck > 0 {
             parts.append(stuck == 1
-                ? "One set of calendar results has been stuck for over \(over) without landing. It is kept, and Overture will keep offering it."
-                : "\(stuck) sets of calendar results have been stuck for over \(over) without landing. They are kept, and Overture will keep offering them.")
+                ? "One set of calendar results has been stuck for over \(over) without landing. It is kept."
+                : "\(stuck) sets of calendar results have been stuck for over \(over) without landing. They are kept.")
         }
         return parts.isEmpty ? nil : parts.joined(separator: " ")
     }

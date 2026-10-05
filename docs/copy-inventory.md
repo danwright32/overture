@@ -1584,7 +1584,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/ActionFeedback.swift`
 "One of the addresses is blank. Nothing was saved"
     `App/ActionFeedback.swift`
-"One set of calendar results has been stuck for over \(over) without landing. It is kept, and Overture will keep offering it."
+"One set of calendar results has been stuck for over \(over) without landing. It is kept."
     `Domain/LandingSingleFlight.swift`
 "One set of calendar results is still waiting for the store."
     `Domain/LandingSingleFlight.swift`
@@ -3503,7 +3503,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/LandingSingleFlight.swift`
 "\(structuralGaps) of \(total) listings named no venue, so Overture left \(left) out of the queue."
     `Domain/SourceReadability.swift`
-"\(stuck) sets of calendar results have been stuck for over \(over) without landing. They are kept, and Overture will keep offering them."
+"\(stuck) sets of calendar results have been stuck for over \(over) without landing. They are kept."
     `Domain/LandingSingleFlight.swift`
 "\(subject) a look: failing, never read at all, empty run after run, or can't mark shows as gone until it reads its calendar properly again"
     `Domain/SourceAttention.swift`
