@@ -1634,11 +1634,11 @@ enum ProspectMutations {
         guard let model = model(forKey: naturalKey, org: nil, in: prospects, feedback: feedback) else { return }
         // Written at the COMMIT, not as he flips it, so cancelling the sheet changes nothing about the show.
         if let together { model.sendsTogetherOverride = together }
-        // #4502: ONE moment for the whole press, taken before the signature refresh's await, so the ticks, the
-        // send and the fully sent answer are judged on one day even across midnight.
-        let pressedAt = Date()
-        let today = EasternDate.today(pressedAt)
-        let chosen = selecting.map { SendGroup.sendableFor(model, ids: $0, today: today) }
+        // #4502: the DAY of the press, taken once before the signature refresh's await, so the ticks, the send
+        // and the fully sent answer are judged on one day even across midnight. The send's own stamps (sent and
+        // claimed) still take the moment the send is made, handed as `now`.
+        let pressDay = EasternDate.today(Date())
+        let chosen = selecting.map { SendGroup.sendableFor(model, ids: $0, today: pressDay) }
         markSending(naturalKey)
         Task {
             // #1208: pull the current Gmail signature right before composing, so an email Dan sends after
@@ -1646,10 +1646,10 @@ enum ProspectMutations {
             await GmailSignatureService.refreshBeforeSend()
             // #2033: sendNext is the one place the together-or-separately choice is acted on, so this
             // button, the confirmation Dan just read and the card all agree about who is being emailed.
-            let sent = await SendService.sendNext(model, to: chosen, now: pressedAt, sender: sender)
+            let sent = await SendService.sendNext(model, to: chosen, now: Date(), today: pressDay, sender: sender)
             context.saveOrWarnSendNotConfirmed(org: model.groupName, feedback: feedback)
             clearSending(naturalKey)
-            if sent { onSent(naturalKey, SendGroup.pendingGroup(of: model, today: today).isEmpty) }
+            if sent { onSent(naturalKey, SendGroup.pendingGroup(of: model, today: pressDay).isEmpty) }
             // #1770: refresh before deciding. A send that just failed is the moment a revoked credential
             // shows itself, so this must not answer from a cache filled before the token died.
             if !sent && !GmailConnection.shared.refreshedIsConnected() { onNeedsReconnect() }

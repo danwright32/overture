@@ -85,36 +85,49 @@ struct SkippedNightSendBlockTests {
     }
 
     // #4502: in the shipping app the send is judged on exactly the day the wall clock gave it before, because
-    // every call the app makes hands it the moment of the press, `pressedAt`, taken as `Date()` once per press.
-    // Derived from the app's own sources (L96), so a new caller handing the send any other moment, which would
-    // send or hold differently, fails here. Refuses to pass on finding none (L98).
-    @Test func everyShippingSendIsHandedTheMomentOfThePress() throws {
+    // every call the app makes hands it the moment it is made (`now: Date()`, which also stamps what is sent) and
+    // the day of the press (`today: pressDay`, taken as `EasternDate.today(Date())` in the SAME function, before
+    // anything awaits). Derived from the app's own sources (L96); each call is read as a whole expression however
+    // it wraps, and the day is looked for inside the function that makes the call, never anywhere in the file
+    // (L135). Refuses to pass on finding none (L98).
+    @Test func everyShippingSendIsJudgedOnTheDayOfThePress() throws {
         let call = try NSRegularExpression(pattern: #"SendService\.(sendNext|sendOne|sendJointly)\("#)
-        var calls: [String] = []
-        var pressMoments: [String: Bool] = [:]
+        var calls = 0
         for file in AppSourceWalk.appFiles() {
-            for line in file.text.components(separatedBy: "\n")
-            where call.firstMatch(in: line, range: NSRange(line.startIndex..., in: line)) != nil {
-                calls.append("\(file.name): \(line.trimmingCharacters(in: .whitespaces))")
-                pressMoments[file.name] = file.text.contains("let pressedAt = Date()\n")
+            let text = file.text as NSString
+            for match in call.matches(in: file.text, range: NSRange(location: 0, length: text.length)) {
+                calls += 1
+                // The whole call, to its balancing parenthesis, however many lines and nested calls it spans.
+                var depth = 0
+                var end = match.range.location + match.range.length - 1
+                repeat {
+                    let unit = text.character(at: end)
+                    if unit == 40 { depth += 1 } else if unit == 41 { depth -= 1 }
+                    end += 1
+                } while depth > 0 && end < text.length
+                let expression = text.substring(with: NSRange(location: match.range.location,
+                                                              length: end - match.range.location))
+                #expect(expression.contains("now: Date()") && expression.contains("today: pressDay"),
+                        Comment(rawValue: "\(file.name): a send handed some other moment or day: \(expression)"))
+                // The function the call sits in: from the last `func ` before it to the call itself.
+                let before = text.substring(to: match.range.location)
+                let function = before.range(of: "func ", options: .backwards).map { String(before[$0.lowerBound...]) } ?? ""
+                #expect(function.contains("let pressDay = EasternDate.today(Date())"),
+                        Comment(rawValue: "\(file.name): the function making this send does not take the press's day itself: \(expression)"))
             }
         }
-        #expect(!calls.isEmpty, "no shipping call to the send was found, so this measured nothing")
-        for found in calls {
-            #expect(found.contains("now: pressedAt,"), Comment(rawValue: "a send handed some other moment: \(found)"))
-        }
-        for (file, takesTheMoment) in pressMoments {
-            #expect(takesTheMoment, Comment(rawValue: "\(file) hands the send `pressedAt` without taking it as `Date()`"))
-        }
+        #expect(calls > 0, "no shipping call to the send was found, so this measured nothing")
     }
 
-    // #4502: a press is judged on ONE day, derived once by `sendNext` and handed to every step, so each step
-    // judges by the day it is handed rather than deriving its own: handed a day after the run, both the single
-    // and the joint send refuse, though their `now` is still before every night.
+    // #4502: a press is judged on ONE day, handed to `sendNext` by the press and down to every step, so each
+    // step judges by the day it is handed rather than deriving its own: handed a day after the run, the press,
+    // the single and the joint send all refuse, though their `now` is still before every night.
     @Test func eachStepOfASendJudgesByTheDayItIsHanded() async throws {
         let ctx = try context()
         let p = try show(ctx, body: "Hello,\n\nI'd be glad to photograph October 6 and October 20.")
         let sender = CountingSender()
+        #expect(await SendService.sendNext(p, now: now, today: "2026-10-26", sender: sender) == false,
+                "the press derived its own day instead of judging by the one the press handed it")
         #expect(await SendService.sendOne(p, now: now, today: "2026-10-26", sender: sender) == false,
                 "the single send derived its own day instead of judging by the one it was handed")
         #expect(await SendService.sendJointly(p, to: p.recipients, now: now, today: "2026-10-26", sender: sender) == false,

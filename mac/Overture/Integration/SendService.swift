@@ -33,11 +33,12 @@ enum SendService {
     // 2026-08-04: "It should send all three now but also give me the option to put them all on the same
     // email", the second half of which is the together switch he can flip on the same sheet.
     @discardableResult
+    // #4502: `now` is the moment of the send (it stamps what is sent); `today` is the day the press is judged
+    // on, handed down from the press so the ticks and the send agree. nil derives it ONCE from this send's own
+    // `now`, never the wall clock beside it, and every step below is handed that one day.
     static func sendNext(_ prospect: Prospect, to chosen: [Recipient]? = nil,
-                         now: Date, sender: MailSender) async -> Bool {
-        // #4502: the day this send is judged on, derived ONCE from its own moment and handed to every step,
-        // so one press is judged on one day even across midnight.
-        let today = EasternDate.today(now)
+                         now: Date, today: String? = nil, sender: MailSender) async -> Bool {
+        let today = today ?? EasternDate.today(now)
         guard let chosen else {
             let group = SendGroup.pendingGroup(of: prospect, today: today)
             guard group.count > 1 else { return await sendOne(prospect, now: now, today: today, sender: sender) }
@@ -63,7 +64,8 @@ enum SendService {
     // per-draft "Send" Dan clicks (one click = one email); for a multi-recipient show each click sends
     // the next pending recipient. Manual approval is its own pacing, so no drip needed.
     @discardableResult
-    // `today` is the day `sendNext` already derived for this press; nil derives it here, once, from `now`.
+    // `today` is the day `sendNext` already derived for this press; nil derives it here, once, from this send's
+    // own `now`, never from the wall clock beside it (it is a default from the moment handed, not from nothing).
     static func sendOne(_ prospect: Prospect, now: Date, today: String? = nil, sender: MailSender) async -> Bool {
         let today = today ?? EasternDate.today(now)
         guard let recipient = nextPendingRecipient(for: prospect, today: today) else { return false }
@@ -431,7 +433,7 @@ enum SendService {
     // their own email is never written to twice, and a contact held by a guard is never quietly included
     // in somebody else's message.
     @discardableResult
-    // `today` as for `sendOne`: the press's one day, or nil to derive it here, once, from `now`.
+    // `today` as for `sendOne`: the press's one day, or nil to derive it here, once, from this send's own `now`.
     static func sendJointly(_ prospect: Prospect, to recipients: [Recipient],
                             now: Date, today: String? = nil, sender: MailSender) async -> Bool {
         let today = today ?? EasternDate.today(now)
