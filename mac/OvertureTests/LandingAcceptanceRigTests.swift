@@ -312,6 +312,7 @@ final class LandingAcceptanceRigTests {
     private typealias Rig = LandingAcceptanceRig
 
     // One store size's world: the clone, RootView mounted on it, the inputs, and the landing's own folders.
+    @MainActor
     private final class World {
         let factor: Int
         let container: ModelContainer
@@ -395,8 +396,9 @@ final class LandingAcceptanceRigTests {
         await drainMain()
         let end = Phase0.now()
         let (pings, _) = timeline.stop()
-        let firstYield = await waitUntil("the first yield's stamp runs", timeout: .seconds(60)) { stamp.value != 0 }
-            ? stamp.value : returned
+        let stamped = await waitUntil("the first yield's stamp runs", timeout: .seconds(60)) { stamp.value != 0 }
+        #expect(stamped, "the main queue never ran the stamp, so the first hold was not measured")
+        let firstYield = stamped ? stamp.value : returned
         let holds = Rig.holds(pings, in: Rig.Window(start: start, firstYield: firstYield, returned: returned, end: end))
         return Rig.Sample(holds: holds, wallMs: Double(returned &- start) / 1_000_000, settleMs: drawn.ms,
                           settled: drawn.settled, loadStart: loadStart, loadEnd: Phase0.oneMinuteLoad(), said: said)
@@ -437,8 +439,9 @@ final class LandingAcceptanceRigTests {
             window.layoutIfNeeded()
             hosting = view
         }
+        let relandData = try JSONEncoder().encode(scaled)
         let world = World(factor: factor, container: container, dir: inputs.dir, exportURL: inputs.exportURL,
-                          historyURL: inputs.historyURL, scaled: scaled, relandData: try JSONEncoder().encode(scaled),
+                          historyURL: inputs.historyURL, scaled: scaled, relandData: relandData,
                           pending: pending, journals: journals, window: window, hosting: hosting)
         let appeared = await settle(world, timeline: nil, deadline: .seconds(120 * factor))
         #if DEBUG

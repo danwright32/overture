@@ -219,7 +219,7 @@ struct ReleaseLikeBuildExclusionsTests {
         for file in tests {
             let used = uses(of: debugNames, in: file)
             if !used.isEmpty {
-                excluded[file.name] = "names " + used.map(\.name).sorted().joined(separator: ", ")
+                excluded[file.name] = "names " + used.map { $0.name }.sorted().joined(separator: ", ")
             }
         }
         var changed = true
@@ -303,7 +303,8 @@ struct ReleaseLikeBuildExclusionsTests {
         // A census beside the verdict, so the size of the release-like build's gap is read rather than assumed.
         let hosted = AppSourceWalk.files(under: RepoRoot.mac.appendingPathComponent("OvertureHostedTests"), floor: 20)
             .map { File(name: $0.name, text: $0.text) }
-        let hostedNaming = hosted.filter { !Self.uses(of: Self.debugOnlyNames(Self.appFiles()), in: $0).isEmpty }
+        let debugNames = Self.debugOnlyNames(Self.appFiles())
+        let hostedNaming = hosted.filter { !Self.uses(of: debugNames, in: $0).isEmpty }
         print("release-like exclusions: \(excluded.count) of \(tests.count) pure test files left out; "
               + "\(hostedNaming.count) of \(hosted.count) hosted test files name a Debug-only symbol "
               + "(the hosted target is not built by that run)")
