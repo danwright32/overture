@@ -669,7 +669,9 @@ final class LandingAcceptanceRigTests {
         let sources = try world.ctx.fetch(FetchDescriptor<WatchedSource>())
         var hashes: [String: String] = [:]
         for s in sources {
-            if let url = URL(string: s.listingsURL), let hash = s.lastContentHash { hashes[url.absoluteString] = hash }
+            if let listings = s.listingsURL, let url = URL(string: listings), let hash = s.lastContentHash {
+                hashes[url.absoluteString] = hash
+            }
         }
         let today = EasternDate.today(Date())
         let native = sources.filter(\.usesNativeExtractor)
