@@ -958,4 +958,95 @@ struct TermsOverFactsTests {
         #expect(!staleFindings.contains { $0.contains("example") },
                 "a finding named an address or a URL rather than an identifier")
     }
+
+    // MARK: slice G3, AgentInputs.from
+
+    // Every count the pills state is non zero here (L159): the stage shows, the due work, the reached-out rows,
+    // the dead end and the stalled drafts from the seeds above, on one store, plus a show Dan dismissed after
+    // its contact wrote back, the reply still waiting on his answer, which only the whole store list counts
+    // (#2968: a dismissal silences the nudge and not the person), and two inquiries, one waiting on Dan's first
+    // reply and one whose reply is unanswered. Invented names throughout (L155, L222).
+    private func seedAgentInputsFrom(_ ctx: ModelContext) throws -> (all: [Prospect], inquiries: [Inquiry]) {
+        let seeded = try seed(ctx)
+        try seedDueWork(ctx, seeded)
+        try seedAgentInputs(ctx, seeded)
+        let dismissed = row(ctx, key: "dismissed after pitch", title: "Gullwing Recital", venue: "Quillon Room",
+                            opens: "2026-12-10")
+        dismissed.statusRaw = "dismissed"
+        let pitched = Recipient(id: "dismissed-reply@example.invalid", email: "dismissed-reply@example.invalid",
+                                provenance: .act)
+        pitched.sendState = .sent
+        pitched.sentAt = TermsOverFacts.reachedOutInstant(asOf).addingTimeInterval(-20 * 86_400)
+        pitched.replied = true
+        pitched.repliedAt = TermsOverFacts.reachedOutInstant(asOf).addingTimeInterval(-86_400)
+        pitched.gmailMessageId = "m-dismissed"
+        pitched.gmailThreadId = "t-dismissed"
+        ctx.insert(pitched)
+        dismissed.recipients.append(pitched)
+        let all = try seedStages(ctx)
+        let firstReply = Inquiry(source: .directEmail, inquirerName: "Wren Halloway",
+                                 inquirerEmail: "wren@example.invalid", eventName: "Lamplight Gala")
+        let waiting = Inquiry(source: .directEmail, inquirerName: "Ivo Marchetti",
+                              inquirerEmail: "ivo@example.invalid", eventName: "Tidewater Benefit")
+        waiting.sentAt = TermsOverFacts.reachedOutInstant(asOf).addingTimeInterval(-3 * 86_400)
+        waiting.replied = true
+        waiting.repliedAt = TermsOverFacts.reachedOutInstant(asOf).addingTimeInterval(-86_400)
+        return (all, [firstReply, waiting])
+    }
+
+    @Test func agentInputsFromAnswersTheSameOverFactsAsOverModels() throws {
+        let ctx = try context()
+        let (all, inquiries) = try seedAgentInputsFrom(ctx)
+        let context = TermsOverFacts.stageContext(for: all, asOf: asOf)
+        let queue = QueueModel.queueScope(all)
+        let inputs = AgentInputs.from(prospects: queue, allProspects: all, inquiries: inquiries, context: context,
+                                      gmailConnected: true, runInFlight: nil, replyRunAlive: false)
+        // Positive controls (L159): every count the term states is non zero, read off the value by Mirror so a
+        // count added later must be reached here too.
+        let zero = Mirror(reflecting: inputs).children.compactMap { child in
+            (child.value as? Int) == 0 ? child.label : nil
+        }
+        #expect(zero.isEmpty, "the fixture leaves \(zero.joined(separator: ", ")) at zero, so nothing compared them")
+        // The rules part two cannot hold, since both of its arms run this one body. The Follow-ups number is over
+        // the whole store and every other count over the queue's own rows; each inquiry counts where it renders.
+        let due = { (rows: [Prospect]) in
+            DueWork.counts(prospects: rows, inquiries: inquiries, now: context.now, replyRunAlive: false).total
+        }
+        #expect(inputs.followUpsDue == due(all), "the Follow-ups number is not the whole store's due work")
+        #expect(due(all) == due(queue) + 1, "the dismissed show's waiting reply is not what separates the two lists")
+        #expect(inputs.toReview == StageNavigation.counts(in: queue, context: context)[.review, default: 0] + 1,
+                "the inquiry waiting on Dan's first reply is not counted in Review")
+        let reachedOut = ReachedOutQueue.activeWithDates(from: queue, now: context.now)
+        #expect(inputs.reachedOut == ReachedOutQueue.showCount(of: reachedOut) + 1,
+                "the answered inquiry is not counted in Reached out")
+        #expect(inputs.reachedOutDue == reachedOut.filter {
+                    ReachedOutQueue.isDueNow(for: $0.recipient, of: $0.prospect, now: context.now)
+                }.count + 1,
+                "the reached-out due count is not the rows owed something plus the inquiry awaiting an answer")
+        // The pass hands in the placement and reached-out list it already built; the answer is the same.
+        let handed = AgentInputs.from(prospects: queue, allProspects: all, inquiries: inquiries, context: context,
+                                      gmailConnected: true, runInFlight: nil, replyRunAlive: false,
+                                      placement: StageNavigation.placements(in: queue, context: context),
+                                      reachedOut: reachedOut)
+        #expect(handed == inputs, "handing in the pass's own placement and reached-out list changed the answer")
+
+        let findings = TermsOverFacts.findings(all, asOf: asOf)
+            + TermsOverFacts.agentInputsFindings(all, all.map(RowFacts.extract), asOf: asOf, inquiries: inquiries)
+        #expect(findings.isEmpty, Comment(rawValue: findings.joined(separator: "\n")))
+
+        // A send claimed after the facts were taken: the pills see a stuck send over models and none over the
+        // retained facts. The finding names that field alone (the contact's degraded tracking is unchanged, so
+        // its pill must not be named) and nothing about the show or the contact.
+        let stale = all.map(RowFacts.extract)
+        let quiet = try #require(all.first { $0.naturalKey == "degraded" }?.recipients.first)
+        quiet.sendState = .sending
+        quiet.sendClaimedAt = Date(timeIntervalSince1970: 1_700_000_000)
+        let staleFindings = TermsOverFacts.agentInputsFindings(all, stale, asOf: asOf, inquiries: inquiries)
+        #expect(staleFindings.contains { $0.hasPrefix("AgentInputs.from stuckSends differ") },
+                "a send claimed after extraction was not seen by the AgentInputs comparison: \(staleFindings)")
+        #expect(!staleFindings.contains { $0.contains("degradedReplyTracking") },
+                "the comparison named a field that did not move")
+        #expect(!staleFindings.contains { $0.contains("example.invalid") || $0.contains("Stage ") },
+                "a finding named an address or a title rather than a field")
+    }
 }
