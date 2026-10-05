@@ -108,9 +108,13 @@ struct PendingScoutIngests {
     }
 
     // Whether a kept copy's results file is there and holds exactly the bytes its record names.
+    // Through the shared reader, so a results file that is there and cannot be read is recorded as such
+    // (#2879) rather than read as absent; either way it is no copy, and the copy step writes it again.
     func resultsAreThese(_ entry: Entry) -> Bool {
-        guard let data = try? Data(contentsOf: resultsURL(entry.contentHash)) else { return false }
-        return Self.contentHash(of: data) == entry.contentHash
+        switch HandoffFile.data(at: resultsURL(entry.contentHash), recorder: readFailures) {
+        case .read(let data): return Self.contentHash(of: data) == entry.contentHash
+        case .absent, .unreadable: return false
+        }
     }
 
     struct UnreadableEntry: Error, CustomStringConvertible {
