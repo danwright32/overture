@@ -85,21 +85,26 @@ struct SkippedNightSendBlockTests {
     }
 
     // #4502: in the shipping app the send is judged on exactly the day the wall clock gave it before, because
-    // every call the app makes hands it the moment of the press. Derived from the app's own sources (L96), so a
-    // new caller handing the send any other moment, which would send or hold differently, fails here. Refuses to
-    // pass on finding none (L98).
+    // every call the app makes hands it the moment of the press, `pressedAt`, taken as `Date()` once per press.
+    // Derived from the app's own sources (L96), so a new caller handing the send any other moment, which would
+    // send or hold differently, fails here. Refuses to pass on finding none (L98).
     @Test func everyShippingSendIsHandedTheMomentOfThePress() throws {
         let call = try NSRegularExpression(pattern: #"SendService\.(sendNext|sendOne|sendJointly)\("#)
         var calls: [String] = []
+        var pressMoments: [String: Bool] = [:]
         for file in AppSourceWalk.appFiles() {
             for line in file.text.components(separatedBy: "\n")
             where call.firstMatch(in: line, range: NSRange(line.startIndex..., in: line)) != nil {
                 calls.append("\(file.name): \(line.trimmingCharacters(in: .whitespaces))")
+                pressMoments[file.name] = file.text.contains("let pressedAt = Date()\n")
             }
         }
         #expect(!calls.isEmpty, "no shipping call to the send was found, so this measured nothing")
         for found in calls {
-            #expect(found.contains("now: Date(),"), Comment(rawValue: "a send handed some other moment: \(found)"))
+            #expect(found.contains("now: pressedAt,"), Comment(rawValue: "a send handed some other moment: \(found)"))
+        }
+        for (file, takesTheMoment) in pressMoments {
+            #expect(takesTheMoment, Comment(rawValue: "\(file) hands the send `pressedAt` without taking it as `Date()`"))
         }
     }
 

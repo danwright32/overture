@@ -14,11 +14,10 @@ enum SendService {
     // #2015: `nonisolated` so the QUEUE CARD can ask the same question the send asks, and the two can
     // never disagree about who is about to be emailed. It reads stored properties and decides; none of
     // the Gmail work the rest of this service does is involved.
-    // #4502: `today` is the day the send is judged on. A send passes the one it derives from its own `now`,
-    // so a send handed a clock answers for that clock rather than for the wall clock beside it (L130); the
-    // queue card asks about today.
-    nonisolated static func nextPendingRecipient(for prospect: Prospect,
-                                                 today: String = EasternDate.today(Date())) -> Recipient? {
+    // #4502: `today` is the day the send is judged on, REQUIRED (L168): a send passes the one it derives from
+    // its own `now`, so a send handed a clock answers for that clock rather than for the wall clock beside it
+    // (L130), and no caller can reach the wall clock by leaving the argument out.
+    nonisolated static func nextPendingRecipient(for prospect: Prospect, today: String) -> Recipient? {
         guard prospect.status == .approved, prospect.draftBody != nil else { return nil }
         return sendOrdered(prospect.recipients).first(where: { $0.isSendablePending(today: today) })
     }
