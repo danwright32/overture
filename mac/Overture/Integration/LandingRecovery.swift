@@ -290,11 +290,12 @@ enum LandingRecovery {
             replayed = .notFinished(startedAt: next.startedAt, why: why)
         default:
             replaying(next.journal.sequence)
-            replayed = await replay(next, journals: journals, pending: pending, clients: clients, history: history,
-                                    blocked: blocked, landings: landings, now: now, saveSource: saveSource,
-                                    movementLog: movementLog, into: context)
+            let attempt = await replay(next, journals: journals, pending: pending, clients: clients,
+                                       history: history, blocked: blocked, landings: landings, now: now,
+                                       saveSource: saveSource, movementLog: movementLog, into: context)
             replaying(nil)
-            if case .notFinished(_, storeHeldElsewhere) = replayed { takeBackTheAttempt() }
+            replayed = attempt.said
+            if attempt.storeWasHeld { takeBackTheAttempt() }
         }
         // "It will try again" is said only while there is an attempt left to make (L703).
         if case .notFinished = replayed, record.attemptCount >= attemptCap {
@@ -306,19 +307,21 @@ enum LandingRecovery {
 
     // An ingest landed again from its own copy, under its own sequence and `now`, holding the store as the
     // recovery. The landing retires its journal and removes its copy itself when every save goes through.
+    // `storeWasHeld` is read off the landing's own outcome, never off the sentence (L35): true only when the
+    // landing never started because another one held the store past the deadline.
     private static func replay(_ item: Interrupted, journals: LandingJournals, pending: PendingScoutIngests,
                                clients: [DownbeatClient], history: [HistoryRecord], blocked: BlockedCalendar,
                                landings: LandingSingleFlight, now: Date,
                                saveSource: @escaping (ModelContext) throws -> Void,
                                movementLog: any FeedMovementLog.Sink,
-                               into context: ModelContext) async -> Recovered {
+                               into context: ModelContext) async -> (said: Recovered, storeWasHeld: Bool) {
         let journal = item.journal
         let copy: (data: Data, results: ScoutExtractResults)
         do {
             copy = try pending.results(try pending.entry(journal.runIdentity))
         } catch {
-            return .notFinished(startedAt: item.startedAt, why: "the kept copy of its results could not be read ("
-                                + HandoffDecodeFailure.describe(error) + ")")
+            return (.notFinished(startedAt: item.startedAt, why: "the kept copy of its results could not be read ("
+                                 + HandoffDecodeFailure.describe(error) + ")"), false)
         }
         // The journal's `now` stamps what lands (its results were read then, L37); what is still UPCOMING is
         // judged on the day the replay runs, so a night that passed while it waited is not a show to come.
@@ -330,14 +333,16 @@ enum LandingRecovery {
         let outcome = landed.outcome
         if outcome.alreadyLandedAt != nil {
             retire(journal, journals: journals, pending: pending)
-            return .retired(startedAt: item.startedAt, finding: .finished)
+            return (.retired(startedAt: item.startedAt, finding: .finished), false)
         }
-        if let why = reason(outcome) { return .notFinished(startedAt: item.startedAt, why: why) }
-        return .landed(startedAt: item.startedAt, sources: item.unlanded.count)
+        if let why = reason(outcome) {
+            return (.notFinished(startedAt: item.startedAt, why: why), outcome.notLandedYet != nil)
+        }
+        return (.landed(startedAt: item.startedAt, sources: item.unlanded.count), false)
     }
 
-    // The one refusal that is no fault of the interrupted landing: another landing held the store past the
-    // deadline. Named once, because `recoverNext` takes back the attempt it counted for it (L527).
+    // The clause for the one refusal that is no fault of the interrupted landing: another landing held the store
+    // past the deadline, for which `recoverNext` takes back the attempt it counted (L527).
     static let storeHeldElsewhere = "another landing was holding the store"
 
     // Why a replay did not finish, as a clause the recovery's sentence carries in parentheses, or nil when it
