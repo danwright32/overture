@@ -140,7 +140,7 @@ struct IdleRecoveryStallsAreIdleWorkTests {
                         recoverySequence: idle ? 44 : nil, inputIdleSeconds: idle ? 300 : nil)
         }
         let records = [record(1, 1.2, idle: false), record(2, 9.8, idle: true), record(3, 0.4, idle: false)]
-        let defaults = try #require(UserDefaults(suiteName: "IdleRecoveryStallsAreIdleWorkTests-\(UUID().uuidString)"))
+        let defaults = ScratchDefaults.make("IdleRecoveryStallsAreIdleWorkTests")
         let said = FreezeReport.newlyReported(
             in: URL(fileURLWithPath: NSTemporaryDirectory()), watchdogRan: true, defaults: defaults,
             sources: .init(live: { _ in FreezeLog.Read(records: records) },
