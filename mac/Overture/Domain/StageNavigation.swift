@@ -73,13 +73,20 @@ enum StageNavigation {
     // own order, because `naturalKeys` returns keys in that order and its callers render them.  And each
     // entry's focuses are in `countedFocuses` order, because `stage(containing:)` takes the FIRST match
     // and which one that is decides where a deep link lands.
-    struct Placement {
+    struct Placement: Equatable {
         fileprivate let entries: [(key: String, focuses: [StageFocus])]
 
         /// How many shows were placed. Read by the tests that check this was built over the corpus they
         /// think it was, so a placement over an empty list cannot answer every question with silence
         /// (L98).
         var count: Int { entries.count }
+
+        // #4357 slice I1: equal when the same shows are placed in the same order under the same focuses.
+        // Written out because a tuple array has no synthesized equality.
+        static func == (lhs: Placement, rhs: Placement) -> Bool {
+            lhs.entries.count == rhs.entries.count
+                && zip(lhs.entries, rhs.entries).allSatisfy { $0.key == $1.key && $0.focuses == $1.focuses }
+        }
     }
 
     // #4357 slice E1: ONE placement, over any `ProspectFacts` and the contacts it is handed. The two entry

@@ -177,15 +177,15 @@ struct ConflictSurfacedTests {
         let r = Recipient(id: "a@act.example", email: "a@act.example", provenance: .act)
         p.setRecipients([r])
         try? ctx.save()
-        #expect(SendService.nextPendingRecipient(for: p) != nil)    // it was ready to go
+        #expect(SendService.nextPendingRecipient(for: p, today: ScoutTestClock.beforeAllFixtures) != nil)    // it was ready to go
 
         run([event("Vienna Philharmonic")], blocked: vacation("2099-09-19", "2099-09-19"), in: ctx)
 
         #expect(r.isSendablePending == false)
-        #expect(SendService.nextPendingRecipient(for: p) == nil)    // and nothing can send it
+        #expect(SendService.nextPendingRecipient(for: p, today: ScoutTestClock.beforeAllFixtures) == nil)    // and nothing can send it
 
         p.clearConflict(); try? ctx.save()
-        #expect(SendService.nextPendingRecipient(for: p) != nil)    // his call, and it goes
+        #expect(SendService.nextPendingRecipient(for: p, today: ScoutTestClock.beforeAllFixtures) != nil)    // his call, and it goes
     }
 
     // MARK: - Where it sits in the queue

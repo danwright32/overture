@@ -3834,6 +3834,23 @@ enum QueueModel {
 
         var builtCount: Int { cards.count }
 
+        /// #4357 slice I1 (plan v7 Phase 3, step 7): what this store HOLDS, as a value, so two passes' stores
+        /// compare by content rather than by object identity. Shows and contacts by their store identifiers,
+        /// never by description. The miss counters and the registry are left out: they are what a surface did
+        /// with the store after the pass, not what the pass produced.
+        struct Contents: Equatable {
+            let cards: [String: QueueItem]
+            let shows: [String: PersistentIdentifier]
+            let contacts: [String: [PersistentIdentifier]]
+            let requestedKeys: Set<String>?
+        }
+
+        var contents: Contents {
+            Contents(cards: cards, shows: showsByKey.mapValues(\.persistentModelID),
+                     contacts: contactsByKey.mapValues { $0.map(\.persistentModelID) },
+                     requestedKeys: requestedKeys)
+        }
+
         /// The card for a row on screen. Builds it if the pass did not, and says which kind of miss that
         /// was.
         func card(for row: QueueScopeRow) -> QueueItem {

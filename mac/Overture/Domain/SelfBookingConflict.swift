@@ -100,7 +100,8 @@ enum SelfBookingConflict {
     // regression on the surface Dan lives in, and #1772 is this repo already having paid for exactly that
     // shape once. Built in `QueueRenderPass`, beside `agentInputs` and `gmailConnected`, for the same
     // reason those are (#1770, #1771).
-    struct NightIndex {
+    // #4357 slice I1: Equatable so two passes' indexes compare by value (`RenderDataComparison`).
+    struct NightIndex: Equatable {
         fileprivate let committedByNight: [String: [Show]]
 
         init(_ shows: [Show]) {
