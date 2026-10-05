@@ -312,7 +312,7 @@ final class RenderPassTotalOrderTests {
             return
         }
         #expect(keys.count == 3, "the merge survivor notice does not carry its three rows")
-        let reached = Set(scout.reachedOut.map(\.prospect.naturalKey))
+        let reached = Set(scout.reachedOut.map { $0.prospect.naturalKey })
         #expect(reached == ["pitched pair", "pitched shared", "pitched replied", "pitched single"])
         #expect(try #require(scout.cards.alreadyBuilt("north a")).inheritedReachability != nil,
                 "the organisation answer reached no show, so the ledger orders nothing")
@@ -346,8 +346,8 @@ final class RenderPassTotalOrderTests {
                 moved += 1
             }
         }
-        #expect(moved > 0, "queueScope no longer breaks a full tie by input position, so the cutover has landed: "
-            + "delete the hold and this test (L373)")
+        #expect(moved > 0, Comment(rawValue: "queueScope no longer breaks a full tie by input position, so the "
+            + "cutover has landed: delete the hold and this test (L373)"))
     }
 
     // MARK: the terms this slice made total, each over its own permutations
@@ -409,6 +409,7 @@ final class RenderPassTotalOrderTests {
         let shows = try plantedCorpus().shows
         let rendered = distinct(shows) { QueueRenderPass.unseenSurvivors(among: $0, today: self.asOf) }
         #expect(rendered == [["survivor a", "survivor b", "survivor c"]],
-                Comment(rawValue: "seed \(seed): " + rendered.map { $0.joined(separator: ",") }.joined(separator: " | ")))
+                Comment(rawValue: "seed \(seed): "
+                    + rendered.map { $0.joined(separator: ",") }.joined(separator: " | ")))
     }
 }
