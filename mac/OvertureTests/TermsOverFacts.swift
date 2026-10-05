@@ -175,6 +175,9 @@ enum TermsOverFacts {
 
         // Slice G1: the row, the contact facts it is built from, and the reachability members they read.
         out += rowFindings(models, facts)
+
+        // Slice G2: the card, its send groups and form pitch, and the members it reads, judged on `asOf`.
+        out += cardFindings(models, facts, today: asOf, now: reachedOutInstant(asOf))
         return out
     }
 
@@ -407,6 +410,115 @@ enum TermsOverFacts {
         }
         for (model, fact) in zip(models, facts) where model.isClosed != fact.isClosed {
             out.append("isClosed differs for row \(pid(model.naturalKey))")
+        }
+        return out
+    }
+
+    // MARK: slice G2, the card and the members it reads
+
+    /// Labels of two values whose rendered children differ, one renderer for both arms, so an optional or an
+    /// enum renders alike on each side (the D1 lesson) and a finding names fields rather than values.
+    static func differingLabels(_ a: Any, _ b: Any) -> [String] {
+        let theirs = Dictionary(Mirror(reflecting: b).children.compactMap { c in c.label.map { ($0, String(describing: c.value)) } },
+                                uniquingKeysWith: { first, _ in first })
+        return Mirror(reflecting: a).children.compactMap { c in
+            guard let label = c.label else { return nil }
+            return theirs[label] == String(describing: c.value) ? nil : label
+        }
+    }
+
+    /// The show members slice G2 moved onto `ProspectFacts`, read through the protocol.
+    struct CardShowAnswers {
+        let hasUnclearedConflict: Bool
+        let conflictScope: ConflictScope?
+        let conflictNote: String?
+        let showSummaryAbsence: ShowSummaryAbsence?
+        let reachabilityEmptyReason: Reachability.EmptyReason?
+        let contactRoute: ContactRoute
+        let draftIsMissingSubject: Bool
+        let skippedNights: [String]
+        let pitchedNights: [String]
+
+        init(_ p: some ProspectFacts, now: Date) {
+            hasUnclearedConflict = p.hasUnclearedConflict
+            conflictScope = p.conflictScope
+            conflictNote = p.conflictNote
+            showSummaryAbsence = p.showSummaryAbsence
+            reachabilityEmptyReason = p.reachabilityEmptyReason
+            contactRoute = p.contactRouteForScoring(now: now)
+            draftIsMissingSubject = p.draftIsMissingSubject
+            skippedNights = p.skippedNightDecisions.map(\.night)
+            pitchedNights = p.pitchedNightDecisions.map(\.night)
+        }
+    }
+
+    /// The contact members slice G2 moved onto `ContactFacts`, and the send gate asked of the contact's show.
+    struct CardContactAnswers {
+        let provenance: RecipientProvenance
+        let suppressionReason: RecipientSuppressionReason
+        let contactMethod: ContactMethod?
+        let contactConfidence: ContactConfidence?
+        let contactTier: ContactTier?
+        let heldDownReason: ContactConfidenceGuard.HoldDown?
+        let replyPostdatesDraftRequest: Bool
+        let replyIsAnswered: Bool
+        let holdReason: Recipient.HoldReason?
+        let sendOrderRank: Int
+        let canReceiveTheEmail: Bool
+        let isSendablePending: Bool
+
+        init<Row: ProspectFacts>(_ r: Row.Contact, of show: Row, among contacts: [Row.Contact], today: String) {
+            provenance = r.provenance
+            suppressionReason = r.suppressionReason
+            contactMethod = r.contactMethod
+            contactConfidence = r.contactConfidence
+            contactTier = r.contactTier
+            heldDownReason = r.heldDownReason
+            replyPostdatesDraftRequest = r.replyPostdatesDraftRequest
+            replyIsAnswered = r.replyIsAnswered
+            holdReason = r.holdReason
+            sendOrderRank = r.sendOrderRank
+            canReceiveTheEmail = r.canReceiveTheEmail
+            isSendablePending = r.passesTheSendGate(today: today, on: show, audience: show.greetingAudienceSize(among: contacts))
+        }
+    }
+
+    /// Every row's card, its send groups and its form pitch over models and over facts, then each show's and
+    /// each contact's moved members. Findings name identifiers and field labels only: a card carries names,
+    /// addresses and letters.
+    static func cardFindings(_ models: [Prospect], _ facts: [RowFacts], today: String, now: Date) -> [String] {
+        var out: [String] = []
+        for (model, fact) in zip(models, facts) {
+            let pid = String(describing: model.persistentModelID)
+            let modelContacts = model.factContacts, factContacts = fact.factContacts
+            let modelGroups = SendGroup.Groups(of: model, among: modelContacts, today: today)
+            let factGroups = SendGroup.Groups(of: fact, among: factContacts, today: today)
+            if modelGroups.preview.map(\.persistentModelID) != factGroups.preview.map(\.persistentModelID)
+                || modelGroups.pending.map(\.persistentModelID) != factGroups.pending.map(\.persistentModelID) {
+                out.append("SendGroup.Groups differ for row \(pid)")
+            }
+            if FormPitch.state(of: model, among: modelContacts) != FormPitch.state(of: fact, among: factContacts) {
+                out.append("FormPitch.state differs for row \(pid)")
+            }
+            let onModel = QueueItem(model, sendGroups: modelGroups, among: modelContacts)
+            let onFact = QueueItem(fact, sendGroups: factGroups, among: factContacts)
+            if onModel != onFact {
+                out.append("QueueItem differs for row \(pid) in " + QueueModel.differingFieldNames(onModel, onFact).joined(separator: ", "))
+            }
+            let showLabels = differingLabels(CardShowAnswers(model, now: now), CardShowAnswers(fact, now: now))
+            if !showLabels.isEmpty {
+                out.append("the card's show answers \(showLabels.joined(separator: ", ")) differ for row \(pid)")
+            }
+            let factByID = Dictionary(factContacts.map { ($0.persistentModelID, $0) }, uniquingKeysWith: { first, _ in first })
+            for contact in modelContacts {
+                guard let record = factByID[contact.persistentModelID] else { continue }   // memberFindings names it
+                let labels = differingLabels(CardContactAnswers(contact, of: model, among: modelContacts, today: today),
+                                             CardContactAnswers(record, of: fact, among: factContacts, today: today))
+                if !labels.isEmpty {
+                    out.append("the card's contact answers \(labels.joined(separator: ", ")) differ for contact "
+                               + String(describing: contact.persistentModelID))
+                }
+            }
         }
         return out
     }

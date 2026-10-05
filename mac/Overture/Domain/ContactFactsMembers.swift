@@ -225,6 +225,108 @@ extension ContactFacts {
     // the route as well would silently remove a show Dan can judge in seconds.
     var hasUnguardedAddress: Bool { email?.isEmpty == false && !isHeldByAGuard }
 
+    // #4357 slice G2: the contact members the card reads, moved from `Recipient` with their comments. The
+    // typed views keep their setters on `Recipient`, whose getters read these bodies.
+    var provenance: RecipientProvenance { RecipientProvenance(rawValue: provenanceRaw) ?? .manual }
+
+    // Defaults to .bookedElsewhere so a suppression from before this field existed (every one of
+    // them was a booking-freeze) still reads correctly rather than as an unrepresentable nil (#542).
+    var suppressionReason: RecipientSuppressionReason {
+        suppressionReasonRaw.flatMap(RecipientSuppressionReason.init) ?? .bookedElsewhere
+    }
+
+    var contactMethod: ContactMethod? { contactMethodRaw.flatMap(ContactMethod.init) }
+
+    var contactConfidence: ContactConfidence? { contactConfidenceRaw.flatMap(ContactConfidence.init) }
+
+    var contactTier: ContactTier? { contactTierRaw.flatMap(ContactTier.init(rawValue:)) }
+
+    var heldDownReason: ContactConfidenceGuard.HoldDown? {
+        heldDownReasonRaw.flatMap(ContactConfidenceGuard.HoldDown.init(rawValue:))
+    }
+
+    // #3573: their newest message arrived AFTER the draft was asked for, so the draft on file answers
+    // their previous one. One definition, read by the drafter's own eligibility rule
+    // (`ReplyClassifyService.recipientNeedsClassify`) and by what the conversation offers on screen
+    // (`ReplyConversationMode`), because those two disagreeing is how a stale draft comes to sit under a
+    // Send button (L16).
+    //
+    // Judged on `replyArrivedAt`, when they SENT it, rather than on when Overture noticed: a message that
+    // arrived before the request and was recorded after it is not a newer message.
+    var replyPostdatesDraftRequest: Bool {
+        guard let requested = replyDraftRequestedAt, let theirs = replyArrivedAt else { return false }
+        return theirs > requested
+    }
+
+    // #2919: they wrote, Dan answered, and nothing has arrived since. The state #2170 created and no
+    // surface ever spoke: once `replyHandledAt` clears the reply, the reached-out row went back to
+    // looking exactly like a pitch nobody ever answered, so a live negotiation and total silence rendered
+    // identically (L152).
+    //
+    // Written OVER `hasUnhandledReply` rather than beside it (#2921's rule), so the two can never disagree
+    // about whether this conversation has been dealt with. The three facts in front of it are the three
+    // that predicate short-circuits on, and they are here because `!hasUnhandledReply` on its own is
+    // equally true of a contact that never replied, one that bounced, and one Dan stood down. A line may
+    // claim only what its check actually measured (L11).
+    var replyIsAnswered: Bool {
+        replied && !bounced && resolution == nil && replyHandledAt != nil && !hasUnhandledReply
+    }
+
+    // #1798: WHICH kind of hold, so the card's sentence can be true of the row that produced it. Measured
+    // on the live store 2026-07-31: the one row in this state was held by the duplicate guard alone, with
+    // the venue and press guards both clear, so the wording written for those two would have been a false
+    // claim about a real presenter's own office address.
+    // #2624 adds the third: an address nobody on the row accounts for. Its own case for the same reason
+    // the duplicate has one, that the badge has to be true of the row that produced it: neither "weak
+    // contact only" nor "held as a duplicate" describes an address in a stranger's name.
+
+    var holdReason: Recipient.HoldReason? {
+        guard isHeldByAGuard else { return nil }
+        if (looksLikeVenue && !looksLikeVenueDismissed)
+            || (looksLikePressContact && !looksLikePressContactDismissed) { return .venueOrPress }
+        if looksLikeDuplicateContact && !looksLikeDuplicateContactDismissed { return .duplicate }
+        return .unaccountedAddress
+    }
+
+    // #4136: the same gate judged against a given day, so a test can pin the clock. The property above is
+    // the spelling every send path reads, and it asks with the real one.
+    func passesTheSendGate<Show: ProspectFacts>(today: String, on show: Show?,
+                                                audience: @autoclosure () -> Int?) -> Bool {
+        sendState == .pending && (email?.isEmpty == false) && !pausedByReply
+            // #4136: a show whose last night has passed does not get pitched. Every other hold here is about
+            // the words or the person; this one is about the calendar, and before it nothing in the funnel
+            // asked, so an approved draft for a performance that was over went out like any other. The
+            // committing moment, and the one place a wrong answer cannot be taken back. No override: there
+            // is no night left to pitch. `DraftReviewNotes.performancePassed` is the sentence beside the
+            // button, and `PassedKeptRetirement` sweeps a never pitched show like this out of Review.
+            && !(show.map { EasternDate.lastNightHasPassed(performanceDate: $0.performanceDate,
+                                                                runEndDate: $0.runEndDate,
+                                                                today: today) } ?? false)
+            // #901: a date conflict Dan has not cleared stops the send, not just the draft. The prep gate
+            // alone would miss the case that matters most: the draft already existed, was approved, and
+            // THEN he blocked the week or took a booking. Nothing should go out pitching a night he
+            // cannot work until he says he can.
+            && show?.hasUnclearedConflict != true
+            // #2052: a written email with no subject line does not go out. Held HERE, and not only on the
+            // confirmation sheet, because the sheet showed the gap ("(no subject)") and offered Send
+            // beside it anyway: a guard on a screen is not a guard. There is no override, unlike the
+            // greeting and lint holds, because those are judgements about words Dan can stand behind
+            // and this is a field he has not filled in.
+            && show?.draftIsMissingSubject != true
+            && !(looksLikeVenue && !looksLikeVenueDismissed)
+            && !(looksLikePressContact && !looksLikePressContactDismissed)
+            && !(looksLikeDuplicateContact && !looksLikeDuplicateContactDismissed)
+            // #2624: an address in a name nobody on this row accounts for. Held here, not merely marked,
+            // because `low` confidence changed how the card DESCRIBED the find and did nothing to stop
+            // the send: the greeting would name the artist and the mail would reach a stranger.
+            && !isLooksLikeAnotherPersons
+            && !isBlockedByDraftLint(body: show?.draftBody, lintBlockers: draftLintBlockers(body: show?.draftBody))
+            // #2545: a body that does not greet, or greets one person on an email several people get.
+            // Held here rather than only on the draft card for the reason #2052 gives directly above:
+            // a guard on a screen is not a guard.
+            && !isBlockedByGreeting(body: show?.draftBody, audience: audience())
+    }
+
     // #4357 slice F: the two reply draft members `StalledReplyDraft` reads, moved from `Recipient` unchanged.
     //
     // #2966: WHEN the reply draft this contact is still waiting on was asked for, from the one shared rule.

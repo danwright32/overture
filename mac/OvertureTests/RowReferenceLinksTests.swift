@@ -164,7 +164,8 @@ struct ListingLinkLabelWiringTests {
         // is decorated. Both halves are asserted, because either alone is satisfied by the other being
         // deleted: a table nothing reads, or a read of a table nobody builds.
         #expect(body.contains("sourceCalendarIndex("))
-        let cardBody = SourceGuardHelper.bodyOfFunction(named: "card", in: model)
+        // #4357 slice G2: the decoration lives in the generic card; the model entry point only forwards to it.
+        let cardBody = SourceGuardHelper.bodyOfFunction(named: "card<Row: ProspectFacts>", in: model)
         #expect(cardBody?.contains("item.sourceCalendarURLs") == true,
                 "QueueModel.card no longer resolves the row's source calendars, or is gone")
         // Resolved through the row's OWN sources, not "any watched source", so a row can never inherit a
