@@ -119,6 +119,38 @@ struct SkippedNightSendBlockTests {
         #expect(calls > 0, "no shipping call to the send was found, so this measured nothing")
     }
 
+    // #4502: the send derives a day in exactly one form, once per entry point, from its own moment, and hands
+    // that one `today` to every step. Any other day or clock read inside the send (a `dayString(from:)`, an
+    // `EasternDate.today(` of anything but the entry point's derivation, a bare `Date()`) is a second day that
+    // can disagree with the first across midnight, which is how the skipped-night check was missed twice.
+    @Test func theSendReadsItsDayInOneFormOnly() throws {
+        let source = SourceGuardHelper.source("Overture/Integration/SendService.swift")
+        let derivation = "let today = today ?? EasternDate.today(now)"
+        var derivations = 0
+        for line in source.components(separatedBy: "\n") {
+            let code = line.components(separatedBy: "//").first ?? ""
+            guard code.contains("dayString(from:") || code.contains("EasternDate.today(") || code.contains("Date()")
+            else { continue }
+            if code.trimmingCharacters(in: .whitespaces) == derivation { derivations += 1; continue }
+            Issue.record(Comment(rawValue: "SendService reads a day or the clock outside its one derivation: \(line)"))
+        }
+        #expect(derivations >= 3, "found \(derivations) derivations; the send's entry points each derive the day once")
+    }
+
+    // Why the skipped-night refusal needs no day-sensitive test of its own: whether a draft names a skipped night
+    // does not depend on the day it is asked on (`EventDateInDraft.finding` reads only the named days and the
+    // skipped set for that answer). Pinned, so a change that makes it day-dependent is seen, and then needs the
+    // send's one `today`, which `theSendReadsItsDayInOneFormOnly` already requires.
+    @Test func whetherADraftNamesASkippedNightDoesNotDependOnTheDay() throws {
+        let ctx = try context()
+        let p = try show(ctx, body: "Hello,\n\nI'd be glad to photograph October 6, October 13 and October 20.")
+        let body = p.draftBody ?? ""
+        let answers = ["2026-01-01", "2026-10-14", "2027-06-01"].map {
+            KeptNights.skippedNightNamed(subject: p.draftSubject, body: body, on: p, today: $0)
+        }
+        #expect(answers == ["2026-10-13", "2026-10-13", "2026-10-13"], Comment(rawValue: "\(answers)"))
+    }
+
     // #4502: a press is judged on ONE day, handed to `sendNext` by the press and down to every step, so each
     // step judges by the day it is handed rather than deriving its own: handed a day after the run, the press,
     // the single and the joint send all refuse, though their `now` is still before every night.
