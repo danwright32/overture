@@ -739,6 +739,9 @@ enum ScoutExtractIngest {
                                                    now: now)
 
         source.lastContentHash = promoted ?? source.lastContentHash
+        // #4440: a NEWER page left pending on this source after these results were read (a kept copy landing
+        // late) is not read by landing them: it stays pending and unread, with its months, for the next scout.
+        if let promoted, let newer = source.pendingContentHash, newer != promoted { return movement }
         source.pendingContentHash = nil
         // #897: the stitched-month expectation is spent once the run read the page in full. Cleared here on
         // the same success branch as the hash, so it can never carry stale months into a later comparison.

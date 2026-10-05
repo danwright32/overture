@@ -60,14 +60,18 @@ struct PendingScoutIngests {
         let hash = Self.contentHash(of: data)
         // An entry that is there and cannot be read is NOT absent (L215): written over, it would lose the
         // sequence the run was kept with, so the copy refuses instead and the landing stops before applying.
-        if let existing = try existingEntry(hash) { return existing }
+        // And a record whose results file is gone or is not these bytes is no copy at all (L421): it is written
+        // again, under the sequence it was kept with, so the run stays the same run.
+        let existing = try existingEntry(hash)
+        if let existing, resultsAreThese(existing) { return existing }
+        let sequence = existing?.sequence ?? sequence
         let fm = FileManager.default
         try fm.createDirectory(at: directory, withIntermediateDirectories: true)
         let incoming = directory.appendingPathComponent(".incoming-\(UUID().uuidString)", isDirectory: true)
         try fm.createDirectory(at: incoming, withIntermediateDirectories: false)
         defer { try? fm.removeItem(at: incoming) }   // gone already once it has been moved into place
         try data.write(to: incoming.appendingPathComponent(Self.resultsName), options: .atomic)
-        try Self.encoded(Entry(contentHash: hash, sequence: sequence, recordedAt: now))
+        try Self.encoded(Entry(contentHash: hash, sequence: sequence, recordedAt: existing?.recordedAt ?? now))
             .write(to: incoming.appendingPathComponent(Self.entryName), options: .atomic)
         try moveIntoPlace(incoming, hash: hash)
         return try entry(hash)
@@ -101,6 +105,12 @@ struct PendingScoutIngests {
         } catch {
             throw UnreadableEntry(path: url.path, why: String(describing: error))
         }
+    }
+
+    // Whether a kept copy's results file is there and holds exactly the bytes its record names.
+    func resultsAreThese(_ entry: Entry) -> Bool {
+        guard let data = try? Data(contentsOf: resultsURL(entry.contentHash)) else { return false }
+        return Self.contentHash(of: data) == entry.contentHash
     }
 
     struct UnreadableEntry: Error, CustomStringConvertible {

@@ -392,5 +392,32 @@ final class ScoutResultsKeptAndReplayedTests {
         _ = await offer(into: ctx, f, lines: Lines())
         #expect(try sources(c)["b"]?.lastContentHash == "new-b", Comment(rawValue:
             "the replay marked \(String(describing: try? sources(c)["b"]?.lastContentHash)) read"))
+        // And the newer page is still waiting to be read: landing the older page's results did not read it.
+        #expect(try sources(c)["b"]?.pendingContentHash == "newer-b", "the newer page was dropped unread")
+        #expect(try sources(c)["b"]?.hasUnreadChanges == true, "the newer page was marked read")
+    }
+
+    // A kept copy is only a copy while its results are there and are these results (L421). An entry whose
+    // results file has gone is written again on the next landing of the same bytes, under the run it was kept
+    // with, so a failed save then still leaves something to land.
+    @Test func aKeptCopyWhoseResultsAreGoneIsWrittenAgainBeforeTheLanding() async throws {
+        let c = try container()
+        let ctx = c.mainContext
+        html("a", in: ctx)
+        try ctx.save()
+        let f = try folders("kept-results-gone")
+        let lines = Lines()
+        let bytes = try data(["a"])
+        _ = try await land(bytes, into: ctx, f, lines: lines, saveSource: FailOne("a").save)
+        let hash = PendingScoutIngests.contentHash(of: bytes)
+        let entry = try #require(try f.pending.existingEntry(hash))
+        try FileManager.default.removeItem(at: f.pending.resultsURL(hash))
+
+        let again = try await land(bytes, into: ctx, f, lines: lines, saveSource: FailOne("a").save)
+        #expect(again.outcome.saveFailed)
+        let rewritten = try #require(try f.pending.existingEntry(hash), "the kept copy's record went too")
+        #expect(rewritten.sequence == entry.sequence, "the copy was kept again under a different run")
+        let copy = try f.pending.results(rewritten)
+        #expect(PendingScoutIngests.contentHash(of: copy.data) == hash, "the results were not kept again")
     }
 }

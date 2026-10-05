@@ -77,10 +77,13 @@ enum ScoutExtractLanding {
         // A kept copy whose record cannot be read gives no sequence here, and the copy step below then REFUSES
         // (`PendingScoutIngests.record` will not write over it), so the landing stops before applying anything
         // and names the record's path; nothing is minted over it and nothing counted twice.
-        let keptSequence: Int?
-        do { keptSequence = try pending.existingEntry(hash)?.sequence } catch { keptSequence = nil }
-        let sequence = sequence ?? keptSequence
-        var kept = sequence != nil
+        // And a record whose results file is gone or is not these bytes is NOT a kept copy (L421): its sequence
+        // is the run's, but the copy step below writes the results again before anything is applied.
+        let keptEntry: PendingScoutIngests.Entry?
+        do { keptEntry = try pending.existingEntry(hash) } catch { keptEntry = nil }
+        let offered = sequence != nil
+        let sequence = sequence ?? keptEntry?.sequence
+        var kept = offered || keptEntry.map(pending.resultsAreThese) == true
         var waited = false
         var copyFailure: String?
         inFlight[hash, default: 0] += 1
