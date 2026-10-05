@@ -86,8 +86,9 @@ struct PendingScoutIngests {
         return try encoder.encode(entry)
     }
 
-    // A folder already at the destination holds no readable entry (`record` returns early when it does),
-    // so it is the leftover of a crash and the finished copy replaces it.
+    // A folder already at the destination is no intact copy of these bytes: either it holds no readable
+    // entry (the leftover of a crash), or its entry is readable but its results are missing or are not these
+    // bytes (`record` and `recoverIncoming` return early only for an intact copy). The finished copy replaces it.
     private func moveIntoPlace(_ incoming: URL, hash: String) throws {
         let fm = FileManager.default
         let destination = folder(hash)
@@ -200,7 +201,10 @@ struct PendingScoutIngests {
         }
         let hash = Self.contentHash(of: data)
         do {
-            if try existingEntry(hash) != nil {
+            // Only an INTACT copy at the destination makes this one redundant (L421): when that copy's results
+            // are gone or are not these bytes, this folder may hold the only copy left (a `record` rewriting it
+            // that died before its move), so it is moved into place rather than deleted.
+            if let existing = try existingEntry(hash), resultsAreThese(existing) {
                 try? fm.removeItem(at: incoming)
                 return nil
             }

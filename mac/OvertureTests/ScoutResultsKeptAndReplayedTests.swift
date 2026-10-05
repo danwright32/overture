@@ -397,6 +397,26 @@ final class ScoutResultsKeptAndReplayedTests {
         #expect(try sources(c)["b"]?.hasUnreadChanges == true, "the newer page was marked read")
     }
 
+    // The crash the rewrite above can meet: `record` wrote the new copy into its temporary folder and died before
+    // moving it into place, over a destination whose record survived but whose results are gone. That temporary
+    // folder holds the only copy, so the next listing moves it into place rather than deleting it (L5, L617).
+    @Test func aStrandedCopyIsMovedOverAKeptRecordWhoseResultsAreGone() throws {
+        let f = try folders("kept-results-gone-stranded")
+        let bytes = try data(["a"])
+        let hash = PendingScoutIngests.contentHash(of: bytes)
+        try f.pending.record(bytes, sequence: 7, now: now)
+        // The rewrite's temporary folder, complete (results and record), as `record` leaves it just before its move.
+        let stranded = f.pending.directory.appendingPathComponent(".incoming-stranded", isDirectory: true)
+        try FileManager.default.copyItem(at: f.pending.resultsURL(hash).deletingLastPathComponent(), to: stranded)
+        try FileManager.default.removeItem(at: f.pending.resultsURL(hash))
+
+        _ = try f.pending.list()
+        let entry = try #require(try f.pending.existingEntry(hash))
+        #expect(f.pending.resultsAreThese(entry), "the only copy left was deleted rather than moved into place")
+        #expect(entry.sequence == 7)
+        #expect(!FileManager.default.fileExists(atPath: stranded.path))
+    }
+
     // A kept copy is only a copy while its results are there and are these results (L421). An entry whose
     // results file has gone is written again on the next landing of the same bytes, under the run it was kept
     // with, so a failed save then still leaves something to land.
