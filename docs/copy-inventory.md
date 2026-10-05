@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1751 sentences**.
+Every sentence Overture can say to Dan: **1753 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -14,7 +14,7 @@ What is not, and why:
   sentences under tokens nobody reads.
 - **Nothing, if it is written as two literals joined with `+`.** Those ARE joined here, into the
   one sentence the running app says (#3155). What is still only part of what Dan reads is a
-  sentence carrying a VALUE: 655 of the 1751 below hold a
+  sentence carrying a VALUE: 656 of the 1753 below hold a
   `\(...)` where a number or a name goes, so what is printed is the template. They are counted
   here rather than listed again, because the hole is visible in the line itself; what was missing
   was any statement of how much of this document is templates.
@@ -2385,7 +2385,9 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "That show is no longer in the queue, so nothing was changed. The row you pressed is out of date"
     `App/ActionFeedback.swift`
 "That show was merged, or moved to a different night, after this row was drawn. Nothing was changed. The list has caught up, so press it again"
-    `Domain/ReachedOutSnapshot.swift`
+    `Domain/ShowIdentity.swift`
+"That show was still being added when this row was drawn, so Overture could not tell which show you pressed. Nothing was changed. The list has caught up, so press it again if it is still there"
+    `Domain/ShowIdentity.swift`
 "That site answered, but its secure connection was broken, so the page couldn't be read. A re-check won't clear this."
     `Integration/SourceFetcher.swift`
 "That was \(named[0])."
@@ -3376,7 +3378,9 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "\(org) was already pitched, so \"\(outcome.label)\" doesn't apply to it. Nothing changed."
     `Domain/ShowOutcome.swift`
 "\(org) was merged, or moved to a different night, after this row was drawn. Nothing was changed. The list has caught up, so press it again"
-    `Domain/ReachedOutSnapshot.swift`
+    `Domain/ShowIdentity.swift`
+"\(org) was still being added when this row was drawn, so Overture could not tell which show you pressed. Nothing was changed. The list has caught up, so press it again if it is still there"
+    `Domain/ShowIdentity.swift`
 "\(org) went by before it was pitched."
     `Domain/ShowOutcome.swift`
 "\(org) went by before it was triaged."
