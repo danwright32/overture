@@ -75,18 +75,7 @@ struct LandingBatchTables {
         // a binary search for the first entry ordered after it.
         fileprivate mutating func insert(_ row: Row, order: Int, into key: String) {
             guard members[key, default: []].insert(row).inserted else { return }
-            let entry = Entry(order: order, row: row)
-            guard let last = entries[key]?.last, last.order > order else {
-                entries[key, default: []].append(entry)
-                return
-            }
-            var low = 0
-            var high = entries[key]?.count ?? 0
-            while low < high {
-                let mid = (low + high) / 2
-                if (entries[key]?[mid].order ?? .max) > order { high = mid } else { low = mid + 1 }
-            }
-            entries[key]?.insert(entry, at: low)
+            _ = LandingBatchTables.insertInOrder(Entry(order: order, row: row), order: \.order, into: &entries[key])
         }
 
         fileprivate mutating func remove(_ row: Row, from key: String) {
@@ -169,20 +158,40 @@ struct LandingBatchTables {
             if entries[key]?.isEmpty == true { entries[key] = nil }
         }
 
-        fileprivate mutating func insert(_ entry: Entry, into key: String) {
-            var list = entries[key] ?? []
-            let at = list.firstIndex { $0.order > entry.order } ?? list.endIndex
-            list.insert(entry, at: at)
-            entries[key] = list
+        // Changed IN PLACE through the one ordered insert (#4512: a copy of the key's list and a linear search
+        // made building one key square in its rows). Returns whether the entry went on the END, the build's case
+        // and a row joining, which is the case `extend` can answer without walking the key again.
+        fileprivate mutating func insert(_ entry: Entry, into key: String) -> Bool {
+            LandingBatchTables.insertInOrder(entry, order: \.order, into: &entries[key])
         }
 
-        // The walk `ShowLink.addShows` makes, over this key's list alone.
-        fileprivate mutating func rejudge(_ key: String) {
+        // An entry appended at the END of a key's list: the walk over the whole list is the walk over the list
+        // before it, which `shows[key]` already holds, followed by this one title, so only that step is taken.
+        // Identical to `rejudge` by construction; any other change re-walks the key. Returns the title steps
+        // taken, which the tables count outside this compared state (#4512 review).
+        fileprivate mutating func extend(_ key: String, with title: String) -> Int {
+            let wasAmbiguous = (shows[key]?.count ?? 0) > 1
+            ShowLink.addShow(title, to: &shows[key, default: []])
+            noteAmbiguity(key, was: wasAmbiguous, is: (shows[key]?.count ?? 0) > 1)
+            return 1
+        }
+
+        // The walk `ShowLink.addShows` makes, over this key's list alone. Returns the title steps taken.
+        @discardableResult
+        fileprivate mutating func rejudge(_ key: String) -> Int {
             let wasAmbiguous = (shows[key]?.count ?? 0) > 1
             var folded: [String] = []
-            for e in entries[key] ?? [] { ShowLink.addShow(e.title, to: &folded) }
+            var steps = 0
+            for e in entries[key] ?? [] {
+                steps += 1
+                ShowLink.addShow(e.title, to: &folded)
+            }
             shows[key] = folded.isEmpty ? nil : folded
-            let isAmbiguous = folded.count > 1
+            noteAmbiguity(key, was: wasAmbiguous, is: folded.count > 1)
+            return steps
+        }
+
+        private mutating func noteAmbiguity(_ key: String, was wasAmbiguous: Bool, is isAmbiguous: Bool) {
             guard wasAmbiguous != isAmbiguous else { return }
             let url = answer(key)
             let n = (ambiguousKeysPerURL[url] ?? 0) + (isAmbiguous ? 1 : -1)
@@ -204,6 +213,31 @@ struct LandingBatchTables {
             for (k, folded) in touched where folded.count > 1 { out.insert(answer(k)) }
             return out
         }
+    }
+
+    // #4512: every `ShowLink.addShow` step the two scopes have taken building and keeping their shows, so a test
+    // can pin that building a key of N rows in order costs N steps rather than the square of N. Kept here, outside
+    // the scopes' compared state, so two scopes holding the same entries and shows still compare equal.
+    private(set) var titleSteps = 0
+
+    // The ONE ordered insert every per key list here uses (`KeyedRows` and `URLScope`), changed in place through
+    // the dictionary's own slot: the common case, the build in order and a row joining at the end, appends;
+    // otherwise the place is found by a binary search for the first entry ordered after it. Returns whether the
+    // entry went on the end.
+    fileprivate static func insertInOrder<E>(_ entry: E, order: KeyPath<E, Int>, into list: inout [E]?) -> Bool {
+        let at = entry[keyPath: order]
+        guard let last = list?.last, last[keyPath: order] > at else {
+            if list == nil { list = [entry] } else { list?.append(entry) }
+            return true
+        }
+        var low = 0
+        var high = list?.count ?? 0
+        while low < high {
+            let mid = (low + high) / 2
+            if (list?[mid][keyPath: order] ?? .max) > at { high = mid } else { low = mid + 1 }
+        }
+        list?.insert(entry, at: low)
+        return false
     }
 
     private(set) var atAVenue = URLScope(scopedByVenue: true)
@@ -246,7 +280,7 @@ struct LandingBatchTables {
             for scope in Self.scopes {
                 let k = self[keyPath: scope].key(u)
                 self[keyPath: scope].remove(row, from: k)
-                self[keyPath: scope].rejudge(k)
+                titleSteps += self[keyPath: scope].rejudge(k)
             }
         }
         for t in Set(value.tokens.map(\.token)) { rowsByToken.remove(row, from: t) }
@@ -261,8 +295,11 @@ struct LandingBatchTables {
         for u in value.urls where !u.url.isEmpty {
             for scope in Self.scopes {
                 let k = self[keyPath: scope].key(u)
-                self[keyPath: scope].insert(URLScope.Entry(order: order, row: row, title: u.title), into: k)
-                self[keyPath: scope].rejudge(k)
+                if self[keyPath: scope].insert(URLScope.Entry(order: order, row: row, title: u.title), into: k) {
+                    titleSteps += self[keyPath: scope].extend(k, with: u.title)
+                } else {
+                    titleSteps += self[keyPath: scope].rejudge(k)
+                }
             }
         }
         for t in Set(value.tokens.map(\.token)) { rowsByToken.insert(row, order: order, into: t) }

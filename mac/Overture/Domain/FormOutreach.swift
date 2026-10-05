@@ -144,8 +144,11 @@ enum FormPitch {
         case recorded(at: Date)
     }
 
-    static func state(of prospect: Prospect) -> State {
-        if let recorded = prospect.recipients.compactMap(\.formOutreachRecordedAt).min() {
+    static func state(of prospect: Prospect) -> State { state(of: prospect, among: prospect.recipients) }
+
+    // #4357 slice G2: the same over any contacts, handed in, so a retained show answers by the one body.
+    static func state<Row: ProspectFacts>(of prospect: Row, among contacts: [Row.Contact]) -> State {
+        if let recorded = contacts.compactMap(\.formOutreachRecordedAt).min() {
             return .recorded(at: recorded)
         }
         // Dan's scope (2026-07-28): forms only, and only where the form is the ONLY way through. A show
@@ -156,11 +159,11 @@ enum FormPitch {
         // existing path to be reused rather than a second one built, and the scope rule is unchanged:
         // only where a hand route is the ONLY way through, so this can never become a way to mark a show
         // with a working address as pitched.
-        let verdict = prospect.reachabilityResultFromRecipients
+        let verdict = prospect.reachabilityResultFromRecipients(among: contacts)
         guard verdict == .contactFormOnly || verdict == .socialOnly else { return .unavailable }
-        let routes = prospect.usableContactFormURLs + prospect.socialRouteURLs
+        let routes = prospect.usableContactFormURLs(among: contacts) + prospect.socialRouteURLs(among: contacts)
         let candidates = Recipient.inSendOrder(
-            prospect.recipients.filter { r in
+            contacts.filter { r in
                 guard let raw = r.contactFormURL?.trimmingCharacters(in: .whitespacesAndNewlines) else { return false }
                 return routes.contains(raw)
             })
