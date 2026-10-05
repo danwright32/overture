@@ -41,6 +41,10 @@ struct LandingRecordMigrationDryRunTests {
         // before anything this build declares has opened it.
         let before = try Self.counts(at: copy)
         let landed = try Self.landingColumns(at: copy)
+        // The recovery's two columns are read apart from the earlier landing columns, because a store from a build
+        // that carries those and not these (main before the recovery) is the one the arm above calls migrated
+        // (L601).
+        let hadRecoveryColumns = try Self.hasColumn("ZATTEMPTCOUNT", table: "ZLANDINGRUN", at: copy)
 
         let container = try FileStores.container(for: AppSchema.schema, configurations: [ModelConfiguration(url: copy)])
         let ctx = ModelContext(container)
@@ -62,8 +66,12 @@ struct LandingRecordMigrationDryRunTests {
             #expect(sources.allSatisfy { $0.lastLandedRunID == nil && $0.lastLandedSequence == 0 },
                     "a migrated source reads as landed by a run nothing recorded")
             #expect(runs.allSatisfy { $0.sequence == 0 && $0.entryPointRaw.isEmpty })
-            // #4335 (the recovery): two more columns, a count and a time, both reading as never recovered.
-            #expect(runs.allSatisfy { $0.attemptCount == 0 && $0.recoveredAt == nil })
+        }
+        if !hadRecoveryColumns {
+            // #4335 (the recovery): two more columns, a count and a time, both reading as never recovered on every
+            // run the file held, whichever arm above it took.
+            #expect(runs.allSatisfy { $0.attemptCount == 0 && $0.recoveredAt == nil },
+                    "a migrated landing run reads as recovered or attempted when nothing recorded either")
         }
 
         // The new columns take a write and read it back, which a schema mismatch breaks and an open-and-count
@@ -118,6 +126,12 @@ struct LandingRecordMigrationDryRunTests {
             (r[0], Landed(runID: r[1] == "1" ? nil : r[2], sequence: Int(r[3]) ?? -1))
         })
         return (keyed, runs.map { Run(identity: $0[0], entryPoint: $0[1], sequence: Int($0[2]) ?? -1) }.sorted())
+    }
+
+    // Whether the file's table carries the column, read before anything this build declares opens it. A table
+    // the file does not have has no columns.
+    private static func hasColumn(_ column: String, table: String, at store: URL) throws -> Bool {
+        try query(store, "SELECT name FROM pragma_table_info('\(table)');").contains { $0.first == column }
     }
 
     // One read-only sqlite3 query, rows split on the unit separator so a value holding "|" stays whole.

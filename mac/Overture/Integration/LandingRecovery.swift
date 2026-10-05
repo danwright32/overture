@@ -265,20 +265,24 @@ enum LandingRecovery {
             return .notFinished(startedAt: next.startedAt, why: "its attempt could not be recorded ("
                                 + HandoffDecodeFailure.describe(error) + ")")
         }
+        // An attempt that never reached the landing (a sweep that could not start, a replay refused because
+        // another landing held the store) uses up nothing of the cap: the count just recorded is taken back in a
+        // save of its own (L527). If that save fails too, the count stands, which errs toward stopping rather
+        // than toward retrying for ever.
+        func takeBackTheAttempt() {
+            record.attemptCount -= 1
+            do {
+                try saveAttempt(context)
+            } catch {
+                _ = LandingRevert.revert(LandingRevert.WriteSet(changed: [record], inserted: [], deleted: []),
+                                         in: context)
+            }
+        }
         let replayed: Recovered
         switch next.finding {
         case .sweep:
             guard sweep() else {
-                // A sweep that could not start (another run, the reader) uses up nothing of the cap: the count
-                // just recorded is taken back in a save of its own. If that save fails too, the count stands,
-                // which errs toward stopping rather than toward retrying for ever.
-                record.attemptCount -= 1
-                do {
-                    try saveAttempt(context)
-                } catch {
-                    _ = LandingRevert.revert(LandingRevert.WriteSet(changed: [record], inserted: [], deleted: []),
-                                             in: context)
-                }
+                takeBackTheAttempt()
                 return .notFinished(startedAt: next.startedAt, why: "the scout that would finish it could not start yet")
             }
             return .sweepRequested(startedAt: next.startedAt)
@@ -290,6 +294,7 @@ enum LandingRecovery {
                                     blocked: blocked, landings: landings, now: now, saveSource: saveSource,
                                     movementLog: movementLog, into: context)
             replaying(nil)
+            if case .notFinished(_, storeHeldElsewhere) = replayed { takeBackTheAttempt() }
         }
         // "It will try again" is said only while there is an attempt left to make (L703).
         if case .notFinished = replayed, record.attemptCount >= attemptCap {
@@ -331,11 +336,15 @@ enum LandingRecovery {
         return .landed(startedAt: item.startedAt, sources: item.unlanded.count)
     }
 
+    // The one refusal that is no fault of the interrupted landing: another landing held the store past the
+    // deadline. Named once, because `recoverNext` takes back the attempt it counted for it (L527).
+    static let storeHeldElsewhere = "another landing was holding the store"
+
     // Why a replay did not finish, as a clause the recovery's sentence carries in parentheses, or nil when it
     // finished. The landing's own warnings are whole sentences written for a scout Dan started, so the clause
     // names the cause instead (L11).
     static func reason(_ outcome: ScoutService.Outcome) -> String? {
-        if outcome.notLandedYet != nil { return "another landing was holding the store" }
+        if outcome.notLandedYet != nil { return storeHeldElsewhere }
         switch outcome.landingStop {
         case .recentEditsUnsaved?: return "your recent edits could not be saved first"
         case .journalNotWritten(let why)?: return "its landing record could not be written: \(why)"

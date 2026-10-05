@@ -535,6 +535,38 @@ final class LandingRecoveryTests {
         #expect(try survey(c, f) == [.stoppedRetrying(attempts: LandingRecovery.attemptCap)])
     }
 
+    // L527: a replay refused because another landing held the store past its deadline says nothing about the
+    // interrupted landing, so it uses up nothing of the cap, as a sweep that could not start does not. Three such
+    // minutes would otherwise stop the recovery for good over a cause that was never this landing's.
+    @Test func aReplayRefusedBecauseTheStoreWasHeldUsesUpNoAttempt() async throws {
+        let c = try container()
+        let ctx = c.mainContext
+        for id in ["a", "b"] { html(id, in: ctx) }
+        try ctx.save()
+        let f = try folders("recover-store-held")
+        try await interruptedIngest(["a", "b"], into: ctx, f)
+        let before = try ModelContext(c).fetch(FetchDescriptor<LandingRun>()).first?.attemptCount ?? 0
+
+        var said: [LandingRecovery.Recovered?] = []
+        for _ in 0..<LandingRecovery.attemptCap {
+            let flight = LandingSingleFlight(sleep: { _ in })
+            let holder = try await flight.begin(entryPoint: .runScoutLanding, priority: .scout, deadline: .seconds(1))
+            said.append(await recover(ctx, f, landings: flight))
+            holder.end()
+        }
+        #expect(said.allSatisfy {
+            if case .notFinished(_, let why)? = $0 { return why == LandingRecovery.storeHeldElsewhere }
+            return false
+        }, Comment(rawValue: "the recovery said \(said)"))
+        let run = try #require(try ModelContext(c).fetch(FetchDescriptor<LandingRun>()).first)
+        #expect(run.attemptCount == before, Comment(rawValue: "a held store used up \(run.attemptCount - before) attempts"))
+        #expect(try survey(c, f) == [.replay])
+        guard case .landed? = await recover(ctx, f) else {
+            Issue.record("the replay did not finish once the store was free")
+            return
+        }
+    }
+
     // MARK: - runScout landings are re-read by the watch-only sweep
 
     @Test func anInterruptedSweepAsksForTheWatchOnlySweepAndIsRetiredOnceItRan() async throws {
