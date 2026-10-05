@@ -105,10 +105,16 @@ final class ScoutResultsKeptAndReplayedTests {
                                        movementLog: lines, into: ctx)
     }
 
-    private func offer(into ctx: ModelContext, _ f: Folders, lines: Lines) async -> ScoutExtractLanding.Offered {
-        await ScoutExtractLanding.offerPending(clients: [], history: [], blocked: .empty, now: now.addingTimeInterval(60),
-                                               landings: LandingSingleFlight(sleep: { _ in }), pending: f.pending,
-                                               journals: f.journals, movementLog: lines, into: ctx)
+    // Offered again the way the product finishes an interrupted landing since #4335: by the recovery, which
+    // the launch sweep of kept copies leaves it to. Answers whether the kept results landed.
+    private func offer(into ctx: ModelContext, _ f: Folders, lines: Lines) async -> Bool {
+        let recovered = await LandingRecovery.recoverNext(
+            journals: f.journals, pending: f.pending, clients: [], history: [], blocked: .empty,
+            landings: LandingSingleFlight(sleep: { _ in }), now: now.addingTimeInterval(60), sweep: { true },
+            movementLog: lines, into: ctx)
+        if case .landed? = recovered { return true }
+        Issue.record(Comment(rawValue: "the kept results did not land: \(String(describing: recovered))"))
+        return false
     }
 
     // A save that refuses, as a store would, the first time it carries the named source's row.
@@ -187,7 +193,7 @@ final class ScoutResultsKeptAndReplayedTests {
         #expect(lines.count("a") == 0, "a source whose save failed appended a movement line")
 
         let offered = await offer(into: ctx, f, lines: lines)
-        #expect(offered.landed.count == 1, Comment(rawValue: "the kept results did not land: \(offered)"))
+        #expect(offered)
         #expect(try titles(c) == ["Recital a 0", "Recital a 1"])
         #expect(try sources(c)["a"]?.successfulCheckCount == WatchedSource.warmupRuns + 1)
         #expect(lines.count("a") == 1)
@@ -226,9 +232,10 @@ final class ScoutResultsKeptAndReplayedTests {
         #expect(try Data(contentsOf: entry) == Data("not an entry".utf8), "listing the copies rewrote the record")
     }
 
-    // A kept copy offered again lands with the `now` its landing started with (its stamps), but judges what is
-    // still upcoming against the day it is offered on: a night that passed in between is not ingested as a
-    // show still to come.
+    // A kept copy offered again judges what is still upcoming against the day it is offered on: a night that
+    // passed in between is not ingested as a show still to come. Since #4335 the copy the launch sweep offers
+    // is one whose landing never STARTED (it waited and was refused, so no journal names it): a started one is
+    // the recovery's, which judges by the day it runs (`LandingRecoveryTests.aReplayJudgesUpcomingByTheDayItRunsOn`).
     @Test func aCopyOfferedAgainJudgesUpcomingByTheDayItIsOfferedOn() async throws {
         let c = try container()
         let ctx = c.mainContext
@@ -236,8 +243,8 @@ final class ScoutResultsKeptAndReplayedTests {
         try ctx.save()
         let f = try folders("kept-later-day")
         let lines = Lines()
-        let first = try await land(try data(["b"]), into: ctx, f, lines: lines, saveSource: FailOne("b").save)
-        #expect(first.outcome.saveFailed)
+        try f.pending.record(try data(["b"]), sequence: 1, now: now)
+        #expect(try f.journals.list().isEmpty, "the copy was meant to be one no landing started")
 
         // Offered a month later: night(0) has passed by then, night(1) is that very day.
         let later = Calendar(identifier: .gregorian).date(byAdding: .day, value: 31, to: now)!
@@ -329,7 +336,7 @@ final class ScoutResultsKeptAndReplayedTests {
         #expect(lines.count("a") == 1 && lines.count("b") == 0)
 
         let offered = await offer(into: ctx, f, lines: lines)
-        #expect(offered.landed.count == 1, Comment(rawValue: "the kept results did not land: \(offered)"))
+        #expect(offered)
         stored = try sources(c)
         for id in ["a", "b", "c"] {
             #expect(stored[id]?.successfulCheckCount == WatchedSource.warmupRuns + 1, Comment(rawValue:

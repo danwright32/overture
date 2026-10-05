@@ -5,7 +5,7 @@ import SwiftData
 // #4404: an edit Dan makes to a watched source outside any landing (an address correction, a resume, a
 // confirmed empty page, a venue answer) makes every reading of that source taken BEFORE it the older one. A
 // landing whose read phase came before the edit (a detached read in flight, a kept copy offered again) sets that
-// reading aside, and Dan's edit stands. #4335's idle recovery of an interrupted landing adds its own case here when it lands.
+// reading aside, and Dan's edit stands. #4335's idle recovery of an interrupted landing has its own case here.
 //
 // Before #4404 the edits left `lastTouchedSequence` where it was, so the landing's re-validation could not tell
 // a reading of the old address from one of the new, and landed the old page over the correction. Every name is
@@ -13,7 +13,9 @@ import SwiftData
 @MainActor
 @Suite("An edit Dan makes sets every older reading of that source aside (#4404)")
 final class DanEditsSetOlderReadingsAsideTests {
+    private let sandboxes = TemporarySandboxes()
     private let started = Date(timeIntervalSince1970: 1_790_000_000.25)
+    private struct SaveRefused: Error {}
 
     // Each edit kind, applied to source "b" on a context, and what it leaves that a stale landing would undo.
     enum Edit: String, CaseIterable, CustomStringConvertible {
@@ -76,6 +78,19 @@ final class DanEditsSetOlderReadingsAsideTests {
         }))
     }
 
+    private struct Folders {
+        let pending: PendingScoutIngests
+        let journals: LandingJournals
+    }
+
+    private func folders(_ name: String) throws -> Folders {
+        let root = try sandboxes.make(named: name)
+        return Folders(pending: PendingScoutIngests(directory: root.appendingPathComponent("pending"),
+                                                    readFailures: HandoffReadFailures()),
+                       journals: LandingJournals(directory: root.appendingPathComponent("journals"),
+                                                 readFailures: HandoffReadFailures()))
+    }
+
     private func titles(_ c: ModelContainer) throws -> [String] {
         try ModelContext(c).fetch(FetchDescriptor<Prospect>()).map(\.groupName).filter { $0.hasPrefix("Recital") }.sorted()
     }
@@ -119,6 +134,51 @@ final class DanEditsSetOlderReadingsAsideTests {
         #expect(states["a"] == .ingested(found: 2))
         #expect(try titles(c) == ["Recital a 0", "Recital a 1"], "the old reading of b landed over the \(edit)")
         #expect(editStands(edit, on: try source("b", c)), "the \(edit) was overwritten by a stale reading")
+    }
+
+    // THE RECOVERY. An interrupted landing whose unlanded source Dan then edited is not replayed onto it: the
+    // recovery replays only the closing step a landed (its reconcile and the landing record), and lands nothing
+    // for b, whose edit stands.
+    @Test(arguments: Edit.allCases)
+    func theRecoveryDoesNotReplayAReadingOverAnEdit(_ edit: Edit) async throws {
+        let c = try container()
+        let ctx = c.mainContext
+        for id in ["a", "b"] { html(id, in: ctx) }
+        try ctx.save()
+        let f = try folders("edit-recovery-\(edit)")
+        let bytes = try data(["a", "b"])
+        // Interrupted after a: b's save refused at store level, and the closing save too.
+        var refused = false
+        _ = await ScoutExtractLanding.land(bytes, try ScoutExtractResultsDecoder.decode(bytes), clients: [], history: [],
+                                           blocked: .empty, today: QueueModel.easternToday(started), now: started,
+                                           landings: LandingSingleFlight(sleep: { _ in }), pending: f.pending,
+                                           saveClosing: { _ in throw SaveRefused() }, journals: f.journals,
+                                           saveSource: { context in
+                                               if !refused, context.changedModelsArray.contains(where: {
+                                                   ($0 as? WatchedSource)?.sourceId == "b" }) {
+                                                   refused = true
+                                                   throw SaveRefused()
+                                               }
+                                               try context.save()
+                                           }, into: ctx)
+        #expect(try LandingRecovery.survey(journals: f.journals, pending: f.pending, in: ModelContext(c)).map(\.finding)
+                == [.replay], "the interrupted landing was not left for the recovery")
+
+        let b = try #require(try ctx.fetch(FetchDescriptor<WatchedSource>()).first { $0.sourceId == "b" })
+        apply(edit, to: b, in: ctx)
+
+        let recovered = await LandingRecovery.recoverNext(
+            journals: f.journals, pending: f.pending, clients: [], history: [], blocked: .empty,
+            landings: LandingSingleFlight(sleep: { _ in }), now: started.addingTimeInterval(3_600), sweep: { true },
+            into: ctx)
+        // a's closing step (its reconcile and the landing record) is still finished; b is not touched.
+        guard case .landed(_, 0)? = recovered else {
+            Issue.record(Comment(rawValue: "after a \(edit) the recovery did \(String(describing: recovered))"))
+            return
+        }
+        #expect(try titles(c) == ["Recital a 0", "Recital a 1"], "the recovery landed b's old reading over the \(edit)")
+        #expect(editStands(edit, on: try source("b", c)), "the \(edit) was overwritten by the recovery")
+        #expect(try f.journals.list().isEmpty && f.pending.list().isEmpty)
     }
 
     // L2: the edits' floor reads the kept copies and the journals through `.live`, which under tests must be

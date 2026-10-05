@@ -51,6 +51,10 @@ final class LandingSingleFlight {
         // its save (its first flush, read phase and classify pass run before it asks). Dan is waiting on it,
         // so it takes its turn at Dan's priority, at the front of the queue.
         case leadPaste
+        // #4335 (A6): the recovery finishing an interrupted ingest landing from its kept copy, at idle. The same
+        // landing block as `scoutExtractIngest`, named apart so a Run press that has to wait can say it is
+        // waiting for the interrupted landing rather than for one Dan started (L703).
+        case landingRecovery
     }
 
     enum Priority: Int, Sendable, Comparable {
@@ -218,7 +222,7 @@ final class LandingSingleFlight {
     func waitForTurnToStartARun(deadline: Duration = Deadline.runPress,
                                 acknowledge: (String) -> Void) async throws {
         let token = try await begin(entryPoint: .runPress, priority: .danAction, deadline: deadline,
-                                    onWait: { acknowledge(LandingWaitCopy.runPressWaiting) })
+                                    onWait: { acknowledge(LandingWaitCopy.runPressWaiting(behind: holder?.entryPoint)) })
         token.end()
     }
 
@@ -244,8 +248,14 @@ final class LandingSingleFlight {
 // surfaces that could show one cannot word it differently.
 enum LandingWaitCopy {
     // The acknowledgement a Run press gets when a landing holds the store. Worded for what this step does
-    // (L703): the holder is a landing in progress. A6 adds "the interrupted landing" for a recovery.
+    // (L703): the holder is a landing in progress. #4335 (A6): or, when the holder is the recovery, the
+    // interrupted landing it is finishing, chosen from who holds the store rather than assumed.
     static let runPressWaiting = "Your scout will start as soon as the landing in progress finishes."
+    static let runPressWaitingForTheRecovery = "Your scout will start as soon as the interrupted landing finishes."
+
+    static func runPressWaiting(behind holder: LandingSingleFlight.EntryPoint?) -> String {
+        holder == .landingRecovery ? runPressWaitingForTheRecovery : runPressWaiting
+    }
 
     static func refused(_ entryPoint: LandingSingleFlight.EntryPoint, waited: Duration) -> String {
         let minutes = max(1, Int((Double(waited.components.seconds) / 60).rounded()))
@@ -268,6 +278,10 @@ enum LandingWaitCopy {
         case .leadPaste:
             return "The shows from that page were not added, because another landing was still saving to the "
                 + "store after \(span). Nothing from the page changed. Paste it again once it has finished."
+        case .landingRecovery:
+            return "Overture could not finish an interrupted landing yet, because another landing was still "
+                + "saving to the store after \(span). It kept the results and will try again when you are away "
+                + "from the Mac."
         }
     }
 
@@ -335,6 +349,42 @@ enum LandingWaitCopy {
 
     static func landedTime(_ date: Date) -> String { landedTimeFormat.string(from: date) }
 
+    // #4335 (A6): the recovery's sentences. An interrupted landing is named by when it STARTED, in New York time
+    // with its day, because the recovery can finish it hours later (L589).
+    static func interruptedWaiting(since startedAt: Date) -> String {
+        "A landing was interrupted at \(landedTime(startedAt)). Overture will finish it when you are away from "
+            + "the Mac."
+    }
+
+    // What one recovery step did, or nil when there is nothing worth saying (a spent record cleared).
+    static func recovered(_ step: LandingRecovery.Recovered) -> String? {
+        switch step {
+        case .landed(let startedAt, _):
+            return "Overture finished the landing that was interrupted at \(landedTime(startedAt))."
+        case .retired(let startedAt, .superseded):
+            return "A landing interrupted at \(landedTime(startedAt)) had been overtaken by a later scout, so "
+                + "there was nothing left of it to finish."
+        case .retired:
+            return nil
+        case .sweepRequested(let startedAt):
+            return "Overture is checking your calendars again to finish the landing that was interrupted at "
+                + "\(landedTime(startedAt))."
+        case .notFinished(let startedAt, let why):
+            return "Overture could not finish the landing that was interrupted at \(landedTime(startedAt)) yet "
+                + "(\(why)). It will try again when you are away from the Mac."
+        case .recordsUnreadable(let why):
+            return "Overture could not read its records of interrupted landings (\(why)), so it cannot finish one "
+                + "yet. It will try again when you are away from the Mac."
+        case .stoppedRetrying(let startedAt, let attempts, let unlanded):
+            let stopped = "Overture stopped trying to finish the landing that was interrupted at "
+                + "\(landedTime(startedAt)) after \(attempts) attempts."
+            // Only its closing step was left: every calendar in it had been saved, so none waits to be read.
+            guard unlanded > 0 else { return stopped + " Every calendar in it had already been saved." }
+            let calendars = unlanded == 1 ? "The calendar it had not saved stays" : "The \(unlanded) calendars it had not saved stay"
+            return stopped + " \(calendars) unread, and your next scout reads " + (unlanded == 1 ? "it" : "them") + " again."
+        }
+    }
+
     static func pendingUnreadable(path: String, why: String) -> String {
         "Overture could not read kept calendar results at \(path) (\(why))."
     }
@@ -355,10 +405,12 @@ enum LandingWaitCopy {
             parts.append(stillWaiting == 1 ? "One set of calendar results is still waiting for the store."
                                            : "\(stillWaiting) sets of calendar results are still waiting for the store.")
         }
+        // Says only that a stuck copy is kept: one the idle recovery has stopped trying is counted here too,
+        // and the recovery's own launch line says when it stopped (#4485 review, L11).
         if stuck > 0 {
             parts.append(stuck == 1
-                ? "One set of calendar results has been stuck for over \(over) without landing. It is kept, and Overture will keep offering it."
-                : "\(stuck) sets of calendar results have been stuck for over \(over) without landing. They are kept, and Overture will keep offering them.")
+                ? "One set of calendar results has been stuck for over \(over) without landing. It is kept."
+                : "\(stuck) sets of calendar results have been stuck for over \(over) without landing. They are kept.")
         }
         return parts.isEmpty ? nil : parts.joined(separator: " ")
     }

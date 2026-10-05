@@ -97,8 +97,10 @@ Inquiry.sourceRaw
 Inquiry.threadIdDegraded
 Inquiry.threadingDegraded
 Inquiry.venue
+LandingRun.attemptCount
 LandingRun.entryPointRaw
 LandingRun.landedAt
+LandingRun.recoveredAt
 LandingRun.runIdentity
 LandingRun.sequence
 LandingRun.startedAt
