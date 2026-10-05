@@ -1350,6 +1350,7 @@
 		86AE682DB2D6C4F261963A62 /* EmailAddressList.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6BF3B8C01356B62369B2C3DD /* EmailAddressList.swift */; };
 		86B0D9EAEAA78E7B493E75C4 /* CheckStallWindowFollowsItsDepthTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A117863216A6833FAE81A025 /* CheckStallWindowFollowsItsDepthTests.swift */; };
 		86B178092227BBC6D738FF55 /* Phase0Corpus.swift in Sources */ = {isa = PBXBuildFile; fileRef = FEFED13451B5CC028A8802B2 /* Phase0Corpus.swift */; };
+		86C56A7731BC015435D1FD99 /* HostedPassCounting.swift in Sources */ = {isa = PBXBuildFile; fileRef = EAB2589832A1142EDE208A5D /* HostedPassCounting.swift */; };
 		870FF7F88E5ABBC8CC257B6A /* LoopbackListenerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 98F9028B89AB5EDEFDADF826 /* LoopbackListenerTests.swift */; };
 		871050AB50AD2BF4EDB3DC8C /* TestWindowsAreNotReleasedOnCloseGuardTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 94862782A45D447258573F7F /* TestWindowsAreNotReleasedOnCloseGuardTests.swift */; };
 		87125BF6C5F590C81DB8B51A /* GmailThreadingRepair.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B661C11D785CFC53CF7D7B4 /* GmailThreadingRepair.swift */; };
@@ -1678,6 +1679,7 @@
 		A8CD79937E1387EFFD6A3DED /* ScoutLandingStoreRevertTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A39BCFC29FBFBE5B057D3787 /* ScoutLandingStoreRevertTests.swift */; };
 		A8CF7E52D9AF89F0A37D3446 /* WatchedSourceProposal.swift in Sources */ = {isa = PBXBuildFile; fileRef = A51B0C4EC24DE6663FB70526 /* WatchedSourceProposal.swift */; };
 		A8D4AD7E565F558DCF21C982 /* ContradictedCancellation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 184AE514EE472DCA65CAC470 /* ContradictedCancellation.swift */; };
+		A914DCF9C44B14D80B7D3C32 /* TheAppHandsNoSurfaceAClockTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5192AFA3542839A66468CA0 /* TheAppHandsNoSurfaceAClockTests.swift */; };
 		A9259EA3ADCF07FD9EA75575 /* DraftGreeting.swift in Sources */ = {isa = PBXBuildFile; fileRef = A28F2F8FF0203601180E3348 /* DraftGreeting.swift */; };
 		A937ABD19C5CE5A16F328E67 /* SourceConfirmation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6CFEF50447A6BA2CC02A5D25 /* SourceConfirmation.swift */; };
 		A94E926C164498E82612A6AF /* Typography.swift in Sources */ = {isa = PBXBuildFile; fileRef = F26C128217DB0FB52D89CDBF /* Typography.swift */; };
@@ -4112,6 +4114,7 @@
 		C4CA895C1F3174203BEE698A /* WindowCensus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowCensus.swift; sourceTree = "<group>"; };
 		C4D255A7F75E00686929B4F8 /* RowFactsExtractionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RowFactsExtractionTests.swift; sourceTree = "<group>"; };
 		C51304F013900E6BF8918D5C /* ManualPrepMutationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManualPrepMutationTests.swift; sourceTree = "<group>"; };
+		C5192AFA3542839A66468CA0 /* TheAppHandsNoSurfaceAClockTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TheAppHandsNoSurfaceAClockTests.swift; sourceTree = "<group>"; };
 		C51E45D444B437620D40DC7B /* ReplyClassifyContractTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReplyClassifyContractTests.swift; sourceTree = "<group>"; };
 		C58B3F1833C2985EC6EE961F /* ExperimentReportView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExperimentReportView.swift; sourceTree = "<group>"; };
 		C5A393A28DB57436856F3A59 /* DayStringParseEquivalenceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DayStringParseEquivalenceTests.swift; sourceTree = "<group>"; };
@@ -4390,6 +4393,7 @@
 		EA488E1F483E6EA25267C9D7 /* ScoutRowsReadThePassesPlacementTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScoutRowsReadThePassesPlacementTests.swift; sourceTree = "<group>"; };
 		EA5E649786BA7B0C931268D4 /* MergedRoomNameKeepsTheScoutsKeyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MergedRoomNameKeepsTheScoutsKeyTests.swift; sourceTree = "<group>"; };
 		EAAEC789391135A974DC258F /* TicketTailorExtractor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TicketTailorExtractor.swift; sourceTree = "<group>"; };
+		EAB2589832A1142EDE208A5D /* HostedPassCounting.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HostedPassCounting.swift; sourceTree = "<group>"; };
 		EAFD4BD1E7F5C8C96D2F84B3 /* ListingCreditCorpusTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ListingCreditCorpusTests.swift; sourceTree = "<group>"; };
 		EB3A67BA0DD14CC45DB4C707 /* RunProgressViewStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunProgressViewStateTests.swift; sourceTree = "<group>"; };
 		EB5A2F5574E4996590E04C43 /* SourceFetcherPaginationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourceFetcherPaginationTests.swift; sourceTree = "<group>"; };
@@ -4651,6 +4655,7 @@
 				D6E025922B3BF60AE12E23BB /* GenreDropdownTests.swift */,
 				E1E6B1FBDCDF232EA24351C3 /* GreetingOnScreenTests.swift */,
 				5F15F5EC4A5D72015559C67E /* HandedRowsStayLiveTests.swift */,
+				EAB2589832A1142EDE208A5D /* HostedPassCounting.swift */,
 				620E7077BDED3FFECBA480AA /* HostedWindowsAreReleasedTests.swift */,
 				36246C1C57DD077B77DE261E /* InquirySendProblemsOnScreenTests.swift */,
 				E79BF4216C43C95E6DD7DDCB /* LiveClockProbe.swift */,
@@ -5930,6 +5935,7 @@
 				45627AD994F92590ACE3A053 /* TestsNeverTouchTheRealStoreTests.swift */,
 				94862782A45D447258573F7F /* TestWindowsAreNotReleasedOnCloseGuardTests.swift */,
 				47F020A9B04BAAC18175B38A /* TheAppChecksItsOwnCardsTests.swift */,
+				C5192AFA3542839A66468CA0 /* TheAppHandsNoSurfaceAClockTests.swift */,
 				84B7054F8DD240778478BB82 /* TheAppReportsItsOwnFreezesTests.swift */,
 				61BE5C1A1E9E7F28A22EE69E /* TheArchivePruneDecodesOnlyWhatItRemovesTests.swift */,
 				87673B91FD2858EF5A66A0D1 /* TheDivergenceLogIsCompactedTests.swift */,
@@ -7382,6 +7388,7 @@
 				5C7697D549EE0B37D154FF0D /* GmailFixture.swift in Sources */,
 				3F65EC436EE0C3EF1A5325CA /* GreetingOnScreenTests.swift in Sources */,
 				E7EDB5CE0AF940A29BCC2FB2 /* HandedRowsStayLiveTests.swift in Sources */,
+				86C56A7731BC015435D1FD99 /* HostedPassCounting.swift in Sources */,
 				D5C30C2147C8BDEE4B8BDB84 /* HostedWindowsAreReleasedTests.swift in Sources */,
 				FEF84482FECC3BB5305357B5 /* IdentifierIndex.swift in Sources */,
 				5BF992E1E911CA67F5677279 /* InquirySendProblemsOnScreenTests.swift in Sources */,
@@ -9181,6 +9188,7 @@
 				757697C857715EC865D0EE8F /* TestsCannotReachSharedStateTests.swift in Sources */,
 				5A37DA62AC233D7E0B2C34EB /* TestsNeverTouchTheRealStoreTests.swift in Sources */,
 				33725B65203DA56E5F5C6A78 /* TheAppChecksItsOwnCardsTests.swift in Sources */,
+				A914DCF9C44B14D80B7D3C32 /* TheAppHandsNoSurfaceAClockTests.swift in Sources */,
 				A301FEC3D3D116DFE7554174 /* TheAppReportsItsOwnFreezesTests.swift in Sources */,
 				330CFF9A7C765B18AF72DD95 /* TheArchivePruneDecodesOnlyWhatItRemovesTests.swift in Sources */,
 				81A5D2E4BBD512D20D11FD0D /* TheDivergenceLogIsCompactedTests.swift in Sources */,

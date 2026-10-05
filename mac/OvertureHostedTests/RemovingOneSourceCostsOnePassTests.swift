@@ -56,16 +56,29 @@ struct RemovingOneSourceCostsOnePassTests {
     // screen observed. That is a rig measuring a path the product never takes: every mutation here goes
     // through the environment's feedback, and the undo banner it raises is one of the things that can
     // rebuild this sheet (L472).
-    private struct Harness: View {
+    private struct Harness: MountedHarness {
         let container: ModelContainer
         let prospects: [Prospect]
         let feedback: ActionFeedback
+        // #4516: frozen, so the memo's two second window cannot be what a count here measures.
+        var clock = HostedPassCounting.frozenClock()
+        var mounted = true
 
         var body: some View {
-            SourcesView(prospects: prospects)
-                .modelContainer(container)
-                .environment(feedback)
+            if mounted {
+                SourcesView(prospects: prospects, clock: clock)
+                    .modelContainer(container)
+                    .environment(feedback)
+            }
         }
+    }
+
+    // #4516: takes the sheet out of the graph before closing its window, so it cannot be evaluated during
+    // a later test (`HostedPassCounting.unmountAndClose` says why).
+    private func tearDown<H: MountedHarness>(_ window: NSWindow, _ hosting: NSHostingView<H>) {
+        var empty = hosting.rootView
+        empty.mounted = false
+        HostedPassCounting.unmountAndClose(hosting, replacingWith: empty, in: window)
     }
 
     // #4247: the REAL type is hosted, never wrapped in `AnyView`. The first version of this suite wrapped
@@ -141,7 +154,7 @@ struct RemovingOneSourceCostsOnePassTests {
 
         let feedback = ActionFeedback()
         let (window, hosting) = host(Harness(container: c, prospects: [], feedback: feedback))
-        defer { window.close() }
+        defer { tearDown(window, hosting) }
 
         // Let the sheet appear and settle first. What is being measured is the cost of a CHANGE, not the
         // cost of appearing, and folding the two would make a cheap removal on a slow first draw read
@@ -193,17 +206,24 @@ struct RemovingOneSourceCostsOnePassTests {
     // private `@State` flag that a hosted test cannot raise, and a window that is never ordered front
     // presents no sheet at all (#3480). What the parent reproduces is the part that matters to a count:
     // every query that re-fetches after a save, and a store read handed down anew each time.
-    private struct AppShapedHarness: View {
+    private struct AppShapedHarness: MountedHarness {
         let container: ModelContainer
         let feedback: ActionFeedback
         let roster: ClientRoster
+        // #4516: frozen, so the memo's two second window cannot be what a count here measures.
+        var clock = HostedPassCounting.frozenClock()
+        var mounted = true
         var body: some View {
-            Parent()
-                .modelContainer(container)
-                .environment(feedback)
-                .environment(roster)
+            if mounted {
+                Parent(clock: clock)
+                    .modelContainer(container)
+                    .environment(feedback)
+                    .environment(roster)
+            }
         }
         struct Parent: View {
+            let clock: () -> Date
+            init(clock: @escaping () -> Date) { self.clock = clock }
             @Query(filter: PrepQueueBuilder.needsPrepPredicate) private var toPrepByStatus: [Prospect]
             @Query private var allProspects: [Prospect]
             @Query private var allInquiries: [Inquiry]
@@ -214,7 +234,7 @@ struct RemovingOneSourceCostsOnePassTests {
                 // Read, so each query is live and re-fetches after a save as `RootView`'s do.
                 let _ = (toPrepByStatus.count, allInquiries.count, watchedSources.count,
                          excludedTownRows.count, allowedSeedTownRows.count)
-                SourcesView(prospects: allProspects)
+                SourcesView(prospects: allProspects, clock: clock)
             }
         }
     }
@@ -261,7 +281,7 @@ struct RemovingOneSourceCostsOnePassTests {
         let roster: ClientRoster
         let file: RosterFile
         let window: NSWindow
-        let hosting: NSView
+        let hosting: NSHostingView<AppShapedHarness>
     }
 
     // Seeds, hosts and SETTLES, and reports what appearing cost, so every test below measures a change
@@ -293,7 +313,7 @@ struct RemovingOneSourceCostsOnePassTests {
     // identical answer. The key now names the window's set of ids, which is the same on both passes.
     @Test func openingTheSheetWithClientsDerivesOnce() async throws {
         let (sheet, appearing) = try await appShaped()
-        defer { sheet.window.close() }
+        defer { tearDown(sheet.window, sheet.hosting) }
         #expect(!sheet.roster.window(for: sheet.sources).clientSourceIds.isEmpty, Comment(rawValue:
             "no watched source is a client's, so the client window this test is about is empty and "
             + "the count below measures a sheet without it (L159)"))
@@ -311,9 +331,19 @@ struct RemovingOneSourceCostsOnePassTests {
     // `Set` printed with `String(describing:)` lists its members in an order that is not a property of
     // its contents, so the re-built window could print differently and move the key. No store write here,
     // deliberately, so SwiftData's own re-fetch (see the removal test below) cannot be what derives.
+    //
+    // #4516: AND THE RELOAD ARRIVES AFTER THE MEMO'S CLOCK WINDOW, on every run. This failed on GitHub's
+    // runner in 10 of 40 failed runs on 2026-10-04, `derivations 1` with `clients | clientWindow,
+    // coverageGaps`, and the cause was not the key: the reload's evaluations were the first after the
+    // settle, and on a slow runner they landed more than two seconds after the last build, so the memo's
+    // clock window alone made the answer stale (`HostedPassCounting.waitPastTheRenderMemoWindow`). The
+    // passing runs took 2.27 to 2.76 s and the failing one 6.90 s. So the sheet is handed a frozen clock and
+    // the test waits past the window in real time first, which makes every run the slow one: a sheet that
+    // read the wall clock instead of the one it was handed derives here every time, not one run in four.
     @Test func aRosterReloadThatChangesNoVerdictDerivesNothing() async throws {
         let (sheet, _) = try await appShaped()
-        defer { sheet.window.close() }
+        defer { tearDown(sheet.window, sheet.hosting) }
+        await HostedPassCounting.waitPastTheRenderMemoWindow(since: Date())
         let before = QueueRenderCounter.derivationCount(for: QueueRenderCounter.sourcesSurface)
         let rendersBefore = QueueRenderCounter.renderCount(for: QueueRenderCounter.sourcesSurface)
         let reasonsBefore = QueueRenderCounter.reasons(for: QueueRenderCounter.sourcesSurface).count
@@ -343,7 +373,7 @@ struct RemovingOneSourceCostsOnePassTests {
     // row, which re-derives on its own and would pass this test whatever the key said.
     @Test func aTownRenamedInPlaceStillReDerives() async throws {
         let (sheet, _) = try await appShaped()
-        defer { sheet.window.close() }
+        defer { tearDown(sheet.window, sheet.hosting) }
         let ctx = sheet.container.mainContext
         let town = ExcludedTown(town: "yonkers")
         ctx.insert(town)
@@ -397,7 +427,7 @@ struct RemovingOneSourceCostsOnePassTests {
 
     @Test func removingOneSourceUnderTheAppsInputsDerivesOncePerThingThatMoved() async throws {
         let (sheet, _) = try await appShaped()
-        defer { sheet.window.close() }
+        defer { tearDown(sheet.window, sheet.hosting) }
         let before = QueueRenderCounter.derivationCount(for: QueueRenderCounter.sourcesSurface)
         let reasonsBefore = QueueRenderCounter.reasons(for: QueueRenderCounter.sourcesSurface).count
 
@@ -444,7 +474,7 @@ struct RemovingOneSourceCostsOnePassTests {
 
         let feedback = ActionFeedback()
         let (window, hosting) = host(Harness(container: c, prospects: [], feedback: feedback))
-        defer { window.close() }
+        defer { tearDown(window, hosting) }
 
         _ = await waitUntilQuiet(in: hosting)
         let derivationsBefore = QueueRenderCounter.derivationCount(for: QueueRenderCounter.sourcesSurface)
@@ -475,4 +505,50 @@ struct RemovingOneSourceCostsOnePassTests {
             "raising a banner with no data change derived the whole Sources sheet \(derivations) "
             + "time(s) over \(evaluations) body evaluation(s) (#4112, #4247)"))
     }
+
+    // #4516: a sheet taken down with `tearDown` is never evaluated again, which is what keeps an earlier
+    // test's sheet out of a later test's count.
+    //
+    // THE POSITIVE CONTROL FIRST, on the same sheet (L159): with its window only CLOSED, a save into its
+    // store and a layout of its hosting view still evaluate it. That is the leftover CI run 37231800659
+    // carried into the roster test, and without it a zero below could mean only that this way of waking
+    // a closed sheet wakes nothing. Every save goes through the main context, which is the one the sheet's
+    // queries read.
+    @Test func aSheetTornDownIsNeverEvaluatedAgain() async throws {
+        let c = try container()
+        let ctx = c.mainContext
+        _ = seed(ctx)
+        let (window, hosting) = host(Harness(container: c, prospects: [], feedback: ActionFeedback()))
+        _ = await waitUntilQuiet(in: hosting)
+
+        window.close()
+        let closedBefore = QueueRenderCounter.renderCount(for: QueueRenderCounter.sourcesSurface)
+        ctx.insert(WatchedSource(sourceId: "src-closed", orgName: "Closed Window Guild",
+                                 listingsURL: "https://closed.example/events", kind: .html))
+        try ctx.save()
+        _ = await waitUntilQuiet(in: hosting)
+        let evaluatedWhileClosed = QueueRenderCounter.renderCount(for: QueueRenderCounter.sourcesSurface)
+            - closedBefore
+        #expect(evaluatedWhileClosed >= 1, Comment(rawValue:
+            "a sheet whose window was only closed was evaluated \(evaluatedWhileClosed) times after a save "
+            + "into its store, so this fixture cannot wake a leftover sheet and the zero below proves nothing"))
+
+        tearDown(window, hosting)
+        let tornDownBefore = QueueRenderCounter.renderCount(for: QueueRenderCounter.sourcesSurface)
+        ctx.insert(WatchedSource(sourceId: "src-torn-down", orgName: "Torn Down Guild",
+                                 listingsURL: "https://torn.example/events", kind: .html))
+        try ctx.save()
+        _ = await waitUntilQuiet(in: hosting)
+        let evaluatedAfterTearDown = QueueRenderCounter.renderCount(for: QueueRenderCounter.sourcesSurface)
+            - tornDownBefore
+        #expect(evaluatedAfterTearDown == 0, Comment(rawValue:
+            "a sheet taken down with tearDown was evaluated \(evaluatedAfterTearDown) times after a save "
+            + "into its store, so it is still in the graph and a later test would be charged for it (#4516)"))
+    }
+}
+
+// #4516: every harness in this suite can be UNMOUNTED. A protocol rather than a flag on each call, so
+// `tearDown` takes any of them and a harness added later cannot be torn down without one.
+private protocol MountedHarness: View {
+    var mounted: Bool { get set }
 }

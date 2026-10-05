@@ -183,6 +183,13 @@ struct QueueView: View {
     // seam for timing the body alone (Phase 0c.8), and `QueueRenderDataProviderWiringTests` keeps it out
     // of the app (L718). Defaulted to the memo one so every harness that names none runs the real path.
     var renderDataProvider: any QueueRenderDataProvider = QueueMemoRenderData()
+    // #4516: the clock a pass is judged by, read ONCE per pass in `makeRenderData`, which is the instant
+    // the stages, the run markers and the render memo's two second window all use. The app passes nothing
+    // and gets the wall clock, so nothing it does changes. A hosted test passes a FROZEN clock, so a
+    // derivation count it asserts is about the memo's key rather than the runner's speed: on GitHub's
+    // runner the next evaluation could land past the window and derive again with nothing changed
+    // (`OneChangeDerivesTheQueueOnceTests`). `TheAppHandsNoSurfaceAClockTests` holds the app to the default.
+    var clock: () -> Date = Date.init
     @State private var focusedKeys: [String]?
     // #1140: which STAGE the focused view is showing, when it was entered by tapping a stage pill (nil
     // for the #308 away-alert leads path). Set, the focused list re-derives its membership and heading
@@ -466,7 +473,7 @@ struct QueueView: View {
             freezeWatch?.recordPassCost(
                 seconds: Double(DispatchTime.now().uptimeNanoseconds - passStarted) / 1_000_000_000)
         }
-        let now = Date()
+        let now = clock()
         // Asked ONCE: five of the inputs below are decided from it, and it reads marker files.
         // #3646: `slotStatus` rather than `runInFlight`, because the surfaces need each SLOT as well as
         // the single composed answer, and this is the one place in a pass that may go to disk for them.
