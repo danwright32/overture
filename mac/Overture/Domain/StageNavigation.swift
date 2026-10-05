@@ -82,12 +82,35 @@ enum StageNavigation {
         var count: Int { entries.count }
     }
 
+    // #4357 slice E1: ONE placement, over any `ProspectFacts` and the contacts it is handed. The two entry
+    // points below differ only in where a row's contacts come from: a live model hands its own `recipients`,
+    // uncounted, exactly as `matches` read them before the port (so no `WorkTally.recipientReaches` pin moves),
+    // and any other conformer hands `factContacts`. Overload resolution takes the `[Prospect]` one for the
+    // models the pass holds today.
     static func placements(in prospects: [Prospect], context: StageContext) -> Placement {
+        placements(of: prospects, contacts: { $0.recipients }, context: context)
+    }
+
+    static func placements<Row: ProspectFacts>(in rows: [Row], context: StageContext) -> Placement {
+        placements(of: rows, contacts: { $0.factContacts }, context: context)
+    }
+
+    private static func placements<Row: ProspectFacts, C: ContactFacts>(
+        of rows: [Row], contacts: (Row) -> [C], context: StageContext) -> Placement {
         // #3738: counted here, at the one place a placement is built, so "once per pass" is a number a
         // test can assert rather than a claim in a comment (L63, L27).
         QueueRenderPass.WorkTally.recordStagePlacement()
-        return Placement(entries: prospects.map { p in
-            (p.naturalKey, countedFocuses.filter { matches($0, p, context: context) })
+        return Placement(entries: rows.map { p in
+            // Read only when a focus asks, and then once: a row the geography hides, or one no send focus
+            // reaches, never has its contacts read, as before the port.
+            var held: [C]?
+            func theirs() -> [C] {
+                if let held { return held }
+                let read = contacts(p)
+                held = read
+                return read
+            }
+            return (p.naturalKey, countedFocuses.filter { matches($0, p, contacts: theirs, context: context) })
         })
     }
 
@@ -260,7 +283,7 @@ enum StageNavigation {
     // An undated show stays. "Date to be confirmed" is ordinary on a season page, and nothing has
     // measured such a show as far out, so dropping it would lose a real lead on a fact nobody
     // established. That is the same call #861 made at the past edge.
-    private static func isWithinLeadTime(_ p: Prospect, context: StageContext) -> Bool {
+    private static func isWithinLeadTime(_ p: some ProspectFacts, context: StageContext) -> Bool {
         // #2365: a past client's show gets the longer window, because a returning client books a season a
         // year ahead and the scout already READS their calendar that far. Without this arm Overture
         // fetched a client's next-season date, stored it, and then declined to offer it for triage for
@@ -281,7 +304,11 @@ enum StageNavigation {
                                                   today: context.today)
     }
 
-    private static func matches(_ focus: StageFocus, _ p: Prospect, context: StageContext) -> Bool {
+    // #4357 slice E1: generic over the row and its contacts, which the placement hands in and reads at most
+    // once (`contacts`), so every arm below reads facts both conformers carry and asks the one body of each rule.
+    private static func matches<Row: ProspectFacts, C: ContactFacts>(_ focus: StageFocus, _ p: Row,
+                                                                      contacts: () -> [C],
+                                                                      context: StageContext) -> Bool {
         // #1570: the geography gate, asked HERE so every surface inherits it, rather than on the
         // masthead's own path alone. It used to sit only in QueueModel.filter, which the stage list Dan
         // triages never called, so the number and the list beneath it counted different shows. The gate
@@ -309,7 +336,8 @@ enum StageNavigation {
             // out, this call quietly omitted the conflict gate of the time (retired by #3369), so the pill
             // counted a show the Prep run then refused to draft. The (Prospect) -> Bool wrapper
             // exists precisely so a new field cannot be forgotten at one of two call sites.
-            return PrepQueueBuilder.needsPrepEligible(p, today: context.today)
+            // #4357 slice E1: through the one view of any `ProspectFacts` as Prep's facts (PrepQueue.swift).
+            return PrepQueueBuilder.needsPrepEligible(PrepEligibilityView(row: p), today: context.today)
 
         case .review:
             // #2050: a show belongs to Review from the moment it has a draft until every contact on it
@@ -346,26 +374,26 @@ enum StageNavigation {
             // comment above states is now asked out loud. A held contact on a show that is NOT in the
             // send half is not lost: its triage card says so instead (ProspectRowView), through this
             // same predicate, so exactly one surface speaks for it.
-            return p.blockedContactCount > 0 && p.hasEnteredSendHalf
+            return p.blockedContactCount(among: contacts()) > 0 && p.hasEnteredSendHalf(among: contacts())
 
         case .sendErrors:
             return p.sendError != nil
 
         case .sendStuck:
             // #475/#476: claimed .sending and never resolved, so the outcome is genuinely unknown.
-            return p.recipients.contains { $0.isSendStuck(now: context.now) }
+            return contacts().contains { $0.isSendStuck(now: context.now) }
 
         case .sendDegraded:
             // #483: the send went out fine, just with no usable threadId to watch for a reply. These
             // shows are SENT, so they are neither approved nor blocked: before #863 the pill counted
             // them and its tap resolved none of them.
-            return p.recipients.contains { $0.replyTrackingDegraded }
+            return contacts().contains { $0.replyTrackingDegraded }
 
         case .sendThreadingDegraded:
             // #2647: the send went out and its replies are watched normally; what is missing is the id
             // our own next message on that conversation would reference, so a nudge or closing note
             // will read as a separate conversation in every client that is not Gmail.
-            return p.recipients.contains { $0.threadingDegraded }
+            return contacts().contains { $0.threadingDegraded }
 
         case .followUps:
             return false

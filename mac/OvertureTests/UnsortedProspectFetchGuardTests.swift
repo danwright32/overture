@@ -73,10 +73,6 @@ enum UnsortedProspectFetchAudit {
             Counted by the start gate, keyed by natural key in `PrepNightPlan`, and sorted for display by \
             `PrepQueueBuilder.prepSelectionOrder` (#3375) before the sheet draws a row.
             """),
-        Entry(file: "RootView.swift", scope: "ingestScoutExtract", reads: 1, kind: .orderedDownstream,
-              why: historyOrdersItself),
-        Entry(file: "RootView.swift", scope: "offerPendingScoutIngests", reads: 1, kind: .orderedDownstream,
-              why: historyOrdersItself),
         Entry(file: "RootView.swift", scope: "syncOmniFocus", reads: 1, kind: .orderFree, why: """
             Every show earns its own tasks, collapsed per send group inside that show, and completions are \
             found by natural key, which is unique.
@@ -84,8 +80,6 @@ enum UnsortedProspectFetchAudit {
         Entry(file: "RootView.swift", scope: "ingestPrep", reads: 1, kind: .orderFree, why: """
             Read into a set of forbidden terms (`VoiceGuidanceGuard.forbiddenTerms`).
             """),
-        Entry(file: "LeadIntakeModel.swift", scope: "importAll", reads: 1, kind: .orderedDownstream,
-              why: historyOrdersItself),
         Entry(file: "FollowUpsView.swift", scope: "#Preview", reads: 1, kind: .orderFree, why: """
             An Xcode preview over a container it owns; nothing ships from it.
             """),

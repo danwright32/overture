@@ -62,13 +62,7 @@ enum PerformanceStatus: String, Sendable, Equatable, CaseIterable {
     }
 }
 
-extension Recipient {
-    var standing: RecipientStanding {
-        let reachable = (email?.isEmpty == false) || (contactFormURL?.isEmpty == false)
-        return RecipientStanding(sendState: sendState, resolution: resolution, bounced: bounced,
-                                 hasContactPath: reachable)
-    }
-}
+// A contact's `standing` lives on `ContactFacts` (ContactFactsMembers.swift) since #4357 slice D1.
 
 extension PerformanceStatus {
     // #3669: the pitch has ENDED without a shoot, whoever ended it: they said not now, they said no, or
@@ -104,8 +98,19 @@ extension PerformanceStatus {
     //
     // Falls through to the contact-derived status when no ending is recorded, so this is a precedence rather
     // than a replacement and every show still in play reads exactly as it did.
+    //
+    // #4357 slice D1: generic over the facts protocols, with the contacts handed in, so a live model and a
+    // retained row are judged by one body. The contacts are a parameter rather than read off the show because
+    // the two callers want different lists of the same people: the model's own `performanceStatus` reads its
+    // `recipients` directly, as it always has, while `ProspectFacts.performanceStatus` reads `factContacts`,
+    // which on a model is the counted accessor (`countedRecipients`). The rule only asks whether ANY or ALL
+    // contacts stand a certain way, so the order the two lists come in cannot change the answer.
+    static func of(_ show: some ProspectFacts, contacts: [some ContactFacts]) -> PerformanceStatus {
+        if let recorded = show.showOutcome?.asPerformanceStatus { return recorded }
+        return derive(contacts.map(\.standing), leadBooked: show.outcome == .booked)
+    }
+
     static func of(_ prospect: Prospect) -> PerformanceStatus {
-        if let recorded = prospect.showOutcome?.asPerformanceStatus { return recorded }
-        return derive(prospect.recipients.map(\.standing), leadBooked: prospect.outcome == .booked)
+        of(prospect, contacts: prospect.recipients)
     }
 }

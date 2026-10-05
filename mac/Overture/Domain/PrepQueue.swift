@@ -265,6 +265,24 @@ protocol PrepEligibilityFacts {
 
 extension Prospect: PrepEligibilityFacts {}
 
+// #4357 slice E1: any `ProspectFacts` seen as the five facts the Prep rule reads, so the stage predicate hands
+// a live model and a retained row to the one rule (`PrepQueueBuilder.needsPrepEligible`).
+//
+// A VIEW and not a refinement of `ProspectFacts`, and that is load bearing. Making `ProspectFacts` refine this
+// protocol turned `status` into a requirement of it, so `Prospect.status`, whose getter reads the protocol's
+// body through `Prospect.asProspectFacts`, dispatched back to its own witness and recursed until the stack ran
+// out (measured: 261 test host crashes in one run, `Thread stack size exceeded`). Here each fact is read through
+// the protocol extension's one body, statically, and no model member is a witness for anything new.
+struct PrepEligibilityView<Row: ProspectFacts>: PrepEligibilityFacts {
+    let row: Row
+    var status: ReviewStatus { row.status }
+    var hasDraft: Bool { row.hasDraft }
+    var reprepDraftRequested: Bool { row.reprepDraftRequested }
+    var reprepContactsRequested: Bool { row.reprepContactsRequested }
+    var performanceDate: String? { row.performanceDate }
+    var runEndDate: String? { row.runEndDate }
+}
+
 // #1666: what the next Prep run will do with ONE show, as one answer. `needsPrep` says whether it is prep
 // work at all, and `prepMode` downgrades a show whose contact a reachability probe already found to writing
 // the draft alone. Anything telling Dan what happens to a show next asks this rather than deriving it again.

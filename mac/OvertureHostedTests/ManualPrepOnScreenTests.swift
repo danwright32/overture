@@ -30,26 +30,26 @@ struct ManualPrepOnScreenTests {
     }
 
     @Test func aKeptShowWithNoDraftOffersIt() throws {
-        let view = ProspectRowView(item: item(), today: "2026-08-03", onKeep: {}, onDismiss: { _ in })
+        let view = ProspectRowView(item: item(), today: "2026-08-03", now: Date(), onKeep: {}, onDismiss: { _ in })
         #expect(try texts(view).contains("Prep manually"))
     }
 
     @Test func anUntriagedShowDoesNotOfferIt() throws {
-        let view = ProspectRowView(item: item(status: .new), today: "2026-08-03",
+        let view = ProspectRowView(item: item(status: .new), today: "2026-08-03", now: Date(),
                                    onKeep: {}, onDismiss: { _ in })
         #expect(try !texts(view).contains("Prep manually"))
     }
 
     @Test func aShowThatAlreadyHasAnEmailDoesNotOfferIt() throws {
         let view = ProspectRowView(item: item(status: .drafted, draftBody: "Hi Olga."),
-                                   today: "2026-08-03", onKeep: {}, onDismiss: { _ in })
+                                   today: "2026-08-03", now: Date(), onKeep: {}, onDismiss: { _ in })
         #expect(try !texts(view).contains("Prep manually"))
     }
 
     // Blocked, not hidden: the control stays on screen so the reason can be read, and "I can shoot this
     // anyway" is right beside it.
     @Test func aShowOnANightHeCannotWorkStillDrawsItBlocked() throws {
-        let view = ProspectRowView(item: item(conflicted: true), today: "2026-08-03",
+        let view = ProspectRowView(item: item(conflicted: true), today: "2026-08-03", now: Date(),
                                    onKeep: {}, onDismiss: { _ in })
         #expect(try texts(view).contains("Prep manually"))
     }
@@ -156,7 +156,7 @@ struct ManualPrepOnScreenTests {
     @Test func offeringTheControlLooksNothingUpUntilTheEditorIsOpened() throws {
         final class Counter: @unchecked Sendable { var calls = 0 }
         let counter = Counter()
-        let view = ProspectRowView(item: item(), today: "2026-08-03", onKeep: {}, onDismiss: { _ in },
+        let view = ProspectRowView(item: item(), today: "2026-08-03", now: Date(), onKeep: {}, onDismiss: { _ in },
                                    manualPrepPrefill: {
                                        counter.calls += 1
                                        return .init(filled: nil, suggestions: [], emptyReason: .nothingFound)

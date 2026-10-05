@@ -21,7 +21,13 @@ import SwiftData
 
 /// One show's facts: every stored `Prospect` property a queue term may read, its contacts in their one
 /// canonical order, and the keys every cross-row term folds from it, worked out once.
-protocol ProspectFacts {
+///
+/// `SendableMetatype` (#4357 slice D2): a generic term over these protocols hands `Row.init` and friends to
+/// closures, which captures the conformer's metatype; without this the compiler warns on every such site
+/// (`capture of non-Sendable type '(some ProspectFacts).Type'`). Every conformer is a nonisolated type, so
+/// its metatype is already sendable and the requirement costs nothing. `ContactFacts` and
+/// `QueueScopeFacts` carry it for the same reason.
+protocol ProspectFacts: SendableMetatype {
     associatedtype Contact: ContactFacts
 
     /// The row's permanent identity. Every retained index is keyed by it, never by `naturalKey` (merges
@@ -165,7 +171,7 @@ protocol ProspectFacts {
 }
 
 /// One contact's facts: every stored `Recipient` property a queue term may read.
-protocol ContactFacts {
+protocol ContactFacts: ReplyArrivalFacts, SendableMetatype {
     var persistentModelID: PersistentIdentifier { get }
 
     var attachDisplacedEmail: String? { get }

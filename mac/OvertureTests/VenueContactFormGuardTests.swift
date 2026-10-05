@@ -120,7 +120,7 @@ struct VenueContactFormGuardTests {
         let p = show(ctx, venue: "Carnegie Hall")
         p.setRecipients([formContact("https://www.carnegiehall.org/contact")])
 
-        #expect(QueueItem(p).displayedContactForms.isEmpty)
+        #expect(QueueItem(p).displayedContactForms(now: Date()).isEmpty)
     }
 
     @Test func theCardStillOffersTheActsForm() throws {
@@ -128,7 +128,7 @@ struct VenueContactFormGuardTests {
         let p = show(ctx, venue: "The Cutting Room")
         p.setRecipients([formContact("https://marcribler.com/contact")])
 
-        #expect(QueueItem(p).displayedContactForms.map(\.absoluteString)
+        #expect(QueueItem(p).displayedContactForms(now: Date()).map(\.absoluteString)
                 == ["https://marcribler.com/contact"])
     }
 

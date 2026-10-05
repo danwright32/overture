@@ -75,7 +75,8 @@ enum ClientHorizon {
     // Asked here rather than in `ClientWindow` because this file is the declared authority on "is this a
     // known client", and a second home for that question is how the source side and the show side would
     // drift into two answers.
-    static func isPastClientShow(_ p: Prospect, clientSourceIds: Set<String>) -> Bool {
+    // #4357 slice E1: over any `ProspectFacts`, reading three stored facts both conformers carry.
+    static func isPastClientShow(_ p: some ProspectFacts, clientSourceIds: Set<String>) -> Bool {
         if p.priorRelationship == "booked" { return true }
         if let matched = p.matchedClientName, !matched.isEmpty { return true }
         return p.sourceIds.contains { clientSourceIds.contains($0) }

@@ -58,7 +58,8 @@ struct ScoutLandingCountersTests {
 
     // Five rows. The first batch question folds all five for the first time and builds the tables from them;
     // the second re-judges nothing; a row joining is counted as a join and re-judged alone; a title written in
-    // place is counted as a changed fold and re-judged with the joined row, which is still an unsaved insert.
+    // place is counted as a changed fold and re-judged, while the joined row, still an unsaved insert, is not
+    // marked again: it is watched, and nothing has written it since (#4482).
     // Every count below is exact.
     @Test func eachCounterMovesAtItsOwnSiteByExactlyItsOwnAmount() throws {
         let ctx = try context()
@@ -89,7 +90,10 @@ struct ScoutLandingCountersTests {
         rows[0].groupName = "Row 0: Encore"
         _ = try landing.ambiguousURLs(adding: [])
         c = landing.counters
-        #expect(c.foldsChanged == 1 && c.tableBuilds == 1 && c.tableRowsRejudged == 3 && c.foldValidations >= 1,
+        // #4482: the joined row, still an unsaved insert, is watched and was not written since it was marked, so
+        // it is not marked again and only the rewritten row is judged again (before #4460 it was rebuilt on every
+        // read until its source saved; under #4460 alone it was checked and found unchanged).
+        #expect(c.foldsChanged == 1 && c.tableBuilds == 1 && c.tableRowsRejudged == 2 && c.foldValidations >= 1,
                 Comment(rawValue: "a title written in place did not count as a changed fold judged again: \(c)"))
 
         let handed = try landing.rows().count
@@ -195,6 +199,7 @@ extension ScoutLandingStore.Counters: CustomStringConvertible {
     var description: String {
         "table builds \(tableBuilds), rows re-judged \(tableRowsRejudged), first folds \(firstFolds), "
             + "folds changed \(foldsChanged), rows joined \(rowsJoined), fold validations \(foldValidations), "
-            + "rows read \(rowsRead), rows handed out \(rowsHandedOut), rows walked \(rowsWalked)"
+            + "rows read \(rowsRead), rows handed out \(rowsHandedOut), rows walked \(rowsWalked), "
+            + "rows looked up \(rowsLookedUp)"
     }
 }

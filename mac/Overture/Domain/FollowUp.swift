@@ -148,7 +148,9 @@ enum FollowUp {
     // takes an optional reason, so a dismissal can leave no recorded ending, and such a row passes
     // `ReachedOutQueue.isInPlay`'s `showOutcome == nil` guard. The dismissal is the decision; the
     // outcome is only what it was labelled.
-    static func isAwaitingNudge(_ r: Recipient, in p: Prospect, now: Date) -> Bool {
+    // #4357 slice D2: generic over the facts protocols, so a live model and a retained row are asked by one
+    // body. Every read here is the row's own or the contact's own, so no `Show` is needed.
+    static func isAwaitingNudge<Row: ProspectFacts>(_ r: Row.Contact, in p: Row, now: Date) -> Bool {
         guard p.status != .dismissed else { return false }
         guard r.isAwaitingFollowUp, !r.isOutreachStoodDown else { return false }
         guard !hasPerformed(p, now: now) else { return false }
@@ -157,7 +159,7 @@ enum FollowUp {
 
     // Has the whole run been and gone, as of `now`? Its own function so the gate above and any later
     // reader ask it one way.
-    static func hasPerformed(_ p: Prospect, now: Date) -> Bool {
+    static func hasPerformed(_ p: some ProspectFacts, now: Date) -> Bool {
         EasternDate.runHasPassed(
             lastNight: EasternDate.runLastNight(runEndDate: p.runEndDate,
                                                 performanceDate: p.performanceDate),
@@ -184,23 +186,37 @@ enum FollowUp {
     struct DueRecipient { let prospect: Prospect; let recipient: Recipient }
 
     static func dueRecipients(from prospects: [Prospect], now: Date, config: FollowUpConfig = .init()) -> [DueRecipient] {
-        var due: [DueRecipient] = []
-        for p in prospects {
-            // A hand-resolved or booked show stops all its follow-ups (matches the lead-level auto-stop).
-            if p.outcomeSourceRaw == OutcomeSource.manual.rawValue || p.outcome == .booked { continue }
+        dueRecipients(from: prospects, contacts: { $0.recipients }, now: now, config: config)
+            .map { DueRecipient(prospect: $0.prospect, recipient: $0.recipient) }
+    }
+
+    // A hand-resolved or booked show stops all its follow-ups (matches the lead-level auto-stop). One body,
+    // read by the list below and by `DueWork.nextChange`, which asks when the next of them falls due.
+    static func nudgesStopped(on p: some ProspectFacts) -> Bool {
+        p.outcomeSourceRaw == OutcomeSource.manual.rawValue || p.outcome == .booked
+    }
+
+    // #4357 slice E2: the same over any rows, with the contacts handed in, so the model entry point above walks
+    // the recipients it always did and a retained row answers by the one body.
+    static func dueRecipients<Row: ProspectFacts>(
+        from rows: [Row], contacts: (Row) -> [Row.Contact], now: Date, config: FollowUpConfig = .init()
+    ) -> [(prospect: Row, recipient: Row.Contact)] {
+        var due: [(prospect: Row, recipient: Row.Contact)] = []
+        for p in rows {
+            if nudgesStopped(on: p) { continue }
             // #2033: one row per EMAIL. Contacts who received one shared email are one conversation to
             // chase, and two rows would be two buttons doing the same thing to the same thread.
             //
             // #2126: due FIRST, collapse after. ANDed with the old lowest-id test this dropped the whole
             // conversation whenever the alphabetically first contact was the one not due, so a colleague's
             // overdue nudge vanished behind a contact who had already declined.
-            let dueHere = p.recipients.filter { r in
+            let dueHere = contacts(p).filter { r in
                 isDue(eligible: isAwaitingNudge(r, in: p, now: now), sentAt: r.sentAt,
                       lastFollowUpAt: r.lastFollowUpAt, followUpCount: r.followUpCount,
                       remindedAt: r.nudgeRemindedAt, now: now, config: config)
             }
             due.append(contentsOf: SendGroup.oneRowPerGroup(dueHere) { $0 }
-                .map { DueRecipient(prospect: p, recipient: $0) })
+                .map { (prospect: p, recipient: $0) })
         }
         return due
     }

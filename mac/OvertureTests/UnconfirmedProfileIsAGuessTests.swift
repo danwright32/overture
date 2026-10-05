@@ -241,7 +241,7 @@ struct UnconfirmedProfileIsAGuessTests {
         ingest([profile("Rowan Ashfield", guessedHandle, nameMatchOnly: true)], into: p, ctx)
 
         let item = QueueItem(p)
-        #expect(item.displayedContactForms.map(\.absoluteString) == [guessedHandle])
+        #expect(item.displayedContactForms(now: Date()).map(\.absoluteString) == [guessedHandle])
     }
 
     // Said ONCE. On a row showing one link the badge directly above it is already saying it, and a second
@@ -256,9 +256,9 @@ struct UnconfirmedProfileIsAGuessTests {
         p.reachabilityProbedAt = Date()
 
         let item = QueueItem(p)
-        #expect(item.reachabilityBadge() == .noEmailFound)
+        #expect(item.reachabilityBadge(now: Date()) == .noEmailFound)
         #expect(item.reachabilityEmptyReason == .unconfirmedSocialProfile)
-        #expect(item.displayedContactRoutes().map(\.marksUnconfirmed) == [false])
+        #expect(item.displayedContactRoutes(now: Date()).map(\.marksUnconfirmed) == [false])
     }
 
     // Two links and the badge can no longer say WHICH, so each guess carries its own mark. This is the
@@ -273,13 +273,13 @@ struct UnconfirmedProfileIsAGuessTests {
         p.reachabilityProbedAt = Date()
 
         let item = QueueItem(p)
-        let routes = item.displayedContactRoutes()
+        let routes = item.displayedContactRoutes(now: Date())
         #expect(routes.count == 2)
         #expect(routes.first(where: { $0.url.absoluteString == guessedHandle })?.marksUnconfirmed == true)
         #expect(routes.first(where: { $0.url.absoluteString == confirmedHandle })?.marksUnconfirmed == false)
         // The link list the card draws is derived from this one, so the marks and the links can never
         // come from two different readings of the same row (L16).
-        #expect(item.displayedContactForms.count == 2)
+        #expect(item.displayedContactForms(now: Date()).count == 2)
     }
 
     // Two guesses and no confirmed one: the badge speaks for both, so neither line repeats it.
@@ -293,8 +293,8 @@ struct UnconfirmedProfileIsAGuessTests {
         p.reachabilityProbedAt = Date()
 
         let item = QueueItem(p)
-        #expect(item.displayedContactRoutes().count == 2)
-        #expect(item.displayedContactRoutes().allSatisfy { $0.marksUnconfirmed == false })
+        #expect(item.displayedContactRoutes(now: Date()).count == 2)
+        #expect(item.displayedContactRoutes(now: Date()).allSatisfy { $0.marksUnconfirmed == false })
     }
 
     // A row whose badge is NOT carrying the sentence (an older stored answer that predates this, so its
@@ -309,7 +309,7 @@ struct UnconfirmedProfileIsAGuessTests {
         p.reachabilityProbedAt = Date()
 
         let item = QueueItem(p)
-        #expect(item.displayedContactRoutes().map(\.marksUnconfirmed) == [true])
+        #expect(item.displayedContactRoutes(now: Date()).map(\.marksUnconfirmed) == [true])
     }
 
     // And the line's own words say the same thing the badge does, in the length a right-justified meta

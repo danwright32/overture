@@ -38,12 +38,22 @@ enum StalledReplyDraft {
     //
     // Oldest request first, so the one that has been stranded longest is the one Dan meets at the top.
     static func dueRecipients(from prospects: [Prospect], now: Date, runAlive: Bool) -> [DueRecipient] {
-        prospects
+        dueRecipients(from: prospects, contacts: { $0.recipients }, now: now, runAlive: runAlive)
+            .map { DueRecipient(prospect: $0.prospect, recipient: $0.recipient, requestedAt: $0.requestedAt) }
+    }
+
+    // #4357 slice F: generic over the facts protocols, so the pass and the engine ask one body. `contacts`
+    // says which list of each row's contacts is walked; the model entry point above hands in `recipients`,
+    // the uncounted relationship it always read, so no `WorkTally.recipientReaches` pin moves.
+    static func dueRecipients<Row: ProspectFacts>(
+        from rows: [Row], contacts: (Row) -> [Row.Contact], now: Date, runAlive: Bool
+    ) -> [(prospect: Row, recipient: Row.Contact, requestedAt: Date)] {
+        rows
             .flatMap { p in
-                p.recipients
+                contacts(p)
                     .filter { $0.isReplyDraftStalled(now: now, runAlive: runAlive) }
                     .compactMap { r in
-                        r.replyDraftRequestedAt.map { DueRecipient(prospect: p, recipient: r, requestedAt: $0) }
+                        r.replyDraftRequestedAt.map { (prospect: p, recipient: r, requestedAt: $0) }
                     }
             }
             .sorted { $0.requestedAt < $1.requestedAt }

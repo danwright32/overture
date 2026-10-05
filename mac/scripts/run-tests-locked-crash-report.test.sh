@@ -84,6 +84,89 @@ clean="$(crash_restart_report "${CLEAN_RUN}")"
 assert_empty "it says NOTHING when the host did not die" "${clean}"
 
 echo
+# --- #4444: a host crash that names the test in flight is still a host crash, and is retried ---------
+#
+# When the host dies, xcodebuild restarts it and names the test that was running as a failure ("Test
+# crashed with signal trap"), so `run_outcome` counted one named failure and called the run "failed",
+# which is never retried. In September 2026, 30 of the 77 red `swift-tests` jobs were exactly this, all
+# against `HostedWindowsAreReleasedTests.whichPartOfAHostedTestSurvivesIt()`, on 29 branches, and none was
+# retried. The shape below is run 37212772398 (2026-10-04, branch phase3-slice-e1-placements-v2), trimmed:
+# the test starts, the host dies, xcodebuild restarts it, the rest passes, and the `Failing tests:` block
+# names only the test that was in flight.
+HOST_CRASH_RUN="$(cat <<'EOF'
+DIAMONDMARK Test aStoreChangeStillReachesAQueueThatNoLongerQueriesTheStore() started.
+TICKMARK Test aStoreChangeStillReachesAQueueThatNoLongerQueriesTheStore() passed after 0.061 seconds.
+DIAMONDMARK Suite "A hosted test releases its view tree (#3874)" started.
+DIAMONDMARK Test whichPartOfAHostedTestSurvivesIt() started.
+2026-10-04 15:55:29.868427+0000 Overture[62640:152349] [Common] Unable to obtain a task name port right for pid 165: (os/kern) failure (0x5)
+
+Restarting after unexpected exit, crash, or test timeout; summary will include totals from previous launches.
+
+DIAMONDMARK Test aHealthyWatchDrawsNothing() started.
+TICKMARK Test aHealthyWatchDrawsNothing() passed after 0.100 seconds.
+TICKMARK Test run with 270 tests in 51 suites passed after 46.173 seconds.
+
+Failing tests:
+	HostedWindowsAreReleasedTests.whichPartOfAHostedTestSurvivesIt()
+
+** TEST FAILED **
+EOF
+)"
+HOST_CRASH_RUN="${HOST_CRASH_RUN//TICKMARK/${TICKMARK}}"
+HOST_CRASH_RUN="${HOST_CRASH_RUN//DIAMONDMARK/${DIAMONDMARK}}"
+
+assert_equals "the test in flight when the host restarted is read out of the log" \
+  "whichPartOfAHostedTestSurvivesIt()" "$(tests_in_flight_at_restart "${HOST_CRASH_RUN}")"
+assert_equals "a run whose ONLY named failure is the test the host died under is a host crash" \
+  "host-crashed" "$(run_outcome "${HOST_CRASH_RUN}" 65)"
+assert_equals "and a host crash is retried once" \
+  "retry" "$(should_retry "host-crashed" 1 2)"
+assert_equals "but only once: the cap holds" \
+  "" "$(should_retry "host-crashed" 2 2)"
+assert_empty "a host crash with a named test does not ask the pure suite, which needs no host" \
+  "$(should_probe_pure_suite "host-crashed")"
+
+# THE OTHER DIRECTION (L1, L104): a genuine assertion failure must stay "failed" and never be retried,
+# or the retry papers over a real red. Same crash, plus a real failure in a test that FINISHED.
+REAL_PLUS_CRASH="${HOST_CRASH_RUN/	HostedWindowsAreReleasedTests.whichPartOfAHostedTestSurvivesIt()/	HostedWindowsAreReleasedTests.whichPartOfAHostedTestSurvivesIt()
+	WatchGapLineTests.aHealthyWatchDrawsNothing()}"
+assert_equals "a real failure beside the crash keeps the run failed" \
+  "failed" "$(run_outcome "${REAL_PLUS_CRASH}" 65)"
+
+# A named failure with no restart at all is an ordinary failure, whatever its name.
+NO_RESTART="${HOST_CRASH_RUN/Restarting after unexpected exit, crash, or test timeout; summary will include totals from previous launches./}"
+assert_equals "with no restart line a named failure is an ordinary failure" \
+  "failed" "$(run_outcome "${NO_RESTART}" 65)"
+
+# A test that had already FINISHED before the restart was not in flight, so naming it is a real failure.
+FINISHED_FIRST="${HOST_CRASH_RUN/	HostedWindowsAreReleasedTests.whichPartOfAHostedTestSurvivesIt()/	StoreLiveTests.aStoreChangeStillReachesAQueueThatNoLongerQueriesTheStore()}"
+assert_equals "a named test that finished before the restart is a real failure, not the crash" \
+  "failed" "$(run_outcome "${FINISHED_FIRST}" 65)"
+
+# The crashed run with nothing named keeps its old outcome: this change narrows nothing.
+assert_equals "a crash that names nothing is still crashed" \
+  "crashed" "$(run_outcome "Restarting after unexpected exit, crash, or test timeout
+Failing tests:
+** TEST FAILED **" 65)"
+
+# Never a silent pass: a run that passes on its retry says so, naming what the first attempt met.
+retry_note="$(passed_on_retry_report "host-crashed" "HostedWindowsAreReleasedTests.whichPartOfAHostedTestSurvivesIt()")"
+assert_contains "a pass on the retry says it was a retry" "${retry_note}" "PASSED ON A RETRY"
+assert_contains "and names the test the host died under" "${retry_note}" "whichPartOfAHostedTestSurvivesIt"
+assert_empty "a first time pass says nothing about retries" "$(passed_on_retry_report "" "")"
+
+# The red end of the same story says only what it measured (L11): "on both attempts" when BOTH were this
+# crash, and the first attempt's own outcome when it was something else, such as a crash that named nothing.
+assert_contains "a host crash on both attempts says so" \
+  "$(host_crashed_final_report "host-crashed")" "on both attempts"
+both_other="$(host_crashed_final_report "crashed")"
+assert_not_contains "a retry that followed a different first outcome does not claim both attempts" \
+  "${both_other}" "on both attempts"
+assert_contains "and names what the first attempt ended as instead" "${both_other}" "ended crashed"
+assert_not_contains "an unretried host crash claims no retry at all" \
+  "$(host_crashed_final_report "")" "attempt"
+
+echo
 if [[ "${FAILURES}" -eq 0 ]]; then
   echo "run-tests-locked-crash-report.test.sh: all assertions passed"
   exit 0

@@ -38,10 +38,14 @@ protocol ReplySearchSubject: ReplyWatchableRecipient {
     var replyCandidateSearchedAt: Date? { get set }
 }
 
-extension Recipient: ReplySearchSubject {
+// #4357 slice E2: on `ContactFacts` rather than in `Recipient`'s conformance (which they still satisfy), so a
+// retained contact is in or out of the search by the same two facts.
+extension ContactFacts {
     var replySearchAnchor: Date? { formOutreachRecordedAt }
     var replySearchHasConversation: Bool { hasWatchableConversation }
 }
+
+extension Recipient: ReplySearchSubject {}
 
 extension Recipient {
     // #3708: the oldest mail worth reading when DAN asks by hand, which is a different question from
@@ -113,18 +117,33 @@ enum ReplySearchScope {
     }
 
     static func inScope(_ r: any ReplySearchSubject, now: Date) -> Bool {
+        inScope(anchor: r.replySearchAnchor, hasConversation: r.replySearchHasConversation,
+                isOpen: r.replyWatchConversationIsOpen, manualOutcome: r.replyWatchManualOutcome,
+                isBooked: r.replyWatchIsBooked, now: now)
+    }
+
+    // #4357 slice E2: the same question about a contact read as `ContactFacts`, which a retained contact is
+    // and an inquiry is not, answered by the one body below.
+    static func inScope(contact r: some ContactFacts, now: Date) -> Bool {
+        inScope(anchor: r.replySearchAnchor, hasConversation: r.replySearchHasConversation,
+                isOpen: r.replyWatchConversationIsOpen, manualOutcome: r.replyWatchManualOutcome,
+                isBooked: r.replyWatchIsBooked, now: now)
+    }
+
+    private static func inScope(anchor: Date?, hasConversation: Bool, isOpen: Bool, manualOutcome: Bool,
+                                isBooked: Bool, now: Date) -> Bool {
         // Something that can actually be answered. For a form pitch that is a pitch that went out:
         // `formOutreachStartedAt` alone is Dan having opened the form and not yet said whether he sent
         // it, and reading the mailbox for an answer to something that may never have been asked would
         // propose a stranger's mail against a pitch that never happened. For an inquiry it is one
         // carrying the address the match is made on.
-        guard let pitchedAt = r.replySearchAnchor else { return false }
+        guard let pitchedAt = anchor else { return false }
         // The whole point: there is nothing here for the reply watcher to fetch.
-        guard !r.replySearchHasConversation else { return false }
+        guard !hasConversation else { return false }
         // Deliberately the same bound the reply watcher uses (`replyWatchConversationIsOpen`), so a
         // conversation that could still put itself in front of Dan is exactly the one still being read
         // for, and the two cannot disagree about which those are.
-        guard r.replyWatchConversationIsOpen, !r.replyWatchManualOutcome, !r.replyWatchIsBooked else {
+        guard isOpen, !manualOutcome, !isBooked else {
             return false
         }
         return now.timeIntervalSince(pitchedAt) < horizon

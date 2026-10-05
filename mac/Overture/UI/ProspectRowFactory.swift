@@ -18,7 +18,8 @@ enum ProspectRowFactory {
     // The obvious fix, handing in the LIVE list, is the regression #3690 names: `QueueModel.queueScope` is
     // a whole-store filter AND a stable sort, so it would run once per rendered row. A closure is
     // evaluated once per PRESS, which is zero per row and live by construction.
-    static func row(_ item: QueueItem, today: String, prospects: @escaping () -> [Prospect], context: ModelContext, feedback: ActionFeedback,
+    // `now` is the render pass's instant (#4357 slice G1), no default for the reason `gmailConnected` has none.
+    static func row(_ item: QueueItem, today: String, now: Date, prospects: @escaping () -> [Prospect], context: ModelContext, feedback: ActionFeedback,
                     dayOffOffer: DayOffOfferRequest,
                     // #1770: HANDED IN, never sourced here. This used to read GmailAuthManager.shared
                     // .isConnected, which opens and JSON-decodes the token file: one synchronous disk read
@@ -66,6 +67,7 @@ enum ProspectRowFactory {
         let row = ProspectRowView(
             item: item,
             today: today,
+            now: now,
             onKeep: {
                 // #4132: a Keep is silent again. #1819 offered to dismiss the night's other shows here, and
                 // Dan reversed it on 2026-09-21; clearing a night is the date heading's right-click only.
