@@ -1702,7 +1702,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ScoutWarningCopy.swift`
 "Overture couldn't save the link. Try again; if this keeps happening, something's wrong with the local store."
     `Domain/ProposedConversation.swift`
-"Overture couldn't save the shows from that page and couldn't undo every change it had made for them, so some of those changes are still unsaved."
+"Overture couldn't save the shows from that page and couldn't undo every change it had made for them, so some of those changes are still unsaved. Paste the page again: Overture saves what is left first, or tells you which shows it still can't save, before adding anything."
     `Domain/LeadIntake.swift`
 "Overture couldn't save the shows from that page, so none of them were added. Nothing else changed. Paste it again to try once more."
     `Domain/LeadIntake.swift`
