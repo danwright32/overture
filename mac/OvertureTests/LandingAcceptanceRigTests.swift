@@ -829,6 +829,16 @@ struct LandingAcceptanceRigArithmeticTests {
         #expect(h.over100 == 1)
     }
 
+    // A ping posted during the first hold that runs only after the turn queued behind the stamp is charged to
+    // the first hold, the term it was posted in, never to the landing it finished inside.
+    @Test func aPingPostedInTheFirstHoldStaysWithTheFirstHoldWhereverItRuns() {
+        let w = Rig.Window(start: 0, firstYield: Self.t(100), returned: Self.t(500), end: Self.t(1_000))
+        let h = Rig.holds([Rig.Ping(posted: Self.t(50), ran: Self.t(160))], in: w)
+        #expect(h.firstHold == 110)
+        #expect(h.landing == 0)
+        #expect(h.worstTerm == .firstHold)
+    }
+
     @Test func aFirstHoldOverTheBarIsTheWorstAndCountedOnce() {
         let w = Rig.Window(start: 0, firstYield: Self.t(150), returned: Self.t(200), end: Self.t(300))
         let h = Rig.holds([Rig.Ping(posted: Self.t(10), ran: Self.t(150))], in: w)
