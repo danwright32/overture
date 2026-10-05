@@ -33,10 +33,20 @@ enum SendGroup {
     // Takes the protocol rather than `Recipient`, so the prospect reply path and the inquiry reply path are
     // one implementation and cannot answer "who does this reach" differently (L30).
     static func replyAudience(of recipient: any ReplyWatchableRecipient) -> [String] {
-        if let captured = recipient.replyAudience?.filter({ !$0.isEmpty }), !captured.isEmpty {
+        replyAudience(captured: recipient.replyAudience, own: recipient.replyWatchAddress)
+    }
+
+    // #4357 slice G2: the same for a contact read as `ContactFacts`, whose own address is the one
+    // `Recipient.replyWatchAddress` names, answered by the one body below.
+    static func replyAudience(ofContact recipient: some ContactFacts) -> [String] {
+        replyAudience(captured: recipient.replyAudience, own: recipient.email)
+    }
+
+    private static func replyAudience(captured audience: [String]?, own: String?) -> [String] {
+        if let captured = audience?.filter({ !$0.isEmpty }), !captured.isEmpty {
             return captured
         }
-        guard let own = recipient.replyWatchAddress, !own.isEmpty else { return [] }
+        guard let own, !own.isEmpty else { return [] }
         return [own]
     }
 
@@ -88,34 +98,38 @@ enum SendGroup {
     // lint over each contact's whole outgoing letter, and it happens while a card is merely being built
     // for a scroll. Handed to the card rather than cached inside it, so a field cannot go back to
     // deriving its own without the card's initializer visibly changing.
-    struct CardGroups {
+    // #4357 slice G2: generic over the contacts, so a retained show's card groups by the same body; the
+    // model's own is `CardGroups`.
+    struct Groups<C: ContactFacts> {
         // Who the email goes to, no approval gate: what the message will LOOK like is a fact about the
         // draft (#2049).
-        let preview: [Recipient]
+        let preview: [C]
         // Who the next press of Send actually reaches, which keeps the approval gate.
-        let pending: [Recipient]
+        let pending: [C]
 
         // Whether anything on this show is waiting to be sent. The preview group is exactly the sendable
         // pending contacts (narrowed to the first when the show sends separately), so it is empty for the
         // same shows a direct scan would call empty.
         var hasPending: Bool { !preview.isEmpty }
 
-        init(preview: [Recipient], pending: [Recipient]) {
+        init(preview: [C], pending: [C]) {
             self.preview = preview
             self.pending = pending
         }
 
-        // The one pass. Both groups come out of a single filter of the recipients.
+        // The one pass. Both groups come out of a single filter of the contacts handed in.
         // #4356: `today` is the day the send gate judges a passed show against, handed in, because the
         // render pass builds these and must not read the wall clock for itself (`PassClockScanTests`).
-        init(of prospect: Prospect, today: String) {
+        init<Row: ProspectFacts>(of row: Row, among contacts: [C], today: String) where Row.Contact == C {
             // #2046 collapsed three of these into one per card and nothing pinned that it stayed one.
             // #2048 counts them, so #2033's shape cannot come back without a number moving.
             QueueRenderPass.WorkTally.recordSendGroupBuild()
-            let preview = SendGroup.previewGroup(of: prospect, today: today)
-            self.init(preview: preview, pending: SendGroup.pending(from: preview, of: prospect))
+            let preview = SendGroup.previewGroup(of: row, among: contacts, today: today)
+            self.init(preview: preview, pending: SendGroup.pending(from: preview, of: row))
         }
     }
+
+    typealias CardGroups = Groups<Recipient>
 
     // #4168: carries `together` through for the same reason `previewGroup` takes it. The approval gate
     // below is unaffected by the choice, so only the grouping half moves.
@@ -126,7 +140,7 @@ enum SendGroup {
 
     // The approval gate on its own, so a caller that already holds the preview group pays for the filter
     // once rather than again (#2046). The gate itself is unchanged and lives only here.
-    private static func pending(from preview: [Recipient], of prospect: Prospect) -> [Recipient] {
+    private static func pending<Row: ProspectFacts>(from preview: [Row.Contact], of prospect: Row) -> [Row.Contact] {
         // The SHOW-level gate, the same one `SendService.nextPendingRecipient` applies: an unapproved draft
         // sends to nobody, whatever its contacts look like. Without this a card would name contacts on a
         // draft Dan has not approved, and a joint send would email them.
@@ -180,8 +194,25 @@ enum SendGroup {
     // Absent, this is `prospect.sendsTogether` exactly, so every existing call site is unchanged.
     // #4356: and judged on a given day, the one a card is built for, rather than the wall clock's.
     static func previewGroup(of prospect: Prospect, together: Bool? = nil, today: String) -> [Recipient] {
-        let sendable = Recipient.inSendOrder(prospect.recipients.filter { $0.isSendablePending(today: today) })
-        guard together ?? prospect.sendsTogether else { return Array(sendable.prefix(1)) }
+        previewGroup(of: prospect, among: prospect.recipients, together: together, today: today)
+    }
+
+    // #4357 slice G2: the same over any contacts, handed in. Each contact is judged against this show, the
+    // one its model would reach through its back reference, and the greeting's audience is this show's
+    // over the same contacts, so a model and a retained row group by one body.
+    static func previewGroup<Row: ProspectFacts>(of row: Row, among contacts: [Row.Contact], together: Bool? = nil,
+                                                today: String) -> [Row.Contact] {
+        let sendable = Recipient.inSendOrder(contacts.filter {
+            $0.passesTheSendGate(today: today, on: row, audience: row.greetingAudienceSize(among: contacts))
+        })
+        guard together ?? row.sendsTogether else { return Array(sendable.prefix(1)) }
         return sendable
+    }
+}
+
+// The model's own card groups, from its own `recipients`, as they were built before #4357 slice G2.
+extension SendGroup.Groups where C == Recipient {
+    init(of prospect: Prospect, today: String) {
+        self.init(of: prospect, among: prospect.recipients, today: today)
     }
 }

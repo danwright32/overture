@@ -805,6 +805,88 @@ struct TermsOverFactsTests {
                 "a finding named a contact's address rather than its identifier")
     }
 
+    // MARK: slice G2, the card and the members it reads
+
+    // An approved draft with three contacts (a presenter and an act, both sendable, and a press inbox the guard
+    // holds), one of them an answered reply whose draft predates their message; a drafted show with no subject
+    // line and an uncleared day off; and a show whose only route is a form Dan has opened but not confirmed.
+    private func seedCard(_ ctx: ModelContext, _ all: [Prospect]) throws {
+        let now = TermsOverFacts.reachedOutInstant(asOf)
+        func show(_ key: String) throws -> Prospect { try #require(all.first { $0.naturalKey == key }) }
+        func contact(_ id: String, on p: Prospect, email: String? = nil, provenance: RecipientProvenance,
+                     form: String? = nil, _ shape: (Recipient) -> Void = { _ in }) {
+            let r = Recipient(id: id, email: email, provenance: provenance, contactFormURL: form)
+            shape(r)
+            ctx.insert(r)
+            p.recipients.append(r)
+        }
+        let approved = try show("lantern|2026-10-03")
+        approved.statusRaw = ReviewStatus.approved.rawValue
+        approved.draftSubject = "Photographs of the Lantern Parade"
+        approved.draftBody = "Hello,\n\nI photograph performing arts in New York."
+        approved.showSummaryAbsentReasonRaw = ShowSummaryAbsence.noListingPage.rawValue
+        contact("presenter@example.invalid", on: approved, email: "presenter@example.invalid", provenance: .presenter)
+        contact("zz-act@example.invalid", on: approved, email: "zz-act@example.invalid", provenance: .act) {
+            $0.replied = true; $0.repliedAt = now.addingTimeInterval(-3600)
+            $0.replyDraftRequestedAt = now.addingTimeInterval(-7200); $0.replyHandledAt = now.addingTimeInterval(-1800)
+        }
+        contact("press@example.invalid", on: approved, email: "press@example.invalid", provenance: .presenter) {
+            $0.looksLikePressContact = true
+        }
+        let blocked = try show("ninefold|2026-10-10")
+        blocked.statusRaw = ReviewStatus.drafted.rawValue
+        blocked.draftBody = "Hello,\n\nI photograph performing arts in New York."
+        blocked.conflictKey = BlockedCalendar.Day(date: "2026-10-10", kind: .dayOff, name: "Rest").key
+        blocked.conflictOpen = true
+        blocked.skippedRunNights = [NightDecision(night: "2026-10-11", at: now, origin: .chosen).stored]
+        contact("blocked@example.invalid", on: blocked, email: "blocked@example.invalid", provenance: .act)
+        let form = try show("copper|2026-10-17")
+        contact("form-pitch", on: form, provenance: .act, form: "https://coppermoth.example/contact") {
+            $0.formOutreachStartedAt = now.addingTimeInterval(-600)
+        }
+    }
+
+    @Test func theCardAndItsMembersAnswerTheSameOverFactsAsOverModels() throws {
+        let ctx = try context()
+        let all = try seed(ctx)
+        try seedCard(ctx, all)
+        // Positive controls (L159): what the card says on each show built for it.
+        func show(_ key: String) throws -> Prospect { try #require(all.first { $0.naturalKey == key }) }
+        let approved = try show("lantern|2026-10-03")
+        let groups = SendGroup.CardGroups(of: approved, today: asOf)
+        #expect(groups.pending.map(\.id) == ["zz-act@example.invalid", "presenter@example.invalid"],
+                "the approved show's send group is not the act then the presenter, with the press inbox held")
+        let card = QueueItem(approved, sendGroups: groups)
+        #expect(card.contacts.first { $0.id == "press@example.invalid" }?.isHeldFromSending == true)
+        #expect(card.weakContactHoldReason == .venueOrPress, "the press inbox is not held as a venue or press address")
+        #expect(card.contacts.first { $0.id == "zz-act@example.invalid" }?.replyIsAnswered == true)
+        #expect(card.contacts.first { $0.id == "zz-act@example.invalid" }?.replyPostdatesDraftRequest == true)
+        #expect(card.showSummaryAbsence == .noListingPage)
+        #expect(card.greetingAudienceSize == 3, "the card's greeting audience is not the show's three pending addresses")
+        let blocked = try show("ninefold|2026-10-10")
+        #expect(blocked.draftIsMissingSubject, "a draft with no subject line is not missing one")
+        #expect(blocked.conflictNote != nil, "an uncleared day off says nothing on the card")
+        #expect(blocked.skippedNightDecisions.map(\.night) == ["2026-10-11"], "the skipped night is not read back")
+        #expect(SendGroup.CardGroups(of: blocked, today: asOf).preview.isEmpty,
+                "a contact on a show with no subject line and an uncleared day off is sendable")
+        if case .awaitingConfirmation = FormPitch.state(of: try show("copper|2026-10-17")) {} else {
+            Issue.record("the form Dan opened and has not confirmed is not awaiting confirmation")
+        }
+
+        let findings = TermsOverFacts.findings(all, asOf: asOf)
+        #expect(findings.isEmpty, Comment(rawValue: findings.joined(separator: "\n")))
+
+        // A press guard lifted after the facts were taken: the groups, the card and the contact all see it.
+        let stale = all.map(RowFacts.extract)
+        try #require(approved.recipients.first { $0.id == "press@example.invalid" }).looksLikePressContactDismissed = true
+        let staleFindings = TermsOverFacts.findings(all, facts: stale, asOf: asOf)
+        for prefix in ["SendGroup.Groups differ", "QueueItem differs", "the card's contact answers"] {
+            #expect(staleFindings.contains { $0.hasPrefix(prefix) }, "a guard lifted after extraction was not seen by \(prefix)")
+        }
+        #expect(!staleFindings.contains { $0.contains("example") },
+                "a finding named an address or a URL rather than an identifier")
+    }
+
     // MARK: slice G1, the row and the reachability members it reads
 
     // One show for each of the five verdicts the contacts can derive (an open address, an address a guard
