@@ -65,7 +65,7 @@ struct NoAuthorityReachedTests {
     @Test func aListOfPerformersWithNoProducerIsNamedAsSuch() throws {
         let i = item(ModelContext(try container()),
                      [contact("a@example.com", .secondary), contact("b@example.com", .secondary)])
-        #expect(i.contactAuthorityGap() == .secondary)
+        #expect(i.contactAuthorityGap(now: Date()) == .secondary)
     }
 
     // The finding that makes the warning worth having: it says nothing at all when the check DID reach
@@ -75,14 +75,14 @@ struct NoAuthorityReachedTests {
         let i = item(ModelContext(try container()),
                      [contact("cast@example.com", .secondary), contact("producer@example.com", .primary),
                       contact("more@example.com", .secondary)])
-        #expect(i.contactAuthorityGap() == nil)
+        #expect(i.contactAuthorityGap(now: Date()) == nil)
     }
 
     // A manager or agent is its own answer and its own sentence: it may well get Dan a reply, but nobody
     // who owns the show was reached, so it is not silence and it is not the performers case either.
     @Test func aRepresentativeOnlyIsItsOwnAnswer() throws {
         let i = item(ModelContext(try container()), [contact("agency@example.com", .tertiary)])
-        #expect(i.contactAuthorityGap() == .tertiary)
+        #expect(i.contactAuthorityGap(now: Date()) == .tertiary)
     }
 
     // MARK: - Absent is not weak
@@ -94,7 +94,7 @@ struct NoAuthorityReachedTests {
     @Test func aContactWithNoStoredTierRaisesNothing() throws {
         let i = item(ModelContext(try container()),
                      [contact("older@example.com", nil), contact("older2@example.com", nil)])
-        #expect(i.contactAuthorityGap() == nil)
+        #expect(i.contactAuthorityGap(now: Date()) == nil)
     }
 
     // And a mixed row answers from what it KNOWS. An untiered contact beside a tiered one cannot be
@@ -102,14 +102,14 @@ struct NoAuthorityReachedTests {
     @Test func anUntieredContactBesideATieredOneDoesNotChangeTheAnswer() throws {
         let ctx = ModelContext(try container())
         let i = item(ctx, [contact("older@example.com", nil), contact("cast@example.com", .secondary)])
-        #expect(i.contactAuthorityGap() == .secondary)
+        #expect(i.contactAuthorityGap(now: Date()) == .secondary)
     }
 
     // The two states that already exist must be untouched: no check has run, and a check ran and found
     // nothing. Neither has a contact to judge, so neither may wear this.
     @Test func aShowWithNoContactsSaysNothing() throws {
         let i = item(ModelContext(try container()), [])
-        #expect(i.contactAuthorityGap() == nil)
+        #expect(i.contactAuthorityGap(now: Date()) == nil)
     }
 
     // The gate, and it is not a detail. The runbook emits a full contact for a named performer even when
@@ -122,8 +122,8 @@ struct NoAuthorityReachedTests {
         // A tiered performer with no address at all. The badge here says nobody was found to write to,
         // and this note under it would be a second negative saying less than the first.
         let nothingToWriteTo = item(ctx, [addresslessContact("cast", .secondary)])
-        #expect(nothingToWriteTo.reachabilityBadge() == .noEmailFound)
-        #expect(nothingToWriteTo.contactAuthorityGap() == nil)
+        #expect(nothingToWriteTo.reachabilityBadge(now: Date()) == .noEmailFound)
+        #expect(nothingToWriteTo.contactAuthorityGap(now: Date()) == nil)
 
         // The same shape with a form and with a social profile: both are routes the badge already
         // qualifies in its own words, so this adds nothing to either.
@@ -131,8 +131,8 @@ struct NoAuthorityReachedTests {
             let r = addresslessContact(route, .secondary)
             r.contactFormURL = route
             let i = item(ctx, [r])
-            #expect(i.reachabilityBadge() != .emailFound)
-            #expect(i.contactAuthorityGap() == nil, "spoke under \(i.reachabilityBadge())")
+            #expect(i.reachabilityBadge(now: Date()) != .emailFound)
+            #expect(i.contactAuthorityGap(now: Date()) == nil, "spoke under \(i.reachabilityBadge(now: Date()))")
         }
 
         // And an address held by a guard, which already reads "Only a venue or press address": this
@@ -140,8 +140,8 @@ struct NoAuthorityReachedTests {
         let held = contact("frontdesk@54below.example", .secondary)
         held.looksLikeVenue = true
         let weak = item(ctx, [held])
-        #expect(weak.reachabilityBadge() == .weakContactOnly)
-        #expect(weak.contactAuthorityGap() == nil)
+        #expect(weak.reachabilityBadge(now: Date()) == .weakContactOnly)
+        #expect(weak.contactAuthorityGap(now: Date()) == nil)
     }
 
     // MARK: - The words

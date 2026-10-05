@@ -128,9 +128,12 @@ enum LeadIntake {
     static let saveFailedMessage =
         "Overture couldn't save the shows from that page, so none of them were added. Nothing else changed. Paste it again to try once more."
 
-    // The save failed and some of what it wrote could not be put back.
+    // The save failed and some of what it wrote could not be put back. #4339: it says what to do, because the
+    // next paste does exactly that: its entry flush (`ScoutService.flushBeforeLanding`) runs before anything
+    // is read or added, and either saves what was left or refuses naming the shows it still cannot save
+    // (`recentEditsUnsaved`). Held by `aSaveThatCannotBePutBackSaysToPasteAgainAndTheNextPasteDoesWhatItSays`.
     static let notRevertedMessage =
-        "Overture couldn't save the shows from that page and couldn't undo every change it had made for them, so some of those changes are still unsaved."
+        "Overture couldn't save the shows from that page and couldn't undo every change it had made for them, so some of those changes are still unsaved. Paste the page again: Overture saves what is left first, or tells you which shows it still can't save, before adding anything."
 
     // The store could not say whether the page's shows were new, so none were added (each is counted store
     // unreadable on the outcome). Not "no new shows": that would read a failed read as a quiet page (L215).

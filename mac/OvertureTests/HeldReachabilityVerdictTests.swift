@@ -62,12 +62,12 @@ struct HeldReachabilityVerdictTests {
         p.reachabilityProbedAt = Date()
         p.setRecipients([formContact("https://corinhale.example/contact")])
         p.reachabilityResult = .contactFormOnly
-        #expect(QueueItem(p).reachabilityBadge() == .contactFormOnly)
+        #expect(QueueItem(p).reachabilityBadge(now: Date()) == .contactFormOnly)
 
         p.setRecipients([])
 
         #expect(p.reachabilityResultAsHeld == .noEmailFound)
-        #expect(QueueItem(p).reachabilityBadge() == .noEmailFound)
+        #expect(QueueItem(p).reachabilityBadge(now: Date()) == .noEmailFound)
     }
 
     // The same defect on the loudest badge in the app: an emptied show must not keep claiming an address.
@@ -77,11 +77,11 @@ struct HeldReachabilityVerdictTests {
         p.reachabilityProbedAt = Date()
         p.setRecipients([emailContact("hello@example.com")])
         p.reachabilityResult = .emailFound
-        #expect(QueueItem(p).reachabilityBadge() == .emailFound)
+        #expect(QueueItem(p).reachabilityBadge(now: Date()) == .emailFound)
 
         p.setRecipients([])
 
-        #expect(QueueItem(p).reachabilityBadge() == .noEmailFound)
+        #expect(QueueItem(p).reachabilityBadge(now: Date()) == .noEmailFound)
     }
 
     // What the check concluded is history and survives, because the delete is not allowed to destroy the
@@ -107,7 +107,7 @@ struct HeldReachabilityVerdictTests {
         let p = show(ctx, group: "Nobody Has Looked At This One")
 
         #expect(p.reachabilityResultAsHeld == nil)
-        #expect(QueueItem(p).reachabilityBadge() != .noEmailFound)
+        #expect(QueueItem(p).reachabilityBadge(now: Date()) != .noEmailFound)
     }
 
     // A show whose pitch has gone out has no PENDING contacts left, so what it "holds" can no longer be
@@ -137,7 +137,7 @@ struct HeldReachabilityVerdictTests {
         p.reachabilityResult = .contactFormOnly
 
         #expect(p.reachabilityResultAsHeld == .contactFormOnly)
-        #expect(QueueItem(p).reachabilityBadge() == .contactFormOnly)
+        #expect(QueueItem(p).reachabilityBadge(now: Date()) == .contactFormOnly)
     }
 
     // The SCORE deliberately does NOT follow the badge here. Dan's call, 2026-08-13, on being shown that
@@ -203,9 +203,9 @@ struct HeldReachabilityVerdictTests {
         let onTheCard = prospects.filter { $0.sentAt == nil && !$0.isBooked }
 
         for p in onTheCard {
-            let badge = QueueItem(p).reachabilityBadge()
+            let badge = QueueItem(p).reachabilityBadge(now: Date())
             if badge == .contactFormOnly {
-                #expect(!QueueItem(p).displayedContactForms.isEmpty,
+                #expect(!QueueItem(p).displayedContactForms(now: Date()).isEmpty,
                         "\(p.groupName) shows a contact-form badge with no form to open")
             }
             if badge == .emailFound {

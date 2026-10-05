@@ -20,7 +20,7 @@ struct ProspectRowViewAlreadyCoveredFlagTests {
     }
 
     @Test func noNoteShowsNoFlagAtAll() throws {
-        let view = ProspectRowView(item: item(alreadyCoveredNote: nil), today: "2026-07-09",
+        let view = ProspectRowView(item: item(alreadyCoveredNote: nil), today: "2026-07-09", now: Date(),
                                    onKeep: {}, onDismiss: { _ in })
 
         let texts = try view.inspect().findAll(ViewType.Text.self).map { try $0.string() }
@@ -29,7 +29,7 @@ struct ProspectRowViewAlreadyCoveredFlagTests {
 
     @Test func aFreshNoteShowsTheFlagWithItsTextAndADismissAction() throws {
         let view = ProspectRowView(item: item(alreadyCoveredNote: "Lists a Photographer in Residence."),
-                                   today: "2026-07-09", onKeep: {}, onDismiss: { _ in })
+                                   today: "2026-07-09", now: Date(), onKeep: {}, onDismiss: { _ in })
 
         let texts = try view.inspect().findAll(ViewType.Text.self).map { try $0.string() }
         #expect(texts.contains { $0.contains("Photographer in Residence") })
@@ -39,7 +39,7 @@ struct ProspectRowViewAlreadyCoveredFlagTests {
     @Test func aDismissedNoteShowsNoFlag() throws {
         let view = ProspectRowView(item: item(alreadyCoveredNote: "Lists a Photographer in Residence.",
                                               alreadyCoveredDismissed: true),
-                                   today: "2026-07-09", onKeep: {}, onDismiss: { _ in })
+                                   today: "2026-07-09", now: Date(), onKeep: {}, onDismiss: { _ in })
 
         let texts = try view.inspect().findAll(ViewType.Text.self).map { try $0.string() }
         #expect(!texts.contains { $0.contains("Photographer in Residence") })
@@ -48,7 +48,7 @@ struct ProspectRowViewAlreadyCoveredFlagTests {
     @Test func tappingNotActuallyCoveredFiresTheCallback() throws {
         var dismissed = false
         let view = ProspectRowView(item: item(alreadyCoveredNote: "Lists a Photographer in Residence."),
-                                   today: "2026-07-09", onKeep: {}, onDismiss: { _ in },
+                                   today: "2026-07-09", now: Date(), onKeep: {}, onDismiss: { _ in },
                                    onDismissAlreadyCoveredFlag: { dismissed = true })
 
         let button = try view.inspect().find(button: "Not actually covered")

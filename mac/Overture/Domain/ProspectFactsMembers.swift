@@ -45,6 +45,151 @@ extension ProspectFacts {
         PerformanceStatus.of(self, contacts: contacts) != .booked && contacts.contains(where: \.hasUnhandledReply)
     }
 
+    // #4357 slice G1: the reachability verdict and the two route lists it reads, moved from `Prospect` with
+    // their comments, over the contacts handed in rather than the model's `recipients`.
+    var reachabilityResult: Reachability.ProbeResult? {
+        reachabilityResultRaw.flatMap(Reachability.ProbeResult.init(rawValue:))
+    }
+
+    // The verdict the BADGE reads: the stored one while a sent or booked show is a record, and re-derived
+    // from the contacts handed in otherwise. Comments on `Prospect.reachabilityResultAsHeld` (#2717).
+    func reachabilityResultAsHeld(among contacts: [some ContactFacts]) -> Reachability.ProbeResult? {
+        guard let stored = reachabilityResult else { return nil }
+        guard sentAt == nil, PerformanceStatus.of(self, contacts: contacts) != .booked else { return stored }
+        return reachabilityResultFromRecipients(among: contacts)
+    }
+
+    func reachabilityResultFromRecipients(among contacts: [some ContactFacts]) -> Reachability.ProbeResult {
+        // #3653: the cascade itself lives in `Reachability.result(from:)` so a tier-one row can ask the
+        // same question without hand-rolling a second copy of it. What stays here is gathering the facts,
+        // which is the only part that needs a model.
+        //
+        // ONE WALK, not four. Each arm used to ask the contacts separately (`hasUnguardedAddress`,
+        // `isHeldByAGuard`, `usableContactFormURLs`, `socialRouteURLs`), and short-circuiting only helped
+        // the rows that answered early. The two URL lists are still computed lazily, because a row with
+        // an address never needs them and they are the expensive pair.
+        //
+        // #3387: `hasUnguardedAddress`, not `isSendablePending`. This asks whether an address exists that
+        // no research guard is holding; the send predicate folds in a calendar conflict, a blank subject
+        // and two lint judgements, none of which is a fact about reachability.
+        // #1798: guarded through the ONE shared definition (`Recipient.isHeldByAGuard`), which lists every
+        // guard that can hold an address. This rule once listed two of the three, so an address held only
+        // as a possible duplicate fell through to "no address at all".
+        var unguarded = false
+        var guarded = false
+        for r in contacts {
+            if r.hasUnguardedAddress { unguarded = true; break }
+            if r.isHeldByAGuard { guarded = true }
+        }
+        if unguarded { return Reachability.result(from: .init(hasUnguardedAddress: true)) }
+        if guarded { return Reachability.result(from: .init(hasGuardedAddress: true)) }
+        return Reachability.result(from: .init(hasUsableContactForm: !usableContactFormURLs(among: contacts).isEmpty,
+                                               hasSocialRoute: !socialRouteURLs(among: contacts).isEmpty))
+    }
+
+    // #2612: the social profiles Dan will actually DM. Judged through the SAME venue and press guards as
+    // the form list below, so a room's own Instagram or a press account is no more a route here than it
+    // is there; only the social-host test differs, and it is inverted.
+    // #2912: and never a profile the run itself called a NAME MATCH ONLY. This list is what makes the
+    // show read as reachable (the stored verdict, the fit score, the organisation ledger, and whether
+    // Dan can record a DM he sent by hand), and every one of those is Overture ASSERTING that a way in
+    // exists. An account carrying the right name and nothing tying it to this show cannot support that
+    // claim, so the assertion side sees exactly what it saw when such a profile was refused outright
+    // (#2147, L75). The CARD still shows the handle, marked, because looking at it costs Dan seconds.
+    func socialRouteURLs(among contacts: [some ContactFacts]) -> [String] {
+        contacts.compactMap { r -> String? in
+            guard !r.isUnconfirmedNameMatch,
+                  let raw = r.contactFormURL?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !raw.isEmpty, Reachability.isSocialOnly(raw),
+                  !VenueContactGuard.looksLikeVenue(formURL: raw, venue: venue),
+                  !PressContactGuard.looksLikePressContact(formURL: raw) else { return nil }
+            return raw
+        }
+    }
+
+    // #1626: the contact forms Dan would actually use, which is a form on the ACT's own site. An
+    // Instagram or another login-walled page is a dead end (his rule, 2026-07-27), judged through the
+    // one shared social-host list rather than a second copy of it.
+    //
+    // #1629: and never the ROOM's own booking form, judged through the same VenueContactGuard
+    // comparison the email path has used since #388. Without it a check that returned the host venue's
+    // form gave a card reading "Contact form only" that pointed Dan straight at the room, which is the
+    // oldest standing rule in the product (#368: a room's own address is never a real contact, not even
+    // a named booking person). Excluding it here means the show falls through to `noEmailFound`, the
+    // same answer he would get if the check had returned the room's email address.
+    func usableContactFormURLs(among contacts: [some ContactFacts]) -> [String] {
+        contacts.compactMap { r -> String? in
+            guard let raw = r.contactFormURL?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !raw.isEmpty, !Reachability.isSocialOnly(raw),
+                  !VenueContactGuard.looksLikeVenue(formURL: raw, venue: venue),
+                  // #1636: nor a press or media page, the same rule the email path applies to a
+                  // "press@" address (#722/#635). The venue guard above cannot cover this: the live case
+                  // is a press office on a domain that is not this show's room at all.
+                  !PressContactGuard.looksLikePressContact(formURL: raw),
+                  let url = URL(string: raw), url.scheme != nil else { return nil }
+            return raw
+        }
+    }
+
+    // #4357 slice G2: the show members the card reads, moved from `Prospect` with their comments.
+    // A day of this run Dan cannot work, that he has NOT waved through. This is the one every gate asks:
+    // it keeps the show out of the Prep run (no money is spent drafting a show he cannot shoot) and out
+    // of the send (a conflict can turn up AFTER the draft exists, which a prep-only gate would miss).
+    var hasUnclearedConflict: Bool { conflictOpen }
+
+    // #1501: which night of this show's run the clash is on. Read off the stored key and this show's own
+    // date, so the pill and the sentence below are two renderings of ONE decision rather than two rules.
+    var conflictScope: ConflictScope? {
+        ConflictScope.of(blockedDate: conflictKey.flatMap { BlockedCalendar.Day(key: $0) }?.date,
+                         performanceDate: performanceDate)
+    }
+
+    // What Dan reads on the row: "You blocked Nov 14 (Vacation)." / "You're already shooting X on Nov 14."
+    // Composed from the key, never stored, so it can never be a stale quotation of older copy.
+    //
+    // #1501: and framed by WHICH night of the run is blocked, because under a date-group header the old
+    // sentence read as a claim about that header's date even when the clash was a week later.
+    var conflictNote: String? {
+        guard let day = conflictKey.flatMap({ BlockedCalendar.Day(key: $0) }) else { return nil }
+        return day.reason(scope: conflictScope ?? .thisNight)
+    }
+
+    var showSummaryAbsence: ShowSummaryAbsence? {
+        showSummaryAbsentReasonRaw.flatMap(ShowSummaryAbsence.init(rawValue:))
+    }
+
+    var reachabilityEmptyReason: Reachability.EmptyReason? {
+        reachabilityEmptyReasonRaw.flatMap(Reachability.EmptyReason.init(rawValue:))
+    }
+
+    func contactRouteForScoring(now: Date) -> ContactRoute {
+        if Reachability.probeIsStale(probedAt: reachabilityProbedAt, now: now) { return .unchecked }
+        // Deliberately the STORED verdict, not `reachabilityResultAsHeld` which the badge reads.
+        //
+        // #2664 briefly made this follow the badge, on the reasoning that a card saying "No email found"
+        // beside a score still paying route points is a contradiction. Dan's call, 2026-08-13, on being
+        // shown that this went further than the decision he actually made: the badge was what he chose,
+        // and ranking stays tied to what the paid check CONCLUDED.
+        //
+        // The two questions really are different, which is why they may answer differently here. The badge
+        // asks "can I reach this show right now", and a contact deleted by hand changes that. The score
+        // asks "what did the research find", and a hand delete is not a research finding: the score moves
+        // when a re-check moves it. Staleness is still shared, so they cannot disagree about whether an
+        // answer is CURRENT, which was #1648's point and is untouched.
+        return ContactRoute(probeResult: reachabilityResult)
+    }
+
+    // #2052: a written email with no subject line. The one definition of that state, read by the send
+    // predicate (Recipient.isSendablePending) and by the note beside the greyed Send button, so what
+    // holds the send and what explains it can never be two different rules.
+    //
+    // It asks about a DRAFT, not about the show: a show with no draft at all has no subject because it
+    // has no email yet, and treating that as missing would make every un-prepped contact unsendable and
+    // change what the whole queue says about who is reachable.
+    var draftIsMissingSubject: Bool {
+        draftBody != nil && (draftSubject ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
     // In force unless the contact has written back since. Takes the contact's own reply stamp because the
     // reopen is per person: one contact replying does not put the whole show back in play for everyone
     // else, but it does put THAT conversation back in play.

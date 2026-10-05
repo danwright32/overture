@@ -70,7 +70,7 @@ struct QueueItemSnapshotTests {
         p.reachabilityResult = p.reachabilityResultFromRecipients
         #expect(QueueItem(p).hasPendingRecipient == false)            // the venue contact is not sendable
         #expect(QueueItem(p).hasWeakContactEmail == true)             // but a weak email does exist
-        #expect(QueueItem(p).reachabilityBadge() == .weakContactOnly) // so the badge is honest about it
+        #expect(QueueItem(p).reachabilityBadge(now: Date()) == .weakContactOnly) // so the badge is honest about it
 
         // #1596 Phase 3 froze this: dismissing the venue guess made the same address sendable while the
         // badge stayed put, because it reported what a CHECK concluded rather than what the row currently
@@ -84,7 +84,7 @@ struct QueueItemSnapshotTests {
         // say different things about the same address.
         venue.looksLikeVenueDismissed = true
         #expect(QueueItem(p).hasPendingRecipient == true)          // sendability is live
-        #expect(QueueItem(p).reachabilityBadge() == .emailFound)   // and now so is the badge
+        #expect(QueueItem(p).reachabilityBadge(now: Date()) == .emailFound)   // and now so is the badge
     }
 
     // #1325: a probe result is fresh only within Reachability.probeFreshness. Past that window the firm

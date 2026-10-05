@@ -104,7 +104,7 @@ struct SocialDMIsARouteTests {
                                         formUrl: "https://www.instagram.com/somethingfromabroad/"), into: ctx)
 
         let item = QueueItem(p)
-        let forms = item.displayedContactForms
+        let forms = item.displayedContactForms(now: Date())
 
         #expect(forms.map(\.absoluteString) == ["https://www.instagram.com/somethingfromabroad/"])
         #expect(QueueModel.contactFormSiteLabel(try #require(forms.first))

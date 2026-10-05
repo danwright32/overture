@@ -58,9 +58,10 @@ struct AnsweredReplyNoteWiringTests {
     // The predicate is shared, not re-derived (#2921's rule). Two definitions of "has this been dealt
     // with" is how a row asserts somebody is waiting hours after Dan wrote back.
     @Test func theAnsweredPredicateIsWrittenOverTheUnhandledOne() throws {
-        let source = SourceGuardHelper.source("Overture/Domain/Recipient.swift")
+        // #4357 slice G2: the predicate lives on `ContactFacts`, which `Recipient` answers it through.
+        let source = SourceGuardHelper.source("Overture/Domain/ContactFactsMembers.swift")
         let body = try #require(SourceGuardHelper.propertyBody("var replyIsAnswered: Bool {", in: source),
-                                "replyIsAnswered was not found on Recipient")
+                                "replyIsAnswered was not found on ContactFacts")
         #expect(body.contains("hasUnhandledReply"),
                 "replyIsAnswered no longer shares hasUnhandledReply, so the two can now disagree (#2921)")
     }

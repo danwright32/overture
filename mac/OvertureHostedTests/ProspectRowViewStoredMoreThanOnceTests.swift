@@ -24,7 +24,7 @@ struct ProspectRowViewStoredMoreThanOnceTests {
     }
 
     private func row(_ item: QueueItem) -> ProspectRowView {
-        ProspectRowView(item: item, today: "2026-09-19", onKeep: {}, onDismiss: { _ in })
+        ProspectRowView(item: item, today: "2026-09-19", now: Date(), onKeep: {}, onDismiss: { _ in })
     }
 
     private func texts(_ view: ProspectRowView) throws -> [String] {

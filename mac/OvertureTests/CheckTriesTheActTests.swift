@@ -168,8 +168,8 @@ struct CheckTriesTheActTests {
 
         // #1859 then took the "Hard to reach" verdict off these rows too, so what the card says about
         // them now is nothing at all, until a check has actually looked.
-        #expect(flagged.reachabilityBadge() == .none)
-        #expect(unflagged.reachabilityBadge() == .none)
+        #expect(flagged.reachabilityBadge(now: Date()) == .none)
+        #expect(unflagged.reachabilityBadge(now: Date()) == .none)
     }
 
     private func queueItem(group: String) -> QueueItem {
