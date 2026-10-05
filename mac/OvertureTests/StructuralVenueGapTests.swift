@@ -143,7 +143,7 @@ struct StructuralVenueGapTests {
         source.successfulCheckCount = WatchedSource.warmupRuns
         source.baselineFeedCount = 58
 
-        source.recordSuccessfulRead(events: 58, unreadable: 0, structuralGaps: 34, placed: 58,
+        _ = source.recordSuccessfulRead(events: 58, unreadable: 0, structuralGaps: 34, placed: 58,
                                     feedHealth: .init(baseline: 58, degradedStreak: 0, lastDegradedCount: 0),
                                     now: now)
 
@@ -164,7 +164,7 @@ struct StructuralVenueGapTests {
         source.successfulCheckCount = WatchedSource.warmupRuns
         source.baselineFeedCount = 68
 
-        source.recordSuccessfulRead(events: 68, unreadable: 12, placed: 68,
+        _ = source.recordSuccessfulRead(events: 68, unreadable: 12, placed: 68,
                                     feedHealth: .init(baseline: 68, degradedStreak: 0, lastDegradedCount: 0),
                                     now: now)
 

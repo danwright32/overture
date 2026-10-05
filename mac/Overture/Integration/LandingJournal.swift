@@ -25,7 +25,10 @@ import Foundation
 struct LandingJournal: Codable, Equatable, Sendable {
     // Bumped whenever the shape changes. Each version is decoded by the version it was written under
     // (`LandingJournals.decode`), with a committed fixture per past version under test.
-    static let currentVersion = 1
+    // #4440 / #4335: version 2 adds where the ingest's results were copied (`resultsCopy`) and, per source, the
+    // two values its feed report is judged against as they stood when the landing STARTED (`checksBefore`,
+    // `baselineBefore`), so a landing offered again can rebuild the report of a source it already landed.
+    static let currentVersion = 2
 
     struct Source: Codable, Equatable, Sendable {
         var sourceId: String
@@ -33,6 +36,19 @@ struct LandingJournal: Codable, Equatable, Sendable {
         // the results were read from, for runScout the hash a natively read page will be marked read as.
         // nil for a source whose landing promotes no hash (a native feed, a failed or unchanged check).
         var pageHash: String?
+        // Version 2. The source's `successfulCheckCount` and feed baseline when the landing started, the two
+        // values its reconcile report carries. A landing offered again after it landed this source (whose
+        // own save already moved both) rebuilds the report from these rather than from the moved values.
+        // nil in a version 1 journal, and for a source that lands no shows (a settled slot).
+        var checksBefore: Int?
+        var baselineBefore: Int?
+
+        init(sourceId: String, pageHash: String?, checksBefore: Int? = nil, baselineBefore: Int? = nil) {
+            self.sourceId = sourceId
+            self.pageHash = pageHash
+            self.checksBefore = checksBefore
+            self.baselineBefore = baselineBefore
+        }
     }
 
     var version: Int
@@ -44,16 +60,50 @@ struct LandingJournal: Codable, Equatable, Sendable {
     var sources: [Source]
     // The landing's own `now`, so a recovery of an ingest stamps what the content really was read at.
     var now: Date
+    // Version 2 (#4440): the content hash under which the ingest's results were copied into
+    // `PendingScoutIngests` before anything was applied, so the results this journal describes can be landed
+    // again from their own copy, never from the reader's file. nil for runScout (it has no results file), in a
+    // version 1 journal, and for decoded results with no file behind them (a test's).
+    var resultsCopy: String?
 
     init(runIdentity: String, sequence: Int, entryPoint: LandingSingleFlight.EntryPoint,
-         sources: [Source], now: Date) {
+         sources: [Source], now: Date, resultsCopy: String? = nil) {
         self.version = Self.currentVersion
         self.runIdentity = runIdentity
         self.sequence = sequence
         self.entryPoint = entryPoint.rawValue
         self.sources = sources
         self.now = now
+        self.resultsCopy = resultsCopy
     }
+
+    // The shape version 1 was written in, decoded as itself and carried forward with nothing invented: the
+    // fields it never had stay nil.
+    fileprivate struct Version1: Decodable {
+        struct Source: Decodable {
+            var sourceId: String
+            var pageHash: String?
+        }
+        var version: Int
+        var runIdentity: String
+        var sequence: Int
+        var entryPoint: String
+        var sources: [Source]
+        var now: Date
+    }
+
+    fileprivate init(_ v1: Version1) {
+        self.version = v1.version
+        self.runIdentity = v1.runIdentity
+        self.sequence = v1.sequence
+        self.entryPoint = v1.entryPoint
+        self.sources = v1.sources.map { Source(sourceId: $0.sourceId, pageHash: $0.pageHash) }
+        self.now = v1.now
+        self.resultsCopy = nil
+    }
+
+    // The source this journal recorded under an id, nil when it recorded none.
+    func source(_ sourceId: String) -> Source? { sources.first { $0.sourceId == sourceId } }
 }
 
 // The folder of landing journals, and everything that reads or writes it.
@@ -157,6 +207,38 @@ struct LandingJournals: Sendable {
         }
     }
 
+    // #4440: the pending journal an earlier attempt of the run with this sequence wrote, read before a landing
+    // offered again replaces it, because it is the only record of what that run's sources stood at when it
+    // first started (L37). Found by the sequence in its NAME, which is unique to a run. nil when there is none,
+    // or when it cannot be read or decoded: the caller then knows less and lands less (it rebuilds no report
+    // it cannot rebuild exactly), never more. A quarantined journal is not read here.
+    func pending(sequence: Int) -> LandingJournal? {
+        let prefix = String(format: "%010ld", sequence) + "-"
+        guard FileManager.default.fileExists(atPath: directory.path) else { return nil }
+        let names: [String]
+        do {
+            names = try FileManager.default.contentsOfDirectory(atPath: directory.path)
+        } catch {
+            readFailures.record(file: Self.folderName + "/", reason: HandoffDecodeFailure.describe(error))
+            return nil
+        }
+        for name in names.sorted() where name.hasPrefix(prefix) && name.hasSuffix(Self.journalSuffix) {
+            // Through the shared reader, so a journal that is there and cannot be read is reported by path (to
+            // the same failures `list()` reports to) rather than read as absent (L215, #2879).
+            let url = directory.appendingPathComponent(name)
+            switch HandoffFile.read(at: url, recorder: .reportedByItsOwnSurface, decode: { try Self.decode($0) }) {
+            case .read(let journal) where journal.sequence == sequence:
+                return journal
+            case .unreadable(let reason):
+                readFailures.record(file: Self.folderName + "/" + name,
+                                    reason: "could not read the landing record at \(url.path): \(reason)")
+            default:
+                continue
+            }
+        }
+        return nil
+    }
+
     // One journal the folder holds, or one that could not be read.
     enum Listed: Equatable {
         case pending(LandingJournal, url: URL)
@@ -228,6 +310,8 @@ struct LandingJournals: Sendable {
         let version = try decoder.decode(Header.self, from: data).version
         switch version {
         case 1:
+            return LandingJournal(try decoder.decode(LandingJournal.Version1.self, from: data))
+        case 2:
             return try decoder.decode(LandingJournal.self, from: data)
         default:
             throw UnknownVersion(version: version)
@@ -238,7 +322,12 @@ struct LandingJournals: Sendable {
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .deferredToDate
         encoder.outputFormatting = [.sortedKeys]
-        return try encoder.encode(journal)
+        // Always the shape this build writes, under the version that names it: a journal read from an older
+        // version is carried forward in memory, and writing it back under its old number would label v2
+        // fields as version 1 (L1010).
+        var current = journal
+        current.version = LandingJournal.currentVersion
+        return try encoder.encode(current)
     }
 
     // fsync(2) on a file or a folder, so the rename above is durable rather than sitting in the cache.

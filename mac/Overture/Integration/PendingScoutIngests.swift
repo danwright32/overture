@@ -58,14 +58,20 @@ struct PendingScoutIngests {
     @discardableResult
     func record(_ data: Data, sequence: Int, now: Date) throws -> Entry {
         let hash = Self.contentHash(of: data)
-        if let existing = try? entry(hash) { return existing }
+        // An entry that is there and cannot be read is NOT absent (L215): written over, it would lose the
+        // sequence the run was kept with, so the copy refuses instead and the landing stops before applying.
+        // And a record whose results file is gone or is not these bytes is no copy at all (L421): it is written
+        // again, under the sequence it was kept with, so the run stays the same run.
+        let existing = try existingEntry(hash)
+        if let existing, resultsAreThese(existing) { return existing }
+        let sequence = existing?.sequence ?? sequence
         let fm = FileManager.default
         try fm.createDirectory(at: directory, withIntermediateDirectories: true)
         let incoming = directory.appendingPathComponent(".incoming-\(UUID().uuidString)", isDirectory: true)
         try fm.createDirectory(at: incoming, withIntermediateDirectories: false)
         defer { try? fm.removeItem(at: incoming) }   // gone already once it has been moved into place
         try data.write(to: incoming.appendingPathComponent(Self.resultsName), options: .atomic)
-        try Self.encoded(Entry(contentHash: hash, sequence: sequence, recordedAt: now))
+        try Self.encoded(Entry(contentHash: hash, sequence: sequence, recordedAt: existing?.recordedAt ?? now))
             .write(to: incoming.appendingPathComponent(Self.entryName), options: .atomic)
         try moveIntoPlace(incoming, hash: hash)
         return try entry(hash)
@@ -80,13 +86,42 @@ struct PendingScoutIngests {
         return try encoder.encode(entry)
     }
 
-    // A folder already at the destination holds no readable entry (`record` returns early when it does),
-    // so it is the leftover of a crash and the finished copy replaces it.
+    // A folder already at the destination is no intact copy of these bytes: either it holds no readable
+    // entry (the leftover of a crash), or its entry is readable but its results are missing or are not these
+    // bytes (`record` and `recoverIncoming` return early only for an intact copy). The finished copy replaces it.
     private func moveIntoPlace(_ incoming: URL, hash: String) throws {
         let fm = FileManager.default
         let destination = folder(hash)
         if fm.fileExists(atPath: destination.path) { try fm.removeItem(at: destination) }
         try fm.moveItem(at: incoming, to: destination)
+    }
+
+    // nil only when no entry was ever written there; an entry that is there and cannot be read THROWS,
+    // naming its path, so no caller can read a damaged record as a missing one.
+    func existingEntry(_ hash: String) throws -> Entry? {
+        let url = entryURL(hash)
+        guard FileManager.default.fileExists(atPath: url.path) else { return nil }
+        do {
+            return try entry(hash)
+        } catch {
+            throw UnreadableEntry(path: url.path, why: String(describing: error))
+        }
+    }
+
+    // Whether a kept copy's results file is there and holds exactly the bytes its record names.
+    // Through the shared reader, so a results file that is there and cannot be read is recorded as such
+    // (#2879) rather than read as absent; either way it is no copy, and the copy step writes it again.
+    func resultsAreThese(_ entry: Entry) -> Bool {
+        switch HandoffFile.data(at: resultsURL(entry.contentHash), recorder: readFailures) {
+        case .read(let data): return Self.contentHash(of: data) == entry.contentHash
+        case .absent, .unreadable: return false
+        }
+    }
+
+    struct UnreadableEntry: Error, CustomStringConvertible {
+        let path: String
+        let why: String
+        var description: String { "the record of the copy already kept at \(path) could not be read: \(why)" }
     }
 
     func entry(_ hash: String) throws -> Entry {
@@ -121,7 +156,15 @@ struct PendingScoutIngests {
         }
         let names = try fm.contentsOfDirectory(atPath: directory.path).filter { !$0.hasPrefix(".") }.sorted()
         let listed: [Listed] = names.map { name in
-            if let found = try? entry(name) { return .entry(found) }
+            // Recovered only when its entry was never WRITTEN; one that is there and cannot be read is
+            // reported by path and left, never rewritten as sequence 0 (which forgets which run it was).
+            do {
+                if let found = try existingEntry(name) { return .entry(found) }
+            } catch let unreadable as UnreadableEntry {
+                return .unreadable(path: unreadable.path, why: unreadable.why)
+            } catch {
+                return .unreadable(path: entryURL(name).path, why: String(describing: error))
+            }
             do { return .entry(try recoverEntry(name)) } catch {
                 return .unreadable(path: folder(name).path, why: String(describing: error))
             }
@@ -157,9 +200,18 @@ struct PendingScoutIngests {
             data = read
         }
         let hash = Self.contentHash(of: data)
-        if (try? entry(hash)) != nil {
-            try? fm.removeItem(at: incoming)
-            return nil
+        do {
+            // Only an INTACT copy at the destination makes this one redundant (L421): when that copy's results
+            // are gone or are not these bytes, this folder may hold the only copy left (a `record` rewriting it
+            // that died before its move), so it is moved into place rather than deleted.
+            if let existing = try existingEntry(hash), resultsAreThese(existing) {
+                try? fm.removeItem(at: incoming)
+                return nil
+            }
+        } catch {
+            // A copy of these bytes is in place with a record nobody can read: moving this one over it would
+            // remove it, so both are left and the damaged one is reported.
+            return .unreadable(path: entryURL(hash).path, why: String(describing: error))
         }
         do {
             try moveIntoPlace(incoming, hash: hash)

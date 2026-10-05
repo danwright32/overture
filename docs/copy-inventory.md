@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1716 sentences**.
+Every sentence Overture can say to Dan: **1720 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -14,7 +14,7 @@ What is not, and why:
   sentences under tokens nobody reads.
 - **Nothing, if it is written as two literals joined with `+`.** Those ARE joined here, into the
   one sentence the running app says (#3155). What is still only part of what Dan reads is a
-  sentence carrying a VALUE: 634 of the 1716 below hold a
+  sentence carrying a VALUE: 637 of the 1720 below hold a
   `\(...)` where a number or a name goes, so what is printed is the template. They are counted
   here rather than listed again, because the hole is visible in the line itself; what was missing
   was any statement of how much of this document is templates.
@@ -1650,7 +1650,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/OmniFocusSync.swift`
 "Overture could not check whether it stopped responding this session, so nothing here can say whether it did."
     `Domain/FreezeReport.swift`
-"Overture could not keep a copy of these calendar results either (\(why)). They are still in the reader's results file until the next read replaces it."
+"Overture could not keep a copy of these calendar results either (\(why)). "
     `Domain/ScoutWarningCopy.swift`
 "Overture could not open its backup folder, so there is nothing to compare against. Nothing has been changed. Check that folder before working."
     `App/StoreShrinkCheck.swift`
@@ -1676,6 +1676,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/LaunchMigrations.swift`
 "Overture couldn't get this reply ready to send."
     `Domain/ReplyPanel.swift`
+"Overture couldn't keep a copy of these calendar results before applying them (\(why)), so none of them were applied. Nothing from the scout changed."
+    `Domain/ScoutWarningCopy.swift`
 "Overture couldn't move its data to \(newStoreURL.path): \(error.localizedDescription). Your data is safe and unchanged at \(legacyStoreURL.path)."
     `App/StoreRelocation.swift`
 "Overture couldn't reach Gmail while looking for replies to the pitches you sent through a form or a DM."
@@ -2567,6 +2569,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/BulkDismiss.swift`
 "They all lose \(dateLabel), filed as \(reason.label), and turn up again under their next night."
     `Domain/BulkDismiss.swift`
+"They are still in the reader's results file until the next read replaces it."
+    `Domain/ScoutWarningCopy.swift`
 "They got back to me"
     `Domain/HandMarkedReply.swift`
 "They include \(named.joined(separator: " and ")), and \(others) \(plural)."
@@ -3600,6 +3604,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Integration/LandingJournal.swift`
 "could not read the landing record at \(url.path): \(newer)"
     `Integration/LandingJournal.swift`
+"could not read the landing record at \(url.path): \(reason)"
+    `Integration/LandingJournal.swift`
 "could not read the landing record at \(url.path): \(why)"
     `Integration/LandingJournal.swift`
 "couldn't read \(read.label). (\(underlying))"
@@ -3745,6 +3751,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Integration/ScoutService.swift`
 "the queue"
     `UI/ProspectMutations.swift`
+"the record of the copy already kept at \(path) could not be read: \(why)"
+    `Integration/PendingScoutIngests.swift`
 "the record of which calendar results already landed"
     `Integration/ScoutService.swift`
 "the record of who you have shot before"

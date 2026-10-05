@@ -393,12 +393,17 @@ final class WatchedSource {
     //
     // Deliberately does NOT touch the content hash. That is the agent path's alone (the native Algolia feed
     // has no fetched page to hash), so its caller promotes the hash itself after this returns.
+    //
+    // #4335 (A6, RC6): RETURNS this run's feed movement line (`FeedMovementLog`), computed from the values this
+    // run arrived with, where it used to write it. The caller appends it through `FeedMovementLog.Sink` only once
+    // the save carrying these writes has succeeded, so a failed save leaves no line describing a read the store
+    // never took. Not discardable: a caller that ignored it would silently drop #913's evidence.
     func recordSuccessfulRead(events: Int, unreadable: Int, titleUnreadable: Int = 0,
                               structuralGaps: Int = 0, droppedShows: [DroppedShow] = [], placed: Int,
-                              feedHealth: FeedReconcile.FeedHealthState, now: Date) {
-        // #1114: record this scout's movement (current vs the previous scout's count, and the baseline)
-        // BEFORE the fields below overwrite them, so #913 has real per-source movement to retune against.
-        FeedMovementLog.record(for: self, current: events, now: now)
+                              feedHealth: FeedReconcile.FeedHealthState, now: Date) -> String {
+        // #1114: this scout's movement (current vs the previous scout's count, and the baseline), taken BEFORE the
+        // fields below overwrite them, so #913 has real per-source movement to retune against.
+        let movement = FeedMovementLog.line(for: self, current: events, now: now)
 
         lastReadableCount = events
         lastUnreadableCount = unreadable
@@ -443,6 +448,7 @@ final class WatchedSource {
         // the one shared success branch both ingest doors go through, for the same reason every count
         // above it is (#1001): a second copy is what drifts.
         failedReadStreak = 0
+        return movement
     }
 
     // #1759: the mirror of `recordSuccessfulRead`, for a run that came away without reading this source

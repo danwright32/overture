@@ -6,8 +6,9 @@ import Foundation
 // the baseline the run is judged against. Written best-effort to a rotated log under ~/Library/Logs/Overture.
 //
 // The line format is a pure function so it stays testable (#863). The default-file write is suppressed when
-// running under tests: otherwise every test that drives recordSuccessfulRead would inject fake movement into
-// the very evidence file #913 reads. Tests exercise the writing through the explicit-URL overload instead.
+// running under tests: otherwise every test that drives a landing would inject fake movement into the very
+// evidence file #913 reads. Tests exercise the writing through the explicit-URL overload instead, and since
+// #4335 read what a landing appended through an in-memory `Sink`.
 enum FeedMovementLog {
     static var fileURL: URL {
         AgentLogLocation.directory.appendingPathComponent("feed-movement.log")
@@ -30,11 +31,24 @@ enum FeedMovementLog {
              previous: source.lastReadableCount, baseline: source.baselineFeedCount, now: now)
     }
 
-    // Production entry point, called from recordSuccessfulRead. No-ops under tests (see the type comment).
-    static func record(for source: WatchedSource, current: Int, now: Date) {
-        guard !isUnderTest else { return }
-        write(line(for: source, current: current, now: now), to: fileURL)
+    // #4335 (A6, RC6): where a landing appends the line `WatchedSource.recordSuccessfulRead` computed, ONLY
+    // after the save carrying that read has succeeded, so a failed save appends nothing and a source landed
+    // once appends one line however many times its landing is offered. Injected, so a test reads what the
+    // landing appended through an in-memory sink rather than being hidden behind the file writer's test guard.
+    // A crash between the save and the append loses one diagnostic line: the accepted at-most-once cost.
+    protocol Sink {
+        func append(_ line: String)
     }
+
+    // The product sink: today's file writer, suppressed under tests exactly as before.
+    struct FileSink: Sink {
+        func append(_ line: String) {
+            guard !FeedMovementLog.isUnderTest else { return }
+            FeedMovementLog.write(line, to: FeedMovementLog.fileURL)
+        }
+    }
+
+    static var file: any Sink { FileSink() }
 
     // Explicit-URL variant, so the formatting and the append are testable without touching the real log.
     static func record(sourceId: String, org: String, current: Int, previous: Int, baseline: Int, now: Date,
@@ -43,7 +57,7 @@ enum FeedMovementLog {
               to: url)
     }
 
-    private static var isUnderTest: Bool {
+    fileprivate static var isUnderTest: Bool {
         ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
             || NSClassFromString("XCTestCase") != nil
     }
@@ -61,7 +75,7 @@ enum FeedMovementLog {
     // exists to retune `minReBaselineFraction` against RECENT movement, which is a rolling question,
     // and the 5 MB cap is thousands of scouts of it. What it could not do before was say that the
     // window it hands back had been cut, which turned a truncated sample into an ordinary one (L350).
-    private static func write(_ text: String, to url: URL) {
+    fileprivate static func write(_ text: String, to url: URL) {
         let fm = FileManager.default
         try? fm.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         let rotation = LogRotation.cap(files: [url], maxBytes: AgentLogLocation.defaultMaxLogBytes)
