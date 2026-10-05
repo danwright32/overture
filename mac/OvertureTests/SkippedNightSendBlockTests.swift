@@ -103,6 +103,22 @@ struct SkippedNightSendBlockTests {
         }
     }
 
+    // #4502: a press is judged on ONE day, derived once by `sendNext` and handed to every step, so each step
+    // judges by the day it is handed rather than deriving its own: handed a day after the run, both the single
+    // and the joint send refuse, though their `now` is still before every night.
+    @Test func eachStepOfASendJudgesByTheDayItIsHanded() async throws {
+        let ctx = try context()
+        let p = try show(ctx, body: "Hello,\n\nI'd be glad to photograph October 6 and October 20.")
+        let sender = CountingSender()
+        #expect(await SendService.sendOne(p, now: now, today: "2026-10-26", sender: sender) == false,
+                "the single send derived its own day instead of judging by the one it was handed")
+        #expect(await SendService.sendJointly(p, to: p.recipients, now: now, today: "2026-10-26", sender: sender) == false,
+                "the joint send derived its own day instead of judging by the one it was handed")
+        #expect(sender.sent.isEmpty)
+        // The control in the same fixture (L159): handed the day of its own moment, the single send goes.
+        #expect(await SendService.sendOne(p, now: now, today: EasternDate.dayString(from: now), sender: sender))
+    }
+
     // #4502: a send is judged on the day of the `now` it is handed, never the wall clock beside it. Handed a
     // moment after the run's last night, the same pitch the control above sends is refused, because that
     // run has passed on that day. Without this, the control above would turn red on its own the day real
