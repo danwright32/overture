@@ -29,7 +29,7 @@ struct GenreDropdownTests {
     final class Corrections { var chosen: [Discipline] = [] }
 
     private func row(_ discipline: String, _ corrections: Corrections) -> ProspectRowView {
-        ProspectRowView(item: item(discipline: discipline), today: "2026-09-25", onKeep: {},
+        ProspectRowView(item: item(discipline: discipline), today: "2026-09-25", now: Date(), onKeep: {},
                         onDismiss: { _ in },
                         onCorrectClassification: { corrections.chosen.append($0) })
     }

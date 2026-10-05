@@ -234,12 +234,12 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     // that proved it had `draftEditedByDan` set.
     //
     // `today` is a parameter so a test pins both ends of the comparison rather than one (L130).
-    func eventDateWarning(today: String = EasternDate.today(Date())) -> String? {
+    func eventDateWarning(today: String) -> String? {
         eventDateFinding(today: today)?.message
     }
 
     // #3326: the one finding, asked once, so the warning and the send block read the same answer (L16).
-    func eventDateFinding(today: String = EasternDate.today(Date())) -> EventDateFinding? {
+    func eventDateFinding(today: String) -> EventDateFinding? {
         guard let body = draftBody else { return nil }
         let playing = PlayingNights.of(runNights: runNights, performanceDate: performanceDate,
                                        runEndDate: runEndDate)
@@ -251,7 +251,7 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     }
 
     // #3326 (plan 2.8): the skipped night this draft names, which holds the send. Nil when it names none.
-    func skippedNightNamedInDraft(today: String = EasternDate.today(Date())) -> String? {
+    func skippedNightNamedInDraft(today: String) -> String? {
         // Asked through `blocksTheSend`, the one place that says which findings hold a send, so a finding
         // added later that also blocks cannot be missed here while the warning shows it.
         guard let finding = eventDateFinding(today: today), finding.blocksTheSend,
@@ -397,8 +397,9 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     // is still a candidate (not yet pitched, not booked); a sent or booked show was clearly reachable.
     // #1325: a method (not a property) so staleness is decided against an injectable `now`, keeping the
     // freshness logic testable rather than reading the wall clock from inside the view (the #863 lesson).
-    // The view calls it with the default; tests pass a fixed `now`.
-    func reachabilityBadge(now: Date = Date()) -> Reachability.Badge {
+    // #4357 slice G1: no default any more. The row passes the render pass's instant, so the badge and the card
+    // it sits on judge staleness at the same moment, and tests pass a fixed `now`.
+    func reachabilityBadge(now: Date) -> Reachability.Badge {
         guard sentAt == nil && !isBooked else { return .none }
         return Reachability.badge(result: reachabilityResult,
                                   probeIsStale: Reachability.probeIsStale(probedAt: reachabilityProbedAt, now: now),
@@ -515,7 +516,7 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     //
     // A contact that HAS an address is still never offered a form: its address is the way in, and the
     // form beside it would be a second control for the same person.
-    var displayedContactForms: [URL] { displayedContactRoutes().map(\.url) }
+    func displayedContactForms(now: Date) -> [URL] { displayedContactRoutes(now: now).map(\.url) }
 
     // #2912: the same list, each link carrying whether the card has to say ON ITS OWN LINE that this one
     // is a guess. Derived from this rather than restated beside it, exactly as `displayedContactEmails`
@@ -540,7 +541,7 @@ struct QueueItem: Identifiable, Equatable, Sendable {
         var id: URL { url }
     }
 
-    func displayedContactRoutes(now: Date = Date()) -> [DisplayedRoute] {
+    func displayedContactRoutes(now: Date) -> [DisplayedRoute] {
         let routes = contacts
             .filter { ($0.email ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
             .compactMap { c -> (URL, Bool, String)? in
@@ -744,7 +745,7 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     // write to". Two negatives, one under the other, the second adding nothing (L118, #843). Every other
     // badge already qualifies the find itself, and "Only a venue or press address" in particular is
     // already saying this in its own words.
-    func contactAuthorityGap(now: Date = Date()) -> ContactTier? {
+    func contactAuthorityGap(now: Date) -> ContactTier? {
         guard reachabilityBadge(now: now) == .emailFound else { return nil }
         guard let best = ContactTier.best(of: contacts.map(\.contactTier)), best != .primary else {
             return nil
@@ -1127,11 +1128,14 @@ enum QueueModel {
     // keys, so the guard is the comparison against a real fetch in that suite rather than this sentence.
     // The STABILITY half is guaranteed by the code and asserted separately, so it holds whatever SQLite
     // decides to do later.
-    static func queueScope(_ all: [Prospect]) -> [Prospect] {
-        all.enumerated()
+    // #4357 slice H: over any `ProspectFacts`, sorted by `queueScopeOrder(for:)` (QueueLongTailTerms.swift),
+    // the same two descriptors written over the conformer; see there for why `queueScopeOrder` stays beside it.
+    static func queueScope<Row: ProspectFacts>(_ all: [Row]) -> [Row] {
+        let order = queueScopeOrder(for: Row.self)
+        return all.enumerated()
             .filter { $0.element.statusRaw != "dismissed" }
             .sorted { lhs, rhs in
-                for descriptor in queueScopeOrder {
+                for descriptor in order {
                     switch descriptor.compare(lhs.element, rhs.element) {
                     case .orderedAscending: return true
                     case .orderedDescending: return false
@@ -2265,6 +2269,12 @@ enum QueueModel {
         return counts
     }
 
+    // #4357 slice F: over the rows themselves, which is what `scope` calls, so the pass hands it live models
+    // and the engine (Phase 4) retained `RowFacts`, the slice C pattern.
+    static func organisationRowCounts(among rows: [some ProspectFacts]) -> [String: Int] {
+        organisationRowCounts(rows.map(\.presenter))
+    }
+
     // What the menu says. One sentence per state, each naming the organisation, so the line Dan reads is
     // about a specific name rather than a rule in the abstract. Kept out of the view with every other
     // sentence the app can say (#915).
@@ -3364,7 +3374,7 @@ enum QueueModel {
         // #1732: how many rows each organisation carries, over the SAME unfiltered corpus venueBrands
         // judges against, so a dismissal cannot quietly take an organisation under the bar and remove the
         // control from the rows still showing. Built once here for the same reason as venueBrands above.
-        let rowCounts = organisationRowCounts((corpus ?? prospects).map(\.presenter))
+        let rowCounts = organisationRowCounts(among: corpus ?? prospects)
         // #1825: built ONCE, for the same reason as venueBrands above. Every row resolves its own sources
         // through this rather than walking the watchlist per card.
         // #2816: the table lives on QueueModel now, because the reached-out and follow-up rows resolve
@@ -3390,8 +3400,8 @@ enum QueueModel {
         // This table is ALSO what resolves the tag at READ time. A key naming a row that is no longer
         // stored, which is what the launch merge leaves behind when it collapses the pair, is simply
         // absent here, so the note stops drawing with nothing needing to clear the field (L200).
-        let titlesByKey = Dictionary((corpus ?? prospects).map { ($0.naturalKey, $0.groupName) },
-                                     uniquingKeysWith: { first, _ in first })
+        // #4357 slice H: one generic term (QueueLongTailTerms.swift), over models here and facts in the engine.
+        let titlesByKey = QueueModel.titlesByKey(among: corpus ?? prospects)
         // #4030: over the UNFILTERED corpus, exactly like `sameShowGroups` above, and through the same
         // `ShowLink` rule: what joins two rows for display is decided in one place and nothing else
         // joins them. The collapse deletes nothing and re-keys nothing; a wrong join costs a re-render.
@@ -3404,28 +3414,14 @@ enum QueueModel {
         // card that is the target of several pointers names one and counts the rest, and the newest is
         // the one Dan has not seen yet. A row with no `firstSeenAt` (every row written before #1886)
         // sorts last rather than being dropped: it is still half of a pair.
-        var laterLookalikesByKey: [String: [Prospect]] = [:]
-        for row in (corpus ?? prospects) {
-            guard let target = row.arrivedLookingLike else { continue }
-            laterLookalikesByKey[target, default: []].append(row)
-        }
         //
         // #4349 (plan v7 Step T, decision 13(vi)): equal sightings, which is every pair of rows written before
         // #1886, fall back to the natural key, so the title the note NAMES is the same on every render
         // rather than whichever of the tied rows the corpus happened to hand over first.
-        let laterLookalikes = laterLookalikesByKey.mapValues { rows in
-            rows.sorted {
-                let (left, right) = ($0.firstSeenAt ?? .distantPast, $1.firstSeenAt ?? .distantPast)
-                return left != right ? left > right : $0.naturalKey < $1.naturalKey
-            }.map(\.naturalKey)
-        }
+        // #4357 slice H: the term lives in QueueLongTailTerms.swift, over any `ProspectFacts`.
+        let laterLookalikes = QueueModel.laterLookalikes(among: corpus ?? prospects)
         // #4042: the same walk, the same scope, and the same read-time resolution.
-        let nightsByKey = Dictionary(
-            (corpus ?? prospects).compactMap { row -> (String, String)? in
-                guard let night = row.performanceDate, !night.isEmpty else { return nil }
-                return (row.naturalKey, night)
-            },
-            uniquingKeysWith: { first, _ in first })
+        let nightsByKey = QueueModel.nightsByKey(among: corpus ?? prospects)
         let built = CardPreamble(linked: linked, inherited: inherited, venueBrands: venueBrands,
                                  rowCounts: rowCounts, calendarBySourceId: calendarBySourceId,
                                  overrides: overrides, clients: clients,
@@ -3628,8 +3624,12 @@ enum QueueModel {
     // The only place a card is decorated, reached both by the pass's prebuild and by a row that arrives on
     // screen after it. Two spellings of this would be two cards that can disagree about a show, and only
     // one of them would be the one on screen (L107, L263).
-    static func card(_ p: Prospect, contacts: [Recipient]?, preamble pre: CardPreamble) -> QueueItem {
-        var item = QueueItem(p, sendGroups: SendGroup.CardGroups(of: p, today: pre.day), contacts: contacts)
+    // #4357 slice G2: generic over the row, with its contacts handed in, so a retained show's card is built
+    // by the one body. The model entry point is the next function. The send groups are taken from those
+    // contacts too, where the model used to walk its `recipients` a second time for them: the same contacts,
+    // and a group is put in send order whatever order it arrives in.
+    static func card<Row: ProspectFacts>(_ p: Row, among contacts: [Row.Contact], preamble pre: CardPreamble) -> QueueItem {
+        var item = QueueItem(p, sendGroups: SendGroup.Groups(of: p, among: contacts, today: pre.day), among: contacts)
         // #2524: inside the sweep that was already happening. Asked as its own pass over the store it
         // was a ninth whole-store sweep per render, which `QueueRenderPassCostTests` refused.
         item.offeredEarlyAsAClient = isOfferedEarlyAsAClient(
@@ -3712,6 +3712,11 @@ enum QueueModel {
                 standing: item.producerStanding)
             : nil
         return item
+    }
+
+    // The model entry point: the contacts the caller already read, or the show's own when it read none.
+    static func card(_ p: Prospect, contacts: [Recipient]?, preamble pre: CardPreamble) -> QueueItem {
+        card(p, among: contacts ?? p.countedRecipients, preamble: pre)
     }
 
     // The rows every whole-scope consumer reads, and the cards the screen draws, as ONE value.
@@ -3828,6 +3833,23 @@ enum QueueModel {
         func alreadyBuilt(_ key: String) -> QueueItem? { cards[key] }
 
         var builtCount: Int { cards.count }
+
+        /// #4357 slice I1 (plan v7 Phase 3, step 7): what this store HOLDS, as a value, so two passes' stores
+        /// compare by content rather than by object identity. Shows and contacts by their store identifiers,
+        /// never by description. The miss counters and the registry are left out: they are what a surface did
+        /// with the store after the pass, not what the pass produced.
+        struct Contents: Equatable {
+            let cards: [String: QueueItem]
+            let shows: [String: PersistentIdentifier]
+            let contacts: [String: [PersistentIdentifier]]
+            let requestedKeys: Set<String>?
+        }
+
+        var contents: Contents {
+            Contents(cards: cards, shows: showsByKey.mapValues(\.persistentModelID),
+                     contacts: contactsByKey.mapValues { $0.map(\.persistentModelID) },
+                     requestedKeys: requestedKeys)
+        }
 
         /// The card for a row on screen. Builds it if the pass did not, and says which kind of miss that
         /// was.
@@ -4101,6 +4123,12 @@ extension QueueItem {
          // what a row reduces away. Handing it facts would mean the card re-reading the models anyway,
          // and the reach count would not move.
          contacts: [Recipient]? = nil) {
+        self.init(p, sendGroups: sendGroups, among: contacts ?? p.countedRecipients)
+    }
+
+    // #4357 slice G2: the card over any row, with its contacts handed in, so a retained show builds its card
+    // by the same body. The model entry point above hands in the contacts it always read.
+    init<Row: ProspectFacts>(_ p: Row, sendGroups: SendGroup.Groups<Row.Contact>, among contactsOnce: [Row.Contact]) {
         // #2048: counted here, the one place every card passes through, whichever initialiser was called.
         QueueRenderPass.WorkTally.recordQueueItem()
         // #1700: the closure-bearing answers are worked out HERE, one small expression each, rather than
@@ -4133,14 +4161,17 @@ extension QueueItem {
         // binding, `WorkTally.recipientReaches` counts FAULTS rather than reads, so the pin means what
         // its name says and a genuine second fault added by the tier-one split cannot hide among eleven
         // cheap ones. Claiming a cost benefit here would be a number nobody took (L102, L107).
-        let contactsOnce = contacts ?? p.countedRecipients
+        // #4357 slice G2: the show's one letter and the greeting's audience, read once here from the show and
+        // the contacts handed in, where each contact used to reach them through its back reference.
+        let body = p.draftBody
+        let audience = p.greetingAudienceSize(among: contactsOnce)
         let weakContactHoldReason = contactsOnce.compactMap(\.holdReason).first
-        let formPitch = FormPitch.state(of: p)
-        let draftGreetedContactName = contactsOnce.first { $0.sendState == .pending && $0.greetingNamesSomeoneElse }?.name
+        let formPitch = FormPitch.state(of: p, among: contactsOnce)
+        let draftGreetedContactName = contactsOnce.first { $0.sendState == .pending && $0.greetingNamesSomeoneElse(body: body) }?.name
         let conflictBlockedDate = p.conflictKey.flatMap { BlockedCalendar.Day(key: $0) }?.date
         let draftGreetedName = contactsOnce
-            .first { $0.sendState == .pending && $0.greetingNamesSomeoneElse }
-            .flatMap { DraftGreeting.greetedName($0.effectiveBody) }
+            .first { $0.sendState == .pending && $0.greetingNamesSomeoneElse(body: body) }
+            .flatMap { _ in DraftGreeting.greetedName(body) }
         // #3498: the lint runs ONCE per pending contact for this card, and every reader below shares the
         // answer. `Recipient.draftLintBlockers` derives live and memoises nothing, so each reader used to
         // pay a whole pass of `DraftCheck` over the letter: measured 2026-09-03, four runs per pending
@@ -4152,29 +4183,29 @@ extension QueueItem {
         // was 24 extra runs per render on this store's shape.
         let pendingRecipients = contactsOnce.filter { $0.sendState == .pending }
         let lintBlockersByRecipient = Dictionary(uniqueKeysWithValues:
-            pendingRecipients.map { ($0.id, $0.draftLintBlockers) })
+            pendingRecipients.map { ($0.id, $0.draftLintBlockers(body: body)) })
         // Falls back to the real derivation for a contact the map does not hold, so this can never answer
         // "no findings" for a body nobody checked. The readers take it as an @autoclosure, so a
         // non-pending contact never reaches this at all.
-        func lintBlockers(_ r: Recipient) -> [DraftIssue] {
-            lintBlockersByRecipient[r.id] ?? r.draftLintBlockers
+        func lintBlockers(_ r: Row.Contact) -> [DraftIssue] {
+            lintBlockersByRecipient[r.id] ?? r.draftLintBlockers(body: body)
         }
         let draftLintBlockers = DraftIssue.orderedBlockers(
             Set(pendingRecipients.flatMap { lintBlockers($0) }))
         let contacts = Recipient.inSendOrder(contactsOnce)
-            .map { RecipientSnapshot($0, lintBlockers: lintBlockers($0)) }
+            .map { RecipientSnapshot($0, body: body, audience: audience, lintBlockers: lintBlockers($0)) }
         let offersSendModeChoice = contactsOnce.filter { $0.email?.isEmpty == false }.count > 1
         let hasWeakContactEmail = contactsOnce.contains(where: \.isHeldByAGuard)
         let hasAnyEmailContact = contactsOnce.contains { $0.email?.isEmpty == false }
-        let draftMissingGreeting = contactsOnce.contains { $0.sendState == .pending && $0.draftIsMissingGreeting }
-        let draftGreetingMisaddressed = contactsOnce.contains { $0.sendState == .pending && $0.greetingMisaddressed }
-        let draftGreetingNamesSomeoneElse = contactsOnce.contains { $0.sendState == .pending && $0.greetingNamesSomeoneElse }
-        let greetingOverridden = !contactsOnce.contains { $0.sendState == .pending && $0.isBlockedByGreeting }
+        let draftMissingGreeting = contactsOnce.contains { $0.sendState == .pending && $0.draftIsMissingGreeting(body: body) }
+        let draftGreetingMisaddressed = contactsOnce.contains { $0.sendState == .pending && $0.greetingMisaddressed(body: body, audience: audience) }
+        let draftGreetingNamesSomeoneElse = contactsOnce.contains { $0.sendState == .pending && $0.greetingNamesSomeoneElse(body: body) }
+        let greetingOverridden = !contactsOnce.contains { $0.sendState == .pending && $0.isBlockedByGreeting(body: body, audience: audience) }
         // #3498: read from the shared answer above rather than asking the lint again. The override half
         // is kept exactly as `Recipient.isBlockedByDraftLint` states it, because a body Dan has overridden
         // is not blocked however many findings it carries.
         let draftLintBlocked = pendingRecipients.contains {
-            $0.isBlockedByDraftLint(lintBlockers: lintBlockers($0))
+            $0.isBlockedByDraftLint(body: body, lintBlockers: lintBlockers($0))
         }
 
         self.init(
@@ -4189,7 +4220,7 @@ extension QueueItem {
             reachabilityRecheckRequestedAt: p.reachabilityRecheckRequestedAt,
             // #2664: what the show HOLDS, not what a check once concluded, so a contact Dan deletes by
             // hand takes the badge's claim with it instead of leaving it promising a route that is gone.
-            reachabilityResult: p.reachabilityResultAsHeld,
+            reachabilityResult: p.reachabilityResultAsHeld(among: contactsOnce),
             reachabilityEmptyReason: p.reachabilityEmptyReason,
             reachabilityUnansweredAt: p.reachabilityUnansweredAt,
             location: p.location,
@@ -4217,7 +4248,7 @@ extension QueueItem {
             draftWrittenByDan: p.draftWrittenByDan,
             draftModel: p.draftModel,
             outcome: p.outcome,
-            performanceStatus: p.performanceStatus,
+            performanceStatus: PerformanceStatus.of(p, contacts: contactsOnce),
             sentAt: p.sentAt,
             // #244/#1773: a sent show with the AI's original wording still recorded is something the
             // voice loop can learn from. Resolved once here, so the card is handed the answer instead
@@ -4239,8 +4270,8 @@ extension QueueItem {
             // #1311: any recipient with a real address at all, so the Send surface can tell "no email to
             // send to" apart from "an email exists but is held for a review".
             hasAnyEmailContact: hasAnyEmailContact,
-            blockedContactCount: p.blockedContactCount(lintBlockers: lintBlockers),
-            hasEnteredSendHalf: p.hasEnteredSendHalf,   // #1797
+            blockedContactCount: p.blockedContactCount(among: contactsOnce, lintBlockers: lintBlockers),
+            hasEnteredSendHalf: p.hasEnteredSendHalf(among: contactsOnce),   // #1797
             sendError: p.sendError,
             lostReason: p.lostReason,
             classificationOverriddenByDan: p.classificationOverriddenByDan,
@@ -4264,7 +4295,7 @@ extension QueueItem {
             draftGreetingNamesSomeoneElse: draftGreetingNamesSomeoneElse,
             draftGreetedName: draftGreetedName,
             draftGreetedContactName: draftGreetedContactName,
-            greetingAudienceSize: p.greetingAudienceSize,
+            greetingAudienceSize: audience,
             // "nothing is held any more", NOT "somebody has an override", and the difference is the whole
             // safety of it: this flag both tones the warning down and REMOVES the Override button, so
             // reading it the second way would take the way out away while the send is genuinely still
@@ -4310,13 +4341,20 @@ extension RecipientSnapshot {
     // run a whole pass of DraftCheck for every already-sent contact anyway. Measured 2026-09-03, that was
     // 26 wasted runs per render on this store's shape (L62).
     init(_ r: Recipient, lintBlockers: @autoclosure () -> [DraftIssue]) {
+        self.init(r, body: r.effectiveBody, audience: r.prospect?.greetingAudienceSize, lintBlockers: lintBlockers())
+    }
+
+    // #4357 slice G2: a contact's row on the card from any contact, with the show's letter and the greeting's
+    // audience handed in, which the model entry point above reaches through the contact's own show.
+    init(_ r: some ContactFacts, body: String?, audience: @autoclosure () -> Int?,
+         lintBlockers: @autoclosure () -> [DraftIssue]) {
         self.init(id: r.id, name: r.name, email: r.email, role: r.role,
                   roleIsACharacterisation: r.roleIsACharacterisation,
                   provenance: r.provenance, sendState: r.sendState, replied: r.replied,
                   lastReplyText: r.lastReplyText, resolution: r.resolution,
                   bounced: r.bounced, outcomeSource: r.outcomeSource,
                   suppressionReason: r.suppressionReason,
-                  isHeldFromSending: r.isBlockedAwaitingReview(lintBlockers: lintBlockers()),
+                  isHeldFromSending: r.isBlockedAwaitingReview(body: body, audience: audience(), lintBlockers: lintBlockers()),
                   replyDraftBody: r.replyDraftBody,
                   replyDraftRequestedAt: r.replyDraftRequestedAt,
                   replyCopiedAt: r.replyCopiedAt,
@@ -4330,7 +4368,7 @@ extension RecipientSnapshot {
                   intentHint: r.intentHint,
                   replyDraftEditedByDan: r.replyDraftEditedByDan,
                   replyDraftWrittenByDan: r.replyDraftWrittenByDan,
-                  replyAudience: SendGroup.replyAudience(of: r),
+                  replyAudience: SendGroup.replyAudience(ofContact: r),
                   replyDraftModel: r.replyDraftModel,
                   conversationRemindedAt: r.conversationRemindedAt,
             outreachStoodDownAt: r.outreachStoodDownAt,

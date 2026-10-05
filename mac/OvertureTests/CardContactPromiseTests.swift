@@ -179,7 +179,7 @@ struct ContactCountPromiseTests {
         #expect(item.contactCountLabel == "2 found, 1 reachable")
         // L16: the number and the rows it promises come from one predicate, so the card offers exactly
         // as many ways in as the pill claims.
-        #expect(item.displayedContactForms.count == 1)
+        #expect(item.displayedContactForms(now: Date()).count == 1)
     }
 
     // Neither performer publishes anything Dan can use. The pill says so rather than counting two.
@@ -219,7 +219,7 @@ struct ContactCountPromiseTests {
                          performer("Tobias Lund", form: "https://tobiaslund.example/appointments")])
 
         let item = QueueItem(p)
-        #expect(item.displayedContactForms.map(\.absoluteString) == ["https://tobiaslund.example/appointments"])
+        #expect(item.displayedContactForms(now: Date()).map(\.absoluteString) == ["https://tobiaslund.example/appointments"])
         #expect(item.contactCountLabel == "2 contacts", "two people, two ways in")
     }
 
@@ -231,7 +231,7 @@ struct ContactCountPromiseTests {
         p.setRecipients([performer("Sarah Matsushima", email: "sarah@example.com",
                                    form: "https://sarahmatsushima.example/contact")])
 
-        #expect(QueueItem(p).displayedContactForms.isEmpty)
+        #expect(QueueItem(p).displayedContactForms(now: Date()).isEmpty)
     }
 
     // #2612 reversed this one. A social profile IS a way in (Dan DMs it by hand), so the contact holding
@@ -244,7 +244,7 @@ struct ContactCountPromiseTests {
                          performer("Tobias Lund", form: "https://instagram.com/example-performer-solo")])
 
         let item = QueueItem(p)
-        #expect(item.displayedContactForms.map(\.absoluteString) == ["https://instagram.com/example-performer-solo"])
+        #expect(item.displayedContactForms(now: Date()).map(\.absoluteString) == ["https://instagram.com/example-performer-solo"])
         #expect(item.contactCountLabel == "2 contacts")
     }
 

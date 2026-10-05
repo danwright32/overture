@@ -291,22 +291,7 @@ final class Prospect {
         return contactTierFromRecipients
     }
 
-    func contactRouteForScoring(now: Date) -> ContactRoute {
-        if Reachability.probeIsStale(probedAt: reachabilityProbedAt, now: now) { return .unchecked }
-        // Deliberately the STORED verdict, not `reachabilityResultAsHeld` which the badge reads.
-        //
-        // #2664 briefly made this follow the badge, on the reasoning that a card saying "No email found"
-        // beside a score still paying route points is a contradiction. Dan's call, 2026-08-13, on being
-        // shown that this went further than the decision he actually made: the badge was what he chose,
-        // and ranking stays tied to what the paid check CONCLUDED.
-        //
-        // The two questions really are different, which is why they may answer differently here. The badge
-        // asks "can I reach this show right now", and a contact deleted by hand changes that. The score
-        // asks "what did the research find", and a hand delete is not a research finding: the score moves
-        // when a re-check moves it. Staleness is still shared, so they cannot disagree about whether an
-        // answer is CURRENT, which was #1648's point and is untouched.
-        return ContactRoute(probeResult: reachabilityResult)
-    }
+    // `contactRouteForScoring(now:)` lives on `ProspectFacts` since #4357 slice G2, comment unchanged.
     // #1596 Phase 3: classify this row's CURRENT recipients into a stored result. One definition, used by
     // every writer, so the importer's upgrade and the row's own snapshot can never disagree about what
     // counts as sendable. Mirrors the venue and press guard outcome exactly: an address held by either
@@ -333,32 +318,10 @@ final class Prospect {
         return Recipient.inCanonicalOrder(recipients)
     }
 
+    // #4357 slice G1: the rule lives on `ProspectFacts` (ProspectFactsMembers.swift) over the contacts handed
+    // in; the model reads it with its own `recipients`, as it always has, so no reach count moves.
     var reachabilityResultFromRecipients: Reachability.ProbeResult {
-        // #3653: the cascade itself lives in `Reachability.result(from:)` so a tier-one row can ask the
-        // same question without hand-rolling a second copy of it. What stays here is gathering the facts,
-        // which is the only part that needs a model.
-        //
-        // ONE WALK, not four. Each arm used to ask the contacts separately (`hasUnguardedAddress`,
-        // `isHeldByAGuard`, `usableContactFormURLs`, `socialRouteURLs`), and short-circuiting only helped
-        // the rows that answered early. The two URL lists are still computed lazily, because a row with
-        // an address never needs them and they are the expensive pair.
-        //
-        // #3387: `hasUnguardedAddress`, not `isSendablePending`. This asks whether an address exists that
-        // no research guard is holding; the send predicate folds in a calendar conflict, a blank subject
-        // and two lint judgements, none of which is a fact about reachability.
-        // #1798: guarded through the ONE shared definition (`Recipient.isHeldByAGuard`), which lists every
-        // guard that can hold an address. This rule once listed two of the three, so an address held only
-        // as a possible duplicate fell through to "no address at all".
-        var unguarded = false
-        var guarded = false
-        for r in recipients {
-            if r.hasUnguardedAddress { unguarded = true; break }
-            if r.isHeldByAGuard { guarded = true }
-        }
-        if unguarded { return Reachability.result(from: .init(hasUnguardedAddress: true)) }
-        if guarded { return Reachability.result(from: .init(hasGuardedAddress: true)) }
-        return Reachability.result(from: .init(hasUsableContactForm: !usableContactFormURLs.isEmpty,
-                                               hasSocialRoute: !socialRouteURLs.isEmpty))
+        reachabilityResultFromRecipients(among: recipients)
     }
 
     // #3387 / milestone 61 Phase 0.1. Does a way in of ANY kind exist: an address, a form on the act's
@@ -370,52 +333,15 @@ final class Prospect {
     // form-only and social-only show as holding an address.
     var hasAnyRoute: Bool { reachabilityResultFromRecipients != .noEmailFound }
 
-    // #2612: the social profiles Dan will actually DM. Judged through the SAME venue and press guards as
-    // the form list below, so a room's own Instagram or a press account is no more a route here than it
-    // is there; only the social-host test differs, and it is inverted.
-    // #2912: and never a profile the run itself called a NAME MATCH ONLY. This list is what makes the
-    // show read as reachable (the stored verdict, the fit score, the organisation ledger, and whether
-    // Dan can record a DM he sent by hand), and every one of those is Overture ASSERTING that a way in
-    // exists. An account carrying the right name and nothing tying it to this show cannot support that
-    // claim, so the assertion side sees exactly what it saw when such a profile was refused outright
-    // (#2147, L75). The CARD still shows the handle, marked, because looking at it costs Dan seconds.
-    var socialRouteURLs: [String] {
-        recipients.compactMap { r -> String? in
-            guard !r.isUnconfirmedNameMatch,
-                  let raw = r.contactFormURL?.trimmingCharacters(in: .whitespacesAndNewlines),
-                  !raw.isEmpty, Reachability.isSocialOnly(raw),
-                  !VenueContactGuard.looksLikeVenue(formURL: raw, venue: venue),
-                  !PressContactGuard.looksLikePressContact(formURL: raw) else { return nil }
-            return raw
-        }
-    }
+    // #4357 slice G1: `socialRouteURLs` (#2612, #2912) and `usableContactFormURLs` (#1626, #1629, #1636) live on
+    // `ProspectFacts` over the contacts handed in, with their comments; the model reads them with its own
+    // `recipients`.
+    var socialRouteURLs: [String] { socialRouteURLs(among: recipients) }
 
-    // #1626: the contact forms Dan would actually use, which is a form on the ACT's own site. An
-    // Instagram or another login-walled page is a dead end (his rule, 2026-07-27), judged through the
-    // one shared social-host list rather than a second copy of it.
-    //
-    // #1629: and never the ROOM's own booking form, judged through the same VenueContactGuard
-    // comparison the email path has used since #388. Without it a check that returned the host venue's
-    // form gave a card reading "Contact form only" that pointed Dan straight at the room, which is the
-    // oldest standing rule in the product (#368: a room's own address is never a real contact, not even
-    // a named booking person). Excluding it here means the show falls through to `noEmailFound`, the
-    // same answer he would get if the check had returned the room's email address.
-    var usableContactFormURLs: [String] {
-        recipients.compactMap { r -> String? in
-            guard let raw = r.contactFormURL?.trimmingCharacters(in: .whitespacesAndNewlines),
-                  !raw.isEmpty, !Reachability.isSocialOnly(raw),
-                  !VenueContactGuard.looksLikeVenue(formURL: raw, venue: venue),
-                  // #1636: nor a press or media page, the same rule the email path applies to a
-                  // "press@" address (#722/#635). The venue guard above cannot cover this: the live case
-                  // is a press office on a domain that is not this show's room at all.
-                  !PressContactGuard.looksLikePressContact(formURL: raw),
-                  let url = URL(string: raw), url.scheme != nil else { return nil }
-            return raw
-        }
-    }
+    var usableContactFormURLs: [String] { usableContactFormURLs(among: recipients) }
 
     var reachabilityResult: Reachability.ProbeResult? {
-        get { reachabilityResultRaw.flatMap(Reachability.ProbeResult.init(rawValue:)) }
+        get { asProspectFacts.reachabilityResult }
         set { reachabilityResultRaw = newValue?.rawValue }
     }
 
@@ -446,11 +372,9 @@ final class Prospect {
     // and a form pitch always has one. Which is the right answer (the show WAS unreachable when it was
     // pitched, and the badge is a record of that) but it is right by accident rather than by design, so it
     // is written down here: do not "fix" this into re-deriving on a sent show.
-    var reachabilityResultAsHeld: Reachability.ProbeResult? {
-        guard let stored = reachabilityResult else { return nil }
-        guard sentAt == nil, !isBooked else { return stored }
-        return reachabilityResultFromRecipients
-    }
+    // #4357 slice G1: the rule lives on `ProspectFacts` over the contacts handed in; the model reads it with its
+    // own `recipients`, the list `isBooked` and `reachabilityResultFromRecipients` read here before.
+    var reachabilityResultAsHeld: Reachability.ProbeResult? { reachabilityResultAsHeld(among: recipients) }
 
     // #1722. An unrecognised stored value reads as nil (no reason given), which the copy degrades to the
     // old sentence, so a newer producer's vocabulary can never put a claim on the card this build cannot
@@ -530,7 +454,7 @@ final class Prospect {
     var mergeSurvivorUnseenAt: Date? = nil
 
     var reachabilityEmptyReason: Reachability.EmptyReason? {
-        get { reachabilityEmptyReasonRaw.flatMap(Reachability.EmptyReason.init(rawValue:)) }
+        get { asProspectFacts.reachabilityEmptyReason }
         set { reachabilityEmptyReasonRaw = newValue?.rawValue }
     }
 
@@ -605,7 +529,7 @@ final class Prospect {
     // default he asked for. Nil is "he has not said", and that reads as together.
     var sendsTogetherOverride: Bool? = nil
 
-    var sendsTogether: Bool { sendsTogetherOverride ?? true }
+    // `sendsTogether` is on `ProspectFacts` since #4357 slice E1 (StagePlacementFacts.swift).
 
     // #2545: how many people ONE send reaches, which is what decides whether a greeting may name
     // somebody. Sending separately is one email each however many contacts the show carries, so the
@@ -616,12 +540,9 @@ final class Prospect {
     // asking it this question would have the two read each other without end. This counts who could
     // receive the mail from the fields alone, which is also the honest reading: a contact held by some
     // OTHER guard is still a person the greeting has to be right for once that guard clears.
-    var greetingAudienceSize: Int {
-        let reachable = recipients.filter {
-            $0.sendState == .pending && $0.email?.isEmpty == false && !$0.pausedByReply
-        }
-        return sendsTogether ? reachable.count : min(reachable.count, 1)
-    }
+    // #4357 slice E1: the rule is on `ProspectFacts` (StagePlacementFacts.swift), over contacts it is handed;
+    // this hands it this show's own `recipients`, uncounted, as it always read them.
+    var greetingAudienceSize: Int { greetingAudienceSize(among: recipients) }
 
     // #367: Dan asked for a re-prep on a prospect that already has a draft. Independent flags so he
     // can request just a redraft, just a fresh contact search, or both; PrepQueueBuilder.needsPrep
@@ -757,9 +678,7 @@ final class Prospect {
     // understood, rather than failing the decode. Read through `showSummaryAbsence` below, never directly.
     var showSummaryAbsentReasonRaw: String? = nil
 
-    var showSummaryAbsence: ShowSummaryAbsence? {
-        showSummaryAbsentReasonRaw.flatMap(ShowSummaryAbsence.init(rawValue:))
-    }
+    // `showSummaryAbsence` reads it on `ProspectFacts` since #4357 slice G2.
 
     // Performer-name warm-lead detection (#749, plan #748, issue #585). Prep matched this
     // performance's PERFORMER (not its org) to a past client, and corrected the relationship the
@@ -825,14 +744,8 @@ final class Prospect {
     // the NEXT event, and a reply always reopens the show.
     var outreachStoodDownAt: Date? = nil
 
-    // In force unless the contact has written back since. Takes the contact's own reply stamp because the
-    // reopen is per person: one contact replying does not put the whole show back in play for everyone
-    // else, but it does put THAT conversation back in play.
-    func isOutreachStoodDown(asOf repliedAt: Date?) -> Bool {
-        guard let stoodDown = outreachStoodDownAt else { return false }
-        if let repliedAt, repliedAt > stoodDown { return false }
-        return true
-    }
+    // Whether this stand-down is in force, `isOutreachStoodDown(asOf:)`, lives on `ProspectFacts`
+    // (ProspectFactsMembers.swift) since #4357 slice D1.
 
     func standDownOutreach(now: Date) { outreachStoodDownAt = now }
     func resumeOutreach() { outreachStoodDownAt = nil }
@@ -978,27 +891,26 @@ final class Prospect {
     // #792: contacts on this show held back by a review guard and waiting on Dan. A show can be
     // genuinely contacted (somebody was emailed) AND still have somebody waiting, and both facts have to
     // survive at once: the bug was that the first silently erased the second.
-    var blockedContactCount: Int { blockedContactCount { $0.draftLintBlockers } }
+    // #4357 slice E1: through the rule on `ProspectFacts`, over this show's own `recipients`, uncounted.
+    var blockedContactCount: Int { blockedContactCount(among: recipients) }
 
     // #3498: the same count, given a way to look up each contact's lint findings rather than deriving
     // them. `Recipient.draftLintBlockers` runs a whole pass of DraftCheck and memoises nothing, and a
     // card build already holds the answer for its pending contacts. ONE definition of what counts as
     // blocked, two spellings, so a change to the rule cannot leave the two disagreeing (L263).
     func blockedContactCount(lintBlockers: (Recipient) -> [DraftIssue]) -> Int {
-        recipients.filter { $0.isBlockedAwaitingReview(lintBlockers: lintBlockers($0)) }.count
+        blockedContactCount(among: recipients, lintBlockers: lintBlockers)
     }
 
     // #1797: whether this show has reached the half of the funnel a send belongs to, which is what decides
     // who speaks for a held contact (Send issues, or the triage card). One rule, in SendHalf, so the stage
     // and the card cannot disagree and leave a held contact spoken for by nobody.
-    var hasEnteredSendHalf: Bool {
-        SendHalf.entered(status: status, sentAt: sentAt,
-                         hasSentRecipient: recipients.contains { $0.sendState == .sent })
-    }
+    var hasEnteredSendHalf: Bool { hasEnteredSendHalf(among: recipients) }
 
     // #2394: the typed ending, the one field every reader shares.
+    // #4357 slice D1: read through its one body on `ProspectFacts`; the setter stays for the writers.
     var showOutcome: ShowOutcome? {
-        get { showOutcomeRaw.flatMap(ShowOutcome.init(rawValue:)) }
+        get { asProspectFacts.showOutcome }
         set { showOutcomeRaw = newValue?.rawValue }
     }
 
@@ -1053,9 +965,8 @@ final class Prospect {
     // not a lead he will work, whatever nights remain on it. A run opening TONIGHT has not opened yet.
     // An UNDATED show has not opened: "date to be confirmed" is a normal state on a season page, and
     // treating it as gone would silently throw away a real lead whose date is not announced yet.
-    func hasOpened(today: String) -> Bool {
-        EasternDate.runHasOpened(openingNight: performanceDate, today: today)
-    }
+    // `hasOpened(today:)` is on `ProspectFacts` since #4357 slice E1 (StagePlacementFacts.swift), where the
+    // reasoning above now sits beside its one body.
 
     // Consecutive scouts where this prospect's source was scouted but it was absent from the
     // feed (#133). Reset to 0 whenever it reappears. Past performances are never counted.
@@ -1154,46 +1065,23 @@ final class Prospect {
         self.runNights = runNights
     }
 
+    // #4357 slice D1: read through its one body on `ProspectFacts`; the setter stays for the writers.
     var status: ReviewStatus {
-        get { ReviewStatus(rawValue: statusRaw) ?? .new }
+        get { asProspectFacts.status }
         set { statusRaw = newValue.rawValue }
     }
 
     // `disappearedFromFeed` lives on `ProspectFacts` (ProspectFactsMembers.swift) since #4357, so a live model and a
     // retained `RowFacts` answer it by one body.
 
-    var hasDraft: Bool { draftBody != nil }
+    // `hasDraft` and `isReprepQueued` are on `ProspectFacts` since #4357 slice E1 (StagePlacementFacts.swift).
 
-    // #1940: a Prep run has work queued on this show. Through the same shared definition QueueItem's badge
-    // reads, so the badge Dan sees and the stage he finds the show under are one rule.
-    var isReprepQueued: Bool {
-        ReprepRequest.isQueued(draftRequested: reprepDraftRequested,
-                               contactsRequested: reprepContactsRequested)
-    }
 
     // MARK: - The date conflict (#901)
 
-    // A day of this run Dan cannot work, that he has NOT waved through. This is the one every gate asks:
-    // it keeps the show out of the Prep run (no money is spent drafting a show he cannot shoot) and out
-    // of the send (a conflict can turn up AFTER the draft exists, which a prep-only gate would miss).
-    var hasUnclearedConflict: Bool { conflictOpen }
-
-    // #1501: which night of this show's run the clash is on. Read off the stored key and this show's own
-    // date, so the pill and the sentence below are two renderings of ONE decision rather than two rules.
-    var conflictScope: ConflictScope? {
-        ConflictScope.of(blockedDate: conflictKey.flatMap { BlockedCalendar.Day(key: $0) }?.date,
-                         performanceDate: performanceDate)
-    }
-
-    // What Dan reads on the row: "You blocked Nov 14 (Vacation)." / "You're already shooting X on Nov 14."
-    // Composed from the key, never stored, so it can never be a stale quotation of older copy.
-    //
-    // #1501: and framed by WHICH night of the run is blocked, because under a date-group header the old
-    // sentence read as a claim about that header's date even when the clash was a week later.
-    var conflictNote: String? {
-        guard let day = conflictKey.flatMap({ BlockedCalendar.Day(key: $0) }) else { return nil }
-        return day.reason(scope: conflictScope ?? .thisNight)
-    }
+    // `hasUnclearedConflict`, `conflictScope` (#1501) and `conflictNote` live on `ProspectFacts`
+    // (ProspectFactsMembers.swift) since #4357 slice G2, comments unchanged, so a retained show answers them by
+    // the same body.
 
     // The scout's write, every run. The ONLY thing that sets a conflict.
     //
@@ -1264,16 +1152,7 @@ final class Prospect {
     //
     // Moves the show to `.drafted` so it flows through Review, approval and the send path with no special
     // casing downstream, exactly as a prepped one does.
-    // #2052: a written email with no subject line. The one definition of that state, read by the send
-    // predicate (Recipient.isSendablePending) and by the note beside the greyed Send button, so what
-    // holds the send and what explains it can never be two different rules.
-    //
-    // It asks about a DRAFT, not about the show: a show with no draft at all has no subject because it
-    // has no email yet, and treating that as missing would make every un-prepped contact unsendable and
-    // change what the whole queue says about who is reachable.
-    var draftIsMissingSubject: Bool {
-        draftBody != nil && (draftSubject ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-    }
+    // `draftIsMissingSubject` (#2052) lives on `ProspectFacts` since #4357 slice G2, comment unchanged.
 
     func writeManualDraft(subject: String, body: String) {
         draftSubject = subject
@@ -1388,8 +1267,9 @@ final class Prospect {
             .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    // #4357 slice D1: read through its one body on `ProspectFacts`; the setter stays for the writers.
     var outcome: Outcome {
-        get { Outcome.fromStored(outcomeRaw) }
+        get { asProspectFacts.outcome }
         set { outcomeRaw = newValue.rawValue }
     }
 
@@ -1421,24 +1301,9 @@ final class Prospect {
     // Closed for routine follow-ups/reminders: booked, every contact resolved (derived), or Dan closed
     // the lead by hand / with a closing note (a lead lostSoft/lostHard not yet written through to a
     // contact). A fresh reply still surfaces independently via `hasUnhandledReply`.
-    var isClosed: Bool {
-        // #769: the org asked Dan to stop. Nothing routine may fire again, on any of their shows. This
-        // is the load-bearing line: without it a do-not-contact org would keep receiving follow-ups
-        // and reminders on a show already sent, which is precisely the email that issue exists to
-        // prevent. Suppressing the untried recipients only stops FIRST sends.
-        if orgDoNotContact { return true }
-        switch performanceStatus {
-        // #1840: a show Dan stopped working is closed for ROUTINE follow-ups, same as the two lost
-        // states. The one thing it keeps raising, its post-event closing note, is carved out inside
-        // ConversationReminder rather than here, so this stays the plain "no routine work" answer and
-        // the exception lives in exactly one place.
-        // #3669: the three ended states come from `endedWithoutAShoot`, the same answer the self booking
-        // check reads, so the two cannot drift apart over which endings count as closed.
-        case .booked: return true
-        case .lostDoorOpen, .lostNotInterested, .stoodDown, .active, .new:
-            return performanceStatus.endedWithoutAShoot || outcome == .lostSoft || outcome == .lostHard
-        }
-    }
+    // #4357 slice H: the rule is on `ProspectFacts` (QueueLongTailTerms.swift), with its reasons; this hands it
+    // the model's own performance status, read over its `recipients` uncounted, as it always was.
+    var isClosed: Bool { isClosed(given: performanceStatus) }
 
     // A contact replied and nobody has answered it: not booked, and some replied / unresolved /
     // un-bounced contact still owes a reply. Per-recipient (#653), so answering one contact never masks
@@ -1453,7 +1318,7 @@ final class Prospect {
     // judgement about the conversation, it is the conversation having succeeded, and it is a rollup
     // question rather than a per-contact one.
     var hasUnhandledReply: Bool {
-        performanceStatus != .booked && recipients.contains(where: \.hasUnhandledReply)
+        hasUnhandledReply(among: recipients)
     }
 
     // Record a lead outcome as Dan's own call (manual source, timestamped, booking-suggestion

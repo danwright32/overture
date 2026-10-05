@@ -10,8 +10,30 @@ import Foundation
 // differs from Prospect's (Inquiry keeps its own) still expresses the same "leave this alone" rule
 // without inheriting Prospect's enum vocabulary.
 
+// #4357 slice D1: the two stamps that date a reply, and the one rule dating it, shared by everything that can
+// be replied to. Both `ReplyWatchableRecipient` (a show's contact and a direct hire inquiry) and `ContactFacts`
+// (a show's contact as the queue terms read it, live or retained) refine this, so `Recipient`, which is
+// both, has one `replyArrivedAt` rather than two equally good ones that make every call ambiguous.
+protocol ReplyArrivalFacts {
+    var inboundReplySentAt: Date? { get }
+    var repliedAt: Date? { get }
+}
+
+extension ReplyArrivalFacts {
+    // #2113: when the reply actually ARRIVED, which is what every date surface wants. Prefers the instant
+    // they sent it over the instant Overture noticed, and falls back to the notice for a row recorded
+    // before the send time was captured.
+    //
+    // #2118: stated here rather than on each conformer, so a scouted contact and a direct hire inquiry
+    // cannot answer it differently. They already did: the queue dated a show's reply by when the person
+    // wrote and an inquiry's by when Overture noticed, up to a night apart on two rows sharing one set of
+    // date headings. One definition, because the queue, the reminder calculator and the OmniFocus sync all
+    // ask it and two of them asking differently is how a card ends up under the wrong day (L16).
+    var replyArrivedAt: Date? { inboundReplySentAt ?? repliedAt }
+}
+
 // One contacted address whose Gmail thread is watched for a reply or a bounce.
-protocol ReplyWatchableRecipient: AnyObject {
+protocol ReplyWatchableRecipient: AnyObject, ReplyArrivalFacts {
     var gmailThreadId: String? { get }
     // #2649: the Message-ID our own next message on this conversation references. Settable, because the
     // threading repair rewrites the minted ids Gmail discarded (#2647) with the ones it really assigned,
@@ -105,16 +127,7 @@ extension ReplyWatchableRecipient {
         self.repliedAt = repliedAt
     }
 
-    // #2113: when the reply actually ARRIVED, which is what every date surface wants. Prefers the instant
-    // they sent it over the instant Overture noticed, and falls back to the notice for a row recorded
-    // before the send time was captured.
-    //
-    // #2118: stated here rather than on each conformer, so a scouted contact and a direct hire inquiry
-    // cannot answer it differently. They already did: the queue dated a show's reply by when the person
-    // wrote and an inquiry's by when Overture noticed, up to a night apart on two rows sharing one set of
-    // date headings. One definition, because the queue, the reminder calculator and the OmniFocus sync all
-    // ask it and two of them asking differently is how a card ends up under the wrong day (L16).
-    var replyArrivedAt: Date? { inboundReplySentAt ?? repliedAt }
+    // `replyArrivedAt` lives on `ReplyArrivalFacts` above since #4357 slice D1, unchanged.
 }
 
 // A contacted entity (a show's lead, or an inquiry) that owns one or more watched threads.
@@ -139,39 +152,15 @@ protocol ReplyWatchable: AnyObject {
 
 extension Recipient: ReplyWatchableRecipient {
     var replyWatchAddress: String? { email }
-    var replyWatchManualOutcome: Bool { outcomeSourceRaw == OutcomeSource.manual.rawValue }
-    var replyWatchIsBooked: Bool { resolution == .booked }
-    // #2196: nothing has closed it out. Deliberately the same three facts `hasUnhandledReply` reads
-    // before it asks anything else, so a conversation that could still put itself in front of Dan is
-    // exactly the one still being watched, and the two cannot disagree about which those are.
-    var replyWatchConversationIsOpen: Bool { resolution == nil && !bounced }
-    // #2717: a form or DM pitch carrying a conversation Overture never sent on.
-    //
-    // Self-healing rather than a permanent brand, which is why `gmailMessageId` is in it: the moment
-    // Overture's own reply lands on the attached thread, `sendReplyDraft` stores the id Gmail assigned it,
-    // and from then on there IS a message of Overture's to thread off. A rule keyed on the channel alone
-    // would go on refusing long after its reason had gone (L68).
-    // #3712: and never keyed on the CHANNEL alone any more. That clause was exactly right while an
-    // attached conversation could only ever sit on a form pitch, and phase 3 of milestone 82 made an
-    // emailed pitch attachable: on #3706's row the channel is `.email` and `gmailMessageId` names a real
-    // message Overture sent, so all three clauses were false about a thread Overture has never sent a
-    // word on, and the three readers of this predicate acted on that answer.
-    //
-    // The displaced arm asks the same question the original does, in the terms that row makes available:
-    // is the outgoing message this row holds a message on the conversation it now stores? While it is
-    // still the one the link displaced, it is not. It heals the same way too, because `sendReplyDraft`
-    // stores the id Gmail assigns Overture's own answer on the linked thread.
-    var replyWatchConversationIsAttached: Bool {
-        guard hasWatchableConversation else { return false }
-        if attachDisplacedThreadId != nil { return gmailMessageId == attachDisplacedMessageId }
-        return outreachChannel == .contactForm && gmailMessageId == nil
-    }
+    // `replyWatchConversationIsAttached` (#2717, #3712), which this conformance requires, is answered by its
+    // one body on `ContactFacts` (ContactFactsMembers.swift) since #4357 slice D1, and
+    // `replyWatchManualOutcome`, `replyWatchIsBooked` and `replyWatchConversationIsOpen` by theirs since E2.
 }
 
 extension Prospect: ReplyWatchable {
     var replyWatchDisplayName: String { groupName }
-    var replyWatchManualOutcome: Bool { outcomeSourceRaw == OutcomeSource.manual.rawValue }
-    var replyWatchIsBooked: Bool { outcome == .booked }
+    // `replyWatchManualOutcome` and `replyWatchIsBooked`, which this conformance requires, are answered by
+    // their one body on `ProspectFacts` (ProspectFactsMembers.swift) since #4357 slice E2.
     var replyWatchRecipients: [any ReplyWatchableRecipient] { recipients }
     // #3937: the run has not passed, judged by its CLOSING night (`runEndDate ?? performanceDate`) through
     // `EasternDate.runHasPassed`. Chosen among the three run predicates on purpose: an unknown date has NOT

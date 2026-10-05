@@ -8,9 +8,8 @@ import Foundation
 // THE EXEMPTION IS A REASON, CHECKED MECHANICALLY (L362). A caller is exempt only while its own body has no
 // suspension point between its first touch of the store and its last write, because such a caller cannot
 // interleave with a landing block: on the main actor it runs start to finish in one turn. It is never
-// exempt by name. Today `LeadIntakeModel.importAll` passes (it is synchronous); the day A11 gives it an
-// await, the scan stops exempting it and this goes red until the paste calls `begin`, which A11 does in the
-// same change.
+// exempt by name. `LeadIntakeModel.importAll` passed while it was synchronous; #4339 (A11) gave the paste its
+// awaits and, in the same change, its own turn through `begin` (`LeadPasteLanding.landPastedLead`).
 //
 // An exempt caller's OWN callers are then entry points in turn (they reach the store through it), followed
 // by name wherever the name is declared exactly once in the app, so a new async caller of `applySweep` is
@@ -39,7 +38,10 @@ struct EveryScoutLandingGoesThroughTheSingleFlightTests {
     static let directCalls = ["ScoutService.apply(", "apply(events:", "ScoutLandingStore("]
     // A read of the store a landing will then write against.
     static let storeTouches = ["context.fetch(", ".fetch(FetchDescriptor", "readProspectTable(", "row(for:",
-                               "venueBrandCorpus(", "ScoutLandingStore("]
+                               "venueBrandCorpus(", "ScoutLandingStore(",
+                               // #4339: the entry flush saves the main context, so a caller that flushes, reads
+                               // off the main thread and lands later has touched the store from its first line.
+                               "flushBeforeLanding("]
     // A write, or a call that writes.
     static let writes = [".save()", "saveLanding(", "save(context)"]
 
@@ -48,9 +50,6 @@ struct EveryScoutLandingGoesThroughTheSingleFlightTests {
     static let unfollowed: [String: String] = [
         "apply": "ScoutService.apply itself, whose default working set is built inside it; every caller of it "
             + "is already found through `ScoutService.apply(` and `apply(events:` above",
-        "start": "LeadIntakeModel.start, the lead paste, exempt only because `importAll` is synchronous; it is "
-            + "reached from the Add a lead sheet's submit, which touches the store nowhere else, and A11 makes "
-            + "the paste take its own turn through `begin` in the change that gives it an await",
     ]
 
     // Type level functions (four spaces in, which is where a type's own members sit in this codebase), each
@@ -210,7 +209,11 @@ struct EveryScoutLandingGoesThroughTheSingleFlightTests {
         func verdict(_ name: String) -> Verdict? { derived.verdicts.first { $0.0.name == name }?.1 }
         #expect(verdict("runScout") == .throughTheFlight)
         #expect(verdict("ingest") == .throughTheFlight)
-        #expect(verdict("importAll") == .exempt, "the lead paste is synchronous today, so it cannot interleave")
+        // #4339 (A11): the lead paste awaits now, so it takes its own turn, at Dan's priority.
+        #expect(verdict("landPastedLead") == .throughTheFlight, "the lead paste lands without waiting its turn")
+        #expect(verdict("importAll") == nil,
+                Comment(rawValue: "importAll should not be a derived entry point: it calls only landPastedLead and "
+                    + "touches the store nowhere itself, so being derived means it has started touching the store directly"))
         #expect(verdict("applySweep") == .exempt)
         #expect(verdict("landNative") == .exempt)
         #expect(derived.verdicts.count >= 6, Comment(rawValue:

@@ -48,7 +48,11 @@ struct RowFactsSchemaCoverageTests {
     static func requirements(of proto: String) throws -> Set<String> {
         let file = try #require(AppSourceWalk.appFiles().first { $0.name == "QueueFacts.swift" })
         let lines = SwiftSource.scannableLines(in: file.text).map(\.code)
-        let start = try #require(lines.firstIndex { $0.contains("protocol \(proto) {") })
+        // #4357 slice D1: `ContactFacts` now refines `ReplyArrivalFacts`, so its declaration reads
+        // `protocol ContactFacts: ReplyArrivalFacts {`; both shapes open the body this reads.
+        let start = try #require(lines.firstIndex {
+            $0.contains("protocol \(proto) {") || $0.contains("protocol \(proto): ")
+        })
         var names: Set<String> = []
         for line in lines[(start + 1)...] {
             if line.hasPrefix("}") { break }

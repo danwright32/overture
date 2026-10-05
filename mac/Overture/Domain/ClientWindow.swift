@@ -74,7 +74,8 @@ struct ClientWindow: Equatable, Sendable {
         self.init(clientSourceIds: Set(clientFlags.filter(\.value).map(\.key)))
     }
 
-    func isPastClientShow(_ p: Prospect) -> Bool {
+    // #4357 slice E1: over any `ProspectFacts`.
+    func isPastClientShow(_ p: some ProspectFacts) -> Bool {
         ClientHorizon.isPastClientShow(p, clientSourceIds: clientSourceIds)
     }
 }

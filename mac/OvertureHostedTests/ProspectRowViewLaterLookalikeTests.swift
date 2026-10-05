@@ -24,7 +24,7 @@ struct ProspectRowViewLaterLookalikeTests {
     }
 
     private func texts(_ item: QueueItem) throws -> [String] {
-        try ProspectRowView(item: item, today: "2026-09-22", onKeep: {}, onDismiss: { _ in })
+        try ProspectRowView(item: item, today: "2026-09-22", now: Date(), onKeep: {}, onDismiss: { _ in })
             .inspect().findAll(ViewType.Text.self).map { try $0.string() }
     }
 
@@ -62,7 +62,7 @@ struct ProspectRowViewLaterLookalikeTests {
     @Test(arguments: [ColorScheme.light, ColorScheme.dark])
     func thenoteRendersInBothThemes(_ scheme: ColorScheme) throws {
         let view = ProspectRowView(item: item(later: ["Orli Shaham: In Clara's Hands"]),
-                                   today: "2026-09-22", onKeep: {}, onDismiss: { _ in })
+                                   today: "2026-09-22", now: Date(), onKeep: {}, onDismiss: { _ in })
             .environment(\.colorScheme, scheme)
         let found = try view.inspect().findAll(ViewType.Text.self).map { try $0.string() }
         #expect(found.contains { $0.contains("A later listing looks like the same show") })

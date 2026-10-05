@@ -217,7 +217,8 @@ struct ShowSummaryWiringTests {
     // been the sentence quietly missing from every card.
     @Test func theQueueModelCarriesItToTheRow() throws {
         let model = SourceGuardHelper.source("Overture/UI/QueueView+Model.swift")
-        let builder = try #require(SourceGuardHelper.between("init(_ p: Prospect, sendGroups:",
+        // #4357 slice G2: the card's body is the generic initialiser the model's forwards to.
+        let builder = try #require(SourceGuardHelper.between("among contactsOnce: [Row.Contact]) {",
                                                              and: "\n    }", in: model),
                                    "expected to find the QueueItem initialiser that builds a card")
         #expect(builder.contains("showSummary: p.showSummary"),

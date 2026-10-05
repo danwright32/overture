@@ -1905,8 +1905,11 @@ struct QueueView: View {
                 // this card draws skips its body. See `ScoutCardInputs`.
                 let offeredEarly = QueueModel.saysOfferedEarlyAsAClient(item, stage: focusedStage)
                 let towns = (excluded: userExcludedTowns, allowed: allowedSeedTowns)
+                // #4357 slice G1: the row judges on the PASS's clock, the instant its card was built at,
+                // rather than the wall clock read again while drawing (the #4356 part 3 note).
+                let passDay = EasternDate.today(data.now)
                 QueueSendAwareRow(key: item.id, sendState: sendState, redrawsOn: ScoutCardInputs(
-                    item: item, today: today, now: data.now, gmailConnected: data.gmailConnected,
+                    item: item, today: passDay, now: data.now, gmailConnected: data.gmailConnected,
                     checkRunning: data.checkRunning, probeRunning: data.probeRunning,
                     checkRunSince: data.checkRunSince, checkLookups: data.checkLookups,
                     offeredEarlyAsAClient: offeredEarly, userExcludedTowns: towns.excluded,
@@ -1916,7 +1919,7 @@ struct QueueView: View {
                     // says it is "read from HERE only by the action handlers, which run on a press rather
                     // than during a render"; handing `data.queueScope` broke that rule, and handing the
                     // property directly would run its whole-store filter and sort once per rendered row.
-                    ProspectRowFactory.row(item, today: today, prospects: { prospects }, context: context, feedback: feedback,
+                    ProspectRowFactory.row(item, today: passDay, now: data.now, prospects: { prospects }, context: context, feedback: feedback,
                                           dayOffOffer: dayOffOffer,
                                           gmailConnected: data.gmailConnected,
                                           timingSurface: .queue,

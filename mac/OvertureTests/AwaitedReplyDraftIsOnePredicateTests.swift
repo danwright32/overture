@@ -183,7 +183,10 @@ struct AwaitedReplyDraftIsOnePredicateTests {
     // Built is not wired (L3): the three readings must be spelled through the shared rule rather than each
     // repeating its conditions, or the next guard added to one of them leaves the other two behind again.
     @Test func noReaderSpellsTheConditionsForItself() throws {
-        for path in ["Overture/Domain/Recipient.swift",
+        // #4357 slice F: the contact's reading moved from Recipient.swift to ContactFactsMembers.swift, where
+        // the stalled question now lives; Recipient.swift keeps only a comment pointing there, which this
+        // guard must not be satisfied by (L103).
+        for path in ["Overture/Domain/ContactFactsMembers.swift",
                      "Overture/Domain/ReplyPanel.swift",
                      "Overture/UI/QueueView+Model.swift"] {
             let source = SourceGuardHelper.source(path)
