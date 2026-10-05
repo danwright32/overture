@@ -129,7 +129,7 @@ struct PrepManuallyTakesARouteTests {
                                        subject: "s", body: "b", prospects: [p], context: ctx,
                                        feedback: ActionFeedback())
         p.status = .approved
-        #expect(SendService.nextPendingRecipient(for: p) == nil)
+        #expect(SendService.nextPendingRecipient(for: p, today: ScoutTestClock.beforeAllFixtures) == nil)
         #expect(SendGroup.pendingGroup(of: p, today: EasternDate.today(Date())).isEmpty)
     }
 

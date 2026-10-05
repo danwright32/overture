@@ -108,9 +108,9 @@ struct DraftLintSendGateTests {
         let act = Recipient(id: "a@act.example", email: "a@act.example", provenance: .act)
         p.setRecipients([act])
 
-        #expect(SendService.nextPendingRecipient(for: p) == nil)
+        #expect(SendService.nextPendingRecipient(for: p, today: ScoutTestClock.beforeAllFixtures) == nil)
 
         act.lintOverriddenBody = act.effectiveBody
-        #expect(SendService.nextPendingRecipient(for: p) === act)
+        #expect(SendService.nextPendingRecipient(for: p, today: ScoutTestClock.beforeAllFixtures) === act)
     }
 }

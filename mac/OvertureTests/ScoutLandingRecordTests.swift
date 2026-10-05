@@ -194,7 +194,9 @@ final class ScoutLandingRecordTests {
         #expect(journal.entryPoint == LandingSingleFlight.EntryPoint.scoutExtractIngest.rawValue)
         #expect(journal.sequence == (try source("a", c)).lastLandedSequence)
         #expect(journal.now == now)
-        #expect(journal.sources == [.init(sourceId: "a", pageHash: "new-a"), .init(sourceId: "b", pageHash: "new-b")])
+        // #4440: and, from version 2, what each landing source's report is judged against as the run started.
+        #expect(journal.sources == [.init(sourceId: "a", pageHash: "new-a", checksBefore: 0, baselineBefore: 0),
+                                    .init(sourceId: "b", pageHash: "new-b", checksBefore: 0, baselineBefore: 0)])
     }
 
     // MARK: - what an interrupted landing leaves
@@ -419,6 +421,30 @@ final class ScoutLandingRecordTests {
         #expect(journal.entryPoint == LandingSingleFlight.EntryPoint.scoutExtractIngest.rawValue)
         #expect(journal.now == Date(timeIntervalSinceReferenceDate: 780_000_000.5))
         #expect(journal.sources == [.init(sourceId: "a", pageHash: "page-a"), .init(sourceId: "b", pageHash: nil)])
+        // #4440: carried forward with nothing invented. A version 1 journal never recorded a results copy or
+        // what its sources stood at, and reads back saying so.
+        #expect(journal.resultsCopy == nil)
+        #expect(journal.sources.allSatisfy { $0.checksBefore == nil && $0.baselineBefore == nil })
+        // Written again (a kept copy offered again writes the same run's journal again), it is written in the
+        // shape this build writes, under the version that names that shape, never "version 1" over v2 fields
+        // that the next read would then decode as version 1 and drop (L1010).
+        let rewritten = try LandingJournals.decode(LandingJournals.encoded(journal))
+        #expect(rewritten.version == LandingJournal.currentVersion)
+        #expect(rewritten.runIdentity == journal.runIdentity && rewritten.sources == journal.sources)
+    }
+
+    // #4440: version 2, the results copy and what each landing source's report is judged against.
+    @Test func aVersionTwoJournalDecodes() throws {
+        let data = try Data(contentsOf: RepoRoot.url.appendingPathComponent("fixtures/landing-journal/v2.json"))
+        let journal = try LandingJournals.decode(data)
+        #expect(journal.version == 2)
+        #expect(journal.resultsCopy == "0123abcd")
+        #expect(journal.sources == [.init(sourceId: "a", pageHash: "page-a", checksBefore: 4, baselineBefore: 3),
+                                    .init(sourceId: "b", pageHash: nil)])
+        #expect(journal.now == Date(timeIntervalSinceReferenceDate: 780_000_000.5))
+        // And what this build writes is what it reads back, at the current version.
+        #expect(try LandingJournals.decode(LandingJournals.encoded(journal)) == journal)
+        #expect(LandingJournal.currentVersion == 2)
     }
 
     @Test func aJournalOfAVersionThisBuildDoesNotKnowIsRefusedNotReadAsTheCurrentOne() {
@@ -433,7 +459,7 @@ final class ScoutLandingRecordTests {
         let j = try journals("file-newer", failures: failures)
         try FileManager.default.createDirectory(at: j.directory, withIntermediateDirectories: true)
         let newer = j.directory.appendingPathComponent(LandingJournals.fileName(sequence: 9, runIdentity: "next"))
-        try Data("{\"version\":2,\"runIdentity\":\"next\"}".utf8).write(to: newer)
+        try Data("{\"version\":\(LandingJournal.currentVersion + 1),\"runIdentity\":\"next\"}".utf8).write(to: newer)
 
         let listed = try j.list()
 
@@ -443,7 +469,7 @@ final class ScoutLandingRecordTests {
         }
         #expect(path == newer.path && sequence == 9)
         #expect(FileManager.default.fileExists(atPath: newer.path), "a newer build's journal was renamed away")
-        #expect(failures.current().contains { $0.reason.contains("version 2 is not one this build reads") },
+        #expect(failures.current().contains { $0.reason.contains("version \(LandingJournal.currentVersion + 1) is not one this build reads") },
                 Comment(rawValue: "\(failures.current())"))
         #expect(j.highestSequence == 9)
     }

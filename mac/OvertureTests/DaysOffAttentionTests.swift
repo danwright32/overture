@@ -33,12 +33,12 @@ struct DaysOffAttentionTests {
 
     @Test func noBookedShootDataNeedsALook() {
         let cal = BlockedCalendar.build(availability: .measured, bookings: [], exportedBlockedDates: [], daysOff: [])
-        #expect(DaysOffAttention.needsALook(cal) == true)
+        #expect(DaysOffAttention.needsALook(cal, today: today, now: now, defaults: scratchDefaults()) == true)
     }
 
     @Test func aSingleBookedShootIsEnoughToStopSayingIt() {
         let cal = BlockedCalendar.build(availability: .measured, bookings: [booking("2026-11-14")], exportedBlockedDates: [], daysOff: [])
-        #expect(DaysOffAttention.needsALook(cal) == false)
+        #expect(DaysOffAttention.needsALook(cal, today: today, now: now, defaults: scratchDefaults()) == false)
     }
 
     // The days Dan blocks himself are NOT booked-shoot data, and must not silence the warning: they are
@@ -46,7 +46,7 @@ struct DaysOffAttentionTests {
     @Test func dansOwnDaysOffDoNotSilenceIt() {
         let cal = BlockedCalendar.build(availability: .measured, bookings: [], exportedBlockedDates: [],
                                         daysOff: [DayOffRange(startDate: "2026-11-14", endDate: "2026-11-22", note: nil)])
-        #expect(DaysOffAttention.needsALook(cal) == true)
+        #expect(DaysOffAttention.needsALook(cal, today: today, now: now, defaults: scratchDefaults()) == true)
     }
 
     // MARK: - What Dan reads
