@@ -62,6 +62,24 @@ def load(path, archive_path):
     return rows, notes, unreadable, sources
 
 
+def split_idle_work(rows):
+    """#4335 (A6, L459): the stalls recorded while Overture finished an INTERRUPTED landing at idle, with
+    nobody at the Mac (`recoverySequence` set), apart from every other record. Idle work, never a freeze Dan
+    felt, so it is reported in a group of its own and never inside the distribution milestone 80's bar is
+    read from. Returns (the other records, the idle work)."""
+    idle = [r for r in rows if isinstance(r, dict) and r.get("recoverySequence") is not None]
+    return [r for r in rows if not (isinstance(r, dict) and r.get("recoverySequence") is not None)], idle
+
+
+def idle_work_line(idle):
+    """The one line that says the idle work is there and was left out, or None when there was none."""
+    if not idle:
+        return None
+    longest = max((_number(r, "seconds") or 0) for r in idle)
+    return (f"idle work, not counted below: {plural(len(idle), 'stall')} while Overture finished an "
+            f"interrupted landing with nobody at the Mac (longest {longest:.2f}s)")
+
+
 def plural(n, word):
     return f"{n} {word}" if n == 1 else f"{n} {word}s"
 

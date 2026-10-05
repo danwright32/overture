@@ -67,6 +67,10 @@ final class FreezeWatch {
     // truth rather than inheriting a stale one.
     func stampWindows(_ presence: WindowPresence) { watchdog?.windows.stamp(presence) }
 
+    // #4335 (A6, L459): called by the MAIN thread as an idle landing recovery starts (with its run and the
+    // input idle seconds it measured) and as it ends (nil). The only writer.
+    func stampIdleWork(_ work: MainThreadWatchdog.IdleWork?) { watchdog?.idleWork.stamp(work) }
+
     // #3760: called by the MAIN thread every time it runs a render pass. The only writer.
     //
     // Silently does nothing while the watch is stood down, which is correct rather than a swallow: with

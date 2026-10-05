@@ -423,6 +423,14 @@ struct StallRecord: Codable, Equatable, Sendable {
     let mainThreadRunnableSamples: Int?
     let mainThreadWaitingSamples: Int?
 
+    // #4335 (A6, L459): this stall happened while Overture was finishing an INTERRUPTED landing, at idle, with
+    // nobody at the Mac: the interrupted landing's sequence number, and how long the Mac had been without keyboard or mouse
+    // input when the recovery started. Idle work, never a freeze Dan felt, so every reader reports these in a
+    // group of their own and never inside the freeze distribution milestone 80's bar is read from. Absent on
+    // every other record, which is nearly all of them, and on every record written before this shipped.
+    let recoverySequence: Int?   // the landing's sequence number, never text: this file is durable (#3435)
+    let inputIdleSeconds: Double?
+
     // The whole identity, as one string, because a reader that remembers what it has said has to remember
     // BOTH halves: the sequence restarts at 1 in every process, so it is not an identity on its own.
     var identity: String { "\(session)#\(sequence)" }
@@ -433,6 +441,7 @@ struct StallRecord: Codable, Equatable, Sendable {
          asleepSeconds: Double? = nil, runLoopActivity: RunLoopActivity = .notRecorded,
          mainThreadCPUSeconds: Double? = nil, mainThreadRunnableSamples: Int? = nil,
          mainThreadWaitingSamples: Int? = nil,
+         recoverySequence: Int? = nil, inputIdleSeconds: Double? = nil,
          promotedFromOlderWindow: Bool? = nil) {
         self.session = session
         self.sequence = sequence
@@ -455,6 +464,8 @@ struct StallRecord: Codable, Equatable, Sendable {
         self.mainThreadCPUSeconds = mainThreadCPUSeconds
         self.mainThreadRunnableSamples = mainThreadRunnableSamples
         self.mainThreadWaitingSamples = mainThreadWaitingSamples
+        self.recoverySequence = recoverySequence
+        self.inputIdleSeconds = inputIdleSeconds
         self.promotedFromOlderWindow = promotedFromOlderWindow
     }
 
@@ -493,6 +504,9 @@ struct StallRecord: Codable, Equatable, Sendable {
         mainThreadCPUSeconds = try c.decodeIfPresent(Double.self, forKey: .mainThreadCPUSeconds)
         mainThreadRunnableSamples = try c.decodeIfPresent(Int.self, forKey: .mainThreadRunnableSamples)
         mainThreadWaitingSamples = try c.decodeIfPresent(Int.self, forKey: .mainThreadWaitingSamples)
+        // #4335: absent on every record that was not idle work.
+        recoverySequence = try c.decodeIfPresent(Int.self, forKey: .recoverySequence)
+        inputIdleSeconds = try c.decodeIfPresent(Double.self, forKey: .inputIdleSeconds)
         // #4122: absent on a record nobody promoted, which is almost all of them.
         promotedFromOlderWindow = try c.decodeIfPresent(Bool.self, forKey: .promotedFromOlderWindow)
         // Decoded as a STRING and mapped, never as the enum directly. `decodeIfPresent` on an enum THROWS on
@@ -653,10 +667,14 @@ enum StallLog {
         // The HIGH WATER is judged BEFORE the floor, deliberately. A session whose worst stall is under
         // the floor still has a worst stall, and reporting none would say a session was clean when what
         // happened is that nothing crossed a threshold (L98).
-        if let current = next.highWater {
-            if stall.seconds > current.seconds { next.highWater = stall }
-        } else {
-            next.highWater = stall
+        // #4335 (A6): idle work (a recovery's hold, nobody at the Mac) never becomes the session's worst stall,
+        // because the gate reading it decides an escalation by freezes Dan could feel. Still written below.
+        if stall.recoverySequence == nil {
+            if let current = next.highWater {
+                if stall.seconds > current.seconds { next.highWater = stall }
+            } else {
+                next.highWater = stall
+            }
         }
         guard stall.seconds >= floor else {
             next.belowFloor += 1
