@@ -17,9 +17,11 @@ struct RenderDataComparisonCoversEveryFieldTests {
     static let asOf = "2026-10-01"
     static let now = Date(timeIntervalSince1970: 1_790_000_000)
 
-    static func pass(_ rows: [Prospect], gmailConnected: Bool = false) -> QueueView.RenderData {
+    static func pass(_ rows: [Prospect], gmailConnected: Bool = false,
+                     focusedStage: StageFocus = .scout) -> QueueView.RenderData {
         var inputs = QueueRenderPass.Inputs(allProspects: QueueRenderPass.Corpus(rows), inquiries: [],
-                                            orgAnswers: [], context: .at(asOf, now: now), focusedStage: .scout)
+                                            orgAnswers: [], context: .at(asOf, now: now),
+                                            focusedStage: focusedStage)
         inputs.gmailConnected = gmailConnected
         return QueueRenderPass.make(inputs)
     }
@@ -57,18 +59,84 @@ struct RenderDataComparisonCoversEveryFieldTests {
         return type.range(of: #"\b(Prospect|Recipient|Inquiry|CardStore)\b"#, options: .regularExpression) != nil
     }
 
-    @Test func noMemberHoldingAnObjectIsComparedByValueEquality() {
-        let members = Self.members(Self.pass([]))
+    /// A pass whose model-carrying members are POPULATED: one show still in Scout and one already pitched, so
+    /// the Reached out list and its entries hold real models. Over an empty pass every such collection is
+    /// empty, and a walk of its values can find no model inside it whatever it is compared by (L101, L159).
+    /// The container comes back with the pass because a context does not keep its container alive.
+    static func populatedPass() throws -> (data: QueueView.RenderData, container: ModelContainer) {
+        let container = try TestModelContainer.inMemory(AppSchema.models)
+        let ctx = ModelContext(container)
+        func show(_ key: String) -> Prospect {
+            let p = Prospect(naturalKey: key, groupName: "Ensemble \(key)", discipline: "music",
+                             venue: "Quillon Room", performanceDate: "2026-10-20", sourceListingURL: nil,
+                             priorRelationship: "none", production: "self", profile: "strong",
+                             coverage: "likely_uncovered", fitScore: 7, tier: "mid", fitReason: "r",
+                             matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil, status: .new)
+            ctx.insert(p)
+            return p
+        }
+        _ = show("populated scout")
+        let pitched = show("populated pitched")
+        pitched.setRecipients([Recipient(id: "pitched@example.invalid", email: "pitched@example.invalid",
+                                         provenance: .act)])
+        DebugStaging.stageAsSent(pitched, now: now.addingTimeInterval(-20 * 86_400))
+        try ctx.save()
+        // Focused on Reached out, the one stage the pass builds the Reached out list for; every other focus
+        // publishes it empty.
+        return (pass(try ctx.fetch(FetchDescriptor<Prospect>()), focusedStage: .reachedOut), container)
+    }
+
+    @Test func noMemberHoldingAnObjectIsComparedByValueEquality() throws {
+        let populated = try Self.populatedPass()
+        let members = Self.members(populated.data)
         let byName = Dictionary(uniqueKeysWithValues: RenderDataComparison.fields.map { ($0.name, $0.how) })
         let objectMembers = members.filter { Self.holdsAnObject($0.value) }.map(\.label)
         // The premise: today RenderData holds the card store and several model collections (until plan step 5
-        // reshapes it), so a walk that found none measured nothing.
-        #expect(objectMembers.contains("cards") && objectMembers.contains("queueScope"),
-                "the walk found no member holding an object, so this checked nothing")
+        // reshapes it), including the Reached out list, whose type names no model and whose entries carry them
+        // in enum payloads. A walk that did not find all four measured less than it claims.
+        for member in ["cards", "queueScope", "reachedOut", "reachedOutList"] {
+            #expect(objectMembers.contains(member), Comment(rawValue: "the walk did not see \(member) holding a "
+                + "model, so the fixture or the walk is too thin to check it"))
+        }
+        withExtendedLifetime(populated.container) {}
         let wrong = objectMembers.filter { byName[$0] != .projection }
         #expect(wrong.isEmpty, Comment(rawValue: "these members hold a class or a model and are compared "
             + "directly, which compares object identity or a description, never what they hold: "
             + wrong.joined(separator: ", ")))
+    }
+
+    // The card store is compared through `contents` and its preamble, both written by hand, so both are held
+    // to the real types by Mirror the way `fields` is held to RenderData (L96, L41).
+    @Test func everyPreambleMemberIsCompared() {
+        let labels = Mirror(reflecting: Self.pass([]).cards.preamble).children.compactMap(\.label)
+        let named = RenderDataComparison.preambleFields.map(\.name)
+        #expect(labels.count >= 6, "the walk of the card preamble found too few members to have checked anything")
+        #expect(Set(named).count == named.count, "the preamble comparison names a member twice")
+        let missing = Set(labels).subtracting(named).sorted()
+        let extra = Set(named).subtracting(labels).sorted()
+        #expect(missing.isEmpty, Comment(rawValue: "card preamble members never compared, so two passes differing "
+            + "only there would read as equal: " + missing.joined(separator: ", ")))
+        #expect(extra.isEmpty, Comment(rawValue: "the preamble comparison names members the preamble does not "
+            + "have: " + extra.joined(separator: ", ")))
+    }
+
+    @Test func everyCardStoreMemberIsAccountedFor() {
+        let store = Self.pass([]).cards
+        let labels = Mirror(reflecting: store).children.compactMap(\.label)
+        let accounted = RenderDataComparison.cardStoreMembers
+        #expect(labels.count >= 8, "the walk of the card store found too few members to have checked anything")
+        let missing = Set(labels).subtracting(accounted.keys).sorted()
+        let extra = Set(accounted.keys).subtracting(labels).sorted()
+        #expect(missing.isEmpty, Comment(rawValue: "card store members neither compared nor left out with a "
+            + "reason: " + missing.joined(separator: ", ")))
+        #expect(extra.isEmpty, Comment(rawValue: "accounted card store members the store does not have: "
+            + extra.joined(separator: ", ")))
+        // Every member said to be compared through `contents` really is a member of it, and `contents` holds
+        // nothing that no store member is said to reach.
+        let contents = Set(Mirror(reflecting: store.contents).children.compactMap(\.label))
+        let targets = Set(accounted.values.filter { $0.hasPrefix("contents.") }.map { String($0.dropFirst(9)) })
+        #expect(targets == contents, Comment(rawValue: "contents holds " + contents.sorted().joined(separator: ", ")
+            + " but the store's members are said to reach " + targets.sorted().joined(separator: ", ")))
     }
 
     @Test func theComparatorNeverComparesByDescription() {
@@ -143,8 +211,6 @@ final class RenderDataComparisonTests {
             #expect(moved.contains(member), Comment(rawValue: "a dismissal was not seen in \(member): "
                 + moved.joined(separator: ", ")))
         }
-        // By name only, never a value: no title or key reaches the answer (L222).
-        #expect(!moved.contains { $0.contains("comparison") || $0.contains("Ensemble") })
     }
 }
 

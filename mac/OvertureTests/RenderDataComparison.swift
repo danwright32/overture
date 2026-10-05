@@ -72,13 +72,41 @@ enum RenderDataComparison {
 
     // MARK: projections
 
+    /// One member of the card preamble, named exactly as Mirror labels it, so the guard can hold this list to
+    /// the preamble's real members the way `fields` is held to RenderData's.
+    struct PreambleField {
+        let name: String
+        let agrees: (QueueModel.CardPreamble, QueueModel.CardPreamble) -> Bool
+    }
+
     /// The card preamble beside the cards: every member is a value, the tables compared through
     /// `TableReader`'s own equality over what it stores.
+    static var preambleFields: [PreambleField] { [
+        PreambleField(name: "tables") { $0.tables == $1.tables },
+        PreambleField(name: "calendarBySourceId") { $0.calendarBySourceId == $1.calendarBySourceId },
+        PreambleField(name: "overrides") { $0.overrides == $1.overrides },
+        PreambleField(name: "clients") { $0.clients == $1.clients },
+        PreambleField(name: "now") { $0.now == $1.now },
+        PreambleField(name: "day") { $0.day == $1.day },
+    ] }
+
     private static func preambleAgrees(_ lhs: QueueView.RenderData, _ rhs: QueueView.RenderData) -> Bool {
-        let a = lhs.cards.preamble, b = rhs.cards.preamble
-        return a.tables == b.tables && a.calendarBySourceId == b.calendarBySourceId && a.overrides == b.overrides
-            && a.clients == b.clients && a.now == b.now && a.day == b.day
+        preambleFields.allSatisfy { $0.agrees(lhs.cards.preamble, rhs.cards.preamble) }
     }
+
+    /// How each stored member of the card store is accounted for: through `contents`, through the preamble, or
+    /// left out with its reason. Held to the store's real members by Mirror, so a member added later has to be
+    /// placed here before the guard passes.
+    static let cardStoreMembers: [String: String] = [
+        "cards": "contents.cards",
+        "showsByKey": "contents.shows",
+        "contactsByKey": "contents.contacts",
+        "requestedKeys": "contents.requestedKeys",
+        "preamble": "preambleFields",
+        "registry": "left out: where the NEXT pass's requests are recorded, not what this pass produced",
+        "expectedFirstFrameMisses": "left out: counted by the surfaces that read the store after the pass",
+        "unexpectedCardMisses": "left out: counted by the surfaces that read the store after the pass",
+    ]
 
     private struct ReachedOutKey: Equatable {
         let show: PersistentIdentifier
