@@ -457,8 +457,14 @@ final class LandingRecoveryTests {
         try ctx.save()
         let f = try folders("recover-switched-off")
         try await interruptedIngest(["a", "b"], into: ctx, f)
-        // Every source it named, so no watched row is left to hold the journal open.
-        for s in try ctx.fetch(FetchDescriptor<WatchedSource>()) { WatchlistEditing.stopWatching(s, in: ctx) }
+        // Every source it named, so no watched row is left to hold the journal open. Switched off the way an
+        // org's refusal does it (`OrgDoNotContact.mark`), which is no edit of Dan's to the source: a stop from
+        // the watchlist is one since #4404, and sets this older reading aside (the test below).
+        for s in try ctx.fetch(FetchDescriptor<WatchedSource>()) {
+            s.isActive = false
+            s.inactiveReason = .orgRefusal
+        }
+        try ctx.save()
 
         #expect(try survey(c, f) == [.replay], "switched off sources' results were judged nothing to land")
         #expect(try f.pending.list().count == 1)
@@ -468,6 +474,29 @@ final class LandingRecoveryTests {
         }
         #expect(try titles(c).count == 4)
         #expect(try f.pending.list().isEmpty && f.journals.list().isEmpty)
+    }
+
+    // #4404 beside L5: a source Dan stopped watching after the landing was interrupted is an edit of his, which
+    // sets every older reading of it aside, so the recovery finds the interrupted landing overtaken and lands none
+    // of its shows, rather than replaying results Dan has since turned away.
+    @Test func anIngestWhoseSourcesDanStoppedWatchingIsOvertakenNotReplayed() async throws {
+        let c = try container()
+        let ctx = c.mainContext
+        for id in ["a", "b"] { html(id, in: ctx) }
+        try ctx.save()
+        let f = try folders("recover-dan-stopped")
+        try await interruptedIngest(["a", "b"], into: ctx, f)
+        let before = try titles(c)
+        for s in try ctx.fetch(FetchDescriptor<WatchedSource>()) { WatchlistEditing.stopWatching(s, in: ctx) }
+
+        let found = try survey(c, f)
+        #expect(found.count == 1, Comment(rawValue: "surveyed \(found)"))
+        guard case .superseded? = found.first else {
+            Issue.record(Comment(rawValue: "a reading Dan set aside was judged \(found)"))
+            return
+        }
+        _ = await recover(ctx, f)
+        #expect(try titles(c) == before, "a reading Dan set aside landed its shows")
     }
 
     // A landing whose recovery keeps failing is tried `attemptCap` times, each counted, and then stops, saying so

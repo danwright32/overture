@@ -232,9 +232,10 @@ final class ScoutResultsKeptAndReplayedTests {
         #expect(try Data(contentsOf: entry) == Data("not an entry".utf8), "listing the copies rewrote the record")
     }
 
-    // A kept copy offered again lands with the `now` its landing started with (its stamps), but judges what is
-    // still upcoming against the day it is offered on: a night that passed in between is not ingested as a
-    // show still to come.
+    // A kept copy offered again judges what is still upcoming against the day it is offered on: a night that
+    // passed in between is not ingested as a show still to come. Since #4335 the copy the launch sweep offers
+    // is one whose landing never STARTED (it waited and was refused, so no journal names it): a started one is
+    // the recovery's, which judges by the day it runs (`LandingRecoveryTests.aReplayJudgesUpcomingByTheDayItRunsOn`).
     @Test func aCopyOfferedAgainJudgesUpcomingByTheDayItIsOfferedOn() async throws {
         let c = try container()
         let ctx = c.mainContext
@@ -242,8 +243,8 @@ final class ScoutResultsKeptAndReplayedTests {
         try ctx.save()
         let f = try folders("kept-later-day")
         let lines = Lines()
-        let first = try await land(try data(["b"]), into: ctx, f, lines: lines, saveSource: FailOne("b").save)
-        #expect(first.outcome.saveFailed)
+        try f.pending.record(try data(["b"]), sequence: 1, now: now)
+        #expect(try f.journals.list().isEmpty, "the copy was meant to be one no landing started")
 
         // Offered a month later: night(0) has passed by then, night(1) is that very day.
         let later = Calendar(identifier: .gregorian).date(byAdding: .day, value: 31, to: now)!
