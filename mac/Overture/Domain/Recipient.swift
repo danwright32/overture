@@ -164,7 +164,7 @@ final class Recipient {
     var looksLikeAnotherPersons: Bool = false
     var looksLikeAnotherPersonsDismissed: Bool = false
 
-    var isLooksLikeAnotherPersons: Bool { looksLikeAnotherPersons && !looksLikeAnotherPersonsDismissed }
+    // `isLooksLikeAnotherPersons` is on `ContactFacts` since #4357 slice E1 (StagePlacementFacts.swift).
 
     // #1866: the fourth guard on a contact, recorded the way the three above are. ContactConfidenceGuard
     // (#1856) rewrites a `high` find down to `low` when it names no page it was read off, and used to store
@@ -196,9 +196,7 @@ final class Recipient {
     // about the code that wrote those rows rather than a guess about them (L90).
     var heldDownReasonRaw: String?
 
-    var heldDownReason: ContactConfidenceGuard.HoldDown? {
-        heldDownReasonRaw.flatMap(ContactConfidenceGuard.HoldDown.init(rawValue:))
-    }
+    // `heldDownReason` reads it on `ContactFacts` since #4357 slice G2.
 
     // Whether the hold is IN FORCE, which is not the same as whether it was ever applied. One definition,
     // so the card, the review panel and the merge cannot each spell the pair differently.
@@ -235,11 +233,8 @@ final class Recipient {
     // route list and refusing it again would change nothing.
     var nameMatchOnlyDismissed: Bool = false
 
-    // #2937: whether the app may still treat this route as a guess. ONE predicate, because four readers
-    // ask it (the social route list, the stored verdict, the card's own line, and whether a DM can be
-    // recorded), and four spellings of one question is how they come to disagree about a single row
-    // (L16).
-    var isUnconfirmedNameMatch: Bool { nameMatchOnly && !nameMatchOnlyDismissed }
+    // `isUnconfirmedNameMatch` (#2937) reads the two fields above, and lives on `ContactFacts`
+    // (ContactFactsMembers.swift) since #4357 slice G1, so a retained contact answers it by the same body.
     // #3078: the run's declaration that `role` is its OWN summary rather than a phrase the cited page
     // carries. Stored, because the card reads it and the ingest is the only writer, and re-derived on
     // every ingest rather than latched, exactly like `nameMatchOnly` above: a later run that quotes the
@@ -257,7 +252,7 @@ final class Recipient {
     var contactTierRaw: String?
 
     var contactTier: ContactTier? {
-        get { contactTierRaw.flatMap(ContactTier.init(rawValue:)) }
+        get { asContactFacts.contactTier }
         set { contactTierRaw = newValue?.rawValue }
     }
 
@@ -624,7 +619,7 @@ final class Recipient {
     }
 
     var provenance: RecipientProvenance {
-        get { RecipientProvenance(rawValue: provenanceRaw) ?? .manual }
+        get { asContactFacts.provenance }
         set { provenanceRaw = newValue.rawValue }
     }
 
@@ -638,7 +633,7 @@ final class Recipient {
     // Defaults to .bookedElsewhere so a suppression from before this field existed (every one of
     // them was a booking-freeze) still reads correctly rather than as an unrepresentable nil (#542).
     var suppressionReason: RecipientSuppressionReason {
-        get { suppressionReasonRaw.flatMap(RecipientSuppressionReason.init) ?? .bookedElsewhere }
+        get { asContactFacts.suppressionReason }
         set { suppressionReasonRaw = newValue.rawValue }
     }
 
@@ -655,37 +650,17 @@ final class Recipient {
     // #654: mirrors Prospect's own contactMethod/contactConfidence wrappers, now the only copy since
     // the lead-level ones were deleted.
     var contactMethod: ContactMethod? {
-        get { contactMethodRaw.flatMap(ContactMethod.init) }
+        get { asContactFacts.contactMethod }
         set { contactMethodRaw = newValue?.rawValue }
     }
 
     var contactConfidence: ContactConfidence? {
-        get { contactConfidenceRaw.flatMap(ContactConfidence.init) }
+        get { asContactFacts.contactConfidence }
         set { contactConfidenceRaw = newValue?.rawValue }
     }
 
-    // #2919: they wrote, Dan answered, and nothing has arrived since. The state #2170 created and no
-    // surface ever spoke: once `replyHandledAt` clears the reply, the reached-out row went back to
-    // looking exactly like a pitch nobody ever answered, so a live negotiation and total silence rendered
-    // identically (L152).
-    //
-    // Written OVER `hasUnhandledReply` rather than beside it (#2921's rule), so the two can never disagree
-    // about whether this conversation has been dealt with. The three facts in front of it are the three
-    // that predicate short-circuits on, and they are here because `!hasUnhandledReply` on its own is
-    // equally true of a contact that never replied, one that bounced, and one Dan stood down. A line may
-    // claim only what its check actually measured (L11).
-    // #3573: their newest message arrived AFTER the draft was asked for, so the draft on file answers
-    // their previous one. One definition, read by the drafter's own eligibility rule
-    // (`ReplyClassifyService.recipientNeedsClassify`) and by what the conversation offers on screen
-    // (`ReplyConversationMode`), because those two disagreeing is how a stale draft comes to sit under a
-    // Send button (L16).
-    //
-    // Judged on `replyArrivedAt`, when they SENT it, rather than on when Overture noticed: a message that
-    // arrived before the request and was recorded after it is not a newer message.
-    var replyPostdatesDraftRequest: Bool {
-        guard let requested = replyDraftRequestedAt, let theirs = replyArrivedAt else { return false }
-        return theirs > requested
-    }
+    // `replyPostdatesDraftRequest` (#3573) and `replyIsAnswered` (#2919) live on `ContactFacts`
+    // (ContactFactsMembers.swift) since #4357 slice G2, comments unchanged.
 
     // #4224: the draft the reply window may put in its compose box, or nil when there is none it may
     // offer. The same rule the card's reply block reads (`ReplyDraftRequest.offersDraftOnFile`).
@@ -699,9 +674,6 @@ final class Recipient {
         return body
     }
 
-    var replyIsAnswered: Bool {
-        replied && !bounced && resolution == nil && replyHandledAt != nil && !hasUnhandledReply
-    }
 
     // #2113 lives on ReplyWatchableRecipient now (#2118): `replyArrivedAt` is one definition for every
     // watched thread, an inquiry's included, because the two kinds of row share the reached-out queue's
@@ -721,99 +693,21 @@ final class Recipient {
     // #789 adds the draft lint: a recipient whose OWN outgoing text carries a blocking finding is
     // held back until Dan either fixes the text or deliberately overrides it, the same way #407's
     // salutation flag blocks above.
-    // #1798: an address that EXISTS and is held back by one of the guards, which is a different fact from
-    // having no address at all. One definition, because the verdict on the row and the card's own answer
-    // were two copies of this rule and both listed two of the three guards; the measured cost was a card
-    // reading "No email found" in rust with `office@frigid.nyc` printed underneath it.
-    //
-    // The three members are exactly the three `isSendablePending` refuses on below, so the two can never
-    // drift apart again: anything held there is held here.
-    var isHeldByAGuard: Bool {
-        email?.isEmpty == false
-            && ((looksLikeVenue && !looksLikeVenueDismissed)
-                || (looksLikePressContact && !looksLikePressContactDismissed)
-                || (looksLikeDuplicateContact && !looksLikeDuplicateContactDismissed)
-                || isLooksLikeAnotherPersons)
-    }
+    // `isHeldByAGuard` (#1798) and `hasUnguardedAddress` (#3387) live on `ContactFacts`
+    // (ContactFactsMembers.swift) since #4357 slice G1, comments and bodies unchanged, so a retained contact
+    // answers both by the same body.
 
-    // #3387 / milestone 61 Phase 0.1. Does an ADDRESS exist that no research guard is holding.
-    //
-    // Deliberately NOT `isSendablePending`. That answers whether this may go out RIGHT NOW and folds in
-    // an uncleared calendar conflict (#901), a blank subject line (#2052), the lint and greeting holds
-    // (#2545), `pausedByReply` and this row's send state, none of which is a fact about whether a way to
-    // contact anybody exists. Measured on the live store 2026-08-31: 9 prospects held an unguarded
-    // address while their stored verdict denied it, 7 of them masked by an open calendar conflict.
-    //
-    // Dan's rule, 2026-08-31: "It should only be impacted by whether or not I'm physically capable of
-    // contacting them."
-    //
-    // ADDRESS ONLY, on purpose. It is substituted into the FIRST arm of the verdict cascade, and a
-    // route bearing predicate there would report every form-only and social-only show as `emailFound`.
-    // `Prospect.hasAnyRoute` is the "a way in of any kind" question and is derived from the whole
-    // cascade rather than written beside it.
-    //
-    // The FIFTH hold state is decided here rather than left to be discovered. `isHeldDownToUnverified`
-    // is in neither `isHeldByAGuard` nor `isSendablePending`; it drives warnings only. So a held down
-    // address IS a route here, which matches today's behaviour and is the right answer: the hold down
-    // describes confidence in WHO is on the end, which the card already warns about, and withholding
-    // the route as well would silently remove a show Dan can judge in seconds.
-    var hasUnguardedAddress: Bool { email?.isEmpty == false && !isHeldByAGuard }
-
-    // #1798: WHICH kind of hold, so the card's sentence can be true of the row that produced it. Measured
-    // on the live store 2026-07-31: the one row in this state was held by the duplicate guard alone, with
-    // the venue and press guards both clear, so the wording written for those two would have been a false
-    // claim about a real presenter's own office address.
-    // #2624 adds the third: an address nobody on the row accounts for. Its own case for the same reason
-    // the duplicate has one, that the badge has to be true of the row that produced it: neither "weak
-    // contact only" nor "held as a duplicate" describes an address in a stranger's name.
+    // #1798, #2624: WHICH kind of hold. The cases stay here; `holdReason` reads them on `ContactFacts`
+    // (ContactFactsMembers.swift) since #4357 slice G2, comment unchanged.
     enum HoldReason: Equatable { case venueOrPress, duplicate, unaccountedAddress }
-
-    var holdReason: HoldReason? {
-        guard isHeldByAGuard else { return nil }
-        if (looksLikeVenue && !looksLikeVenueDismissed)
-            || (looksLikePressContact && !looksLikePressContactDismissed) { return .venueOrPress }
-        if looksLikeDuplicateContact && !looksLikeDuplicateContactDismissed { return .duplicate }
-        return .unaccountedAddress
-    }
 
     var isSendablePending: Bool { isSendablePending(today: EasternDate.today(Date())) }
 
     // #4136: the same gate judged against a given day, so a test can pin the clock. The property above is
-    // the spelling every send path reads, and it asks with the real one.
+    // the spelling every send path reads, and it asks with the real one. #4357 slice G2: the rule lives on
+    // `ContactFacts` (`passesTheSendGate`) with the show handed in; this model asks it of its own show.
     func isSendablePending(today: String) -> Bool {
-        sendState == .pending && (email?.isEmpty == false) && !pausedByReply
-            // #4136: a show whose last night has passed does not get pitched. Every other hold here is about
-            // the words or the person; this one is about the calendar, and before it nothing in the funnel
-            // asked, so an approved draft for a performance that was over went out like any other. The
-            // committing moment, and the one place a wrong answer cannot be taken back. No override: there
-            // is no night left to pitch. `DraftReviewNotes.performancePassed` is the sentence beside the
-            // button, and `PassedKeptRetirement` sweeps a never pitched show like this out of Review.
-            && !(prospect.map { EasternDate.lastNightHasPassed(performanceDate: $0.performanceDate,
-                                                                runEndDate: $0.runEndDate,
-                                                                today: today) } ?? false)
-            // #901: a date conflict Dan has not cleared stops the send, not just the draft. The prep gate
-            // alone would miss the case that matters most: the draft already existed, was approved, and
-            // THEN he blocked the week or took a booking. Nothing should go out pitching a night he
-            // cannot work until he says he can.
-            && prospect?.hasUnclearedConflict != true
-            // #2052: a written email with no subject line does not go out. Held HERE, and not only on the
-            // confirmation sheet, because the sheet showed the gap ("(no subject)") and offered Send
-            // beside it anyway: a guard on a screen is not a guard. There is no override, unlike the
-            // greeting and lint holds, because those are judgements about words Dan can stand behind
-            // and this is a field he has not filled in.
-            && prospect?.draftIsMissingSubject != true
-            && !(looksLikeVenue && !looksLikeVenueDismissed)
-            && !(looksLikePressContact && !looksLikePressContactDismissed)
-            && !(looksLikeDuplicateContact && !looksLikeDuplicateContactDismissed)
-            // #2624: an address in a name nobody on this row accounts for. Held here, not merely marked,
-            // because `low` confidence changed how the card DESCRIBED the find and did nothing to stop
-            // the send: the greeting would name the artist and the mail would reach a stranger.
-            && !isLooksLikeAnotherPersons
-            && !isBlockedByDraftLint
-            // #2545: a body that does not greet, or greets one person on an email several people get.
-            // Held here rather than only on the draft card for the reason #2052 gives directly above:
-            // a guard on a screen is not a guard.
-            && !isBlockedByGreeting
+        passesTheSendGate(today: today, on: prospect, audience: prospect?.greetingAudienceSize)
     }
 
     // #789 / #641 / #3549: the text THIS recipient actually receives, which is the show's one letter.
@@ -835,20 +729,13 @@ final class Recipient {
     // #789: the blocking lint findings in that text. Derived live rather than stored at ingest on
     // purpose: it is a pure function of text already on disk, so it can never go stale, it needs no
     // migration, and it covers Dan's own edits and a performer's override body for free.
-    var draftLintBlockers: [DraftIssue] {
-        guard let body = effectiveBody, !body.isEmpty else { return [] }
-        // #2048: counted at the point the lint really runs, AFTER the empty-body guard above, so the
-        // number is the work done rather than the times the question was asked. A recipient with no body
-        // costs nothing here and must not read as if it did.
-        QueueRenderPass.WorkTally.recordDraftLintRun()
-        return DraftCheck.blockingFindings(in: body)
-    }
+    // #4357 slice E1: the rule lives on `ContactFacts` (StagePlacementFacts.swift), over the body it is
+    // handed; this hands it this contact's show's draft.
+    var draftLintBlockers: [DraftIssue] { draftLintBlockers(body: effectiveBody) }
 
     // True only when the current outgoing text is the EXACT text Dan overrode; a mismatch (edited
     // since, or never overridden) means the block still applies.
-    var isLintOverridden: Bool {
-        lintOverriddenBody != nil && lintOverriddenBody == effectiveBody
-    }
+    var isLintOverridden: Bool { isLintOverridden(body: effectiveBody) }
 
     var isBlockedByDraftLint: Bool { isBlockedByDraftLint(lintBlockers: draftLintBlockers) }
 
@@ -857,7 +744,7 @@ final class Recipient {
     // the same question pays for it three times. A caller holding the findings already passes them here;
     // the property above is the ordinary spelling and stays the only definition of the RULE (L263).
     func isBlockedByDraftLint(lintBlockers: @autoclosure () -> [DraftIssue]) -> Bool {
-        !lintBlockers().isEmpty && !isLintOverridden
+        isBlockedByDraftLint(body: effectiveBody, lintBlockers: lintBlockers())
     }
 
     // #2545: the body must open with a greeting, because nothing composes one above it any more. Judged
@@ -866,10 +753,7 @@ final class Recipient {
     //
     // A missing body is not this guard's business (the send already refuses one), so it answers false
     // rather than claiming a greeting is absent from text that does not exist.
-    var draftIsMissingGreeting: Bool {
-        guard let body = effectiveBody, !body.isEmpty else { return false }
-        return !DraftGreeting.opensWithAGreeting(body)
-    }
+    var draftIsMissingGreeting: Bool { draftIsMissingGreeting(body: effectiveBody) }
 
     // #2545: a greeting that names one person on an email more than one person receives.
     //
@@ -881,13 +765,13 @@ final class Recipient {
     // Only the wrong direction is held. A plain "Hello," to one person is not an error, and on a shared
     // inbox it is the correct opening, with the `Attn:` block above it naming the desk.
     var greetingMisaddressed: Bool {
-        guard let prospect else { return false }
+        greetingMisaddressed(body: effectiveBody, audience: prospect?.greetingAudienceSize)
+        // The rule, on `ContactFacts` since #4357 slice E1, answers false for a contact with no show.
         // #3549 removed the performer carve-out that used to sit here. It stood on a performer having
         // a letter of their OWN, which went to them alone, making a name in it right by construction.
         // With one letter per show that premise is gone: a body naming the performer, on a show that
         // also emails a presenter, is misaddressed for exactly the reason this guard exists. A single
         // contact show is unaffected, since the audience is then one and the size test is false.
-        return prospect.greetingAudienceSize > 1 && DraftGreeting.namesSomeone(effectiveBody)
     }
 
     // #2579: the greeting names somebody who is clearly not this contact.
@@ -902,25 +786,20 @@ final class Recipient {
     // The performer carve-out is deliberately NOT repeated here. A performer's own second-person letter
     // goes to them alone, which makes a name in it right by construction for the audience question, and
     // makes it exactly as wrong as any other if it is the wrong name.
-    var greetingNamesSomeoneElse: Bool {
-        DraftGreeting.namesSomeoneElse(greeting: effectiveBody, contactName: name)
-    }
+    var greetingNamesSomeoneElse: Bool { greetingNamesSomeoneElse(body: effectiveBody) }
 
     // #2545: Dan's deliberate override of the two greeting holds, pinned to the EXACT text he took it
     // on, the same shape as `lintOverriddenBody` above. Editing the body afterwards re-arms the hold
     // rather than carrying an approval forward onto words nobody has read.
     var greetingOverriddenBody: String? = nil
 
-    var isGreetingOverridden: Bool {
-        greetingOverriddenBody != nil && greetingOverriddenBody == effectiveBody
-    }
+    var isGreetingOverridden: Bool { isGreetingOverridden(body: effectiveBody) }
 
     var isBlockedByGreeting: Bool {
         // #2579 joins this disjunction rather than standing beside it, so it inherits the override Dan
         // already has for a greeting hold. A third hold with no way past it would be the one that made
         // him stop trusting the other two.
-        (draftIsMissingGreeting || greetingMisaddressed || greetingNamesSomeoneElse)
-            && !isGreetingOverridden
+        isBlockedByGreeting(body: effectiveBody, audience: prospect?.greetingAudienceSize)
     }
 
     // RETAINED STORAGE, read by nothing (#2545). This held Dan's own opening for THIS contact, back when
@@ -1005,55 +884,13 @@ final class Recipient {
     // before the guard could refuse it. Measured 2026-09-03: that cost 24 extra lint runs per render,
     // making a change meant to remove work add it (L62: a guard on a function's first line cannot
     // protect against the cost of building its arguments).
+    // #4357 slice E1: the rule is on `ContactFacts` (StagePlacementFacts.swift); this hands it this contact's
+    // show's draft and audience, the latter only if the rule gets that far.
     func isBlockedAwaitingReview(lintBlockers: @autoclosure () -> [DraftIssue]) -> Bool {
-        guard sendState == .pending, email?.isEmpty == false, !pausedByReply else { return false }
-        // #2545: the greeting hold takes the place of #407's, which policed the same thing from the
-        // other side. It belongs HERE and not only in `isSendablePending` for the reason above: a body
-        // that forgot its greeting is one edit from sendable, so the person behind it is waiting, not
-        // finished, and a show must not leave the queue reading as fully sent on their behalf.
-        return isBlockedByGreeting
-            || (looksLikeVenue && !looksLikeVenueDismissed)
-            || (looksLikePressContact && !looksLikePressContactDismissed)
-            || (looksLikeDuplicateContact && !looksLikeDuplicateContactDismissed)
-            || isLooksLikeAnotherPersons
-            || isBlockedByDraftLint(lintBlockers: lintBlockers())
+        isBlockedAwaitingReview(body: effectiveBody, audience: prospect?.greetingAudienceSize,
+                                lintBlockers: lintBlockers())
     }
 
-    // Deterministic send order. SwiftData to-many relationships are UNORDERED, so the send queue and
-    // the manual-send picker must impose a stable order or "the next recipient" (and which address each
-    // click sends) would vary run to run. Act/performer contacts go first (mutually exclusive per
-    // performance, so they tie), then a presenter, then a manual add (the #366/#368 contact ladder:
-    // target the act or performer; the presenter only after).
-    var sendOrderRank: Int {
-        switch provenance {
-        case .act, .performer: return 0
-        case .presenter: return 1
-        case .manual: return 2
-        }
-    }
-
-    // #3603: what breaks a tie in that ladder, and it is a STATED order rather than an emergent one.
-    //
-    // The rank above ties constantly: on a self-produced show every contact is a performer, so every
-    // one is rank 0 and the tie-break alone decides. That tie-break used to be `id`, which is
-    // `makeId`'s output: the canonical address when there is one, the literal "form:" plus the URL
-    // when there is not. So the order was really alphabetical over a string whose FIRST CHARACTER
-    // depends on whether the contact has an address at all, and "form:" precedes any address from g to
-    // z. Measured on the live store 2026-08-30 (the #3284 evidence): four performer contacts, three
-    // ids beginning "form:" and one address beginning "s", so all three contacts that cannot receive
-    // the email were listed above the one that can.
-    //
-    // So: the ladder first, then whether the email can actually reach this contact, then the id.
-    //
-    // The receivability key is "holds an address", NOT `isSendablePending`. That is deliberate and is
-    // the one choice here worth understanding. `isSendablePending` is the question the SEND asks, and
-    // it folds in the draft's lint findings, the greeting, a calendar conflict and the review guards,
-    // every one of which changes while Dan is editing. Sorting on it would reorder the card under his
-    // hands as he typed, and would run a lint pass per comparison (L62). An address held by a guard is
-    // still an address: that person is one dismissal away from receiving the email, where a form-only
-    // contact is not. `email?.isEmpty == false` is the same predicate `hasUnguardedAddress` and
-    // `offersSendModeChoice` already read, so a contact holding `""` is not treated as reachable.
-    var canReceiveTheEmail: Bool { email?.isEmpty == false }
 
     // The ONE comparator, because it was written out at six call sites and six copies of an order are
     // six things to drift (L263, L370). `SendOrderTests.nothingReimplementsTheComparator` is what keeps
@@ -1061,7 +898,7 @@ final class Recipient {
     //
     // `nonisolated` because the queue CARD asks this question as well as the send does, off the main
     // actor in places, and the two must never disagree about who comes first (L16).
-    nonisolated static func inSendOrder(_ recipients: [Recipient]) -> [Recipient] {
+    nonisolated static func inSendOrder<C: ContactFacts>(_ recipients: [C]) -> [C] {
         recipients.sorted { a, b in
             if a.sendOrderRank != b.sendOrderRank { return a.sendOrderRank < b.sendOrderRank }
             if a.canReceiveTheEmail != b.canReceiveTheEmail { return a.canReceiveTheEmail }
@@ -1168,37 +1005,14 @@ final class Recipient {
     // run and surfaced as needs-attention, so a stranded request never sits in progress forever.
     static let replyDraftStallTimeout: TimeInterval = RunTimeouts.replyDraft
 
-    // #2966: WHEN the reply draft this contact is still waiting on was asked for, from the one shared rule.
-    // See `ReplyDraftRequest` for why the rule is not spelled here: three places asked this question and
-    // only one of them allowed for a request belonging to an exchange already answered.
-    var awaitedReplyDraftRequestedAt: Date? {
-        ReplyDraftRequest.awaited(requestedAt: replyDraftRequestedAt, draftBody: replyDraftBody,
-                                  replacingDraftOnFile: replyDraftReplacesDraftOnFile,
-                                  answeredAt: replyHandledAt)
-    }
-
-    // True when a reply draft is still awaited and the timeout has elapsed (#431).
-    // #471: `runAlive` is the classify run's real heartbeat (ReplyClassifyService.isRunning); when it's
-    // still alive, past-timeout no longer counts as stalled, since the wall clock alone can't tell a
-    // genuinely dead run from one that's just slower than usual.
-    //
-    // #2966: this used to ask "requested, and nothing stored" for itself, which is the same question
-    // `ReplyPanel.isDrafting` asks with one more guard on it. It reads the shared answer now: an answered
-    // conversation was reading as permanently stalled, and since #2878 that number is on the Follow-ups
-    // pill, the Due header, the toolbar badge, the Dock tile and the menu bar.
-    func isReplyDraftStalled(now: Date, timeout: TimeInterval = Recipient.replyDraftStallTimeout, runAlive: Bool = false) -> Bool {
-        guard let requested = awaitedReplyDraftRequestedAt else { return false }
-        return !runAlive && now.timeIntervalSince(requested) >= timeout
-    }
+    // `awaitedReplyDraftRequestedAt` and `isReplyDraftStalled(now:timeout:runAlive:)` live on `ContactFacts`
+    // (ContactFactsMembers.swift) since #4357 slice F, unchanged.
 
     // True when a send was claimed and has run long enough to be considered stuck rather than a
     // normal brief send (#475/#476): the app was interrupted (crash, or a save that never landed)
     // between claiming the send and recording its outcome. Must be surfaced for Dan to check Gmail
     // and resolve by hand: never auto-resent (still not .pending) and never auto-assumed sent.
-    func isSendStuck(now: Date, timeout: TimeInterval = RunTimeouts.send) -> Bool {
-        guard sendState == .sending, let claimed = sendClaimedAt else { return false }
-        return now.timeIntervalSince(claimed) >= timeout
-    }
+    // `isSendStuck(now:timeout:)` is on `ContactFacts` since #4357 slice E1 (StagePlacementFacts.swift).
 
     // Apply Dan's edit to the AI reply draft (#459), mirroring Prospect.applyEdit for the cold draft:
     // his text wins and the deterministic DraftCheck warnings stop nagging on it.
@@ -1324,4 +1138,44 @@ final class Recipient {
         bounced = false
         dismissedBounceId = lastBounceId
     }
+}
+
+// #4357 slice G2: the send order's two keys, on `ContactFacts` so a retained contact sorts by the same rule,
+// and in this file because `SendOrderTests.nothingReimplementsTheComparator` holds them here.
+extension ContactFacts {
+    // Deterministic send order. SwiftData to-many relationships are UNORDERED, so the send queue and
+    // the manual-send picker must impose a stable order or "the next recipient" (and which address each
+    // click sends) would vary run to run. Act/performer contacts go first (mutually exclusive per
+    // performance, so they tie), then a presenter, then a manual add (the #366/#368 contact ladder:
+    // target the act or performer; the presenter only after).
+    var sendOrderRank: Int {
+        switch provenance {
+        case .act, .performer: return 0
+        case .presenter: return 1
+        case .manual: return 2
+        }
+    }
+
+    // #3603: what breaks a tie in that ladder, and it is a STATED order rather than an emergent one.
+    //
+    // The rank above ties constantly: on a self-produced show every contact is a performer, so every
+    // one is rank 0 and the tie-break alone decides. That tie-break used to be `id`, which is
+    // `makeId`'s output: the canonical address when there is one, the literal "form:" plus the URL
+    // when there is not. So the order was really alphabetical over a string whose FIRST CHARACTER
+    // depends on whether the contact has an address at all, and "form:" precedes any address from g to
+    // z. Measured on the live store 2026-08-30 (the #3284 evidence): four performer contacts, three
+    // ids beginning "form:" and one address beginning "s", so all three contacts that cannot receive
+    // the email were listed above the one that can.
+    //
+    // So: the ladder first, then whether the email can actually reach this contact, then the id.
+    //
+    // The receivability key is "holds an address", NOT `isSendablePending`. That is deliberate and is
+    // the one choice here worth understanding. `isSendablePending` is the question the SEND asks, and
+    // it folds in the draft's lint findings, the greeting, a calendar conflict and the review guards,
+    // every one of which changes while Dan is editing. Sorting on it would reorder the card under his
+    // hands as he typed, and would run a lint pass per comparison (L62). An address held by a guard is
+    // still an address: that person is one dismissal away from receiving the email, where a form-only
+    // contact is not. `email?.isEmpty == false` is the same predicate `hasUnguardedAddress` and
+    // `offersSendModeChoice` already read, so a contact holding `""` is not treated as reachable.
+    var canReceiveTheEmail: Bool { email?.isEmpty == false }
 }

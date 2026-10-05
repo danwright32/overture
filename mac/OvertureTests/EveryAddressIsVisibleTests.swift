@@ -54,7 +54,7 @@ struct EveryAddressIsVisibleTests {
         add(ctx, to: p, email: "info@thevenue.example", name: nil, provenance: .act)
         add(ctx, to: p, email: "sarah@company.example", name: "Sarah Chen", provenance: .manual)
 
-        let next = SendService.nextPendingRecipient(for: p)
+        let next = SendService.nextPendingRecipient(for: p, today: ScoutTestClock.beforeAllFixtures)
 
         #expect(next?.email == "info@thevenue.example",
                 "the found address still wins the order, which is exactly why it has to be visible")

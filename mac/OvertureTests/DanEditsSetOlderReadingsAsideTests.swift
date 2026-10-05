@@ -19,7 +19,7 @@ final class DanEditsSetOlderReadingsAsideTests {
 
     // Each edit kind, applied to source "b" on a context, and what it leaves that a stale landing would undo.
     enum Edit: String, CaseIterable, CustomStringConvertible {
-        case addressCorrection, resume, confirmEmpty, venueLocation, venueName
+        case addressCorrection, resume, confirmEmpty, venueLocation, venueName, stop
         var description: String { rawValue }
     }
 
@@ -39,6 +39,8 @@ final class DanEditsSetOlderReadingsAsideTests {
             WatchlistEditing.setVenueLocation(b, to: "Brooklyn, NY", in: ctx)
         case .venueName:
             WatchlistEditing.setVenueName(b, to: "The Corrected Room", in: ctx)
+        case .stop:
+            WatchlistEditing.stopWatching(b, in: ctx)
         }
     }
 
@@ -105,6 +107,7 @@ final class DanEditsSetOlderReadingsAsideTests {
         case .confirmEmpty: return b.confirmedEmptyHash == "new-b" && b.successfulCheckCount == 0
         case .venueLocation: return b.venueLocation == "Brooklyn, NY" && b.lastContentHash == nil
         case .venueName: return b.venueName == "The Corrected Room" && b.lastContentHash == nil
+        case .stop: return !b.isActive && b.inactiveReason == .removedByDan && b.lastContentHash == "old-b"
         }
     }
 

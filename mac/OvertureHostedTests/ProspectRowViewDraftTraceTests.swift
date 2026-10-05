@@ -24,7 +24,7 @@ struct ProspectRowViewDraftTraceTests {
     // Archived / no draft body: the review panel isn't rendering, so the row badge is where the trace
     // survives (the whole point of #879).
     @Test func aDraftedShowShowsWhichModelWroteIt() throws {
-        let view = ProspectRowView(item: item(draftModel: "opus"), today: "2026-07-09",
+        let view = ProspectRowView(item: item(draftModel: "opus"), today: "2026-07-09", now: Date(),
                                    onKeep: {}, onDismiss: { _ in })
 
         let texts = try view.inspect().findAll(ViewType.Text.self).map { try $0.string() }
@@ -37,14 +37,14 @@ struct ProspectRowViewDraftTraceTests {
     @Test func aCardStillInReviewShowsTheTraceExactlyOnce() throws {
         var reviewing = item(draftModel: "opus")
         reviewing.draftBody = "Hello, I photograph performances."   // hasDraft -> the panel renders
-        let view = ProspectRowView(item: reviewing, today: "2026-07-09", onKeep: {}, onDismiss: { _ in })
+        let view = ProspectRowView(item: reviewing, today: "2026-07-09", now: Date(), onKeep: {}, onDismiss: { _ in })
 
         let texts = try view.inspect().findAll(ViewType.Text.self).map { try $0.string() }
         #expect(texts.filter { $0.contains("Drafted by opus") }.count == 1)
     }
 
     @Test func noModelStampShowsNoTraceTag() throws {
-        let view = ProspectRowView(item: item(draftModel: nil), today: "2026-07-09",
+        let view = ProspectRowView(item: item(draftModel: nil), today: "2026-07-09", now: Date(),
                                    onKeep: {}, onDismiss: { _ in })
 
         let texts = try view.inspect().findAll(ViewType.Text.self).map { try $0.string() }
@@ -54,7 +54,7 @@ struct ProspectRowViewDraftTraceTests {
     // #378-adjacent: a stamp that degrades to blank text (record_model's own failure mode, see
     // DraftTrace's doc comment) must read as no trace at all, never a half sentence naming nobody.
     @Test func aBlankModelStampShowsNoTraceTag() throws {
-        let view = ProspectRowView(item: item(draftModel: "   "), today: "2026-07-09",
+        let view = ProspectRowView(item: item(draftModel: "   "), today: "2026-07-09", now: Date(),
                                    onKeep: {}, onDismiss: { _ in })
 
         let texts = try view.inspect().findAll(ViewType.Text.self).map { try $0.string() }

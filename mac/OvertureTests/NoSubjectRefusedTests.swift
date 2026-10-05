@@ -82,7 +82,7 @@ struct NoSubjectRefusedTests {
         let r = try #require(p.recipients.first)
 
         #expect(r.isSendablePending == false)
-        #expect(SendService.nextPendingRecipient(for: p) == nil)
+        #expect(SendService.nextPendingRecipient(for: p, today: ScoutTestClock.beforeAllFixtures) == nil)
 
         p.draftSubject = "Photographs of your September concert"
         #expect(r.isSendablePending, "A subject is all that was holding it")

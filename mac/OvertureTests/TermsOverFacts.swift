@@ -32,6 +32,39 @@ enum TermsOverFacts {
         var now: Date
     }
 
+    // MARK: slice F, the agent input terms
+
+    /// `organisationRowCounts`, `DraftedDeadEnd` and `StalledReplyDraft`, models against facts. The counts are
+    /// keyed by an organisation's folded name, a real organisation on the live store, so a difference names the
+    /// rows whose presenter it is about rather than the name (L222).
+    static func agentInputFindings(_ models: [Prospect], _ facts: [RowFacts], now: Date) -> [String] {
+        var out: [String] = []
+        let countsModels = QueueModel.organisationRowCounts(among: models)
+        let countsFacts = QueueModel.organisationRowCounts(among: facts)
+        if countsModels != countsFacts {
+            let differing = Set(countsModels.keys).union(countsFacts.keys).filter { countsModels[$0] != countsFacts[$0] }
+            let rows = models.filter { ProducerGate.key($0.presenter).map(differing.contains) ?? false }
+            out += rows.map { "organisationRowCounts differs for the organisation of row \($0.persistentModelID)" }
+            if rows.isEmpty { out.append("organisationRowCounts differs for an organisation no model presents") }
+        }
+        for (model, fact) in zip(models, facts)
+        where DraftedDeadEnd.hasNobodyToSendTo(model, contacts: model.factContacts)
+            != DraftedDeadEnd.hasNobodyToSendTo(fact, contacts: fact.factContacts) {
+            out.append("DraftedDeadEnd.hasNobodyToSendTo differs for row \(model.persistentModelID)")
+        }
+        for instant in [now, Date.distantFuture] {
+            let onModels = StalledReplyDraft.dueRecipients(from: models, contacts: { $0.factContacts }, now: instant, runAlive: false)
+            let onFacts = StalledReplyDraft.dueRecipients(from: facts, contacts: { $0.factContacts }, now: instant, runAlive: false)
+            if onModels.map({ "\($0.recipient.persistentModelID) \($0.requestedAt)" })
+                != onFacts.map({ "\($0.recipient.persistentModelID) \($0.requestedAt)" }) {
+                out.append("StalledReplyDraft.dueRecipients differs "
+                           + (instant == now ? "now" : "at the end of time")
+                           + ": \(onModels.count) over models, \(onFacts.count) over facts")
+            }
+        }
+        return out
+    }
+
     /// Every place a ported term answered differently over facts than over models, empty when they agree.
     /// `asOf` is the day the feed break term judges "still to come" against, and `drawn` the keys a
     /// surface draws, which is what the collapse hides rows in favour of (nil means every row is drawn).
@@ -124,8 +157,548 @@ enum TermsOverFacts {
             out += inheritedFindings(inheritedModels, inheritedFacts, term: "OrgAnswerLedger.inherited", pid: pid)
         }
 
+        // Slice F: the agent input terms, judged at noon Eastern on `asOf` so both arms share a clock.
+        out += agentInputFindings(models, facts, now: reachedOutInstant(asOf))
+
+        // Slice E2: the due work terms, at the same instant.
+        out += dueWorkFindings(models, facts, now: reachedOutInstant(asOf))
+
         // Slice D1: the computed members the reached-out terms read, on the show and on every contact.
         out += memberFindings(models, facts)
+
+        // Slice D2: the reached-out terms, judged at a fixed instant on `asOf` so the two arms share a clock.
+        out += reachedOutFindings(models, facts, now: reachedOutInstant(asOf), today: asOf)
+        // Slice E1: the stage placement, the geography and client window it reads, and its members.
+        out += stageFindings(models, facts, asOf: asOf)
+        // Slice H: the long tail (T8).
+        out += longTailFindings(models, facts, asOf: asOf)
+
+        // Slice G1: the row, the contact facts it is built from, and the reachability members they read.
+        out += rowFindings(models, facts)
+
+        // Slice G2: the card, its send groups and form pitch, and the members it reads, judged on `asOf`.
+        out += cardFindings(models, facts, today: asOf, now: reachedOutInstant(asOf))
+        return out
+    }
+
+    // MARK: slice D2, the reached-out terms
+
+    /// Noon Eastern on `day`, the instant the reached-out comparison judges at. Fixed by the day rather than
+    /// read off the wall clock, so a fixture run and its rerun ask the same question (L74).
+    static func reachedOutInstant(_ day: String) -> Date {
+        (EasternDate.date(from: day) ?? Date(timeIntervalSince1970: 0)).addingTimeInterval(12 * 3600)
+    }
+
+    /// What a reached-out term says about one contact on one show, read through the generic terms.
+    struct ReachedOutAnswers: Equatable {
+        let isInPlay: Bool
+        let nextReachOut: Date?
+        let nextActionableMoment: Date?
+        let isDueNow: Bool
+        let timingLabel: String
+        let action: ReachedOutAction
+        let isAwaitingNudge: Bool
+        let nextPromptDate: Date?
+        let prompt: PostEventPrompt.Prompt?
+
+        init<Row: ProspectFacts>(_ r: Row.Contact, of show: ReachedOutQueue.Show<Row>, now: Date, today: String) {
+            isInPlay = ReachedOutQueue.isInPlay(r, of: show)
+            nextReachOut = ReachedOutQueue.nextReachOut(for: r, of: show, now: now)
+            nextActionableMoment = ReachedOutQueue.nextActionableMoment(for: r, of: show, now: now)
+            isDueNow = ReachedOutQueue.isDueNow(for: r, of: show, now: now)
+            timingLabel = ReachedOutQueue.timingLabel(for: r, of: show, now: now, today: today)
+            action = ReachedOutAction.of(r, in: show, now: now, today: today)
+            isAwaitingNudge = FollowUp.isAwaitingNudge(r, in: show.row, now: now)
+            nextPromptDate = PostEventPrompt.nextPromptDate(for: r, of: show)
+            prompt = PostEventPrompt.prompt(for: r, of: show, now: now)
+        }
+
+        func differing(from other: ReachedOutAnswers) -> [String] {
+            Mirror(reflecting: self).children.compactMap { child in
+                guard let label = child.label,
+                      let theirs = Mirror(reflecting: other).children.first(where: { $0.label == label })
+                else { return nil }
+                return String(describing: child.value) == String(describing: theirs.value) ? nil : label
+            }
+        }
+    }
+
+    /// The reached-out list over models and over facts, entry by entry, and every contact's answers.
+    ///
+    /// THE REPRESENTATIVE IS COMPARED AS A TIE CLASS (the inventory's word for this slice). Each show's row
+    /// speaks for one contact, chosen by a total order whose last key is the store's identifier. A different
+    /// contact on the two arms is one of two faults, and they are told apart: a contact OUTSIDE the
+    /// representative's tie class (a different reply instant, or a different due date when nobody replied)
+    /// means a fact the order reads came across differently; one INSIDE it means only the tie breaks
+    /// (address, identifier) disagreed. Both are findings; the label says which.
+    static func reachedOutFindings(_ models: [Prospect], _ facts: [RowFacts], now: Date, today: String) -> [String] {
+        var out: [String] = []
+        let onModels = ReachedOutQueue.activeWithDates(from: models, contacts: { $0.factContacts }, now: now)
+        let onFacts = ReachedOutQueue.activeWithDates(from: facts, contacts: { $0.factContacts }, now: now)
+        let factsByKey = Dictionary(onFacts.map { ($0.prospect.naturalKey, $0) }, uniquingKeysWith: { first, _ in first })
+        if onModels.map(\.prospect.naturalKey) != onFacts.map(\.prospect.naturalKey) {
+            out.append("ReachedOutQueue.activeWithDates order or membership differs")
+        }
+        for entry in onModels {
+            let pid = String(describing: entry.prospect.persistentModelID)
+            guard let other = factsByKey[entry.prospect.naturalKey] else {
+                out.append("ReachedOutQueue.activeWithDates drops row \(pid) over facts")
+                continue
+            }
+            if entry.next != other.next { out.append("ReachedOutQueue.activeWithDates date differs for row \(pid)") }
+            if entry.recipient.persistentModelID != other.recipient.persistentModelID {
+                let sameClass = entry.recipient.replied == other.recipient.replied
+                    && (entry.recipient.replied
+                        ? entry.recipient.replyArrivedAt == other.recipient.replyArrivedAt
+                        : ReachedOutQueue.nextReachOut(for: entry.recipient, of: .init(entry.prospect, contacts: entry.prospect.factContacts), now: now)
+                            == ReachedOutQueue.nextReachOut(for: other.recipient, of: .init(other.prospect, contacts: other.prospect.factContacts), now: now))
+                out.append("ReachedOutQueue.activeWithDates representative differs "
+                           + (sameClass ? "within its tie class" : "across tie classes") + " for row \(pid)")
+            }
+        }
+        for (model, fact) in zip(models, facts) {
+            let modelShow = ReachedOutQueue.Show(model, contacts: model.factContacts)
+            let factShow = ReachedOutQueue.Show(fact, contacts: fact.factContacts)
+            let factByID = Dictionary(fact.factContacts.map { ($0.persistentModelID, $0) }, uniquingKeysWith: { first, _ in first })
+            for contact in model.factContacts {
+                guard let record = factByID[contact.persistentModelID] else { continue }   // memberFindings names it
+                let names = ReachedOutAnswers(contact, of: modelShow, now: now, today: today)
+                    .differing(from: ReachedOutAnswers(record, of: factShow, now: now, today: today))
+                if !names.isEmpty {
+                    out.append("reached-out answers \(names.joined(separator: ", ")) differ for contact "
+                               + String(describing: contact.persistentModelID))
+                }
+            }
+        }
+        return out
+    }
+
+    // MARK: slice E1, the stage placement and the members it reads
+
+    /// The context the stage comparison judges against: the day `asOf` at noon in New York, Overture's own
+    /// geography rules with no refusals of Dan's, and a client window holding every other source id the rows
+    /// carry (sorted, so it is the same set every run), so the client arm of the lead time rule is asked on
+    /// both sides of its line rather than never.
+    static func stageContext(for models: [Prospect], asOf: String) -> StageContext {
+        let sources = Set(models.flatMap(\.sourceIds)).sorted()
+        let clients = Set(sources.enumerated().filter { $0.offset % 2 == 0 }.map(\.element))
+        let noon = (EasternDate.date(from: asOf) ?? Date(timeIntervalSince1970: 0)).addingTimeInterval(12 * 3600)
+        return StageContext(now: noon, geo: .none, clients: ClientWindow(clientSourceIds: clients), today: asOf)
+    }
+
+    /// Every show member slice E1 moved onto `ProspectFacts`, read through the protocol.
+    struct StageMembers: Equatable {
+        let hasDraft: Bool
+        let hasOpened: Bool
+        let isReprepQueued: Bool
+        let sendsTogether: Bool
+        let greetingAudienceSize: Int
+        let blockedContactCount: Int
+        let hasEnteredSendHalf: Bool
+        let hiddenByGeography: Bool
+        let isPastClientShow: Bool
+
+        init(_ p: some ProspectFacts, context: StageContext) {
+            hasDraft = p.hasDraft
+            hasOpened = p.hasOpened(today: context.today)
+            isReprepQueued = p.isReprepQueued
+            sendsTogether = p.sendsTogether
+            greetingAudienceSize = p.greetingAudienceSize
+            blockedContactCount = p.blockedContactCount
+            hasEnteredSendHalf = p.hasEnteredSendHalf
+            hiddenByGeography = context.geo.hidesFromQueue(p)
+            isPastClientShow = context.clients.isPastClientShow(p)
+        }
+    }
+
+    /// Every contact rule slice E1 moved onto `ContactFacts`, each judged on the show's draft and audience.
+    struct StageContactMembers: Equatable {
+        let isLooksLikeAnotherPersons: Bool
+        let isSendStuck: Bool
+        let draftLintBlockers: [DraftIssue]
+        let isBlockedByGreeting: Bool
+        let isBlockedAwaitingReview: Bool
+
+        init(_ c: some ContactFacts, body: String?, audience: Int, now: Date) {
+            isLooksLikeAnotherPersons = c.isLooksLikeAnotherPersons
+            isSendStuck = c.isSendStuck(now: now)
+            draftLintBlockers = c.draftLintBlockers(body: body)
+            isBlockedByGreeting = c.isBlockedByGreeting(body: body, audience: audience)
+            isBlockedAwaitingReview = c.isBlockedAwaitingReview(body: body, audience: audience,
+                                                                lintBlockers: c.draftLintBlockers(body: body))
+        }
+    }
+
+    /// The placement over models (each row's own `recipients`, as the pass reads them) against the placement
+    /// over facts (`factContacts`), focus by focus, then the members, then the resolved geography. Findings
+    /// name a focus, a member and an identifier, never a title, a venue or an address (L222).
+    static func stageFindings(_ models: [Prospect], _ facts: [RowFacts], asOf: String) -> [String] {
+        let context = stageContext(for: models, asOf: asOf)
+        var out: [String] = []
+        let pidByKey = Dictionary(models.map { ($0.naturalKey, String(describing: $0.persistentModelID)) },
+                                  uniquingKeysWith: { first, _ in first })
+        let onModels = StageNavigation.placements(in: models, context: context)
+        let onFacts = StageNavigation.placements(in: facts, context: context)
+        if onModels.count != onFacts.count {
+            out.append("StageNavigation.placements placed \(onModels.count) row(s) one way and \(onFacts.count) the other")
+        }
+        for focus in StageFocus.allCases {
+            let a = Set(StageNavigation.naturalKeys(for: focus, in: onModels))
+            let b = Set(StageNavigation.naturalKeys(for: focus, in: onFacts))
+            for key in a.symmetricDifference(b).sorted() {
+                out.append("StageNavigation.placements \(focus.rawValue) differs for row \(pidByKey[key] ?? "a row no model holds")")
+            }
+        }
+        for (model, fact) in zip(models, facts) {
+            let pid = String(describing: model.persistentModelID)
+            if StageMembers(model, context: context) != StageMembers(fact, context: context) {
+                out.append("stage members differ for row \(pid)")
+            }
+            let modelAudience = model.greetingAudienceSize(among: model.recipients)
+            let factAudience = fact.greetingAudienceSize(among: fact.factContacts)
+            let factByID = Dictionary(fact.factContacts.map { ($0.persistentModelID, $0) },
+                                      uniquingKeysWith: { first, _ in first })
+            for contact in model.recipients {
+                guard let record = factByID[contact.persistentModelID] else { continue }
+                if StageContactMembers(contact, body: model.draftBody, audience: modelAudience, now: context.now)
+                    != StageContactMembers(record, body: fact.draftBody, audience: factAudience, now: context.now) {
+                    out.append("stage contact members differ for contact \(String(describing: contact.persistentModelID))")
+                }
+            }
+        }
+        if context.resolvingPlaces(of: models).geo.resolvedPlaceCount
+            != context.resolvingPlaces(of: facts).geo.resolvedPlaceCount {
+            out.append("StageContext.resolvingPlaces resolved a different number of places")
+        }
+        return out
+    }
+
+    // MARK: slice H, the long tail (T8)
+
+    /// The queue scope's membership and order, the three read-time tables `scope` builds over the corpus, the
+    /// possible match fan out line, the unseen merge survivors at `asOf`, and each row's `isClosed`, over
+    /// models against facts. Findings name a term and an identifier, never a title, a venue or a match's name,
+    /// which the fan out line carries (L222).
+    static func longTailFindings(_ models: [Prospect], _ facts: [RowFacts], asOf: String) -> [String] {
+        var out: [String] = []
+        let pidByKey = Dictionary(models.map { ($0.naturalKey, String(describing: $0.persistentModelID)) },
+                                  uniquingKeysWith: { first, _ in first })
+        func pid(_ key: String) -> String { pidByKey[key] ?? "a row no model holds" }
+
+        if QueueModel.queueScope(models).map(\.persistentModelID) != QueueModel.queueScope(facts).map(\.persistentModelID) {
+            out.append("QueueModel.queueScope membership or order differs")
+        }
+        let titlesM = QueueModel.titlesByKey(among: models), titlesF = QueueModel.titlesByKey(among: facts)
+        for key in Set(titlesM.keys).union(titlesF.keys).sorted() where titlesM[key] != titlesF[key] {
+            out.append("QueueModel.titlesByKey differs for row \(pid(key))")
+        }
+        let laterM = QueueModel.laterLookalikes(among: models), laterF = QueueModel.laterLookalikes(among: facts)
+        for key in Set(laterM.keys).union(laterF.keys).sorted() where laterM[key] != laterF[key] {
+            out.append("QueueModel.laterLookalikes differs for the row \(pid(key)) points at")
+        }
+        let nightsM = QueueModel.nightsByKey(among: models), nightsF = QueueModel.nightsByKey(among: facts)
+        for key in Set(nightsM.keys).union(nightsF.keys).sorted() where nightsM[key] != nightsF[key] {
+            out.append("QueueModel.nightsByKey differs for row \(pid(key))")
+        }
+        if QueueRenderPass.fanOutWarning(models) != QueueRenderPass.fanOutWarning(facts) {
+            out.append("QueueRenderPass.fanOutWarning differs")
+        }
+        let survivorsM = QueueRenderPass.unseenSurvivors(among: models, today: asOf)
+        let survivorsF = QueueRenderPass.unseenSurvivors(among: facts, today: asOf)
+        for key in Set(survivorsM).symmetricDifference(survivorsF).sorted() {
+            out.append("QueueRenderPass.unseenSurvivors differs for row \(pid(key))")
+        }
+        for (model, fact) in zip(models, facts) where model.isClosed != fact.isClosed {
+            out.append("isClosed differs for row \(pid(model.naturalKey))")
+        }
+        return out
+    }
+
+    // MARK: slice G2, the card and the members it reads
+
+    /// Labels of two values whose rendered children differ, one renderer for both arms, so an optional or an
+    /// enum renders alike on each side (the D1 lesson) and a finding names fields rather than values.
+    static func differingLabels(_ a: Any, _ b: Any) -> [String] {
+        let theirs = Dictionary(Mirror(reflecting: b).children.compactMap { c in c.label.map { ($0, String(describing: c.value)) } },
+                                uniquingKeysWith: { first, _ in first })
+        return Mirror(reflecting: a).children.compactMap { c in
+            guard let label = c.label else { return nil }
+            return theirs[label] == String(describing: c.value) ? nil : label
+        }
+    }
+
+    /// The show members slice G2 moved onto `ProspectFacts`, read through the protocol.
+    struct CardShowAnswers {
+        let hasUnclearedConflict: Bool
+        let conflictScope: ConflictScope?
+        let conflictNote: String?
+        let showSummaryAbsence: ShowSummaryAbsence?
+        let reachabilityEmptyReason: Reachability.EmptyReason?
+        let contactRoute: ContactRoute
+        let draftIsMissingSubject: Bool
+        let skippedNights: [String]
+        let pitchedNights: [String]
+
+        init(_ p: some ProspectFacts, now: Date) {
+            hasUnclearedConflict = p.hasUnclearedConflict
+            conflictScope = p.conflictScope
+            conflictNote = p.conflictNote
+            showSummaryAbsence = p.showSummaryAbsence
+            reachabilityEmptyReason = p.reachabilityEmptyReason
+            contactRoute = p.contactRouteForScoring(now: now)
+            draftIsMissingSubject = p.draftIsMissingSubject
+            skippedNights = p.skippedNightDecisions.map(\.night)
+            pitchedNights = p.pitchedNightDecisions.map(\.night)
+        }
+    }
+
+    /// The contact members slice G2 moved onto `ContactFacts`, and the send gate asked of the contact's show.
+    struct CardContactAnswers {
+        let provenance: RecipientProvenance
+        let suppressionReason: RecipientSuppressionReason
+        let contactMethod: ContactMethod?
+        let contactConfidence: ContactConfidence?
+        let contactTier: ContactTier?
+        let heldDownReason: ContactConfidenceGuard.HoldDown?
+        let replyPostdatesDraftRequest: Bool
+        let replyIsAnswered: Bool
+        let holdReason: Recipient.HoldReason?
+        let sendOrderRank: Int
+        let canReceiveTheEmail: Bool
+        let isSendablePending: Bool
+
+        init<Row: ProspectFacts>(_ r: Row.Contact, of show: Row, among contacts: [Row.Contact], today: String) {
+            provenance = r.provenance
+            suppressionReason = r.suppressionReason
+            contactMethod = r.contactMethod
+            contactConfidence = r.contactConfidence
+            contactTier = r.contactTier
+            heldDownReason = r.heldDownReason
+            replyPostdatesDraftRequest = r.replyPostdatesDraftRequest
+            replyIsAnswered = r.replyIsAnswered
+            holdReason = r.holdReason
+            sendOrderRank = r.sendOrderRank
+            canReceiveTheEmail = r.canReceiveTheEmail
+            isSendablePending = r.passesTheSendGate(today: today, on: show, audience: show.greetingAudienceSize(among: contacts))
+        }
+    }
+
+    /// Every row's card, its send groups and its form pitch over models and over facts, then each show's and
+    /// each contact's moved members. Findings name identifiers and field labels only: a card carries names,
+    /// addresses and letters.
+    static func cardFindings(_ models: [Prospect], _ facts: [RowFacts], today: String, now: Date) -> [String] {
+        var out: [String] = []
+        for (model, fact) in zip(models, facts) {
+            let pid = String(describing: model.persistentModelID)
+            let modelContacts = model.factContacts, factContacts = fact.factContacts
+            let modelGroups = SendGroup.Groups(of: model, among: modelContacts, today: today)
+            let factGroups = SendGroup.Groups(of: fact, among: factContacts, today: today)
+            if modelGroups.preview.map(\.persistentModelID) != factGroups.preview.map(\.persistentModelID)
+                || modelGroups.pending.map(\.persistentModelID) != factGroups.pending.map(\.persistentModelID) {
+                out.append("SendGroup.Groups differ for row \(pid)")
+            }
+            if FormPitch.state(of: model, among: modelContacts) != FormPitch.state(of: fact, among: factContacts) {
+                out.append("FormPitch.state differs for row \(pid)")
+            }
+            let onModel = QueueItem(model, sendGroups: modelGroups, among: modelContacts)
+            let onFact = QueueItem(fact, sendGroups: factGroups, among: factContacts)
+            if onModel != onFact {
+                out.append("QueueItem differs for row \(pid) in " + QueueModel.differingFieldNames(onModel, onFact).joined(separator: ", "))
+            }
+            let showLabels = differingLabels(CardShowAnswers(model, now: now), CardShowAnswers(fact, now: now))
+            if !showLabels.isEmpty {
+                out.append("the card's show answers \(showLabels.joined(separator: ", ")) differ for row \(pid)")
+            }
+            let factByID = Dictionary(factContacts.map { ($0.persistentModelID, $0) }, uniquingKeysWith: { first, _ in first })
+            for contact in modelContacts {
+                guard let record = factByID[contact.persistentModelID] else { continue }   // memberFindings names it
+                let labels = differingLabels(CardContactAnswers(contact, of: model, among: modelContacts, today: today),
+                                             CardContactAnswers(record, of: fact, among: factContacts, today: today))
+                if !labels.isEmpty {
+                    out.append("the card's contact answers \(labels.joined(separator: ", ")) differ for contact "
+                               + String(describing: contact.persistentModelID))
+                }
+            }
+        }
+        return out
+    }
+
+    // MARK: slice G1, the row and the reachability members it reads
+
+    /// What the row's reachability reads about one show, over that show's own contacts.
+    struct RowShowAnswers: Equatable {
+        let reachabilityResult: Reachability.ProbeResult?
+        let fromRecipients: Reachability.ProbeResult
+        let asHeld: Reachability.ProbeResult?
+        let socialRoutes: [String]
+        let contactForms: [String]
+
+        init(_ p: some ProspectFacts) {
+            let contacts = p.factContacts
+            reachabilityResult = p.reachabilityResult
+            fromRecipients = p.reachabilityResultFromRecipients(among: contacts)
+            asHeld = p.reachabilityResultAsHeld(among: contacts)
+            socialRoutes = p.socialRouteURLs(among: contacts)
+            contactForms = p.usableContactFormURLs(among: contacts)
+        }
+    }
+
+    /// The three address members slice G1 moved onto `ContactFacts`.
+    struct RowContactAnswers: Equatable {
+        let isUnconfirmedNameMatch: Bool
+        let isHeldByAGuard: Bool
+        let hasUnguardedAddress: Bool
+
+        init(_ r: some ContactFacts) {
+            isUnconfirmedNameMatch = r.isUnconfirmedNameMatch
+            isHeldByAGuard = r.isHeldByAGuard
+            hasUnguardedAddress = r.hasUnguardedAddress
+        }
+    }
+
+    /// Every row's contact facts and the row built from them, over models and over facts, then each show's
+    /// and each contact's reachability answers. Findings name identifiers only: the contact facts carry names
+    /// and addresses, and the route lists carry URLs.
+    static func rowFindings(_ models: [Prospect], _ facts: [RowFacts]) -> [String] {
+        var out: [String] = []
+        for (model, fact) in zip(models, facts) {
+            let pid = String(describing: model.persistentModelID)
+            let onModel = RecipientFacts.of(model, contacts: model.factContacts)
+            let onFact = RecipientFacts.of(fact, contacts: fact.factContacts)
+            if onModel != onFact { out.append("RecipientFacts.of differs for row \(pid)") }
+            if QueueScopeRow(model, facts: onModel) != QueueScopeRow(fact, facts: onFact) {
+                out.append("QueueScopeRow differs for row \(pid)")
+            }
+            if RowShowAnswers(model) != RowShowAnswers(fact) {
+                out.append("the row's reachability answers differ for row \(pid)")
+            }
+            let factByID = Dictionary(fact.factContacts.map { ($0.persistentModelID, $0) }, uniquingKeysWith: { first, _ in first })
+            for contact in model.factContacts {
+                guard let record = factByID[contact.persistentModelID] else { continue }   // memberFindings names it
+                if RowContactAnswers(contact) != RowContactAnswers(record) {
+                    out.append("the address members differ for contact " + String(describing: contact.persistentModelID))
+                }
+            }
+        }
+        return out
+    }
+
+    // MARK: slice E2, the due work terms
+
+    /// What the due work terms read about one show, through the generic members.
+    struct DueShowAnswers: Equatable {
+        let replyWatchManualOutcome: Bool
+        let replyWatchIsBooked: Bool
+        let nudgesStopped: Bool
+        let hasUnhandledReply: Bool
+
+        init(_ p: some ProspectFacts) {
+            replyWatchManualOutcome = p.replyWatchManualOutcome
+            replyWatchIsBooked = p.replyWatchIsBooked
+            nudgesStopped = FollowUp.nudgesStopped(on: p)
+            hasUnhandledReply = p.hasUnhandledReply(among: p.factContacts)
+        }
+    }
+
+    /// What the due work terms read about one contact. The conversation proposal is rendered by one renderer
+    /// for both arms, and the contact a reply is answered on by its identifier.
+    struct DueContactAnswers: Equatable {
+        let replyWatchManualOutcome: Bool
+        let replyWatchIsBooked: Bool
+        let replyWatchConversationIsOpen: Bool
+        let replySearchAnchor: Date?
+        let replySearchHasConversation: Bool
+        let inSearchScope: Bool
+        let proposal: String
+        let groupKey: String
+        let answering: PersistentIdentifier
+
+        init<C: ContactFacts>(_ r: C, among contacts: [C], now: Date) {
+            replyWatchManualOutcome = r.replyWatchManualOutcome
+            replyWatchIsBooked = r.replyWatchIsBooked
+            replyWatchConversationIsOpen = r.replyWatchConversationIsOpen
+            replySearchAnchor = r.replySearchAnchor
+            replySearchHasConversation = r.replySearchHasConversation
+            inSearchScope = ReplySearchScope.inScope(contact: r, now: now)
+            proposal = String(describing: ProposedConversation.state(of: r, now: now))
+            groupKey = SendGroup.groupKey(r)
+            answering = ReplyIdentity.answering(for: r, among: contacts).persistentModelID
+        }
+
+        func differing(from other: DueContactAnswers) -> [String] {
+            Mirror(reflecting: self).children.compactMap { child in
+                guard let label = child.label,
+                      let theirs = Mirror(reflecting: other).children.first(where: { $0.label == label })
+                else { return nil }
+                return String(describing: child.value) == String(describing: theirs.value) ? nil : label
+            }
+        }
+    }
+
+    /// Each due list as lines of identifiers and the value the list carries, in its order, keyed by list.
+    /// The lines carry a candidate's address, so they are compared and never printed.
+    static func dueLines<Row: ProspectFacts>(_ due: DueWork.Due<Row>) -> [String: [String]] {
+        func id(_ p: Row, _ r: Row.Contact) -> String { "\(p.persistentModelID) \(r.persistentModelID)" }
+        return [
+            "afterTheShow": due.afterTheShow.map { "\(id($0.prospect, $0.recipient)) \($0.prompt)" },
+            "silent": due.silent.map { id($0.prospect, $0.recipient) },
+            "stalledReplyDrafts": due.stalledReplyDrafts.map { "\(id($0.prospect, $0.recipient)) \($0.requestedAt)" },
+            "conversationsToConfirm": due.conversationsToConfirm.map { "\(id($0.prospect, $0.recipient)) \($0.candidate)" },
+            "repliesToAnswer": due.repliesToAnswer.map { conversation in
+                switch conversation {
+                case .show(let p, let r): return id(p, r)
+                case .inquiry(let inquiry): return "inquiry \(inquiry.persistentModelID)"
+                }
+            },
+        ]
+    }
+
+    /// The five due lists, their counts and the next instant the count could change, over models and over
+    /// facts, at `now` and at the end of time (where every awaited draft has stalled and every nudge is
+    /// due), with the reply run dead and alive; then every show's and every contact's answers.
+    static func dueWorkFindings(_ models: [Prospect], _ facts: [RowFacts], now: Date) -> [String] {
+        var out: [String] = []
+        for (instant, label) in [(now, "now"), (Date.distantFuture, "at the end of time")] {
+            for alive in [false, true] {
+                let onModels = DueWork.rows(from: models, contacts: { $0.factContacts }, inquiries: [], now: instant,
+                                            replyRunAlive: alive)
+                let onFacts = DueWork.rows(from: facts, contacts: { $0.factContacts }, inquiries: [], now: instant,
+                                           replyRunAlive: alive)
+                let linesModels = dueLines(onModels), linesFacts = dueLines(onFacts)
+                for list in linesModels.keys.sorted() where linesModels[list] != linesFacts[list] {
+                    out.append("DueWork.rows \(list) differs \(label)\(alive ? " with the reply run alive" : ""): "
+                               + "\(linesModels[list]?.count ?? 0) over models, \(linesFacts[list]?.count ?? 0) over facts")
+                }
+                if onModels.counts != onFacts.counts {
+                    out.append("DueWork.Due.counts differs \(label)\(alive ? " with the reply run alive" : "")")
+                }
+            }
+        }
+        for (instant, label) in [(now, "now"), (Date(timeIntervalSince1970: 0), "from 1970")] {
+            for alive in [false, true] {
+                let onModels = DueWork.nextChange(from: models, contacts: { $0.factContacts }, now: instant, replyRunAlive: alive)
+                let onFacts = DueWork.nextChange(from: facts, contacts: { $0.factContacts }, now: instant, replyRunAlive: alive)
+                if onModels != onFacts {
+                    out.append("DueWork.nextChange differs \(label)\(alive ? " with the reply run alive" : "")")
+                }
+            }
+        }
+        for (model, fact) in zip(models, facts) {
+            if DueShowAnswers(model) != DueShowAnswers(fact) {
+                out.append("due work show answers differ for row \(model.persistentModelID)")
+            }
+            let modelContacts = model.factContacts, factContacts = fact.factContacts
+            let factByID = Dictionary(factContacts.map { ($0.persistentModelID, $0) }, uniquingKeysWith: { first, _ in first })
+            for contact in modelContacts {
+                guard let record = factByID[contact.persistentModelID] else { continue }   // memberFindings names it
+                let names = DueContactAnswers(contact, among: modelContacts, now: now)
+                    .differing(from: DueContactAnswers(record, among: factContacts, now: now))
+                if !names.isEmpty {
+                    out.append("due work contact answers \(names.joined(separator: ", ")) differ for contact "
+                               + String(describing: contact.persistentModelID))
+                }
+            }
+        }
         return out
     }
 
@@ -172,6 +745,10 @@ enum TermsOverFacts {
         let standing: RecipientStanding
         let isOutreachStoodDown: Bool
         let isClosingNoteStoodDown: Bool
+        // Slice F: the two reply draft members `StalledReplyDraft` reads. Stalled is asked at the end of time,
+        // where it is true exactly when a draft is awaited; the fixture holds the timeout itself.
+        let awaitedReplyDraftRequestedAt: Date?
+        let stalledAtTheEndOfTime: Bool
 
         init(_ c: some ContactFacts) {
             sendState = c.sendState
@@ -189,6 +766,8 @@ enum TermsOverFacts {
             standing = c.standing
             isOutreachStoodDown = c.isOutreachStoodDown
             isClosingNoteStoodDown = c.isClosingNoteStoodDown
+            awaitedReplyDraftRequestedAt = c.awaitedReplyDraftRequestedAt
+            stalledAtTheEndOfTime = c.isReplyDraftStalled(now: .distantFuture)
         }
 
         /// The names of the members that differ, so a finding says which rule disagreed.

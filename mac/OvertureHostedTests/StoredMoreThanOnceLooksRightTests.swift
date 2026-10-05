@@ -49,7 +49,7 @@ struct StoredMoreThanOnceLooksRightTests {
         let name = scheme == .light ? "light" : "dark"
 
         let card = VStack(alignment: .leading, spacing: 0) {
-            ProspectRowView(item: item(sameShowKeys: ["other"]), today: "2026-09-19",
+            ProspectRowView(item: item(sameShowKeys: ["other"]), today: "2026-09-19", now: Date(),
                             onKeep: {}, onDismiss: { _ in })
         }
         .padding(16)

@@ -520,8 +520,15 @@ enum ScoutExtractIngest {
             func failed(_ applied: ScoutService.Outcome) {
                 outcome.saveFailed = true
                 outcome.degradedReads.append(contentsOf: applied.degradedReads)
-                outcome.landingStop = outcome.landingStop ?? ScoutService.isolateFailedSave(
-                    of: source.orgName, scope: applied.saveFailureScope, landing: landing)
+                // Written as an `if`, never `?? isolateFailedSave(...)`: the right side of `??` is an autoclosure,
+                // and the Release compiler on Xcode 26.6 (CI's) refuses the non-Sendable source captured in an
+                // autoclosure inside this local function ("sending 'source' risks causing data races"). Same
+                // behaviour: the failed save is put back only when no earlier stop was recorded.
+                let orgName = source.orgName
+                if outcome.landingStop == nil {
+                    outcome.landingStop = ScoutService.isolateFailedSave(
+                        of: orgName, scope: applied.saveFailureScope, landing: landing)
+                }
                 outcome.sources.append(ScoutService.SourceResult(
                     sourceId: source.sourceId, orgName: source.orgName,
                     state: .saveFailed, hadBaseline: health.baseline > 0, listingsURL: source.listingsURL))
@@ -743,6 +750,9 @@ enum ScoutExtractIngest {
                                                    now: now)
 
         source.lastContentHash = promoted ?? source.lastContentHash
+        // #4440: a NEWER page left pending on this source after these results were read (a kept copy landing
+        // late) is not read by landing them: it stays pending and unread, with its months, for the next scout.
+        if let promoted, let newer = source.pendingContentHash, newer != promoted { return movement }
         source.pendingContentHash = nil
         // #897: the stitched-month expectation is spent once the run read the page in full. Cleared here on
         // the same success branch as the hash, so it can never carry stale months into a later comparison.

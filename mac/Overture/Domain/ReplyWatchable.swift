@@ -152,20 +152,15 @@ protocol ReplyWatchable: AnyObject {
 
 extension Recipient: ReplyWatchableRecipient {
     var replyWatchAddress: String? { email }
-    var replyWatchManualOutcome: Bool { outcomeSourceRaw == OutcomeSource.manual.rawValue }
-    var replyWatchIsBooked: Bool { resolution == .booked }
-    // #2196: nothing has closed it out. Deliberately the same three facts `hasUnhandledReply` reads
-    // before it asks anything else, so a conversation that could still put itself in front of Dan is
-    // exactly the one still being watched, and the two cannot disagree about which those are.
-    var replyWatchConversationIsOpen: Bool { resolution == nil && !bounced }
     // `replyWatchConversationIsAttached` (#2717, #3712), which this conformance requires, is answered by its
-    // one body on `ContactFacts` (ContactFactsMembers.swift) since #4357 slice D1.
+    // one body on `ContactFacts` (ContactFactsMembers.swift) since #4357 slice D1, and
+    // `replyWatchManualOutcome`, `replyWatchIsBooked` and `replyWatchConversationIsOpen` by theirs since E2.
 }
 
 extension Prospect: ReplyWatchable {
     var replyWatchDisplayName: String { groupName }
-    var replyWatchManualOutcome: Bool { outcomeSourceRaw == OutcomeSource.manual.rawValue }
-    var replyWatchIsBooked: Bool { outcome == .booked }
+    // `replyWatchManualOutcome` and `replyWatchIsBooked`, which this conformance requires, are answered by
+    // their one body on `ProspectFacts` (ProspectFactsMembers.swift) since #4357 slice E2.
     var replyWatchRecipients: [any ReplyWatchableRecipient] { recipients }
     // #3937: the run has not passed, judged by its CLOSING night (`runEndDate ?? performanceDate`) through
     // `EasternDate.runHasPassed`. Chosen among the three run predicates on purpose: an unknown date has NOT

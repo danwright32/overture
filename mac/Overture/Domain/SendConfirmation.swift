@@ -90,7 +90,7 @@ struct SendConfirmation: Equatable {
             : SendGroup.pendingGroup(of: prospect, together: sendsTogether, today: today)
         // A ticked contact must still clear every guard: `sendableFor` filters to the ones that could
         // actually go, so a held contact cannot be talked past by being named here (#2052).
-        let group = selecting.map { SendGroup.sendableFor(prospect, ids: $0) } ?? defaultGroup
+        let group = selecting.map { SendGroup.sendableFor(prospect, ids: $0, today: today) } ?? defaultGroup
         // #2052: no sheet at all for a draft with no subject line, where this used to render
         // "(no subject)" beside a live Send button. The placeholder was itself the detection that the
         // value was missing, so it had to stop the send rather than label it (L67). Dan, on finding it:
@@ -122,7 +122,7 @@ struct SendConfirmation: Equatable {
         // promise on an email reaching two people, so a group gets its own, naming how many.
         // #2017: follows the ticks AND the together-or-separately choice, both changeable on this sheet.
         reassurance = SendConfirmCopy.reassurance(chosen: group.count, together: sendsTogether)
-        candidates = SendGroup.candidates(of: prospect)
+        candidates = SendGroup.candidates(of: prospect, today: today)
         selected = group.map(\.id)
         // #4168: the CHOICE this confirmation was composed for, which is what the write route used to
         // leave on the model for this line to read back. The sheet seeds its picker from the confirmation

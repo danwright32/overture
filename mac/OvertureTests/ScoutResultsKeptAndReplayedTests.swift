@@ -200,6 +200,60 @@ final class ScoutResultsKeptAndReplayedTests {
         #expect(try f.pending.list().isEmpty && f.journals.list().isEmpty)
     }
 
+    // A kept copy whose record cannot be read is NOT an absent one (L215). Read as absent, a fresh sequence was
+    // minted and a new copy written over it, so the sources an earlier attempt landed were counted again. Now
+    // the landing is refused before anything is applied, and the unreadable record is left where it is.
+    @Test func aKeptCopyWhoseRecordCannotBeReadRefusesTheLandingAndIsNotWrittenOver() async throws {
+        let c = try container()
+        let ctx = c.mainContext
+        html("a", in: ctx)
+        try ctx.save()
+        let f = try folders("kept-unreadable-entry")
+        let lines = Lines()
+        let bytes = try data(["a"])
+        _ = try await land(bytes, into: ctx, f, lines: lines, saveSource: FailOne("a").save)
+        let hash = PendingScoutIngests.contentHash(of: bytes)
+        let entry = f.pending.resultsURL(hash).deletingLastPathComponent().appendingPathComponent("entry.json")
+        try Data("not an entry".utf8).write(to: entry)
+
+        let again = try await land(bytes, into: ctx, f, lines: lines)
+        guard case .resultsNotKept(let why)? = again.outcome.landingStop else {
+            Issue.record(Comment(rawValue: "a kept copy with an unreadable record gave \(String(describing: again.outcome.landingStop))"))
+            return
+        }
+        #expect(why.contains(entry.path), Comment(rawValue: why))
+        #expect(try titles(c).isEmpty, "the landing applied results over a kept copy it could not read")
+        #expect(try sources(c)["a"]?.successfulCheckCount == WatchedSource.warmupRuns)
+        #expect(try Data(contentsOf: entry) == Data("not an entry".utf8), "the unreadable record was written over")
+        // And the sweep's listing reports it by path rather than rewriting it as a run nobody knows.
+        let listed = try f.pending.list()
+        #expect(listed.contains { if case .unreadable(entry.path, _) = $0 { return true }; return false },
+                Comment(rawValue: "listed \(listed)"))
+        #expect(try Data(contentsOf: entry) == Data("not an entry".utf8), "listing the copies rewrote the record")
+    }
+
+    // A kept copy offered again lands with the `now` its landing started with (its stamps), but judges what is
+    // still upcoming against the day it is offered on: a night that passed in between is not ingested as a
+    // show still to come.
+    @Test func aCopyOfferedAgainJudgesUpcomingByTheDayItIsOfferedOn() async throws {
+        let c = try container()
+        let ctx = c.mainContext
+        html("b", in: ctx)
+        try ctx.save()
+        let f = try folders("kept-later-day")
+        let lines = Lines()
+        let first = try await land(try data(["b"]), into: ctx, f, lines: lines, saveSource: FailOne("b").save)
+        #expect(first.outcome.saveFailed)
+
+        // Offered a month later: night(0) has passed by then, night(1) is that very day.
+        let later = Calendar(identifier: .gregorian).date(byAdding: .day, value: 31, to: now)!
+        let offered = await ScoutExtractLanding.offerPending(
+            clients: [], history: [], blocked: .empty, now: later, landings: LandingSingleFlight(sleep: { _ in }),
+            pending: f.pending, journals: f.journals, movementLog: lines, into: ctx)
+        #expect(offered.landed.count == 1, Comment(rawValue: "the kept results did not land: \(offered)"))
+        #expect(try titles(c) == ["Recital b 1"], "a night that had passed by the day of the offer was ingested")
+    }
+
     // L258: a copy that cannot be kept refuses the landing by name before anything is applied, as a journal
     // that cannot be written does, and says where the results still are.
     @Test func aCopyThatCannotBeKeptRefusesTheLandingBeforeAnythingIsApplied() async throws {
@@ -344,5 +398,52 @@ final class ScoutResultsKeptAndReplayedTests {
         _ = await offer(into: ctx, f, lines: Lines())
         #expect(try sources(c)["b"]?.lastContentHash == "new-b", Comment(rawValue:
             "the replay marked \(String(describing: try? sources(c)["b"]?.lastContentHash)) read"))
+        // And the newer page is still waiting to be read: landing the older page's results did not read it.
+        #expect(try sources(c)["b"]?.pendingContentHash == "newer-b", "the newer page was dropped unread")
+        #expect(try sources(c)["b"]?.hasUnreadChanges == true, "the newer page was marked read")
+    }
+
+    // The crash the rewrite above can meet: `record` wrote the new copy into its temporary folder and died before
+    // moving it into place, over a destination whose record survived but whose results are gone. That temporary
+    // folder holds the only copy, so the next listing moves it into place rather than deleting it (L5, L617).
+    @Test func aStrandedCopyIsMovedOverAKeptRecordWhoseResultsAreGone() throws {
+        let f = try folders("kept-results-gone-stranded")
+        let bytes = try data(["a"])
+        let hash = PendingScoutIngests.contentHash(of: bytes)
+        try f.pending.record(bytes, sequence: 7, now: now)
+        // The rewrite's temporary folder, complete (results and record), as `record` leaves it just before its move.
+        let stranded = f.pending.directory.appendingPathComponent(".incoming-stranded", isDirectory: true)
+        try FileManager.default.copyItem(at: f.pending.resultsURL(hash).deletingLastPathComponent(), to: stranded)
+        try FileManager.default.removeItem(at: f.pending.resultsURL(hash))
+
+        _ = try f.pending.list()
+        let entry = try #require(try f.pending.existingEntry(hash))
+        #expect(f.pending.resultsAreThese(entry), "the only copy left was deleted rather than moved into place")
+        #expect(entry.sequence == 7)
+        #expect(!FileManager.default.fileExists(atPath: stranded.path))
+    }
+
+    // A kept copy is only a copy while its results are there and are these results (L421). An entry whose
+    // results file has gone is written again on the next landing of the same bytes, under the run it was kept
+    // with, so a failed save then still leaves something to land.
+    @Test func aKeptCopyWhoseResultsAreGoneIsWrittenAgainBeforeTheLanding() async throws {
+        let c = try container()
+        let ctx = c.mainContext
+        html("a", in: ctx)
+        try ctx.save()
+        let f = try folders("kept-results-gone")
+        let lines = Lines()
+        let bytes = try data(["a"])
+        _ = try await land(bytes, into: ctx, f, lines: lines, saveSource: FailOne("a").save)
+        let hash = PendingScoutIngests.contentHash(of: bytes)
+        let entry = try #require(try f.pending.existingEntry(hash))
+        try FileManager.default.removeItem(at: f.pending.resultsURL(hash))
+
+        let again = try await land(bytes, into: ctx, f, lines: lines, saveSource: FailOne("a").save)
+        #expect(again.outcome.saveFailed)
+        let rewritten = try #require(try f.pending.existingEntry(hash), "the kept copy's record went too")
+        #expect(rewritten.sequence == entry.sequence, "the copy was kept again under a different run")
+        let copy = try f.pending.results(rewritten)
+        #expect(PendingScoutIngests.contentHash(of: copy.data) == hash, "the results were not kept again")
     }
 }

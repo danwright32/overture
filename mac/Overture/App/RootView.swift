@@ -2404,23 +2404,21 @@ struct RootView: View {
         // the failure is now recorded against the file and reaches the masthead.
         // #4330: the bytes are kept beside the decoded results, so an ingest that has to wait for the store
         // can copy exactly what it decoded (`ScoutExtractLanding`), never whatever the file holds by then.
-        guard let file = HandoffFile.read(at: ScoutExtractResultsDecoder.defaultURL,
-                                          decode: { ($0, try ScoutExtractResultsDecoder.decode($0)) }).value
-        else { return nil }
-        let loaded = DownbeatBridge.loadWithHealth(now: Date())
-        let existing = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
+        // #4339 (A11): the read phase, in Integration, so the first hold probe measures the product's own.
+        guard let file = LandingInputs.readResultsFile() else { return nil }
+        let inputs = await LandingInputs.read(into: context)
         let landed = await ScoutExtractLanding.land(
-            file.0, file.1, clients: loaded.clients,
-            history: LocalHistory.forMatching(existing: existing),
-            blocked: ScoutService.blockedCalendar(export: (loaded.bookings, loaded.blockedDates,
-                                                           loaded.health),
-                                                  context: context),
+            file.data, file.results, clients: inputs.clients, history: inputs.history, blocked: inputs.blocked,
             priority: priority,
             // #4335 (A6): the landing journal folder, resolved here, at the product call site, once.
             journals: .live,
             into: context)
         if let left = landed.copyLeftBehind { status.set(left, priority: .warning) }
-        let outcome = landed.outcome
+        var outcome = landed.outcome
+        // #4339: a show table the read phase could not read, said on this run's summary, the same place the
+        // ingest's own degraded reads are said. Only the summary carries it: like those, it is not written to
+        // the landing's record or journal.
+        outcome.degradedReads.append(contentsOf: inputs.degradedReads)
 
         scoutSummary = ScoutRunSummary.watchedCalendarSummary(for: outcome)   // #885
         // #4330: the sweep at the end of every landing.
@@ -2441,14 +2439,15 @@ struct RootView: View {
                        priority: .warning)
             return
         }
-        let loaded = DownbeatBridge.loadWithHealth(now: Date())
-        let existing = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
+        let inputs = await LandingInputs.read(into: context)
         let offered = await ScoutExtractLanding.offerPending(
-            clients: loaded.clients, history: LocalHistory.forMatching(existing: existing),
-            blocked: ScoutService.blockedCalendar(export: (loaded.bookings, loaded.blockedDates, loaded.health),
-                                                  context: context),
+            clients: inputs.clients, history: inputs.history, blocked: inputs.blocked,
             pending: pending, journals: .live, into: context)
-        let problems = offered.unreadable + offered.copiesLeftBehind
+        // #4339: the kept results landed against the imported history alone when the show table could not be
+        // read, so that is said, in the same one line as the rest, rather than read as an empty store (L215).
+        let degraded = inputs.degradedReads.isEmpty
+            ? [] : [ScoutWarningCopy.degradedReads(inputs.degradedReads.map(\.label))]
+        let problems = offered.unreadable + offered.copiesLeftBehind + degraded
         if let line = LandingWaitCopy.offered(landed: offered.landed.count, alreadyLanded: offered.alreadyLanded,
                                               stillWaiting: offered.stillWaiting,
                                               stuck: offered.stuck, stuckAfter: offered.stuckAfter) {

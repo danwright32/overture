@@ -264,6 +264,7 @@ struct BlockedContactRowGuardTests {
     // asserted is unchanged: the count is carried on the QueueItem, from the show's own definition of it,
     // rather than recomputed in a view. Re-aimed rather than relaxed.
     @Test func theCountReachesTheRow() {
-        #expect(queueModel.contains("blockedContactCount: p.blockedContactCount(lintBlockers:"))
+        // #4357 slice G2: and over the contacts the card was handed, the needle's meaning unchanged.
+        #expect(queueModel.contains("blockedContactCount: p.blockedContactCount(among: contactsOnce, lintBlockers:"))
     }
 }

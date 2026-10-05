@@ -238,7 +238,8 @@ struct PresenterLineWiringTests {
         // place a card is made, reached both by the pass's prebuild and by a row that arrives on screen
         // after it. Asserted THERE, or this guard would be satisfied by the table being built and say
         // nothing about any card reading it.
-        let cardBody = SourceGuardHelper.bodyOfFunction(named: "card", in: model)
+        // #4357 slice G2: the decoration lives in the generic card; the model entry point only forwards to it.
+        let cardBody = SourceGuardHelper.bodyOfFunction(named: "card<Row: ProspectFacts>", in: model)
         #expect(cardBody?.contains("presenterLine") == true,
                 "QueueModel.card no longer sets the presenter line, or is gone")
         // The corpus is the whole store, not the caller's already-filtered rows: judging brands against a

@@ -21,8 +21,11 @@ import SwiftData
 @Suite("A refused source cannot be edited by any route (#2530)")
 struct RefusedSourceIsImmutableTests {
 
+    // `LandingRun` too (#4404): every route here now passes through `WatchlistEditing.touchedByDan`, whose stamp
+    // reads the highest landing record, so the schema holds everything that route can read. On a refused row it
+    // returns before reading anything, which is what this suite asserts.
     private func context() throws -> ModelContext {
-        ModelContext(try ModelContainer(for: Schema([WatchedSource.self, Prospect.self]),
+        ModelContext(try ModelContainer(for: Schema([WatchedSource.self, Prospect.self, LandingRun.self]),
                                         configurations: [ModelConfiguration(isStoredInMemoryOnly: true)]))
     }
 

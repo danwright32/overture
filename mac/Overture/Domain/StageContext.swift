@@ -64,7 +64,8 @@ struct StageContext: Equatable, Sendable {
     //
     // The day is carried across explicitly and NOT re-derived: re-deriving would silently discard a day a
     // caller had pinned, which is the one thing a memoisation step must not do.
-    func resolvingPlaces(of prospects: [Prospect]) -> StageContext {
+    // #4357 slice E1: over any `ProspectFacts`, so the pass can hand it retained rows.
+    func resolvingPlaces(of prospects: [some ProspectFacts]) -> StageContext {
         StageContext(now: now, geo: geo.resolving(prospects), clients: clients, today: today)
     }
 }

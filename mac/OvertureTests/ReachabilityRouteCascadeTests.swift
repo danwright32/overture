@@ -61,11 +61,12 @@ struct ReachabilityRouteCascadeTests {
     // hand-rolled copy is exactly what this exists to prevent (L263, L370).
     @Test("the cascade has one definition and the Prospect rule calls it")
     func theProspectRuleGoesThroughTheSharedCascade() throws {
-        let prospect = SourceGuardHelper.source("Overture/Domain/Prospect.swift")
-        // Sliced here rather than through `SourceGuardHelper`, which reads FUNCTION bodies and this is a
-        // computed property. The slice runs from the declaration to the next closing brace at the type's
-        // own indent, which is where a computed property ends in this file.
-        let opening = "var reachabilityResultFromRecipients: Reachability.ProbeResult {"
+        // #4357 slice G1: the rule moved to `ProspectFacts`, over the contacts handed in, and the model's
+        // property only forwards to it, so the guard reads the file the rule now lives in.
+        let prospect = SourceGuardHelper.source("Overture/Domain/ProspectFactsMembers.swift")
+        // Sliced here rather than through `SourceGuardHelper`. The slice runs from the declaration to the
+        // next closing brace at the type's own indent, which is where a member ends in this file.
+        let opening = "func reachabilityResultFromRecipients(among contacts: [some ContactFacts]) -> Reachability.ProbeResult {"
         let start = try #require(prospect.range(of: opening),
                                  "the rule is gone, so this guard is about nothing (L98)")
         let rest = prospect[start.upperBound...]

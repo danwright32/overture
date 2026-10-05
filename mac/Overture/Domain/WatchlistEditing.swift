@@ -136,6 +136,8 @@ enum WatchlistEditing {
         guard !isRefusalRecord(source) else { return }
         source.isActive = false
         source.inactiveReason = .removedByDan
+        // #4404: a reading taken before the stop would otherwise still land its shows for a source Dan removed.
+        touchedByDan(source, in: context)
         try? context.save()
     }
 
@@ -452,6 +454,11 @@ enum WatchlistEditing {
         guard !isRefusalRecord(source) else { return }   // #2530: nothing about a refused row may change
         var top = FetchDescriptor<WatchedSource>(sortBy: [SortDescriptor(\.lastTouchedSequence, order: .reverse)])
         top.fetchLimit = 1
+        // The store's two maxima are a third bound, beside the two that carry every reading that can still land:
+        // one minted in this process sits under `landings`' counter, which every new mint goes above, and one
+        // kept on disk is named in the copies or journals `floor` reads. A store row above both belongs to a
+        // landing that already landed, and a landed reading never lands again, so a failed read here can only
+        // drop a redundant bound, never put the stamp under a reading still to land (#4404's review, agreed).
         let stored = max((try? context.fetch(top))?.first?.lastTouchedSequence ?? 0,
                          (try? LandingRun.highestSequence(in: context)) ?? 0)
         source.lastTouchedSequence = landings.mintSequence(above: max(stored, floor()))
