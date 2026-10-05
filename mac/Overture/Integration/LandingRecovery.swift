@@ -200,6 +200,9 @@ enum LandingRecovery {
                             now: Date = Date(),
                             // Asks for the watch-only sweep and answers whether it STARTED.
                             sweep: () -> Bool,
+                            // #4343 (E0): handed to the replay's landing, as `ScoutExtractLanding.land` takes it;
+                            // only the acceptance rig passes anything but the real lookup.
+                            alreadyLanded: AlreadyLandedCheck = .lookUp,
                             saveAttempt: (ModelContext) throws -> Void = { try $0.save() },
                             // Each replayed source's own save, injected so a test can make a recovery fail.
                             saveSource: @escaping (ModelContext) throws -> Void = { try $0.save() },
@@ -292,7 +295,8 @@ enum LandingRecovery {
             replaying(next.journal.sequence)
             let attempt = await replay(next, journals: journals, pending: pending, clients: clients,
                                        history: history, blocked: blocked, landings: landings, now: now,
-                                       saveSource: saveSource, movementLog: movementLog, into: context)
+                                       alreadyLanded: alreadyLanded, saveSource: saveSource,
+                                       movementLog: movementLog, into: context)
             replaying(nil)
             replayed = attempt.said
             if attempt.storeWasHeld { takeBackTheAttempt() }
@@ -312,6 +316,7 @@ enum LandingRecovery {
     private static func replay(_ item: Interrupted, journals: LandingJournals, pending: PendingScoutIngests,
                                clients: [DownbeatClient], history: [HistoryRecord], blocked: BlockedCalendar,
                                landings: LandingSingleFlight, now: Date,
+                               alreadyLanded: AlreadyLandedCheck,
                                saveSource: @escaping (ModelContext) throws -> Void,
                                movementLog: any FeedMovementLog.Sink,
                                into context: ModelContext) async -> (said: Recovered, storeWasHeld: Bool) {
@@ -328,8 +333,8 @@ enum LandingRecovery {
         let landed = await ScoutExtractLanding.land(
             copy.data, copy.results, sequence: journal.sequence, clients: clients, history: history, blocked: blocked,
             today: QueueModel.easternToday(now), now: journal.now, landings: landings,
-            holdingAs: .landingRecovery, pending: pending, journals: journals, saveSource: saveSource,
-            movementLog: movementLog, recoveredAt: now, into: context)
+            holdingAs: .landingRecovery, pending: pending, alreadyLanded: alreadyLanded, journals: journals,
+            saveSource: saveSource, movementLog: movementLog, recoveredAt: now, into: context)
         let outcome = landed.outcome
         if outcome.alreadyLandedAt != nil {
             retire(journal, journals: journals, pending: pending)

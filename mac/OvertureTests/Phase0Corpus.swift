@@ -170,6 +170,31 @@ enum Phase0 {
         ScaledCorpus.results(results, factor: factor)
     }
 
+    /// #4327 step 0.7: the INSERTING variant of a results file. Per source, `share` of its events (rounded, at
+    /// least one where the source has any) copied as new shows at the same venue, night and presenter, with a
+    /// title and a link no stored show carries; `round` is in both, so a later round inserts again rather than
+    /// re-landing an earlier round's rows. In memory only. Moved here unchanged from
+    /// `ScoutLandingAttributionProbeTests` (#4343), so the acceptance rig and that probe land one variant.
+    nonisolated static func insertingResults(_ results: ScoutExtractResults, share: Double,
+                                             round: Int) -> ScoutExtractResults {
+        var out = results
+        for (s, result) in results.results.enumerated() where !result.events.isEmpty {
+            let n = max(1, Int((Double(result.events.count) * share).rounded()))
+            let stride = max(1, result.events.count / n)
+            var added: [ScoutExtractEvent] = []
+            for i in 0..<n {
+                var e = result.events[(i * stride) % result.events.count]
+                let tag = "\(round)s\(s)e\(i)"
+                e.title = "Probe Synthetic Recital \(tag)"
+                e.sourceUrl = e.sourceUrl.map { $0 + ($0.hasSuffix("/") ? "" : "/") + "probe4327-\(tag)" }
+                e.seriesId = nil
+                added.append(e)
+            }
+            out.results[s].events += added
+        }
+        return out
+    }
+
 
     /// The shape a scaled corpus must keep (L48): printed side by side for the clone and the copy.
     static func shape(_ rows: [Prospect]) -> String {

@@ -19,6 +19,15 @@ settings:
     ENABLE_HARDENED_RUNTIME: YES
     CODE_SIGN_IDENTITY: "-"
     DEVELOPMENT_TEAM: ""
+  configs:
+    # #4343 (E0): DEBUG reaches the compiler through ONE variable, so the release-like test run
+    # (mac/scripts/lib/release-like-build.sh) can take it out of every target at once by replacing the
+    # variable, while each target keeps what it adds after $(inherited) (the hosted target's
+    # OVERTURE_HOSTED_TESTS). Overriding the conditions themselves on the command line would replace every
+    # target's value with one. An ordinary Debug build compiles exactly what it did: the variable is DEBUG.
+    Debug:
+      OVERTURE_DEBUG_CONDITION: DEBUG
+      SWIFT_ACTIVE_COMPILATION_CONDITIONS: "$(OVERTURE_DEBUG_CONDITION)"
 targets:
   Overture:
     type: application
@@ -107,6 +116,10 @@ targets:
       # #4427: Phase0Corpus.swift delegates the 4x build to ScaledCorpus.swift, a file of its own so the
       # landing oracle's freeze can overlay it onto 6d3453d8.
       - path: OvertureTests/ScaledCorpus.swift
+      # #4343 (E0): RootView's harness, declared in OvertureTests so the landing acceptance rig can mount
+      # RootView from the pure target the release-like build compiles, and compiled in here for the hosted
+      # suites that already used it. One declaration in two targets, never a copy (L613).
+      - path: OvertureTests/RootHarness.swift
     dependencies:
       - target: Overture
       - package: ViewInspector

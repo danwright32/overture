@@ -230,6 +230,9 @@ enum ScoutExtractLanding {
                              stuckAfter: TimeInterval = ScoutSchedule.defaultInterval,
                              landings: LandingSingleFlight = .shared,
                              pending: PendingScoutIngests = .live,
+                             // #4343 (E0): handed to every landing it makes, as `land` takes it; only the
+                             // acceptance rig passes anything but the real lookup.
+                             alreadyLanded: AlreadyLandedCheck = .lookUp,
                              saveClosing: (ModelContext) throws -> Void = { try $0.save() },
                              // #4335: handed to every landing it makes, as `land` takes it.
                              journals: LandingJournals? = nil,
@@ -275,8 +278,9 @@ enum ScoutExtractLanding {
                 let landed = await land(copy.data, copy.results, sequence: entry.sequence,
                                         clients: clients, history: history, blocked: blocked,
                                         today: QueueModel.easternToday(now), now: now,
-                                        landings: landings, pending: pending, saveClosing: saveClosing,
-                                        journals: journals, movementLog: movementLog, into: context)
+                                        landings: landings, pending: pending, alreadyLanded: alreadyLanded,
+                                        saveClosing: saveClosing, journals: journals, movementLog: movementLog,
+                                        into: context)
                 let outcome = landed.outcome
                 if let left = landed.copyLeftBehind { offered.copiesLeftBehind.append(left) }
                 if let landedAt = outcome.alreadyLandedAt {

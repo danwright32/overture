@@ -250,6 +250,79 @@ final class ScoutResultsAlreadyLandedTests {
         #expect(line == LandingWaitCopy.keptCopyAlreadyLanded(at: firstLanding), Comment(rawValue: line ?? "nil"))
     }
 
+    // #4343 (E0): the two other ways a kept copy lands, the sweep and the idle recovery, take the same check as a
+    // parameter whose default is the real lookup, so the acceptance rig can re-land one frozen file through each
+    // every round. Each is asserted both ways in one test: the default still refuses (the positive control the
+    // seam must never hide, L159), and only the bypass lands the same results again.
+    @Test func theSweepRefusesByDefaultAndLandsAgainOnlyWithTheBypass() async throws {
+        let c = try container()
+        let ctx = c.mainContext
+        htmlSource(in: ctx)
+        try ctx.save()
+        let pending = PendingScoutIngests(directory: try sandboxes.make(named: "already-landed-sweep-bypass"))
+        let data = try JSONEncoder().encode(Self.results("swept"))
+        _ = try await land(data, at: firstLanding, into: ctx, pending: pending)
+        let flight = LandingSingleFlight(sleep: { _ in })
+
+        try pending.record(data, sequence: 50, now: firstLanding)
+        let refused = await ScoutExtractLanding.offerPending(clients: [], history: [], blocked: .empty,
+                                                            now: secondLanding, landings: flight,
+                                                            pending: pending, into: ctx)
+        #expect(refused.alreadyLanded == [firstLanding], "the sweep's default no longer refuses a re-land")
+
+        try pending.record(data, sequence: 60, now: firstLanding)
+        let landed = await ScoutExtractLanding.offerPending(clients: [], history: [], blocked: .empty,
+                                                           now: secondLanding, landings: flight,
+                                                           pending: pending, alreadyLanded: .bypassedForMeasurement,
+                                                           into: ctx)
+        #expect(landed.alreadyLanded.isEmpty)
+        #expect(landed.landed.count == 1, "the bypass did not land the kept copy again")
+        #expect(try source(c).successfulCheckCount == 2)
+    }
+
+    @Test func theRecoveryRefusesByDefaultAndLandsAgainOnlyWithTheBypass() async throws {
+        let c = try container()
+        let ctx = c.mainContext
+        htmlSource(in: ctx)
+        try ctx.save()
+        let root = try sandboxes.make(named: "already-landed-recovery-bypass")
+        let pending = PendingScoutIngests(directory: root.appendingPathComponent("pending"),
+                                          readFailures: HandoffReadFailures())
+        let journals = LandingJournals(directory: root.appendingPathComponent("journals"),
+                                       readFailures: HandoffReadFailures())
+        let data = try JSONEncoder().encode(Self.results("recovered"))
+        let hash = PendingScoutIngests.contentHash(of: data)
+        _ = try await land(data, at: firstLanding, into: ctx, pending: pending)
+        let flight = LandingSingleFlight(sleep: { _ in })
+
+        // An interrupted landing of the same results, under a sequence above everything the first one stamped.
+        func interrupt(at sequence: Int) throws {
+            try pending.record(data, sequence: sequence, now: firstLanding)
+            try journals.start(LandingJournal(runIdentity: hash, sequence: sequence, entryPoint: .scoutExtractIngest,
+                                              sources: [.init(sourceId: "org", pageHash: nil)], now: firstLanding,
+                                              resultsCopy: hash))
+        }
+        func recover(_ check: AlreadyLandedCheck?) async -> LandingRecovery.Recovered? {
+            if let check {
+                return await LandingRecovery.recoverNext(journals: journals, pending: pending, clients: [],
+                                                         history: [], blocked: .empty, landings: flight,
+                                                         now: secondLanding, sweep: { false },
+                                                         alreadyLanded: check, into: ctx)
+            }
+            return await LandingRecovery.recoverNext(journals: journals, pending: pending, clients: [], history: [],
+                                                     blocked: .empty, landings: flight, now: secondLanding,
+                                                     sweep: { false }, into: ctx)
+        }
+        let floor = try source(c).lastTouchedSequence
+        try interrupt(at: floor + 10)
+        #expect(await recover(nil) == .retired(startedAt: firstLanding, finding: .finished),
+                "the recovery's default no longer refuses a re-land")
+        try interrupt(at: floor + 20)
+        #expect(await recover(.bypassedForMeasurement) == .landed(startedAt: firstLanding, sources: 1),
+                "the bypass did not land the interrupted copy again")
+        #expect(try source(c).successfulCheckCount == 2)
+    }
+
     // MARK: - What Dan reads
 
     // 2026-09-30 18:14 UTC is 2:14 PM in New York.
