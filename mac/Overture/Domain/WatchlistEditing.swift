@@ -136,6 +136,8 @@ enum WatchlistEditing {
         guard !isRefusalRecord(source) else { return }
         source.isActive = false
         source.inactiveReason = .removedByDan
+        // #4404: a reading taken before the stop would otherwise still land its shows for a source Dan removed.
+        touchedByDan(source, in: context)
         try? context.save()
     }
 
@@ -163,6 +165,7 @@ enum WatchlistEditing {
         source.isActive = true
         source.inactiveReason = nil
         clearTheVerdictFromBeforeTheStop(source)
+        touchedByDan(source, in: context)   // #4404: a reading from before the stop is now the older one
         try? context.save()
         return .resumed
     }
@@ -261,6 +264,7 @@ enum WatchlistEditing {
         }
         clearStateDerivedFromTheWatchedPage(source)
         source.hasUnreadChanges = true          // so the next scout reads the corrected page
+        touchedByDan(source, in: context)       // #4404: a reading of the old address is now the older one
         try? context.save()
         return .saved(sourceId: source.sourceId)
     }
@@ -360,6 +364,7 @@ enum WatchlistEditing {
         let trimmed = newLocation.trimmingCharacters(in: .whitespacesAndNewlines)
         source.venueLocation = trimmed.isEmpty ? nil : trimmed
         markForFreshRead(source)
+        touchedByDan(source, in: context)   // #4404: a reading from before the answer is now the older one
         // Nothing to place when the answer was withdrawn. The fill is additive, so it could not un-place
         // rows an earlier save already wrote in any case, and saying "placed 0 shows" about a clear would
         // be reporting an action nobody asked for.
@@ -380,6 +385,7 @@ enum WatchlistEditing {
         let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
         source.venueName = trimmed.isEmpty ? nil : trimmed
         markForFreshRead(source)
+        touchedByDan(source, in: context)   // #4404: a reading from before the answer is now the older one
         try? context.save()
     }
 
@@ -415,6 +421,7 @@ enum WatchlistEditing {
         // #2530: there is nothing to confirm about a page that will never be read again.
         guard !isRefusalRecord(source) else { return .refused(orgName: source.orgName) }
         source.health = .ok
+        touchedByDan(source, in: context)   // #4404: a failed reading from before the answer is now the older one
         source.lastFailure = nil
         // #1759: Dan has answered the question the repeated-failure line asks him ("Check the link"), and
         // his answer is that the link is right. Leaving the count standing would keep that line on the row
@@ -430,6 +437,31 @@ enum WatchlistEditing {
         source.hasUnreadChanges = false
         try? context.save()
         return .confirmed
+    }
+
+    // #4404: an edit Dan makes to a source outside any landing (an address correction, a resume, a confirmed
+    // empty page, a venue answer) is a LATER touch than every reading of that source taken before it. A reading
+    // still waiting to land (a detached read in flight, a kept copy, an interrupted landing #4335's recovery
+    // would finish at idle) describes the source as it was before Dan changed it, and landing it would put the
+    // old page's shows, hash or verdict back over his correction. So the edit stamps the source's
+    // `lastTouchedSequence` with a sequence minted above everything any run could hold (the store's highest, the
+    // kept copies' and every journal's name), which is exactly the signal the landing's re-validation and the
+    // recovery already read: the older reading is set aside, and reported as superseded.
+    static func touchedByDan(_ source: WatchedSource, in context: ModelContext,
+                             landings: LandingSingleFlight = .shared,
+                             floor: () -> Int = { max(PendingScoutIngests.live.highestSequence,
+                                                      LandingJournals.live.highestSequence) }) {
+        guard !isRefusalRecord(source) else { return }   // #2530: nothing about a refused row may change
+        var top = FetchDescriptor<WatchedSource>(sortBy: [SortDescriptor(\.lastTouchedSequence, order: .reverse)])
+        top.fetchLimit = 1
+        // The store's two maxima are a third bound, beside the two that carry every reading that can still land:
+        // one minted in this process sits under `landings`' counter, which every new mint goes above, and one
+        // kept on disk is named in the copies or journals `floor` reads. A store row above both belongs to a
+        // landing that already landed, and a landed reading never lands again, so a failed read here can only
+        // drop a redundant bound, never put the stamp under a reading still to land (#4404's review, agreed).
+        let stored = max((try? context.fetch(top))?.first?.lastTouchedSequence ?? 0,
+                         (try? LandingRun.highestSequence(in: context)) ?? 0)
+        source.lastTouchedSequence = landings.mintSequence(above: max(stored, floor()))
     }
 
     // #2377: one shared answer to "is this the same calendar", not a third spelling of it. The rule is
