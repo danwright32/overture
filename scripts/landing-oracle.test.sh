@@ -87,6 +87,21 @@ assert_contains "and says why" "${out}" "inside a git work tree"
 out="$(main --inputs "${SCRATCH}/archive" 2>&1)"
 assert_equals "the real arm with nowhere to write is refused" "2" "$?"
 
+# #4518: a refreeze takes an old archive's 1x and inputs into a NEW one, so it needs --freeze to write into and a
+# source that is a frozen archive, and both are refused by name before anything is built.
+out="$(main --refreeze-from "${SCRATCH}/old" --out "${SCRATCH}/out" 2>&1)"
+assert_equals "a refreeze with no new archive to write is refused before any build" "2" "$?"
+assert_contains "and says it needs --freeze" "${out}" "--refreeze-from needs --freeze"
+mkdir -p "${SCRATCH}/not-an-archive"
+out="$(main --freeze "${SCRATCH}/new" --refreeze-from "${SCRATCH}/not-an-archive" --out "${SCRATCH}/out" 2>&1)"
+assert_equals "a refreeze from a folder with no MANIFEST is refused before any build" "2" "$?"
+assert_contains "and names it as no frozen archive" "${out}" "holds no MANIFEST"
+if [ -e "${SCRATCH}/new" ]; then
+  fail "the refused refreeze created its new archive anyway"
+else
+  pass "the refused refreeze wrote nothing"
+fi
+
 if [[ ${FAILURES} -gt 0 ]]; then
   echo "${FAILURES} failure(s)"
   exit 1
