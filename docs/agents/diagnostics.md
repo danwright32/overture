@@ -372,6 +372,18 @@ the measurement it came from lives here. Read the entry before the rule decides 
   Three outcomes, the same as the hang reader's: `1` reports are on record, `0` the directories it could
   read hold none and it names them, `2` UNMEASURED because not one could be read.
 
+## Asking how often a landing had edits to save first
+
+- **Asking how often a landing had edits to save first: `scripts/landing-flush-rate.sh` (#4338).** Every scout
+  landing saves whatever is pending in the main context before it applies anything (the entry flush, once in its
+  read phase and once holding the store), and records how many of those flushes had something to save on its
+  landing record (`LandingRun.entryFlushSaves`). This is that number's reader: of the landings STARTED in the
+  last 14 days (`--days N`), how many saved first, once or twice. It reads a COPY of the store (`--store PATH`,
+  the live Release store by default), never the store itself. Four outcomes: `0` measured, where a window with no
+  landing says there is no rate; `2` UNMEASURED, when the store cannot be read or records no flush count (one
+  from before #4338, which is never read as zero); `3` there is no store; `64` an argument it does not know.
+  `LandingFlushRateColumnTests` holds the column name it reads to the one this build's store really has.
+
 ## Asking what is behind a small room's band
 
 - **Asking what is behind a small room's band: `scripts/report-small-venues.sh` (#1902).** Opt in, run by

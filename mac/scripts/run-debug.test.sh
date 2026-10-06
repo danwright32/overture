@@ -156,6 +156,40 @@ with_missing_registrar() {
 assert_succeeds "a missing registrar does not take the build down" with_missing_registrar
 assert_equals "and asks nothing of it" "" "$(cat "${LSLOG}")"
 
+# --- resolve_store_folder (#4338) ---
+#
+# The store folder option exists so a SYNTHETIC store can be looked at. Its whole value is the two
+# refusals: the live Release folder holds Dan's real data, and the default Debug folder is the one his
+# ordinary Debug runs keep. Each is refused named directly, from inside, from above, and through a link.
+SFTMP="$(fixture_scratch_dir)"
+trap 'rm -rf "${LSTMP}" "${SFTMP}"' EXIT
+APPSUP="${SFTMP}/Application Support"
+mkdir -p "${APPSUP}/Overture/inner" "${APPSUP}/Overture-Debug/inner" "${SFTMP}/scratch store"
+ln -s "${APPSUP}/Overture" "${SFTMP}/link-to-live"
+SCRATCH_REAL="$(cd "${SFTMP}/scratch store" && pwd -P)"
+
+assert_equals "a named scratch folder is accepted and printed as resolved" \
+  "${SCRATCH_REAL}" "$(resolve_store_folder "${SFTMP}/scratch store" "${APPSUP}" 2>/dev/null)"
+assert_fails "REFUSES the live Release folder" resolve_store_folder "${APPSUP}/Overture" "${APPSUP}"
+assert_fails "REFUSES the default Debug folder" resolve_store_folder "${APPSUP}/Overture-Debug" "${APPSUP}"
+assert_fails "refuses a folder inside the live one" resolve_store_folder "${APPSUP}/Overture/inner" "${APPSUP}"
+assert_fails "refuses a folder inside the Debug one" resolve_store_folder "${APPSUP}/Overture-Debug/inner" "${APPSUP}"
+assert_fails "refuses Application Support itself, which holds both" resolve_store_folder "${APPSUP}" "${APPSUP}"
+assert_fails "refuses a link that points at the live folder" resolve_store_folder "${SFTMP}/link-to-live" "${APPSUP}"
+assert_fails "refuses a folder that does not exist" resolve_store_folder "${SFTMP}/not-made" "${APPSUP}"
+assert_fails "refuses no folder at all" resolve_store_folder "" "${APPSUP}"
+# The refusal says which folder and why, so a person reading it knows what to change.
+assert_contains "the live refusal names the folder it refused" \
+  "$(resolve_store_folder "${APPSUP}/Overture" "${APPSUP}" 2>&1)" "${APPSUP}/Overture"
+
+# --- launch_arguments (#4338) ---
+assert_equals "no options hands the app nothing" "" "$(launch_arguments "" "")"
+assert_equals "a store folder is handed to the app under its own flag" \
+  "$(printf '%s\n%s' "--overture-store-folder" "/tmp/x y")" "$(launch_arguments "/tmp/x y" "")"
+assert_equals "a landing preview is handed to the app under its own flag" \
+  "$(printf '%s\n%s\n%s\n%s' "--overture-store-folder" "/s" "--overture-landing-preview" "stoppedRetrying")" \
+  "$(launch_arguments "/s" "stoppedRetrying")"
+
 if [[ "${FAILURES}" -gt 0 ]]; then
   echo "${FAILURES} failure(s)"
   exit 1

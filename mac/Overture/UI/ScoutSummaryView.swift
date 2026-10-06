@@ -134,9 +134,38 @@ struct ScoutSummaryView: View {
 
     @ViewBuilder
     private func sectionView(_ section: ScoutWarnings.Section) -> some View {
+        // #4338 (A10): a landing outcome is drawn in its own state, as the landing line draws it.
+        if let look = section.look, let message = landingMessage(section) {
+            landingBlock(message, look: look)
+        } else {
+            otherSectionView(section)
+        }
+    }
+
+    // The sentence a landing section says, each the one it always said.
+    private func landingMessage(_ section: ScoutWarnings.Section) -> String? {
+        switch section {
+        case .saveFailed: return ScoutWarningCopy.saveFailed(retried: warnings.saveFailedRetried)
+        case .landingStopped(let message), .notLandedYet(let message): return message
+        case .superseded(let results): return ScoutWarningCopy.superseded(results.map(\.orgName))
+        case .alreadyLanded(let landedAt): return LandingWaitCopy.alreadyLanded(at: landedAt)
+        default: return nil
+        }
+    }
+
+    private func landingBlock(_ message: String, look: LandingLook) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: OVSpacing.xs) {
+            LandingMark(look: look)
+            Text(message).font(.system(size: 12)).foregroundStyle(LandingMark.textColor(look))
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    @ViewBuilder
+    private func otherSectionView(_ section: ScoutWarnings.Section) -> some View {
         switch section {
         case .saveFailed:
-            infoBlock(ScoutWarningCopy.saveFailed)
+            infoBlock(ScoutWarningCopy.saveFailed(retried: warnings.saveFailedRetried))
         case .landingStopped(let message):
             infoBlock(message)
         case .storeUnreadable(let count, let keys):

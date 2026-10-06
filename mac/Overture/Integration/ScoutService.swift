@@ -284,6 +284,12 @@ enum ScoutService {
         // #4334: the sources a stopped landing never reached.
         var notAttemptedSources: [SourceResult] { sources.filter { $0.state == .notAttempted } }
 
+        // #4338 (A10): a save failed and the recovery WILL try again, because the landing's journal is kept and
+        // its record has attempts left (`LandingRecovery.willRetry`). Written by the two landings that keep a
+        // journal, at their end; read by the save failure's sentence, so "will be retried" is said only when
+        // it is true (L703). False on every outcome whose save did not fail.
+        var retriedByRecovery: Bool = false
+
         // #4334: the stop, in Dan's words, with what it left behind. nil when nothing stopped, and for a store
         // that refused a save, whose sentence is `ScoutWarningCopy.saveFailed` itself, unless sources after it
         // went unlanded, which is then said.
@@ -331,8 +337,8 @@ enum ScoutService {
             // #4330 (L94): `notLandedYet` rides with both early returns rather than being hidden behind them:
             // "kept, will be offered again" is true of the run whatever else went wrong with it.
             if saveFailed {
-                return [ScoutWarningCopy.saveFailed, landingStopWarning, notLandedYet].compactMap { $0 }
-                    .joined(separator: "\n\n")
+                return [ScoutWarningCopy.saveFailed(retried: retriedByRecovery), landingStopWarning, notLandedYet]
+                    .compactMap { $0 }.joined(separator: "\n\n")
             }
             // The run found new listings and could not read them. It outranks a per-source failure
             // because it is the app that is broken, not a calendar, and because it has a one-step fix.
@@ -410,7 +416,11 @@ enum ScoutService {
             storeUnreadable += other.storeUnreadable
             storeUnreadableKeys.append(contentsOf: other.storeUnreadableKeys)
             degradedReads.append(contentsOf: other.degradedReads)
+            // #4338: retried only while every failed save merged in is; one that will not be is the one to say.
+            let wasFailed = saveFailed
             saveFailed = saveFailed || other.saveFailed
+            retriedByRecovery = saveFailed && (!wasFailed || retriedByRecovery)
+                && (!other.saveFailed || other.retriedByRecovery)
             sources.append(contentsOf: other.sources)
             unqueuedResultIds.append(contentsOf: other.unqueuedResultIds)
             suppressedOrgs.append(contentsOf: other.suppressedOrgs)
@@ -709,9 +719,13 @@ enum ScoutService {
         // refused by name before anything is read or applied: every source is reported not attempted, and
         // since the read phase writes nothing (A12), nothing needs undoing and the next scout reads them again.
         var corpusRead: CorpusRead?
+        // #4338 (A10): how many of this landing's entry flushes saved pending edits, for its record.
+        var entryFlushSaves = 0
         func corpus() async -> CorpusRead? {
             if let corpusRead { return corpusRead }
-            if let refused = flushBeforeLanding(context, save: saveEntry) {
+            let flush = flushBeforeLanding(context, save: saveEntry)
+            if flush == .saved { entryFlushSaves += 1 }
+            if let refused = flush.refusal {
                 outcome.landingStop = refused
                 for slot in reports { reportNotAttempted(slot) }
                 for source in nativeSources.compactMap({ $0 }) + plan.fetch
@@ -852,7 +866,9 @@ enum ScoutService {
         // can touch was pending when the landing began, so anything pending is saved first. A flush that
         // cannot save REFUSES the landing by name before anything is applied (L667): the edits stay exactly
         // as they were for Dan's own save path, and every page keeps its unread state for the next scout.
-        if let refused = flushBeforeLanding(context, save: saveEntry) {
+        let entryFlush = flushBeforeLanding(context, save: saveEntry)
+        if entryFlush == .saved { entryFlushSaves += 1 }
+        if let refused = entryFlush.refusal {
             outcome.landingStop = refused
             for slot in reports { reportNotAttempted(slot) }
             outcome.clientListWarning = DownbeatBridge.warningText(for: loaded.health)
@@ -887,6 +903,10 @@ enum ScoutService {
         // is put back without taking it.
         let run = LandingRun.begin(runIdentity: sweepID, sequence: sequence, entryPoint: .runScoutLanding,
                                    startedAt: now, in: context)
+        // #4338: added to, never set, so a record an earlier attempt of the same run saved keeps its count.
+        if entryFlushSaves > 0 { run.entryFlushSaves += entryFlushSaves }
+        // #4338: read now, while the record is certainly in the context, for whether a failed save is retried.
+        let attemptsBefore = run.attemptCount
         landing.noteSettled(run)
         for slot in reports {
             // #4334: a landing a failed save stopped lands nothing after it (decision 3).
@@ -963,6 +983,9 @@ enum ScoutService {
         if landedEverySource { run.landedAt = now }
         if notReverted || !saveLanding(landing, into: context, save: saveClosing) || stop != nil {
             outcome.saveFailed = true
+            // #4338 (A10): retried only when the recovery really will: the journal is kept and attempts are left.
+            outcome.retriedByRecovery = LandingRecovery.willRetry(journalKept: journals != nil,
+                                                                  attempts: attemptsBefore)
             let neverHandedOver = Set(toRead.map { $0.source.sourceId })
             outcome.sources.removeAll { $0.state == .queuedForReading && neverHandedOver.contains($0.sourceId) }
             reportWaiting(SourceSchedule.waitingToRead(deferred: plan.deferred)
@@ -1095,6 +1118,9 @@ enum ScoutService {
             } catch {
                 landing.revertFailedSave(closing: true)
                 outcome.saveFailed = true
+                // #4338: the journal is kept for a failed tail too, so the recovery finishes it.
+                outcome.retriedByRecovery = LandingRecovery.willRetry(journalKept: journals != nil,
+                                                                      attempts: attemptsBefore)
             }
         }
         // #4335: the run's journal is spent only once the tail's writes are in the store too, so a run stopped
@@ -1709,14 +1735,23 @@ enum ScoutService {
     // is what autosave would do anyway. Cheap when nothing is pending, which after #4329 is the normal case.
     // A flush that cannot save refuses the landing, naming the rows it was carrying, and leaves them exactly
     // as they were.
-    static func flushBeforeLanding(_ context: ModelContext, save: (ModelContext) throws -> Void) -> LandingStop? {
-        guard context.hasChanges else { return nil }
+    // #4338 (A10): says which of three things it did, so the landing can count a flush that SAVED on its record
+    // (`LandingRun.entryFlushSaves`), and records each refusal and each success on `record`, whose two refusals
+    // in a row are the standing state on the landing line (`EntryFlushRecord`).
+    static func flushBeforeLanding(_ context: ModelContext, save: (ModelContext) throws -> Void,
+                                   record: EntryFlushRecord = .shared) -> EntryFlush {
+        guard context.hasChanges else {
+            record.saveSucceeded()
+            return .nothingPending
+        }
         let rows = pendingRowNames(in: context)
         do {
             try save(context)
-            return nil
+            record.saveSucceeded()
+            return .saved
         } catch {
-            return .recentEditsUnsaved(rows: rows)
+            record.refused(rows: rows)
+            return .refused(.recentEditsUnsaved(rows: rows))
         }
     }
 
@@ -1724,15 +1759,18 @@ enum ScoutService {
     // organisation, a contact by their address, and anything else as one more record, never a type name.
     static func pendingRowNames(in context: ModelContext) -> [String] {
         let models = context.changedModelsArray + context.insertedModelsArray + context.deletedModelsArray
-        let names = models.map { model -> String in
-            switch model {
-            case let p as Prospect: return p.groupName
-            case let w as WatchedSource: return w.orgName
-            case let r as Recipient: return r.email ?? r.name ?? "a contact"
-            default: return "another record"
-            }
+        return Array(Set(models.map(rowName(of:)))).sorted()
+    }
+
+    // #4338: one row's name in those words, shared with the discard confirmation (`UnsavedEditsDiscard`) so the
+    // refusal and the confirmation name a row the same way.
+    static func rowName(of model: any PersistentModel) -> String {
+        switch model {
+        case let p as Prospect: return p.groupName
+        case let w as WatchedSource: return w.orgName
+        case let r as Recipient: return r.email ?? r.name ?? "a contact"
+        default: return "another record"
         }
-        return Array(Set(names)).sorted()
     }
 
     // Application of already-extracted events with injected data, so the full

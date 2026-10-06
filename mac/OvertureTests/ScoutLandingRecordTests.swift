@@ -354,8 +354,9 @@ final class ScoutLandingRecordTests {
     }
 
     // L371: one bad journal cannot stop every landing. Its NAME still carries its sequence, so a landing mints
-    // above it and lands; listing the folder quarantines it by renaming, reports it by path, and the name
-    // keeps counting.
+    // above it and lands; listing the folder quarantines it by renaming, lists it by path, and the name keeps
+    // counting. #4338 (A10): the path is said by the landing line, its own surface, with "Try again" and
+    // "Discard", so it is no longer also recorded for the generic file notice.
     @Test func anUnreadableJournalIsQuarantinedAndNeverStopsALanding() async throws {
         let c = try container()
         let ctx = c.mainContext
@@ -379,8 +380,8 @@ final class ScoutLandingRecordTests {
         #expect(sequence == 57)
         #expect(path.hasSuffix(LandingJournals.quarantineSuffix))
         #expect(!FileManager.default.fileExists(atPath: corrupt.path))
-        #expect(failures.current().contains { $0.reason.contains("could not read the landing record at \(path)") },
-                Comment(rawValue: "\(failures.current())"))
+        #expect(!failures.current().contains { $0.reason.contains("could not read the landing record") },
+                Comment(rawValue: "said in the file notice as well as on the landing line: \(failures.current())"))
 
         _ = await ingest(results(["a"]), into: ctx, journals: j, flight: LandingSingleFlight(sleep: { _ in }),
                          identity: "after")

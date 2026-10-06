@@ -245,9 +245,9 @@ final class ScoutResultsAlreadyLandedTests {
         #expect(!offered.isEmpty)
         #expect(try pending.list().isEmpty, "the copy of results that had already landed was kept")
         #expect(try source(c).successfulCheckCount == 1)
-        let line = LandingWaitCopy.offered(landed: 0, alreadyLanded: offered.alreadyLanded, stillWaiting: 0,
-                                           stuck: 0, stuckAfter: offered.stuckAfter)
-        #expect(line == LandingWaitCopy.keptCopyAlreadyLanded(at: firstLanding), Comment(rawValue: line ?? "nil"))
+        let lines = LandingOutcome.from(offered: offered, degradedLabels: [])
+        #expect(lines == [.keptResultsAlreadyLanded(at: firstLanding)], Comment(rawValue: "\(lines)"))
+        #expect(lines.first?.line == LandingWaitCopy.keptCopyAlreadyLanded(at: firstLanding))
     }
 
     // MARK: - What Dan reads

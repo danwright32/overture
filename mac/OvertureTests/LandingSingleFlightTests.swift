@@ -214,7 +214,7 @@ struct LandingSingleFlightTests {
     // L720: the stuck sentence names the interval it was judged by, from the same value.
     @Test func theStuckSentenceSaysTheIntervalItWasJudgedBy() {
         func line(_ after: TimeInterval) -> String {
-            LandingWaitCopy.offered(landed: 0, stillWaiting: 0, stuck: 1, stuckAfter: after) ?? ""
+            LandingWaitCopy.keptResultsStuck(1, over: after)
         }
         #expect(line(ScoutSchedule.defaultInterval).contains("stuck for over a day"))
         #expect(line(2 * 86_400).contains("stuck for over 2 days"), Comment(rawValue: line(2 * 86_400)))
@@ -226,7 +226,7 @@ struct LandingSingleFlightTests {
     // the sentence may say only that it is kept, never that Overture will go on offering it (L11).
     @Test func theStuckSentenceNeverPromisesToKeepOffering() {
         for stuck in [1, 3] {
-            let line = LandingWaitCopy.offered(landed: 0, stillWaiting: 0, stuck: stuck, stuckAfter: 86_400) ?? ""
+            let line = LandingWaitCopy.keptResultsStuck(stuck, over: 86_400)
             #expect(line.contains(stuck == 1 ? "It is kept." : "They are kept."), Comment(rawValue: line))
             #expect(!line.localizedCaseInsensitiveContains("keep offering"), Comment(rawValue: line))
         }

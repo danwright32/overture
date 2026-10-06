@@ -67,6 +67,9 @@ struct ScoutWarnings: Equatable, Sendable {
     // #4334 (A5): why a landing stopped before landing every source, or never started, in its own sentence
     // (`Outcome.landingStopWarning`).
     var landingStopped: String? = nil
+    // #4338 (A10): the save failure WILL be tried again by the recovery, in every half whose save failed
+    // (`Outcome.retriedByRecovery`), so its sentence says so. False when any failed half will not be.
+    var saveFailedRetried: Bool = false
 
     static func from(native: ScoutService.Outcome, extract: ScoutService.Outcome?,
                      finishedEmpty: String?) -> ScoutWarnings {
@@ -129,7 +132,14 @@ struct ScoutWarnings: Equatable, Sendable {
             notLandedYet: native.notLandedYet ?? extract?.notLandedYet,
             supersededSources: superseded,
             alreadyLandedAt: native.alreadyLandedAt ?? extract?.alreadyLandedAt,
-            landingStopped: landingStopped(native, extract))
+            landingStopped: landingStopped(native, extract),
+            saveFailedRetried: saveFailedRetried(native, extract))
+    }
+
+    // #4338: retried only when every half whose save failed will be; the one that will not be is the true one.
+    private static func saveFailedRetried(_ native: ScoutService.Outcome, _ extract: ScoutService.Outcome?) -> Bool {
+        let failed = [native, extract].compactMap { $0 }.filter(\.saveFailed)
+        return !failed.isEmpty && failed.allSatisfy(\.retriedByRecovery)
     }
 
     // Both halves can stop, the sweep's landing and the ingest's, and each says its own.
@@ -176,7 +186,10 @@ struct ScoutWarnings: Equatable, Sendable {
         guard let first = sections.first else { return nil }
         switch first {
         case .saveFailed:
-            return "The scout couldn't save its results. Run it again."
+            // #4338 (A10): "will try again" only when the recovery will (`saveFailedRetried`).
+            return saveFailedRetried
+                ? "The scout couldn't save its results. Overture will try again when you are away from the Mac."
+                : "The scout couldn't save its results. Run it again."
         case .storeUnreadable(let count, _):
             // #3074: deliberately still just the count. This is ONE line in the masthead for a run Dan
             // did not start, and a natural key is long; the summary he opens is where the list belongs.

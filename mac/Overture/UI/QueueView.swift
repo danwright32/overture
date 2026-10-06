@@ -214,6 +214,9 @@ struct QueueView: View {
     // #2250: performs whatever a notice offers. RootView owns the sync and every other remedy, so this
     // view only reports the press upward, the same shape as onProbeReachability.
     var onNoticeAction: (AppNoticeAction) -> Void = { _ in }
+    // #4338 (A10): what the landing line's controls do. RootView owns the store and the landing folders they act
+    // on, so it hands them down; `LandingLineWiringTests` holds RootView's call to passing them.
+    var landingLine: LandingLineHandlers = .unwired
     // #338: the Follow-ups pill reuses the existing FollowUpsView sheet (owned by RootView)
     // instead of a second filtered-list implementation of the same thing.
     var onShowFollowUps: () -> Void = {}
@@ -1420,6 +1423,9 @@ struct QueueView: View {
                     else if case .showMergeSurvivorsTheFeedDropped(let keys) = action { showBrokenShows(keys) }
                     else { onNoticeAction(action) }
                 })
+            // #4338 (A10): a scout landing's progress between scouts, and what needs Dan about one. Its own view,
+            // like the line below, so a landing starting or ending repaints this line and nothing else.
+            LandingLine(handlers: landingLine)
             // #1923: its own view, so an idle queue runs no timer for it and a run starting repaints one
             // line instead of re-deriving the store. See ReplyRunLine.
             ReplyRunLine(activity: .replyClassify)

@@ -396,6 +396,31 @@ final class ScoutFailedSaveIsolationTests {
                 "the retried landing did not count exactly one more check")
     }
 
+    // #4338 (A10): a failed save says "will try again" only when the recovery really will: the landing kept its
+    // journal and its record has attempts left. With no journal, nothing will retry it, and it says to run again.
+    @Test func aFailedSaveSaysItWillBeRetriedOnlyWhenItsJournalIsKept() async throws {
+        let c = try container()
+        let ctx = c.mainContext
+        html("kept", in: ctx)
+        html("bare", in: ctx)
+        try ctx.save()
+        let journals = LandingJournals(directory: try sandboxes.make(named: "retried-by-recovery"),
+                                       readFailures: HandoffReadFailures())
+
+        let kept = await ingest(results([result("kept")]), into: ctx, saveClosing: { _ in throw SaveRefused() },
+                                journals: journals)
+        #expect(kept.saveFailed && kept.retriedByRecovery)
+        #expect(kept.warning?.hasPrefix(ScoutWarningCopy.saveFailedRetried) == true, Comment(rawValue: kept.warning ?? "nil"))
+        #expect(try journals.list().count == 1, "the landing said it would be retried and kept no journal to retry")
+
+        let bare = await ingest(results([result("bare")]), into: ctx, saveClosing: { _ in throw SaveRefused() })
+        #expect(bare.saveFailed && !bare.retriedByRecovery)
+        #expect(bare.warning?.hasPrefix(ScoutWarningCopy.saveFailed) == true)
+
+        let landed = await ingest(results([result("kept")]), into: ctx, journals: journals)
+        #expect(!landed.saveFailed && !landed.retriedByRecovery)
+    }
+
     // MARK: - #4422's note: offered again, a landing whose save failed applies its writes once
 
     @Test func aLandingWhoseSavesFailedOfferedAgainAppliesItsCapturedWritesOnce() async throws {
