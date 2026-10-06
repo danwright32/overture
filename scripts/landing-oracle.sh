@@ -4,7 +4,7 @@ set -uo pipefail
 # #4328 (step A1 of #4275's plan) and #4327 step 0.0: record the scout landing oracle FROM 6d3453d8, and
 # freeze the real inputs it is recorded on.
 #
-#   scripts/landing-oracle.sh [--freeze <archive>] [--inputs <archive>] [--out <dir>]
+#   scripts/landing-oracle.sh [--freeze <archive> [--refreeze-from <archive>]] [--inputs <archive>] [--out <dir>]
 #                             [--synthetic-to <dir>] [--commit <sha>]
 #
 #   (no flags)            record the synthetic arm into fixtures/landing-oracle/, one file per entry point that
@@ -14,6 +14,10 @@ set -uo pipefail
 #   --freeze <archive>    first build the frozen inputs there (#4327 step 0.0), then record the real arm on
 #                         them (implies --inputs <archive>). The archive must not exist yet, must sit outside
 #                         every git work tree, and is left READ ONLY with a MANIFEST of content hashes
+#   --refreeze-from <archive>
+#                         with --freeze (#4518): take the new archive's 1x store, inputs and pinned today and now
+#                         from that already frozen archive, checked against its MANIFEST, and build only the 4x
+#                         afresh, so a corpus change is a new 4x on the same 1x and nothing reads the live store
 #   --inputs <archive>    record the real arm on an existing archive
 #   --out <dir>           where the real arm's recordings go; outside every git work tree (required with
 #                         --inputs or --freeze)
@@ -116,7 +120,7 @@ oracle_record_real_arm() {
 }
 
 main() {
-  local commit="6d3453d8" freeze="" inputs="" out="" synthetic_to=""
+  local commit="6d3453d8" freeze="" inputs="" out="" synthetic_to="" refreeze_from=""
   while [ $# -gt 0 ]; do
     # Every flag takes a value. One given without it would leave `shift 2` unable to shift and the loop
     # spinning, so it is refused by name instead.
@@ -126,6 +130,7 @@ main() {
     fi
     case "$1" in
       --freeze) freeze="${2:-}"; shift 2 ;;
+      --refreeze-from) refreeze_from="${2:-}"; shift 2 ;;
       --inputs) inputs="${2:-}"; shift 2 ;;
       --out) out="${2:-}"; shift 2 ;;
       --synthetic-to) synthetic_to="${2:-}"; shift 2 ;;
@@ -159,6 +164,23 @@ main() {
   if [ -n "${freeze}" ] && [ -e "${freeze}" ] && [ -n "$(ls -A "${freeze}" 2>/dev/null)" ]; then
     echo "landing-oracle: REFUSED: ${freeze} already exists; an archive is written once" >&2
     return 2
+  fi
+  # #4518: a refreeze builds a NEW archive from an old one, so it needs somewhere new to write, and an old one that
+  # can be read. The test checks the source whole against its MANIFEST before copying anything; these refuse
+  # before any build is paid for.
+  if [ -n "${refreeze_from}" ]; then
+    if [ -z "${freeze}" ]; then
+      echo "landing-oracle: REFUSED: --refreeze-from needs --freeze <new archive> to write into" >&2
+      return 2
+    fi
+    if [ ! -f "${refreeze_from}/MANIFEST" ]; then
+      echo "landing-oracle: REFUSED: ${refreeze_from} holds no MANIFEST, so it is not a frozen archive" >&2
+      return 2
+    fi
+    if ! outside_every_work_tree "${refreeze_from}"; then
+      echo "landing-oracle: REFUSED: ${refreeze_from} is inside a git work tree, and a frozen archive holds real data" >&2
+      return 2
+    fi
   fi
 
   local path why
@@ -228,7 +250,10 @@ main() {
   # 2. The frozen inputs (#4327 step 0.0).
   if [ -n "${freeze}" ]; then
     mkdir -p "${freeze}"
-    TEST_RUNNER_FREEZE_4275_TO="${freeze}" \
+    # The source is named to the test only when there is one: an empty value would read as a path.
+    local freeze_env=("TEST_RUNNER_FREEZE_4275_TO=${freeze}")
+    [ -z "${refreeze_from}" ] || freeze_env+=("TEST_RUNNER_FREEZE_4275_FROM=${refreeze_from}")
+    env "${freeze_env[@]}" \
       "${runner}" "-only-testing:${suite}/freezeTheInputs()" 2>&1 | tee "${log}"
     status="${PIPESTATUS[0]}"
     if [ "${status}" -ne 0 ] || [ ! -s "${freeze}/FACTS" ] || ! grep -q "FROZE inputs" "${log}"; then
@@ -241,6 +266,7 @@ main() {
       cat "${freeze}/FACTS"
       echo "commit: ${full}"
       echo "frozen-by: scripts/landing-oracle.sh"
+      [ -z "${refreeze_from}" ] || echo "x1-from: ${refreeze_from}"
       (cd "${freeze}" && find . -type f ! -name MANIFEST | sed 's|^\./||' | LC_ALL=C sort | while IFS= read -r f; do
         shasum -a 256 "${f}"
       done)

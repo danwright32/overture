@@ -495,6 +495,95 @@ final class LandingOracleTests {
             "the push guard's marker (\(shell ?? "nothing")) is not the one real-arm files begin with"))
     }
 
+    // MARK: the order the real arm hands the landing (#4518)
+
+    // The pin hands back every read in key order, compared byte for byte, and counts it, whatever order the rows
+    // were written in. Measured against the fetch's own order first, so a fixture the fetch already returns in
+    // key order cannot pass for a pin that orders nothing (L159).
+    @Test func theKeyOrderPinHandsBackEveryReadInKeyOrderAndCountsIt() throws {
+        let container = try TestModelContainer.inMemory(AppSchema.models)
+        let context = container.mainContext
+        let written = ["k-07", "k-02", "K-11", "k-05", "k-01"]
+        for key in written {
+            context.insert(Prospect(naturalKey: key, groupName: "Show \(key)", discipline: "music", venue: "Pin Hall",
+                                    performanceDate: "2026-11-01", sourceListingURL: "https://pin.example/\(key)",
+                                    priorRelationship: "none", production: "self", profile: "strong",
+                                    coverage: "likely_uncovered", fitScore: 5, tier: "mid", fitReason: "r",
+                                    matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
+                                    ingestedAt: LandingOracleCorpus.now))
+        }
+        try context.save()
+        let byBytes = written.sorted { $0.utf8.lexicographicallyPrecedes($1.utf8) }
+        let fetched = try context.fetch(FetchDescriptor<Prospect>()).map(\.naturalKey)
+        #expect(fetched != byBytes, Comment(rawValue:
+            "the fetch already came back in key order (\(fetched)), so this cannot see the pin order anything"))
+
+        let table = LandingOracle.KeyOrderedTable()
+        #expect(table.count == 0, Comment(rawValue: "a pin nothing has read through counted \(table.count) reads"))
+        let first = try table.read(context).map(\.naturalKey)
+        let second = try table.read(context).map(\.naturalKey)
+        #expect(first == byBytes && second == byBytes, Comment(rawValue:
+            "the pin handed back \(first) and then \(second), not \(byBytes)"))
+        #expect(table.count == 2, Comment(rawValue: "two reads through the pin were counted as \(table.count)"))
+    }
+
+    // A recording made before the pin holds a draw of the fetch order, and a comparison with it fails on the rows
+    // that draw placed differently, which reads exactly like a landing change (#4518). So it is refused by name.
+    @Test func aRealArmRecordingMadeBeforeTheKeyOrderPinIsRefusedByName() {
+        let snapshot = LandingOracle.Snapshot(rows: [
+            LandingOracle.Row(entity: "Prospect", fields: [LandingOracle.Field(name: "naturalKey", value: "k")]),
+        ])
+        let before = LandingOracle.realArmFile(snapshot, header: ["#4328 real arm", "inputs today 2026-09-29"])
+        let after = LandingOracle.realArmFile(snapshot, header: ["#4328 real arm", LandingOracle.keyOrderPin])
+        let refusal = LandingOracle.recordingRefusal(before) ?? ""
+        #expect(refusal.hasPrefix("UNMEASURED: ") && refusal.contains("#4518"), Comment(rawValue:
+            "a recording made without the key order pin was not refused by name: \(refusal)"))
+        #expect(LandingOracle.recordingRefusal(after) == nil, Comment(rawValue:
+            "a recording made with the key order pin was refused: \(LandingOracle.recordingRefusal(after) ?? "")"))
+        // Only the pin's own header line counts: the words anywhere else in the file say nothing about the run.
+        let mentioned = before + "# also: " + LandingOracle.keyOrderPin + "\n"
+        #expect(LandingOracle.recordingRefusal(mentioned) != nil, Comment(rawValue:
+            "a recording that only mentions the key order pin was taken as made with it"))
+    }
+
+    // The archive a refreeze copies its 1x store and inputs from is checked whole before anything is copied. No
+    // MANIFEST, a file that no longer matches it, or a missing 1x store, FACTS, input or pinned today and now each
+    // refuse by name, rather than carrying a damaged or partial archive into a new one.
+    @Test func aRefreezeSourceIsRefusedUnlessItIsWholeAndMatchesItsManifest() throws {
+        let source = try sandboxes.make(named: "landing-oracle-refreeze-source")
+        let required = Self.requiredInputs
+        func refusal() -> String { LandingOracle.refreezeSourceRefusal(source, requiredInputs: required) ?? "" }
+        #expect(refusal().contains("no readable MANIFEST"), Comment(rawValue: "an empty folder was not refused: \(refusal())"))
+
+        try FileManager.default.createDirectory(at: source.appendingPathComponent("x1"), withIntermediateDirectories: true)
+        var files = ["FACTS": "today: 2026-09-29\nnow: 2026-09-29T23:19:27Z\n", "x1/Overture.store": "invented store"]
+        for name in required { files[name] = "{}" }
+        for (name, text) in files { try Data(text.utf8).write(to: source.appendingPathComponent(name)) }
+        func writeManifest(_ names: [String], pinned: Bool = true) throws {
+            let facts = pinned ? ["today: 2026-09-29", "now: 2026-09-29T23:19:27Z"] : []
+            let lines = facts + names.sorted().map { LandingOracle.hash(files[$0] ?? "") + "  " + $0 }
+            try (lines.joined(separator: "\n") + "\n")
+                .write(to: source.appendingPathComponent("MANIFEST"), atomically: true, encoding: .utf8)
+        }
+        try writeManifest(Array(files.keys))
+        #expect(refusal().isEmpty, Comment(rawValue: "a whole archive was refused: \(refusal())"))
+
+        try Data("changed".utf8).write(to: source.appendingPathComponent("x1/Overture.store"))
+        #expect(refusal().contains("does not match its own MANIFEST"), Comment(rawValue:
+            "a store changed since its MANIFEST was not refused: \(refusal())"))
+        try Data((files["x1/Overture.store"] ?? "").utf8).write(to: source.appendingPathComponent("x1/Overture.store"))
+
+        for missing in ["x1/Overture.store", "FACTS"] + required {
+            try writeManifest(files.keys.filter { $0 != missing })
+            let named = missing.hasPrefix("x1/") ? "no 1x store" : "holds no " + missing
+            #expect(refusal().hasPrefix("REFUSED: ") && refusal().contains(named), Comment(rawValue:
+                "an archive without \(missing) was not refused by name: \(refusal())"))
+        }
+        try writeManifest(Array(files.keys), pinned: false)
+        #expect(refusal().contains("does not pin today and now"), Comment(rawValue:
+            "an archive pinning no today and now was not refused: \(refusal())"))
+    }
+
     // MARK: the real arm, opt in, on the frozen inputs
 
     private struct Frozen {
@@ -552,6 +641,8 @@ final class LandingOracleTests {
         // and 4x run alone differed in each of three runs. So the seed is fixed as one controlled condition (it
         // removes a variable, it did NOT make 4x stable), the real arm runs only in a process of its own (the
         // oracle script runs nothing else beside it), and no equality claim rests on 4x until #4397 closes.
+        // #4397 closed with #4407: the order was an unsorted table read, which the landing now puts in key order
+        // itself, and since #4518 the real arm hands it the stored shows in that order on both sides.
         guard Self.env["SWIFT_DETERMINISTIC_HASHING"] == "1" else {
             Issue.record("UNMEASURED: the real arm needs TEST_RUNNER_SWIFT_DETERMINISTIC_HASHING=1, because the landing is not the same across processes without it")
             return
@@ -605,16 +696,26 @@ final class LandingOracleTests {
                 + "their own, so freeze a new one with scripts/landing-oracle.sh --freeze"))
             return
         }
-        let existing = try context.fetch(FetchDescriptor<Prospect>())
+        // #4518: the stored shows reach the landing in natural key order, on both sides of the comparison, and the
+        // history the classify pass matches against is built from them in that order too (#4407 orders both). At
+        // 6d3453d8 the order was whatever an unsorted fetch returned (#4397), so a recording made there without
+        // this was one draw of it; see `LandingOracle.KeyOrderedTable`.
+        let existing = LandingOracle.inKeyOrder(try context.fetch(FetchDescriptor<Prospect>()))
         let loaded = DownbeatBridge.loadWithHealth(from: work.appendingPathComponent("downbeat-export.json"), now: now)
         let history = LocalHistory.forMatching(existing: existing,
                                                importedFrom: work.appendingPathComponent("overture-history.json"))
         let blocked = ScoutService.blockedCalendar(export: (loaded.bookings, loaded.blockedDates, loaded.health),
                                                    context: context)
         let before = existing.count
+        let table = LandingOracle.KeyOrderedTable()
         let outcome = await ScoutExtractIngest.ingest(results, clients: loaded.clients, history: history,
-                                                      blocked: blocked, today: today, now: now, into: context)
+                                                      blocked: blocked, today: today, now: now,
+                                                      readProspectTable: table.read, into: context)
         try context.save()
+        guard table.count > 0 else {
+            Issue.record("UNMEASURED: the \(size) landing never read its stored shows through the key order pin, so it took them in an unsorted fetch's order (#4397) and is one draw of that order, not what the landing leaves")
+            return
+        }
         let snapshot = try LandingOracle.snapshot(of: container)
         let events = results.results.reduce(0) { $0 + $1.events.count }
         let counts = snapshot.counts.keys.sorted().map { "\($0) \(snapshot.counts[$0] ?? 0)" }.joined(separator: ", ")
@@ -627,12 +728,17 @@ final class LandingOracleTests {
             try LandingOracle.realArmFile(snapshot, header: [
                 "#4328 real arm, recorded from the frozen inputs. REAL DATA HASHED: never commit, never post.",
                 "inputs today \(today) now \(nowText); Swift hash seed fixed (SWIFT_DETERMINISTIC_HASHING=1)",
+                LandingOracle.keyOrderPin,
             ]).write(to: file, atomically: true, encoding: .utf8)
             print("landing-oracle: RECORDED real arm " + summary)
             return
         }
         guard let text = try? String(contentsOf: file, encoding: .utf8) else {
             Issue.record(Comment(rawValue: "UNMEASURED: no recorded real arm at \(file.path)"))
+            return
+        }
+        if let refusal = LandingOracle.recordingRefusal(text) {
+            Issue.record(Comment(rawValue: refusal + " (\(file.path))"))
             return
         }
         let differences = LandingOracle.differences(expected: LandingOracle.parse(text), actual: snapshot, arm: .real)
@@ -657,18 +763,53 @@ final class LandingOracleTests {
             Issue.record(Comment(rawValue: "REFUSED: \(archive.path) already holds files; an archive is written once"))
             return
         }
+        // #4518: FREEZE_4275_FROM names an archive already frozen. Its 1x store, its inputs and its pinned today
+        // and now are copied as they are, and only the 4x is built afresh from that 1x, so a change to the corpus
+        // (#4427, #4481) is a new 4x on the SAME 1x: the 1x arm's inputs do not move, and nothing here reads the
+        // live store or the handoff folder. Checked whole before anything is written.
+        let source = Self.env["FREEZE_4275_FROM"].flatMap { $0.isEmpty ? nil : URL(fileURLWithPath: $0) }
+        var sourceManifest: LandingOracle.Manifest?
+        if let source {
+            if let refusal = LandingOracle.refreezeSourceRefusal(source, requiredInputs: Self.requiredInputs) {
+                Issue.record(Comment(rawValue: refusal))
+                return
+            }
+            sourceManifest = LandingOracle.manifest(at: source.appendingPathComponent("MANIFEST"))
+        }
         let x1 = archive.appendingPathComponent("x1")
         let x4 = archive.appendingPathComponent("x4")
         try FileManager.default.createDirectory(at: x1, withIntermediateDirectories: true)
         try FileManager.default.createDirectory(at: x4, withIntermediateDirectories: true)
-        guard let base = try LiveStoreClone.makeClone(in: x1) else {
-            Issue.record("UNMEASURED: no live store on this machine")
+        let base: URL
+        if let source, let manifest = sourceManifest,
+           let store = manifest.sha256.keys.sorted().first(where: { $0.hasPrefix("x1/") && $0.hasSuffix(".store") }) {
+            // Every file the source froze except its 4x: the 1x store, the inputs, and FACTS, which pins today
+            // and now. Copies keep the source's read only permissions; the scratch copy below is the one opened.
+            for name in manifest.sha256.keys.sorted() where !name.hasPrefix("x4/") {
+                let to = archive.appendingPathComponent(name)
+                try FileManager.default.createDirectory(at: to.deletingLastPathComponent(),
+                                                        withIntermediateDirectories: true)
+                try FileManager.default.copyItem(at: source.appendingPathComponent(name), to: to)
+            }
+            base = archive.appendingPathComponent(store)
+        } else if let source {
+            // `refreezeSourceRefusal` read this MANIFEST and found a 1x store a moment ago, so this is a source
+            // that changed under the freeze. Said, never taken as an instruction to clone the live store instead.
+            Issue.record(Comment(rawValue: "REFUSED: \(source.path) changed while it was being read"))
             return
+        } else {
+            guard let clone = try LiveStoreClone.makeClone(in: x1) else {
+                Issue.record("UNMEASURED: no live store on this machine")
+                return
+            }
+            base = clone
         }
         // Built from a scratch copy, so the 1x file in the archive is exactly the clone and nothing opened it.
         let scratch = try sandboxes.make(named: "landing-oracle-freeze")
         let scratchBase = scratch.appendingPathComponent("Overture.store")
         try FileManager.default.copyItem(at: base, to: scratchBase)
+        // A copy keeps its source's permissions, and a frozen archive's files are read only.
+        try FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: scratchBase.path)
         // #4427: through `ScaledCorpus`, never `Phase0.scaledCopy`. This runs in scripts/landing-oracle.sh's
         // worktree of 6d3453d8, where Phase0Corpus.swift is that commit's and builds that commit's corpus;
         // ScaledCorpus.swift is in the overlay, so the archive holds today's corpus, its copies with sources.
@@ -678,6 +819,10 @@ final class LandingOracleTests {
             if FileManager.default.fileExists(atPath: from.path) {
                 try FileManager.default.copyItem(at: from, to: x4.appendingPathComponent(from.lastPathComponent))
             }
+        }
+        if let source {
+            print("landing-oracle: FROZE inputs to \(archive.path), the 4x built afresh from the 1x of \(source.path)")
+            return
         }
         let handoff = StoreLocation.handoffDirectory(appSupport: StoreLocation.appSupport, isDebugBuild: false)
         // The inputs a landing reads are REQUIRED: an archive without one could never be landed on, so the
