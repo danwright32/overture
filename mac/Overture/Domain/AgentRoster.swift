@@ -106,22 +106,44 @@ extension AgentInputs {
                      gmailConnected: Bool, runInFlight: RunKind?, replyRunAlive: Bool,
                      placement: StageNavigation.Placement? = nil,
                      reachedOut: [(prospect: Prospect, recipient: Recipient, next: Date)]? = nil) -> AgentInputs {
+        from(prospects: prospects, allProspects: allProspects, contacts: { $0.recipients }, inquiries: inquiries,
+             context: context, gmailConnected: gmailConnected, runInFlight: runInFlight,
+             replyRunAlive: replyRunAlive, placement: placement, reachedOut: reachedOut)
+    }
+
+    // #4357 slice G3 (plan v7 Phase 3): the ONE body, generic over the facts protocols, so the pass reads it over
+    // live models today and the engine (Phase 4) over retained `RowFacts`. `contacts` says which list of each
+    // row's contacts every term below walks, and it is handed to each of them rather than read here: the model
+    // entry point above hands in `recipients`, the uncounted relationship those terms always read through their
+    // own model entry points, so no `WorkTally.recipientReaches` pin moves; a facts caller hands in
+    // `factContacts`. Nothing here reads a show or a contact member itself. Inquiries are a separate model with
+    // no facts counterpart and pass through unchanged.
+    //
+    // `inquiries` carries no default here, unlike the model entry point's, which keeps it for the test call
+    // sites that have none: a generic caller is new code, and a forgotten list would silently drop the
+    // inquiry halves of two pills (L168).
+    static func from<Row: ProspectFacts>(
+        prospects: [Row], allProspects: [Row], contacts: (Row) -> [Row.Contact], inquiries: [Inquiry],
+        context: StageContext, gmailConnected: Bool, runInFlight: RunKind?, replyRunAlive: Bool,
+        placement: StageNavigation.Placement? = nil,
+        reachedOut: [(prospect: Row, recipient: Row.Contact, next: Date)]? = nil) -> AgentInputs {
         // Counted THROUGH StageNavigation, never alongside it, so a pill's number and the rows its tap
         // lands on come from one predicate and cannot answer the same question differently.
         // #1121: one traversal for every focus (StageNavigation.counts), not one traversal per focus, so
         // the send-related counts fault each prospect's `recipients` at most once instead of once each.
         let focusCounts = StageNavigation.counts(
-            in: placement ?? StageNavigation.placements(in: prospects, context: context))
+            in: placement ?? StageNavigation.placements(of: prospects, contacts: contacts, context: context))
         // #1837: ONE derivation, read twice. The pill states `total` and its attention tone is now decided
         // by `conversationsToConfirm`, and those must be two readings of the same Counts rather than two
         // calls that could drift or disagree about the same store (L16). Hoisted rather than called twice
         // for that reason, not for speed.
-        let dueWork = DueWork.counts(prospects: allProspects, inquiries: inquiries, now: context.now,
+        let dueWork = DueWork.counts(from: allProspects, contacts: contacts, inquiries: inquiries, now: context.now,
                                      replyRunAlive: replyRunAlive)
         func count(_ focus: StageFocus) -> Int { focusCounts[focus] ?? 0 }
         // #4106 Step C: ONE reached-out list for both counts below, the caller's when it has one. The pill's
         // show count and its due count were two separate walks of the same rows at the same instant.
-        let reachedOutRows = reachedOut ?? ReachedOutQueue.activeWithDates(from: prospects, now: context.now)
+        let reachedOutRows = reachedOut
+            ?? ReachedOutQueue.activeWithDates(from: prospects, contacts: contacts, now: context.now)
         // #1436: inquiries share two of these stages, so a logged inquiry is counted where it renders.
         func inquiryCount(_ focus: StageFocus) -> Int {
             inquiries.filter { StageNavigation.stage(for: $0) == focus }.count
@@ -146,12 +168,12 @@ extension AgentInputs {
             repliesToAnswer: dueWork.repliesToAnswer,
             // #2674: counted over the same list the stage's own number comes from, so the two halves of
             // one sentence cannot be about different sets of rows.
-            reviewDeadEnds: DraftedDeadEnd.count(in: prospects),
+            reviewDeadEnds: DraftedDeadEnd.count(in: prospects, contacts: contacts),
             // #2878/#2828: the SAME function FollowUpsView builds its "Stalled reply drafts" section
             // from, so the number on this pill and the rows behind it cannot answer differently. It used
             // to sweep the recipients here for itself, and the sheet swept nothing at all, so the pill
             // said "1 reply draft stalled" and the sheet said "Due 0" over an empty state (L16).
-            stalledReplyDrafts: StalledReplyDraft.dueRecipients(from: prospects, now: context.now,
+            stalledReplyDrafts: StalledReplyDraft.dueRecipients(from: prospects, contacts: contacts, now: context.now,
                                                                 runAlive: replyRunAlive).count,
             stuckSends: count(.sendStuck),
             degradedReplyTracking: count(.sendDegraded),
@@ -188,8 +210,15 @@ extension AgentInputs {
             // flag was the only reading available; now that the answer is its own fact, `replied` stays
             // true for the rest of the conversation and this pill would count a conversation Dan has
             // already answered as still owing him something, on every launch, for ever.
+            //
+            // #4357 slice G3: the show the contact is asked against is built from the same handed contacts, once
+            // per reached-out row, exactly as the model entry point's `show(p)` built it from `recipients`.
             reachedOutDue: reachedOutRows
-                .filter { ReachedOutQueue.isDueNow(for: $0.recipient, of: $0.prospect, now: context.now) }.count
+                .filter {
+                    ReachedOutQueue.isDueNow(for: $0.recipient,
+                                             of: ReachedOutQueue.Show($0.prospect, contacts: contacts($0.prospect)),
+                                             now: context.now)
+                }.count
                 + inquiries.filter { StageNavigation.stage(for: $0) == .reachedOut && $0.hasUnhandledReply }.count
         )
     }

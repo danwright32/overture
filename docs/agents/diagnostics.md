@@ -372,6 +372,24 @@ the measurement it came from lives here. Read the entry before the rule decides 
   Three outcomes, the same as the hang reader's: `1` reports are on record, `0` the directories it could
   read hold none and it names them, `2` UNMEASURED because not one could be read.
 
+## Asking how often a landing had edits to save first
+
+- **Asking how often a landing had edits to save first: `scripts/landing-flush-rate.sh` (#4338).** Every scout
+  landing saves whatever is pending in the main context before it applies anything (the entry flush, once in its
+  read phase and once holding the store), and records how many of those flushes had something to save on its
+  landing record (`LandingRun.entryFlushSaves`). This is that number's reader: of the landings STARTED in the
+  last 14 days (`--days N`), how many saved first, once or twice. It reads a COPY of the store (`--store PATH`,
+  the live Release store by default), never the store itself. The count is optional, and that is its marker: a
+  landing record carrying none (written before #4338, or made by the recovery for a landing that never reached its
+  first save) is left out of the rate and counted as its own group, never read as a landing that saved nothing.
+  A landing REFUSED before its record was written (an identity re-check, a second flush failing, the journal not
+  written) has no row at all, so it is in neither group, and the output says so on every measured run.
+  Four outcomes: `0` measured, where a window with no landing says there is no rate; `2` UNMEASURED, when the
+  store cannot be read, holds no landing records at all, has no flush count column, or every landing in the
+  window carries no count, each said apart; `3` there is
+  no store; `64` an argument it does not know or a flag with no value after it. `LandingFlushRateColumnTests`
+  holds the column name it reads to the one this build's store really has.
+
 ## Asking what is behind a small room's band
 
 - **Asking what is behind a small room's band: `scripts/report-small-venues.sh` (#1902).** Opt in, run by

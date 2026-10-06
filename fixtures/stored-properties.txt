@@ -98,6 +98,7 @@ Inquiry.threadIdDegraded
 Inquiry.threadingDegraded
 Inquiry.venue
 LandingRun.attemptCount
+LandingRun.entryFlushSaves
 LandingRun.entryPointRaw
 LandingRun.landedAt
 LandingRun.recoveredAt

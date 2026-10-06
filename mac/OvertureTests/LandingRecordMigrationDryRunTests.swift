@@ -45,6 +45,8 @@ struct LandingRecordMigrationDryRunTests {
         // that carries those and not these (main before the recovery) is the one the arm above calls migrated
         // (L601).
         let hadRecoveryColumns = try Self.hasColumn("ZATTEMPTCOUNT", table: "ZLANDINGRUN", at: copy)
+        // #4338 (A10): the entry flush count, read apart for the same reason.
+        let hadFlushColumn = try Self.hasColumn("ZENTRYFLUSHSAVES", table: "ZLANDINGRUN", at: copy)
 
         let container = try FileStores.container(for: AppSchema.schema, configurations: [ModelConfiguration(url: copy)])
         let ctx = ModelContext(container)
@@ -73,6 +75,12 @@ struct LandingRecordMigrationDryRunTests {
             #expect(runs.allSatisfy { $0.attemptCount == 0 && $0.recoveredAt == nil },
                     "a migrated landing run reads as recovered or attempted when nothing recorded either")
         }
+        if !hadFlushColumn {
+            // #4338: one more count, optional, reading as NO count on every run the file held, never as a landing
+            // that saved nothing first.
+            #expect(runs.allSatisfy { $0.entryFlushSaves == nil },
+                    "a migrated landing run reads as carrying a flush count when nothing recorded one")
+        }
 
         // The new columns take a write and read it back, which a schema mismatch breaks and an open-and-count
         // would not notice.
@@ -81,6 +89,7 @@ struct LandingRecordMigrationDryRunTests {
                              entryPoint: .runScoutLanding, startedAt: started)
         dry.attemptCount = 2
         dry.recoveredAt = started.addingTimeInterval(60)
+        dry.entryFlushSaves = 1
         ctx.insert(dry)
         if let first = sources.first {
             first.lastLandedRunID = "dry-run-landing"
@@ -92,6 +101,7 @@ struct LandingRecordMigrationDryRunTests {
         let run = try #require(try fresh.fetch(FetchDescriptor<LandingRun>()).first { $0.runIdentity == "dry-run-landing" })
         #expect(run.startedAt == started && run.entryPointRaw == "runScoutLanding")
         #expect(run.attemptCount == 2 && run.recoveredAt == started.addingTimeInterval(60))
+        #expect(run.entryFlushSaves == 1)
         if let id = sources.first?.sourceId {
             let s = try #require(try fresh.fetch(FetchDescriptor<WatchedSource>()).first { $0.sourceId == id })
             #expect(s.lastLandedRunID == "dry-run-landing" && s.lastLandedSequence == 9_999)

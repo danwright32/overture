@@ -80,12 +80,34 @@ assert_equals "the second names only 4x" "-only-testing:OvertureTests/LandingOra
   "$(sed -n 2p "${CALLS}")"
 assert_equals "and a failed size is not hidden by a later one that passed" "1" "${status}"
 
+# #4518: every refusal below is one the script makes before it creates a worktree, and should one stop refusing,
+# the script would go on to build 6d3453d8 and queue a real recording for the shared test lock: it did exactly that
+# under a mutation of the MANIFEST refusal on 2026-10-05. So each runs with an overlay the script refuses next, and
+# a refusal that stopped working fails on its message instead of starting a recording.
+refused_main() { ( ORACLE_OVERLAY=(scripts/landing-oracle.sh); main "$@" ); }
+
 # The whole script refuses before building anything when the real arm would write inside a checkout.
-out="$(main --inputs "${SCRATCH}/archive" --out "${REPO_ROOT}/real-arm-out" 2>&1)"
+out="$(refused_main --inputs "${SCRATCH}/archive" --out "${REPO_ROOT}/real-arm-out" 2>&1)"
 assert_equals "the real arm's output inside a checkout is refused before any build" "2" "$?"
 assert_contains "and says why" "${out}" "inside a git work tree"
-out="$(main --inputs "${SCRATCH}/archive" 2>&1)"
+out="$(refused_main --inputs "${SCRATCH}/archive" 2>&1)"
 assert_equals "the real arm with nowhere to write is refused" "2" "$?"
+assert_contains "and says it needs --out" "${out}" "needs --out"
+
+# #4518: a refreeze takes an old archive's 1x and inputs into a NEW one, so it needs --freeze to write into and a
+# source that is a frozen archive, and both are refused by name before anything is built.
+out="$(refused_main --refreeze-from "${SCRATCH}/old" --out "${SCRATCH}/out" 2>&1)"
+assert_equals "a refreeze with no new archive to write is refused before any build" "2" "$?"
+assert_contains "and says it needs --freeze" "${out}" "--refreeze-from needs --freeze"
+mkdir -p "${SCRATCH}/not-an-archive"
+out="$(refused_main --freeze "${SCRATCH}/new" --refreeze-from "${SCRATCH}/not-an-archive" --out "${SCRATCH}/out" 2>&1)"
+assert_equals "a refreeze from a folder with no MANIFEST is refused before any build" "2" "$?"
+assert_contains "and names it as no frozen archive" "${out}" "holds no MANIFEST"
+if [ -e "${SCRATCH}/new" ]; then
+  fail "the refused refreeze created its new archive anyway"
+else
+  pass "the refused refreeze wrote nothing"
+fi
 
 if [[ ${FAILURES} -gt 0 ]]; then
   echo "${FAILURES} failure(s)"

@@ -75,6 +75,19 @@ the measurement it came from lives here. Read the entry before the rule decides 
   `--keychain` scope; a guard in `mac/scripts/prune-stale-keychains.test.sh` fails if any `*.test.sh`
   writes the search list instead.
 
+- **Looking at it on a SYNTHETIC store (#4338).** `mac/scripts/run-debug.sh --store-folder <folder>` opens the
+  Debug build on the store in a named folder instead of its own, and prints which store it opened. It refuses the
+  live Release folder and the default Debug folder by name, anything inside either, anything holding either
+  (Application Support itself would put the store's handoff files on the live ones), a link to any of those, and a
+  folder that does not exist, so a mistyped path never opens an empty store that reads as every show gone. The
+  app makes the same check on launch (`StoreLocation.debugStoreFolder`) and stops rather than open any other store.
+  `scripts/make-synthetic-landing-store.sh <folder>` fills such a folder: 39 sources and 1,350 shows, every name
+  from the A1 synthetic arm's invented vocabulary, and a landing record in each state that lives in records (a
+  landing waiting to be finished at idle, one the recovery stopped trying, a landing record nobody can read, kept
+  results the launch sweep lands, kept results that had already landed). It is never a clone of the live store,
+  because this repository is public. Opening the app drives Dan's screen, so it is his to run or to be told about
+  first.
+
 ## Installing a Release build, and what the Update button runs
 
 - `build-install.sh` builds WHATEVER IS CHECKED OUT, which is what you want when installing a branch build

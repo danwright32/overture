@@ -129,12 +129,19 @@ struct QueueRenderDataGuardTests {
     @Test func agentInputsCountsInOnePass() {
         // Anchored on the NAME (#2784): #1570 added a `geo:` argument and #2365 folded it, the day and
         // the instant into one `context:`, and every such change used to move the text this pinned.
-        guard let body = SourceGuardHelper.bodyOfFunction(named: "from", in: agentRoster) else {
-            Issue.record("expected to find AgentInputs.from's body")
+        // #4357 slice G3: the rule lives in the generic body, and the model entry point the pass calls hands
+        // its rows to it. Both halves are held, so neither a body that stopped counting in one pass nor an
+        // entry point that stopped reaching that body is green.
+        guard let body = SourceGuardHelper.bodyOfFunction(named: "from<Row: ProspectFacts>", in: agentRoster),
+              let entry = SourceGuardHelper.bodyOfFunction(named: "from", in: agentRoster) else {
+            Issue.record("expected to find AgentInputs.from's body and its model entry point")
             return
         }
         #expect(body.contains("StageNavigation.counts("))
         // The old shape counted each focus with its own full navigation pass; that must not come back.
         #expect(!body.contains("StageNavigation.naturalKeys("))
+        #expect(SourceGuardHelper.containsCode("from(prospects: prospects, allProspects: allProspects, contacts: { $0.recipients },",
+                                               in: entry),
+                "the model entry point no longer hands its rows and their own recipients to the one body")
     }
 }

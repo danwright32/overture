@@ -54,7 +54,7 @@ enum LeadPasteLanding {
         saveSource: @escaping (ModelContext) throws -> Void = { try $0.save() },
         into context: ModelContext
     ) async -> Result {
-        if case .recentEditsUnsaved(let rows)? = ScoutService.flushBeforeLanding(context, save: saveEntry) {
+        if case .recentEditsUnsaved(let rows)? = ScoutService.flushBeforeLanding(context, save: saveEntry).refusal {
             return .refused(LeadIntake.recentEditsUnsaved(rows))
         }
         let read = await readOffTheMainThread(container: context.container, read: readProspectTable,
@@ -76,7 +76,7 @@ enum LeadPasteLanding {
         defer { token.end() }
         // Again, now the store is held: whatever Dan edited while the paste read and waited is saved before
         // anything is applied, so a revert, which restores committed values, cannot put back an edit of his.
-        if case .recentEditsUnsaved(let rows)? = ScoutService.flushBeforeLanding(context, save: saveEntry) {
+        if case .recentEditsUnsaved(let rows)? = ScoutService.flushBeforeLanding(context, save: saveEntry).refusal {
             return .refused(LeadIntake.recentEditsUnsaved(rows))
         }
         let landing = ScoutLandingStore(context: context, read: readProspectTable, saveSource: saveSource)
