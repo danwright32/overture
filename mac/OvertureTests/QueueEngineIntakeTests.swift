@@ -642,11 +642,14 @@ final class QueueEngineIntakeTests {
                 "the engine still holds a temporary identifier after the first save")
         #expect(contacts.allSatisfy { $0.storeIdentifier != nil })
         // The tracker armed before the save still fires with the temporary identifier, a stale fire dropped
-        // unread; the row was armed again under its permanent one, so the edit still lands.
+        // unread; the row was armed again under its permanent one, so an UNSAVED edit still lands. Unsaved on
+        // purpose: a save would name the row and hide a missing tracker.
         fresh.fitReason = "edited after the first save"
+        turns.run()
+        #expect(engine.facts.shows[permanent]?.fitReason == "edited after the first save",
+                "an unsaved edit after the first save was lost: no tracker was armed under the permanent identifier")
         try store.context.save()
         turns.run()
-        #expect(engine.facts.shows[permanent]?.fitReason == "edited after the first save")
         #expect(try engine.facts == store.freshFacts())
         #expect(!held().contains(temporary))
     }
