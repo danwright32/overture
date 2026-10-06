@@ -79,9 +79,9 @@ struct ReachedOutSnapshotTests {
         let snapshot = ReachedOutSnapshot(show: show, contact: contact, next: Date())
 
         // The press arrives against a live list that no longer holds it.
-        let outcome = ReachedOutSnapshot.resolve(snapshot, in: [])
+        let outcome = ReachedOutSnapshot.resolve(snapshot, in: [Prospect]())
 
-        #expect(outcome == .gone,
+        #expect(outcome == .showRefused(.gone),
                 Comment(rawValue: "a show missing from the live list resolved as \(outcome) rather than "
                         + "gone, so a press on a deleted row does something other than refuse."))
     }
@@ -103,7 +103,7 @@ struct ReachedOutSnapshotTests {
 
         let outcome = ReachedOutSnapshot.resolve(snapshot, in: [survivor])
 
-        #expect(outcome == .gone,
+        #expect(outcome == .showRefused(.gone),
                 Comment(rawValue: "resolved as \(outcome). A snapshot whose show was merged away must not "
                         + "find the survivor that adopted its key: `naturalKey` is unique, so a key-only "
                         + "lookup returns exactly one row with nothing to report and the press lands on a "
@@ -127,7 +127,7 @@ struct ReachedOutSnapshotTests {
 
         let outcome = ReachedOutSnapshot.resolve(snapshot, in: [show])
 
-        #expect(outcome == .reKeyed,
+        #expect(outcome == .showRefused(.reKeyed),
                 Comment(rawValue: "resolved as \(outcome). The row is alive and its key has moved, so it "
                         + "is not the show the list drew and acting on it would write to a night Dan did "
                         + "not press. That is its own refusal, never \"could not find that show\"."))
@@ -153,13 +153,38 @@ struct ReachedOutSnapshotTests {
                         + "(L11, L260)."))
     }
 
-    // The three refusals must not share a sentence, which is the whole reason they are three cases.
+    // 4. #4357 slice I2: a snapshot taken of a row BEFORE its first save. The identifier is replaced at
+    // that save, so the snapshot names nothing afterwards, and that is refused by name rather than found by
+    // key. This is the premise the comment above the type used to say an assertion guarded, and none did.
+    @Test func aSnapshotTakenBeforeTheShowsFirstSaveIsRefusedByName() throws {
+        let ctx = ModelContext(try container())
+        let show = makeShow(ctx, key: "show-1")
+        let contact = addContact(ctx, to: show, id: "contact-1")
+        let snapshot = ReachedOutSnapshot(show: show, contact: contact, next: Date())
+        // The positive control in the same fixture: before the save, the same snapshot resolves (L159).
+        guard case .found = ReachedOutSnapshot.resolve(snapshot, in: [show]) else {
+            Issue.record(Comment(rawValue: "an unsaved row's snapshot did not resolve even before the save, "
+                                 + "so the refusal below is not about the save"))
+            return
+        }
+        try ctx.save()
+
+        let outcome = ReachedOutSnapshot.resolve(snapshot, in: [show])
+
+        #expect(outcome == .showRefused(.drawnBeforeItsFirstSave),
+                Comment(rawValue: "resolved as \(outcome). The identifier the row was drawn with no longer "
+                        + "names it, and resolving by key instead cannot tell this row from a different "
+                        + "show holding its key (L75)."))
+    }
+
+    // The refusals must not share a sentence, which is the whole reason they are separate cases. Every
+    // show refusal comes from `ShowIdentity` itself, so a fourth added there is checked here too.
     @Test func eachRefusalSaysSomethingDifferent() {
-        let said = [ReachedOutSnapshot.Outcome.gone,
-                    .reKeyed,
-                    .contactGone].map { $0.sentence(org: "Ensemble") }
+        let outcomes = ShowIdentity.Refusal.allCases.map { ReachedOutSnapshot.Outcome.showRefused($0) }
+            + [.contactGone]
+        let said = outcomes.map { $0.sentence(org: "Ensemble") }
         #expect(Set(said).count == said.count,
-                Comment(rawValue: "two of the three refusals say the same thing: \(said). Two outcomes "
+                Comment(rawValue: "two of the refusals say the same thing: \(said). Two outcomes "
                         + "with distinct causes and one message are one outcome in practice (L11, L260)."))
         for sentence in said {
             #expect(!sentence.isEmpty, "a refusal with no wording cannot be acted on")

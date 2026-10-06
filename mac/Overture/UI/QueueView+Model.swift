@@ -8,6 +8,13 @@ import SwiftData
 
 struct QueueItem: Identifiable, Equatable, Sendable {
     let id: String
+    // #4357 slice I2: the show this card was drawn from, by its store identifier, which is what an action
+    // on the card resolves through (`ShowIdentity`); `id` is the natural key and only WITNESSES it, because
+    // merges and re-keys reassign keys. Filled by the initialiser over the facts, from the identifier the
+    // fact carries, so every card the app builds has one. Optional rather than required for the memberwise
+    // initialiser's callers, which are tests and previews and name no stored show: such a card resolves to
+    // nothing, never to whatever holds its key.
+    var showID: PersistentIdentifier? = nil
     let groupName: String
     let discipline: String
     let venue: String?
@@ -3915,8 +3922,10 @@ enum QueueModel {
                 // The row exists and its show does not, which no pass can produce: a row is built FROM a
                 // show. Counted as an unexpected miss whatever the key set said, because it is a fault in
                 // the build rather than a scroll arriving early, and the row still draws (L67).
+                // #4357 slice I2: with the ROW's identity, so a press on this card resolves the show the
+                // row was built from or says why it cannot, rather than resolving nothing at all.
                 unexpectedCardMisses += 1
-                return QueueItem(id: row.id, groupName: row.groupName, discipline: row.discipline,
+                return QueueItem(id: row.id, showID: row.showID, groupName: row.groupName, discipline: row.discipline,
                                  venue: row.venue, performanceDate: row.performanceDate,
                                  sourceListingURL: nil, priorRelationship: "none", production: "self",
                                  profile: "strong", coverage: "likely_uncovered", fitScore: row.fitScore,
@@ -4255,6 +4264,7 @@ extension QueueItem {
 
         self.init(
             id: p.naturalKey,
+            showID: p.persistentModelID,
             groupName: p.groupName,
             discipline: p.discipline,
             venue: p.venue,
