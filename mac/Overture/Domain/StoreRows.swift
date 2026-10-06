@@ -47,7 +47,9 @@ struct StoreRows {
 
     // Deleted and not yet saved reads `isDeleted`; deleted and saved has lost its context. Either way it is
     // no longer a row anybody should write to.
-    static func isLive(_ model: some PersistentModel) -> Bool {
+    // #4358: `nonisolated`, because the queue engine's `FactStore` asks it of a row read through any context,
+    // the verifier's own included, and the question reads only the row it is handed.
+    nonisolated static func isLive(_ model: some PersistentModel) -> Bool {
         !model.isDeleted && model.modelContext != nil
     }
 

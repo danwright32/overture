@@ -132,7 +132,10 @@ struct TestOnlyReachableDomainCodeTests {
         // #4356: `QueueFacts.swift` and `RowFacts.swift` are the same case. They carry, or exempt BY NAME,
         // every stored property of `Prospect` and `Recipient`, held to the schema by
         // `RowFactsSchemaCoverageTests`, so a mention there is the list rather than a use.
-        let byConstruction: Set<String> = ["ScopeFields.swift", "QueueFacts.swift", "RowFacts.swift"]
+        // #4358: `QueueEngineRecords.swift` is the same case again, for `Inquiry` and every small table: each record
+        // carries every stored property of its model, held to the schema by `QueueEngineRecordsCoverTheSchemaTests`.
+        let byConstruction: Set<String> = ["ScopeFields.swift", "QueueFacts.swift", "RowFacts.swift",
+                                           "QueueEngineRecords.swift"]
         let appFiles = scanned(app, floor: 200).filter { !byConstruction.contains($0.name) }
         var testFiles = scanned(RepoRoot.mac.appendingPathComponent("OvertureTests"), floor: 400)
         testFiles += scanned(RepoRoot.mac.appendingPathComponent("OvertureHostedTests"), floor: 20)

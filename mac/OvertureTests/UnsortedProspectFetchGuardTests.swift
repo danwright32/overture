@@ -182,7 +182,15 @@ enum UnsortedProspectFetchAudit {
         Entry(file: "DebugSeed.swift", scope: "clearStore", reads: 1, kind: .orderFree, why: """
             Deletes every row; a debug build only.
             """),
+        // #4358: the queue engine's whole read, into dictionaries keyed by each row's own identity.
+        Entry(file: "FactStore.swift", scope: "extractAll", reads: 1, kind: .orderFree, why: engineFacts),
+        Entry(file: "QueueEngine.swift", scope: "readEverything", reads: 1, kind: .orderFree, why: engineFacts),
     ]
+
+    private static let engineFacts = """
+        Each show is stored as its own value under its own identifier, and each contact under the one show that \
+        holds it, so the order the rows come back in decides nothing (#4358).
+        """
 
     // MARK: the reader
 
