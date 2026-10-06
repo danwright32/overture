@@ -401,6 +401,10 @@ final class LandingAcceptanceRigTests {
         let loadStart = Phase0.oneMinuteLoad()
         let timeline = HoldTimeline()
         timeline.start()
+        // Every exit ends the ping thread, a throwing entry point included, or it keeps posting to the main
+        // queue every millisecond and loads every later sample (L515, the review of 9481b92). `stop()` may run
+        // twice: the one below collects the pings, this one only makes sure the thread is gone.
+        defer { _ = timeline.stop() }
         await drainMain()
         let stamp = FirstYield()
         let start = Phase0.now()
