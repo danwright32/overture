@@ -24,6 +24,13 @@ struct SourcesView: View {
     // RootView's job (it owns the live-run state and the one-at-a-time guard), and a view that launched
     // its own run would be a second place that could start one.
     var readOne: (WatchedSource) -> Void = { _ in }
+    // #4516: the clock this sheet's derivation is judged by, read ONCE per pass in `makeRenderData`. The app
+    // passes nothing and gets the wall clock, so the room rule and the render memo's two second window
+    // behave exactly as they always have. A hosted test passes a FROZEN clock, so a derivation count it
+    // asserts is about the memo's key rather than about how long the runner took to reach the next
+    // evaluation: on GitHub's runner that was past the window one run in four, and the window alone
+    // derived the store again. `TheAppHandsNoSurfaceAClockTests` holds the app to the default.
+    var clock: () -> Date = Date.init
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var context
@@ -161,8 +168,11 @@ struct SourcesView: View {
     // change. `now` and `today` are re-derived on every read deliberately: a frozen instant is how a sheet
     // left open across midnight goes on judging lead time by yesterday, and caching the whole context
     // would have bought about a microsecond of `Set` building at that price (L74, L175).
-    private var roomContext: StageContext {
-        StageContext(now: Date(), geo: geo, clients: clientWindow ?? ClientWindow(sources: sources, clients: clients))
+    //
+    // #4516: a function of the pass's instant rather than a property reading the clock for itself, so the
+    // room rule and the render memo's window are measured from ONE reading of `clock`, never two.
+    private func roomContext(at now: Date) -> StageContext {
+        StageContext(now: now, geo: geo, clients: clientWindow ?? ClientWindow(sources: sources, clients: clients))
     }
     // #2216: the sources the live extract run has been asked for and not yet come back with, read once
     // per sheet build rather than per row (a per-row file read would put two file reads on every one of
@@ -226,11 +236,15 @@ struct SourcesView: View {
         // also fires `willSet` on every field of every row a query re-fetches, changed or not, and that
         // is indistinguishable from an edit. `RemovingOneSourceCostsOnePassTests` names each derivation a
         // removal still costs and why the remaining two stay.
+        //
+        // #4516: the pass's ONE instant, from the clock this view was handed, for the room rule and for
+        // the memo's window alike.
+        let now = clock()
         let inputs = SourcesRenderPass.Inputs(
             prospects: SourcesRenderPass.Corpus(prospects),
             sources: sources,
             searchQuery: searchQuery,
-            context: roomContext)
+            context: roomContext(at: now))
         // The key names THIS view's own inputs, one `add` per input, so an input added here and not to
         // the key is a line that is missing rather than an argument that is subtly wrong (L96, and
         // `ScopeFingerprint`'s own header says so). The two collections are hashed by identity, which
@@ -272,7 +286,7 @@ struct SourcesView: View {
         key.add(value: inputs.context.geo.userExcludedTowns)
         key.add(value: inputs.context.geo.allowedSeedTowns)
         // #4106: and any save into this store, through any context (see `ScopeMemo.value`'s `savesIn`).
-        return renderMemo.value(fingerprint: key, cardKeys: [], now: Date(),
+        return renderMemo.value(fingerprint: key, cardKeys: [], now: now,
                                 savesIn: context.container,
                                 // #4252: 10 ms to derive on the live store (74 sources, 2026-09-25),
                                 // far cheaper than the 123 ms re-arming a served refetch would cost.
