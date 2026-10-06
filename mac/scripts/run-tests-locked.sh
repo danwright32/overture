@@ -102,6 +102,9 @@ DISPLAY_GUARD_PID=""
 # #4106 (plan v7 probe 0c.9): the opt in optimised run, and the build log check that proves it was one.
 # shellcheck source=./lib/optimised-build.sh
 source "${SCRIPT_DIR}/lib/optimised-build.sh"
+# #4343 (E0): the opt in release-like run (the optimiser AND DEBUG compiled out), and its own build log check.
+# shellcheck source=./lib/release-like-build.sh
+source "${SCRIPT_DIR}/lib/release-like-build.sh"
 
 # Given `ps -eo pid=,command=`-style output (one process per line: PID then its full command),
 # returns the PIDs of any resident Debug-configuration Overture.app test host (#632): the one
@@ -1024,14 +1027,47 @@ main() {
   # #4106: OVERTURE_TEST_OPTIMISED=1 compiles the suite with Release's optimiser (lib/optimised-build.sh).
   # Off, the overrides list is EMPTY and every xcodebuild call below receives exactly the arguments it
   # always did. Read before anything else, so a value that is neither on nor off refuses before a build.
-  local optimised optimised_evidence="" override_line
+  # #4343 (E0): OVERTURE_TEST_RELEASE_LIKE=1 takes the optimiser AND compiles DEBUG out, on the pure suite's
+  # scheme (lib/release-like-build.sh). `build_mode` says which of the three this run is, so every record
+  # kept for Debug runs below refuses both measured builds by one test rather than one per switch.
+  local optimised release_like build_mode="debug" build_evidence="" override_line
+  local main_scheme="Overture"
   local build_overrides=()
   optimised="$(optimised_build_switch)" || exit 2
+  release_like="$(release_like_build_switch)" || exit 2
+  # Both at once is refused rather than either winning in silence: each asks for a different build, and a
+  # run that quietly gave one of them would be timed as the other (L11).
+  if [[ "${optimised}" == "on" && "${release_like}" == "on" ]]; then
+    echo "run-tests-locked.sh: OVERTURE_TEST_RELEASE_LIKE and OVERTURE_TEST_OPTIMISED are both set. A release-like run already takes the optimiser, so set one of them. Nothing was run." >&2
+    exit 2
+  fi
   if [[ "${optimised}" == "on" ]]; then
+    build_mode="optimised"
     while IFS= read -r override_line; do
       build_overrides+=("${override_line}")
     done < <(optimised_build_overrides)
     echo "run-tests-locked.sh: OPTIMISED run (#4106): passing ${build_overrides[*]} to xcodebuild. The build log is checked afterwards, and the run fails unless it shows the code really was compiled that way." >&2
+  fi
+  if [[ "${release_like}" == "on" ]]; then
+    build_mode="release-like"
+    main_scheme="${RELEASE_LIKE_SCHEME}"
+    while IFS= read -r override_line; do
+      build_overrides+=("${override_line}")
+    done < <(release_like_build_overrides)
+    # The pure test files that cannot compile without DEBUG, from the derived list. ONE argument, since the
+    # setting is itself a space separated list. A list that cannot be read refuses before anything builds.
+    local release_like_excluded
+    release_like_excluded="$(release_like_build_exclusions)" || exit 2
+    [[ -z "${release_like_excluded}" ]] || build_overrides+=("EXCLUDED_SOURCE_FILE_NAMES=${release_like_excluded}")
+    # What the TEST PROCESS was asked for (xcodebuild hands it every TEST_RUNNER_ variable without the
+    # prefix), so a probe can refuse when the build it finds itself in is not the one asked for.
+    export TEST_RUNNER_OVERTURE_BUILD_MODE="release-like"
+    echo "run-tests-locked.sh: RELEASE-LIKE run (#4343): the ${main_scheme} scheme, passing ${build_overrides[*]} to xcodebuild. The build log is checked afterwards, and the run fails unless it shows the code really was compiled that way." >&2
+  else
+    # Asked for by this switch only, never inherited from whoever ran this script (L439).
+    unset TEST_RUNNER_OVERTURE_BUILD_MODE
+  fi
+  if [[ "${build_mode}" != "debug" ]]; then
     # The whole module compile is one long swift-frontend that xcodebuild's own CPU cannot see, so the
     # ordinary stall limit ends it mid build (measured, see OPTIMISED_STALL_END_SECONDS). A limit the
     # caller set explicitly still wins. The notice prints the limit IN FORCE, not the constant, so it
@@ -1171,7 +1207,8 @@ main() {
     # exit code comes from `wait` on flock itself rather than PIPESTATUS, which is #1459's hazard gone.
     # #4106: the overrides go in only when the optimised switch is on. The `+` form expands an empty
     # array to nothing under `set -u` on macOS bash 3.2, where the plain form is an error (L486).
-    run_locked_xcodebuild "${output_file}" yes -scheme Overture -destination 'platform=macOS' \
+    # #4343: and the scheme is the pure suite's only on a release-like run; every other run keeps Overture.
+    run_locked_xcodebuild "${output_file}" yes -scheme "${main_scheme}" -destination 'platform=macOS' \
       ${build_overrides[@]+"${build_overrides[@]}"} test "$@"
     test_exit_code="${RUN_EXIT_CODE}"
     stall_record="${RUN_STALL_RECORD_TEXT}"
@@ -1202,8 +1239,9 @@ main() {
     last_output="$(cat "${output_file}")"
     # #4106: the compile lines of EVERY attempt, since a retry usually recompiles nothing and its log
     # alone would say nothing about how the code it ran was built.
-    if [[ "${optimised}" == "on" ]]; then
-      optimised_evidence="${optimised_evidence}"$'\n'"$(optimised_build_evidence "${last_output}")"
+    # #4343: one collection for both measured builds; the two evidence readers select the same lines.
+    if [[ "${build_mode}" != "debug" ]]; then
+      build_evidence="${build_evidence}"$'\n'"$(optimised_build_evidence "${last_output}")"
     fi
     # #3276: read BEFORE the scratch file goes, and kept per attempt for the same reason `last_output`
     # is: a retry's reading must be the retry's own.
@@ -1294,7 +1332,10 @@ main() {
   executed="$(awk '{print $1}' <<< "${authoritative}")"
   # #3976: a run the stall guard ended is short by construction, and SHORT RUN's advice (something is
   # killing the process) would name this runner's own act as the mystery. Its own report says it.
-  if [[ "${scoped}" -eq 0 && "${outcome}" != "stalled" ]]; then
+  # #4343: and only a DEBUG run is held to the baseline. A release-like run builds the pure scheme with its
+  # excluded files left out and an optimised one compiles differently, so their counts are not the Debug
+  # count, and the same rule keeps them from writing it below (the review of 88d6bec).
+  if [[ "${scoped}" -eq 0 && "${outcome}" != "stalled" && "${build_mode}" == "debug" ]]; then
     [[ -f "${BASELINE_FILE}" ]] && baseline="$(cat "${BASELINE_FILE}" 2>/dev/null || true)"
     truncated="$(truncated_report "${executed}" "${baseline}")"
   fi
@@ -1308,7 +1349,8 @@ main() {
     # test-all.sh would go on to say "all suites passed" having run two thirds of it. A result that
     # cannot be believed must never exit 0.
     [[ "${test_exit_code}" -ne 0 ]] || test_exit_code=1
-  elif [[ "${scoped}" -eq 0 && -z "${outcome}" && -n "${executed}" && -z "${restarted}" ]]; then
+  elif [[ "${scoped}" -eq 0 && -z "${outcome}" && -n "${executed}" && -z "${restarted}" \
+          && "${build_mode}" == "debug" ]]; then
     # Only a genuinely green FULL run may move the baseline, so neither a truncated one, nor a failing
     # one, nor a scoped one can quietly lower the bar it is measured against.
     #
@@ -1336,13 +1378,19 @@ main() {
   # #4106: an optimised run is believed only once its own build log shows it was one (L188, L416).
   # Anything short of VERIFIED fails the run, UNMEASURED included, because a timing from a build nobody
   # can show was optimised is exactly the Debug number this switch exists to replace (L98).
-  if [[ "${optimised}" == "on" ]]; then
-    local optimised_verdict
-    optimised_verdict="$(optimised_build_verdict "${optimised_evidence}")"
+  # #4343: a release-like run likewise, by its own check, which also refuses a compile that still carried
+  # DEBUG or lacked the marker that shows the override reached the compiler.
+  if [[ "${build_mode}" != "debug" ]]; then
+    local build_verdict
+    if [[ "${build_mode}" == "optimised" ]]; then
+      build_verdict="$(optimised_build_verdict "${build_evidence}")"
+    else
+      build_verdict="$(release_like_build_verdict "${build_evidence}")"
+    fi
     echo >&2
-    echo "run-tests-locked.sh: optimised build check: ${optimised_verdict}" >&2
-    if [[ "${optimised_verdict}" != VERIFIED:* ]]; then
-      echo "run-tests-locked.sh: this OPTIMISED run is NOT trusted, so it fails whatever its tests did." >&2
+    echo "run-tests-locked.sh: ${build_mode} build check: ${build_verdict}" >&2
+    if [[ "${build_verdict}" != VERIFIED:* ]]; then
+      echo "run-tests-locked.sh: this $(tr '[:lower:]' '[:upper:]' <<< "${build_mode}") run is NOT trusted, so it fails whatever its tests did." >&2
       [[ "${test_exit_code}" -ne 0 ]] || test_exit_code=1
     fi
   fi
@@ -1408,7 +1456,7 @@ main() {
   QUEUE_COST_NEXT="$(queue_cost_seen_update "${last_output}" "${QUEUE_COST_TODAY}" "${QUEUE_COST_SEEN}")"
   # #4106: never from an optimised run. The record is a Debug figure every later run is compared with,
   # and an optimised reading written over it would read as the code getting faster.
-  if [[ "${optimised}" == "off" && -n "${QUEUE_COST_NEXT}" && "${QUEUE_COST_NEXT}" != "${QUEUE_COST_SEEN}" ]]; then
+  if [[ "${build_mode}" == "debug" && -n "${QUEUE_COST_NEXT}" && "${QUEUE_COST_NEXT}" != "${QUEUE_COST_SEEN}" ]]; then
     printf '%s\n' "${QUEUE_COST_NEXT}" > "${QUEUE_COST_RECORD}" 2>/dev/null || true
   fi
 
@@ -1426,7 +1474,7 @@ main() {
   echo "run-tests-locked.sh: $(live_store_cost_report "${QUEUE_COST_TODAY}" "${LIVE_COST_SEEN}" "${last_output}" "${LIVE_COST_SHAPE}")" >&2
   LIVE_COST_NEXT="$(live_store_cost_seen_update "${last_output}" "${QUEUE_COST_TODAY}" "${LIVE_COST_SEEN}" "${LIVE_COST_SHAPE}")"
   # #4106: never from an optimised run, for the queue cost record's reason just above.
-  if [[ "${optimised}" == "off" && -n "${LIVE_COST_NEXT}" && "${LIVE_COST_NEXT}" != "${LIVE_COST_SEEN}" ]]; then
+  if [[ "${build_mode}" == "debug" && -n "${LIVE_COST_NEXT}" && "${LIVE_COST_NEXT}" != "${LIVE_COST_SEEN}" ]]; then
     printf '%s\n' "${LIVE_COST_NEXT}" > "${LIVE_COST_RECORD}" 2>/dev/null || true
   fi
 
@@ -1446,7 +1494,7 @@ main() {
   # against the wrong spread and become a fast outlier every later Debug run is judged against. The
   # scoped guard stays the line straight after the record's path, which suite-stats.test.sh reads.
   SUITE_SERIES_RECORD="${OVERTURE_SUITE_RUN_SERIES:-${MAC_DIR}/../.overture-suite-run-series}"
-  if [[ "${scoped}" -eq 0 && "${optimised}" == "off" ]]; then
+  if [[ "${scoped}" -eq 0 && "${build_mode}" == "debug" ]]; then
     SUITE_SERIES_TEXT="$(cat "${SUITE_SERIES_RECORD}" 2>/dev/null || true)"
     if [[ -z "${SUITE_SERIES_TEXT}" ]]; then
       SUITE_SERIES_TEXT="# One line per FULL suite run: date, tests, suites, seconds, and why it was retried."
@@ -1459,8 +1507,8 @@ main() {
     if [[ -n "${SUITE_SERIES_NEXT}" && "${SUITE_SERIES_NEXT}" != "${SUITE_SERIES_TEXT}" ]]; then
       printf '%s\n' "${SUITE_SERIES_NEXT}" > "${SUITE_SERIES_RECORD}" 2>/dev/null || true
     fi
-  elif [[ "${optimised}" == "on" ]]; then
-    echo "run-tests-locked.sh: this run was OPTIMISED, so its duration and any cost reading it took were not recorded beside the Debug ones." >&2
+  elif [[ "${build_mode}" != "debug" ]]; then
+    echo "run-tests-locked.sh: this run was $(tr '[:lower:]' '[:upper:]' <<< "${build_mode}"), so its duration and any cost reading it took were not recorded beside the Debug ones." >&2
   fi
 
   # #1995: and whether THIS run verified the screens, beside the two readouts above.

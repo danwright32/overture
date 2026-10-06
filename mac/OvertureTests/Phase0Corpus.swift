@@ -170,6 +170,44 @@ enum Phase0 {
         ScaledCorpus.results(results, factor: factor)
     }
 
+    /// #4327 step 0.7: the INSERTING variant of a results file. Per source, `share` of its events copied as new
+    /// shows (`insertedCopies`); `round` is in every title and link, so a later round inserts again rather than
+    /// re-landing an earlier round's rows. In memory only. Moved here unchanged from
+    /// `ScoutLandingAttributionProbeTests` (#4343), so the acceptance rig and that probe land one variant;
+    /// `linkTag` names who added the link, and defaults to that probe's own.
+    nonisolated static func insertingResults(_ results: ScoutExtractResults, share: Double, round: Int,
+                                             linkTag: String = "probe4327") -> ScoutExtractResults {
+        var out = results
+        for (s, result) in results.results.enumerated() where !result.events.isEmpty {
+            out.results[s].events += insertedCopies(of: result.events, share: share,
+                                                    tag: { "\(round)s\(s)e\($0)" }, linkTag: linkTag)
+        }
+        return out
+    }
+
+    /// The title every inserted show carries and no real show does, so a probe can find (and remove) what it added.
+    nonisolated static let syntheticTitle = "Probe Synthetic Recital"
+
+    /// The one rule for an inserting round, over any list of events: `share` of them (rounded, at least one where
+    /// there are any), evenly spaced, copied at the same venue, night and presenter, with a title and a link no
+    /// stored show carries. The results file's events (`insertingResults`) and the acceptance rig's native feed
+    /// events (#4343) both go through it, so the two variants cannot drift apart (L370).
+    nonisolated static func insertedCopies<Event: Phase0InsertableEvent>(of events: [Event], share: Double,
+                                                                       tag: (Int) -> String,
+                                                                       linkTag: String) -> [Event] {
+        guard !events.isEmpty else { return [] }
+        let n = max(1, Int((Double(events.count) * share).rounded()))
+        let stride = max(1, events.count / n)
+        return (0..<n).map { i in
+            var e = events[(i * stride) % events.count]
+            let t = tag(i)
+            e.title = "\(syntheticTitle) \(t)"
+            e.sourceUrl = e.sourceUrl.map { $0 + ($0.hasSuffix("/") ? "" : "/") + "\(linkTag)-\(t)" }
+            e.seriesId = nil
+            return e
+        }
+    }
+
 
     /// The shape a scaled corpus must keep (L48): printed side by side for the clone and the copy.
     static func shape(_ rows: [Prospect]) -> String {
@@ -185,3 +223,13 @@ enum Phase0 {
             + "largest night \(perNight.values.max() ?? 0), presenter-venue pairs \(pairs)"
     }
 }
+
+/// What `Phase0.insertedCopies` needs of an event: the scout extract results' events and the native feeds' both have it.
+protocol Phase0InsertableEvent {
+    var title: String { get set }
+    var sourceUrl: String? { get set }
+    var seriesId: String? { get set }
+}
+
+extension ScoutExtractEvent: Phase0InsertableEvent {}
+extension ExtractedEvent: Phase0InsertableEvent {}

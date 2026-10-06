@@ -462,9 +462,12 @@ STUB
 
   # #4106: XCODEBUILD_ARGS_FILE records every argument list the runner hands xcodebuild, one call per
   # line, so a fixture can assert what an ordinary run and an optimised run each PASS. Inert unless set.
+  # #4343: XCODEBUILD_ENV_FILE records the build mode the runner handed the TEST PROCESS (xcodebuild passes
+  # every TEST_RUNNER_ variable through with the prefix removed), one line per call. Inert unless set.
   cat > "${bin_dir}/xcodebuild" <<STUB
 #!/usr/bin/env bash
 echo "\$*" >> "\${XCODEBUILD_ARGS_FILE:-/dev/null}"
+echo "build-mode=\${TEST_RUNNER_OVERTURE_BUILD_MODE:-unset}" >> "\${XCODEBUILD_ENV_FILE:-/dev/null}"
 cat <<'XCODEBUILD_OUTPUT'
 ${xcodebuild_output}
 XCODEBUILD_OUTPUT
@@ -2187,6 +2190,92 @@ ${GREEN_RUN_LOG}" 0)"
 assert_contains "a switch value that is neither 1 nor unset is refused" "OVERTURE_TEST_OPTIMISED is 'yes'" "${OPT_TYPO_RUN}"
 assert_equals "and nothing is built" "" "$(grep -a ' test' "${OPT_DIR}/typo-args" || true)"
 rm -rf "${OPT_DIR}"
+
+echo
+# --- #4343 (E0): the RELEASE-LIKE run -----------------------------------------------------------------
+#
+# Release's optimiser with DEBUG compiled out, on the pure suite's scheme only (lib/release-like-build.sh).
+RL_DIR="$(fixture_scratch_dir)"
+# The derived exclusion list, a fixture's own rather than the committed one, so these cases do not move
+# whenever a test file starts or stops naming a Debug-only symbol. Exported for this block only and unset
+# at its end, so no later case inherits it (L439).
+printf '# fixture list\nAOneTests.swift\nBTwoTests.swift\n' > "${RL_DIR}/exclusions.txt"
+export OVERTURE_RELEASE_LIKE_EXCLUSIONS="${RL_DIR}/exclusions.txt"
+RL_RELEASE_FRONTEND='    builtin-SwiftDriver -- /X/usr/bin/swiftc -module-name OvertureTests -O -whole-module-optimization @/X/OvertureTests.SwiftFileList -DOVERTURE_RELEASE_LIKE -enable-testing'
+RL_DEBUG_FRONTEND='    builtin-SwiftDriver -- /X/usr/bin/swiftc -module-name OvertureTests -O @/X/OvertureTests.SwiftFileList -DOVERTURE_RELEASE_LIKE -DDEBUG -enable-testing'
+
+: > "${RL_DIR}/default-env"
+RL_DEFAULT_RUN="$(OVERTURE_TEST_RELEASE_LIKE= XCODEBUILD_ENV_FILE="${RL_DIR}/default-env" \
+  run_wrapper_with_stub_xcodebuild "${OPT_DEBUG_FRONTEND}
+${GREEN_RUN_LOG}" 0)"
+assert_not_contains "an ordinary run says nothing about a release-like build" "release-like build check" "${RL_DEFAULT_RUN}"
+assert_equals "and hands the test process no build mode" "build-mode=unset" "$(head -n 1 "${RL_DIR}/default-env")"
+
+: > "${RL_DIR}/rl-args"
+: > "${RL_DIR}/rl-env"
+RL_VERIFIED_RUN="$(OVERTURE_TEST_RELEASE_LIKE=1 XCODEBUILD_ARGS_FILE="${RL_DIR}/rl-args" XCODEBUILD_ENV_FILE="${RL_DIR}/rl-env" \
+  run_wrapper_with_stub_xcodebuild "${RL_RELEASE_FRONTEND}
+${GREEN_RUN_LOG}" 0)"
+assert_equals "the switch builds the PURE scheme with the optimiser, testability, and DEBUG replaced by the marker" \
+  "-scheme OvertureCore -destination platform=macOS SWIFT_OPTIMIZATION_LEVEL=-O SWIFT_COMPILATION_MODE=wholemodule ENABLE_TESTABILITY=YES OVERTURE_DEBUG_CONDITION=OVERTURE_RELEASE_LIKE GCC_PREPROCESSOR_DEFINITIONS=OVERTURE_RELEASE_LIKE=1 EXCLUDED_SOURCE_FILE_NAMES=AOneTests.swift BTwoTests.swift test" \
+  "$(grep -a ' test' "${RL_DIR}/rl-args" | head -n 1 || true)"
+assert_equals "and tells the test process it asked for a release-like build" "build-mode=release-like" \
+  "$(head -n 1 "${RL_DIR}/rl-env")"
+assert_contains "a release-like log is VERIFIED" "release-like build check: VERIFIED" "${RL_VERIFIED_RUN}"
+assert_not_contains "and is not refused" "NOT trusted" "${RL_VERIFIED_RUN}"
+assert_equals "and the green run stays green" "exit=0" "$(tail -n 1 <<< "${RL_VERIFIED_RUN}")"
+assert_contains "a release-like full run writes nothing into the Debug duration series" "seriesrecord=0" "${RL_VERIFIED_RUN}"
+assert_contains "a release-like run waits longer before calling its build stalled" \
+  "ended as stalled only after 3600s" "${RL_VERIFIED_RUN}"
+
+# A release-like run builds the pure scheme only, with the excluded files left out, so it executes fewer
+# tests than a Debug run by construction. It is never measured against the Debug baseline, which would call
+# it SHORT, and never writes its own count as that baseline, which would lower the bar every later Debug run
+# is held to (the review of 88d6bec).
+RL_BASELINE_RUN="$(OVERTURE_TEST_RELEASE_LIKE=1 run_wrapper_with_stub_xcodebuild "${RL_RELEASE_FRONTEND}
+${GREEN_RUN_LOG}" 0 "" "" "" "" 8595)"
+assert_not_contains "a release-like run is never judged against the Debug baseline" "SHORT RUN" "${RL_BASELINE_RUN}"
+assert_equals "and never moves it" "baseline=8595" "$(grep '^baseline=' <<< "${RL_BASELINE_RUN}")"
+assert_equals "and a green one stays green" "exit=0" "$(tail -n 1 <<< "${RL_BASELINE_RUN}")"
+RL_FIRST_RUN="$(OVERTURE_TEST_RELEASE_LIKE=1 run_wrapper_with_stub_xcodebuild "${RL_RELEASE_FRONTEND}
+${GREEN_RUN_LOG}" 0)"
+assert_equals "nor records itself as the first baseline on a Mac that has none" "baseline=" \
+  "$(grep '^baseline=' <<< "${RL_FIRST_RUN}")"
+
+RL_DEBUG_RUN="$(OVERTURE_TEST_RELEASE_LIKE=1 run_wrapper_with_stub_xcodebuild "${RL_DEBUG_FRONTEND}
+${GREEN_RUN_LOG}" 0)"
+assert_contains "a log still carrying DEBUG is REFUSED by name" "release-like build check: REFUSED" "${RL_DEBUG_RUN}"
+assert_contains "and the green run it came from fails" "exit=1" "${RL_DEBUG_RUN}"
+
+RL_EMPTY_RUN="$(OVERTURE_TEST_RELEASE_LIKE=1 run_wrapper_with_stub_xcodebuild "${GREEN_RUN_LOG}" 0)"
+assert_contains "a log with no compile lines is UNMEASURED, never a pass" \
+  "release-like build check: UNMEASURED" "${RL_EMPTY_RUN}"
+assert_contains "and fails the run" "exit=1" "${RL_EMPTY_RUN}"
+
+: > "${RL_DIR}/both-args"
+RL_BOTH_RUN="$(OVERTURE_TEST_RELEASE_LIKE=1 OVERTURE_TEST_OPTIMISED=1 XCODEBUILD_ARGS_FILE="${RL_DIR}/both-args" \
+  run_wrapper_with_stub_xcodebuild "${RL_RELEASE_FRONTEND}
+${GREEN_RUN_LOG}" 0)"
+assert_contains "both switches at once are refused, never one silently winning" \
+  "OVERTURE_TEST_RELEASE_LIKE and OVERTURE_TEST_OPTIMISED are both set" "${RL_BOTH_RUN}"
+assert_equals "and nothing is built" "" "$(grep -a ' test' "${RL_DIR}/both-args" || true)"
+
+: > "${RL_DIR}/typo-args"
+RL_TYPO_RUN="$(OVERTURE_TEST_RELEASE_LIKE=true XCODEBUILD_ARGS_FILE="${RL_DIR}/typo-args" \
+  run_wrapper_with_stub_xcodebuild "${RL_RELEASE_FRONTEND}
+${GREEN_RUN_LOG}" 0)"
+assert_contains "a switch value that is neither 1 nor unset is refused" "OVERTURE_TEST_RELEASE_LIKE is 'true'" "${RL_TYPO_RUN}"
+assert_equals "and nothing is built" "" "$(grep -a ' test' "${RL_DIR}/typo-args" || true)"
+
+: > "${RL_DIR}/nolist-args"
+RL_NOLIST_RUN="$(OVERTURE_TEST_RELEASE_LIKE=1 OVERTURE_RELEASE_LIKE_EXCLUSIONS="${RL_DIR}/absent.txt" \
+  XCODEBUILD_ARGS_FILE="${RL_DIR}/nolist-args" run_wrapper_with_stub_xcodebuild "${RL_RELEASE_FRONTEND}
+${GREEN_RUN_LOG}" 0)"
+assert_contains "an exclusion list that cannot be read refuses the run by name" \
+  "release-like exclusion list ${RL_DIR}/absent.txt cannot be read" "${RL_NOLIST_RUN}"
+assert_equals "and nothing is built" "" "$(grep -a ' test' "${RL_DIR}/nolist-args" || true)"
+unset OVERTURE_RELEASE_LIKE_EXCLUSIONS
+rm -rf "${RL_DIR}"
 
 if [[ "${FAILURES}" -eq 0 ]]; then
   echo "All run-tests-locked.sh stale-host fixtures passed."

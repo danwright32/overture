@@ -484,8 +484,8 @@ struct ScoutLandingAttributionProbeTests {
                                                 blocked: inputs.blocked, into: ctx)
             try? ctx.save()
 
-            for (variant, landed) in [("reland", scaled), ("inserting", Self.inserting(scaled, share: share,
-                                                                                        round: factor))] {
+            for (variant, landed) in [("reland", scaled), ("inserting", Phase0.insertingResults(scaled, share: share,
+                                                                                                round: factor))] {
                 let wait = Phase0.waitForLoad(below: 8, deadline: 1800, poll: 5)
                 var steps: [(String, ScoutLandingStore.Counters, Double)] = []
                 let t0 = Phase0.now()
@@ -517,27 +517,9 @@ struct ScoutLandingAttributionProbeTests {
         }
     }
 
-    // The inserting variant of a results file: per source, `share` of its events (rounded, at least one where
-    // the source has any) copied as new shows at the same venue, night and presenter, with a title and a link
-    // no stored show carries. In memory only.
-    static func inserting(_ results: ScoutExtractResults, share: Double, round: Int) -> ScoutExtractResults {
-        var out = results
-        for (s, result) in results.results.enumerated() where !result.events.isEmpty {
-            let n = max(1, Int((Double(result.events.count) * share).rounded()))
-            let stride = max(1, result.events.count / n)
-            var added: [ScoutExtractEvent] = []
-            for i in 0..<n {
-                var e = result.events[(i * stride) % result.events.count]
-                let tag = "\(round)s\(s)e\(i)"
-                e.title = "Probe Synthetic Recital \(tag)"
-                e.sourceUrl = e.sourceUrl.map { $0 + ($0.hasSuffix("/") ? "" : "/") + "probe4327-\(tag)" }
-                e.seriesId = nil
-                added.append(e)
-            }
-            out.results[s].events += added
-        }
-        return out
-    }
+    // The inserting variant of a results file is `Phase0.insertingResults`, moved there unchanged (#4343) so the
+    // acceptance rig lands the same variant without depending on this file, which the release-like build leaves
+    // out (it names `QueueRenderCounter`).
 
     // The unit the landing's samples are dominated by, timed on its own: one whole-store Prospect fetch on a
     // main context that already holds every row registered (as the landing's context does by then), and the
