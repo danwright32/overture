@@ -139,6 +139,16 @@ final class SurvivorScoreLiveStoreTests {
         return reading
     }
 
+    // An UNMEASURED run is said where every run's summary counts it, as a KNOWN ISSUE, never only on
+    // stdout inside a passing test: a corpus that stays empty would otherwise read as a measurement
+    // forever (L98, L325). A known issue does not turn the run red, which is the point of #4533.
+    private static func sayUnmeasured(_ line: String) {
+        print(line)
+        withKnownIssue("the live arm measured nothing; the fixture test holds the instrument (#4533)") {
+            Issue.record(Comment(rawValue: line))
+        }
+    }
+
     @Test(.enabled(if: liveStoreExists, "no live store on this machine"))
     func theMergeIsMeasuredForWhichCopyItKeeps() async throws {
         await RealStoreTestLock.shared.acquire()
@@ -153,7 +163,7 @@ final class SurvivorScoreLiveStoreTests {
                 .filter { $0.count == 15 && $0.dropFirst(8).first == "-" && Int($0.prefix(8)) != nil }
                 .sorted()
             guard !dated.isEmpty else {
-                print("Survivor score: UNMEASURED, no dated backup to read.")
+                Self.sayUnmeasured("Survivor score: UNMEASURED, no dated backup to read.")
                 await RealStoreTestLock.shared.release()
                 return
             }
@@ -197,9 +207,9 @@ final class SurvivorScoreLiveStoreTests {
             // deferred and no code at fault (L68, L411). The instrument is held by the fixture test
             // above, on every machine; here a zero is said for what it is, and never as a count.
             guard total.deleted > 0 else {
-                print("Survivor score: UNMEASURED, over \(dated.count) dated backup(s) the ladder chose "
-                      + "no survivor (\(total.deferred) conflict(s) deferred, which never reach it), so "
-                      + "there is no kept copy to judge.")
+                Self.sayUnmeasured("Survivor score: UNMEASURED, over \(dated.count) dated backup(s) the "
+                                   + "ladder chose no survivor (\(total.deferred) conflict(s) deferred, "
+                                   + "which never reach it), so there is no kept copy to judge.")
                 await RealStoreTestLock.shared.release()
                 return
             }
