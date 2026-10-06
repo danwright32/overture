@@ -277,10 +277,17 @@ final class RenderPassTotalOrderTests {
 
     // MARK: the property
 
+    // The corpus as planted, with the scope's own tie held the same way every permutation holds it, so the
+    // baseline answers the held question too.
+    private func held(_ c: Corpus) -> Corpus {
+        Corpus(shows: Self.holdingTheScopesTie(c.shows), inquiries: c.inquiries, answers: c.answers,
+               sources: c.sources)
+    }
+
     @Test(arguments: [StageFocus.scout, .review, .reachedOut])
     func everyOrderOfTheInputsGivesOnePass(focus: StageFocus) throws {
         let corpus = try plantedCorpus()
-        let baseline = pass(corpus, focus: focus)
+        let baseline = pass(held(corpus), focus: focus)
         var generator = SeededGenerator(seed: seed)
         var failures: [String] = []
         var contactOrders: Set<String> = [contactOrder(of: "pitched shared", in: corpus)]
@@ -337,7 +344,7 @@ final class RenderPassTotalOrderTests {
     // key, this fails: delete `holdingTheScopesTie` and this test together.
     @Test func theScopesOwnTieStillNeedsTheHold() throws {
         let corpus = try plantedCorpus()
-        let baseline = pass(corpus, focus: .scout)
+        let baseline = pass(held(corpus), focus: .scout)
         var generator = SeededGenerator(seed: seed)
         var moved = 0
         for _ in 0..<permutationCount {
