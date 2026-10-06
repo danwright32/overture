@@ -177,6 +177,7 @@ final class QueueEngine {
 
     // MARK: - The turn
 
+    @ObservationIgnored private var started = false
     @ObservationIgnored private var turnScheduled = false
     @ObservationIgnored private var observedForeignSaves = 0
     @ObservationIgnored private(set) var counters = QueueEngineCounters()
@@ -199,8 +200,10 @@ final class QueueEngine {
     }
 
     /// Starts watching the store and reads every row. Saves are watched BEFORE the read, so no save can land
-    /// between the two unseen.
+    /// between the two unseen. Once: a second call would register a second observer and double every intake.
     func start() {
+        guard !started else { return }
+        started = true
         let intake = self.intake
         let store = ObjectIdentifier(container)
         observers.add(saveCenter.addObserver(forName: ModelContext.didSave, object: nil, queue: nil) { note in
@@ -264,7 +267,11 @@ final class QueueEngine {
             if let show = recipientParent[id], !resolution.deletedIDs.contains(show) { shows.insert(show) }
         }
         var changed = resolution.deletedIDs.filter(facts.holds).count
+        // Only a row with a tracker armed under its temporary identifier can still report that identifier, so
+        // only its re-key is remembered; a small table row, which no tracker watches, needs no entry.
+        let reportable = resolution.rekeyedIDs.filter { armed.contains($0.key) }
         resolveIdentities(resolution)
+        rekeyedTemporaries.merge(reportable) { _, new in new }
 
         let fired = Set(pending.fired.map(current))
         armed.subtract(fired)
@@ -583,8 +590,8 @@ extension QueueEngine {
                 for id in resolution.deletedIDs { engine.temporaries.removeValue(forKey: id) }
                 for temporary in resolution.rekeyedIDs.keys { engine.temporaries.removeValue(forKey: temporary) }
             }),
+            // Entries are ADDED by the intake turn, for re-keyed rows a tracker still watches; this only purges.
             IdentityKeyedState(path: "rekeyedTemporaries", disposition: .resolved { engine, resolution in
-                engine.rekeyedTemporaries.merge(resolution.rekeyedIDs) { _, new in new }
                 engine.rekeyedTemporaries = engine.rekeyedTemporaries.filter { temporary, permanent in
                     !resolution.deletedIDs.contains(permanent) && !resolution.deletedIDs.contains(temporary)
                 }

@@ -644,6 +644,35 @@ final class QueueEngineIntakeTests {
         #expect(!held.contains(temporary), "the engine still holds the temporary identifier after its tracker fired")
     }
 
+    // A small table row has no tracker, so nothing will ever report its temporary identifier, and the engine
+    // must not keep one for it after the re-key.
+    @Test func anUnsavedSmallTableRowLeavesNoTemporaryIdentifierBehind() throws {
+        let store = try EngineStore(shows: 2, seed: 22)
+        let turns = EngineTurns()
+        let engine = EngineHarness.started(store, turns)
+        let town = ExcludedTown(town: "temporary town", addedAt: EngineStore.baseNow)
+        store.context.insert(town)
+        let temporary = town.persistentModelID
+        engine.noteChanged(town)
+        turns.run()
+        #expect(engine.facts.excludedTowns[temporary] != nil, "the unsaved row was not taken in")
+        try store.context.save()
+        turns.run()
+        #expect(try engine.facts == store.freshFacts())
+        let held = EngineIdentityWalk.walk(engine).leaves
+            .reduce(into: Set<PersistentIdentifier>()) { $0.formUnion(EngineIdentityWalk.identities(in: $1.value)) }
+        #expect(!held.contains(temporary), "the engine still holds a temporary identifier nothing can report")
+    }
+
+    @Test func startingTwiceWatchesTheStoreOnce() throws {
+        let store = try EngineStore(shows: 2, seed: 23)
+        let turns = EngineTurns()
+        let engine = EngineHarness.started(store, turns)
+        #expect(engine.counters.fullReads == 1)
+        engine.start()
+        #expect(engine.counters.fullReads == 1, "a second start read the whole store again")
+    }
+
     @Test func anInsertDeletedBeforeItsSaveLeavesNothing() throws {
         let store = try EngineStore(shows: 2, seed: 17)
         let turns = EngineTurns()
