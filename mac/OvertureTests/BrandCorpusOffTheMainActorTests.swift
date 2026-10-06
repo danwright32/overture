@@ -211,6 +211,42 @@ final class BrandCorpusOffTheMainActorTests {
             "the background corpus read saw the pending edit \(saw.answers), so it judged against an older store"))
     }
 
+    // #4338 (A10): each landing records on its own landing record how many of its entry flushes saved an edit,
+    // which `scripts/landing-flush-rate.sh` reads as a rate. The read phase flush saves the pending edit and the
+    // flush under the store finds nothing more, so one; with nothing pending, none.
+    @Test func theIngestRecordsHowManyOfItsEntryFlushesSavedAnEdit() async throws {
+        let (_, edited, stored) = try store()
+        try addPages(1, to: edited)
+        stored.presenter = "Hall Of Glass"
+        _ = await ScoutExtractIngest.ingest(Self.results(sources: 1), clients: [], history: [], blocked: .empty,
+                                            into: edited)
+        #expect(try edited.fetch(FetchDescriptor<LandingRun>()).map(\.entryFlushSaves) == [1])
+
+        let (_, quiet, _) = try store()
+        try addPages(1, to: quiet)
+        _ = await ScoutExtractIngest.ingest(Self.results(sources: 1), clients: [], history: [], blocked: .empty,
+                                            into: quiet)
+        #expect(try quiet.fetch(FetchDescriptor<LandingRun>()).map(\.entryFlushSaves) == [0])
+    }
+
+    @Test func theSweepRecordsHowManyOfItsEntryFlushesSavedAnEdit() async throws {
+        let (_, ctx, stored) = try store()
+        ctx.insert(WatchedSource(sourceId: "feed-0", orgName: "Feed 0",
+                                 listingsURL: "https://feed-0.example/", kind: .algolia))
+        try ctx.save()
+        stored.presenter = "Hall Of Glass"
+        _ = try await ScoutService.runScout(
+            into: ctx, depth: .watchOnly, only: ["feed-0"],
+            extractorRegistry: { source in
+                source?.sourceId == "feed-0" ? ListedFeed(events: Self.events(for: "feed-0")) : nil
+            },
+            fetch: { url, _, _ in FetchedPage(normalizedHTML: "<p/>", finalURL: url.absoluteString,
+                                             contentHash: "same") },
+            pin: { _, id in URL(fileURLWithPath: "/tmp/\(id).html") }, launch: { _ in },
+            defaults: ScratchDefaults.make("BrandCorpusOffTheMainActorTests.flushCount"))
+        #expect(try ctx.fetch(FetchDescriptor<LandingRun>()).map(\.entryFlushSaves) == [1])
+    }
+
     // A flush that cannot save refuses the landing BY NAME before the corpus is read and before any apply,
     // reports every source not attempted, and leaves the pending edit exactly as it was.
     @Test func aFlushFailureRefusesTheIngestBeforeTheCorpusIsRead() async throws {

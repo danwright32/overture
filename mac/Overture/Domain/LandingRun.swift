@@ -40,6 +40,11 @@ final class LandingRun {
     // #4335: when the recovery finished this landing, nil while it has not and on every landing that finished
     // by itself. With `startedAt`, the delay between the two is what an interrupted landing cost.
     var recoveredAt: Date?
+    // #4338 (A10): how many of this landing's entry flushes (`ScoutService.flushBeforeLanding`, one in its read
+    // phase and one under the token) found edits pending and saved them, 0 to 2, added to on every attempt of
+    // the same run. Kept here rather than on the run's outcome because the rows are never pruned, so the rate
+    // over time is readable: `scripts/landing-flush-rate.sh` is its reader. Defaulted, so earlier rows read 0.
+    var entryFlushSaves: Int = 0
 
     init(runIdentity: String, landedAt: Date?, sequence: Int = 0,
          entryPoint: LandingSingleFlight.EntryPoint? = nil, startedAt: Date? = nil) {

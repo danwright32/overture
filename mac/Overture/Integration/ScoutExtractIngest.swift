@@ -150,6 +150,8 @@ enum ScoutExtractIngest {
         // table fetch, measured at 158.8 ms over 1,238 rows. Nothing lands until every source is read,
         // so a per source read would return the same store every time.
         var corpusRead: ScoutService.CorpusRead?
+        // #4338 (A10): how many of this landing's entry flushes saved pending edits, for its record.
+        var entryFlushSaves = 0
         // #4334 (A5): a slot a stopped landing never reached, reported as such so it is not silence. A result
         // under an id nobody queued is a report rather than a write, so it is still said.
         func reportNotAttempted(_ slot: Slot) {
@@ -301,7 +303,9 @@ enum ScoutExtractIngest {
             if let corpusRead {
                 corpus = corpusRead
             } else {
-                if let refused = ScoutService.flushBeforeLanding(context, save: saveEntry) {
+                let flush = ScoutService.flushBeforeLanding(context, save: saveEntry)
+                if flush == .saved { entryFlushSaves += 1 }
+                if let refused = flush.refusal {
                     return refuseBeforeTheRead(refused, unread: results.results[index...])
                 }
                 corpus = await ScoutService.venueBrandCorpusOffMain(container: context.container,
@@ -361,7 +365,9 @@ enum ScoutExtractIngest {
         // pending, so that answer must not wait on a save, nor be said as "your edits could not be saved".
         // A flush that cannot save refuses the landing by name before anything is applied (L667): the edits
         // stay exactly as they were, and the caller keeps the results to land once they are saved.
-        if let refused = ScoutService.flushBeforeLanding(context, save: saveEntry) {
+        let entryFlush = ScoutService.flushBeforeLanding(context, save: saveEntry)
+        if entryFlush == .saved { entryFlushSaves += 1 }
+        if let refused = entryFlush.refusal {
             outcome.landingStop = refused
             for slot in slots { reportNotAttempted(slot) }
             onRefused(sequence)
@@ -438,6 +444,8 @@ enum ScoutExtractIngest {
         // record of a landing that started survives that source.
         let run = LandingRun.begin(runIdentity: runIdentity, sequence: sequence, entryPoint: .scoutExtractIngest,
                                    startedAt: now, in: context)
+        // #4338: added to, never set, so a record an earlier attempt of the same run saved keeps its count.
+        if entryFlushSaves > 0 { run.entryFlushSaves += entryFlushSaves }
         landing.noteSettled(run)
         // #4330: the re-validation. A later run landed this source after this one read it, so this reading is
         // the older one and is set aside whole: nothing applied (#4329: not even its note, its failure or its

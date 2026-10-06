@@ -65,10 +65,80 @@ enum StoreLocation {
             .appendingPathComponent(legacyStoreFilename)
     }
 
+    // #4338 (A10): a Debug run opened on a NAMED folder by `run-debug.sh --store-folder`, so a synthetic store can
+    // be looked at without overwriting the Debug store this build keeps, and with no route to the live one. The
+    // script refuses first; this is the app's own refusal, so a launch by hand is refused the same way.
+    //
+    // Refused: the live Release folder and the default Debug folder, anything inside either, and anything that
+    // holds either (Application Support itself would put this store's handoff folder on the live one). Symlinks
+    // are followed before comparing, so a link to a refused folder is that folder. A folder that does not exist
+    // is refused, so a mistyped path never opens an empty store that reads as every show gone. A Release build
+    // never reads the argument at all.
+    static let storeFolderArgument = "--overture-store-folder"
+
+    enum DebugStoreFolder: Equatable, Sendable {
+        case notAsked
+        case folder(URL)
+        case refused(String)
+    }
+
+    // copy-inventory:ignore-start  a Debug launch refusal, said only in the stop it causes, never on a screen (#4338)
+    static func debugStoreFolder(arguments: [String], isDebugBuild: Bool, appSupport: URL,
+                                 fileManager: FileManager = .default) -> DebugStoreFolder {
+        guard isDebugBuild, let flag = arguments.firstIndex(of: storeFolderArgument) else { return .notAsked }
+        guard flag + 1 < arguments.count, !arguments[flag + 1].isEmpty else {
+            return .refused("\(storeFolderArgument) was given no folder")
+        }
+        let raw = arguments[flag + 1]
+        guard raw.hasPrefix("/") else { return .refused("\(raw) is not a full path") }
+        var isFolder: ObjCBool = false
+        guard fileManager.fileExists(atPath: raw, isDirectory: &isFolder), isFolder.boolValue else {
+            return .refused("\(raw) is not a folder")
+        }
+        let resolved = URL(fileURLWithPath: raw, isDirectory: true).resolvingSymlinksInPath().standardizedFileURL
+        for isDebug in [false, true] {
+            let protected = dataDirectory(appSupport: appSupport, isDebugBuild: isDebug)
+            let real = protected.resolvingSymlinksInPath().standardizedFileURL
+            if isSameOrInside(resolved, real) {
+                return .refused("\(raw) is \(protected.path), or inside it")
+            }
+            if isSameOrInside(real, resolved) {
+                return .refused("\(raw) holds \(protected.path)")
+            }
+        }
+        return .folder(resolved)
+    }
+    // copy-inventory:ignore-end
+
+    private static func isSameOrInside(_ path: URL, _ folder: URL) -> Bool {
+        (path.path + "/").hasPrefix(folder.path + "/")
+    }
+
+    // Where a named store folder keeps its store and its handoff files: laid out as the Debug build lays out
+    // its own folder, so everything the app reads or writes on disk hangs off the named folder.
+    static func paths(inStoreFolder folder: URL) -> (store: URL, handoff: URL) {
+        (folder.appendingPathComponent(storeFilename), folder.appendingPathComponent("Overture", isDirectory: true))
+    }
+
+    // This launch's answer, read once. A refused folder stops the launch rather than opening any other store:
+    // a run asked to open a named folder must never quietly open the Debug store instead (L320).
+    static let launchStoreFolder: DebugStoreFolder = {
+        let answer = debugStoreFolder(arguments: ProcessInfo.processInfo.arguments, isDebugBuild: isDebugBuild,
+                                      appSupport: appSupport)
+        if case .refused(let why) = answer { preconditionFailure("Overture refused its store folder: \(why)") }
+        return answer
+    }()
+
     // The live data directory for THIS build. Creates the Debug subfolder on first use (the Release
     // root always exists); every on-disk path in the app hangs off this so dev and resident never mix.
+    // #4338: a Debug run opened on a named folder keeps everything there instead.
     static var dataDirectory: URL {
-        let dir = dataDirectory(appSupport: appSupport, isDebugBuild: isDebugBuild)
+        let dir: URL
+        if case .folder(let folder) = launchStoreFolder {
+            dir = folder
+        } else {
+            dir = dataDirectory(appSupport: appSupport, isDebugBuild: isDebugBuild)
+        }
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir
     }
@@ -77,7 +147,12 @@ enum StoreLocation {
     static var lockURL: URL { storeURL.appendingPathExtension("lock") }
 
     // The pre-move path for THIS build, used once at launch by StoreRelocation.
-    static var legacyStoreURL: URL { legacyStoreURL(appSupport: appSupport, isDebugBuild: isDebugBuild) }
+    // #4338: a named store folder has no pre-move path but its own, or the move would carry the Debug build's
+    // old store into the named folder.
+    static var legacyStoreURL: URL {
+        if case .folder(let folder) = launchStoreFolder { return folder.appendingPathComponent(legacyStoreFilename) }
+        return legacyStoreURL(appSupport: appSupport, isDebugBuild: isDebugBuild)
+    }
 
     // #666: reveal the store file in Finder so StoreUnavailableView's degraded-state warning is
     // directly actionable instead of leaving Dan to copy a path out of prose and paste it into
@@ -165,8 +240,14 @@ enum StoreLocation {
     // The handoff directory for THIS build. Creates it on first use (dataDirectory already ensures the
     // parent exists), so writers never hit a missing-directory error.
     static var handoffDirectory: URL {
-        let dir = writableHandoffDirectory(handoffDirectory(appSupport: appSupport,
-                                                            isDebugBuild: isDebugBuild))
+        // #4338: a Debug run opened on a named folder keeps its handoff files inside it.
+        let requested: URL
+        if case .folder(let folder) = launchStoreFolder {
+            requested = paths(inStoreFolder: folder).handoff
+        } else {
+            requested = handoffDirectory(appSupport: appSupport, isDebugBuild: isDebugBuild)
+        }
+        let dir = writableHandoffDirectory(requested)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir
     }

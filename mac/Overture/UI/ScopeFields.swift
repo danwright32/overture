@@ -509,6 +509,7 @@ extension LandingRun: ScopeObserved {
     func scopeAccess<V>(_ keyPath: KeyPath<LandingRun, V>) { access(keyPath: keyPath) }
     static let scopeFields: [ScopeField<LandingRun>] = [
         .init(\.attemptCount),
+        .init(\.entryFlushSaves),
         .init(\.entryPointRaw),
         .init(\.landedAt),
         .init(\.recoveredAt),

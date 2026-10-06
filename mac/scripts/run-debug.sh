@@ -17,6 +17,8 @@ set -euo pipefail
 # RELEASE identity would open Dan's live store, which is the one outcome this must never allow. So
 # the built bundle's identity is VERIFIED before it is launched, and the script refuses rather than
 # guesses.
+#
+# Usage: mac/scripts/run-debug.sh [--store-folder <folder>]
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MAC_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
@@ -88,6 +90,58 @@ assert_is_debug_bundle() {
   return 0
 }
 
+# #4338 (A10): `--store-folder <folder>` opens the Debug build on the store in a NAMED folder instead of
+# its own, so a synthetic store (scripts/make-synthetic-landing-store.sh) can be looked at without ever
+# overwriting the Debug store, and without any route to the live one. Two folders are refused by name,
+# the live Release one and the default Debug one, along with anything inside either and anything that
+# holds either: a folder holding the Release one (Application Support itself, the home folder) would put
+# the store's handoff files on top of the live ones. Symlinks are followed first, so a link pointing at a
+# refused folder is refused as that folder. A folder that does not exist is refused too, because a typo
+# would otherwise open an empty store that reads as every show gone.
+#
+# Prints the folder as resolved on success. On refusal prints why to stderr and returns 1. The app makes
+# the same check again on launch (`StoreLocation.debugStoreFolder`), so a launch by hand is refused too.
+resolve_store_folder() {
+  local folder="$1" app_support="$2"
+  if [[ -z "${folder}" ]]; then
+    echo "Refusing to launch: --store-folder needs a folder." >&2
+    return 1
+  fi
+  if [[ ! -d "${folder}" ]]; then
+    echo "Refusing to launch: ${folder} is not a folder. Create it first, for example with" >&2
+    echo "scripts/make-synthetic-landing-store.sh, so a mistyped path never opens an empty store." >&2
+    return 1
+  fi
+  local resolved
+  resolved="$(cd "${folder}" && pwd -P)" || {
+    echo "Refusing to launch: could not resolve ${folder}." >&2
+    return 1
+  }
+  local protected real
+  for protected in "${app_support}/Overture" "${app_support}/Overture-Debug"; do
+    real="${protected}"
+    if [[ -d "${protected}" ]]; then real="$(cd "${protected}" && pwd -P)"; fi
+    case "${resolved}/" in
+      "${real}/"*)
+        echo "Refusing to launch: ${folder} is ${protected}, or inside it, and that store must never be opened this way." >&2
+        return 1 ;;
+    esac
+    case "${real}/" in
+      "${resolved}/"*)
+        echo "Refusing to launch: ${folder} holds ${protected}, so its files would land beside that store's." >&2
+        return 1 ;;
+    esac
+  done
+  printf '%s\n' "${resolved}"
+}
+
+# The arguments the app is opened with: the store folder, only when one was asked for. Kept apart from `main`
+# so the fixture can read exactly what the app would be handed.
+launch_arguments() {
+  local store_folder="$1"
+  if [[ -n "${store_folder}" ]]; then printf '%s\n%s\n' "--overture-store-folder" "${store_folder}"; fi
+}
+
 # #2072: the TERM, bounded wait, escalate, verify loop is the shared driver in lib/app-quit.sh
 # now (build-install.sh needs the identical pattern for the Release bundle), with debug_app_pids
 # above still deciding WHAT may be killed. The driver also verifies the process is actually gone,
@@ -111,6 +165,16 @@ drop_previous_registration() {
 }
 
 main() {
+  local store_folder=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --store-folder) store_folder="$(resolve_store_folder "${2:-}" "${HOME}/Library/Application Support")" || exit 1
+                      shift 2 ;;
+      *) echo "Unknown argument: $1 (expected --store-folder <folder>)" >&2
+         exit 64 ;;
+    esac
+  done
+
   cd "${MAC_DIR}"
 
   if command -v xcodegen >/dev/null; then
@@ -161,8 +225,20 @@ main() {
   # DerivedData hashes change, so print what was ACTUALLY launched and which store it will touch.
   echo "==> Launching ${built_app}"
   echo "    bundle id: ${bundle_id}"
-  echo "    store:     ~/Library/Application Support/Overture-Debug/"
-  open "${built_app}"
+  # #4338: the store this launch opens, the named folder's when one was given.
+  if [[ -n "${store_folder}" ]]; then
+    echo "    store:     ${store_folder}/Overture.store"
+  else
+    echo "    store:     ~/Library/Application Support/Overture-Debug/"
+  fi
+  local args=()
+  local line
+  while IFS= read -r line; do args+=("${line}"); done <<< "$(launch_arguments "${store_folder}")"
+  if [[ -n "${store_folder}" ]]; then
+    open "${built_app}" --args "${args[@]}"
+  else
+    open "${built_app}"
+  fi
 }
 
 # Sourceable without running main, so the pure helpers can be exercised directly. Mirrors

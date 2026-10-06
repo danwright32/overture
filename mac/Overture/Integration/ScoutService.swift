@@ -709,9 +709,13 @@ enum ScoutService {
         // refused by name before anything is read or applied: every source is reported not attempted, and
         // since the read phase writes nothing (A12), nothing needs undoing and the next scout reads them again.
         var corpusRead: CorpusRead?
+        // #4338 (A10): how many of this landing's entry flushes saved pending edits, for its record.
+        var entryFlushSaves = 0
         func corpus() async -> CorpusRead? {
             if let corpusRead { return corpusRead }
-            if let refused = flushBeforeLanding(context, save: saveEntry) {
+            let flush = flushBeforeLanding(context, save: saveEntry)
+            if flush == .saved { entryFlushSaves += 1 }
+            if let refused = flush.refusal {
                 outcome.landingStop = refused
                 for slot in reports { reportNotAttempted(slot) }
                 for source in nativeSources.compactMap({ $0 }) + plan.fetch
@@ -852,7 +856,9 @@ enum ScoutService {
         // can touch was pending when the landing began, so anything pending is saved first. A flush that
         // cannot save REFUSES the landing by name before anything is applied (L667): the edits stay exactly
         // as they were for Dan's own save path, and every page keeps its unread state for the next scout.
-        if let refused = flushBeforeLanding(context, save: saveEntry) {
+        let entryFlush = flushBeforeLanding(context, save: saveEntry)
+        if entryFlush == .saved { entryFlushSaves += 1 }
+        if let refused = entryFlush.refusal {
             outcome.landingStop = refused
             for slot in reports { reportNotAttempted(slot) }
             outcome.clientListWarning = DownbeatBridge.warningText(for: loaded.health)
@@ -887,6 +893,8 @@ enum ScoutService {
         // is put back without taking it.
         let run = LandingRun.begin(runIdentity: sweepID, sequence: sequence, entryPoint: .runScoutLanding,
                                    startedAt: now, in: context)
+        // #4338: added to, never set, so a record an earlier attempt of the same run saved keeps its count.
+        if entryFlushSaves > 0 { run.entryFlushSaves += entryFlushSaves }
         landing.noteSettled(run)
         for slot in reports {
             // #4334: a landing a failed save stopped lands nothing after it (decision 3).
@@ -1709,14 +1717,16 @@ enum ScoutService {
     // is what autosave would do anyway. Cheap when nothing is pending, which after #4329 is the normal case.
     // A flush that cannot save refuses the landing, naming the rows it was carrying, and leaves them exactly
     // as they were.
-    static func flushBeforeLanding(_ context: ModelContext, save: (ModelContext) throws -> Void) -> LandingStop? {
-        guard context.hasChanges else { return nil }
+    // #4338 (A10): says which of three things it did, so the landing can count a flush that SAVED on its record
+    // (`LandingRun.entryFlushSaves`), the count `scripts/landing-flush-rate.sh` reads as a rate.
+    static func flushBeforeLanding(_ context: ModelContext, save: (ModelContext) throws -> Void) -> EntryFlush {
+        guard context.hasChanges else { return .nothingPending }
         let rows = pendingRowNames(in: context)
         do {
             try save(context)
-            return nil
+            return .saved
         } catch {
-            return .recentEditsUnsaved(rows: rows)
+            return .refused(.recentEditsUnsaved(rows: rows))
         }
     }
 
