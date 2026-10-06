@@ -319,6 +319,9 @@ the subject named below.
 - **Scrolling the running app from a script**: `scripts/scroll-wheel.sh`, which DRIVES DAN'S MACHINE
   and refuses without `--yes`. It confirms the scroll landed, because a scroll that did nothing and
   a surface that does not rebuild on scroll read identically.
+- **How often a landing had edits to save first**: `scripts/landing-flush-rate.sh`, the reader of
+  `LandingRun.entryFlushSaves`. It reads a copy of the store, and a store from before the count is unmeasured,
+  never zero.
 - **What is behind a small room's band**: `scripts/report-small-venues.sh`. Opt in. Its output holds
   calendar titles, which can carry client payment notes, so it stays on this Mac and never reaches GitHub.
 - **Measuring two runs going at once**: `scripts/measure-concurrent-runs.sh`. It spends REAL usage,
@@ -395,7 +398,8 @@ the subject named below.
 ### `docs/agents/building.md`
 
 - **To actually LOOK at the app**: `mac/scripts/run-debug.sh`, which refuses to launch a bundle
-  claiming the Release identity and so can never open the LIVE store.
+  claiming the Release identity and so can never open the LIVE store. On invented data:
+  `scripts/make-synthetic-landing-store.sh <folder>`, then `run-debug.sh --store-folder <folder>`.
 - **Installing a Release build**: `mac/build-install.sh`, after `mac/scripts/setup-signing-identity.sh`
   once per Mac. It builds WHATEVER IS CHECKED OUT. The freshness panel's Update button runs
   `mac/scripts/update-overture.sh` instead, which only ever fast forwards main onto its own remote

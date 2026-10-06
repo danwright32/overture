@@ -156,6 +156,68 @@ with_missing_registrar() {
 assert_succeeds "a missing registrar does not take the build down" with_missing_registrar
 assert_equals "and asks nothing of it" "" "$(cat "${LSLOG}")"
 
+# --- resolve_store_folder (#4338) ---
+#
+# The store folder option exists so a SYNTHETIC store can be looked at. Its whole value is the two
+# refusals: the live Release folder holds Dan's real data, and the default Debug folder is the one his
+# ordinary Debug runs keep. Each is refused named directly, from inside, from above, and through a link.
+SFTMP="$(fixture_scratch_dir)"
+trap 'rm -rf "${LSTMP}" "${SFTMP}"' EXIT
+APPSUP="${SFTMP}/Application Support"
+mkdir -p "${APPSUP}/Overture/inner" "${APPSUP}/Overture-Debug/inner" "${SFTMP}/scratch store"
+ln -s "${APPSUP}/Overture" "${SFTMP}/link-to-live"
+SCRATCH_REAL="$(cd "${SFTMP}/scratch store" && pwd -P)"
+
+assert_equals "a named scratch folder is accepted and printed as resolved" \
+  "${SCRATCH_REAL}" "$(resolve_store_folder "${SFTMP}/scratch store" "${APPSUP}" 2>/dev/null)"
+assert_fails "REFUSES the live Release folder" resolve_store_folder "${APPSUP}/Overture" "${APPSUP}"
+assert_fails "REFUSES the default Debug folder" resolve_store_folder "${APPSUP}/Overture-Debug" "${APPSUP}"
+assert_fails "refuses a folder inside the live one" resolve_store_folder "${APPSUP}/Overture/inner" "${APPSUP}"
+assert_fails "refuses a folder inside the Debug one" resolve_store_folder "${APPSUP}/Overture-Debug/inner" "${APPSUP}"
+assert_fails "refuses Application Support itself, which holds both" resolve_store_folder "${APPSUP}" "${APPSUP}"
+assert_fails "refuses a link that points at the live folder" resolve_store_folder "${SFTMP}/link-to-live" "${APPSUP}"
+assert_fails "refuses a folder that does not exist" resolve_store_folder "${SFTMP}/not-made" "${APPSUP}"
+assert_fails "refuses no folder at all" resolve_store_folder "" "${APPSUP}"
+# The refusal says which folder and why, so a person reading it knows what to change.
+assert_contains "the live refusal names the folder it refused" \
+  "$(resolve_store_folder "${APPSUP}/Overture" "${APPSUP}" 2>&1)" "${APPSUP}/Overture"
+
+# The startup volume ignores letter case, so a path spelled in other letters names the same folder, and
+# `pwd -P` keeps the letters it was given. Each spelling below was accepted by a comparison of path text;
+# the refusal compares the folders themselves, by device and inode. The first line checks the premise: on a
+# volume that respects case these spellings name nothing, and every refusal below would pass for that reason.
+CASED="${SFTMP}/application support"
+# The premise: these spellings name the real folders only where the scratch volume ignores case. Where it
+# respects case they name nothing, so the cased cases are said to be UNMEASURED and skipped, never failed
+# for a fault that is the machine's, nor passed for the wrong reason (L411, the review of 7af8f6d).
+EMPTYSUP="${SFTMP}/Empty Support"
+mkdir -p "${EMPTYSUP}"
+if test -d "${CASED}/overture/inner"; then
+  assert_fails "REFUSES the live folder spelled in other letters" resolve_store_folder "${CASED}/overture" "${APPSUP}"
+  assert_fails "REFUSES a folder inside the live one spelled in other letters" \
+    resolve_store_folder "${CASED}/OVERTURE/inner" "${APPSUP}"
+  assert_fails "REFUSES the Debug folder spelled in other letters" \
+    resolve_store_folder "${CASED}/overture-debug" "${APPSUP}"
+  assert_fails "refuses Application Support spelled in other letters" resolve_store_folder "${CASED}" "${APPSUP}"
+  assert_fails "refuses the live folder when Application Support itself arrives in other letters" \
+    resolve_store_folder "${APPSUP}/Overture" "${CASED}"
+  assert_fails "and refuses the folder that would hold the live one however Application Support is spelled" \
+    resolve_store_folder "${EMPTYSUP}" "${SFTMP}/empty support"
+else
+  echo "UNMEASURED - the scratch volume respects letter case, so the six spellings in other letters name no folder and were not run"
+fi
+assert_fails "refuses the top of the disk, which holds everything" resolve_store_folder "/" "${APPSUP}"
+# Before the live folder exists, the folder that would hold it is still refused, and a scratch folder is not.
+assert_fails "refuses the folder that would hold the live one before it exists" \
+  resolve_store_folder "${EMPTYSUP}" "${EMPTYSUP}"
+assert_equals "while a scratch folder beside it is still accepted" \
+  "${SCRATCH_REAL}" "$(resolve_store_folder "${SFTMP}/scratch store" "${EMPTYSUP}" 2>/dev/null)"
+
+# --- launch_arguments (#4338) ---
+assert_equals "no folder hands the app nothing" "" "$(launch_arguments "")"
+assert_equals "a store folder is handed to the app under its own flag" \
+  "$(printf '%s\n%s' "--overture-store-folder" "/tmp/x y")" "$(launch_arguments "/tmp/x y")"
+
 if [[ "${FAILURES}" -gt 0 ]]; then
   echo "${FAILURES} failure(s)"
   exit 1

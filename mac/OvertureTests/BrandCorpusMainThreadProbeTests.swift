@@ -71,7 +71,7 @@ struct BrandCorpusMainThreadProbeTests {
                 let monitor = LandingStallMonitor()
                 monitor.start()
                 let t1 = Phase0.now()
-                #expect(ScoutService.flushBeforeLanding(after, save: { try $0.save() }) == nil)
+                #expect(ScoutService.flushBeforeLanding(after, save: { try $0.save() }).refusal == nil)
                 let landed = await ScoutService.venueBrandCorpusOffMain(
                     container: container, read: ScoutService.readProspectTable,
                     readOverrides: ScoutService.readProducerOverrides)
