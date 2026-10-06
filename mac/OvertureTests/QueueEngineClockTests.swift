@@ -76,10 +76,14 @@ final class QueueEngineClockTests {
     func eachSystemEventForcesAPass(_ reason: QueueEnginePassReason) async throws {
         let rig = try await rig(seed: 43)
         let event = try #require(QueueEngineSystemEvents.events.first { $0.reason == reason })
-        let wrong = event.workspace ? rig.events.system : rig.events.workspace
+        // Which centre each is really posted to is decided HERE, from AppKit's own rule, never read back from
+        // the list under test, which would make a list that put wake on the wrong centre agree with itself
+        // (L70).
+        let postedToWorkspace = event.name == NSWorkspace.didWakeNotification
+        let wrong = postedToWorkspace ? rig.events.system : rig.events.workspace
         wrong.post(name: event.name, object: nil)
         #expect(rig.turns.queued.isEmpty, "\(event.name.rawValue) was heard on a centre it is never posted to")
-        (event.workspace ? rig.events.workspace : rig.events.system).post(name: event.name, object: nil)
+        (postedToWorkspace ? rig.events.workspace : rig.events.system).post(name: event.name, object: nil)
         #expect(rig.turns.queued.count == 1, "\(event.name.rawValue) asked for no pass")
         rig.turns.run()
         #expect(rig.engine.output?.reasons == [reason])

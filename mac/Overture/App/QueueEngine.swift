@@ -468,6 +468,25 @@ final class QueueEngine<Value> {
                 everything = true
             }
         }
+        // A row a save names as INSERTED that the store does not hold, and no save deleted, was merged into a
+        // row already stored that shares its unique key. That row changed IN PLACE, the save did not name it,
+        // and no tracker fired; the newcomer stays registered in the context and reads as live (#4106 probe 2;
+        // measured for #4358 in memory and on disk: the save names only the newcomer's identifier, and only a
+        // FETCH by it finds nothing). Which row it was cannot be read from here, so everything is read again.
+        let inserted = Set(pending.inserted.map(current)).subtracting(resolution.deletedIDs)
+            .filter { FactStore.Table.holding($0.entityName) != nil }
+        if !everything, !inserted.isEmpty {
+            do {
+                if try FactStore.storedIdentifiers(among: inserted, in: context) != inserted {
+                    counters.insertsMergedAway.record(at: now)
+                    everything = true
+                }
+            } catch {
+                // A failed read is not a merge, and not nothing either (L215): read everything, counted.
+                counters.unreadRows.record(at: now)
+                everything = true
+            }
+        }
         let foreign = saves.foreignSaveCount(for: container)
         if foreign != observedForeignSaves {
             observedForeignSaves = foreign
@@ -484,15 +503,6 @@ final class QueueEngine<Value> {
             for id in shows where readShow(id, now: now, into: &second) { changed += 1 }
             for id in inquiries where readInquiry(id, now: now, into: &second) { changed += 1 }
             for id in small where readSmallTableRow(id, now: now, into: &second) { changed += 1 }
-            // A row a save names as INSERTED that the store does not hold, and no save deleted, was merged into a
-            // row already stored that shares its unique key. That row changed IN PLACE, the save did not name it,
-            // and no tracker fired (#4106 probe 2; measured for #4358: the save names only the newcomer's
-            // identifier). Which row it was cannot be read from here, so everything is read again.
-            let inserted = Set(pending.inserted.map(current)).subtracting(resolution.deletedIDs)
-            if !inserted.isDisjoint(with: second.deletedIDs) {
-                counters.insertsMergedAway.record(at: now)
-                everything = true
-            }
         }
         if everything { changed += readEverything(into: &second) }
         resolveIdentities(second)

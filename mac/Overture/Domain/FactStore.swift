@@ -92,6 +92,30 @@ struct FactStore: Equatable, Sendable {
                                           TownRecord.init(copying:))
     }
 
+    /// Which of `ids` the store really holds, by one FETCH per table, never through the context's registered
+    /// objects: a row merged into another by its unique key stays registered and reads as live, and only a
+    /// fetch finds that its identifier names no row (#4358). Identifiers of a model with no table are left out.
+    nonisolated static func storedIdentifiers(among ids: Set<PersistentIdentifier>,
+                                              in context: ModelContext) throws -> Set<PersistentIdentifier> {
+        var found: Set<PersistentIdentifier> = []
+        let byTable = Dictionary(grouping: ids) { Table.holding($0.entityName) }
+        for (table, members) in byTable {
+            guard let table else { continue }
+            switch table {
+            case .shows: found.formUnion(try stored(Prospect.self, members, in: context))
+            case .inquiries: found.formUnion(try stored(Inquiry.self, members, in: context))
+            case .orgAnswers: found.formUnion(try stored(OrgReachabilityAnswer.self, members, in: context))
+            case .watchedSources: found.formUnion(try stored(WatchedSource.self, members, in: context))
+            case .refusedAddresses: found.formUnion(try stored(RefusedContactAddress.self, members, in: context))
+            case .promotedProducers: found.formUnion(try stored(PromotedProducer.self, members, in: context))
+            case .demotedHouses: found.formUnion(try stored(DemotedHouse.self, members, in: context))
+            case .excludedTowns: found.formUnion(try stored(ExcludedTown.self, members, in: context))
+            case .allowedSeedTowns: found.formUnion(try stored(AllowedSeedTown.self, members, in: context))
+            }
+        }
+        return found
+    }
+
     /// Stores `model` as its value in the table it belongs to, and says whether the stored value CHANGED. An
     /// equal value is still stored (the same value), so a caller can tell "read and unchanged" from "absent".
     mutating func record(_ model: any PersistentModel) -> Bool {
@@ -169,6 +193,12 @@ struct FactStore: Equatable, Sendable {
         out.reserveCapacity(rows.count)
         for row in rows { out[row.persistentModelID] = make(row) }
         return out
+    }
+
+    private nonisolated static func stored<M: PersistentModel>(_ type: M.Type, _ ids: [PersistentIdentifier],
+                                                               in context: ModelContext) throws -> [PersistentIdentifier] {
+        try context.fetch(FetchDescriptor<M>(predicate: #Predicate<M> { ids.contains($0.persistentModelID) }))
+            .map(\.persistentModelID)
     }
 
     private nonisolated static func liveRow<M: PersistentModel>(_ type: M.Type, _ id: PersistentIdentifier,
