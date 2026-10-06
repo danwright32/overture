@@ -39,6 +39,8 @@ assert_contains "the window counts only landings started in it" "${COUNTED_RUN}"
 assert_contains "and gives the share that saved first, with once and twice apart" "${COUNTED_RUN}" \
   "saved pending edits first: 2 of 4 (50%), once 1, twice 1, 3 entry flush saves in all"
 assert_contains "and exits 0" "${COUNTED_RUN}" "exit=0"
+assert_contains "and says a landing refused before its record is not in the rate" "${COUNTED_RUN}" \
+  "A landing refused before its record was written is not counted here."
 
 WIDE_RUN="$(run_script --store "${COUNTED}" --days 60)"
 assert_contains "a wider window reaches the older landing, never the one with no start time" "${WIDE_RUN}" \
@@ -52,6 +54,15 @@ BEFORE_RUN="$(run_script --store "${BEFORE}")"
 assert_contains "a store with no flush count is unmeasured" "${BEFORE_RUN}" "UNMEASURED: this store records no entry flush count"
 assert_contains "and exits 2" "${BEFORE_RUN}" "exit=2"
 assert_not_contains "and never prints a rate" "${BEFORE_RUN}" "saved pending edits first"
+
+# A store with no landing records at all predates #4335, not just #4338, and is said as that (L11).
+NOTABLE="${WORK}/no-table.store"
+sqlite3 "${NOTABLE}" "CREATE TABLE ZPROSPECT (Z_PK INTEGER PRIMARY KEY);"
+NOTABLE_RUN="$(run_script --store "${NOTABLE}")"
+assert_contains "a store with no landing records is unmeasured as that" "${NOTABLE_RUN}" \
+  "UNMEASURED: this store holds no landing records at all"
+assert_not_contains "never blamed on a missing flush count" "${NOTABLE_RUN}" "records no entry flush count"
+assert_contains "and exits 2" "${NOTABLE_RUN}" "exit=2"
 
 # A window holding no landing says so, with no rate.
 QUIET="${WORK}/quiet.store"

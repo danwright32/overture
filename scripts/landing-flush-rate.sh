@@ -79,6 +79,12 @@ if [[ ${status} -ne 0 ]]; then
   echo "UNMEASURED: the store could not be read (${COLUMNS})."
   exit 2
 fi
+# An absent table and a table missing only the count are different stores, said apart (L11).
+if [[ -z "${COLUMNS}" ]]; then
+  echo "UNMEASURED: this store holds no landing records at all (no ZLANDINGRUN table), so it predates"
+  echo "#4335 and there is no rate to read."
+  exit 2
+fi
 if ! grep -qx "${FLUSH_COLUMN}" <<< "${COLUMNS}"; then
   echo "UNMEASURED: this store records no entry flush count (no ${FLUSH_COLUMN} on its landing records),"
   echo "so it predates #4338 and there is no rate to read."
@@ -116,6 +122,9 @@ if [[ "${LANDINGS}" -eq 0 ]]; then
 fi
 echo "landings started in the last ${DAYS} days: ${LANDINGS}"
 echo "saved pending edits first: ${FLUSHED} of ${LANDINGS} ($(( FLUSHED * 100 / LANDINGS ))%), once ${ONCE}, twice ${TWICE}, ${SAVES} entry flush saves in all"
+# The count rides the landing record, so a landing refused before its record was written (an identity
+# re-check, a second flush failing, the journal not written) is in no row here (the review of c65f855).
+echo "A landing refused before its record was written is not counted here."
 if [[ "${BEFORE}" -eq 1 ]]; then
   echo "1 more landing started in the last ${DAYS} days carries no flush count, so it is not counted."
 elif [[ "${BEFORE}" -gt 1 ]]; then

@@ -382,8 +382,11 @@ the measurement it came from lives here. Read the entry before the rule decides 
   the live Release store by default), never the store itself. The count is optional, and that is its marker: a
   landing record carrying none (written before #4338, or made by the recovery for a landing that never reached its
   first save) is left out of the rate and counted as its own group, never read as a landing that saved nothing.
+  A landing REFUSED before its record was written (an identity re-check, a second flush failing, the journal not
+  written) has no row at all, so it is in neither group, and the output says so on every measured run.
   Four outcomes: `0` measured, where a window with no landing says there is no rate; `2` UNMEASURED, when the
-  store cannot be read, has no flush count column, or every landing in the window carries no count; `3` there is
+  store cannot be read, holds no landing records at all, has no flush count column, or every landing in the
+  window carries no count, each said apart; `3` there is
   no store; `64` an argument it does not know or a flag with no value after it. `LandingFlushRateColumnTests`
   holds the column name it reads to the one this build's store really has.
 
