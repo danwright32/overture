@@ -81,6 +81,15 @@ final class DebugStoreFolderTests {
         #expect(isRefused(folder(link.path, appSupport: appSupport)))
     }
 
+    // Whether the volume the sandboxes live on ignores letter case. Where it respects case, the spellings in
+    // the four tests below name no folder at all, so the trait SKIPS them and the run says so, rather than
+    // failing for a fault that is the machine's or passing for the wrong reason (L411, the review of 7af8f6d).
+    private static var volumeIgnoresCase: Bool {
+        let values = try? FileManager.default.temporaryDirectory
+            .resourceValues(forKeys: [.volumeSupportsCaseSensitiveNamesKey])
+        return values?.volumeSupportsCaseSensitiveNames == false
+    }
+
     // The startup volume ignores letter case, so a path in other letters names the same folder. The refusal
     // compares the folders themselves, device and inode, never the spelling (the review of ed57113). The
     // `#require` checks the premise: on a volume that respects case these spellings name nothing, and each
@@ -92,7 +101,8 @@ final class DebugStoreFolderTests {
         return cased
     }
 
-    @Test func theLiveFolderSpelledInOtherLettersIsRefused() throws {
+    @Test(.enabled(if: volumeIgnoresCase, "this volume respects letter case, so these spellings name no folder"))
+    func theLiveFolderSpelledInOtherLettersIsRefused() throws {
         let (appSupport, _) = try layout()
         let cased = try otherLetters(appSupport)
         #expect(isRefused(folder(cased.appendingPathComponent("overture").path, appSupport: appSupport)))
@@ -101,13 +111,15 @@ final class DebugStoreFolderTests {
         #expect(isRefused(folder(live.path, appSupport: cased)))
     }
 
-    @Test func aFolderInsideTheLiveOneSpelledInOtherLettersIsRefused() throws {
+    @Test(.enabled(if: volumeIgnoresCase, "this volume respects letter case, so these spellings name no folder"))
+    func aFolderInsideTheLiveOneSpelledInOtherLettersIsRefused() throws {
         let (appSupport, _) = try layout()
         let cased = try otherLetters(appSupport)
         #expect(isRefused(folder(cased.appendingPathComponent("OVERTURE/inner").path, appSupport: appSupport)))
     }
 
-    @Test func theDebugFolderSpelledInOtherLettersIsRefused() throws {
+    @Test(.enabled(if: volumeIgnoresCase, "this volume respects letter case, so these spellings name no folder"))
+    func theDebugFolderSpelledInOtherLettersIsRefused() throws {
         let (appSupport, _) = try layout()
         let cased = try otherLetters(appSupport)
         #expect(isRefused(folder(cased.appendingPathComponent("overture-debug").path, appSupport: appSupport)))
@@ -117,7 +129,8 @@ final class DebugStoreFolderTests {
     // Before the live folder exists, the folder that would hold it is still refused however Application Support
     // is spelled, and a scratch folder beside it is still opened. Foundation leaves the text of a path that does
     // not exist exactly as typed, so this is the spelling a comparison of path text cannot see.
-    @Test func theFolderThatWouldHoldTheLiveOneIsRefusedBeforeItExists() throws {
+    @Test(.enabled(if: volumeIgnoresCase, "this volume respects letter case, so these spellings name no folder"))
+    func theFolderThatWouldHoldTheLiveOneIsRefusedBeforeItExists() throws {
         let root = try sandboxes.make(named: "debug-store-folder-empty")
         let empty = root.appendingPathComponent("Empty Support", isDirectory: true)
         let scratch = root.appendingPathComponent("scratch store", isDirectory: true)
