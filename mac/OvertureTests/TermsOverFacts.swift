@@ -65,6 +65,52 @@ enum TermsOverFacts {
         return out
     }
 
+    // MARK: slice G3, AgentInputs.from
+
+    /// `AgentInputs.from` over models and over facts, asked as the pass asks it: over the queue's own rows, with the
+    /// whole store for the Follow-ups number, the stage context `stageContext(for:asOf:)` builds, and the same
+    /// inquiries on both arms (a separate model with no facts counterpart). Each comparison is made twice, with the
+    /// pass's own placement and reached-out list handed in and with neither, so the term decides them itself.
+    /// `thorough` adds a month on and a live reply run; the 4x arm asks the base case alone, which is the shape
+    /// of every other whole-corpus term there. The pill counts carry no title or address, so a finding names
+    /// each differing field.
+    static func agentInputsFindings(_ models: [Prospect], _ facts: [RowFacts], asOf: String, inquiries: [Inquiry],
+                                    thorough: Bool = true) -> [String] {
+        var out: [String] = []
+        let base = stageContext(for: models, asOf: asOf)
+        let scopeModels = QueueModel.queueScope(models), scopeFacts = QueueModel.queueScope(facts)
+        let instants = thorough ? [(base.now, "on \(asOf)"), (base.now.addingTimeInterval(30 * 86_400), "a month on")]
+                                : [(base.now, "on \(asOf)")]
+        for (instant, when) in instants {
+            let context = StageContext(now: instant, geo: base.geo, clients: base.clients)
+            for alive in thorough ? [false, true] : [false] {
+                for handed in [false, true] {
+                    let onModels = agentInputs(scopeModels, all: models, inquiries: inquiries, context: context,
+                                               replyRunAlive: alive, handed: handed)
+                    let onFacts = agentInputs(scopeFacts, all: facts, inquiries: inquiries, context: context,
+                                              replyRunAlive: alive, handed: handed)
+                    guard onModels != onFacts else { continue }
+                    out.append("AgentInputs.from \(differingLabels(onModels, onFacts).joined(separator: ", ")) differ "
+                               + when + (alive ? " with the reply run alive" : "")
+                               + (handed ? " with the placement and reached-out list handed in" : ""))
+                }
+            }
+        }
+        return out
+    }
+
+    /// One arm of the comparison above: the term over `scope` and `all`, each row's contacts read through
+    /// `factContacts` on both conformers, as every other finding here reads them.
+    static func agentInputs<Row: ProspectFacts>(_ scope: [Row], all: [Row], inquiries: [Inquiry], context: StageContext,
+                                               replyRunAlive: Bool, handed: Bool) -> AgentInputs {
+        let contacts: (Row) -> [Row.Contact] = { $0.factContacts }
+        return AgentInputs.from(
+            prospects: scope, allProspects: all, contacts: contacts, inquiries: inquiries, context: context,
+            gmailConnected: true, runInFlight: nil, replyRunAlive: replyRunAlive,
+            placement: handed ? StageNavigation.placements(of: scope, contacts: contacts, context: context) : nil,
+            reachedOut: handed ? ReachedOutQueue.activeWithDates(from: scope, contacts: contacts, now: context.now) : nil)
+    }
+
     /// Every place a ported term answered differently over facts than over models, empty when they agree.
     /// `asOf` is the day the feed break term judges "still to come" against, and `drawn` the keys a
     /// surface draws, which is what the collapse hides rows in favour of (nil means every row is drawn).
@@ -178,6 +224,9 @@ enum TermsOverFacts {
 
         // Slice G2: the card, its send groups and form pitch, and the members it reads, judged on `asOf`.
         out += cardFindings(models, facts, today: asOf, now: reachedOutInstant(asOf))
+
+        // Slice G3: `AgentInputs.from` itself, field by field. No inquiries, as part two hands every term.
+        out += agentInputsFindings(models, facts, asOf: asOf, inquiries: [], thorough: rowByRow)
         return out
     }
 
