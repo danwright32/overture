@@ -46,6 +46,7 @@ final class StoreSaveCount: @unchecked Sendable {
     private let lock = NSLock()
     private var counts: [ObjectIdentifier: Int] = [:]
     private var foreign: Set<ObjectIdentifier> = []
+    private var foreignCounts: [ObjectIdentifier: Int] = [:]
     private var token: NSObjectProtocol?
     private let center: NotificationCenter
 
@@ -75,7 +76,19 @@ final class StoreSaveCount: @unchecked Sendable {
             && MainActor.assumeIsolated { ObjectIdentifier(container.mainContext) == savedID }
         lock.lock(); defer { lock.unlock() }
         counts[store, default: 0] += 1
-        if !isMain { foreign.insert(store) }
+        if !isMain {
+            foreign.insert(store)
+            foreignCounts[store, default: 0] += 1
+        }
+    }
+
+    /// #4358 (plan v7 D2): how many saves into `store` came through a context other than its main one. Only
+    /// ever increases, so a reader that remembers its last reading knows a foreign save landed since by the
+    /// number moving, which `hasForeignSaves` cannot say once it is true. The queue engine reads every row
+    /// again when it moves, because such a save leaves the main context's own copies stale (#4106 probe 2).
+    func foreignSaveCount(for store: ModelContainer) -> Int {
+        lock.lock(); defer { lock.unlock() }
+        return foreignCounts[ObjectIdentifier(store)] ?? 0
     }
 
     /// Whether `store` has ever taken a save through a context other than its main one.
