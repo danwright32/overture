@@ -12,7 +12,7 @@ stripped. **What it deliberately does not claim:** which container a given sente
 That is not knowable from one file, since a sentence declared in one view routinely surfaces
 through another, and a wrong label would be worse than none.
 
-18 files render at least one container.
+19 files render at least one container.
 
 ## Surfaces where a message can go astray
 
@@ -52,8 +52,10 @@ macOS may relocate this into the overflow menu or drop it entirely at a narrow w
 
 A sentence written as a constant is read here at the file that RENDERS it, not only at the file that declares it. That is the case the rest of this document and `copy-inventory.md` cannot show: moving an existing sentence onto a new screen changes no literal anywhere, so it produces no diff and gets no cold read, which is exactly when placement most needs reading.
 
-57 files render a sentence declared as a constant.
+58 files render a sentence declared as a constant.
 
+`App/LandingPreview.swift`
+    LandingWaitCopy.ingestCancelled  "The calendar results have not landed yet, because their landing was stopped "
 `App/OvertureApp.swift`
     StoreLaunchOutcome.defaultUnavailableReason  "Overture's data is unavailable."
 `App/RootView.swift`
@@ -349,6 +351,8 @@ A sentence written as a constant is read here at the file that RENDERS it, not o
     OS alert, Confirmation dialog, Menu, Popover
 `UI/FollowUpsView.swift`
     OS alert, Menu, Sheet
+`UI/LandingLine.swift`
+    Confirmation dialog
 `UI/OutcomePatternsView.swift`
     Popover, Sheet
 `UI/PrepSelectionSheet.swift`

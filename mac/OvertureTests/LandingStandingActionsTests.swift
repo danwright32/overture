@@ -18,8 +18,14 @@ final class LandingStandingActionsTests {
         var description: String { "the store refused the save" }
     }
 
+    // Held for the life of the test: a container that goes away resets its context and destroys every row the
+    // test still holds (measured here: the first run trapped inside SwiftData on a row of a released container).
+    private var containers: [ModelContainer] = []
+
     private func container() throws -> ModelContainer {
-        try TestModelContainer.inMemory(AppSchema.models)
+        let made = try TestModelContainer.inMemory(AppSchema.models)
+        containers.append(made)
+        return made
     }
 
     private func show(_ title: String, in ctx: ModelContext) -> Prospect {
