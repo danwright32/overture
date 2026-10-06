@@ -182,6 +182,32 @@ assert_fails "refuses no folder at all" resolve_store_folder "" "${APPSUP}"
 assert_contains "the live refusal names the folder it refused" \
   "$(resolve_store_folder "${APPSUP}/Overture" "${APPSUP}" 2>&1)" "${APPSUP}/Overture"
 
+# The startup volume ignores letter case, so a path spelled in other letters names the same folder, and
+# `pwd -P` keeps the letters it was given. Each spelling below was accepted by a comparison of path text;
+# the refusal compares the folders themselves, by device and inode. The first line checks the premise: on a
+# volume that respects case these spellings name nothing, and every refusal below would pass for that reason.
+CASED="${SFTMP}/application support"
+assert_succeeds "the scratch volume ignores case, so the spellings below name the real folders" \
+  test -d "${CASED}/overture/inner"
+assert_fails "REFUSES the live folder spelled in other letters" resolve_store_folder "${CASED}/overture" "${APPSUP}"
+assert_fails "REFUSES a folder inside the live one spelled in other letters" \
+  resolve_store_folder "${CASED}/OVERTURE/inner" "${APPSUP}"
+assert_fails "REFUSES the Debug folder spelled in other letters" \
+  resolve_store_folder "${CASED}/overture-debug" "${APPSUP}"
+assert_fails "refuses Application Support spelled in other letters" resolve_store_folder "${CASED}" "${APPSUP}"
+assert_fails "refuses the live folder when Application Support itself arrives in other letters" \
+  resolve_store_folder "${APPSUP}/Overture" "${CASED}"
+assert_fails "refuses the top of the disk, which holds everything" resolve_store_folder "/" "${APPSUP}"
+# Before the live folder exists, the folder that would hold it is still refused, and a scratch folder is not.
+EMPTYSUP="${SFTMP}/Empty Support"
+mkdir -p "${EMPTYSUP}"
+assert_fails "refuses the folder that would hold the live one before it exists" \
+  resolve_store_folder "${EMPTYSUP}" "${EMPTYSUP}"
+assert_fails "and refuses it however Application Support is spelled" \
+  resolve_store_folder "${EMPTYSUP}" "${SFTMP}/empty support"
+assert_equals "while a scratch folder beside it is still accepted" \
+  "${SCRATCH_REAL}" "$(resolve_store_folder "${SFTMP}/scratch store" "${EMPTYSUP}" 2>/dev/null)"
+
 # --- launch_arguments (#4338) ---
 assert_equals "no folder hands the app nothing" "" "$(launch_arguments "")"
 assert_equals "a store folder is handed to the app under its own flag" \
