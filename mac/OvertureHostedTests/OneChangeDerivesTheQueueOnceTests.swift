@@ -83,6 +83,8 @@ struct OneChangeDerivesTheQueueOnceTests {
         let dayOffOffer: DayOffOfferRequest
         let undoStack: QueueUndoStack
         let tick: RedrawTick
+        // #4516: frozen, so the memo's two second window cannot be what a count here measures.
+        let clock: () -> Date
         @State private var deepLinkedKey: LeadDeepLink?
         @State private var deepLinkedKeys: LeadsDeepLink?
 
@@ -96,7 +98,7 @@ struct OneChangeDerivesTheQueueOnceTests {
             let n = tick.value
             RowsFromStore { (rows: [Prospect]) in
                 QueueView(deepLinkedKey: $deepLinkedKey, deepLinkedKeys: $deepLinkedKeys,
-                          allProspects: rows, onConnectGmail: { _ = n })
+                          allProspects: rows, clock: clock, onConnectGmail: { _ = n })
             }
             .modelContainer(container)
             .environment(feedback)
@@ -131,7 +133,8 @@ struct OneChangeDerivesTheQueueOnceTests {
         window.isReleasedWhenClosed = false
         let hosting = NSHostingView(rootView: AnyView(Harness(container: c, feedback: feedback,
                                                               dayOffOffer: offer, undoStack: undo,
-                                                              tick: tick)))
+                                                              tick: tick,
+                                                              clock: HostedPassCounting.frozenClock())))
         hosting.frame = window.contentLayoutRect
         hosting.autoresizingMask = [.width, .height]
         window.contentView?.addSubview(hosting)
@@ -141,6 +144,12 @@ struct OneChangeDerivesTheQueueOnceTests {
         // through a second context reaches the view by a different route (a merge) than the button's.
         return Hosted(window: window, hosting: hosting, context: c.mainContext,
                       feedback: feedback, offer: offer, undo: undo, tick: tick)
+    }
+
+    // #4516: the queue is taken out of the graph before its window closes, so it cannot be evaluated during
+    // a later test and charged to it by the process wide counter (`HostedPassCounting.unmountAndClose`).
+    private func tearDown(_ h: Hosted) {
+        HostedPassCounting.unmountAndClose(h.hosting, replacingWith: AnyView(EmptyView()), in: h.window)
     }
 
     // Waits until the derivation count has GONE QUIET, collecting the reason for each derivation on the
@@ -184,7 +193,7 @@ struct OneChangeDerivesTheQueueOnceTests {
     @Test func dismissingOneShowDerivesTheQueueNoMoreThanTheSaveAnnounces() async throws {
         let c = try container()
         let h = host(c)
-        defer { h.window.close() }
+        defer { tearDown(h) }
         seed(h.context)
         await brought(up: h)
 
@@ -210,7 +219,7 @@ struct OneChangeDerivesTheQueueOnceTests {
     @Test func correctingOneShowsGenreDerivesTheQueueNoMoreThanTheSaveAnnounces() async throws {
         let c = try container()
         let h = host(c)
-        defer { h.window.close() }
+        defer { tearDown(h) }
         seed(h.context)
         await brought(up: h)
 
@@ -233,7 +242,7 @@ struct OneChangeDerivesTheQueueOnceTests {
     @Test func dismissingAWholeNightDerivesTheQueueNoMoreThanTheSaveAnnounces() async throws {
         let c = try container()
         let h = host(c)
-        defer { h.window.close() }
+        defer { tearDown(h) }
         seed(h.context)
         await brought(up: h)
 
@@ -262,12 +271,21 @@ struct OneChangeDerivesTheQueueOnceTests {
     //
     // ZERO derivations, not one, because nothing the pass reads changed and "it rebuilt but quickly" is
     // a statement about the machine (L63).
+    //
+    // #4516: AND THE REDRAWS ARRIVE AFTER THE MEMO'S CLOCK WINDOW, on every run. A late evaluation with
+    // nothing changed is what the two flaky siblings in this suite recorded as their extra derivation
+    // (`prospects | nothing this view reads` on CI run 37246102075): the queue's memo, like the Sources
+    // sheet's, refuses an answer older than two seconds by its clock, and on a loaded runner the next
+    // evaluation arrives later than that. So the queue is handed a frozen clock and this test waits past
+    // the window in real time first, which makes every run the slow one
+    // (`HostedPassCounting.waitPastTheRenderMemoWindow`).
     @Test func aRedrawWithNoDataChangeDerivesNothing() async throws {
         let c = try container()
         let h = host(c)
-        defer { h.window.close() }
+        defer { tearDown(h) }
         seed(h.context)
         await brought(up: h)
+        await HostedPassCounting.waitPastTheRenderMemoWindow(since: Date())
 
         let evaluationsBefore = QueueRenderCounter.renderCount(for: QueueRenderCounter.queueBodySurface)
         var why: [String] = []
@@ -297,7 +315,7 @@ struct OneChangeDerivesTheQueueOnceTests {
     @Test func aRefusedTownRenamedInPlaceStillReachesTheQueue() async throws {
         let c = try container()
         let h = host(c)
-        defer { h.window.close() }
+        defer { tearDown(h) }
         let town = ExcludedTown(town: "Poughkeepsie")
         h.context.insert(town)
         seed(h.context)
@@ -316,7 +334,7 @@ struct OneChangeDerivesTheQueueOnceTests {
     @Test func anEditInPlaceAfterAServedRedrawStillReachesTheQueue() async throws {
         let c = try container()
         let h = host(c)
-        defer { h.window.close() }
+        defer { tearDown(h) }
         seed(h.context)
         await brought(up: h)
 
@@ -341,7 +359,7 @@ struct OneChangeDerivesTheQueueOnceTests {
     @Test func anEditInPlaceAfterASavedChangeSettledStillReachesTheQueue() async throws {
         let c = try container()
         let h = host(c)
-        defer { h.window.close() }
+        defer { tearDown(h) }
         seed(h.context)
         await brought(up: h)
 
@@ -370,7 +388,7 @@ struct OneChangeDerivesTheQueueOnceTests {
     @Test func anEditInPlaceStillReachesTheQueueWithoutASave() async throws {
         let c = try container()
         let h = host(c)
-        defer { h.window.close() }
+        defer { tearDown(h) }
         seed(h.context)
         await brought(up: h)
 
