@@ -47,6 +47,11 @@ struct RenderDataComparisonCoversEveryFieldTests {
     /// A member holds a class or a model when its value is a class instance, or its type names one of the
     /// model types or the card store. Read from the live value and its type, not from a list of members.
     static func holdsAnObject(_ value: Any, depth: Int = 0) -> Bool {
+        // A store identifier is a VALUE whose equality is the row it names, which two passes over one store
+        // share: the opposite of the object identity this guard exists to keep out. Its storage reflects as
+        // a class, so without this a row carrying its show's identifier (#4357 slice I2) read as holding a
+        // model, and `rows` and `visibleRows` were flagged for comparing by value, which is right for them.
+        if value is PersistentIdentifier { return false }
         let mirror = Mirror(reflecting: value)
         if mirror.displayStyle == .class { return true }
         // And anything inside it, a few levels down, for a member whose type name says nothing (an enum

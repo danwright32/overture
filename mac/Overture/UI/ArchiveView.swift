@@ -373,8 +373,11 @@ struct ArchiveView: View {
                               onRestore: item.status == .dismissed ? { restore(item) } : nil)
     }
 
+    // #4357 slice I2: both presses find their show through `ShowIdentity`, as every row action does, and a
+    // refusal is said rather than swallowed (#1778). By key, a press on a merged-away show's card acted on
+    // whichever show had adopted its key.
     private func restore(_ item: QueueItem) {
-        guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
+        guard let model = prospects.show(for: item, feedback: feedback) else { return }
         DismissedProspects.restore(model)
         if context.saveOrWarn(org: item.groupName, feedback: feedback) {
             feedback.acknowledge(ActionAck.restored(org: item.groupName))
@@ -382,7 +385,7 @@ struct ArchiveView: View {
     }
 
     private func requestSend(_ item: QueueItem) {
-        guard let model = prospects.first(where: { $0.naturalKey == item.id }),
+        guard let model = prospects.show(for: item, feedback: feedback),
               var confirmation = SendConfirmation(prospect: model) else { return }
         // #1244: the Archive send path warns on a same-date self double-booking too, using the SAME shared
         // helper as the main queue's requestSend, so the guard doesn't depend on which screen Dan sends from.
