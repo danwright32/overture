@@ -41,8 +41,12 @@ struct ReleaseLikeBuildExclusionsTests {
 
     private struct Open {
         let line: Int
-        let condition: String   // "DEBUG", "!DEBUG" or anything else
+        var condition: String   // the current branch's: "DEBUG", "!DEBUG" or anything else
         var branchStart: Int
+        // Whether the group OPENED as `#if DEBUG` or `#if !DEBUG`. It stays a DEBUG group after an `#elseif`,
+        // which only stops the later branches being judged (the review of dc04f1c).
+        var isDebugGroup: Bool { opened == "DEBUG" || opened == "!DEBUG" }
+        var opened = ""
         var inElse = false
         var debug: [ClosedRange<Int>] = []
         var release: [ClosedRange<Int>] = []
@@ -66,19 +70,21 @@ struct ReleaseLikeBuildExclusionsTests {
             let text = code[line]!.trimmingCharacters(in: .whitespaces)
             if text.hasPrefix("#if") {
                 let condition = text.dropFirst(3).trimmingCharacters(in: .whitespaces)
-                stack.append(Open(line: line, condition: condition, branchStart: line + 1))
+                stack.append(Open(line: line, condition: condition, branchStart: line + 1, opened: condition))
             } else if text.hasPrefix("#elseif"), !stack.isEmpty {
                 close(&stack[stack.count - 1], before: line)
-                // A DEBUG group continued by another condition is no longer only about DEBUG.
-                stack[stack.count - 1] = Open(line: stack[stack.count - 1].line, condition: "other",
-                                              branchStart: line + 1)
+                // The branches after an `#elseif` are no longer only about DEBUG, so they are not judged; what
+                // the DEBUG branch before it recorded is kept.
+                stack[stack.count - 1].condition = "other"
+                stack[stack.count - 1].inElse = false
+                stack[stack.count - 1].branchStart = line + 1
             } else if text.hasPrefix("#else"), !stack.isEmpty {
                 close(&stack[stack.count - 1], before: line)
                 stack[stack.count - 1].inElse = true
                 stack[stack.count - 1].branchStart = line + 1
             } else if text.hasPrefix("#endif"), var open = stack.popLast() {
                 close(&open, before: line)
-                if open.condition == "DEBUG" || open.condition == "!DEBUG" {
+                if open.isDebugGroup {
                     out.append(Branches(ifLine: open.line, debug: open.debug, release: open.release))
                 }
             }
@@ -381,6 +387,24 @@ struct ReleaseLikeBuildExclusionsTests {
             #endif
             """)
         #expect(Self.debugOnlyNames([app]) == ["OnlyInDebug", "snapshot", "debugMember"])
+    }
+
+    // A DEBUG group continued by `#elseif` keeps what its DEBUG branch already declared (the review of
+    // dc04f1c): only the branches AFTER the `#elseif` stop being judged, since they are no longer about DEBUG.
+    @Test func aDebugBranchContinuedByAnElseIfStillCountsAsDebugOnly() {
+        let app = File(name: "App.swift", text: """
+            #if DEBUG
+            enum OnlyInDebug {}
+            #elseif os(macOS)
+            enum OnlyOnMacRelease {}
+            #else
+            enum Elsewhere {}
+            #endif
+            """)
+        #expect(Self.debugOnlyNames([app]) == ["OnlyInDebug"])
+        let guarded = File(name: "GuardedTests.swift", text: "#if DEBUG\nlet c = OnlyInDebug.self\n#elseif os(macOS)\nlet d = 1\n#endif\n")
+        let names = File(name: "NamesTests.swift", text: "let c = OnlyInDebug.self\n")
+        #expect(Set(Self.exclusions(app: [app], tests: [guarded, names]).keys) == ["NamesTests.swift"])
     }
 
     @Test func aFileNamingOneOutsideDebugIsLeftOutAndSoIsAFileUsingIt() {
