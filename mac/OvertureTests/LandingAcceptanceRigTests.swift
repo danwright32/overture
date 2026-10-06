@@ -326,11 +326,11 @@ final class LandingAcceptanceRigTests {
         let pending: PendingScoutIngests
         let journals: LandingJournals
         let window: NSWindow
-        let hosting: NSView?
+        let hosting: NSHostingView<AnyView>?
         var round = 0
         init(factor: Int, container: ModelContainer, dir: URL, exportURL: URL, historyURL: URL,
              scaled: ScoutExtractResults, relandData: Data, pending: PendingScoutIngests, journals: LandingJournals,
-             window: NSWindow, hosting: NSView?) {
+             window: NSWindow, hosting: NSHostingView<AnyView>?) {
             self.factor = factor
             self.container = container
             self.ctx = container.mainContext
@@ -428,11 +428,12 @@ final class LandingAcceptanceRigTests {
                               styleMask: [.borderless], backing: .buffered, defer: false)
         // #3480: AppKit's default releases a window this scope still holds.
         window.isReleasedWhenClosed = false
-        var hosting: NSView?
+        var hosting: NSHostingView<AnyView>?
         if ScreenSession.isLocked {
             ScreenSession.reportUnmeasured("LandingAcceptanceRigTests redraw term at \(factor)x")
         } else {
-            let view = NSHostingView(rootView: RootHarness(container: container))
+            // Behind `AnyView` only so `close` can unmount it (below); the view drawn is RootView's real body.
+            let view = NSHostingView(rootView: AnyView(RootHarness(container: container)))
             view.frame = window.contentLayoutRect
             view.autoresizingMask = [.width, .height]
             window.contentView?.addSubview(view)
@@ -456,12 +457,29 @@ final class LandingAcceptanceRigTests {
         return world
     }
 
-    private func close(_ world: World) {
+    // RootView is UNMOUNTED before its container can go, and given turns to finish going. Measured on the first
+    // smoke run (2026-10-05): with the window merely closed, the next test's RootView wrote its due counts to
+    // UserDefaults, the closed one's `@AppStorage` re-evaluated its body over shows whose container had been
+    // released, and SwiftData ended the process ("This model instance was destroyed by calling
+    // ModelContext.reset"). A RootView left mounted would also redraw on the next world's changes and be
+    // counted in its redraw term.
+    private func close(_ world: World) async {
         // Off, and nothing left pending, BEFORE the window goes: the #3874 crash is an autosave firing into a
         // SwiftUI observer after the test that armed it has ended.
         world.ctx.autosaveEnabled = false
         if world.ctx.hasChanges { try? Phase0.save(world.ctx, step: "rig4343 close") }
+        if let hosting = world.hosting {
+            hosting.rootView = AnyView(EmptyView())
+            hosting.layoutSubtreeIfNeeded()
+            hosting.displayIfNeeded()
+            hosting.removeFromSuperview()
+        }
         world.window.close()
+        // Its tasks are cancelled and its observers removed on turns after the unmount, so they get those turns.
+        for _ in 0..<10 {
+            await drainMain()
+            try? await Task.sleep(for: .milliseconds(20))
+        }
     }
 
     // MARK: - Inputs
@@ -725,7 +743,28 @@ final class LandingAcceptanceRigTests {
         var rows: [String] = []
         for factor in Rig.sizes {
             let world = try await makeWorld(factor: factor, base: base, storesDir: storesDir, inputs: inputs)
-            defer { close(world) }
+            // Closed, and RootView unmounted, whether the size measured or threw, before the next world opens.
+            let measured: Result<[String], Error>
+            do {
+                measured = .success(try await measureSize(entry, carried, world: world, defaults: defaults))
+            } catch {
+                measured = .failure(error)
+            }
+            await close(world)
+            rows += try measured.get()
+        }
+        Rig.say("table | entry | size | variant | largest single main thread hold | above load 8, not counted |")
+        for row in rows { Rig.say("table " + row) }
+        Rig.say("\(entry.rawValue): the 100 ms bar is judged by Phase E of #4275, not by this run")
+    }
+
+    // One store size of one entry point: the positive control where the entry makes the A7 check, then each
+    // variant's warm up and samples. Answers the table rows.
+    private func measureSize(_ entry: Rig.Entry, _ carried: Rig.Carried, world: World,
+                             defaults: UserDefaults) async throws -> [String] {
+        let factor = world.factor
+        var rows: [String] = []
+        do {
             let shows = try world.ctx.fetchCount(FetchDescriptor<Prospect>())
             Rig.say("\(entry.rawValue) x\(factor): \(shows) shows, \(world.scaled.results.count) sources, "
                     + "\(world.scaled.results.reduce(0) { $0 + $1.events.count }) events, " + Phase0.load())
@@ -744,7 +783,7 @@ final class LandingAcceptanceRigTests {
                         + "landing \(second): " + (refused ? "refused as already landed, as it must be" : "NOT REFUSED"))
                 #expect(refused, Comment(rawValue: "the real already-landed check let a second landing of the same "
                                          + "file through, so the seam cannot be trusted to hide only itself"))
-                guard refused else { continue }
+                guard refused else { return rows }
             }
             var stubs: RunScoutStubs?
             if entry == .runScout {
@@ -786,9 +825,7 @@ final class LandingAcceptanceRigTests {
                 rows.append(Rig.row(entry, factor, variant, Rig.cell(taken)))
             }
         }
-        Rig.say("table | entry | size | variant | largest single main thread hold | above load 8, not counted |")
-        for row in rows { Rig.say("table " + row) }
-        Rig.say("\(entry.rawValue): the 100 ms bar is judged by Phase E of #4275, not by this run")
+        return rows
     }
 
     @Test(.enabled(if: Phase0.liveStoreExists, "no live store on this machine"))
