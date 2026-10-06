@@ -5,8 +5,8 @@ import AppKit
 // Every SwiftData mutation a queue row can trigger, moved out of QueueView so the same row
 // component (Mark menu, Keep/Dismiss, booking confirm, and so on) behaves identically wherever
 // it is shown: originally only the main Queue, now also the Archive lookup. Each function takes
-// the full prospects array to find its target by natural key, the same way QueueView's private
-// methods always did; nothing here changes existing behavior, it only relocates it.
+// the full prospects array to find its target, since #4357 slice I2 by the card's store identifier
+// through `ShowIdentity` rather than by natural key.
 @MainActor
 enum ProspectMutations {
 
@@ -20,9 +20,16 @@ enum ProspectMutations {
     // It speaks only for its OWN failure. A guard that carries domain conditions beside this still
     // refuses those on its own terms, and those refusals already say their piece (ShowOutcome
     // .refusedLine is the worked example). Nothing here changes what any action DOES.
+    //
+    // #4357 slice I2: it finds the show by the card's IDENTIFIER, with the key as a witness, through
+    // `ShowIdentity`, where it used to find whichever row held the card's key. A merge can hand a deleted
+    // show's key to a survivor, and the old lookup then acted on the survivor with nothing said (B3). The
+    // refusals say their own causes. These two helpers and the array they take go in the slice that moves
+    // every action onto `ShowResolver` (#4357), which cannot share a pull request with this one: its diff is
+    // past what a review can read.
     static func model(for item: QueueItem, in prospects: [Prospect],
                       feedback: ActionFeedback) -> Prospect? {
-        model(forKey: item.id, org: item.groupName, in: prospects, feedback: feedback)
+        prospects.show(for: item, feedback: feedback)
     }
 
     // The same question where the caller holds a key rather than a row (the reply actions). `org` is
@@ -30,11 +37,7 @@ enum ProspectMutations {
     // naming the wrong show.
     static func model(forKey naturalKey: String, org: String?, in prospects: [Prospect],
                       feedback: ActionFeedback) -> Prospect? {
-        guard let found = prospects.first(where: { $0.naturalKey == naturalKey }) else {
-            feedback.acknowledge(ActionAck.couldNotFindShow(org: org), tone: .warning)
-            return nil
-        }
-        return found
+        prospects.show(forKey: naturalKey, org: org, feedback: feedback)
     }
 
     static func toggleVoiceLearning(_ item: QueueItem, prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
@@ -319,7 +322,9 @@ enum ProspectMutations {
     // render pass. And it reads the booking-history file, which is real disk work. Neither belongs on a
     // render path: the row calls this only when the editor is actually opened.
     static func manualPrepPrefill(_ item: QueueItem, prospects: [Prospect]) -> ManualPrepPrefill.Result {
-        guard let model = prospects.first(where: { $0.naturalKey == item.id }) else {
+        // #4357 slice I2: by identity, and SILENT on a refusal, because this is a read for a sheet rather
+        // than the result of a press, so a nil is an ordinary answer with nothing to acknowledge.
+        guard let model = ShowIdentity(item)?.resolve(in: prospects).show else {
             // No prospect behind this card is not "nothing was found": it is a lookup that could not run,
             // and saying "checked past emails and the booking sheet" would be a claim about work that
             // never happened (L11). The history is the half that genuinely could not be consulted.
@@ -836,11 +841,13 @@ enum ProspectMutations {
     //
     // Empty for a card that stands alone, which is almost every card, so both call sites run exactly as
     // they did before this issue on the ordinary row.
+    // #4357 slice I2: the members are held as KEYS (`QueueItem.collapsedMemberKeys`), so each resolves
+    // through the identity the rows hold for it, never by a filter over the keys themselves.
     private static func siblings(of item: QueueItem, in prospects: [Prospect]) -> [Prospect] {
         guard !item.collapsedMemberKeys.isEmpty else { return [] }
-        let others = Set(item.collapsedMemberKeys).subtracting([item.id])
+        let others = item.collapsedMemberKeys.filter { $0 != item.id }
         guard !others.isEmpty else { return [] }
-        return prospects.filter { others.contains($0.naturalKey) }
+        return prospects.shows(forKeys: others)
     }
 
     static func setStatus(_ item: QueueItem, _ status: ReviewStatus, _ reason: ShowOutcome?,
@@ -916,12 +923,12 @@ enum ProspectMutations {
                            undo: QueueUndoStack? = nil, now: Date = Date(),
                            export: DayOffEditing.Export = DownbeatBridge.loadedExport())
         -> DayOffOfferRequest.Pending? {
-        let byKey = Dictionary(prospects.map { ($0.naturalKey, $0) }, uniquingKeysWith: { first, _ in first })
         // Two rows are skipped rather than recorded: one whose key has no prospect left (deleted at runtime
         // by NaturalKeyVenueMigration), and one this exact action already dismissed for this exact reason
         // ("assume it runs twice"). An entry describing a dismissal that did not happen would spend the
         // next Cmd+Z doing nothing while looking exactly like a working undo.
-        let targets = keys.compactMap { byKey[$0] }
+        // #4357 slice I2: the night's rows are held as keys, so each resolves through its identity.
+        let targets = prospects.shows(forKeys: keys)
             .filter { !($0.status == .dismissed && $0.showOutcome == reason) }
         guard !targets.isEmpty else { return nil }
         // #1743: read BEFORE anything moves. A night already blocked shows as a clash on the night itself
@@ -1071,8 +1078,10 @@ enum ProspectMutations {
         // answers `.wholeShow` whenever there is no run to pick apart (a single night, a row with no
         // recorded nights, the last night left), so this falls through to exactly today's behaviour in
         // every case that is not a live multi-night run.
+        // #4357 slice I2: resolved SILENTLY here, by identity, because a refusal falls through to
+        // `setStatus` below, which resolves the same card again and is the one that says why.
         if RunNightDrop.isAboutOneNight(reason),
-           let model = prospects.first(where: { $0.naturalKey == item.id }) {
+           let model = ShowIdentity(item)?.resolve(in: prospects).show {
             let priorStatus = model.status
             let priorReason = model.showOutcomeRaw
             // #3566: and WHEN that ending was recorded, so an undo cannot leave a stamp behind an ending it cleared.

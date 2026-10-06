@@ -52,8 +52,9 @@ struct CopyingAReplyDoesNotClaimItWasSentTests {
         return p
     }
 
+    // #4357 slice I2: with the show's identity, which is what the action resolves through.
     private func item(_ p: Prospect) -> QueueItem {
-        QueueItem(id: p.naturalKey, groupName: p.groupName, discipline: "music", venue: p.venue,
+        QueueItem(id: p.naturalKey, showID: p.persistentModelID, groupName: p.groupName, discipline: "music", venue: p.venue,
                   performanceDate: p.performanceDate, sourceListingURL: nil,
                   priorRelationship: "none", production: "self", profile: "strong",
                   coverage: "likely_uncovered", fitScore: 7, tier: "high", fitReason: "r",
