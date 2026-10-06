@@ -35,11 +35,15 @@ import SwiftData
 //
 // Its own guard missed it too, and that is worth recording rather than quietly fixing: the guard asked
 // whether any cluster was SEEN, and five deferrals satisfied it. A deferral never reaches the ladder.
-// The guard now asks whether the ladder CHOSE, which is the thing the report is about.
+// The live arm now asks whether the ladder CHOSE, which is the thing the report is about, and since
+// #4533 it only REPORTS the answer: when the ladder chose nothing it says UNMEASURED and passes,
+// because what the backups hold is a fact about the data. The ONE guard on the instrument is the
+// fixture test, `theMeasurementSeesTheLadderChooseWhereTheStoreHoldsADuplicate`, which runs on every
+// machine.
 //
 // `overture-store-backups/` holds a snapshot taken at the START of each launch, before that launch's
 // migrations, so those stores still carry the duplicates the pass is about to collapse. That is the
-// only place the ladder can be watched working.
+// only place the ladder can be watched working on Dan's own data, when they hold one.
 @MainActor
 @Suite("Which copy of one show survives the merge (#3328)")
 final class SurvivorScoreLiveStoreTests {
