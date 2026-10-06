@@ -283,14 +283,14 @@ extension LandingOutcome {
         return ordered(out)
     }
 
-    // One step of the idle recovery, as the line it leaves, or nil when there is nothing worth saying (a spent
-    // record cleared). The standing case, a landing it stopped trying, carries the landing it is about, so its
-    // two actions can be aimed at it.
     // What a Discard on an interrupted landing says, from whether it discarded anything.
     static func afterDiscard(discarded: Bool, startedAt: Date?) -> LandingOutcome {
         discarded ? .interruptedDiscarded(startedAt: startedAt) : .nothingLeftToDiscard
     }
 
+    // One step of the idle recovery, as the line it leaves, or nil when there is nothing worth saying (a spent
+    // record cleared). The standing case, a landing it stopped trying, carries the landing it is about, so its
+    // two actions can be aimed at it.
     static func from(recovered: LandingRecovery.Recovered, ref: LandingRef?) -> LandingOutcome? {
         switch recovered {
         case .landed(let startedAt, _): return .landedByRecovery(startedAt: startedAt)
