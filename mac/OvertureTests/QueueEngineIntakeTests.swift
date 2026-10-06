@@ -631,17 +631,24 @@ final class QueueEngineIntakeTests {
         #expect(permanent != temporary)
         #expect(engine.facts.shows[temporary] == nil && engine.facts.shows[permanent] != nil)
         #expect(try engine.facts == store.freshFacts())
-        // The tracker armed under the temporary identifier still fires with it; the edit must still land.
+        // Saved and not yet edited, nothing the engine holds names any temporary identifier, the contact's
+        // included, so a session of inserts never edited again leaves nothing behind.
+        let contacts = Set(engine.facts.shows[permanent]?.factContacts.map(\.persistentModelID) ?? [])
+        func held() -> Set<PersistentIdentifier> {
+            EngineIdentityWalk.walk(engine).leaves
+                .reduce(into: []) { $0.formUnion(EngineIdentityWalk.identities(in: $1.value)) }
+        }
+        #expect(!held().contains(temporary) && held().allSatisfy { $0.storeIdentifier != nil },
+                "the engine still holds a temporary identifier after the first save")
+        #expect(contacts.allSatisfy { $0.storeIdentifier != nil })
+        // The tracker armed before the save still fires with the temporary identifier, a stale fire dropped
+        // unread; the row was armed again under its permanent one, so the edit still lands.
         fresh.fitReason = "edited after the first save"
         try store.context.save()
         turns.run()
         #expect(engine.facts.shows[permanent]?.fitReason == "edited after the first save")
         #expect(try engine.facts == store.freshFacts())
-        // And once that tracker has fired, nothing the engine holds names the temporary identifier any more, so
-        // a session of inserts does not leave one entry each behind for the life of the engine.
-        let held = EngineIdentityWalk.walk(engine).leaves
-            .reduce(into: Set<PersistentIdentifier>()) { $0.formUnion(EngineIdentityWalk.identities(in: $1.value)) }
-        #expect(!held.contains(temporary), "the engine still holds the temporary identifier after its tracker fired")
+        #expect(!held().contains(temporary))
     }
 
     // A small table row has no tracker, so nothing will ever report its temporary identifier, and the engine

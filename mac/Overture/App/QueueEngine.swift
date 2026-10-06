@@ -170,10 +170,9 @@ final class QueueEngine {
     /// Rows with a tracker armed and not yet fired, so a row read for another reason is not armed twice.
     @ObservationIgnored private var armed: Set<PersistentIdentifier> = []
     /// Rows held under a TEMPORARY identifier (inserted, not yet saved), until their first save re-keys them.
+    /// A re-keyed row is armed again under its permanent identifier in the same turn, so the tracker armed
+    /// before the save, which still reports the temporary one, is only ever a stale fire, dropped unread.
     @ObservationIgnored private var temporaries: [PersistentIdentifier: any PersistentModel] = [:]
-    /// Each temporary identifier a save replaced, to its permanent one, because a tracker armed before the
-    /// save still reports the temporary one when it fires.
-    @ObservationIgnored private var rekeyedTemporaries: [PersistentIdentifier: PersistentIdentifier] = [:]
 
     // MARK: - The turn
 
@@ -267,19 +266,24 @@ final class QueueEngine {
             if let show = recipientParent[id], !resolution.deletedIDs.contains(show) { shows.insert(show) }
         }
         var changed = resolution.deletedIDs.filter(facts.holds).count
-        // Only a row with a tracker armed under its temporary identifier can still report that identifier, so
-        // only its re-key is remembered; a small table row, which no tracker watches, needs no entry.
-        let reportable = resolution.rekeyedIDs.filter { armed.contains($0.key) }
         resolveIdentities(resolution)
-        rekeyedTemporaries.merge(reportable) { _, new in new }
 
-        let fired = Set(pending.fired.map(current))
+        // An identifier reported before the save that re-keyed it in this turn reads as its permanent one. A
+        // temporary one that no row holds any more is a stale fire, from a tracker armed before an earlier save
+        // re-keyed its row, which was armed again under its permanent identifier then: it is dropped unread.
+        let rekeyed = resolution.rekeyedIDs
+        let temporaries = self.temporaries
+        func current(_ id: PersistentIdentifier) -> PersistentIdentifier? {
+            if let permanent = rekeyed[id] { return permanent }
+            return id.storeIdentifier == nil && temporaries[id] == nil ? nil : id
+        }
+        let fired = Set(pending.fired.compactMap(current))
         armed.subtract(fired)
-        let touched = fired.union(pending.noted.map(current)).union(pending.inserted.map(current))
-            .union(pending.updated.map(current)).union(resolution.rekeyedIDs.values)
-        // A tracker fires once, so a temporary identifier one just reported will never be reported again: the
-        // row is re-armed under its permanent identifier below, and the entry has done its only job.
-        for id in pending.fired { rekeyedTemporaries.removeValue(forKey: id) }
+        // A re-keyed row is read again below and armed afresh under its permanent identifier, so no tracker is
+        // left that only the temporary one could name.
+        armed.subtract(rekeyed.values)
+        let touched = fired.union(pending.noted.compactMap(current)).union(pending.inserted.compactMap(current))
+            .union(pending.updated.compactMap(current)).union(rekeyed.values)
         for id in touched where !resolution.deletedIDs.contains(id) {
             switch AppSchemaInputClass.byModel[id.entityName] {
             case .perRowFact(parent: nil, _):
@@ -301,7 +305,7 @@ final class QueueEngine {
         // and no tracker fired; the newcomer stays registered in the context and reads as live (#4106 probe 2;
         // measured for #4358 in memory and on disk: the save names only the newcomer's identifier, and only a
         // FETCH by it finds nothing). Which row it was cannot be read from here, so everything is read again.
-        let inserted = Set(pending.inserted.map(current)).subtracting(resolution.deletedIDs)
+        let inserted = Set(pending.inserted.compactMap(current)).subtracting(resolution.deletedIDs)
             .filter { FactStore.Table.holding($0.entityName) != nil }
         if !everything, !inserted.isEmpty {
             do {
@@ -343,11 +347,6 @@ final class QueueEngine {
         for entry in Self.identityKeyedState {
             if case .resolved(let apply) = entry.disposition { apply(self, resolution) }
         }
-    }
-
-    /// The identifier a row carries now, for one a tracker armed before its first save still reports.
-    private func current(_ id: PersistentIdentifier) -> PersistentIdentifier {
-        rekeyedTemporaries[id] ?? id
     }
 
     private static func isContact(_ id: PersistentIdentifier) -> Bool {
@@ -589,12 +588,6 @@ extension QueueEngine {
             IdentityKeyedState(path: "temporaries", disposition: .resolved { engine, resolution in
                 for id in resolution.deletedIDs { engine.temporaries.removeValue(forKey: id) }
                 for temporary in resolution.rekeyedIDs.keys { engine.temporaries.removeValue(forKey: temporary) }
-            }),
-            // Entries are ADDED by the intake turn, for re-keyed rows a tracker still watches; this only purges.
-            IdentityKeyedState(path: "rekeyedTemporaries", disposition: .resolved { engine, resolution in
-                engine.rekeyedTemporaries = engine.rekeyedTemporaries.filter { temporary, permanent in
-                    !resolution.deletedIDs.contains(permanent) && !resolution.deletedIDs.contains(temporary)
-                }
             }),
             IdentityKeyedState(path: "intake.pending.fired", disposition: .drainedAtEveryTurn),
             IdentityKeyedState(path: "intake.pending.noted", disposition: .drainedAtEveryTurn),
