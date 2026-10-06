@@ -2228,6 +2228,20 @@ assert_contains "a release-like full run writes nothing into the Debug duration 
 assert_contains "a release-like run waits longer before calling its build stalled" \
   "ended as stalled only after 3600s" "${RL_VERIFIED_RUN}"
 
+# A release-like run builds the pure scheme only, with the excluded files left out, so it executes fewer
+# tests than a Debug run by construction. It is never measured against the Debug baseline, which would call
+# it SHORT, and never writes its own count as that baseline, which would lower the bar every later Debug run
+# is held to (the review of 88d6bec).
+RL_BASELINE_RUN="$(OVERTURE_TEST_RELEASE_LIKE=1 run_wrapper_with_stub_xcodebuild "${RL_RELEASE_FRONTEND}
+${GREEN_RUN_LOG}" 0 "" "" "" "" 8595)"
+assert_not_contains "a release-like run is never judged against the Debug baseline" "SHORT RUN" "${RL_BASELINE_RUN}"
+assert_equals "and never moves it" "baseline=8595" "$(grep '^baseline=' <<< "${RL_BASELINE_RUN}")"
+assert_equals "and a green one stays green" "exit=0" "$(tail -n 1 <<< "${RL_BASELINE_RUN}")"
+RL_FIRST_RUN="$(OVERTURE_TEST_RELEASE_LIKE=1 run_wrapper_with_stub_xcodebuild "${RL_RELEASE_FRONTEND}
+${GREEN_RUN_LOG}" 0)"
+assert_equals "nor records itself as the first baseline on a Mac that has none" "baseline=" \
+  "$(grep '^baseline=' <<< "${RL_FIRST_RUN}")"
+
 RL_DEBUG_RUN="$(OVERTURE_TEST_RELEASE_LIKE=1 run_wrapper_with_stub_xcodebuild "${RL_DEBUG_FRONTEND}
 ${GREEN_RUN_LOG}" 0)"
 assert_contains "a log still carrying DEBUG is REFUSED by name" "release-like build check: REFUSED" "${RL_DEBUG_RUN}"

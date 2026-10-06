@@ -1332,7 +1332,10 @@ main() {
   executed="$(awk '{print $1}' <<< "${authoritative}")"
   # #3976: a run the stall guard ended is short by construction, and SHORT RUN's advice (something is
   # killing the process) would name this runner's own act as the mystery. Its own report says it.
-  if [[ "${scoped}" -eq 0 && "${outcome}" != "stalled" ]]; then
+  # #4343: and only a DEBUG run is held to the baseline. A release-like run builds the pure scheme with its
+  # excluded files left out and an optimised one compiles differently, so their counts are not the Debug
+  # count, and the same rule keeps them from writing it below (the review of 88d6bec).
+  if [[ "${scoped}" -eq 0 && "${outcome}" != "stalled" && "${build_mode}" == "debug" ]]; then
     [[ -f "${BASELINE_FILE}" ]] && baseline="$(cat "${BASELINE_FILE}" 2>/dev/null || true)"
     truncated="$(truncated_report "${executed}" "${baseline}")"
   fi
@@ -1346,7 +1349,8 @@ main() {
     # test-all.sh would go on to say "all suites passed" having run two thirds of it. A result that
     # cannot be believed must never exit 0.
     [[ "${test_exit_code}" -ne 0 ]] || test_exit_code=1
-  elif [[ "${scoped}" -eq 0 && -z "${outcome}" && -n "${executed}" && -z "${restarted}" ]]; then
+  elif [[ "${scoped}" -eq 0 && -z "${outcome}" && -n "${executed}" && -z "${restarted}" \
+          && "${build_mode}" == "debug" ]]; then
     # Only a genuinely green FULL run may move the baseline, so neither a truncated one, nor a failing
     # one, nor a scoped one can quietly lower the bar it is measured against.
     #
