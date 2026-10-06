@@ -1271,6 +1271,11 @@ struct RootView: View {
                 // #4330 (A13, L665): the launch sweep of kept calendar results, offered from their own
                 // copies. Empty on every ordinary launch, and one directory listing to learn so.
                 await offerPendingScoutIngests()
+                #if DEBUG
+                // #4338: a landing outcome put on screen for looking at, on a synthetic store only. After the launch
+                // sweep, whose end clears the line's landing in progress: beside it, a preview of one was cleared.
+                if let preview = LandingPreview.requested { showLandingPreview(preview) }
+                #endif
                 autoScoutIfDue()   // run a scheduled scout on launch if one is due (#33)
             }
             // #2365: load Dan's client list at launch, and again whenever the reconcile tick observes the
@@ -1353,10 +1358,6 @@ struct RootView: View {
                 // Dan is away from the Mac, because finishing one is a block of seconds the window cannot draw
                 // through. Said at launch, so the wait is visible, then looked at once a minute.
                 announceInterruptedLandings()
-                #if DEBUG
-                // #4338: a landing outcome put on screen for looking at, on a synthetic store only.
-                if let preview = LandingPreview.requested { showLandingPreview(preview) }
-                #endif
                 while !Task.isCancelled {
                     try? await Task.sleep(nanoseconds: 60 * 1_000_000_000)
                     await recoverAnInterruptedLandingIfIdle()
@@ -1491,11 +1492,8 @@ struct RootView: View {
             }
         case .discardInterruptedLanding(let ref):
             let startedAt = interruptedStart(ref)
-            if LandingRecovery.discard(ref, journals: .live, pending: .live), let startedAt {
-                marker.said([.interruptedDiscarded(startedAt: startedAt)])
-            } else {
-                marker.said([.nothingLeftToDiscard])
-            }
+            let discarded = LandingRecovery.discard(ref, journals: .live, pending: .live)
+            marker.said([.afterDiscard(discarded: discarded, startedAt: startedAt)])
         case .tryUnreadableRecordAgain(let path):
             if case .stillUnreadable(let why) = LandingJournals.live.tryReadingAgain(path: path) {
                 marker.said([.recordStillUnreadable(path: path, why: why)])

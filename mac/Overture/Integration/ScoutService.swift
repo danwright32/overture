@@ -1119,11 +1119,13 @@ enum ScoutService {
             } catch {
                 landing.revertFailedSave(closing: true)
                 outcome.saveFailed = true
-                // #4338: the journal is kept for a failed tail too, so the recovery finishes it.
-                outcome.retriedByRecovery = LandingRecovery.willRetry(journalKept: journals != nil,
-                                                                      attempts: attemptsBefore)
             }
         }
+        // #4338: decided once, from the outcome the landing ends with, as the ingest decides it: a failed tail, and a
+        // source level failure the landing carried on from, both keep the journal for the recovery, and the second
+        // was never seen by a flag set only where a save failed (the review of 29db676).
+        outcome.retriedByRecovery = outcome.saveFailed
+            && LandingRecovery.willRetry(journalKept: journals != nil, attempts: attemptsBefore)
         // #4335: the run's journal is spent only once the tail's writes are in the store too, so a run stopped
         // in the tail keeps it for the recovery, which then finds every source landed and only the tail left.
         if landedEverySource && !outcome.saveFailed { journals?.retire(journal) }

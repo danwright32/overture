@@ -139,8 +139,8 @@ enum LandingOutcome: Equatable, Sendable {
     case editsDiscarded
     case editsDiscardedButStillNotSaving(why: String)
 
-    // What the other standing actions did.
-    case interruptedDiscarded(startedAt: Date)
+    // What the other standing actions did. A discarded landing's start is nil when the survey no longer knew it.
+    case interruptedDiscarded(startedAt: Date?)
     case unreadableRecordDiscarded
     case retryNotRecorded(startedAt: Date, why: String)
     case unreadableRecordNotDiscarded(why: String)
@@ -225,6 +225,7 @@ enum LandingOutcome: Equatable, Sendable {
             return "Overture put your edits back but still couldn't save (\(why)), so the store itself is refusing "
                 + "saves. Quit and reopen Overture; if this keeps happening, something's wrong with the local store."
         case .interruptedDiscarded(let startedAt):
+            guard let startedAt else { return "Overture discarded the interrupted landing." }
             return "Overture discarded the landing that was interrupted at \(LandingWaitCopy.landedTime(startedAt))."
         case .unreadableRecordDiscarded:
             return "Overture discarded the landing record it couldn't read."
@@ -285,6 +286,11 @@ extension LandingOutcome {
     // One step of the idle recovery, as the line it leaves, or nil when there is nothing worth saying (a spent
     // record cleared). The standing case, a landing it stopped trying, carries the landing it is about, so its
     // two actions can be aimed at it.
+    // What a Discard on an interrupted landing says, from whether it discarded anything.
+    static func afterDiscard(discarded: Bool, startedAt: Date?) -> LandingOutcome {
+        discarded ? .interruptedDiscarded(startedAt: startedAt) : .nothingLeftToDiscard
+    }
+
     static func from(recovered: LandingRecovery.Recovered, ref: LandingRef?) -> LandingOutcome? {
         switch recovered {
         case .landed(let startedAt, _): return .landedByRecovery(startedAt: startedAt)

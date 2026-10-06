@@ -28,6 +28,18 @@ struct LandingProgressTests {
          .unreadableRecordNotDiscarded(why: "a reason"), .nothingLeftToDiscard]
     }
 
+    // What a Discard on an interrupted landing says is decided by whether it discarded anything, never by whether the
+    // survey still knew when the landing started: a stale survey with no start time said "nothing left to discard"
+    // about a landing it had just discarded (L11, the review of 29db676).
+    @Test func aDiscardSaysWhatItDidWhetherOrNotItsStartIsKnown() {
+        #expect(LandingOutcome.afterDiscard(discarded: true, startedAt: at) == .interruptedDiscarded(startedAt: at))
+        let unknownStart = LandingOutcome.afterDiscard(discarded: true, startedAt: nil)
+        #expect(unknownStart == .interruptedDiscarded(startedAt: nil))
+        #expect(unknownStart.line == "Overture discarded the interrupted landing.")
+        #expect(LandingOutcome.afterDiscard(discarded: false, startedAt: at) == .nothingLeftToDiscard)
+        #expect(LandingOutcome.afterDiscard(discarded: false, startedAt: nil) == .nothingLeftToDiscard)
+    }
+
     @Test func everyOutcomeHasItsOwnSentence() {
         let lines = every.map(\.line)
         #expect(lines.allSatisfy { !$0.isEmpty }, Comment(rawValue: "\(zip(every, lines).filter { $0.1.isEmpty })"))
