@@ -425,6 +425,24 @@ final class LandingAcceptanceRigTests {
         return "\(n) pending rows saved outside the window"
     }
 
+    // The shows an inserting round added, removed again OUTSIDE the window, so every round and every entry point
+    // lands on the store size it is reported at (0.5's reset). Measured before this existed (2026-10-06, 1x): the
+    // inserting rounds of the earlier entry points had grown the store from 1,385 shows to 2,144 by the lead paste.
+    // Found by the synthetic title every inserting variant gives them (`Phase0.insertingResults`, `RunScoutStubs`),
+    // which no real show carries.
+    static let syntheticTitle = "Probe Synthetic Recital"
+
+    private func removeInserted(_ world: World) async throws -> String {
+        let synthetic = try world.ctx.fetch(FetchDescriptor<Prospect>()).filter {
+            $0.groupName.contains(Self.syntheticTitle)
+        }
+        guard !synthetic.isEmpty else { return "no inserted shows to remove" }
+        for p in synthetic { world.ctx.delete(p) }
+        try Phase0.save(world.ctx, step: "rig4343 removing an inserting round's shows")
+        _ = await settle(world, timeline: nil, deadline: .seconds(60 * world.factor + 60))
+        return "\(synthetic.count) inserted shows removed outside the window"
+    }
+
     // MARK: - The world
 
     private func makeWorld(factor: Int, base: URL, storesDir: URL, inputs: (dir: URL, results: ScoutExtractResults,
@@ -828,14 +846,16 @@ final class LandingAcceptanceRigTests {
                         let said = try await work()
                         _ = await settle(world, timeline: nil, deadline: .seconds(60 * factor + 60))
                         let flushed = try flush(world)
-                        Rig.say("\(entry.rawValue) x\(factor) \(variant.label) warm up: \(said); \(flushed)")
+                        let removed = try await removeInserted(world)
+                        Rig.say("\(entry.rawValue) x\(factor) \(variant.label) warm up: \(said); \(flushed); \(removed)")
                         continue
                     }
                     let sample = try await measure(world, work)
                     let flushed = try flush(world)
+                    let removed = try await removeInserted(world)
                     taken.append(sample)
                     Rig.say("\(entry.rawValue) x\(factor) \(variant.label) round \(round): " + Rig.describe(sample)
-                            + "; then \(flushed)")
+                            + "; then \(flushed); \(removed)")
                 }
                 rows.append(Rig.row(entry, factor, variant, Rig.cell(taken)))
             }
