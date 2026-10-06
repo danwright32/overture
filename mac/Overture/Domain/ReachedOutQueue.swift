@@ -211,7 +211,8 @@ enum ReachedOutQueue {
     }
 
     // The same count over a list already built, for a caller holding one (#4106 Step C).
-    static func showCount(of rows: [(prospect: Prospect, recipient: Recipient, next: Date)]) -> Int {
+    // #4357 slice G3: over any rows, so `AgentInputs.from` counts the list it was handed whatever it holds.
+    static func showCount<Row: ProspectFacts>(of rows: [(prospect: Row, recipient: Row.Contact, next: Date)]) -> Int {
         Set(rows.map { $0.prospect.naturalKey }).count
     }
 

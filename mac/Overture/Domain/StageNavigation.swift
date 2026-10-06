@@ -94,6 +94,9 @@ enum StageNavigation {
     // uncounted, exactly as `matches` read them before the port (so no `WorkTally.recipientReaches` pin moves),
     // and any other conformer hands `factContacts`. Overload resolution takes the `[Prospect]` one for the
     // models the pass holds today.
+    //
+    // #4357 slice G3: the body itself is no longer private, so a generic caller that is itself handed its
+    // contacts (`AgentInputs.from`) passes them straight through rather than choosing a list here.
     static func placements(in prospects: [Prospect], context: StageContext) -> Placement {
         placements(of: prospects, contacts: { $0.recipients }, context: context)
     }
@@ -102,7 +105,7 @@ enum StageNavigation {
         placements(of: rows, contacts: { $0.factContacts }, context: context)
     }
 
-    private static func placements<Row: ProspectFacts, C: ContactFacts>(
+    static func placements<Row: ProspectFacts, C: ContactFacts>(
         of rows: [Row], contacts: (Row) -> [C], context: StageContext) -> Placement {
         // #3738: counted here, at the one place a placement is built, so "once per pass" is a number a
         // test can assert rather than a claim in a comment (L63, L27).

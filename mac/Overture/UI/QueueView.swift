@@ -2027,8 +2027,11 @@ struct QueueView: View {
     // show reaches this the same way an approved one does, and `approving: true` is what lets the sheet
     // name the people a not-yet-approved draft is about to reach. Nothing is written until he confirms, so
     // cancelling here leaves the draft exactly as it was.
+    // #4357 slice I2: the show is found through `ShowIdentity`, as every row action finds it, and a refusal
+    // is said on the press. The rebuild below resolves the same card SILENTLY, because it runs inside the
+    // sheet's body evaluation, where an acknowledgement would be a write during a render.
     private func requestSend(_ item: QueueItem) {
-        guard let model = prospects.first(where: { $0.naturalKey == item.id }),
+        guard let model = prospects.show(for: item, feedback: feedback),
               var confirmation = SendConfirmation(prospect: model, approving: true) else { return }
         // #1219: warn at the committing moment when a DIFFERENT committed show shares this date, naming it
         // so Dan remembers which one. Fires on any commitment (booked / emailed / live draft), not just an
@@ -2040,7 +2043,7 @@ struct QueueView: View {
         pendingConfirm = PendingSend(
             id: item.id, confirmation: confirmation,
             rebuild: { selected, together in
-                guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return nil }
+                guard let model = ShowIdentity(item)?.resolve(in: prospects).show else { return nil }
                 // #4168: the choice is PASSED, never written. This used to set `sendsTogetherOverride` on
                 // the live model and restore it in a `defer`, which is two writes to an observed SwiftData
                 // model inside a SwiftUI body evaluation. `SendConfirmSheet.current` was read seven times

@@ -180,6 +180,65 @@ enum LandingOracle {
         return unwrap(child.value)
     }
 
+    // MARK: the order the real arm hands the landing its stored shows in (#4518)
+
+    /// Shows in natural key order, compared byte for byte, two holding one key in the order they were handed in:
+    /// the order today's landing holds its table in (`Prospect.inKeyOrder`, #4397). A copy rather than a call,
+    /// because this file is overlaid onto 6d3453d8, which has no `Prospect.inKeyOrder`;
+    /// `LandingOracleKeyOrderTests` holds the copy to the app's answer.
+    static func inKeyOrder(_ rows: [Prospect]) -> [Prospect] {
+        rows.enumerated().map { (key: $0.element.naturalKey, at: $0.offset, row: $0.element) }
+            .sorted {
+                $0.key.utf8.elementsEqual($1.key.utf8)
+                    ? $0.at < $1.at : $0.key.utf8.lexicographicallyPrecedes($1.key.utf8)
+            }
+            .map(\.row)
+    }
+
+    /// The real arm's read of the stored shows: every read the landing makes of them, handed back in key order,
+    /// and counted.
+    ///
+    /// 6d3453d8's landing took the stored shows in whatever order an unsorted fetch returned them, and on a
+    /// context holding unsaved changes that order moves from one read to the next (#4397). So a recording made
+    /// there without this was one draw of that order, which 6d3453d8 itself could not repeat, and the landing has
+    /// held its table in key order since #4407, so today's code could not match the draw either: the 1x arm went
+    /// red on three rows that draw had placed differently (#4518). Handed this read, 6d3453d8 lands in the order
+    /// today's landing uses, and on today's code it changes nothing, because the landing orders the table itself.
+    /// The count is how a landing that never read through it is said rather than compared.
+    final class KeyOrderedTable: @unchecked Sendable {
+        private let lock = NSLock()
+        private var reads = 0
+
+        var count: Int {
+            lock.lock()
+            defer { lock.unlock() }
+            return reads
+        }
+
+        var read: @Sendable (ModelContext) throws -> [Prospect] {
+            { [self] context in
+                lock.lock()
+                reads += 1
+                lock.unlock()
+                return LandingOracle.inKeyOrder(try context.fetch(FetchDescriptor<Prospect>()))
+            }
+        }
+    }
+
+    /// The header line a real-arm recording carries when its landing read the stored shows through
+    /// `KeyOrderedTable`.
+    static let keyOrderPin = "stored shows handed to the landing in natural key order (#4518)"
+
+    /// Why a real-arm recording cannot be compared against, or nil when it can. One made before #4518 holds a
+    /// draw of the fetch order, so a comparison with it fails on whichever rows that draw placed differently,
+    /// which reads exactly like a landing change and is how #4518 was found.
+    static func recordingRefusal(_ text: String) -> String? {
+        if text.split(separator: "\n").contains(where: { $0 == "# " + keyOrderPin }) { return nil }
+        return "UNMEASURED: this recording was made before the real arm handed the landing its stored shows in "
+            + "key order (#4518), so it holds one draw of an unsorted read rather than what the landing leaves; "
+            + "record a new one with scripts/landing-oracle.sh"
+    }
+
     // MARK: hashing
 
     static func hash(_ text: String) -> String { hex(SHA256.hash(data: Data(text.utf8))) }
@@ -424,6 +483,29 @@ enum LandingOracle {
             m.sha256[parts[1].trimmingCharacters(in: .whitespaces)] = parts[0]
         }
         return m
+    }
+
+    /// Why `source` cannot be the archive a new one takes its 1x store and inputs from (#4518), or nil when it
+    /// can: it must carry a readable MANIFEST every file still matches, a 1x store, FACTS pinning today and now,
+    /// and every input a landing reads. Checked before anything is copied, so a damaged or partial archive is
+    /// refused rather than carried into a new one.
+    static func refreezeSourceRefusal(_ source: URL, requiredInputs: [String]) -> String? {
+        guard let manifest = manifest(at: source.appendingPathComponent("MANIFEST")) else {
+            return "REFUSED: \(source.path) carries no readable MANIFEST, so nothing in it can be checked"
+        }
+        if let refusal = inputsRefusal(archive: source, manifest: manifest) {
+            return "REFUSED: \(source.path) does not match its own MANIFEST (\(refusal))"
+        }
+        guard manifest.sha256.keys.contains(where: { $0.hasPrefix("x1/") && $0.hasSuffix(".store") }) else {
+            return "REFUSED: \(source.path) holds no 1x store"
+        }
+        for name in ["FACTS"] + requiredInputs where manifest.sha256[name] == nil {
+            return "REFUSED: \(source.path) holds no \(name)"
+        }
+        guard manifest.facts["today"] != nil, manifest.facts["now"] != nil else {
+            return "REFUSED: \(source.path) does not pin today and now"
+        }
+        return nil
     }
 
     /// Nil when every file the manifest names hashes to what it recorded, or the reading

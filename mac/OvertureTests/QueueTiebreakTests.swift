@@ -83,6 +83,24 @@ struct QueueTiebreakTests {
                 "the same night in either input order reads the same way round")
     }
 
+    // #4357 slice I3 (plan v7 Phase 3, step 6): two rooms spelled apart only by letter case compare as one
+    // room, and that must fall through to the natural key rather than stop there. The venue clause used to
+    // return on any two spellings that differed, so for these two it answered "neither comes first" and the
+    // key below it was never asked: the night kept whatever order the rows arrived in.
+    @Test func twoRoomsSpelledApartOnlyByCaseFallToTheKey() {
+        let forwards = QueueModel.orderedWithinNight([
+            item("bbb", fit: 5, reachability: .emailFound, venue: "Harbor Hall"),
+            item("aaa", fit: 5, reachability: .emailFound, venue: "harbor hall"),
+        ])
+        let backwards = QueueModel.orderedWithinNight([
+            item("aaa", fit: 5, reachability: .emailFound, venue: "harbor hall"),
+            item("bbb", fit: 5, reachability: .emailFound, venue: "Harbor Hall"),
+        ])
+        #expect(forwards.map(\.id) == ["aaa", "bbb"])
+        #expect(backwards.map(\.id) == ["aaa", "bbb"],
+                "two spellings of one room kept the order the rows arrived in")
+    }
+
     // An UNCHECKED show is unknown, not unreachable, so it sits between the two. Ranking it with the
     // shows a check proved have no route would state something no check ever measured (L11), and Dan
     // triages these on Scout before any check has run, so this is the common case rather than an edge.

@@ -269,8 +269,10 @@ struct QueueShowableSurfacesAreOnePredicateTests {
               marker: "private func focusOnStage(_ status: AgentStatus) {",
               answers: "the rows a stage pill's tap lands on",
               mustCall: ["naturalKeys"]),
+        // #4357 slice G3: the generic body, where the rule lives; the model entry point only hands it the rows,
+        // and `QueueRenderDataGuardTests.agentInputsCountsInOnePass` holds it to that.
         .init(path: "Overture/Domain/AgentRoster.swift",
-              marker: "-> AgentInputs {",
+              marker: "recipient: Row.Contact, next: Date)]? = nil) -> AgentInputs {",
               answers: "the number each stage pill states",
               mustCall: ["counts"]),
         // #2288: the Sources sheet's room list, whose count beside each room promises what answering it

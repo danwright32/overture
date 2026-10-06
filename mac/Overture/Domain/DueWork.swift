@@ -156,7 +156,18 @@ enum DueWork {
 
     static func counts(prospects: [Prospect], inquiries: [Inquiry], now: Date, replyRunAlive: Bool,
                        followUp: FollowUpConfig = .init()) -> Counts {
-        rows(prospects: prospects, inquiries: inquiries, now: now, replyRunAlive: replyRunAlive,
+        counts(from: prospects, contacts: { $0.recipients }, inquiries: inquiries, now: now,
+               replyRunAlive: replyRunAlive, followUp: followUp)
+    }
+
+    // #4357 slice G3: the same over any rows, with the contacts handed in, read by `AgentInputs.from` and by the
+    // model entry point above. Slice E2 left it out because nothing read it yet. Counted off the generic lists
+    // directly: the model entry point used to wrap every row in the sheet's structs only to count them, and the
+    // counts of a wrapped list and of the list it wraps are the same numbers.
+    static func counts<Row: ProspectFacts>(from shows: [Row], contacts: (Row) -> [Row.Contact], inquiries: [Inquiry],
+                                           now: Date, replyRunAlive: Bool,
+                                           followUp: FollowUpConfig = .init()) -> Counts {
+        rows(from: shows, contacts: contacts, inquiries: inquiries, now: now, replyRunAlive: replyRunAlive,
              followUp: followUp).counts
     }
 

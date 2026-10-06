@@ -43,7 +43,13 @@ fi
 
 FOLDER="$(resolve_store_folder "$1" "${APP_SUPPORT}")" || exit 1
 if [[ -e "${FOLDER}/Overture.store" ]]; then
-  echo "Refusing: ${FOLDER} already holds a store, and this never writes over one. Name an empty folder." >&2
+  # The writer writes its report LAST, so a store with no report beside it is what a run stopped part way
+  # leaves. It is still never written over; the refusal names the way out instead (L406).
+  if [[ ! -s "${FOLDER}/synthetic-store-report.txt" ]]; then
+    echo "Refusing: ${FOLDER} holds a store with no report beside it, which is what a writer run stopped part way leaves. This never writes over a store: delete that folder, or name an empty one, and run this again." >&2
+  else
+    echo "Refusing: ${FOLDER} already holds a store, and this never writes over one. Name an empty folder." >&2
+  fi
   exit 1
 fi
 

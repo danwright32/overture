@@ -947,6 +947,26 @@ the measurement it came from lives here. Read the entry before the rule decides 
   #4372 probe's `restamped shows ... by the twin key` line; `anUnchangedReLandWritesOnlyTheTwinRuleSRowsAtEverySize`
   holds that a re-land writes only the twin rule's rows and the reconcile's counted misses, and at 3x exactly three times what it writes at 1x. Three, because 3x (the original plus two copies) is the smallest corpus holding two copies to twin. Archives frozen before
   #4481 hold the old glue, so the re-freeze above applies again.
+- **Since #4518 (2026-10-05) the real arm hands the landing its stored shows in natural key order, on both
+  sides, and both sizes were recorded again from 6d3453d8 that way.** On 2026-10-05 main's 1x landing differed
+  from the 2026-09-30 recording in 41 fields, over Prospect rows 739 to 741 and one field of row 1293, and in
+  nothing else (the comparison prints 25 lines, so the first report saw only rows 739 and 740). That recording
+  was one draw: 6d3453d8's landing took the stored shows, and built the history it matches against, in whatever
+  order an unsorted fetch returned them, which on a context holding unsaved changes moves from read to read
+  (#4397), and since #4407 the landing puts both in key order itself. With #4407's two order lines reverted,
+  main drew a third outcome on the same rows, so no build could be expected to repeat the draw. Recorded at
+  6d3453d8 with the order pinned, the 1x landing's digest is main's to the last character. The real arm now
+  passes `LandingOracle.KeyOrderedTable` as the ingest's `readProspectTable` and builds the history from the
+  rows in key order; on today's code that changes nothing, since the landing orders both itself.
+  `LandingOracleKeyOrderTests` holds the oracle's copy of the order to `Prospect.inKeyOrder` (a copy, because
+  6d3453d8 has no `Prospect.inKeyOrder` for the overlay to call). A landing that never read through the pin is
+  refused, and a recording without the pin's header line is refused as `UNMEASURED` by name rather than
+  compared, which is what the 2026-09-30 recordings now say. The 4x was rebuilt with
+  `scripts/landing-oracle.sh --freeze <new archive> --refreeze-from <old archive>`, which copies the old
+  archive's 1x store, inputs and pinned today and now byte for byte, checked against its MANIFEST, and builds
+  only the 4x afresh with today's `ScaledCorpus`: no new clone of the live store, and the 1x arm's inputs did not
+  move. The archive is `~/.overture-oracle/4275-frozen-inputs-20260929-rescaled-20261005` and the recordings are
+  in `~/.overture-oracle/real-arm-6d3453d8-keyorder`.
 - **A real-arm file can never be pushed.** Its FIRST LINE is exactly the marker, and nothing else counts, so
   every file that talks about the marker builds it from two halves and pushes cleanly (L245, L673).
   `scripts/hooks/pre-push` walks every commit a push carries and refuses one that adds or modifies a marked

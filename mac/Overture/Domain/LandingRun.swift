@@ -43,8 +43,11 @@ final class LandingRun {
     // #4338 (A10): how many of this landing's entry flushes (`ScoutService.flushBeforeLanding`, one in its read
     // phase and one under the token) found edits pending and saved them, 0 to 2, added to on every attempt of
     // the same run. Kept here rather than on the run's outcome because the rows are never pruned, so the rate
-    // over time is readable: `scripts/landing-flush-rate.sh` is its reader. Defaulted, so earlier rows read 0.
-    var entryFlushSaves: Int = 0
+    // over time is readable: `scripts/landing-flush-rate.sh` is its reader. OPTIONAL, and that is the marker:
+    // every landing that reaches its landing block under a build that writes it sets it, to 0 or more, so nil
+    // says "no count recorded" (a row from before #4338, or one the recovery made for a landing that never
+    // reached its first save), which the reader leaves out rather than reading as a landing that saved nothing.
+    var entryFlushSaves: Int? = nil
 
     init(runIdentity: String, landedAt: Date?, sequence: Int = 0,
          entryPoint: LandingSingleFlight.EntryPoint? = nil, startedAt: Date? = nil) {

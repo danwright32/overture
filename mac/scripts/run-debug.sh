@@ -92,12 +92,18 @@ assert_is_debug_bundle() {
 
 # #4338 (A10): `--store-folder <folder>` opens the Debug build on the store in a NAMED folder instead of
 # its own, so a synthetic store (scripts/make-synthetic-landing-store.sh) can be looked at without ever
-# overwriting the Debug store, and without any route to the live one. Two folders are refused by name,
-# the live Release one and the default Debug one, along with anything inside either and anything that
-# holds either: a folder holding the Release one (Application Support itself, the home folder) would put
-# the store's handoff files on top of the live ones. Symlinks are followed first, so a link pointing at a
-# refused folder is refused as that folder. A folder that does not exist is refused too, because a typo
-# would otherwise open an empty store that reads as every show gone.
+# overwriting the Debug store, and without any route to the live one. Two folders are refused, the live
+# Release one and the default Debug one, along with anything inside either and anything that holds either:
+# a folder holding the Release one (Application Support itself, the home folder) would put the store's
+# handoff files on top of the live ones. A folder that does not exist is refused too, because a typo would
+# otherwise open an empty store that reads as every show gone.
+#
+# THE RULE, stated once here and once in `StoreLocation.debugStoreFolder`: folders are compared by FILE
+# IDENTITY, device and inode, never by path text. A folder is refused when it, or any folder above it, IS
+# a protected folder, and when it is any folder above a protected one. Path text cannot answer this: the
+# startup volume ignores letter case, so `application support/overture` names the live folder while
+# matching neither spelling, and a link, or `/var` beside `/private/var`, gives one folder two spellings.
+# The review of ed57113 found the case hole; a comparison that folded case would still miss the others.
 #
 # Prints the folder as resolved on success. On refusal prints why to stderr and returns 1. The app makes
 # the same check again on launch (`StoreLocation.debugStoreFolder`), so a launch by hand is refused too.
@@ -117,22 +123,43 @@ resolve_store_folder() {
     echo "Refusing to launch: could not resolve ${folder}." >&2
     return 1
   }
-  local protected real
+  local candidate_chain
+  candidate_chain="$(folder_identity_chain "${resolved}")" || {
+    echo "Refusing to launch: could not read ${folder}, or a folder above it." >&2
+    return 1
+  }
+  local protected protected_chain
   for protected in "${app_support}/Overture" "${app_support}/Overture-Debug"; do
-    real="${protected}"
-    if [[ -d "${protected}" ]]; then real="$(cd "${protected}" && pwd -P)"; fi
-    case "${resolved}/" in
-      "${real}/"*)
-        echo "Refusing to launch: ${folder} is ${protected}, or inside it, and that store must never be opened this way." >&2
-        return 1 ;;
-    esac
-    case "${real}/" in
-      "${resolved}/"*)
-        echo "Refusing to launch: ${folder} holds ${protected}, so its files would land beside that store's." >&2
-        return 1 ;;
-    esac
+    protected_chain="$(folder_identity_chain "${protected}")" || {
+      echo "Refusing to launch: could not read ${protected}, or a folder above it." >&2
+      return 1
+    }
+    if [[ -d "${protected}" ]] && grep -Fqx "${protected_chain%%$'\n'*}" <<< "${candidate_chain}"; then
+      echo "Refusing to launch: ${folder} is ${protected}, or inside it, and that store must never be opened this way." >&2
+      return 1
+    fi
+    if grep -Fqx "${candidate_chain%%$'\n'*}" <<< "${protected_chain}"; then
+      echo "Refusing to launch: ${folder} holds ${protected}, so its files would land beside that store's." >&2
+      return 1
+    fi
   done
   printf '%s\n' "${resolved}"
+}
+
+# The device and inode of a folder and of every folder above it, one per line, the folder itself first.
+# The walk runs over the physical path `pwd -P` gives, as StoreLocation.swift walks `realpath`'s, so a link
+# or a `..` is settled before any parent is taken. `stat` is named by path because a GNU stat earlier on
+# PATH reads `-f` as something else. A path that does not exist yet starts from the nearest folder above it
+# that does, so a protected folder not yet made still has its holders.
+folder_identity_chain() {
+  local path="$1"
+  while [[ ! -d "${path}" && "${path}" != "/" ]]; do path="$(dirname "${path}")"; done
+  path="$(cd "${path}" && pwd -P)" || return 1
+  while :; do
+    /usr/bin/stat -f '%d:%i' "${path}" || return 1
+    if [[ "${path}" == "/" ]]; then return 0; fi
+    path="$(dirname "${path}")"
+  done
 }
 
 # The arguments the app is opened with: the store folder, and a landing preview, each only when asked for.

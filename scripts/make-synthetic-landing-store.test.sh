@@ -75,6 +75,17 @@ assert_contains "a folder already holding a store is refused" "${AGAIN_RUN}" "al
 assert_contains "and exits 1" "${AGAIN_RUN}" "exit=1"
 assert_equals "without running the writer" "" "$(cat "${CALLS}")"
 
+# A store with no report beside it is what a writer run stopped part way leaves (the report is written last).
+# It is still never written over, and the refusal names the way out rather than leaving it to be guessed (L406).
+mkdir -p "${WORK}/half written"
+: > "${WORK}/half written/Overture.store"
+: > "${CALLS}"
+HALF_RUN="$(run_script "${GOOD}" "${WORK}/half written")"
+assert_contains "a store a stopped writer left is refused as that" "${HALF_RUN}" "stopped part way"
+assert_contains "and the refusal says to delete the folder and run again" "${HALF_RUN}" "delete that folder"
+assert_contains "and exits 1" "${HALF_RUN}" "exit=1"
+assert_equals "without running the writer" "" "$(cat "${CALLS}")"
+
 # A writer that failed, or passed and wrote nothing, is unmeasured, never a store written.
 mkdir -p "${WORK}/second" "${WORK}/third"
 FAILED_RUN="$(run_script "$(make_runner no 65)" "${WORK}/second")"

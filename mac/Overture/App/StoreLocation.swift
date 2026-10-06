@@ -95,23 +95,64 @@ enum StoreLocation {
         guard fileManager.fileExists(atPath: raw, isDirectory: &isFolder), isFolder.boolValue else {
             return .refused("\(raw) is not a folder")
         }
-        let resolved = URL(fileURLWithPath: raw, isDirectory: true).resolvingSymlinksInPath().standardizedFileURL
+        // THE RULE, stated once here and once in run-debug.sh's `resolve_store_folder`: folders are compared by
+        // FILE IDENTITY, device and inode, never by path text. A folder is refused when it, or any folder above
+        // it, IS a protected folder, and when it is any folder above a protected one. Path text cannot answer
+        // this: the startup volume ignores letter case, and a link, a firmlink or `/var` beside `/private/var`
+        // each give one folder two spellings. Foundation settles most of them for a folder that exists, but
+        // leaves the text of one that does not exactly as typed, so a text comparison holds only by accident
+        // and only on some paths (the review of ed57113 found the case hole in the shell twin).
+        guard let candidateChain = folderIdentityChain(raw) else {
+            return .refused("\(raw), or a folder above it, could not be read")
+        }
         for isDebug in [false, true] {
             let protected = dataDirectory(appSupport: appSupport, isDebugBuild: isDebug)
-            let real = protected.resolvingSymlinksInPath().standardizedFileURL
-            if isSameOrInside(resolved, real) {
+            guard let protectedChain = folderIdentityChain(protected.path) else {
+                return .refused("\(protected.path), or a folder above it, could not be read")
+            }
+            if let protectedFolder = folderIdentity(protected.path), candidateChain.contains(protectedFolder) {
                 return .refused("\(raw) is \(protected.path), or inside it")
             }
-            if isSameOrInside(real, resolved) {
+            if let candidateFolder = candidateChain.first, protectedChain.contains(candidateFolder) {
                 return .refused("\(raw) holds \(protected.path)")
             }
         }
-        return .folder(resolved)
+        return .folder(URL(fileURLWithPath: raw, isDirectory: true).resolvingSymlinksInPath().standardizedFileURL)
     }
     // copy-inventory:ignore-end
 
-    private static func isSameOrInside(_ path: URL, _ folder: URL) -> Bool {
-        (path.path + "/").hasPrefix(folder.path + "/")
+    private struct FolderIdentity: Equatable {
+        let device: dev_t
+        let inode: ino_t
+    }
+
+    // A folder's device and inode, as `stat -f '%d:%i'` prints them in run-debug.sh. Nil for anything that is
+    // not a folder, or cannot be read.
+    private static func folderIdentity(_ path: String) -> FolderIdentity? {
+        var info = stat()
+        guard stat(path, &info) == 0, (info.st_mode & S_IFMT) == S_IFDIR else { return nil }
+        return FolderIdentity(device: info.st_dev, inode: info.st_ino)
+    }
+
+    // The identity of a folder and of every folder above it, the folder itself first. A path that does not exist
+    // yet starts from the nearest folder above it that does, so a protected folder not yet made still has its
+    // holders. The walk runs over `realpath`'s answer, so a link or a `..` is settled before any parent is
+    // taken. Nil when a folder on the way cannot be read, which refuses.
+    private static func folderIdentityChain(_ path: String) -> [FolderIdentity]? {
+        var existing = path
+        while folderIdentity(existing) == nil && existing != "/" && !existing.isEmpty {
+            existing = (existing as NSString).deletingLastPathComponent
+        }
+        guard let real = realpath(existing, nil) else { return nil }
+        var current = String(cString: real)
+        free(real)
+        var chain: [FolderIdentity] = []
+        while true {
+            guard let identity = folderIdentity(current) else { return nil }
+            chain.append(identity)
+            if current == "/" { return chain }
+            current = (current as NSString).deletingLastPathComponent
+        }
     }
 
     // Where a named store folder keeps its store and its handoff files: laid out as the Debug build lays out

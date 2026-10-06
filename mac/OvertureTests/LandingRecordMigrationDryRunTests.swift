@@ -76,9 +76,10 @@ struct LandingRecordMigrationDryRunTests {
                     "a migrated landing run reads as recovered or attempted when nothing recorded either")
         }
         if !hadFlushColumn {
-            // #4338: one more count, reading as no flush saved on every run the file held.
-            #expect(runs.allSatisfy { $0.entryFlushSaves == 0 },
-                    "a migrated landing run reads as having saved edits first when nothing recorded it")
+            // #4338: one more count, optional, reading as NO count on every run the file held, never as a landing
+            // that saved nothing first.
+            #expect(runs.allSatisfy { $0.entryFlushSaves == nil },
+                    "a migrated landing run reads as carrying a flush count when nothing recorded one")
         }
 
         // The new columns take a write and read it back, which a schema mismatch breaks and an open-and-count

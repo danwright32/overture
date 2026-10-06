@@ -39,6 +39,8 @@ assert_contains "the window counts only landings started in it" "${COUNTED_RUN}"
 assert_contains "and gives the share that saved first, with once and twice apart" "${COUNTED_RUN}" \
   "saved pending edits first: 2 of 4 (50%), once 1, twice 1, 3 entry flush saves in all"
 assert_contains "and exits 0" "${COUNTED_RUN}" "exit=0"
+assert_contains "and says a landing refused before its record is not in the rate" "${COUNTED_RUN}" \
+  "A landing refused before its record was written is not counted here."
 
 WIDE_RUN="$(run_script --store "${COUNTED}" --days 60)"
 assert_contains "a wider window reaches the older landing, never the one with no start time" "${WIDE_RUN}" \
@@ -52,6 +54,15 @@ BEFORE_RUN="$(run_script --store "${BEFORE}")"
 assert_contains "a store with no flush count is unmeasured" "${BEFORE_RUN}" "UNMEASURED: this store records no entry flush count"
 assert_contains "and exits 2" "${BEFORE_RUN}" "exit=2"
 assert_not_contains "and never prints a rate" "${BEFORE_RUN}" "saved pending edits first"
+
+# A store with no landing records at all predates #4335, not just #4338, and is said as that (L11).
+NOTABLE="${WORK}/no-table.store"
+sqlite3 "${NOTABLE}" "CREATE TABLE ZPROSPECT (Z_PK INTEGER PRIMARY KEY);"
+NOTABLE_RUN="$(run_script --store "${NOTABLE}")"
+assert_contains "a store with no landing records is unmeasured as that" "${NOTABLE_RUN}" \
+  "UNMEASURED: this store holds no landing records at all"
+assert_not_contains "never blamed on a missing flush count" "${NOTABLE_RUN}" "records no entry flush count"
+assert_contains "and exits 2" "${NOTABLE_RUN}" "exit=2"
 
 # A window holding no landing says so, with no rate.
 QUIET="${WORK}/quiet.store"
@@ -79,6 +90,38 @@ assert_equals "the store read is never written" "${BEFORE_SUM}" "$(shasum "${COU
 
 BAD_DAYS="$(run_script --store "${COUNTED}" --days soon)"
 assert_contains "a window that is not a number is refused" "${BAD_DAYS}" "exit=64"
+
+# A flag given as the last argument, with no value after it, is refused by name rather than looping for ever:
+# `shift 2` with one argument left shifts nothing. Each run is bounded by an alarm, so a regression fails here
+# (killed by the alarm, exit 142) rather than hanging the fixture run.
+for flag in --store --days; do
+  LAST_RUN="$(perl -e 'alarm 10; exec @ARGV' "${SCRIPT}" "${flag}" 2>&1)"
+  LAST_CODE=$?
+  assert_equals "${flag} with no value after it is refused" "64" "${LAST_CODE}"
+  assert_contains "and the refusal names ${flag}" "${LAST_RUN}" "${flag} needs a value"
+done
+
+# #4338 review: a landing that carries no count (NULL, written before the count existed) is never read as one that
+# saved nothing first. It is left out of the rate and said as its own unmeasured group.
+MIXED="${WORK}/mixed.store"
+sqlite3 "${MIXED}" "CREATE TABLE ZLANDINGRUN (Z_PK INTEGER PRIMARY KEY, ZRUNIDENTITY VARCHAR, ZSTARTEDAT TIMESTAMP, ZENTRYFLUSHSAVES INTEGER);
+INSERT INTO ZLANDINGRUN (ZRUNIDENTITY, ZSTARTEDAT, ZENTRYFLUSHSAVES) VALUES
+ ('new', $(( NOW - 1 * DAY )), 1), ('older-a', $(( NOW - 2 * DAY )), NULL), ('older-b', $(( NOW - 3 * DAY )), NULL);"
+MIXED_RUN="$(run_script --store "${MIXED}")"
+assert_contains "the rate counts only landings that recorded their count" "${MIXED_RUN}" \
+  "saved pending edits first: 1 of 1 (100%)"
+assert_contains "and says how many in the window predate the count" "${MIXED_RUN}" \
+  "2 more landings started in the last 14 days carry no flush count, so they are not counted."
+assert_contains "and still exits 0, since a rate was measured" "${MIXED_RUN}" "exit=0"
+
+ALL_OLDER="${WORK}/all-older.store"
+sqlite3 "${ALL_OLDER}" "CREATE TABLE ZLANDINGRUN (Z_PK INTEGER PRIMARY KEY, ZSTARTEDAT TIMESTAMP, ZENTRYFLUSHSAVES INTEGER);
+INSERT INTO ZLANDINGRUN (ZSTARTEDAT, ZENTRYFLUSHSAVES) VALUES ($(( NOW - DAY )), NULL);"
+ALL_OLDER_RUN="$(run_script --store "${ALL_OLDER}")"
+assert_contains "a window holding only landings from before the count is unmeasured" "${ALL_OLDER_RUN}" \
+  "UNMEASURED: the 1 landing started in the last 14 days carries no flush count"
+assert_contains "and exits 2" "${ALL_OLDER_RUN}" "exit=2"
+assert_not_contains "never a rate of nothing saved" "${ALL_OLDER_RUN}" "saved pending edits first"
 
 if [[ "${FAILURES}" -gt 0 ]]; then
   echo "${FAILURES} failure(s)"
