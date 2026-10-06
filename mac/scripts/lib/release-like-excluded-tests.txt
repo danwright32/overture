@@ -19,6 +19,10 @@ LandingBatchTablesRealArmTests.swift
 LandingBatchTablesTests.swift
 # names buildPartsNanoseconds
 LandingFirstHoldProbeTests.swift
+# uses FailurePathRevertProbeTests (FailurePathRevertProbeTests.swift)
+LandingSaveFailureTests.swift
+# uses ScoutFailedSaveIsolationTests (ScoutFailedSaveIsolationTests.swift)
+LeadPasteLandingTests.swift
 # names QueueRenderCounter
 QueueDerivationCounterTests.swift
 # names QueueRenderCounter
@@ -27,5 +31,9 @@ QueueDerivationReasonTests.swift
 QueueWriteTraceTests.swift
 # names DebugStaging
 RenderDataComparisonTests.swift
+# uses FailurePathRevertProbeTests (FailurePathRevertProbeTests.swift)
+ScoutFailedSaveIsolationTests.swift
 # names QueueRenderCounter
 ScoutLandingAttributionProbeTests.swift
+# uses ScoutFailedSaveIsolationTests (ScoutFailedSaveIsolationTests.swift)
+ScoutLandingStoreRevertTests.swift

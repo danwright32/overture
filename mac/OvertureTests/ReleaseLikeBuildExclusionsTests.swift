@@ -17,7 +17,9 @@ import Foundation
 // list that differs from the derivation fails, and `TEST_RUNNER_REGENERATE_RELEASE_LIKE_EXCLUSIONS=1` writes it
 // (L422, L272). The acceptance rig's own file must never be on it, or the release-like reading would be
 // UNMEASURED by construction.
-@Suite("The release-like run leaves out exactly the pure test files that need DEBUG (#4343)")
+// `.sharesTheRenderCounter` because the positive controls below NAME the render counter, which is what
+// SharedStateWiringTests reads; this suite never touches it, so the trait costs one serialisation and nothing else.
+@Suite("The release-like run leaves out exactly the pure test files that need DEBUG (#4343)", .sharesTheRenderCounter)
 struct ReleaseLikeBuildExclusionsTests {
 
     static let listURL = RepoRoot.mac.appendingPathComponent("scripts/lib/release-like-excluded-tests.txt")
@@ -177,16 +179,7 @@ struct ReleaseLikeBuildExclusionsTests {
 
     // The names in `names` a file uses in code that compiles without DEBUG, with the first line each is on.
     static func uses(of names: Set<String>, in file: File) -> [(name: String, line: Int)] {
-        guard !names.isEmpty else { return [] }
-        let code = SwiftSource.tokenize(file.text).codeLines
-        let skipped = debugOnlyLines(code)
-        var found: [String: Int] = [:]
-        for line in code.keys.sorted() where !skipped.contains(line) {
-            for word in words(in: code[line]!) where names.contains(word) && found[word] == nil {
-                found[word] = line
-            }
-        }
-        return found.map { (name: $0.key, line: $0.value) }.sorted { $0.line < $1.line }
+        Scanned(file).uses(of: names)
     }
 
     static func words(in line: String) -> [String] {
@@ -202,22 +195,49 @@ struct ReleaseLikeBuildExclusionsTests {
         return out
     }
 
-    // The names a test file declares that another file could use: its top-level declarations, and the members
-    // of its top-level extensions.
-    static func exportedNames(_ file: File) -> Set<String> {
-        let code = SwiftSource.tokenize(file.text).codeLines
-        let skipped = debugOnlyLines(code)
-        return names(declaredAt: 0, in: code.keys.sorted().filter { !skipped.contains($0) }, code: code,
-                     depths: depths(code))
+    // One test file, read once: every word its code uses outside a DEBUG branch with the first line each is on,
+    // and the names it declares that another file could use (its top-level declarations, and the members of its
+    // top-level extensions). The closure below asks both many times per file, so each file is tokenised once:
+    // asked afresh per question, the first version of this guard took a minute of every run.
+    struct Scanned {
+        let name: String
+        let words: [String: Int]
+        let exported: Set<String>
+
+        init(_ file: File) {
+            let code = SwiftSource.tokenize(file.text).codeLines
+            let skipped = ReleaseLikeBuildExclusionsTests.debugOnlyLines(code)
+            var words: [String: Int] = [:]
+            let kept = code.keys.sorted().filter { !skipped.contains($0) }
+            for line in kept {
+                for word in ReleaseLikeBuildExclusionsTests.words(in: code[line]!) where words[word] == nil {
+                    words[word] = line
+                }
+            }
+            self.name = file.name
+            self.words = words
+            self.exported = ReleaseLikeBuildExclusionsTests.names(
+                declaredAt: 0, in: kept, code: code, depths: ReleaseLikeBuildExclusionsTests.depths(code))
+        }
+
+        func uses(of names: Set<String>) -> [(name: String, line: Int)] {
+            names.compactMap { n in words[n].map { (name: n, line: $0) } }
+                .sorted { $0.line != $1.line ? $0.line < $1.line : $0.name < $1.name }
+        }
     }
+
+    static func exportedNames(_ file: File) -> Set<String> { Scanned(file).exported }
 
     // The files to leave out, each with why, closed over use: a file using a name only a left out file declares
     // is left out too, until nothing changes.
     static func exclusions(app: [File], tests: [File]) -> [String: String] {
-        let debugNames = debugOnlyNames(app)
+        exclusions(debugNames: debugOnlyNames(app), tests: tests.map(Scanned.init))
+    }
+
+    static func exclusions(debugNames: Set<String>, tests: [Scanned]) -> [String: String] {
         var excluded: [String: String] = [:]
         for file in tests {
-            let used = uses(of: debugNames, in: file)
+            let used = file.uses(of: debugNames)
             if !used.isEmpty {
                 excluded[file.name] = "names " + used.map { $0.name }.sorted().joined(separator: ", ")
             }
@@ -227,12 +247,11 @@ struct ReleaseLikeBuildExclusionsTests {
             changed = false
             var declaredBy: [String: String] = [:]
             for file in tests where excluded[file.name] != nil {
-                for name in exportedNames(file) { declaredBy[name] = file.name }
+                for name in file.exported { declaredBy[name] = file.name }
             }
+            let declared = Set(declaredBy.keys)
             for file in tests where excluded[file.name] == nil {
-                let mine = exportedNames(file)
-                let used = uses(of: Set(declaredBy.keys).subtracting(mine), in: file)
-                if let first = used.first {
+                if let first = file.uses(of: declared.subtracting(file.exported)).first {
                     excluded[file.name] = "uses \(first.name) (\(declaredBy[first.name]!))"
                     changed = true
                 }
@@ -282,8 +301,12 @@ struct ReleaseLikeBuildExclusionsTests {
                             floor: 100).map { File(name: $0.name, text: $0.text) }
     }
 
+    // The app's Debug-only names, derived once per process for both tests below: an immutable value, so sharing
+    // it cannot couple the tests, and the derivation (an index over every app file) is the costly half.
+    static let appDebugNames: Set<String> = debugOnlyNames(appFiles())
+
     @Test func theDerivationFindsTheAppsDebugOnlyDeclarations() {
-        let names = Self.debugOnlyNames(Self.appFiles())
+        let names = Self.appDebugNames
         // POSITIVE CONTROLS (L98): a type declared in a DEBUG branch, and members declared in one inside a type
         // that exists in both builds. A derivation finding none of these would clear every test file.
         for expected in ["QueueRenderCounter", "DebugSeed", "DebugStaging", "walkedRows", "batchTablesSnapshot",
@@ -298,16 +321,20 @@ struct ReleaseLikeBuildExclusionsTests {
 
     @Test func theCommittedListIsTheDerivedOne() throws {
         let tests = Self.pureTestFiles()
-        let excluded = Self.exclusions(app: Self.appFiles(), tests: tests)
+        let excluded = Self.exclusions(debugNames: Self.appDebugNames, tests: tests.map(Scanned.init))
         let derived = Self.listText(excluded)
         // A census beside the verdict, so the size of the release-like build's gap is read rather than assumed.
         let hosted = AppSourceWalk.files(under: RepoRoot.mac.appendingPathComponent("OvertureHostedTests"), floor: 20)
             .map { File(name: $0.name, text: $0.text) }
-        let debugNames = Self.debugOnlyNames(Self.appFiles())
-        let hostedNaming = hosted.filter { !Self.uses(of: debugNames, in: $0).isEmpty }
+        let hostedNaming = hosted.filter { !Self.uses(of: Self.appDebugNames, in: $0).isEmpty }
         print("release-like exclusions: \(excluded.count) of \(tests.count) pure test files left out; "
               + "\(hostedNaming.count) of \(hosted.count) hosted test files name a Debug-only symbol "
               + "(the hosted target is not built by that run)")
+        // Asked of every run, a regenerating one included: a list that leaves the rig out is wrong to write too.
+        #expect(excluded[Self.rigFile] == nil, Comment(rawValue: """
+            the acceptance rig would be left out of the release-like build (\(excluded[Self.rigFile] ?? "")), so its \
+            release-like reading could never be taken
+            """))
         if Self.regenerationRequested(ProcessInfo.processInfo.environment) {
             try derived.write(to: Self.listURL, atomically: true, encoding: .utf8)
             print("release-like exclusions: wrote \(Self.listURL.path); review it with git diff")
@@ -320,10 +347,6 @@ struct ReleaseLikeBuildExclusionsTests {
             -only-testing:OvertureTests/ReleaseLikeBuildExclusionsTests to write it. Derived: \
             \(Self.listedNames(derived).joined(separator: ", ")); committed: \
             \(Self.listedNames(committed).joined(separator: ", "))
-            """))
-        #expect(excluded[Self.rigFile] == nil, Comment(rawValue: """
-            the acceptance rig would be left out of the release-like build (\(excluded[Self.rigFile] ?? "")), so its \
-            release-like reading could never be taken
             """))
     }
 
