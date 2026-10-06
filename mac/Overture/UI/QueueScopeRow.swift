@@ -1,4 +1,5 @@
 import Foundation
+import SwiftData
 
 // #3653 Phase 3: what a whole-scope consumer of the render pass is allowed to know about a show.
 //
@@ -18,6 +19,9 @@ import Foundation
 // the FUNCTIONS, which can no longer see anything else.
 protocol QueueScopeFacts: SendableMetatype {
     var id: String { get }
+    // #4357 slice I2: the show's store identifier, which a press resolves through (`ShowIdentity`); `id`
+    // only witnesses it. On the protocol so the splice below carries it from a card to a row.
+    var showID: PersistentIdentifier? { get }
     var groupName: String { get }
     var discipline: String { get }
     var venue: String? { get }
@@ -91,6 +95,10 @@ protocol QueueScopeFacts: SendableMetatype {
 // mattering is that nothing in `mac/Overture` calls the memberwise init at all.
 struct QueueScopeRow: Identifiable, Equatable, Sendable, QueueScopeFacts {
     var id: String
+    // #4357 slice I2: the second half of the identity, and the one exception to the rule above, for
+    // `QueueItem.showID`'s reason: the memberwise callers are tests that name no stored show. Every row the
+    // app builds comes through the initialiser below, which fills it from the identifier the fact carries.
+    var showID: PersistentIdentifier? = nil
     var groupName: String
     var discipline: String
     var venue: String? = nil
@@ -295,6 +303,7 @@ extension QueueScopeRow {
         // test burns its full deadline (90s, 20s, 20s, 60s) in the serial hosted bundle before failing.
         QueueRenderPass.WorkTally.recordQueueRow()
         self.init(id: p.naturalKey,
+                  showID: p.persistentModelID,
                   groupName: p.groupName,
                   discipline: p.discipline,
                   venue: p.venue,
@@ -346,6 +355,7 @@ extension QueueScopeRow {
     // answers derived from it, `performanceStatus` and `reachabilityResult`, are STORED and do travel.
     init(_ other: some QueueScopeFacts) {
         self.init(id: other.id,
+                  showID: other.showID,
                   groupName: other.groupName,
                   discipline: other.discipline,
                   venue: other.venue,
