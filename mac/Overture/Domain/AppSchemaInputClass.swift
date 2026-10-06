@@ -9,7 +9,8 @@ import Foundation
 // here, once, and `AppSchemaInputClassTests` holds this table to the code in both directions: to
 // `AppSchema.models`, to the pass's own `Inputs`, and to the tables `QueueView` actually reads.
 //
-// NOTHING READS THIS YET. Phase 4's intake is its first reader (#4358).
+// The queue engine's intake reads it (#4358): every saved or fired identifier is taken in by its model's class,
+// and one this table does not name costs a full read rather than being ignored.
 enum AppSchemaInputClass: Equatable, Sendable {
     /// A row the engine keeps facts for. `parent` names the relationship that carries it into its owner's
     /// facts (a contact rides inside its show's `RowFacts`), or nil for a row that is a root of its own.

@@ -26,6 +26,7 @@ What is not, and why:
 - `App/LogRotation.swift`: lines written INTO a diagnostic log file, never the app's voice on screen
 - `App/PrepRunArchive.swift`: archive.log is a diagnostic record, not the app's voice on screen
 - `App/PrepRunArchive.swift`: archive.log is a diagnostic record, not the app's voice on screen
+- `App/QueueEngine.swift`: developer diagnostic log, not the app's own voice (#4358)
 - `App/StoreBackup.swift`: backup.log is a diagnostic record, not the app's voice on screen
 - `App/StoreSchemaGuard.swift`: sqlite's own error text, for backup.log, never shown on screen
 - `App/StoreShrinkCheck.swift`: SQL, not a sentence Overture says to Dan
