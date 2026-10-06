@@ -20,9 +20,9 @@
 #     test files that cannot compile without DEBUG: every file naming a Debug-only app symbol outside
 #     `#if DEBUG`, and every file using one of those. The list is DERIVED, by `ReleaseLikeBuildExclusionsTests`
 #     in every ordinary run, from the app's `#if DEBUG` declarations and the test sources, and committed
-#     beside this file (release-like-excluded-tests.txt), which that test fails on when it is stale. Measured
-#     2026-10-05: 10 pure files and 15 hosted files named one. The hosted target is not built at all, for that
-#     reason; no probe that matters to the release-like reading lives there.
+#     beside this file (release-like-excluded-tests.txt), which that test fails on when it is stale; that list,
+#     not this comment, says how many files are left out. Hosted test files name such symbols too, so the
+#     hosted target is not built at all; no probe that matters to the release-like reading lives there.
 #     Left out rather than wrapped in `#if DEBUG` in the files themselves, because a wrapped region is
 #     invisible to every source guard that skips Debug code (the window, store and container scans), so a
 #     wrap would quietly take those files out of the guards' reach in every ORDINARY run (L708).
