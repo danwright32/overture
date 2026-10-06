@@ -10,14 +10,23 @@ import AppKit
 //
 // MEASUREMENT ONLY, OPT IN, and it says it did not run rather than passing (L98):
 //
-//   TEST_RUNNER_MEASURE_4343=1 OVERTURE_TEST_STALL_END_SECONDS=7200 mac/scripts/run-tests-locked.sh \
-//     -only-testing:OvertureTests/LandingAcceptanceRigTests
+//   TEST_RUNNER_MEASURE_4343=1 TEST_RUNNER_MEASURE_4343_SIZE=4 OVERTURE_TEST_STALL_END_SECONDS=7200 \
+//     mac/scripts/run-tests-locked.sh -only-testing:OvertureTests/LandingAcceptanceRigTests
 //
-// Optional: TEST_RUNNER_MEASURE_4343_SIZES=1,4 (store multiples), TEST_RUNNER_MEASURE_4343_SAMPLES=5,
+// ONE STORE SIZE PER RUN, and the rig scoped ALONE, both measured rather than chosen. RootView's `@Query`
+// observers outlive the view: with a second store opened in the same process the first one's observers were
+// still registered, and once that store's sandbox closed it (`FileStores`) the next save ANYWHERE trapped inside
+// SwiftData's SwiftUI integration (the #3874 shape, measured 2026-10-06 on this rig's first two runs, which
+// ended the test process in the next entry point and in the next suite). So a run mounts ONE RootView on ONE
+// store, measures every entry point on it in turn, and nothing that saves may run after it in the process.
+// 1x and 4x are two runs.
+//
+// Optional: TEST_RUNNER_MEASURE_4343_SIZE=1 (the store multiple, 1 by default), TEST_RUNNER_MEASURE_4343_ENTRIES=
+// runScout,calendarIngest,offerPending,recovery,leadPaste (all by default), TEST_RUNNER_MEASURE_4343_SAMPLES=5,
 // TEST_RUNNER_MEASURE_4343_VARIANTS=reland,inserting, TEST_RUNNER_MEASURE_4343_LOAD_WAIT=60 (seconds a sample
 // waits for the one minute load to fall under 8 before it is taken anyway and judged), and
 // TEST_RUNNER_MEASURE_4343_OUT=<dir outside any checkout>, where every line is also appended to rig.log, so a run
-// the stall guard ends still leaves what it said. One test per entry point, so a run can be scoped to one.
+// the stall guard ends still leaves what it said.
 // Release-like (Release's optimiser, DEBUG compiled out): OVERTURE_TEST_RELEASE_LIKE=1 on the same command.
 //
 // WHAT IT MEASURES, per entry point, per store size, per variant: the LARGEST SINGLE MAIN THREAD HOLD over the
@@ -87,7 +96,11 @@ enum LandingAcceptanceRig {
 
     nonisolated static var env: [String: String] { ProcessInfo.processInfo.environment }
     nonisolated static var enabled: Bool { env["MEASURE_4343"] != nil }
-    nonisolated static var sizes: [Int] { (env["MEASURE_4343_SIZES"] ?? "1,4").split(separator: ",").compactMap { Int($0) } }
+    nonisolated static var size: Int { max(1, Int(env["MEASURE_4343_SIZE"] ?? "") ?? 1) }
+    nonisolated static var entries: [Entry] {
+        guard let named = env["MEASURE_4343_ENTRIES"] else { return Entry.allCases }
+        return named.split(separator: ",").compactMap { Entry(rawValue: String($0)) }
+    }
     nonisolated static var samples: Int { max(1, Int(env["MEASURE_4343_SAMPLES"] ?? "") ?? 5) }
     nonisolated static var variants: [Variant] {
         (env["MEASURE_4343_VARIANTS"] ?? "reland,inserting").split(separator: ",").compactMap { Variant(rawValue: String($0)) }
@@ -710,7 +723,7 @@ final class LandingAcceptanceRigTests {
 
     // MARK: - One entry point, every size and variant
 
-    private func measureEntry(_ entry: Rig.Entry) async throws {
+    private func measureEveryEntryPoint() async throws {
         guard Rig.enabled else {
             print("rig4343: not measured. Set TEST_RUNNER_MEASURE_4343=1 to run it.")
             return
@@ -718,44 +731,46 @@ final class LandingAcceptanceRigTests {
         let build = Rig.build(askedFor: Rig.env["OVERTURE_BUILD_MODE"], debugCompiledIn: Rig.debugCompiledIn,
                               optimised: !_isDebugAssertConfiguration(),
                               markerCompiledIn: Rig.releaseLikeMarkerCompiledIn)
-        Rig.say("\(entry.rawValue): " + build.line)
+        Rig.say(build.line)
         if let refusal = build.refusal {
-            Rig.say("\(entry.rawValue): " + refusal)
+            Rig.say(refusal)
             Issue.record(Comment(rawValue: refusal))
             return
         }
-        guard let carried = Rig.carried.first(where: { $0.entry == entry }) else { return }
         guard let inputs = try copiedInputs() else {
-            Rig.say("\(entry.rawValue): UNMEASURED, no readable scout extract results on this machine")
+            Rig.say("UNMEASURED, no readable scout extract results on this machine")
             return
         }
-        let storesDir = try sandboxes.make(named: "rig4343-stores-\(entry.rawValue)")
+        let storesDir = try sandboxes.make(named: "rig4343-stores")
         guard let base = try LiveStoreClone.makeClone(in: storesDir) else {
             throw LiveStoreClone.Refusal.backupFailed("no live store on this machine")
         }
         // The test's own scratch defaults, made outside every window: the first in a process sweeps
         // ~/Library/Preferences, which A11 measured at 2.2 s and which the product never pays (#4510).
         let defaults = ScratchDefaults.make("LandingAcceptanceRigTests")
-        Rig.say("\(entry.rawValue): drives \(carried.top), as \(carried.viewCallers.sorted().joined(separator: ", ")) "
-                + "does; " + (carried.usesTheCheck
-                    ? "A7 BYPASSED by the measurement seam (AlreadyLandedCheck.bypassedForMeasurement) after its positive control"
-                    : "A7 does not apply (no results file identity)"))
+        let world = try await makeWorld(factor: Rig.size, base: base, storesDir: storesDir, inputs: inputs)
         var rows: [String] = []
-        for factor in Rig.sizes {
-            let world = try await makeWorld(factor: factor, base: base, storesDir: storesDir, inputs: inputs)
-            // Closed, and RootView unmounted, whether the size measured or threw, before the next world opens.
-            let measured: Result<[String], Error>
+        var failures: [String] = []
+        for entry in Rig.entries {
+            guard let carried = Rig.carried.first(where: { $0.entry == entry }) else { continue }
+            Rig.say("\(entry.rawValue): drives \(carried.top), as \(carried.viewCallers.sorted().joined(separator: ", ")) "
+                    + "does; " + (carried.usesTheCheck
+                        ? "A7 BYPASSED by the measurement seam (AlreadyLandedCheck.bypassedForMeasurement) after its "
+                            + "positive control"
+                        : "A7 does not apply (no results file identity)"))
+            // One entry point that throws is said and the next still measured, on the same RootView.
             do {
-                measured = .success(try await measureSize(entry, carried, world: world, defaults: defaults))
+                rows += try await measureSize(entry, carried, world: world, defaults: defaults)
             } catch {
-                measured = .failure(error)
+                failures.append("\(entry.rawValue): \(error)")
+                Rig.say("\(entry.rawValue): FAILED, \(error)")
             }
-            await close(world)
-            rows += try measured.get()
         }
+        await close(world)
         Rig.say("table | entry | size | variant | largest single main thread hold | above load 8, not counted |")
         for row in rows { Rig.say("table " + row) }
-        Rig.say("\(entry.rawValue): the 100 ms bar is judged by Phase E of #4275, not by this run")
+        Rig.say("the 100 ms bar is judged by Phase E of #4275, not by this run")
+        #expect(failures.isEmpty, Comment(rawValue: "entry points that could not be measured: \(failures)"))
     }
 
     // One store size of one entry point: the positive control where the entry makes the A7 check, then each
@@ -829,19 +844,7 @@ final class LandingAcceptanceRigTests {
     }
 
     @Test(.enabled(if: Phase0.liveStoreExists, "no live store on this machine"))
-    func runScoutPress() async throws { try await measureEntry(.runScout) }
-
-    @Test(.enabled(if: Phase0.liveStoreExists, "no live store on this machine"))
-    func calendarIngest() async throws { try await measureEntry(.calendarIngest) }
-
-    @Test(.enabled(if: Phase0.liveStoreExists, "no live store on this machine"))
-    func keptCopyOffered() async throws { try await measureEntry(.offerPending) }
-
-    @Test(.enabled(if: Phase0.liveStoreExists, "no live store on this machine"))
-    func idleRecovery() async throws { try await measureEntry(.recovery) }
-
-    @Test(.enabled(if: Phase0.liveStoreExists, "no live store on this machine"))
-    func leadPaste() async throws { try await measureEntry(.leadPaste) }
+    func measureEveryEntryPointOnOneStore() async throws { try await measureEveryEntryPoint() }
 }
 
 // The rig's own arithmetic, in every run: which term a hold belongs to, which samples count, and what a cell with
