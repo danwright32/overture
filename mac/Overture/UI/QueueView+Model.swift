@@ -2010,7 +2010,31 @@ enum QueueModel {
             return .inquiry(inquiry: inquiry, row: row, next: due)
         }
         // Stable: equal dates keep prospects before inquiries rather than reordering run to run.
-        return (prospectEntries + inquiryEntries).sorted { $0.next < $1.next }
+        // #4357 slice I3 (plan v7 Phase 3, step 6): and TOTAL. Two inquiries due at one instant kept the order
+        // the unsorted query handed them over in, so the list could reorder between launches on unchanged
+        // data (L343).
+        return (prospectEntries + inquiryEntries).sorted(by: reachedOutEntryOrder)
+    }
+
+    // At one instant a show comes before an inquiry, as it always has; two shows by their natural key, which
+    // is the order `ReachedOutQueue` already hands them over in; two inquiries by `inquiryKeyThenIdentifier`.
+    static func reachedOutEntryOrder(_ a: ReachedOutEntry, _ b: ReachedOutEntry) -> Bool {
+        if a.next != b.next { return a.next < b.next }
+        switch (a, b) {
+        case let (.prospect(p, _, _), .prospect(q, _, _)): return p.naturalKey < q.naturalKey
+        case (.prospect, .inquiry): return true
+        case (.inquiry, .prospect): return false
+        case let (.inquiry(i, _, _), .inquiry(j, _, _)): return inquiryKeyThenIdentifier(i, j)
+        }
+    }
+
+    // #4357 slice I3: two inquiries that tie on everything a list sorts them by, by the event's natural key and
+    // then the store's own identifier. The key alone is not enough: two people can write about one event, and
+    // their inquiries then share it.
+    static func inquiryKeyThenIdentifier(_ a: Inquiry, _ b: Inquiry) -> Bool {
+        let (ka, kb) = (a.naturalKey, b.naturalKey)
+        if ka != kb { return ka < kb }
+        return a.persistentModelID < b.persistentModelID
     }
 
 
@@ -2352,7 +2376,11 @@ enum QueueModel {
                 // string otherwise would: a nameless room tells Dan less than a named one.
                 if va.isEmpty { return false }
                 if vb.isEmpty { return true }
-                return va.localizedCaseInsensitiveCompare(vb) == .orderedAscending
+                // #4357 slice I3: two spellings of one room apart only in case compare as the same room,
+                // and that must fall through to the key rather than answer "neither first", which left the
+                // pair in whatever order the rows arrived in.
+                let order = va.localizedCaseInsensitiveCompare(vb)
+                if order != .orderedSame { return order == .orderedAscending }
             }
             return a.id < b.id
         }
@@ -2401,8 +2429,14 @@ enum QueueModel {
     // Live inquiries as display rows. A booked or hand-lost inquiry is closed and leaves the daily
     // list, exactly as a confirmed booking leaves the pitch queue. Nudge/closing state is computed
     // against `now` here so the row is a pure snapshot.
+    //
+    // #4357 slice I3 (plan v7 Phase 3, step 6): in ONE order, whatever order the store handed them over in. A
+    // stage's inquiry block draws its groups and rows in the order these come back, and they came back in the
+    // unsorted query's (L343). #1436 drew them by date with the undated last, through `combinedQueueRows`;
+    // #2348 deleted that function and its sort went with it, so this puts that order back and gives it the
+    // ties it never had (`inquiryOrder`).
     static func inquiryRows(_ inquiries: [Inquiry], now: Date) -> [InquiryRow] {
-        inquiries.filter { $0.isOpen }.map { inquiry in
+        inquiries.filter { $0.isOpen }.sorted(by: inquiryOrder).map { inquiry in
             InquiryRow(
                 id: String(describing: inquiry.persistentModelID),
                 inquirerName: inquiry.inquirerName,
@@ -2424,6 +2458,17 @@ enum QueueModel {
                 sendError: inquiry.sendError,
                 conversationAttachedAt: inquiry.conversationAttachedAt
             )
+        }
+    }
+
+    // The event's night ascending, an undated inquiry after every dated one (#1436's "undated groups last"),
+    // then `inquiryKeyThenIdentifier`.
+    static func inquiryOrder(_ a: Inquiry, _ b: Inquiry) -> Bool {
+        switch (a.performanceDate, b.performanceDate) {
+        case let (x?, y?) where x != y: return x < y
+        case (.some, nil): return true
+        case (nil, .some): return false
+        default: return inquiryKeyThenIdentifier(a, b)
         }
     }
 
