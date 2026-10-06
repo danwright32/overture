@@ -200,7 +200,13 @@ main() {
                       shift 2 ;;
       # #4338: a Debug only preview of one landing outcome on the masthead's landing line, so each can be
       # looked at on a synthetic store. The app names one it does not know rather than showing nothing.
-      --landing-preview) landing_preview="${2:-}"; shift 2 ;;
+      # A flag with no name is refused here, by name: under `set -e` the `shift 2` past the end ended the run
+      # with no word said.
+      --landing-preview) if [[ -z "${2:-}" ]]; then
+                           echo "Refusing to launch: --landing-preview needs a name (LandingPreview.Name lists them)." >&2
+                           exit 64
+                         fi
+                         landing_preview="$2"; shift 2 ;;
       *) echo "Unknown argument: $1 (expected --store-folder <folder> or --landing-preview <name>)" >&2
          exit 64 ;;
     esac

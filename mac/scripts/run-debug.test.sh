@@ -221,6 +221,14 @@ assert_equals "a landing preview is handed to the app under its own flag" \
   "$(printf '%s\n%s\n%s\n%s' "--overture-store-folder" "/s" "--overture-landing-preview" "stoppedRetrying")" \
   "$(launch_arguments "/s" "stoppedRetrying")"
 
+# A preview flag with no name refuses by name, before anything is built. Under `set -e` the `shift 2` past the
+# end of the arguments ended the run with no word said. The alarm bounds a parse that would loop instead.
+preview_out="$(perl -e 'alarm 20; exec @ARGV' bash "${SCRIPT_DIR}/run-debug.sh" --landing-preview 2>&1)"
+preview_code=$?
+assert_equals "a preview flag with no name is refused as a usage error" "64" "${preview_code}"
+assert_contains "and the refusal names the flag and where the names are listed" \
+  "${preview_out}" "--landing-preview needs a name"
+
 if [[ "${FAILURES}" -gt 0 ]]; then
   echo "${FAILURES} failure(s)"
   exit 1
