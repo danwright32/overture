@@ -35,11 +35,15 @@ import SwiftData
 //
 // Its own guard missed it too, and that is worth recording rather than quietly fixing: the guard asked
 // whether any cluster was SEEN, and five deferrals satisfied it. A deferral never reaches the ladder.
-// The guard now asks whether the ladder CHOSE, which is the thing the report is about.
+// The live arm now asks whether the ladder CHOSE, which is the thing the report is about, and since
+// #4533 it only REPORTS the answer: when the ladder chose nothing it says UNMEASURED and passes,
+// because what the backups hold is a fact about the data. The ONE guard on the instrument is the
+// fixture test, `theMeasurementSeesTheLadderChooseWhereTheStoreHoldsADuplicate`, which runs on every
+// machine.
 //
 // `overture-store-backups/` holds a snapshot taken at the START of each launch, before that launch's
 // migrations, so those stores still carry the duplicates the pass is about to collapse. That is the
-// only place the ladder can be watched working.
+// only place the ladder can be watched working on Dan's own data, when they hold one.
 @MainActor
 @Suite("Which copy of one show survives the merge (#3328)")
 final class SurvivorScoreLiveStoreTests {
@@ -61,6 +65,90 @@ final class SurvivorScoreLiveStoreTests {
     private struct Before { let key: String; let title: String; let date: String
                             let score: Int; let missed: Int }
 
+    // #4533: the measurement's positive control, on every machine, the live store or none (L68, L411).
+    // The live arm below can find nothing for the ladder to choose, because every launch collapses what
+    // the backups held, so its zero is a fact about the data and is reported as UNMEASURED rather than
+    // red. What keeps the INSTRUMENT honest is this fixture, which always holds one show billed two ways
+    // on one night: the pass must collapse it, and the measurement must see the deletion and pair it
+    // with the survivor that took its place. Both rows are still listed, the case the report is about.
+    @Test func theMeasurementSeesTheLadderChooseWhereTheStoreHoldsADuplicate() throws {
+        let ctx = ModelContext(try ModelContainer(
+            for: Schema([Prospect.self, Recipient.self, DayOff.self]),
+            configurations: [ModelConfiguration(isStoredInMemoryOnly: true)]))
+        for (title, ingested, score) in [("FRIGID Nightcap", 1_000.0, 3),
+                                         ("FRIGID Nightcap: FUTURE TENSE", 2_000.0, 8)] {
+            ctx.insert(Prospect(naturalKey: "\(title)|2026-07-31|Under St Marks", groupName: title,
+                                discipline: "music", venue: "Under St Marks",
+                                performanceDate: "2026-07-31", sourceListingURL: nil,
+                                priorRelationship: "none", production: "self", profile: "strong",
+                                coverage: "likely_uncovered", fitScore: score, tier: "mid",
+                                fitReason: "r", matchedClientName: nil, possibleMatchSource: nil,
+                                possibleMatchName: nil, status: .new,
+                                ingestedAt: Date(timeIntervalSince1970: ingested)))
+        }
+        try ctx.save()
+
+        let reading = try Self.measure(in: ctx)
+
+        #expect(reading.deleted == 1,
+                "the pass collapsed no duplicate in a store holding one show billed two ways on one night, so the measurement has nothing to measure even where there is something")
+        #expect(reading.paired == 1,
+                "the measurement saw a deletion but paired it with no survivor, so its count of copies that kept a lower score cannot see the row it is about")
+        #expect(reading.bothListed == 1,
+                "both rows were still listed, the one case the ladder cannot separate by the feed, and the measurement did not count it")
+    }
+
+    // What one run of the pass did to one store: how many rows it deleted and deferred, how many of
+    // those deletions it paired with a survivor on the same night, and which pairs kept the lower
+    // score. One function for the fixture and for every backup, so the two cannot measure differently.
+    private struct Reading {
+        var deleted = 0
+        var deferred = 0
+        var paired = 0
+        var bothListed = 0
+        var lowerScoreKept: [(gone: Before, kept: Before)] = []
+    }
+
+    private static func measure(in ctx: ModelContext) throws -> Reading {
+        // Before: every row this pass could touch, by the identity that survives a delete.
+        var before: [String: Before] = [:]
+        for p in try ctx.fetch(FetchDescriptor<Prospect>()) {
+            before[p.naturalKey] = Before(key: p.naturalKey, title: p.groupName,
+                                          date: p.performanceDate ?? "",
+                                          score: p.fitScore, missed: p.missedScoutCount)
+        }
+
+        let summary = SameNightTitleVariantMerge.run(in: ctx)
+        try ctx.save()
+
+        let after = Set((try ctx.fetch(FetchDescriptor<Prospect>())).map(\.naturalKey))
+        let deleted = before.values.filter { !after.contains($0.key) }
+
+        // A deleted row and the survivor that replaced it share the night. Pairing on the night is
+        // the pass's own outermost bucket, so this cannot pair two rows the pass never compared.
+        var reading = Reading(deleted: summary.duplicatesDeleted, deferred: summary.conflictsDeferred)
+        for gone in deleted {
+            let survivors = before.values.filter {
+                after.contains($0.key) && $0.date == gone.date && $0.key != gone.key
+            }
+            guard let kept = survivors.max(by: { $0.score < $1.score }) else { continue }
+            reading.paired += 1
+            if gone.missed == 0 && kept.missed == 0 { reading.bothListed += 1 }
+            if kept.score < gone.score { reading.lowerScoreKept.append((gone, kept)) }
+        }
+        return reading
+    }
+
+    // An UNMEASURED run is said where every run's summary counts it, as a KNOWN ISSUE, never only on
+    // stdout inside a passing test: a corpus that stays empty would otherwise read as a measurement
+    // forever (L98, L325). A known issue does not turn the run red, which is the point of #4533.
+    private static func sayUnmeasured(_ line: String) {
+        print(line)
+        withKnownIssue("the live arm measured nothing; the fixture test holds the instrument (#4533)") {
+            Issue.record(Comment(rawValue: line))
+        }
+    }
+
     @Test(.enabled(if: liveStoreExists, "no live store on this machine"))
     func theMergeIsMeasuredForWhichCopyItKeeps() async throws {
         await RealStoreTestLock.shared.acquire()
@@ -75,56 +163,26 @@ final class SurvivorScoreLiveStoreTests {
                 .filter { $0.count == 15 && $0.dropFirst(8).first == "-" && Int($0.prefix(8)) != nil }
                 .sorted()
             guard !dated.isEmpty else {
-                print("Survivor score: UNMEASURED, no dated backup to read.")
+                Self.sayUnmeasured("Survivor score: UNMEASURED, no dated backup to read.")
                 await RealStoreTestLock.shared.release()
                 return
             }
             // EVERY dated backup, not the newest one. One launch collapses one or two clusters, so a
             // single backup is a sample of one and cannot be told from noise (L395). Ten launches is a
             // population worth a verdict, and each clone plus pass costs about a second.
-            var totalDeleted = 0
-            var totalDeferred = 0
-            var totalBothListed = 0
-            var allLowerScoreKept: [(gone: Before, kept: Before)] = []
+            var total = Reading()
             for (index, stamp) in dated.enumerated() {
                 let dir = try sandboxes.make(named: "survivor-score-\(index)")
                 let clone = try LiveStoreClone.makeClone(
                     ofBackupAt: backupsRoot.appendingPathComponent(stamp)
                         .appendingPathComponent("Overture.store"),
                     in: dir)
-                let ctx = ModelContext(try container(at: clone))
-
-            // Before: every row this pass could touch, by the identity that survives a delete.
-            var before: [String: Before] = [:]
-            for p in try ctx.fetch(FetchDescriptor<Prospect>()) {
-                before[p.naturalKey] = Before(key: p.naturalKey, title: p.groupName,
-                                              date: p.performanceDate ?? "",
-                                              score: p.fitScore, missed: p.missedScoutCount)
-            }
-
-            let summary = SameNightTitleVariantMerge.run(in: ctx)
-            try ctx.save()
-
-            let after = Set((try ctx.fetch(FetchDescriptor<Prospect>())).map(\.naturalKey))
-            let deleted = before.values.filter { !after.contains($0.key) }
-
-            // A deleted row and the survivor that replaced it share the night. Pairing on the night is
-            // the pass's own outermost bucket, so this cannot pair two rows the pass never compared.
-            var lowerScoreKept: [(gone: Before, kept: Before)] = []
-            var bothWereListed = 0
-            for gone in deleted {
-                let survivors = before.values.filter {
-                    after.contains($0.key) && $0.date == gone.date && $0.key != gone.key
-                }
-                guard let kept = survivors.max(by: { $0.score < $1.score }) else { continue }
-                if gone.missed == 0 && kept.missed == 0 { bothWereListed += 1 }
-                if kept.score < gone.score { lowerScoreKept.append((gone, kept)) }
-            }
-
-                totalDeleted += summary.duplicatesDeleted
-                totalDeferred += summary.conflictsDeferred
-                totalBothListed += bothWereListed
-                allLowerScoreKept.append(contentsOf: lowerScoreKept)
+                let one = try Self.measure(in: ModelContext(try container(at: clone)))
+                total.deleted += one.deleted
+                total.deferred += one.deferred
+                total.paired += one.paired
+                total.bothListed += one.bothListed
+                total.lowerScoreKept.append(contentsOf: one.lowerScoreKept)
             }
 
             // #3321: WHICH groups the pass refuses is NOT reported here, and the reason is worth
@@ -139,22 +197,32 @@ final class SurvivorScoreLiveStoreTests {
             // for the pass to REPORT what it refused, and this is the evidence that no audit standing
             // beside it can substitute for that.
 
+            // A run whose ladder CHOSE nothing measured nothing, and a report saying "0 kept a lower
+            // score" after examining no clusters is the reading this milestone has already been misled
+            // by twice (L98, L182). A deferral is a cluster the pass SAW, but it never reaches the
+            // ladder, which is the distinction the first version of this guard missed. Until #4533 this
+            // was an `#expect`, and that was the wrong verdict for it: whether the ten backups hold a
+            // duplicate the ladder resolves is a fact about the DATA (each launch collapses what its
+            // backup held), so on 2026-10-05 it turned every branch red with 0 deleted and 130
+            // deferred and no code at fault (L68, L411). The instrument is held by the fixture test
+            // above, on every machine; here a zero is said for what it is, and never as a count.
+            guard total.deleted > 0 else {
+                Self.sayUnmeasured("Survivor score: UNMEASURED, over \(dated.count) dated backup(s) the "
+                                   + "ladder chose no survivor (\(total.deferred) conflict(s) deferred, "
+                                   + "which never reach it), so there is no kept copy to judge.")
+                await RealStoreTestLock.shared.release()
+                return
+            }
+
             print("Survivor score corpus: over \(dated.count) dated backup(s), "
-                  + "\(totalDeleted) duplicate(s) deleted, \(totalDeferred) conflict(s) deferred; "
-                  + "\(totalBothListed) pair(s) had BOTH rows still listed, "
-                  + "\(allLowerScoreKept.count) kept a lower score")
-            for pair in allLowerScoreKept.prefix(8) {
+                  + "\(total.deleted) duplicate(s) deleted, \(total.deferred) conflict(s) deferred; "
+                  + "\(total.bothListed) pair(s) had BOTH rows still listed, "
+                  + "\(total.lowerScoreKept.count) kept a lower score")
+            for pair in total.lowerScoreKept.prefix(8) {
                 print("    lowerScoreKept \(pair.gone.date): kept \(pair.kept.title) "
                       + "score=\(pair.kept.score) missed=\(pair.kept.missed) :: deleted "
                       + "\(pair.gone.title) score=\(pair.gone.score) missed=\(pair.gone.missed)")
             }
-
-            // THE ONLY ASSERTION, and it is about the instrument rather than the store. A run that
-            // collapsed nothing measured nothing, and a report that says "0 kept a lower score" after
-            // examining no clusters is the reading this milestone has already been misled by twice
-            // (L98, L182). `conflictsDeferred` counts too: a deferral is a cluster the pass SAW.
-            #expect(totalDeleted > 0,
-                    "the ladder CHOSE no survivor in this run, so a count of 'kept a lower score' counts nothing: a deferral never reaches the ladder, which is the distinction the first version of this guard missed")
 
             await RealStoreTestLock.shared.release()
         } catch {
