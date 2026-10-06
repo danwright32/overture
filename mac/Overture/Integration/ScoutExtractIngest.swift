@@ -444,8 +444,9 @@ enum ScoutExtractIngest {
         // record of a landing that started survives that source.
         let run = LandingRun.begin(runIdentity: runIdentity, sequence: sequence, entryPoint: .scoutExtractIngest,
                                    startedAt: now, in: context)
-        // #4338: added to, never set, so a record an earlier attempt of the same run saved keeps its count.
-        if entryFlushSaves > 0 { run.entryFlushSaves += entryFlushSaves }
+        // #4338: always set, so a record this build wrote carries a count (0 included) and one it did not carries
+        // none; and added to, so a record an earlier attempt of the same run saved keeps its count.
+        run.entryFlushSaves = (run.entryFlushSaves ?? 0) + entryFlushSaves
         landing.noteSettled(run)
         // #4330: the re-validation. A later run landed this source after this one read it, so this reading is
         // the older one and is set aside whole: nothing applied (#4329: not even its note, its failure or its

@@ -213,7 +213,8 @@ final class BrandCorpusOffTheMainActorTests {
 
     // #4338 (A10): each landing records on its own landing record how many of its entry flushes saved an edit,
     // which `scripts/landing-flush-rate.sh` reads as a rate. The read phase flush saves the pending edit and the
-    // flush under the store finds nothing more, so one; with nothing pending, none.
+    // flush under the store finds nothing more, so one; with nothing pending, zero, which is a recorded count and
+    // not "no count" (nil, the marker the reader leaves out).
     @Test func theIngestRecordsHowManyOfItsEntryFlushesSavedAnEdit() async throws {
         let (_, edited, stored) = try store()
         try addPages(1, to: edited)

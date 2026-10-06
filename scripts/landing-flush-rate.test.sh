@@ -80,6 +80,38 @@ assert_equals "the store read is never written" "${BEFORE_SUM}" "$(shasum "${COU
 BAD_DAYS="$(run_script --store "${COUNTED}" --days soon)"
 assert_contains "a window that is not a number is refused" "${BAD_DAYS}" "exit=64"
 
+# A flag given as the last argument, with no value after it, is refused by name rather than looping for ever:
+# `shift 2` with one argument left shifts nothing. Each run is bounded by an alarm, so a regression fails here
+# (killed by the alarm, exit 142) rather than hanging the fixture run.
+for flag in --store --days; do
+  LAST_RUN="$(perl -e 'alarm 10; exec @ARGV' "${SCRIPT}" "${flag}" 2>&1)"
+  LAST_CODE=$?
+  assert_equals "${flag} with no value after it is refused" "64" "${LAST_CODE}"
+  assert_contains "and the refusal names ${flag}" "${LAST_RUN}" "${flag} needs a value"
+done
+
+# #4338 review: a landing that carries no count (NULL, written before the count existed) is never read as one that
+# saved nothing first. It is left out of the rate and said as its own unmeasured group.
+MIXED="${WORK}/mixed.store"
+sqlite3 "${MIXED}" "CREATE TABLE ZLANDINGRUN (Z_PK INTEGER PRIMARY KEY, ZRUNIDENTITY VARCHAR, ZSTARTEDAT TIMESTAMP, ZENTRYFLUSHSAVES INTEGER);
+INSERT INTO ZLANDINGRUN (ZRUNIDENTITY, ZSTARTEDAT, ZENTRYFLUSHSAVES) VALUES
+ ('new', $(( NOW - 1 * DAY )), 1), ('older-a', $(( NOW - 2 * DAY )), NULL), ('older-b', $(( NOW - 3 * DAY )), NULL);"
+MIXED_RUN="$(run_script --store "${MIXED}")"
+assert_contains "the rate counts only landings that recorded their count" "${MIXED_RUN}" \
+  "saved pending edits first: 1 of 1 (100%)"
+assert_contains "and says how many in the window predate the count" "${MIXED_RUN}" \
+  "2 more landings started in the last 14 days carry no flush count, so they are not counted."
+assert_contains "and still exits 0, since a rate was measured" "${MIXED_RUN}" "exit=0"
+
+ALL_OLDER="${WORK}/all-older.store"
+sqlite3 "${ALL_OLDER}" "CREATE TABLE ZLANDINGRUN (Z_PK INTEGER PRIMARY KEY, ZSTARTEDAT TIMESTAMP, ZENTRYFLUSHSAVES INTEGER);
+INSERT INTO ZLANDINGRUN (ZSTARTEDAT, ZENTRYFLUSHSAVES) VALUES ($(( NOW - DAY )), NULL);"
+ALL_OLDER_RUN="$(run_script --store "${ALL_OLDER}")"
+assert_contains "a window holding only landings from before the count is unmeasured" "${ALL_OLDER_RUN}" \
+  "UNMEASURED: the 1 landing started in the last 14 days carries no flush count"
+assert_contains "and exits 2" "${ALL_OLDER_RUN}" "exit=2"
+assert_not_contains "never a rate of nothing saved" "${ALL_OLDER_RUN}" "saved pending edits first"
+
 if [[ "${FAILURES}" -gt 0 ]]; then
   echo "${FAILURES} failure(s)"
   exit 1

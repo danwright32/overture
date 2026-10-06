@@ -893,8 +893,9 @@ enum ScoutService {
         // is put back without taking it.
         let run = LandingRun.begin(runIdentity: sweepID, sequence: sequence, entryPoint: .runScoutLanding,
                                    startedAt: now, in: context)
-        // #4338: added to, never set, so a record an earlier attempt of the same run saved keeps its count.
-        if entryFlushSaves > 0 { run.entryFlushSaves += entryFlushSaves }
+        // #4338: always set, so a record this build wrote carries a count (0 included) and one it did not carries
+        // none; and added to, so a record an earlier attempt of the same run saved keeps its count.
+        run.entryFlushSaves = (run.entryFlushSaves ?? 0) + entryFlushSaves
         landing.noteSettled(run)
         for slot in reports {
             // #4334: a landing a failed save stopped lands nothing after it (decision 3).

@@ -12,8 +12,12 @@ set -uo pipefail
 # is never pruned, and this is that number's reader (L46): the share of landings that had to save first, over
 # a window, which is the rate #4332's plan said should be visible.
 #
-# A landing record that predates the count (a store from before #4338, or a row A7 wrote before landings
-# recorded their start) has no flush count and is not counted at all, never as zero (L90).
+# A landing record can carry NO count: its column is NULL, because the count is optional and a landing sets it, to 0
+# or more, only once it reaches its landing block under a build that writes it. A record written before #4338 has
+# none, and so does one the recovery made for a landing that never reached its first save. Such a record is never
+# read as a landing that saved nothing first (L90): it is left out of the rate and said as its own group, and a
+# window holding only such records is UNMEASURED. A row A7 wrote before landings recorded their start has no start
+# time and is not in any window.
 #
 # The store is never opened directly, even read only: SQLite rewrites the -shm beside it when it is opened
 # (L474), so the .store, -wal and -shm are copied to scratch and the copy is read.
@@ -38,8 +42,11 @@ DAYS=14
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --store) STORE="${2:-}"; shift 2 ;;
-    --days) DAYS="${2:-}"; shift 2 ;;
+    # A flag needs its value: with nothing after it, `shift 2` would shift nothing and the loop would never end.
+    --store|--days)
+      if [[ $# -lt 2 ]]; then echo "$1 needs a value after it" >&2; exit 64; fi
+      if [[ "$1" == --store ]]; then STORE="$2"; else DAYS="$2"; fi
+      shift 2 ;;
     -h|--help) sed -n '3,30p' "${BASH_SOURCE[0]}"; exit 0 ;;
     *) echo "unknown argument: $1" >&2; exit 64 ;;
   esac
@@ -81,20 +88,36 @@ fi
 # Core Data stores a date as seconds since 2001-01-01, which is 978307200 seconds after the Unix epoch.
 CUTOFF=$(( $(date +%s) - DAYS * 86400 - 978307200 ))
 ROW="$(sqlite3 -readonly -separator ' ' "${COPY}" \
-  "SELECT count(*), ifnull(sum(${FLUSH_COLUMN} > 0), 0), ifnull(sum(${FLUSH_COLUMN} = 1), 0),
-          ifnull(sum(${FLUSH_COLUMN} >= 2), 0), ifnull(sum(${FLUSH_COLUMN}), 0)
+  "SELECT count(${FLUSH_COLUMN}), ifnull(sum(${FLUSH_COLUMN} > 0), 0), ifnull(sum(${FLUSH_COLUMN} = 1), 0),
+          ifnull(sum(${FLUSH_COLUMN} >= 2), 0), ifnull(sum(${FLUSH_COLUMN}), 0),
+          sum(${FLUSH_COLUMN} IS NULL)
    FROM ZLANDINGRUN WHERE ZSTARTEDAT IS NOT NULL AND ZSTARTEDAT >= ${CUTOFF};" 2>&1)"
 status=$?
 if [[ ${status} -ne 0 ]]; then
   echo "UNMEASURED: the landing records could not be read (${ROW})."
   exit 2
 fi
-read -r LANDINGS FLUSHED ONCE TWICE SAVES <<< "${ROW}"
+read -r LANDINGS FLUSHED ONCE TWICE SAVES BEFORE <<< "${ROW}"
+BEFORE="${BEFORE:-0}"
+[[ "${BEFORE}" =~ ^[0-9]+$ ]] || BEFORE=0
 
 echo "landing-flush-rate: ${STORE}"
-if [[ "${LANDINGS}" -eq 0 ]]; then
+if [[ "${LANDINGS}" -eq 0 && "${BEFORE}" -eq 0 ]]; then
   echo "No landing started in the last ${DAYS} days, so there is no rate to give."
   exit 0
 fi
+if [[ "${LANDINGS}" -eq 0 ]]; then
+  if [[ "${BEFORE}" -eq 1 ]]; then
+    echo "UNMEASURED: the 1 landing started in the last ${DAYS} days carries no flush count, so there is no rate to give."
+  else
+    echo "UNMEASURED: the ${BEFORE} landings started in the last ${DAYS} days carry no flush count, so there is no rate to give."
+  fi
+  exit 2
+fi
 echo "landings started in the last ${DAYS} days: ${LANDINGS}"
 echo "saved pending edits first: ${FLUSHED} of ${LANDINGS} ($(( FLUSHED * 100 / LANDINGS ))%), once ${ONCE}, twice ${TWICE}, ${SAVES} entry flush saves in all"
+if [[ "${BEFORE}" -eq 1 ]]; then
+  echo "1 more landing started in the last ${DAYS} days carries no flush count, so it is not counted."
+elif [[ "${BEFORE}" -gt 1 ]]; then
+  echo "${BEFORE} more landings started in the last ${DAYS} days carry no flush count, so they are not counted."
+fi
