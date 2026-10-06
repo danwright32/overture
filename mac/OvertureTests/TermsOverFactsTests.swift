@@ -1014,8 +1014,22 @@ struct TermsOverFactsTests {
         }
         #expect(inputs.followUpsDue == due(all), "the Follow-ups number is not the whole store's due work")
         #expect(due(all) == due(queue) + 1, "the dismissed show's waiting reply is not what separates the two lists")
-        #expect(inputs.toReview == StageNavigation.counts(in: queue, context: context)[.review, default: 0] + 1,
+        let stages = StageNavigation.counts(in: queue, context: context)
+        #expect(inputs.toReview == stages[.review, default: 0] + 1,
                 "the inquiry waiting on Dan's first reply is not counted in Review")
+        // Every other stage count is the placement's own number for its focus.
+        let byFocus: [(StageFocus, Int)] = [
+            (.scout, inputs.toTriage), (.prep, inputs.keptToPrep), (.sendApproved, inputs.readyToSend),
+            (.sendErrors, inputs.sendErrors), (.sendStuck, inputs.stuckSends), (.sendDegraded, inputs.degradedReplyTracking),
+            (.sendThreadingDegraded, inputs.degradedThreading), (.sendBlocked, inputs.blockedContacts)]
+        for (focus, count) in byFocus {
+            #expect(count == stages[focus, default: 0], "the \(focus.rawValue) count is not the placement's")
+        }
+        // Named, not only non zero, for the two counts the body hands each row's contacts to: a body that handed
+        // them the wrong contacts keeps both above zero. Three shows are drafted and only the two with nobody on
+        // them are dead ends; two reply drafts died an hour ago, and the fresh, answered and delivered ones did not.
+        #expect(inputs.reviewDeadEnds == 2, "the drafted show with contacts is counted as a dead end, or a dead end is missed")
+        #expect(inputs.stalledReplyDrafts == 2, "the stalled reply drafts are not the two that died")
         let reachedOut = ReachedOutQueue.activeWithDates(from: queue, now: context.now)
         #expect(inputs.reachedOut == ReachedOutQueue.showCount(of: reachedOut) + 1,
                 "the answered inquiry is not counted in Reached out")
