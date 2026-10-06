@@ -31,6 +31,8 @@ QueueDerivationReasonTests.swift
 QueueWriteTraceTests.swift
 # names DebugStaging
 RenderDataComparisonTests.swift
+# names DebugStaging
+RenderPassTotalOrderTests.swift
 # uses FailurePathRevertProbeTests (FailurePathRevertProbeTests.swift)
 ScoutFailedSaveIsolationTests.swift
 # names QueueRenderCounter
