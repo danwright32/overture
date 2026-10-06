@@ -18,6 +18,7 @@ DownbeatExport.swift:hostingSite
 DownbeatExport.swift:isTaxExempt
 DownbeatExport.swift:phoneNumber
 DownbeatExport.swift:venueId
+FactStore.swift:extractAll  # #4358 slice E1a shipped the FactStore's whole read ahead of its app reader, the verifier's fresh read off the main thread (#4358 slice E2, plan v7 D7). The engine fills itself through the same initialiser, and every engine test compares against this. Remove this line in that change.
 GeoRefusals.swift:resolvedPlaceCount
 InquiryReporting.swift:lostAfter
 InquiryReporting.swift:openPredicate

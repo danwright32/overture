@@ -637,6 +637,11 @@ final class QueueEngineIntakeTests {
         turns.run()
         #expect(engine.facts.shows[permanent]?.fitReason == "edited after the first save")
         #expect(try engine.facts == store.freshFacts())
+        // And once that tracker has fired, nothing the engine holds names the temporary identifier any more, so
+        // a session of inserts does not leave one entry each behind for the life of the engine.
+        let held = EngineIdentityWalk.walk(engine).leaves
+            .reduce(into: Set<PersistentIdentifier>()) { $0.formUnion(EngineIdentityWalk.identities(in: $1.value)) }
+        #expect(!held.contains(temporary), "the engine still holds the temporary identifier after its tracker fired")
     }
 
     @Test func anInsertDeletedBeforeItsSaveLeavesNothing() throws {

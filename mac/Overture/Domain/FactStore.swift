@@ -66,7 +66,7 @@ struct FactStore: Equatable, Sendable {
 
     /// Every queue input in the store `context` reads, as values. A context of its own sees what is SAVED; the
     /// main context also sees its own unsaved changes.
-    nonisolated static func extractAll(from context: ModelContext) throws -> FactStore {
+    static func extractAll(from context: ModelContext) throws -> FactStore {
         try FactStore(shows: context.fetch(FetchDescriptor<Prospect>()),
                       inquiries: context.fetch(FetchDescriptor<Inquiry>()),
                       smallTablesFrom: context)

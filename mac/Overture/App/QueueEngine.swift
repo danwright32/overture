@@ -270,6 +270,9 @@ final class QueueEngine {
         armed.subtract(fired)
         let touched = fired.union(pending.noted.map(current)).union(pending.inserted.map(current))
             .union(pending.updated.map(current)).union(resolution.rekeyedIDs.values)
+        // A tracker fires once, so a temporary identifier one just reported will never be reported again: the
+        // row is re-armed under its permanent identifier below, and the entry has done its only job.
+        for id in pending.fired { rekeyedTemporaries.removeValue(forKey: id) }
         for id in touched where !resolution.deletedIDs.contains(id) {
             switch AppSchemaInputClass.byModel[id.entityName] {
             case .perRowFact(parent: nil, _):
