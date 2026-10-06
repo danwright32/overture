@@ -23,6 +23,25 @@ struct StoreSaveCountTests {
             + "from before a write saved through another context"))
     }
 
+    // #4358: the foreign count moves on every save through another context, and never on the main context's
+    // own, which is the positive control that makes "it moved" mean something (L159).
+    @Test func onlyASaveThroughAnotherContextMovesTheForeignCount() throws {
+        let counter = StoreSaveCount()
+        let c = try TestModelContainer.inMemory(AppSchema.models)
+        c.mainContext.insert(WatchedSource(sourceId: "m", orgName: "Main", listingsURL: "https://m.example/e", kind: .html))
+        try c.mainContext.save()
+        #expect(counter.value(for: c) == 1 && counter.foreignSaveCount(for: c) == 0,
+                "the main context's own save counted as foreign")
+        for n in 1...2 {
+            let other = ModelContext(c)
+            other.insert(WatchedSource(sourceId: "f\(n)", orgName: "Other", listingsURL: "https://f.example/e", kind: .html))
+            try other.save()
+            #expect(counter.foreignSaveCount(for: c) == n,
+                    "save \(n) through another context left the count at \(counter.foreignSaveCount(for: c))")
+        }
+        #expect(counter.hasForeignSaves(in: c))
+    }
+
     // PER STORE: a save into a different container is not a change to this one. Without this, every
     // concurrently running suite's saves would move every memo in the process.
     @Test func aSaveIntoAnotherStoreLeavesThisOnesCountAlone() throws {
