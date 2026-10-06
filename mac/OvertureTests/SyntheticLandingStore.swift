@@ -2,7 +2,7 @@ import Testing
 import Foundation
 import SwiftData
 
-// #4338 (A10): a SYNTHETIC store to look at a scout landing's states on, at the real scale: 39 sources and 1,350 shows,
+// #4338 (A10): a SYNTHETIC store to look at the landing line on, at the real scale: 39 sources and 1,350 shows,
 // every name drawn from the A1 synthetic arm's invented vocabulary (`LandingOracleCorpus`), and a landing record
 // seeded in each state that lives in records, so the Debug build opened on it (`run-debug.sh --store-folder`) shows
 // each through the real survey rather than a stand in. Never a clone of the live store: this is a public repository,
@@ -258,16 +258,14 @@ final class SyntheticLandingStoreTests {
                                        readFailures: HandoffReadFailures())
         let pending = PendingScoutIngests(directory: paths.handoff.appendingPathComponent(PendingScoutIngests.folderName),
                                           readFailures: HandoffReadFailures())
-        let interrupted = try LandingRecovery.survey(journals: journals, pending: pending, in: context)
-        let findings = Dictionary(uniqueKeysWithValues: interrupted.map { ($0.journal.sequence, $0.finding) })
+        let survey = try LandingRecovery.surveyAll(journals: journals, pending: pending, in: context)
+        let findings = Dictionary(uniqueKeysWithValues: survey.interrupted.map { ($0.journal.sequence, $0.finding) })
         #expect(findings[SyntheticLandingStore.Seeded.waitingSequence] == .replay)
         #expect(findings[SyntheticLandingStore.Seeded.stoppedSequence] == .stoppedRetrying(attempts: LandingRecovery.attemptCap))
-        let listed = try journals.list()
-        let unreadable = listed.filter { item in
-            if case .quarantined(let path, _, _) = item { return path.hasSuffix(LandingJournals.quarantineSuffix) }
-            return false
-        }
-        #expect(unreadable.count == 1, Comment(rawValue: "\(listed)"))
+        #expect(survey.unreadable.count == 1 && survey.unreadable.allSatisfy { $0.hasSuffix(LandingJournals.quarantineSuffix) })
+        let standing = LandingOutcome.standing(interrupted: survey.interrupted, unreadable: survey.unreadable,
+                                               editsStuck: nil)
+        #expect(standing.map(\.look) == [.stalled, .failed, .alive], Comment(rawValue: "\(standing)"))
         // Three kept copies: the waiting landing's, the fresh one the launch sweep lands, the one already landed.
         #expect(try pending.list().count == 3)
         let alreadyLanded = try #require(try Self.alreadyLandedHash(pending))

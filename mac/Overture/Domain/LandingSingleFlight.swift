@@ -389,29 +389,27 @@ enum LandingWaitCopy {
         "Overture could not read kept calendar results at \(path) (\(why))."
     }
 
-    // What the sweep of kept copies says, when it did anything at all. nil when it had nothing to report.
+    // What the sweep of kept copies says, one sentence per part. #4338 (A10): these were one joined line in the
+    // status line; each is now a line of its own on the landing line, in the state it is in
+    // (`LandingOutcome.from(offered:)`), so a stuck copy no longer shares a tone with one that landed.
     // L720: `stuckAfter` is the SAME value the sweep judged stuck by, so the sentence names what was measured.
     // #4336 (A7): an alreadyLanded copy is one landed EARLIER and now removed, never one landing now (L11).
-    static func offered(landed: Int, alreadyLanded: [Date] = [], stillWaiting: Int, stuck: Int,
-                        stuckAfter: TimeInterval) -> String? {
+    static func keptResultsLanded(_ landed: Int) -> String {
+        landed == 1 ? "Calendar results that had been waiting for the store have landed."
+                    : "\(landed) sets of calendar results that had been waiting for the store have landed."
+    }
+
+    static func keptResultsWaiting(_ stillWaiting: Int) -> String {
+        stillWaiting == 1 ? "One set of calendar results is still waiting for the store."
+                          : "\(stillWaiting) sets of calendar results are still waiting for the store."
+    }
+
+    // Says only that a stuck copy is kept: one the idle recovery has stopped trying is counted here too,
+    // and the recovery's own line says when it stopped (#4485 review, L11).
+    static func keptResultsStuck(_ stuck: Int, over stuckAfter: TimeInterval) -> String {
         let over = span(stuckAfter)
-        var parts: [String] = []
-        if landed > 0 {
-            parts.append(landed == 1 ? "Calendar results that had been waiting for the store have landed."
-                                     : "\(landed) sets of calendar results that had been waiting for the store have landed.")
-        }
-        parts.append(contentsOf: alreadyLanded.map(keptCopyAlreadyLanded(at:)))
-        if stillWaiting > 0 {
-            parts.append(stillWaiting == 1 ? "One set of calendar results is still waiting for the store."
-                                           : "\(stillWaiting) sets of calendar results are still waiting for the store.")
-        }
-        // Says only that a stuck copy is kept: one the idle recovery has stopped trying is counted here too,
-        // and the recovery's own launch line says when it stopped (#4485 review, L11).
-        if stuck > 0 {
-            parts.append(stuck == 1
-                ? "One set of calendar results has been stuck for over \(over) without landing. It is kept."
-                : "\(stuck) sets of calendar results have been stuck for over \(over) without landing. They are kept.")
-        }
-        return parts.isEmpty ? nil : parts.joined(separator: " ")
+        return stuck == 1
+            ? "One set of calendar results has been stuck for over \(over) without landing. It is kept."
+            : "\(stuck) sets of calendar results have been stuck for over \(over) without landing. They are kept."
     }
 }

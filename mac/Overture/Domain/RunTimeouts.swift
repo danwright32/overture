@@ -114,6 +114,14 @@ enum RunTimeouts {
     // clobber the shared results file. Matched to replyClassify, the other heavy detached run.
     static let scoutExtract: TimeInterval = 10 * 60
 
+    // #4338 (A10): a scout LANDING on the landing line, from its start to its return, not counting a wait in the
+    // landing queue, which is its own state (`LandingOutcome.waitingBehind`) with its own named deadline
+    // (`LandingSingleFlight.Deadline`). What fills the window is the read phase (each source's classify pass,
+    // awaited off the main actor) and the synchronous landing block: #4327 step 0.7 measured the whole block of a
+    // 4x inserting landing at 7.8 s, and the read phase of 39 sources is tens of seconds. Five minutes is well past
+    // both, so only a landing that has genuinely stopped moving reads as stuck.
+    static let landing: TimeInterval = 5 * 60
+
     // Gmail OAuth connect: the visible "looks stuck" warning, set below GmailAuthManager's hard 90s
     // internal give-up (#1163) so Dan gets a heads-up to check the browser sign-in window before connect()
     // self-aborts and surfaces its actionable, retryable failure alert. The common dead-handoff case now

@@ -19,6 +19,8 @@ LandingBatchTablesRealArmTests.swift
 LandingBatchTablesTests.swift
 # names buildPartsNanoseconds
 LandingFirstHoldProbeTests.swift
+# names LandingPreview, previewWaitingBehind
+LandingPreviewTests.swift
 # uses FailurePathRevertProbeTests (FailurePathRevertProbeTests.swift)
 LandingSaveFailureTests.swift
 # uses ScoutFailedSaveIsolationTests (ScoutFailedSaveIsolationTests.swift)

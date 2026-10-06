@@ -198,9 +198,6 @@ struct RootView: View {
     // completion can record {sources, elapsed} for the "~X remaining" pace. Kept alongside readingStartedAt
     // because both describe the same run.
     @State private var readingSourceCount = 0
-    // #4335 (A6): the last thing the landing recovery said, so a recovery that reads the same every minute (one
-    // that stopped being tried) is said once rather than every minute.
-    @State private var lastRecoveryLine: String?
 
     // #885: one definition of "due", shared with the sheet this badge opens (DueWork). Summed here in
     // the body before, and summed again in FollowUpsView's own body: the pill Dan clicks and the list he
@@ -828,6 +825,10 @@ struct RootView: View {
                           venueSplits = VenueKeySplit.current()
                       }
                   },
+                  // #4338 (A10): the landing line's two pairs of controls, performed here where the store and
+                  // the landing folders are, and each Discard's consequence derived here at the moment it is asked.
+                  landingLine: LandingLineHandlers(perform: { performLandingAction($0) },
+                                                   consequence: { landingConsequence($0) }),
                   onShowFollowUps: { showFollowUps = true },
                   // #1129: the Prep stage's discoverable "Prep these N" button opens the same #953 per-run
                   // selection sheet the toolbar menu and Cmd+P do, so there is one Prep-start path, not two.
@@ -1270,6 +1271,11 @@ struct RootView: View {
                 // #4330 (A13, L665): the launch sweep of kept calendar results, offered from their own
                 // copies. Empty on every ordinary launch, and one directory listing to learn so.
                 await offerPendingScoutIngests()
+                #if DEBUG
+                // #4338: a landing outcome put on screen for looking at, on a synthetic store only. After the launch
+                // sweep, whose end clears the line's landing in progress: beside it, a preview of one was cleared.
+                if let preview = LandingPreview.requested { showLandingPreview(preview) }
+                #endif
                 autoScoutIfDue()   // run a scheduled scout on launch if one is due (#33)
             }
             // #2365: load Dan's client list at launch, and again whenever the reconcile tick observes the
@@ -1307,6 +1313,12 @@ struct RootView: View {
                 }
             }
             .onChange(of: feedClientCount) { clientRoster?.reload() }
+            // #4338 (A10): any save of the main context saves everything pending in it, so the entry flush's
+            // standing state ("your recent edits could not be saved") ends the moment one goes through, whoever
+            // made it, rather than at the next landing.
+            .onReceive(NotificationCenter.default.publisher(for: ModelContext.didSave, object: context)) { _ in
+                EntryFlushRecord.shared.saveSucceeded()
+            }
             .task {
                 guard AppEnvironment.shouldStartBackgroundServices else { return }
                 // Follow every reply-classify run to completion so a finished draft clears the spinner
@@ -1353,18 +1365,26 @@ struct RootView: View {
             }
     }
 
-    // #4335 (A6): the launch line for a landing the recovery is waiting to finish. Silent when there is none,
-    // which is one directory listing to learn.
+    // #4335 (A6): what launch says about interrupted landings. #4338 (A10): on the landing line now, which stands
+    // for as long as each is true: a landing the recovery is waiting to finish, one it stopped trying and one whose
+    // record it could not read, the last two with "Try again" and "Discard". Silent when there is none, which is one
+    // directory listing to learn.
     private func announceInterruptedLandings() {
-        let found: [LandingRecovery.Interrupted]
+        surveyLandings()
+    }
+
+    // #4338 (A10): the survey the landing line stands on, taken at launch, every idle minute and after each of
+    // Dan's actions. A folder nothing can list is said, never skipped in silence. Returns the landings it judged,
+    // for the idle tick, which acts on them.
+    @discardableResult
+    private func surveyLandings() -> [LandingRecovery.Interrupted]? {
         do {
-            found = try LandingRecovery.survey(journals: .live, pending: .live, in: context)
+            let survey = try LandingRecovery.surveyAll(journals: .live, pending: .live, in: context)
+            LandingMarker.shared.surveyed(survey)
+            return survey.interrupted
         } catch {
             sayRecovery(.recordsUnreadable(why: HandoffDecodeFailure.describe(error)))
-            return
-        }
-        if let said = LandingRecovery.launchLine(found) {
-            status.set(said.line, priority: said.needsDan ? .warning : .info)
+            return nil
         }
     }
 
@@ -1381,24 +1401,16 @@ struct RootView: View {
         let journals = LandingJournals.live
         // The judgement first (journals and the watchlist, no show table): a journal that stopped being tried is
         // pending for good, and must not cost a whole table read every idle minute only to say nothing.
-        let found: [LandingRecovery.Interrupted]
-        do {
-            found = try LandingRecovery.survey(journals: journals, pending: .live, in: context)
-        } catch {
-            // Said, never skipped in silence: a folder nothing can list is a landing nothing will ever finish.
-            sayRecovery(.recordsUnreadable(why: HandoffDecodeFailure.describe(error)))
-            return
-        }
+        // Said, never skipped in silence: a folder nothing can list is a landing nothing will ever finish.
+        // #4338: and the same survey keeps the landing line's standing states current.
+        guard let found = surveyLandings() else { return }
         let actionable = found.filter {
             switch $0.finding {
             case .stoppedRetrying: return false
             default: return true
             }
         }
-        guard !actionable.isEmpty else {
-            if found.isEmpty { lastRecoveryLine = nil }
-            return
-        }
+        guard !actionable.isEmpty else { return }
         // What only a replay reads (the client list, the match history, the blocked calendar), built only when
         // one is waiting.
         let replays = actionable.contains { $0.finding == .replay }
@@ -1425,22 +1437,107 @@ struct RootView: View {
                 return isScanning
             },
             // L459: the replay's holds are recorded as idle work, never mixed with freezes Dan felt.
+            // #4338 (A10): and the landing line shows the replay in progress, named by when it was interrupted.
             replaying: { sequence in
                 freezeWatch.stampIdleWork(sequence.map { .init(recoverySequence: $0, inputIdleSeconds: quiet) })
+                if let sequence, let waiting = found.first(where: { $0.journal.sequence == sequence }) {
+                    LandingMarker.shared.began(.interrupted(startedAt: waiting.startedAt), at: Date())
+                } else {
+                    LandingMarker.shared.ended()
+                }
             },
             surveyed: found,
             into: context)
         if let recovered { sayRecovery(recovered) }
+        // What the step changed is standing state too: a landing finished, retired, or stopped being tried.
+        surveyLandings()
     }
 
-    // Said once: a landing that stopped being tried, or records that cannot be read, read the same every minute,
-    // and a line repeated every minute is one Dan learns to skim (L36).
+    // #4338 (A10): on the landing line, in the state it is in. A landing the recovery stopped trying is a standing
+    // state there, from the survey, with its two actions, so it is never said here as well; and the line says a
+    // thing once however many minutes it stays true, since the marker redraws only when what it says changes (L36).
     private func sayRecovery(_ recovered: LandingRecovery.Recovered) {
-        guard let line = LandingWaitCopy.recovered(recovered), line != lastRecoveryLine else { return }
-        lastRecoveryLine = line
-        switch recovered {
-        case .notFinished, .stoppedRetrying, .recordsUnreadable: status.set(line, priority: .warning)
-        default: status.set(line, priority: .info)
+        if case .stoppedRetrying = recovered { return }
+        guard let outcome = LandingOutcome.from(recovered: recovered, ref: nil) else { return }
+        LandingMarker.shared.said([outcome])
+    }
+
+    #if DEBUG
+    // #4338 (A10): applies a Debug landing preview to the surface its outcome really appears on.
+    private func showLandingPreview(_ name: String) {
+        switch LandingPreview.apply(name, now: Date()) {
+        case .landingLine:
+            break
+        case .summary(let warnings):
+            scoutWarnings = warnings
+            scoutSheetShown = true
+        case .unknown(let why):
+            status.set(why, priority: .warning)
+        }
+    }
+    #endif
+
+    // #4338 (A10): what a landing line control does. Each says what it did on the line it was pressed on (L608),
+    // and the survey is taken again after it, so a state it cleared leaves the line at once.
+    private func performLandingAction(_ action: LandingAction) {
+        let marker = LandingMarker.shared
+        switch action {
+        case .trySavingAgain:
+            if let saved = UnsavedEditsDiscard.trySavingAgain(in: context, now: Date()) { marker.said([saved]) }
+        case .discardUnsavedEdits:
+            marker.said([UnsavedEditsDiscard.perform(in: context)])
+        case .tryInterruptedLandingAgain(let ref):
+            if let why = LandingRecovery.allowAnotherTry(ref, in: context) {
+                marker.said([.retryNotRecorded(startedAt: interruptedStart(ref) ?? Date(), why: why)])
+            }
+        case .discardInterruptedLanding(let ref):
+            let startedAt = interruptedStart(ref)
+            let discarded = LandingRecovery.discard(ref, journals: .live, pending: .live)
+            marker.said([.afterDiscard(discarded: discarded, startedAt: startedAt)])
+        case .tryUnreadableRecordAgain(let path):
+            if case .stillUnreadable(let why) = LandingJournals.live.tryReadingAgain(path: path) {
+                marker.said([.recordStillUnreadable(path: path, why: why)])
+            }
+        case .discardUnreadableRecord(let path):
+            do {
+                try LandingJournals.live.discardUnreadable(path: path)
+                marker.said([.unreadableRecordDiscarded])
+            } catch {
+                marker.said([.unreadableRecordNotDiscarded(why: HandoffDecodeFailure.describe(error))])
+            }
+        }
+        surveyLandings()
+    }
+
+    // When the interrupted landing an action names first started, from the survey the line stands on.
+    private func interruptedStart(_ ref: LandingRef) -> Date? {
+        LandingMarker.shared.surveyed.interrupted.first {
+            $0.journal.runIdentity == ref.runIdentity && $0.journal.sequence == ref.sequence
+        }?.startedAt
+    }
+
+    // #4338 (A10, L180): what a Discard will change, derived from the state it changes at the moment Dan asks.
+    private func landingConsequence(_ action: LandingAction) -> String {
+        switch action {
+        case .discardUnsavedEdits:
+            return UnsavedEditsDiscard.consequence(UnsavedEditsDiscard.preview(in: context))
+        case .discardInterruptedLanding(let ref):
+            let item = LandingMarker.shared.surveyed.interrupted.first {
+                $0.journal.runIdentity == ref.runIdentity && $0.journal.sequence == ref.sequence
+            }
+            return LandingRecovery.discardConsequence(keptCopy: item?.journal.resultsCopy != nil,
+                                                      unlanded: item?.unlanded.count ?? 0)
+        case .discardUnreadableRecord(let path):
+            let name = URL(fileURLWithPath: path).lastPathComponent
+            let identity = LandingJournals.runIdentity(inName: name)
+            let sequence = LandingJournals.sequence(inName: name)
+            let landedAt = identity.flatMap { id in
+                sequence.flatMap { try? LandingRun.record(id, sequence: $0, in: context)?.landedAt }
+            }
+            let keptCopy = identity.map { (try? PendingScoutIngests.live.existingEntry($0)) != nil } ?? false
+            return LandingJournals.discardConsequence(landedAt: landedAt, keptCopy: keptCopy)
+        case .trySavingAgain, .tryInterruptedLandingAgain, .tryUnreadableRecordAgain:
+            return ""
         }
     }
 
@@ -2406,6 +2503,8 @@ struct RootView: View {
         // can copy exactly what it decoded (`ScoutExtractLanding`), never whatever the file holds by then.
         // #4339 (A11): the read phase, in Integration, so the first hold probe measures the product's own.
         guard let file = LandingInputs.readResultsFile() else { return nil }
+        // #4338 (A10): the landing line shows this landing from its read phase to its return.
+        LandingMarker.shared.began(.calendarResults, at: Date())
         let inputs = await LandingInputs.read(into: context)
         let landed = await ScoutExtractLanding.land(
             file.data, file.results, clients: inputs.clients, history: inputs.history, blocked: inputs.blocked,
@@ -2413,6 +2512,7 @@ struct RootView: View {
             // #4335 (A6): the landing journal folder, resolved here, at the product call site, once.
             journals: .live,
             into: context)
+        LandingMarker.shared.ended()
         if let left = landed.copyLeftBehind { status.set(left, priority: .warning) }
         var outcome = landed.outcome
         // #4339: a show table the read phase could not read, said on this run's summary, the same place the
@@ -2427,35 +2527,29 @@ struct RootView: View {
     }
 
     // #4330 (A13, L665): every kept set of calendar results, offered again from its own copy. Nothing to
-    // say on the ordinary day, when nothing is kept; otherwise one status line that says what landed, what
-    // is still waiting, and what is stuck.
+    // say on the ordinary day, when nothing is kept; otherwise what landed, what is still waiting, and what
+    // is stuck.
+    // #4338 (A10): said on the landing line, each part in the state it is in (`LandingOutcome.from(offered:)`),
+    // and the sweep itself shown there while it lands.
     private func offerPendingScoutIngests() async {
         let pending = PendingScoutIngests.live
         do {
             guard !(try pending.list()).isEmpty else { return }
         } catch {
-            status.set(LandingWaitCopy.pendingUnreadable(path: pending.directory.path,
-                                                         why: String(describing: error)),
-                       priority: .warning)
+            LandingMarker.shared.said([.keptResultsUnreadable([LandingWaitCopy.pendingUnreadable(
+                path: pending.directory.path, why: String(describing: error))])])
             return
         }
+        LandingMarker.shared.began(.keptResults, at: Date())
         let inputs = await LandingInputs.read(into: context)
         let offered = await ScoutExtractLanding.offerPending(
             clients: inputs.clients, history: inputs.history, blocked: inputs.blocked,
             pending: pending, journals: .live, into: context)
+        LandingMarker.shared.ended()
         // #4339: the kept results landed against the imported history alone when the show table could not be
-        // read, so that is said, in the same one line as the rest, rather than read as an empty store (L215).
-        let degraded = inputs.degradedReads.isEmpty
-            ? [] : [ScoutWarningCopy.degradedReads(inputs.degradedReads.map(\.label))]
-        let problems = offered.unreadable + offered.copiesLeftBehind + degraded
-        if let line = LandingWaitCopy.offered(landed: offered.landed.count, alreadyLanded: offered.alreadyLanded,
-                                              stillWaiting: offered.stillWaiting,
-                                              stuck: offered.stuck, stuckAfter: offered.stuckAfter) {
-            status.set(([line] + problems).joined(separator: " "),
-                       priority: offered.stuck > 0 || !problems.isEmpty ? .warning : .info)
-        } else if !problems.isEmpty {
-            status.set(problems.joined(separator: " "), priority: .warning)
-        }
+        // read, so that is said, beside the rest, rather than read as an empty store (L215).
+        LandingMarker.shared.said(LandingOutcome.from(offered: offered,
+                                                      degradedLabels: inputs.degradedReads.map(\.label)))
     }
 
     // The reply drafter's completion half (#435): the classify+drafter run is detached, so without this

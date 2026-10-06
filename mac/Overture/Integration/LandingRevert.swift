@@ -132,6 +132,80 @@ enum LandingRevert {
         return report
     }
 
+    // #4338 (A10): what `revert` WOULD change, without changing it, so the discard of unsaved edits can name
+    // the rows and the fields before Dan confirms it (L180). The same three groups the revert works through and
+    // the same comparison per field (`RevertibleField.compare`), so the confirmation and the revert cannot
+    // disagree about which fields go back.
+    struct Difference {
+        enum Kind: Equatable {
+            // A saved row with these fields edited, named by property. Empty when its saved copy could not be
+            // read, so which fields differ is unknown: the row is still named, never left out.
+            case changed(fields: [String])
+            // A row never saved, which the revert takes back out.
+            case inserted
+            // A saved row the edits removed, which the revert cannot bring back.
+            case deleted
+        }
+        var model: any PersistentModel
+        var kind: Kind
+    }
+
+    static func differences(_ set: WriteSet, in context: ModelContext) -> [Difference] {
+        let committed = CommittedStore(context.container)
+        let insertedIDs = Set(set.inserted.map(\.persistentModelID))
+        var out: [Difference] = []
+        for model in set.changed where !insertedIDs.contains(model.persistentModelID) {
+            guard let row = model as? any ScopeObserved else { continue }
+            guard let fields = changedFields(row, from: committed) else {
+                out.append(Difference(model: model, kind: .changed(fields: [])))
+                continue
+            }
+            if !fields.isEmpty { out.append(Difference(model: model, kind: .changed(fields: fields))) }
+        }
+        for model in set.inserted { out.append(Difference(model: model, kind: .inserted)) }
+        for model in set.deleted where !insertedIDs.contains(model.persistentModelID) {
+            out.append(Difference(model: model, kind: .deleted))
+        }
+        return out
+    }
+
+    // The properties of one changed row whose value differs from its committed one, by name, or nil when its
+    // committed copy cannot be read.
+    private static func changedFields<M: ScopeObserved>(_ row: M, from committed: CommittedStore) -> [String]? {
+        guard let base = committed.row(row.persistentModelID, as: M.self) else { return nil }
+        return M.scopeFields.compactMap { field -> String? in
+            guard let path = field.keyPath as? any RevertibleField else { return nil }
+            switch path.compare(committed: base, row: row) {
+            case .same: return nil
+            case .differs, .uncompared, .unresolvable: return propertyName(field.keyPath)
+            }
+        }
+    }
+
+    // A key path's property name, `\Prospect.sourceListingURL` read as "source listing URL": split where a word
+    // starts, an acronym kept whole, with the `Raw` a stored enum's backing field ends in dropped. Never a type
+    // name, never a path.
+    static func propertyName(_ keyPath: AnyKeyPath) -> String {
+        let described = String(describing: keyPath)
+        guard let dot = described.lastIndex(of: ".") else { return "a field" }
+        var name = Array(described[described.index(after: dot)...])
+        if name.count > 3, String(name.suffix(3)) == "Raw" { name.removeLast(3) }
+        var words: [String] = []
+        var current = ""
+        for (i, ch) in name.enumerated() {
+            let afterLower = i > 0 && name[i - 1].isLowercase
+            let endsAcronym = i > 0 && name[i - 1].isUppercase && i + 1 < name.count && name[i + 1].isLowercase
+            if ch.isUppercase, !current.isEmpty, afterLower || endsAcronym {
+                words.append(current)
+                current = ""
+            }
+            current.append(ch)
+        }
+        if !current.isEmpty { words.append(current) }
+        let spoken = words.map { $0.count > 1 && $0.allSatisfy(\.isUppercase) ? $0 : $0.lowercased() }
+        return spoken.isEmpty ? "a field" : spoken.joined(separator: " ")
+    }
+
     // The store as last saved, read through a context of its own that only ever READS
     // (`OnlyTheMainContextWritesGuardTests`): one per revert, made the first time a row needs it.
     private final class CommittedStore {
@@ -170,8 +244,14 @@ enum LandingRevert {
 
 enum RevertStep { case same, written, writtenUncompared, unresolvable(String) }
 
+/// #4338: what one field's committed value says beside the row's current one, without writing anything. The
+/// revert below writes on `differs` and `uncompared`; the discard confirmation (`UnsavedEditsDiscard`) names the
+/// fields that would be written, from the same comparison, so the two can never disagree about a field (L263).
+enum FieldComparison: Equatable { case same, differs, uncompared, unresolvable(String) }
+
 /// A key path whose committed value can be copied onto the row being reverted.
 protocol RevertibleField {
+    @MainActor func compare(committed: Any, row: Any) -> FieldComparison
     @MainActor func revert(from committed: Any, to row: Any, resolvingIn context: ModelContext) -> RevertStep
 }
 
@@ -212,13 +292,33 @@ extension Equatable {
 }
 
 extension ReferenceWritableKeyPath: RevertibleField {
-    @MainActor func revert(from committed: Any, to row: Any, resolvingIn context: ModelContext) -> RevertStep {
+    @MainActor func compare(committed: Any, row: Any) -> FieldComparison {
         guard let base = committed as? Root, let row = row as? Root else { return .unresolvable("wrong root") }
         let was = base[keyPath: self]
         let now = row[keyPath: self]
         if let wasMembers = was as? any RevertModelArray, let nowMembers = now as? any RevertModelArray {
             // A to-many relationship holds no order, so it is compared as a set of identities.
-            if Set(wasMembers.memberIDs) == Set(nowMembers.memberIDs) { return .same }
+            return Set(wasMembers.memberIDs) == Set(nowMembers.memberIDs) ? .same : .differs
+        }
+        if Value.self is any RevertOptionalModel.Type {
+            let wasID = (was as? any RevertOptionalModel)?.memberID
+            let nowID = (now as? any RevertOptionalModel)?.memberID
+            return wasID == nowID ? .same : .differs
+        }
+        if let comparable = was as? any Equatable { return comparable.revertEquals(now) ? .same : .differs }
+        return .uncompared
+    }
+
+    @MainActor func revert(from committed: Any, to row: Any, resolvingIn context: ModelContext) -> RevertStep {
+        let comparison = compare(committed: committed, row: row)
+        switch comparison {
+        case .same: return .same
+        case .unresolvable(let why): return .unresolvable(why)
+        case .differs, .uncompared: break
+        }
+        guard let base = committed as? Root, let row = row as? Root else { return .unresolvable("wrong root") }
+        let was = base[keyPath: self]
+        if let wasMembers = was as? any RevertModelArray {
             guard let resolved = (Value.self as? any RevertModelArray.Type)?
                 .resolving(wasMembers.memberIDs, in: context) as? Value else {
                 return .unresolvable("a to-many member could not be resolved in the reverted context")
@@ -228,21 +328,14 @@ extension ReferenceWritableKeyPath: RevertibleField {
         }
         if let optionalType = Value.self as? any RevertOptionalModel.Type {
             let wasID = (was as? any RevertOptionalModel)?.memberID
-            let nowID = (now as? any RevertOptionalModel)?.memberID
-            if wasID == nowID { return .same }
             guard let resolved = optionalType.resolving(wasID, in: context) as? Value else {
                 return .unresolvable("a to-one member could not be resolved in the reverted context")
             }
             row[keyPath: self] = resolved
             return .written
         }
-        if let comparable = was as? any Equatable {
-            if comparable.revertEquals(now) { return .same }
-            row[keyPath: self] = was
-            return .written
-        }
         row[keyPath: self] = was
-        return .writtenUncompared
+        return comparison == .uncompared ? .writtenUncompared : .written
     }
 }
 // copy-inventory:ignore-end

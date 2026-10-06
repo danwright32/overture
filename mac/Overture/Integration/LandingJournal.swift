@@ -293,10 +293,80 @@ struct LandingJournals: Sendable {
                 let why = HandoffDecodeFailure.describe(error)
                 let quarantined = url.appendingPathExtension(String(Self.quarantineSuffix.dropFirst()))
                 let path = (try? fm.moveItem(at: url, to: quarantined)) != nil ? quarantined.path : url.path
-                readFailures.record(file: label, reason: "could not read the landing record at \(path): \(why)")
+                // #4338 (A10): reported by its own surface now, the landing line, which names it at every survey with
+                // "Try again" and "Discard" (`LandingRecovery.surveyAll`). Recorded here too, it would also stand in
+                // the generic file notice, whose sentence says nothing in the app can repair it, beside a line
+                // offering exactly that (#843, the rule `HandoffReadFailures.reportedByItsOwnSurface` states).
+                readFailures.clear(file: label)
                 return .quarantined(path: path, sequence: Self.sequence(inName: name), why: why)
             }
         }
+    }
+
+    // MARK: - Dan's two actions on a journal that could not be read (#4338, A10)
+
+    // The run identity a journal's file NAME carries, quarantined or not, as `fileName` wrote it. nil for a name
+    // that is not a journal's.
+    static func runIdentity(inName name: String) -> String? {
+        guard sequence(inName: name) != nil, let dash = name.firstIndex(of: "-") else { return nil }
+        var rest = String(name[name.index(after: dash)...])
+        if rest.hasSuffix(quarantineSuffix) { rest.removeLast(quarantineSuffix.count) }
+        guard rest.hasSuffix(journalSuffix) else { return nil }
+        rest.removeLast(journalSuffix.count)
+        return rest.isEmpty ? nil : rest
+    }
+
+    enum Reread: Equatable {
+        // It reads now, and is back in place as a pending journal, for the recovery to judge.
+        case readable
+        case stillUnreadable(why: String)
+    }
+
+    // "Try again": the quarantined file read once more. One that now decodes goes back under its own name, where
+    // the next survey judges it like any other; one that still does not stays where it is, set aside.
+    func tryReadingAgain(path: String) -> Reread {
+        let url = URL(fileURLWithPath: path)
+        let journal: LandingJournal
+        do {
+            journal = try Self.decode(Data(contentsOf: url))
+        } catch {
+            return .stillUnreadable(why: HandoffDecodeFailure.describe(error))
+        }
+        let destination = self.url(for: journal)
+        guard destination.path != url.path else { return .readable }
+        guard !FileManager.default.fileExists(atPath: destination.path) else {
+            return .stillUnreadable(why: "a landing record is already in its place at \(destination.path)")
+        }
+        do {
+            try FileManager.default.moveItem(at: url, to: destination)
+            return .readable
+        } catch {
+            return .stillUnreadable(why: HandoffDecodeFailure.describe(error))
+        }
+    }
+
+    // "Discard": the quarantined file removed. Only a file in this folder, named as a journal, is ever removed.
+    func discardUnreadable(path: String) throws {
+        let url = URL(fileURLWithPath: path)
+        guard url.deletingLastPathComponent().standardizedFileURL.path == directory.standardizedFileURL.path,
+              Self.sequence(inName: url.lastPathComponent) != nil else {
+            throw CocoaError(.fileNoSuchFile, userInfo: [NSFilePathErrorKey: path])
+        }
+        try FileManager.default.removeItem(at: url)
+    }
+
+    // What discarding it changes, from what its NAME and the store can still say (L180, the plan's wording): the
+    // landing finished (its record says so), its results are still kept and will be offered again, or neither, in
+    // which case which calendars it named cannot be known, and any it had not saved stay unread until a scout
+    // reads them, because their pages were never marked read.
+    static func discardConsequence(landedAt: Date?, keptCopy: Bool) -> String {
+        if let landedAt {
+            return "That landing finished at \(LandingWaitCopy.landedTime(landedAt)), so discarding its record changes nothing else."
+        }
+        if keptCopy {
+            return "Its calendar results are still kept and Overture will offer them again, so discarding its record changes nothing else."
+        }
+        return "Overture can't tell which calendars that landing named, so any it had not saved stay unread until your next scout reads them again."
     }
 
     // Decodes a journal by the version it was written under. A version this build does not know is refused

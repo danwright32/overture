@@ -160,12 +160,4 @@ final class DebugStoreFolderTests {
         #expect(paths.store == scratch.appendingPathComponent(StoreLocation.storeFilename))
         #expect(paths.handoff == scratch.appendingPathComponent("Overture", isDirectory: true))
     }
-
-    // The flag `run-debug.sh` hands the app is the one the app reads, compared across the two files (L70): a
-    // rename on either side would open the Debug store while the script printed the named one.
-    @Test func theFlagRunDebugHandsIsTheOneTheAppReads() throws {
-        let script = try String(contentsOf: RepoRoot.mac.appendingPathComponent("scripts/run-debug.sh"), encoding: .utf8)
-        #expect(script.contains("\"\(StoreLocation.storeFolderArgument)\""),
-                "run-debug.sh hands a store folder flag the app does not read")
-    }
 }

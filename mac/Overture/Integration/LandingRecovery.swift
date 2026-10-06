@@ -40,6 +40,11 @@ import CoreGraphics
 enum LandingRecovery {
     static let attemptCap = 3
 
+    // #4338 (A10): whether a landing whose save failed will be tried again here: its journal is kept (only a
+    // landing whose every save went through retires it) and its record has attempts left. The one rule a
+    // failed save's "will try again" is said by (L703).
+    static func willRetry(journalKept: Bool, attempts: Int) -> Bool { journalKept && attempts < attemptCap }
+
     enum Finding: Equatable, Sendable {
         case finished
         case superseded(bySequence: Int)
@@ -77,24 +82,47 @@ enum LandingRecovery {
 
     // MARK: - judging (read only)
 
-    // Every pending journal, oldest first, judged. Quarantined and left-in-place journals are reported by
-    // `LandingJournals.list()` itself (to the handoff read failures); they are not landings this can judge.
+    // Every pending journal, oldest first, judged. Left-in-place journals are reported by `LandingJournals.list()`
+    // itself (to the handoff read failures); they are not landings this can judge.
     static func survey(journals: LandingJournals, pending: PendingScoutIngests,
                        in context: ModelContext,
                        // The watchlist read, injected so a test can count it.
                        readSources: (ModelContext) throws -> [WatchedSource] = {
                            try $0.fetch(FetchDescriptor<WatchedSource>())
                        }) throws -> [Interrupted] {
+        try surveyAll(journals: journals, pending: pending, in: context, readSources: readSources).interrupted
+    }
+
+    // #4338 (A10): the survey, and the journals it could not read, from ONE listing of the folder. The landing line
+    // shows both: a quarantined journal is a landing nobody can judge, which stands there with "Try again" and
+    // "Discard" until Dan picks one, rather than being said once to the generic file notice and never again.
+    struct Survey: Equatable, Sendable {
+        var interrupted: [Interrupted] = []
+        // The quarantined journals, by path.
+        var unreadable: [String] = []
+    }
+
+    static func surveyAll(journals: LandingJournals, pending: PendingScoutIngests,
+                          in context: ModelContext,
+                          readSources: (ModelContext) throws -> [WatchedSource] = {
+                              try $0.fetch(FetchDescriptor<WatchedSource>())
+                          }) throws -> Survey {
         // The journals first: on the ordinary day there are none, and that answer costs a directory listing,
         // never a read of the watchlist.
-        let pendingJournals = try journals.list().compactMap { listed -> LandingJournal? in
+        let listed = try journals.list()
+        let pendingJournals = listed.compactMap { listed -> LandingJournal? in
             guard case .pending(let journal, _) = listed else { return nil }
             return journal
         }
-        guard !pendingJournals.isEmpty else { return [] }
+        let unreadable = listed.compactMap { listed -> String? in
+            guard case .quarantined(let path, _, _) = listed else { return nil }
+            return path
+        }
+        guard !pendingJournals.isEmpty else { return Survey(unreadable: unreadable) }
         let sources = try readSources(context)
         let byId = Dictionary(sources.map { ($0.sourceId, $0) }, uniquingKeysWith: { first, _ in first })
-        return try pendingJournals.map { try judge($0, sources: byId, pending: pending, in: context) }
+        return Survey(interrupted: try pendingJournals.map { try judge($0, sources: byId, pending: pending, in: context) },
+                      unreadable: unreadable)
     }
 
     static func judge(_ journal: LandingJournal, sources: [String: WatchedSource], pending: PendingScoutIngests,
@@ -148,24 +176,60 @@ enum LandingRecovery {
         }
     }
 
-    // MARK: - the launch line
+    // MARK: - Dan's two actions on a landing the recovery stopped trying (#4338, A10)
 
-    // What launch says about interrupted landings, nil when there are none. A landing the recovery stopped
-    // trying is said FIRST, at every launch until A10's controls (#4338) can clear it: the minute tick no longer
-    // works on it and would otherwise never say it again, while a landing still waiting beside it is said by the
-    // tick that finishes it.
-    static func launchLine(_ found: [Interrupted]) -> (line: String, needsDan: Bool)? {
-        for item in found {
-            if case .stoppedRetrying(let attempts) = item.finding,
-               let line = LandingWaitCopy.recovered(.stoppedRetrying(startedAt: item.startedAt, attempts: attempts,
-                                                                     unlanded: item.unlanded.count)) {
-                return (line, true)
-            }
+    // A landing the recovery stopped trying used to be said by a launch line, at every launch, with nothing to
+    // press. It now stands on the landing line (`LandingOutcome.standing`) with these two.
+
+    // "Try again": one more attempt, never a fresh count. The record is set one below the cap, so a landing that
+    // ends the process every time it is finished is tried once more rather than three more times (L365), at the
+    // next idle moment, by the same recovery as any other (decision 5: never while Dan is at the Mac). Saved at
+    // once; a save that fails is put back through the one revert the landing path uses (never `rollback()`) and
+    // says why, so the line never claims a retry nothing recorded. nil when it was recorded.
+    static func allowAnotherTry(_ ref: LandingRef, in context: ModelContext,
+                                save: (ModelContext) throws -> Void = { try $0.save() }) -> String? {
+        let record: LandingRun?
+        do {
+            record = try LandingRun.record(ref.runIdentity, sequence: ref.sequence, in: context)
+        } catch {
+            return "its record could not be read (" + HandoffDecodeFailure.describe(error) + ")"
         }
-        if let first = found.first(where: { $0.finding == .replay || $0.finding == .sweep }) {
-            return (LandingWaitCopy.interruptedWaiting(since: first.startedAt), false)
+        guard let record else { return "its record could not be found" }
+        let before = record.attemptCount
+        record.attemptCount = min(before, attemptCap - 1)
+        do {
+            try save(context)
+            return nil
+        } catch {
+            _ = LandingRevert.revert(LandingRevert.WriteSet(changed: [record], inserted: [], deleted: []), in: context)
+            return "its record could not be saved (" + HandoffDecodeFailure.describe(error) + ")"
         }
-        return nil
+    }
+
+    // "Discard": the landing's journal and its kept copy go, through the one step that retires both (`retire`),
+    // so the copy is never deleted while the journal could still be finished. Its record stays, unlanded, as the
+    // history of a landing that never finished. False when there was no such journal any more.
+    @discardableResult
+    static func discard(_ ref: LandingRef, journals: LandingJournals, pending: PendingScoutIngests) -> Bool {
+        guard let journal = journals.pending(sequence: ref.sequence), journal.runIdentity == ref.runIdentity else {
+            return false
+        }
+        retire(journal, journals: journals, pending: pending)
+        return true
+    }
+
+    // What discarding it changes, from what the journal and the store say now (L180): whether a copy of its
+    // results is kept, and how many of its calendars the store says it had not saved, which stay unread and are
+    // read again by the next scout because their pages were never marked read.
+    static func discardConsequence(keptCopy: Bool, unlanded: Int) -> String {
+        var parts: [String] = []
+        if keptCopy { parts.append("The calendar results it kept are deleted.") }
+        switch unlanded {
+        case 0: parts.append("Every calendar in it was already saved, so nothing waits to be read.")
+        case 1: parts.append("The calendar it had not saved stays unread, and your next scout reads it again.")
+        default: parts.append("The \(unlanded) calendars it had not saved stay unread, and your next scout reads them again.")
+        }
+        return parts.joined(separator: " ")
     }
 
     // MARK: - the replay's match history

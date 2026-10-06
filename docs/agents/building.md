@@ -85,8 +85,9 @@ the measurement it came from lives here. Read the entry before the rule decides 
   from the A1 synthetic arm's invented vocabulary, and a landing record in each state that lives in records (a
   landing waiting to be finished at idle, one the recovery stopped trying, a landing record nobody can read, kept
   results the launch sweep lands, kept results that had already landed). It is never a clone of the live store,
-  because this repository is public. Opening the app drives Dan's screen, so it is his to run or to be told about
-  first.
+  because this repository is public. Add `--landing-preview <name>` to `run-debug.sh` to put any other landing
+  outcome on screen (`LandingPreview.Name` lists them), on the surface it really appears on. Opening the app
+  drives Dan's screen, so it is his to run or to be told about first.
 
 ## Installing a Release build, and what the Update button runs
 

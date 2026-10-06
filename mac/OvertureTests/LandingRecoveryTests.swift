@@ -248,9 +248,10 @@ final class LandingRecoveryTests {
         #expect(!body.contains("try? context.fetch(FetchDescriptor<Prospect>())"), Comment(rawValue: body))
     }
 
-    // Launch says a landing the recovery stopped trying even when another landing is waiting beside it, since
-    // nothing after launch says a stopped one again; the waiting one alone gets the waiting line.
-    @Test func launchSaysAStoppedLandingAheadOfOneStillWaiting() throws {
+    // A landing the recovery stopped trying is shown even when another landing is waiting beside it, and first,
+    // since nothing the recovery does says a stopped one again; the waiting one gets the waiting line. #4338 (A10):
+    // the landing line's standing states now, which replaced the launch line this used to read.
+    @Test func aStoppedLandingStandsAheadOfOneStillWaiting() throws {
         let c = try container()
         let ctx = c.mainContext
         for id in ["a", "b"] { html(id, in: ctx) }
@@ -267,11 +268,15 @@ final class LandingRecoveryTests {
         try ctx.save()
 
         let found = try LandingRecovery.survey(journals: f.journals, pending: f.pending, in: ctx)
-        let said = try #require(LandingRecovery.launchLine(found))
-        #expect(said.needsDan && said.line.contains("stopped trying"), Comment(rawValue: said.line))
-        let waitingOnly = try #require(LandingRecovery.launchLine(found.filter { $0.finding == .sweep }))
-        #expect(!waitingOnly.needsDan && waitingOnly.line == LandingWaitCopy.interruptedWaiting(since: started))
-        #expect(LandingRecovery.launchLine([]) == nil)
+        let standing = LandingOutcome.standing(interrupted: found, unreadable: [], editsStuck: nil)
+        #expect(standing.first?.look == .stalled && standing.first?.line.contains("stopped trying") == true,
+                Comment(rawValue: "\(standing)"))
+        #expect(standing.first?.actions.count == 2, "the stopped landing carries no way out")
+        let waitingOnly = LandingOutcome.standing(interrupted: found.filter { $0.finding == .sweep }, unreadable: [],
+                                                  editsStuck: nil)
+        #expect(waitingOnly == [.waitingForIdle(startedAt: started)])
+        #expect(waitingOnly.first?.line == LandingWaitCopy.interruptedWaiting(since: started))
+        #expect(LandingOutcome.standing(interrupted: [], unreadable: [], editsStuck: nil).isEmpty)
     }
 
     // MARK: - finishing an interrupted ingest

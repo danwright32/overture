@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -uo pipefail
 
-# #4338 (A10): writes a SYNTHETIC Overture store into a named folder, so a scout landing can be LOOKED at, in
+# #4338 (A10): writes a SYNTHETIC Overture store into a named folder, so the landing line can be LOOKED at, in
 # every state, at the real scale (L606), without a single real name on screen (L222, L155).
 #
 # What it writes (`SyntheticLandingStore`, in the test target, run through the one opt-in writer): 39 watched
@@ -16,6 +16,7 @@ set -uo pipefail
 # either and nothing holding either. It must exist, and must not hold a store already: this never writes over one.
 #
 # Then open it with: mac/scripts/run-debug.sh --store-folder <folder>
+# and add --landing-preview <name> to put any other outcome on screen (`LandingPreview.Name`).
 #
 # Usage: scripts/make-synthetic-landing-store.sh <folder>
 # Exit codes: 0 written. 1 the folder was refused. 2 UNMEASURED, the writer failed or wrote no store. 64 usage.
@@ -78,3 +79,4 @@ cat "${FOLDER}/synthetic-store-report.txt"
 echo
 echo "Open it with:"
 echo "  mac/scripts/run-debug.sh --store-folder \"${FOLDER}\""
+echo "and put any other landing outcome on screen with --landing-preview <name>."

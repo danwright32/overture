@@ -134,39 +134,63 @@ struct ScoutSummaryView: View {
 
     @ViewBuilder
     private func sectionView(_ section: ScoutWarnings.Section) -> some View {
+        // #4338 (A10): a landing outcome is drawn in its own state, as the landing line draws it.
+        if let look = section.look, let message = landingMessage(section) {
+            landingBlock(message, look: look)
+        } else {
+            switch section {
+            case .saveFailed:
+                infoBlock(ScoutWarningCopy.saveFailed(retried: warnings.saveFailedRetried))
+            case .landingStopped(let message):
+                infoBlock(message)
+            case .storeUnreadable(let count, let keys):
+                infoBlock(ScoutWarningCopy.storeUnreadable(count: count, keys: keys))
+            case .notLandedYet(let message):
+                infoBlock(message)
+            case .extractLaunchFailure(let message):
+                infoBlock(message)
+            case .readerFinishedEmpty(let message):
+                infoBlock(message)
+            case .failures(let results):
+                // #1426: the heading counts what is on screen, because the rows and the count read the same
+                // filtered list. Removing every failing source leaves nothing here at all, rather than a
+                // heading over an empty box.
+                let shown = ScoutSummaryRow.stillWorthShowing(results, in: sources)
+                if !shown.isEmpty { failuresBlock(shown) }
+            case .unqueued(let ids):
+                infoBlock(ScoutWarningCopy.unqueued(ids: ids))
+            case .silentlyEmptyFeed(let empties):
+                // #2207: the shape of a page whose format changed, and the case that most needs looking at,
+                // because it is invisible everywhere else: nothing failed. Same filter as the failures above,
+                // so a source Dan settles on this screen leaves it.
+                let stillEmpty = ScoutSummaryRow.silentlyEmptyStillWorthShowing(empties, in: sources)
+                if !stillEmpty.isEmpty { silentlyEmptyBlock(stillEmpty) }
+            case .superseded(let results):
+                infoBlock(ScoutWarningCopy.superseded(results.map(\.orgName)))
+            case .pastClientList(let message):
+                infoBlock(message)
+            case .alreadyLanded(let landedAt):
+                infoBlock(LandingWaitCopy.alreadyLanded(at: landedAt))
+            }
+        }
+    }
+
+    // The sentence a landing section says, each the one it always said.
+    private func landingMessage(_ section: ScoutWarnings.Section) -> String? {
         switch section {
-        case .saveFailed:
-            infoBlock(ScoutWarningCopy.saveFailed)
-        case .landingStopped(let message):
-            infoBlock(message)
-        case .storeUnreadable(let count, let keys):
-            infoBlock(ScoutWarningCopy.storeUnreadable(count: count, keys: keys))
-        case .notLandedYet(let message):
-            infoBlock(message)
-        case .extractLaunchFailure(let message):
-            infoBlock(message)
-        case .readerFinishedEmpty(let message):
-            infoBlock(message)
-        case .failures(let results):
-            // #1426: the heading counts what is on screen, because the rows and the count read the same
-            // filtered list. Removing every failing source leaves nothing here at all, rather than a
-            // heading over an empty box.
-            let shown = ScoutSummaryRow.stillWorthShowing(results, in: sources)
-            if !shown.isEmpty { failuresBlock(shown) }
-        case .unqueued(let ids):
-            infoBlock(ScoutWarningCopy.unqueued(ids: ids))
-        case .silentlyEmptyFeed(let empties):
-            // #2207: the shape of a page whose format changed, and the case that most needs looking at,
-            // because it is invisible everywhere else: nothing failed. Same filter as the failures above,
-            // so a source Dan settles on this screen leaves it.
-            let stillEmpty = ScoutSummaryRow.silentlyEmptyStillWorthShowing(empties, in: sources)
-            if !stillEmpty.isEmpty { silentlyEmptyBlock(stillEmpty) }
-        case .superseded(let results):
-            infoBlock(ScoutWarningCopy.superseded(results.map(\.orgName)))
-        case .pastClientList(let message):
-            infoBlock(message)
-        case .alreadyLanded(let landedAt):
-            infoBlock(LandingWaitCopy.alreadyLanded(at: landedAt))
+        case .saveFailed: return ScoutWarningCopy.saveFailed(retried: warnings.saveFailedRetried)
+        case .landingStopped(let message), .notLandedYet(let message): return message
+        case .superseded(let results): return ScoutWarningCopy.superseded(results.map(\.orgName))
+        case .alreadyLanded(let landedAt): return LandingWaitCopy.alreadyLanded(at: landedAt)
+        default: return nil
+        }
+    }
+
+    private func landingBlock(_ message: String, look: LandingLook) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: OVSpacing.xs) {
+            LandingMark(look: look)
+            Text(message).font(.system(size: 12)).foregroundStyle(LandingMark.textColor(look))
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 

@@ -214,9 +214,20 @@ assert_equals "while a scratch folder beside it is still accepted" \
   "${SCRATCH_REAL}" "$(resolve_store_folder "${SFTMP}/scratch store" "${EMPTYSUP}" 2>/dev/null)"
 
 # --- launch_arguments (#4338) ---
-assert_equals "no folder hands the app nothing" "" "$(launch_arguments "")"
+assert_equals "no options hands the app nothing" "" "$(launch_arguments "" "")"
 assert_equals "a store folder is handed to the app under its own flag" \
-  "$(printf '%s\n%s' "--overture-store-folder" "/tmp/x y")" "$(launch_arguments "/tmp/x y")"
+  "$(printf '%s\n%s' "--overture-store-folder" "/tmp/x y")" "$(launch_arguments "/tmp/x y" "")"
+assert_equals "a landing preview is handed to the app under its own flag" \
+  "$(printf '%s\n%s\n%s\n%s' "--overture-store-folder" "/s" "--overture-landing-preview" "stoppedRetrying")" \
+  "$(launch_arguments "/s" "stoppedRetrying")"
+
+# A preview flag with no name refuses by name, before anything is built. Under `set -e` the `shift 2` past the
+# end of the arguments ended the run with no word said. The alarm bounds a parse that would loop instead.
+preview_out="$(perl -e 'alarm 20; exec @ARGV' bash "${SCRIPT_DIR}/run-debug.sh" --landing-preview 2>&1)"
+preview_code=$?
+assert_equals "a preview flag with no name is refused as a usage error" "64" "${preview_code}"
+assert_contains "and the refusal names the flag and where the names are listed" \
+  "${preview_out}" "--landing-preview needs a name"
 
 if [[ "${FAILURES}" -gt 0 ]]; then
   echo "${FAILURES} failure(s)"

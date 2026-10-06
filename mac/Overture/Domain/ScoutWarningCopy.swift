@@ -10,6 +10,14 @@ enum ScoutWarningCopy {
     static let saveFailed =
         "The scout ran but couldn't save its results. Run it again; if this keeps happening, something's wrong with the local store."
 
+    // #4338 (A10): the same failure when the recovery WILL try again (`Outcome.retriedByRecovery`: the landing's
+    // journal is kept and its record has attempts left). Said only then, never as a hope (L703): without a
+    // kept journal, or at the cap, the sentence above is the true one.
+    static let saveFailedRetried =
+        "The scout ran but couldn't save all of its results. Overture kept a record of what it was saving and will try again when you are away from the Mac."
+
+    static func saveFailed(retried: Bool) -> String { retried ? saveFailedRetried : saveFailed }
+
     // #2758 / #2999: says what was left out and why it was left out on purpose.
     //
     // The alternative is what used to happen: the scout could not tell a key nobody holds from a store

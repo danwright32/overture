@@ -669,8 +669,8 @@ struct ScoutLandingsWaitTheirTurnTests {
         #expect(offered.stillWaiting == 1)
         #expect(offered.landed.isEmpty)
         #expect(try pending.list().count == 2, "a refused offer lost its copy")
-        #expect(LandingWaitCopy.offered(landed: 0, stillWaiting: 1, stuck: 1,
-                                        stuckAfter: offered.stuckAfter)?.contains("stuck") == true)
+        #expect(LandingOutcome.from(offered: offered, degradedLabels: [])
+                == [.keptResultsStuck(sets: 1, over: offered.stuckAfter), .keptResultsWaiting(sets: 1)])
         holder.end()
     }
 

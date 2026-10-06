@@ -447,6 +447,8 @@ enum ScoutExtractIngest {
         // #4338: always set, so a record this build wrote carries a count (0 included) and one it did not carries
         // none; and added to, so a record an earlier attempt of the same run saved keeps its count.
         run.entryFlushSaves = (run.entryFlushSaves ?? 0) + entryFlushSaves
+        // #4338: read now, while the record is certainly in the context, for whether a failed save is retried.
+        let attemptsBefore = run.attemptCount
         landing.noteSettled(run)
         // #4330: the re-validation. A later run landed this source after this one read it, so this reading is
         // the older one and is set aside whole: nothing applied (#4329: not even its note, its failure or its
@@ -689,6 +691,10 @@ enum ScoutExtractIngest {
         // #4335: a landing whose every save went through has spent its journal. Any other keeps it, for the
         // recovery to read against what the store says landed.
         if landed && !outcome.saveFailed { journals?.retire(journal) }
+        // #4338 (A10): a failed save says "will be retried" only when the recovery really will: this landing's
+        // journal is kept (it was written, and is retired only above) and its record has attempts left.
+        outcome.retriedByRecovery = outcome.saveFailed
+            && LandingRecovery.willRetry(journalKept: journals != nil, attempts: attemptsBefore)
         token.end()
 
         return outcome

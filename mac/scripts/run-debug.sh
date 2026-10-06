@@ -18,7 +18,7 @@ set -euo pipefail
 # the built bundle's identity is VERIFIED before it is launched, and the script refuses rather than
 # guesses.
 #
-# Usage: mac/scripts/run-debug.sh [--store-folder <folder>]
+# Usage: mac/scripts/run-debug.sh [--store-folder <folder>] [--landing-preview <name>]
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MAC_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
@@ -162,11 +162,12 @@ folder_identity_chain() {
   done
 }
 
-# The arguments the app is opened with: the store folder, only when one was asked for. Kept apart from `main`
-# so the fixture can read exactly what the app would be handed.
+# The arguments the app is opened with: the store folder, and a landing preview, each only when asked for.
+# Kept apart from `main` so the fixture can read exactly what the app would be handed.
 launch_arguments() {
-  local store_folder="$1"
+  local store_folder="$1" landing_preview="$2"
   if [[ -n "${store_folder}" ]]; then printf '%s\n%s\n' "--overture-store-folder" "${store_folder}"; fi
+  if [[ -n "${landing_preview}" ]]; then printf '%s\n%s\n' "--overture-landing-preview" "${landing_preview}"; fi
 }
 
 # #2072: the TERM, bounded wait, escalate, verify loop is the shared driver in lib/app-quit.sh
@@ -192,12 +193,21 @@ drop_previous_registration() {
 }
 
 main() {
-  local store_folder=""
+  local store_folder="" landing_preview=""
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --store-folder) store_folder="$(resolve_store_folder "${2:-}" "${HOME}/Library/Application Support")" || exit 1
                       shift 2 ;;
-      *) echo "Unknown argument: $1 (expected --store-folder <folder>)" >&2
+      # #4338: a Debug only preview of one landing outcome on the masthead's landing line, so each can be
+      # looked at on a synthetic store. The app names one it does not know rather than showing nothing.
+      # A flag with no name is refused here, by name: under `set -e` the `shift 2` past the end ended the run
+      # with no word said.
+      --landing-preview) if [[ -z "${2:-}" ]]; then
+                           echo "Refusing to launch: --landing-preview needs a name (LandingPreview.Name lists them)." >&2
+                           exit 64
+                         fi
+                         landing_preview="$2"; shift 2 ;;
+      *) echo "Unknown argument: $1 (expected --store-folder <folder> or --landing-preview <name>)" >&2
          exit 64 ;;
     esac
   done
@@ -258,10 +268,11 @@ main() {
   else
     echo "    store:     ~/Library/Application Support/Overture-Debug/"
   fi
+  if [[ -n "${landing_preview}" ]]; then echo "    preview:   ${landing_preview}"; fi
   local args=()
   local line
-  while IFS= read -r line; do args+=("${line}"); done <<< "$(launch_arguments "${store_folder}")"
-  if [[ -n "${store_folder}" ]]; then
+  while IFS= read -r line; do args+=("${line}"); done <<< "$(launch_arguments "${store_folder}" "${landing_preview}")"
+  if [[ -n "${store_folder}${landing_preview}" ]]; then
     open "${built_app}" --args "${args[@]}"
   else
     open "${built_app}"

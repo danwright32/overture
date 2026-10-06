@@ -396,6 +396,31 @@ final class ScoutFailedSaveIsolationTests {
                 "the retried landing did not count exactly one more check")
     }
 
+    // #4338 (A10): a failed save says "will try again" only when the recovery really will: the landing kept its
+    // journal and its record has attempts left. With no journal, nothing will retry it, and it says to run again.
+    @Test func aFailedSaveSaysItWillBeRetriedOnlyWhenItsJournalIsKept() async throws {
+        let c = try container()
+        let ctx = c.mainContext
+        html("kept", in: ctx)
+        html("bare", in: ctx)
+        try ctx.save()
+        let journals = LandingJournals(directory: try sandboxes.make(named: "retried-by-recovery"),
+                                       readFailures: HandoffReadFailures())
+
+        let kept = await ingest(results([result("kept")]), into: ctx, saveClosing: { _ in throw SaveRefused() },
+                                journals: journals)
+        #expect(kept.saveFailed && kept.retriedByRecovery)
+        #expect(kept.warning?.hasPrefix(ScoutWarningCopy.saveFailedRetried) == true, Comment(rawValue: kept.warning ?? "nil"))
+        #expect(try journals.list().count == 1, "the landing said it would be retried and kept no journal to retry")
+
+        let bare = await ingest(results([result("bare")]), into: ctx, saveClosing: { _ in throw SaveRefused() })
+        #expect(bare.saveFailed && !bare.retriedByRecovery)
+        #expect(bare.warning?.hasPrefix(ScoutWarningCopy.saveFailed) == true)
+
+        let landed = await ingest(results([result("kept")]), into: ctx, journals: journals)
+        #expect(!landed.saveFailed && !landed.retriedByRecovery)
+    }
+
     // MARK: - #4422's note: offered again, a landing whose save failed applies its writes once
 
     @Test func aLandingWhoseSavesFailedOfferedAgainAppliesItsCapturedWritesOnce() async throws {
@@ -435,7 +460,8 @@ final class ScoutFailedSaveIsolationTests {
 
     private func runInline(_ ctx: ModelContext, saveSource: @escaping (ModelContext) throws -> Void,
                            classify: @escaping (Error) -> LandingSaveFailure.Scope = LandingSaveFailure.classify,
-                           movementLog: any FeedMovementLog.Sink = FeedMovementLog.file)
+                           movementLog: any FeedMovementLog.Sink = FeedMovementLog.file,
+                           journals: LandingJournals? = nil)
         async throws -> ScoutService.Outcome {
         try await ScoutService.runScout(
             into: ctx, depth: .readChanged,
@@ -443,7 +469,7 @@ final class ScoutFailedSaveIsolationTests {
             pin: { _, id in URL(fileURLWithPath: "/tmp/\(id).html") }, launch: { _ in },
             now: now, defaults: ScratchDefaults.make("ScoutFailedSaveIsolationTests"),
             landings: LandingSingleFlight(sleep: { _ in }), sequenceFloor: { 0 },
-            saveSource: saveSource, classifySaveFailure: classify, movementLog: movementLog)
+            saveSource: saveSource, classifySaveFailure: classify, journals: journals, movementLog: movementLog)
     }
 
     private final class Lines: FeedMovementLog.Sink {
@@ -476,6 +502,25 @@ final class ScoutFailedSaveIsolationTests {
         #expect(b.lastContentHash == "inline-new-inline-b.example")
         // #4335 (RC6): a movement line only for the source whose save went through, appended once.
         #expect(lines.count("inline-a") == 0 && lines.count("inline-b") == 1, Comment(rawValue: "\(lines.lines)"))
+    }
+
+    // #4338 (the review of 29db676): a source level failure lets the landing carry on, and its closing save can then go
+    // through. The journal is kept for the recovery all the same, so the summary must say it will be retried: the
+    // flag was set only where a save failed, never from the outcome a merged source failure left behind.
+    @Test func aSourceLevelFailureTheLandingCarriedOnFromSaysItWillBeRetried() async throws {
+        let c = try container()
+        let ctx = c.mainContext
+        for id in ["inline-a", "inline-b"] { html(id, in: ctx) }
+        try ctx.save()
+        let journals = LandingJournals(directory: try sandboxes.make(named: "source-level-retried"),
+                                       readFailures: HandoffReadFailures())
+
+        let outcome = try await runInline(ctx, saveSource: FailOne("inline-a").save, classify: { _ in .source },
+                                          journals: journals)
+
+        #expect(outcome.saveFailed && outcome.landingStop == nil, Comment(rawValue: "\(states(outcome))"))
+        #expect(try journals.list().count == 1, "the landing kept no journal, so nothing would retry it")
+        #expect(outcome.retriedByRecovery, "the landing kept its journal for the recovery and said to run the scout again")
     }
 
     @Test func aStoreLevelFailureOnTheNativePathStopsTheSweepsLanding() async throws {
