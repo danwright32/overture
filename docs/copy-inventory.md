@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1751 sentences**.
+Every sentence Overture can say to Dan: **1752 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -14,7 +14,7 @@ What is not, and why:
   sentences under tokens nobody reads.
 - **Nothing, if it is written as two literals joined with `+`.** Those ARE joined here, into the
   one sentence the running app says (#3155). What is still only part of what Dan reads is a
-  sentence carrying a VALUE: 655 of the 1751 below hold a
+  sentence carrying a VALUE: 656 of the 1752 below hold a
   `\(...)` where a number or a name goes, so what is printed is the template. They are counted
   here rather than listed again, because the hole is visible in the line itself; what was missing
   was any statement of how much of this document is templates.
@@ -28,6 +28,7 @@ What is not, and why:
 - `App/PrepRunArchive.swift`: archive.log is a diagnostic record, not the app's voice on screen
 - `App/QueueEngine.swift`: developer diagnostic log, not the app's own voice (#4358)
 - `App/StoreBackup.swift`: backup.log is a diagnostic record, not the app's voice on screen
+- `App/StoreLocation.swift`: a Debug launch refusal, said only in the stop it causes, never on a screen (#4338)
 - `App/StoreSchemaGuard.swift`: sqlite's own error text, for backup.log, never shown on screen
 - `App/StoreShrinkCheck.swift`: SQL, not a sentence Overture says to Dan
 - `App/UpdateCommandFile.swift`: a shell script for Terminal, not Overture's voice to Dan (#915)
@@ -1797,6 +1798,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ProposedConversation.swift`
 "Overture recorded those before it kept their dates, so it can't say which have already happened. What it can say is that a new shoot came through as recently as \(arrived), and the export now holds none at all. Re-export it from Downbeat, then re-read it here."
     `Domain/AppNotice.swift`
+"Overture refused its store folder: \(why)"
+    `App/StoreLocation.swift`
 "Overture stopped responding \(count) times and could not write the records of them, so nothing here can say how long for."
     `Domain/FreezeReport.swift`
 "Overture stopped responding \(count) times. The longest was \(seconds) seconds."
