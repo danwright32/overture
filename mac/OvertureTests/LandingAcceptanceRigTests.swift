@@ -90,6 +90,10 @@ enum LandingAcceptanceRig {
     }
 
     static let bar = 100.0
+    // The share of each source's events an inserting round adds as new shows, and the tag its links carry, for
+    // both inserting paths (the results file and the native feeds), which share `Phase0.insertedCopies`.
+    static let insertedShare = 0.1
+    static let linkTag = "rig4343"
     static let loadCeiling = 8.0
 
     // MARK: - Options
@@ -428,13 +432,11 @@ final class LandingAcceptanceRigTests {
     // The shows an inserting round added, removed again OUTSIDE the window, so every round and every entry point
     // lands on the store size it is reported at (0.5's reset). Measured before this existed (2026-10-06, 1x): the
     // inserting rounds of the earlier entry points had grown the store from 1,385 shows to 2,144 by the lead paste.
-    // Found by the synthetic title every inserting variant gives them (`Phase0.insertingResults`, `RunScoutStubs`),
-    // which no real show carries.
-    static let syntheticTitle = "Probe Synthetic Recital"
-
+    // Found by the title every inserting round gives them (`Phase0.syntheticTitle`, written by
+    // `Phase0.insertedCopies`, the one rule both inserting paths use), which no real show carries.
     private func removeInserted(_ world: World) async throws -> String {
         let synthetic = try world.ctx.fetch(FetchDescriptor<Prospect>()).filter {
-            $0.groupName.contains(Self.syntheticTitle)
+            $0.groupName.contains(Phase0.syntheticTitle)
         }
         guard !synthetic.isEmpty else { return "no inserted shows to remove" }
         for p in synthetic { world.ctx.delete(p) }
@@ -558,7 +560,8 @@ final class LandingAcceptanceRigTests {
         case .reland: return (world.relandData, world.scaled)
         case .inserting:
             world.round += 1
-            let inserting = Phase0.insertingResults(world.scaled, share: 0.1, round: world.factor * 10_000 + world.round)
+            let inserting = Phase0.insertingResults(world.scaled, share: Rig.insertedShare,
+                                                    round: world.factor * 10_000 + world.round, linkTag: Rig.linkTag)
             guard let data = try? JSONEncoder().encode(inserting) else { return nil }
             return (data, inserting)
         }
@@ -685,7 +688,7 @@ final class LandingAcceptanceRigTests {
 
     // runScout's stubs: every html page reads as unchanged (its stored hash), and every source with its own
     // extractor lists the upcoming shows the store already holds for it, so the sweep is a pure re-land; the
-    // inserting variant adds a tenth of each as new shows, as `Phase0.insertingResults` does for a results file.
+    // inserting variant adds a tenth of each as new shows by the results file's own rule (`Phase0.insertedCopies`).
     private struct RunScoutStubs {
         let hashes: [String: String]
         let feeds: [String: ReplayFeed]
@@ -695,19 +698,10 @@ final class LandingAcceptanceRigTests {
 
         func inserting(round: Int) -> [String: ReplayFeed] {
             var out: [String: ReplayFeed] = [:]
+            // The results file's own rule (`Phase0.insertedCopies`, L370), over each feed's events.
             for (s, (id, feed)) in feeds.sorted(by: { $0.key < $1.key }).enumerated() {
-                guard !feed.events.isEmpty else { out[id] = feed; continue }
-                let n = max(1, Int((Double(feed.events.count) * 0.1).rounded()))
-                let stride = max(1, feed.events.count / n)
-                var added: [ExtractedEvent] = []
-                for i in 0..<n {
-                    var e = feed.events[(i * stride) % feed.events.count]
-                    let tag = "\(round)n\(s)e\(i)"
-                    e.title = "Probe Synthetic Recital \(tag)"
-                    e.sourceUrl = e.sourceUrl.map { $0 + ($0.hasSuffix("/") ? "" : "/") + "rig4343-\(tag)" }
-                    e.seriesId = nil
-                    added.append(e)
-                }
+                let added = Phase0.insertedCopies(of: feed.events, share: LandingAcceptanceRig.insertedShare,
+                                                  tag: { "\(round)n\(s)e\($0)" }, linkTag: LandingAcceptanceRig.linkTag)
                 out[id] = ReplayFeed(events: feed.events + added)
             }
             return out
@@ -934,6 +928,28 @@ struct LandingAcceptanceRigArithmeticTests {
         #expect(row.contains("UNMEASURED, no sample under load 8"))
         #expect(!row.contains("under the bar"))
         #expect(c.worstTerm == .landing, "the raw readings still name their worst term")
+    }
+
+    // The results file's inserting round and the native feeds' one are ONE rule (`Phase0.insertedCopies`, L370): over
+    // the same events, with the same tag and link tag, the two event types come out as the same shows.
+    @Test func bothInsertingPathsAddTheSameShowsByOneRule() {
+        let scout = (0..<10).map { i in
+            ScoutExtractEvent(title: "Show \(i)", presenter: "Presenter \(i)", venue: "Hall", performanceDate: "2027-01-1\(i)",
+                              sourceUrl: "https://example.test/show-\(i)")
+        }
+        let feed = scout.map { ExtractedEvent(title: $0.title, presenter: $0.presenter, venue: $0.venue,
+                                              performanceDate: $0.performanceDate, sourceUrl: $0.sourceUrl) }
+        let results = ScoutExtractResults(version: 1, generatedAt: "2027-01-01T00:00:00Z", results: [
+            ScoutExtractResult(sourceId: "only", verdict: .upcomingListings, events: scout, note: nil)])
+        let fromFile = Array(Phase0.insertingResults(results, share: Rig.insertedShare, round: 7,
+                                                     linkTag: Rig.linkTag).results[0].events.dropFirst(scout.count))
+        let fromFeed = Phase0.insertedCopies(of: feed, share: Rig.insertedShare, tag: { "7s0e\($0)" },
+                                             linkTag: Rig.linkTag)
+        #expect(fromFile.count == 1, "a tenth of ten events, at least one")
+        #expect(fromFile.map(\.title) == fromFeed.map(\.title))
+        #expect(fromFile.map(\.sourceUrl) == fromFeed.map(\.sourceUrl))
+        #expect(fromFeed.allSatisfy { $0.title.hasPrefix(Phase0.syntheticTitle) && $0.seriesId == nil })
+        #expect(fromFeed.first?.sourceUrl == "https://example.test/show-0/rig4343-7s0e0")
     }
 
     @Test func aRunAskedToBeReleaseLikeRefusesCodeThatIsNot() {
