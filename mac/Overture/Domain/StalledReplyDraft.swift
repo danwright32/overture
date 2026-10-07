@@ -56,7 +56,11 @@ enum StalledReplyDraft {
                         r.replyDraftRequestedAt.map { (prospect: p, recipient: r, requestedAt: $0) }
                     }
             }
-            .sorted { $0.requestedAt < $1.requestedAt }
+            // #4531: two asked for at one instant by `DueWork.showThenContact`, never arrival order.
+            .sorted {
+                if $0.requestedAt != $1.requestedAt { return $0.requestedAt < $1.requestedAt }
+                return DueWork.showThenContact($0.prospect, $0.recipient, $1.prospect, $1.recipient)
+            }
     }
 }
 
