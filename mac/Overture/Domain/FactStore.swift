@@ -382,10 +382,13 @@ struct QueueEngineCounters: Equatable, Sendable {
     /// Rows read again from the store, and how many of those the equality gate dropped as unchanged.
     var rowsReread = 0
     var equalValueReads = 0
-    /// Whole-store reads: at the start, and after each of the anomalies below.
+    /// Whole-store reads: at the start, after an unclassified save or an insert merged away, and after a foreign
+    /// save only when none of its identifiers reached the engine.
     var fullReads = 0
     /// A save through a context other than the main one. Never happens in the app (only the main context
-    /// writes, `OnlyTheMainContextWritesGuardTests`); each one costs a full read.
+    /// writes, `OnlyTheMainContextWritesGuardTests`). Since #4358 slice E2 each one faults the rows it named and
+    /// recovery fetches them again (decision 9(a)); it costs a full read only when its identifiers never reached
+    /// the engine.
     var foreignSaves: QueueEngineAnomaly = .neverFired
     /// A saved identifier whose model `AppSchemaInputClass` does not classify, which also costs a full read.
     var unclassifiedSaves: QueueEngineAnomaly = .neverFired
