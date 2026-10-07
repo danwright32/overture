@@ -85,8 +85,9 @@ struct CardDivergenceRecord: Codable, Equatable, Sendable {
     // #4358 slice E2: the verifier's and recovery's kinds, each written by `QueueEngine` (`writeFinding`). The
     // engine is unwired until the cutover (#4358, slice E4), which is also where the launch notice that SAYS them
     // arrives; until then `QueueEngine.verifierFindings` and its suites are their reader. `fields` holds
-    // `table.member` names for a mismatch, the table names for a foreign save, and nothing for the three about
-    // the verifier itself. `cardsBuilt` is 0 on every one: no card is involved.
+    // `table.member` names for a mismatch, the table names for a foreign save, the fields of what was faulted for
+    // a heal or a give-up (so a table name after a foreign save), and nothing for the four about the verifier
+    // itself. `cardsBuilt` is 0 on every one: no card is involved.
     enum Kind: String, Codable, Equatable, Hashable, Sendable, CaseIterable {
         case cardDivergence
         case noOpDirty
@@ -106,6 +107,8 @@ struct CardDivergenceRecord: Codable, Equatable, Sendable {
         case verifierTimedOut
         /// A verification was never started because one the deadline gave up on had still not returned.
         case verifierWedged
+        /// Re-verification stopped after runs in a row that reached no verdict (saves landing during every read).
+        case verifierRetriesCapped
         // Written by nobody: what a spelling this build does not know DECODES to, because a later build
         // wrote it. Kept as a record rather than failing the whole line (L255, `StallRecord`'s rule).
         case unrecognised
@@ -117,7 +120,8 @@ struct CardDivergenceRecord: Codable, Equatable, Sendable {
             switch self {
             case .cardDivergence: return 0
             case .noOpDirty, .factMismatch, .outputMismatch, .foreignSave, .healed, .healDidNotConverge,
-                 .unverifiedTooLong, .verifierTimedOut, .verifierWedged, .unrecognised: return 600
+                 .unverifiedTooLong, .verifierTimedOut, .verifierWedged, .verifierRetriesCapped, .unrecognised:
+                return 600
             }
         }
     }
