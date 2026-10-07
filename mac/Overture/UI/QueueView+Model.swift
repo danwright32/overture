@@ -3857,9 +3857,10 @@ enum QueueModel {
     // holds no model at all (`OutputsHoldNoModelTests`), and the queue engine's pass (#4358) builds exactly
     // that. TODAY'S PASS STILL HANDS IT THE MODELS, and that is measured rather than chosen: a store over
     // facts built by the model pass would have to extract every row in scope on every pass, which the
-    // live store cost probe prices (`a store over facts, built by this pass`) at about a tenth of the
-    // narrowed pass, against the "no slower" rule this milestone holds every change to. The engine
-    // retains its facts across passes, so it pays nothing for the same store.
+    // live store cost probe prices (`a store over facts, built by this pass`): measured 2026-10-07 at
+    // 103.5 ms against a narrowed pass of 370.2 ms over the same 448 rows, against the "no slower" rule this
+    // milestone holds every change to. The engine retains its facts across passes, so it pays nothing for
+    // the same store.
     final class CardStore {
         private var cards: [String: QueueItem]
         // The shows a card the pass did not prebuild is built FROM, and the contacts the pass read for each.
