@@ -142,27 +142,65 @@ struct OneAddressTwoContactsCardTests {
         return out
     }
 
-    // True when the argument builds a map over contacts keyed on anything but the row identity. The
-    // address (`id`, `email`) repeats across contacts, on one show and across shows, so a uniquely keyed
-    // map over it traps the first time two contacts share one. `persistentModelID` is the row identity.
-    static func keysContactsOnTheirAddress(_ argument: String) -> Bool {
+    // Two readings, because a map over contacts can be spotted by what it is OVER or by what it is KEYED on,
+    // and a guard reading only one covers only the spellings its author thought of (L96).
+    //
+    // OVER contacts: the argument names them and does not key on `persistentModelID`, the row identity.
+    static func namesContactsWithoutTheRowIdentity(_ argument: String) -> Bool {
         let namesContacts = argument.range(of: "recipient|contact|peer|twin",
                                            options: [.regularExpression, .caseInsensitive]) != nil
-        guard namesContacts else { return false }
-        return !argument.contains("persistentModelID")
+        return namesContacts && !argument.contains("persistentModelID")
+    }
+
+    // KEYED on an address, whatever the collection is called: a tuple whose key ends in `.id`, `.email` or
+    // `.emailAddress` (`($0.id, ...`, `(r.email, ...`, `($0.element.id, ...`), or such a key path. The
+    // address repeats across contacts, on one show and across shows (#4207).
+    static func keyedOnAnAddress(_ argument: String) -> Bool {
+        let tupleKey = #"\(\s*[$A-Za-z0-9_.]*\.(id|email|emailAddress)\s*,"#
+        let keyPath = #"\\\.(id|email|emailAddress)\b"#
+        return argument.range(of: tupleKey, options: .regularExpression) != nil
+            || argument.range(of: keyPath, options: .regularExpression) != nil
+    }
+
+    // A call keyed on `id` that is NOT a contact's address, by the REASON it is safe (L362), matched on the
+    // call's argument with its whitespace collapsed. Each entry must still match a call in the app, so a
+    // reason cannot outlive the code it excuses.
+    static let keyedOnIdForAReason: [String: String] = [
+        "members.map { ($0.id, nights(of: $0)) }":
+            "ShowLink.Row.id is the caller's handle, Prospect.naturalKey, which the store holds unique "
+            + "(@Attribute(.unique)); it is never a contact's address.",
+    ]
+
+    static func collapsed(_ argument: String) -> String {
+        argument.split(whereSeparator: \.isWhitespace).joined(separator: " ")
+    }
+
+    static func refuses(_ argument: String) -> Bool {
+        if namesContactsWithoutTheRowIdentity(argument) { return true }
+        return keyedOnAnAddress(argument) && keyedOnIdForAReason[collapsed(argument)] == nil
     }
 
     @Test func thePredicateRefusesTheTrappingShapeAndAcceptsTheRowIdentity() {
         let trapping = "let m = Dictionary(uniqueKeysWithValues:\n    pendingRecipients.map { ($0.id, $0.draftLintBlockers(body: body)) })"
         let found = Self.uniquelyKeyedArguments(in: trapping)
         #expect(found.count == 1)
-        #expect(found.allSatisfy(Self.keysContactsOnTheirAddress))
+        #expect(found.allSatisfy(Self.refuses))
 
         let byIdentity = "Dictionary(uniqueKeysWithValues: contacts.map { ($0.persistentModelID, $0) })"
-        #expect(Self.uniquelyKeyedArguments(in: byIdentity).allSatisfy { !Self.keysContactsOnTheirAddress($0) })
+        #expect(Self.uniquelyKeyedArguments(in: byIdentity).allSatisfy { !Self.refuses($0) })
 
-        let notContacts = "Dictionary(uniqueKeysWithValues: members.map { ($0.id, nights(of: $0)) })"
-        #expect(Self.uniquelyKeyedArguments(in: notContacts).allSatisfy { !Self.keysContactsOnTheirAddress($0) })
+        // Keyed on an address under a name that says nothing about contacts: refused by its key.
+        for unnamed in ["Dictionary(uniqueKeysWithValues: rows.map { ($0.email, $0) })",
+                        "Dictionary(uniqueKeysWithValues: zip(all.map(\\.id), all))",
+                        "Dictionary(uniqueKeysWithValues: list.enumerated().map { ($0.element.id, $0.offset) })"] {
+            #expect(Self.uniquelyKeyedArguments(in: unnamed).allSatisfy(Self.refuses), "\(unnamed) was accepted")
+        }
+
+        // An `id` key with a recorded reason is accepted, and only that exact call.
+        let reasoned = "Dictionary(uniqueKeysWithValues: members.map { ($0.id, nights(of: $0)) })"
+        #expect(Self.uniquelyKeyedArguments(in: reasoned).allSatisfy { !Self.refuses($0) })
+        let unreasoned = "Dictionary(uniqueKeysWithValues: members.map { ($0.id, $0) })"
+        #expect(Self.uniquelyKeyedArguments(in: unreasoned).allSatisfy(Self.refuses))
     }
 
     // Derived from the tree rather than a list of call sites (L96), so a new map over contacts anywhere in
@@ -170,10 +208,12 @@ struct OneAddressTwoContactsCardTests {
     @Test func noAppSourceKeysAUniqueMapOnAContactsAddress() {
         var scanned = 0
         var offenders: [String] = []
+        var reasonsUsed: Set<String> = []
         for file in AppSourceWalk.files(under: RepoRoot.app) {
             for argument in Self.uniquelyKeyedArguments(in: file.text) {
                 scanned += 1
-                if Self.keysContactsOnTheirAddress(argument) {
+                if Self.keyedOnIdForAReason[Self.collapsed(argument)] != nil { reasonsUsed.insert(Self.collapsed(argument)) }
+                if Self.refuses(argument) {
                     offenders.append("\(file.name): Dictionary(uniqueKeysWithValues:"
                         + argument.split(separator: "\n").map { $0.trimmingCharacters(in: .whitespaces) }
                             .joined(separator: " ") + ")")
@@ -187,5 +227,8 @@ struct OneAddressTwoContactsCardTests {
             + "traps when two contacts share one (#4589); key it on persistentModelID, or merge duplicates "
             + "with Dictionary(_:uniquingKeysWith:) where the address is the right key: "
             + offenders.joined(separator: "; ")))
+        let stale = Set(Self.keyedOnIdForAReason.keys).subtracting(reasonsUsed).sorted()
+        #expect(stale.isEmpty, Comment(rawValue: "a recorded reason matches no call in the app any more, so it "
+            + "excuses nothing and should be deleted: " + stale.joined(separator: "; ")))
     }
 }
