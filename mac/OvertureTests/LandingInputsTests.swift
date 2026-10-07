@@ -57,6 +57,40 @@ final class LandingInputsTests {
         #expect(inputs.history == LocalHistory.forMatching(existing: [], importedFrom: absentHistory))
     }
 
+    // #4526: the idle landing recovery's read. The same builder, off the main thread the same way, but a table
+    // that cannot be read REFUSES rather than falling back to the imported history: a replay landed against the
+    // imported record alone would retire its kept copy matched against a store it never saw (L215).
+    @Test func theRefusingReadIsOffTheMainThreadAndBuildsWhatTheOrdinaryReadBuilds() async throws {
+        let (container, ctx) = try seeded()
+        defer { withExtendedLifetime(container) {} }
+        let threads = Threads()
+        let refusing = await LandingInputs.readRefusingUnreadableShowTable(
+            exportURL: absentExport, historyURL: absentHistory,
+            readProspectTable: { threads.note(); return try ScoutService.readProspectTable($0) }, into: ctx)
+        #expect(threads.all == [false], "the show table was read on threads \(threads.all) (true is main)")
+        let ordinary = await LandingInputs.read(exportURL: absentExport, historyURL: absentHistory, into: ctx)
+        guard case .success(let inputs) = refusing else {
+            Issue.record("a table that reads was refused")
+            return
+        }
+        #expect(inputs.history == ordinary.history)
+        #expect(inputs.clients == ordinary.clients)
+        #expect(inputs.degradedReads.isEmpty)
+    }
+
+    @Test func theRefusingReadRefusesAnUnreadableTable() async throws {
+        let (container, ctx) = try seeded()
+        defer { withExtendedLifetime(container) {} }
+        let refusing = await LandingInputs.readRefusingUnreadableShowTable(
+            exportURL: absentExport, historyURL: absentHistory,
+            readProspectTable: { _ in throw Unreadable() }, into: ctx)
+        guard case .failure(let unreadable) = refusing else {
+            Issue.record("an unreadable show table was handed on as inputs")
+            return
+        }
+        #expect(unreadable.description.contains("Unreadable"), Comment(rawValue: unreadable.description))
+    }
+
     // The read phase saves nothing: with an edit of Dan's pending, the history is read on the main thread, where
     // the context sees the edit, and the edit is left pending for the landing's own flush to save.
     @Test func aPendingEditKeepsTheReadOnTheMainThreadAndIsNotSaved() async throws {
