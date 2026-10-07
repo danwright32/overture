@@ -78,10 +78,16 @@ enum SendGroup {
     // caller's idea of eligible, which is the thing that differs. So the order is inverted instead: each
     // list filters to what it wants FIRST and collapses after, and the row it keeps is the lowest id among
     // those, which is stable across launches for the same reason the old rule was.
+    //
+    // #4531: then the store's identifier, because one show can hold two contacts on one address, and with
+    // `id` alone which of the two was kept followed the order the relationship handed them over in.
     static func oneRowPerGroup<T, C: ContactFacts>(_ qualifying: [T], recipient: (T) -> C) -> [T] {
         var seen = Set<String>()
         return qualifying
-            .sorted { recipient($0).id < recipient($1).id }
+            .sorted {
+                let (a, b) = (recipient($0), recipient($1))
+                return a.id != b.id ? a.id < b.id : a.persistentModelID < b.persistentModelID
+            }
             .filter { seen.insert(groupKey(recipient($0))).inserted }
     }
 
