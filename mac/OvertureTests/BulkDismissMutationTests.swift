@@ -35,7 +35,7 @@ struct BulkDismissMutationTests {
         let feedback = ActionFeedback()
 
         ProspectMutations.dismissAll(["a", "b", "c"], reason: .tooSoon, dateLabel: "Jul 24",
-                                     prospects: [a, b, c], context: ctx, feedback: feedback)
+                                     shows: [a, b, c], context: ctx, feedback: feedback)
 
         #expect([a, b, c].allSatisfy { $0.status == .dismissed })
         // #1128: "Too soon" is a missed opportunity, never a bad-fit signal, so the raw value written must
@@ -51,7 +51,7 @@ struct BulkDismissMutationTests {
         let stack = QueueUndoStack()
 
         ProspectMutations.dismissAll(["a", "b", "c"], reason: .dateConflict, dateLabel: "Jul 24",
-                                     prospects: [a, b, c], context: ctx, feedback: ActionFeedback(),
+                                     shows: [a, b, c], context: ctx, feedback: ActionFeedback(),
                                      undo: stack)
 
         #expect(stack.entries.count == 1)
@@ -65,7 +65,7 @@ struct BulkDismissMutationTests {
         let a = show(ctx, "a"), b = show(ctx, "b")
         let stack = QueueUndoStack()
         ProspectMutations.dismissAll(["a", "b"], reason: .dateConflict, dateLabel: "Jul 24",
-                                     prospects: [a, b], context: ctx, feedback: ActionFeedback(), undo: stack)
+                                     shows: [a, b], context: ctx, feedback: ActionFeedback(), undo: stack)
 
         let entry = try #require(stack.takeTop())
         let outcome = QueueUndo.apply(entry, resolving: [a, b],
@@ -84,10 +84,10 @@ struct BulkDismissMutationTests {
         let ctx = try context()
         let kept = show(ctx, "k"), other = show(ctx, "o")
         let stack = QueueUndoStack()
-        ProspectMutations.setStatus(QueueItem(kept), .queued, nil, prospects: [kept, other], context: ctx,
+        ProspectMutations.setStatus(QueueItem(kept), .queued, nil, shows: [kept, other], context: ctx,
                                     feedback: ActionFeedback(), undo: stack, undoLabel: "Keep")
         ProspectMutations.dismissAll(["o"], reason: .pitchingOtherShows, dateLabel: "Jul 24",
-                                     prospects: [kept, other], context: ctx, feedback: ActionFeedback(), undo: stack)
+                                     shows: [kept, other], context: ctx, feedback: ActionFeedback(), undo: stack)
         #expect(other.status == .dismissed)
 
         let entry = try #require(stack.takeTop())
@@ -103,7 +103,7 @@ struct BulkDismissMutationTests {
         let feedback = ActionFeedback()
 
         ProspectMutations.dismissAll(["a", "b"], reason: .tooSoon, dateLabel: "Jul 24",
-                                     prospects: [a, b], context: ctx, feedback: feedback)
+                                     shows: [a, b], context: ctx, feedback: feedback)
 
         let message = try #require(feedback.message)
         #expect(message.contains("2 shows"))
@@ -119,7 +119,7 @@ struct BulkDismissMutationTests {
         let stack = QueueUndoStack()
 
         ProspectMutations.dismissAll(["a", "gone"], reason: .notAFit, dateLabel: "Jul 24",
-                                     prospects: [a], context: ctx, feedback: ActionFeedback(), undo: stack)
+                                     shows: [a], context: ctx, feedback: ActionFeedback(), undo: stack)
 
         #expect(a.status == .dismissed)
         #expect(stack.entries.first?.rows.count == 1)   // the entry describes what actually happened
@@ -134,9 +134,9 @@ struct BulkDismissMutationTests {
         let stack = QueueUndoStack()
 
         ProspectMutations.dismissAll(["a"], reason: .tooSoon, dateLabel: "Jul 24",
-                                     prospects: [a], context: ctx, feedback: ActionFeedback(), undo: stack)
+                                     shows: [a], context: ctx, feedback: ActionFeedback(), undo: stack)
         ProspectMutations.dismissAll(["a"], reason: .tooSoon, dateLabel: "Jul 24",
-                                     prospects: [a], context: ctx, feedback: ActionFeedback(), undo: stack)
+                                     shows: [a], context: ctx, feedback: ActionFeedback(), undo: stack)
 
         #expect(stack.entries.count == 1)
     }
@@ -151,7 +151,7 @@ struct BulkDismissMutationTests {
         let stack = QueueUndoStack()
 
         ProspectMutations.dismissAll(["a"], reason: .tooSoon, dateLabel: "Jul 24",
-                                     prospects: [a], context: ctx, feedback: ActionFeedback(), undo: stack)
+                                     shows: [a], context: ctx, feedback: ActionFeedback(), undo: stack)
 
         #expect(a.showOutcomeRaw == "too_soon")
         #expect(stack.entries.first?.rows.first?.priorShowOutcomeRaw == "not_a_fit")
@@ -164,7 +164,7 @@ struct BulkDismissMutationTests {
         let stack = QueueUndoStack()
 
         ProspectMutations.dismissAll([], reason: .tooSoon, dateLabel: "Jul 24",
-                                     prospects: [], context: ctx, feedback: feedback, undo: stack)
+                                     shows: [], context: ctx, feedback: feedback, undo: stack)
 
         #expect(feedback.message == nil)
         #expect(stack.canUndo == false)

@@ -38,7 +38,7 @@ struct ManualPrepMultipleAddressesTests {
                                        email: "olga@bargemusic.org, mark@bargemusic.org", name: nil,
                                        subject: "Your November dates",
                                        body: "Are the November dates set yet?",
-                                       prospects: [p], context: ctx, feedback: ActionFeedback())
+                                       shows: [p], context: ctx, feedback: ActionFeedback())
 
         #expect(p.status == .drafted)
         #expect(p.recipients.count == 2)
@@ -55,7 +55,7 @@ struct ManualPrepMultipleAddressesTests {
 
         ProspectMutations.prepManually(QueueItem(p), email: "a@x.org; b@y.org", name: nil,
                                        subject: "Your November dates", body: "One paragraph.",
-                                       prospects: [p], context: ctx, feedback: ActionFeedback())
+                                       shows: [p], context: ctx, feedback: ActionFeedback())
 
         #expect(p.draftSubject == "Your November dates")
         #expect(p.draftBody == "One paragraph.")
@@ -74,7 +74,7 @@ struct ManualPrepMultipleAddressesTests {
         ProspectMutations.prepManually(QueueItem(p),
                                        email: "olga@bargemusic.org, mark@bargemusic.org", name: nil,
                                        subject: "s", body: "b",
-                                       prospects: [p], context: ctx, feedback: ActionFeedback())
+                                       shows: [p], context: ctx, feedback: ActionFeedback())
 
         #expect(p.recipients.count == 2)
         #expect(Set(p.recipients.map(\.id)) == ["olga@bargemusic.org", "mark@bargemusic.org"])
@@ -93,7 +93,7 @@ struct ManualPrepMultipleAddressesTests {
 
         ProspectMutations.prepManually(QueueItem(p), email: "call the box office", name: nil,
                                        subject: "s", body: "b",
-                                       prospects: [p], context: ctx, feedback: feedback)
+                                       shows: [p], context: ctx, feedback: feedback)
 
         #expect(p.status == .queued)
         #expect(p.recipients.isEmpty)
@@ -112,7 +112,7 @@ struct ManualPrepMultipleAddressesTests {
         ProspectMutations.prepManually(QueueItem(p),
                                        email: "olga@bargemusic.org, mark-at-bargemusic", name: nil,
                                        subject: "s", body: "b",
-                                       prospects: [p], context: ctx, feedback: feedback)
+                                       shows: [p], context: ctx, feedback: feedback)
 
         // Not one half-applied contact for the address that WAS good.
         #expect(p.recipients.isEmpty)
@@ -134,7 +134,7 @@ struct ManualPrepMultipleAddressesTests {
             p.naturalKey = "k\(index)"
             ProspectMutations.prepManually(QueueItem(p), email: typed, name: nil,
                                            subject: "s", body: "b",
-                                           prospects: [p], context: ctx, feedback: ActionFeedback())
+                                           shows: [p], context: ctx, feedback: ActionFeedback())
             for recipient in p.recipients {
                 #expect(!recipient.id.contains(","), "id from \(typed): \(recipient.id)")
                 #expect(!recipient.id.contains(";"), "id from \(typed): \(recipient.id)")

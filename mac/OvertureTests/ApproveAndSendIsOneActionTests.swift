@@ -115,7 +115,7 @@ struct ApproveAndSendIsOneActionTests {
         let feedback = ActionFeedback()
         var cleared: [String] = []
 
-        ProspectMutations.approveAndSend(item(p), prospects: [p], context: ctx, feedback: feedback,
+        ProspectMutations.approveAndSend(item(p), shows: [p], context: ctx, feedback: feedback,
                                          sender: sender, markSending: { _ in },
                                          clearSending: { cleared.append($0) }, onNeedsReconnect: {})
 
@@ -136,7 +136,7 @@ struct ApproveAndSendIsOneActionTests {
         let sender = RecordingSender()
         var cleared: [String] = []
 
-        ProspectMutations.approveAndSend(item(p), prospects: [p], context: ctx, feedback: ActionFeedback(),
+        ProspectMutations.approveAndSend(item(p), shows: [p], context: ctx, feedback: ActionFeedback(),
                                          sender: sender, markSending: { _ in },
                                          clearSending: { cleared.append($0) }, onNeedsReconnect: {})
 
@@ -158,7 +158,7 @@ struct ApproveAndSendIsOneActionTests {
                                userInfo: [NSLocalizedDescriptionKey: "Gmail refused it"])
         var cleared: [String] = []
 
-        ProspectMutations.approveAndSend(item(p), prospects: [p], context: ctx, feedback: ActionFeedback(),
+        ProspectMutations.approveAndSend(item(p), shows: [p], context: ctx, feedback: ActionFeedback(),
                                          sender: sender, markSending: { _ in },
                                          clearSending: { cleared.append($0) }, onNeedsReconnect: {})
 

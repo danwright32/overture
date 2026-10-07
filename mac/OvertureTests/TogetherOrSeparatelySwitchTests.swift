@@ -71,11 +71,11 @@ struct TogetherOrSeparatelySwitchTests {
         let p = show(ctx)
         let item = QueueItem(p)
 
-        ProspectMutations.setSendsTogether(item, false, prospects: [p], context: ctx,
+        ProspectMutations.setSendsTogether(item, false, shows: [p], context: ctx,
                                            feedback: ActionFeedback())
         #expect(SendGroup.pendingGroup(of: p, today: EasternDate.today(Date())).count == 1)
 
-        ProspectMutations.setSendsTogether(item, true, prospects: [p], context: ctx,
+        ProspectMutations.setSendsTogether(item, true, shows: [p], context: ctx,
                                            feedback: ActionFeedback())
         #expect(SendGroup.pendingGroup(of: p, today: EasternDate.today(Date())).count == 2)
     }
@@ -84,7 +84,7 @@ struct TogetherOrSeparatelySwitchTests {
         let ctx = ModelContext(try container())
         let p = show(ctx)
 
-        ProspectMutations.setSendsTogether(QueueItem(p), false, prospects: [p], context: ctx,
+        ProspectMutations.setSendsTogether(QueueItem(p), false, shows: [p], context: ctx,
                                            feedback: ActionFeedback())
         let reread = try #require(try ctx.fetch(FetchDescriptor<Prospect>()).first)
 
@@ -121,12 +121,12 @@ struct TogetherOrSeparatelySwitchTests {
 
         ProspectMutations.prepManually(QueueItem(p), email: "a@x.org, b@y.org", name: nil,
                                        subject: "S", body: "Body", sendsTogether: true,
-                                       prospects: [p], context: ctx, feedback: feedback)
+                                       shows: [p], context: ctx, feedback: feedback)
         #expect(p.sendsTogether)
 
         ProspectMutations.prepManually(QueueItem(p), email: "a@x.org, b@y.org", name: nil,
                                        subject: "S", body: "Body", sendsTogether: false,
-                                       prospects: [p], context: ctx, feedback: feedback)
+                                       shows: [p], context: ctx, feedback: feedback)
         #expect(p.sendsTogether == false)
     }
 }

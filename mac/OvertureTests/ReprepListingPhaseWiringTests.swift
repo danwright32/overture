@@ -38,7 +38,7 @@ struct ReprepListingPhaseWiringTests {
         let p = show(in: ctx)
         var launched: Set<String> = []
 
-        await ProspectMutations.reprep(QueueItem(p), mode: .draftOnly, prospects: [p], context: ctx,
+        await ProspectMutations.reprep(QueueItem(p), mode: .draftOnly, shows: [p], context: ctx,
                                        feedback: ActionFeedback(),
                                        startPrep: { _, _, keys in launched = keys })
 

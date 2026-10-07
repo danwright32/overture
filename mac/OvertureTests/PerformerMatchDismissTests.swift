@@ -289,7 +289,7 @@ struct PerformerMatchDismissTests {
         let p = correctedProspect(ctx)
         let feedback = ActionFeedback()
 
-        #expect(ProspectMutations.confirmPerformerMatch(QueueItem(p), prospects: [p],
+        #expect(ProspectMutations.confirmPerformerMatch(QueueItem(p), shows: [p],
                                                         context: ctx, feedback: feedback))
 
         #expect(p.performerMatchReviewed)
@@ -306,9 +306,9 @@ struct PerformerMatchDismissTests {
         try ctx.save()
         let feedback = ActionFeedback()
 
-        #expect(ProspectMutations.confirmPerformerMatch(QueueItem(p), prospects: [p],
+        #expect(ProspectMutations.confirmPerformerMatch(QueueItem(p), shows: [p],
                                                         context: ctx, feedback: feedback) == false)
-        #expect(ProspectMutations.dismissPerformerMatch(QueueItem(p), prospects: [p],
+        #expect(ProspectMutations.dismissPerformerMatch(QueueItem(p), shows: [p],
                                                         context: ctx, feedback: feedback) == false)
 
         #expect(p.performerMatchReviewed == false)
@@ -323,9 +323,9 @@ struct PerformerMatchDismissTests {
         let p = correctedProspect(ctx)
         let feedback = ActionFeedback()
 
-        #expect(ProspectMutations.confirmPerformerMatch(QueueItem(p), prospects: [],
+        #expect(ProspectMutations.confirmPerformerMatch(QueueItem(p), shows: [],
                                                         context: ctx, feedback: feedback) == false)
-        #expect(ProspectMutations.dismissPerformerMatch(QueueItem(p), prospects: [],
+        #expect(ProspectMutations.dismissPerformerMatch(QueueItem(p), shows: [],
                                                         context: ctx, feedback: feedback) == false)
     }
 }

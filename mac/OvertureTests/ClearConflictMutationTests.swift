@@ -33,7 +33,7 @@ struct ClearConflictMutationTests {
         let p = conflicted(ctx)
         let feedback = ActionFeedback()
 
-        ProspectMutations.clearConflict(QueueItem(p), prospects: [p], context: ctx, feedback: feedback)
+        ProspectMutations.clearConflict(QueueItem(p), shows: [p], context: ctx, feedback: feedback)
 
         #expect(p.hasUnclearedConflict == false)
         #expect(p.conflictNote == "You blocked Nov 14 (Vacation).")   // the clash is still TRUE, and still said
@@ -45,7 +45,7 @@ struct ClearConflictMutationTests {
         let p = conflicted(ctx)
         let feedback = ActionFeedback()
 
-        ProspectMutations.clearConflict(QueueItem(p), prospects: [p], context: ctx, feedback: feedback)
+        ProspectMutations.clearConflict(QueueItem(p), shows: [p], context: ctx, feedback: feedback)
 
         #expect(feedback.message == "Vienna Philharmonic can be drafted despite the clash")
         #expect(feedback.action?.label == "Undo")
@@ -56,7 +56,7 @@ struct ClearConflictMutationTests {
         let p = conflicted(ctx)
         let feedback = ActionFeedback()
 
-        ProspectMutations.clearConflict(QueueItem(p), prospects: [p], context: ctx, feedback: feedback)
+        ProspectMutations.clearConflict(QueueItem(p), shows: [p], context: ctx, feedback: feedback)
         feedback.action?.perform()
 
         #expect(p.hasUnclearedConflict)                                // blocked again
@@ -71,7 +71,7 @@ struct ClearConflictMutationTests {
         p.setScoutConflict(nil)                                       // the vacation was cancelled
         let feedback = ActionFeedback()
 
-        ProspectMutations.clearConflict(QueueItem(p), prospects: [p], context: ctx, feedback: feedback)
+        ProspectMutations.clearConflict(QueueItem(p), shows: [p], context: ctx, feedback: feedback)
 
         #expect(p.conflictClearedKey == nil)
         #expect(feedback.message == nil)                              // and it says nothing happened
@@ -96,7 +96,7 @@ struct ClearConflictMutationTests {
 
         let p = conflicted(ctx)
         p.setScoutConflict(key([one, other]))
-        ProspectMutations.clearConflict(QueueItem(p), prospects: [p], context: ctx,
+        ProspectMutations.clearConflict(QueueItem(p), shows: [p], context: ctx,
                                         feedback: ActionFeedback())
         #expect(p.hasUnclearedConflict == false)
 

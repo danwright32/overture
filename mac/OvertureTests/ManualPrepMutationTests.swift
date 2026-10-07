@@ -33,7 +33,7 @@ struct ManualPrepMutationTests {
         ProspectMutations.prepManually(QueueItem(p), email: "Olga@Bargemusic.org", name: "Olga",
                                        subject: "Your November dates",
                                        body: "Hi Olga, are the November dates set yet?",
-                                       prospects: [p], context: ctx, feedback: feedback)
+                                       shows: [p], context: ctx, feedback: feedback)
 
         #expect(p.status == .drafted)
         #expect(p.draftWrittenByDan)
@@ -54,7 +54,7 @@ struct ManualPrepMutationTests {
 
         ProspectMutations.prepManually(QueueItem(p), email: "olga@bargemusic.org", name: nil,
                                        subject: "s", body: "b",
-                                       prospects: [p], context: ctx, feedback: ActionFeedback())
+                                       shows: [p], context: ctx, feedback: ActionFeedback())
 
         #expect(p.recipients.count == 1)
         #expect(p.status == .drafted)
@@ -69,7 +69,7 @@ struct ManualPrepMutationTests {
 
         ProspectMutations.prepManually(QueueItem(p), email: "olga@bargemusic.org", name: nil,
                                        subject: "Your November dates", body: "   ",
-                                       prospects: [p], context: ctx, feedback: feedback)
+                                       shows: [p], context: ctx, feedback: feedback)
 
         #expect(p.status == .queued)
         #expect(p.hasDraft == false)
@@ -84,7 +84,7 @@ struct ManualPrepMutationTests {
 
         ProspectMutations.prepManually(QueueItem(p), email: " ", name: nil,
                                        subject: "s", body: "b",
-                                       prospects: [p], context: ctx, feedback: feedback)
+                                       shows: [p], context: ctx, feedback: feedback)
 
         #expect(p.status == .queued)
         #expect(p.hasDraft == false)
@@ -110,7 +110,7 @@ struct ManualPrepMutationTests {
 
         ProspectMutations.prepManually(QueueItem(p), email: "olga@bargemusic.org", name: nil,
                                        subject: "s", body: "b",
-                                       prospects: [p], context: ctx, feedback: feedback)
+                                       shows: [p], context: ctx, feedback: feedback)
 
         #expect(p.hasDraft)
         #expect(p.hasUnclearedConflict, "writing the email is not an answer to the clash")

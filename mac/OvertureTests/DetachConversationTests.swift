@@ -386,7 +386,7 @@ struct DetachConversationTests {
         let r = formPitch(ctx, on: p)
         let recordedAt = try #require(r.formOutreachRecordedAt)
 
-        ProspectMutations.cancelFormPitch(QueueItem(p), r.id, prospects: [p],
+        ProspectMutations.cancelFormPitch(QueueItem(p), r.id, shows: [p],
                                           context: ctx, feedback: ActionFeedback())
 
         #expect(r.formOutreachRecordedAt == recordedAt, "the send record must be left exactly as it was")
@@ -405,7 +405,7 @@ struct DetachConversationTests {
         p.addRecipient(r)
         r.formOutreachStartedAt = now
 
-        ProspectMutations.cancelFormPitch(QueueItem(p), r.id, prospects: [p],
+        ProspectMutations.cancelFormPitch(QueueItem(p), r.id, shows: [p],
                                           context: ctx, feedback: ActionFeedback())
 
         #expect(r.formOutreachStartedAt == nil)
