@@ -77,15 +77,38 @@ struct CardDivergenceRecord: Codable, Equatable, Sendable {
         self.suppressedRepeats = suppressedRepeats
     }
 
-    // #4354: the kinds this log holds. Only `.cardDivergence` has a writer today (`QueueView.recordCardCheck`).
-    // `.noOpDirty` and `.factMismatch` are the queue engine's, activated by #4358 (plan v7 Phase 4 plus 5),
-    // named here because the compaction and cooldown rules below have to hold for them before the first
-    // one is written, which is the order the plan requires (L191). Each later verifier kind joins this
-    // list in the PR that writes it.
+    // #4354: the kinds this log holds. `.cardDivergence` is written by `QueueView.recordCardCheck`.
+    // `.noOpDirty` is the queue engine's, activated by #4358 (plan v7 Phase 4 plus 5), named here because the
+    // compaction and cooldown rules below have to hold for it before the first one is written, which is the
+    // order the plan requires (L191). Each later verifier kind joins this list in the PR that writes it.
+    //
+    // #4358 slice E2: the verifier's and recovery's kinds, each written by `QueueEngine` (`writeFinding`). The
+    // engine is unwired until the cutover (#4358, slice E4), which is also where the launch notice that SAYS them
+    // arrives; until then `QueueEngine.verifierFindings` and its suites are their reader. `fields` holds
+    // `table.member` names for a mismatch, the table names for a foreign save, the fields of what was faulted for
+    // a heal or a give-up (so a table name after a foreign save), and nothing for the four about the verifier
+    // itself. `cardsBuilt` is 0 on every one: no card is involved.
     enum Kind: String, Codable, Equatable, Hashable, Sendable, CaseIterable {
         case cardDivergence
         case noOpDirty
+        /// A held fact differed from a fresh read of the store.
         case factMismatch
+        /// The facts agreed and the output on screen was not the pass over them.
+        case outputMismatch
+        /// A save through another context touched these tables, and their rows were faulted (decision 9(a)).
+        case foreignSave
+        /// A faulted row, or an output, came back into step.
+        case healed
+        /// A round of attempts at a faulted row ended without it coming back into step.
+        case healDidNotConverge
+        /// Ten minutes passed with no comparison reaching a verdict.
+        case unverifiedTooLong
+        /// The verifier's thread did not answer within its deadline.
+        case verifierTimedOut
+        /// A verification was never started because one the deadline gave up on had still not returned.
+        case verifierWedged
+        /// Re-verification stopped after runs in a row that reached no verdict (saves landing during every read).
+        case verifierRetriesCapped
         // Written by nobody: what a spelling this build does not know DECODES to, because a later build
         // wrote it. Kept as a record rather than failing the whole line (L255, `StallRecord`'s rule).
         case unrecognised
@@ -96,7 +119,9 @@ struct CardDivergenceRecord: Codable, Equatable, Sendable {
         var cooldown: TimeInterval {
             switch self {
             case .cardDivergence: return 0
-            case .noOpDirty, .factMismatch, .unrecognised: return 600
+            case .noOpDirty, .factMismatch, .outputMismatch, .foreignSave, .healed, .healDidNotConverge,
+                 .unverifiedTooLong, .verifierTimedOut, .verifierWedged, .verifierRetriesCapped, .unrecognised:
+                return 600
             }
         }
     }
@@ -173,6 +198,11 @@ enum CardDivergenceLog {
     // this milestone exists to make cheap. What has to be answerable is only whether anything has ever
     // looked, which a stamp answers as well as a count and more usefully: a date says WHEN.
     static let lastRanKey = "cardCheckLastRanAt"
+    // #4358 slice E2 (plan v7 D7): the queue engine verifier's own proof that it ran, beside the card check's.
+    // A lifetime count of comparisons that MATCHED and when the last one did, so zero reads as "never verified",
+    // never as clean (L557). Written by `QueueEngine` on every match; said by the cutover's launch notice (E4).
+    static let verifierMatchCountKey = "queueVerifierMatchCount"
+    static let verifierLastMatchedKey = "queueVerifierLastMatchedAt"
     // Said once per install and not once per launch. A notice carrying no action, delivered every time,
     // teaches a person to skip the whole surface.
     static let neverRanSaidKey = "cardCheckNeverRanSaid"
@@ -503,6 +533,16 @@ enum CardDivergenceLog {
         }
     }
 
+    // #4358 slice E2: a window's held count, handed back by `Cooldown.drainEnded`, written as a record of its
+    // (kind, source) carrying the count and no field. NOT through the cooldown: the window it belonged to has
+    // ended, and admitting it would open a new one and zero the very count it exists to carry (L710).
+    @discardableResult
+    static func appendDrained(_ held: Cooldown.Held, session: String, sequence: Int, at now: Date, to url: URL) -> Bool {
+        write(CardDivergenceRecord(session: session, sequence: sequence, at: now, fields: [], cardsBuilt: 0, stage: nil,
+                                   kind: held.kind, source: held.source, suppressedRepeats: held.suppressedRepeats),
+              to: url)
+    }
+
     private static func write(_ record: CardDivergenceRecord, to url: URL) -> Bool {
         guard let line = line(for: record) else { return false }
         return appending(line + "\n", to: url)
@@ -516,8 +556,9 @@ enum CardDivergenceLog {
     // window ends carries that count as `suppressedRepeats`, and a window that ends with nothing after it
     // is handed back by `drainEnded` so its count is written rather than lost to a quiet period (L710).
     //
-    // In memory, owned by whichever writer holds it; the engine's verifier is that owner (#4358), and its
-    // hourly tick is where `drainEnded` is called. Pure, so every outcome is produced by a test rather
+    // In memory, owned by whichever writer holds it; the queue engine is that owner (#4358), and it calls
+    // `drainEnded` on every turn (`QueueEngine.drainHeldRepeats`), which its clock's floor makes at least once a
+    // minute. Pure, so every outcome is produced by a test rather
     // than watched not to happen (L151).
     struct Cooldown: Equatable, Sendable {
         struct Key: Hashable, Sendable {
