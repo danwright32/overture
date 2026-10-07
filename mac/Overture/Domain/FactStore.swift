@@ -210,8 +210,12 @@ struct FactStore: Equatable, Sendable {
     }
 }
 
-// #4358 (plan v7 Phase 4, step 1): what the queue engine's resolve step removes and renames, kept beside the
-// store whose identities it is about, as plain values a test drives directly.
+// #4358 (plan v7 Phase 4, steps 1 to 4): the values the queue engine decides with, kept beside the store whose
+// identities they are about, so each decision is a plain function over values a test drives directly: which
+// identities a turn removes or renames (`QueueEngineResolution`), what a pass is handed (`QueueEnginePassInput`),
+// why it ran (`QueueEnginePassReason`), when the clock next forces one (`QueueEngineDeadline`), and whether an
+// output may replace the one on screen (`QueueEngineGenerations`). The engine (`App/QueueEngine.swift`) owns
+// the observation, notifications and timers that feed them.
 
 /// What one resolve step removes and renames, applied to every structure the engine keys by identity
 /// (`QueueEngine.identityKeyedState`). Built from the step's own evidence, never from a list of structures.
@@ -219,10 +223,111 @@ struct QueueEngineResolution: Equatable, Sendable {
     /// Rows that are gone: deleted and saved, deleted before they were ever saved, or a show's contacts gone
     /// with it.
     var deletedIDs: Set<PersistentIdentifier> = []
+    /// The natural keys of the shows among them, for the structures a surface keys by show.
+    var deletedKeys: Set<String> = []
     /// Temporary identifiers that a first save replaced (#4327 step 0.4), to the identifiers they became.
     var rekeyedIDs: [PersistentIdentifier: PersistentIdentifier] = [:]
+    /// Shows whose natural key changed under the same identity (a rename), from the old key to the new.
+    var rekeyedKeys: [String: String] = [:]
 
-    var isEmpty: Bool { deletedIDs.isEmpty && rekeyedIDs.isEmpty }
+    var isEmpty: Bool { deletedIDs.isEmpty && deletedKeys.isEmpty && rekeyedIDs.isEmpty && rekeyedKeys.isEmpty }
+}
+
+extension Set where Element == String {
+    /// Natural keys: without the deleted shows', and with a re-keyed show under its new key.
+    mutating func resolve(keys resolution: QueueEngineResolution) {
+        subtract(resolution.deletedKeys)
+        for (old, new) in resolution.rekeyedKeys where remove(old) != nil { insert(new) }
+    }
+}
+
+extension Array where Element == String {
+    /// Natural keys in their order: the deleted shows' removed, a re-keyed show's renamed in place.
+    func resolved(keys resolution: QueueEngineResolution) -> [String] {
+        compactMap { key in resolution.deletedKeys.contains(key) ? nil : (resolution.rekeyedKeys[key] ?? key) }
+    }
+}
+
+/// The surface's own state the pass reads: which stage is focused, which leads, and which cards the last frame
+/// drew. Compared by `==`, so the same inputs handed in again are no reason for a pass (plan v2 Phase 4 step 2).
+struct QueueEngineViewInputs: Equatable, Sendable {
+    var focusedStage: StageFocus?
+    var focusedKeys: [String]?
+    var requestedCardKeys: Set<String> = []
+}
+
+/// Everything one pass is handed. Values only, so the pass can never reach the store (B2).
+struct QueueEnginePassInput: Sendable {
+    let facts: FactStore
+    let viewInputs: QueueEngineViewInputs
+    let now: Date
+}
+
+/// Why a pass derived. A turn with no reason does not derive (the generation gate, plan v2 Phase 4 step 2).
+enum QueueEnginePassReason: Hashable, Sendable, CaseIterable {
+    /// The first pass, which has nothing on screen to keep.
+    case first
+    /// A stored value the pass reads changed (after the equality gate).
+    case factsChanged
+    /// The instant a rule in the last output comes due arrived.
+    case clockTerm
+    /// The 60 second floor arrived with no rule due before it (L51).
+    case clockFloor
+    /// The Mac woke, its clock or time zone was changed, or the calendar day turned.
+    case wake
+    case systemClock
+    case timeZone
+    case calendarDay
+    /// An input that is neither a store row nor the clock moved (`QueueContextSignals`).
+    case sourceFired
+    /// The surface asked for a different view, or for a card the last pass did not build.
+    case viewInputs
+}
+
+/// When the clock next forces a pass, and which of the two deadlines it is (plan v2 Phase 4 step 4).
+struct QueueEngineDeadline: Equatable, Sendable {
+    enum Kind: Equatable, Sendable {
+        /// A rule in the last output comes due (`DueWork.nextChange`'s shape).
+        case term
+        /// No rule is due sooner than the floor, so the pass is forced anyway.
+        case floor
+    }
+
+    let at: Date
+    let kind: Kind
+
+    /// The floor every deadline is held to. One minute: the longest a clock-driven change may wait unseen.
+    static let floorInterval: TimeInterval = 60
+
+    /// ONE deadline: the earlier of the output's own next change and the floor. A rule already due is due now.
+    static func next(now: Date, termNextChange: Date?) -> QueueEngineDeadline {
+        let floorAt = now.addingTimeInterval(floorInterval)
+        guard let term = termNextChange, term < floorAt else { return QueueEngineDeadline(at: floorAt, kind: .floor) }
+        return QueueEngineDeadline(at: max(term, now), kind: .term)
+    }
+}
+
+/// Whether a pass's output may replace the one published (plan v2 Phase 4 step 3).
+enum QueueEngineGenerations {
+    enum Verdict: Equatable, Sendable {
+        case apply
+        /// An output no newer than the one on screen. Applying it would put an older store state over a newer
+        /// one, so it is refused, loudly in Debug and by a routine log line in Release.
+        case refuse(published: Int, incoming: Int)
+    }
+
+    static func verdict(published: Int?, incoming: Int) -> Verdict {
+        guard let published, incoming <= published else { return .apply }
+        return .refuse(published: published, incoming: incoming)
+    }
+}
+
+/// One floor-only pass that changed the output: the 60 second floor's named cost (L93). Field NAMES only, never
+/// a value (C7, L222).
+struct QueueEngineFloorChange: Equatable, Sendable {
+    let fields: [String]
+    let at: Date
+    let generation: Int
 }
 
 extension Dictionary where Key == PersistentIdentifier {
@@ -269,6 +374,8 @@ struct QueueEngineCounters: Equatable, Sendable {
     /// Turns the engine ran, and the stored values those turns changed (the equality gate's other side).
     var turns = 0
     var rowsChanged = 0
+    /// Turns that derived an output. A turn with no reason derives nothing (the generation gate).
+    var passes = 0
     /// Rows read again from the store, and how many of those the equality gate dropped as unchanged.
     var rowsReread = 0
     var equalValueReads = 0
