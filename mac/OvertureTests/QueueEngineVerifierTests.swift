@@ -420,6 +420,8 @@ final class QueueEngineRecoveryTests {
         #expect(engine.verifierFindings.first?.kind == .foreignSave)
         #expect(engine.verifierFindings.first?.fields == ["shows"])
         #expect(engine.verifierFindings.map(\.kind) == [.foreignSave, .healed])
+        // The heal names what was faulted the way every record does, by table here, never a placeholder word.
+        #expect(engine.verifierFindings.last?.fields == ["shows"])
         #expect(engine.facts.shows[id]?.fitReason == "written elsewhere")
     }
 }
@@ -471,6 +473,42 @@ final class QueueEngineVerifierTriggerTests {
         #expect(engine.verifierCounts.started == 2, "the twentieth output did not start a verification")
         await VerifierRig.finished(engine, beyond: 1, "the forced verification")
         #expect(engine.verifierCounts.matches == 2)
+    }
+
+    // Saves landing during every read: each run is superseded, and the re-verifications back off (3, 6, 12, 24 and
+    // 48 seconds) and stop after five in a row, with one record saying so, rather than reading the whole store
+    // every three seconds for as long as the saves go on (L704, found by the lessons review). The next output's
+    // own quiet moment, or a verdict, is what starts it again.
+    @Test func reVerificationsAfterSupersededRunsBackOffAndStop() async throws {
+        let store = try EngineStore(shows: 2, seed: 80)
+        let turns = EngineTurns()
+        let clock = EngineTestClock()
+        let center = NotificationCenter()
+        let engine = VerifierRig.engine(store, turns, clock: clock, saves: StoreSaveCount(center: center),
+                                        setup: QueueEngineVerifierSetup(read: VerifierReads.straddling(center)))
+        var elapsed: TimeInterval = 0
+        // The first run after the start's quiet moment, then the five retries.
+        for (run, delay) in [3.0, 3, 6, 12, 24, 48].enumerated() {
+            // The floor's sleeper until it fires at sixty seconds, the ten minute timer, and this run's timer.
+            let sleepers = (elapsed < 60 ? 1 : 0) + 2
+            await waitUntil("run \(run + 1)'s timer is sleeping") { clock.waiting == sleepers }
+            clock.advance(by: delay - 0.5)
+            #expect(engine.verifierCounts.started == run, "run \(run + 1) started before its \(delay) seconds")
+            clock.advance(by: 0.5)
+            elapsed += delay
+            await waitUntil("run \(run + 1) was superseded") { engine.verifierCounts.superseded == run + 1 }
+        }
+        #expect(engine.verifierCounts.retriesCapped == 1)
+        #expect(engine.verifierFindings.map(\.kind) == [.verifierRetriesCapped])
+        await waitUntil("only the ten minute timer is left") { clock.waiting == 1 }
+        clock.advance(by: 200)
+        #expect(engine.verifierCounts.started == 6, "the verifier kept re-reading after the cap")
+    }
+
+    @Test func theRetryScheduleDoublesAndEnds() {
+        let delays = (1...QueueEngineVerifier.maxConsecutiveRetries).map { QueueEngineVerifier.retryDelay(afterConsecutive: $0) }
+        #expect(delays == [3, 6, 12, 24, 48])
+        #expect(QueueEngineVerifier.retryDelay(afterConsecutive: QueueEngineVerifier.maxConsecutiveRetries + 1) == nil)
     }
 
     // Always superseded, so no comparison ever reaches a verdict: at ten minutes that is recorded.
@@ -545,7 +583,7 @@ final class QueueEngineVerifierTriggerTests {
 
     @Test func everyVerifierKindHasTheCooldown() {
         for kind in [CardDivergenceRecord.Kind.factMismatch, .outputMismatch, .foreignSave, .healed, .healDidNotConverge,
-                     .unverifiedTooLong, .verifierTimedOut, .verifierWedged] {
+                     .unverifiedTooLong, .verifierTimedOut, .verifierWedged, .verifierRetriesCapped] {
             #expect(kind.cooldown == 600, "\(kind)")
         }
     }

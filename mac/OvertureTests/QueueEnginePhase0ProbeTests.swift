@@ -937,14 +937,14 @@ struct QueueEnginePhase0ProbeTests {
             for (night, keys) in nights {
                 dismissSizes.append(keys.count)
                 dismissRuns.append(Phase0.time {
-                    ProspectMutations.dismissAll(keys, reason: .pitchingOtherShows, dateLabel: night, prospects: rows,
+                    ProspectMutations.dismissAll(keys, reason: .pitchingOtherShows, dateLabel: night, shows: rows,
                                                  context: ctx, feedback: ActionFeedback(), now: now,
                                                  export: exportTuple)
                 })
             }
             let reprepCount = ProspectMutations.bulkReprepEligible(rows, now: now).count
             let reprep = Phase0.time {
-                ProspectMutations.bulkReprep(.draftOnly, prospects: rows, context: ctx, feedback: ActionFeedback(), now: now)
+                ProspectMutations.bulkReprep(.draftOnly, shows: rows, context: ctx, feedback: ActionFeedback(), now: now)
             }
             Phase0.say("""
                 p4 [\(label)] \(rows.count) shows, \(Phase0.load())

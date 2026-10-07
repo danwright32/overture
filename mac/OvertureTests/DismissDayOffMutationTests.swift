@@ -37,7 +37,7 @@ struct DismissDayOffMutationTests {
         let offer = DayOffOfferRequest()
 
         ProspectMutations.dismissForReason(QueueItem(p), .dateConflict,
-                                           prospects: [p], context: ctx, feedback: feedback, offer: offer)
+                                           shows: [p], context: ctx, feedback: feedback, offer: offer)
 
         #expect(p.status == .dismissed)
         #expect(p.showOutcomeRaw == "date_conflict")
@@ -57,7 +57,7 @@ struct DismissDayOffMutationTests {
         let offer = DayOffOfferRequest()
 
         ProspectMutations.dismissForReason(QueueItem(p), .dateConflict,
-                                           prospects: [p], context: ctx, feedback: feedback, offer: offer)
+                                           shows: [p], context: ctx, feedback: feedback, offer: offer)
 
         let pending = try #require(offer.pending)
         #expect(pending.start == "2026-11-18")
@@ -73,7 +73,7 @@ struct DismissDayOffMutationTests {
         let offer = DayOffOfferRequest()
 
         ProspectMutations.dismissForReason(QueueItem(p), .notAFit,
-                                           prospects: [p], context: ctx, feedback: feedback, offer: offer)
+                                           shows: [p], context: ctx, feedback: feedback, offer: offer)
 
         #expect(p.status == .dismissed)
         #expect(offer.pending == nil)
@@ -92,7 +92,7 @@ struct DismissDayOffMutationTests {
         let offer = DayOffOfferRequest()
 
         ProspectMutations.dismissForReason(QueueItem(p), .dateConflict,
-                                           prospects: [p], context: ctx, feedback: feedback, offer: offer)
+                                           shows: [p], context: ctx, feedback: feedback, offer: offer)
 
         #expect(p.status == .dismissed)     // still dismissed
         #expect(offer.pending == nil)       // but no picker: the date is already blocked
@@ -119,7 +119,7 @@ struct DismissDayOffMutationTests {
         let offer = DayOffOfferRequest()
 
         ProspectMutations.dismissForReason(QueueItem(p1), .dateConflict,
-                                           prospects: [p1, p2], context: ctx, feedback: feedback, offer: offer)
+                                           shows: [p1, p2], context: ctx, feedback: feedback, offer: offer)
 
         let pending = try #require(offer.pending)
         #expect(pending.start == "2026-07-25")

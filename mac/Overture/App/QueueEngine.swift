@@ -473,6 +473,8 @@ final class QueueEngine<Value: Sendable> {
     /// The generation the last verification started at, for "every twenty outputs".
     @ObservationIgnored private var verifiedAtGeneration = 0
     @ObservationIgnored private var verifyAgain = false
+    /// Verifications in a row that reached no verdict and were retried, for the retries' back off and cap.
+    @ObservationIgnored private var consecutiveRetries = 0
     /// The view the output on screen was derived for, which a verification compares at.
     @ObservationIgnored private var publishedViewInputs: QueueEngineViewInputs?
     /// An output mismatch with matching facts, waiting for the pass that heals it.
@@ -999,8 +1001,11 @@ final class QueueEngine<Value: Sendable> {
         // means a save this observer never saw, and only then is every row read again.
         let foreignRows = rowsOwning(pending.foreign.compactMap(current)).subtracting(resolution.deletedIDs)
         if !foreignRows.isEmpty {
-            faults.admit(Dictionary(uniqueKeysWithValues: foreignRows.map { ($0, ["foreignSave"]) }),
-                         origin: .foreignSave, at: now)
+            // Each row is faulted under its TABLE's name, the one the foreignSave record carries, so the heal or the
+            // give-up that follows names what was faulted rather than a placeholder word.
+            faults.admit(Dictionary(uniqueKeysWithValues: foreignRows.map { id in
+                (id, FactStore.Table.holding(id.entityName).map { ["\($0)"] } ?? [])
+            }), origin: .foreignSave, at: now)
             writeFinding(.foreignSave, fields: foreignRows.compactMap { FactStore.Table.holding($0.entityName) }
                             .map { "\($0)" }, at: now)
         }
@@ -1241,13 +1246,33 @@ final class QueueEngine<Value: Sendable> {
         }
         // Asked again while this ran, or this one could not say, or it judged an output older than the one now
         // on screen: once more after the next quiet moment (L710).
+        let verdict: Bool
+        switch result {
+        case .match, .factMismatch, .outputMismatch: verdict = true
+        case .superseded, .cancelled, .unmeasured: verdict = false
+        }
+        if verdict { consecutiveRetries = 0 }
         if QueueEngineVerifier.needsAnother(after: result, onScreen: output?.generation) { verifyAgain = true }
-        if verifyAgain, verifierSetup.triggers == .automatic {
-            verifyAgain = false
-            let at = generation
-            armTimer(.quiet, after: QueueEngineVerifier.quietSeconds) { engine in
-                if engine.generation == at { engine.startVerification() }
+        guard verifyAgain, verifierSetup.triggers == .automatic else { return }
+        verifyAgain = false
+        var delay = QueueEngineVerifier.quietSeconds
+        if !verdict {
+            // Runs that cannot say, in a row, back off and then stop (L704): each is a whole read of the store, and
+            // saves landing during every read would otherwise repeat it every three seconds for as long as they
+            // went on. The next output's own quiet moment, or a verdict, starts it again.
+            consecutiveRetries += 1
+            guard let backoff = QueueEngineVerifier.retryDelay(afterConsecutive: consecutiveRetries) else {
+                if consecutiveRetries == QueueEngineVerifier.maxConsecutiveRetries + 1 {
+                    verifierCounts.retriesCapped += 1
+                    writeFinding(.verifierRetriesCapped, fields: [], at: now)
+                }
+                return
             }
+            delay = backoff
+        }
+        let at = generation
+        armTimer(.quiet, after: delay) { engine in
+            if engine.generation == at { engine.startVerification() }
         }
     }
 

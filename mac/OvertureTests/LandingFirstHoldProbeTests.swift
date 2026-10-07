@@ -248,7 +248,8 @@ final class LandingFirstHoldProbeTests {
             // pass 1 below.
             if factor == 1 && ProcessInfo.processInfo.environment["MEASURE_4339_HISTORY_FIRST"] != nil {
                 Self.say("x1 before the history read: context has changes \(ctx.hasChanges)")
-                let (_, historyHold) = try await measure { await LandingInputs.history(into: ctx) }
+                // #4558: runScout reads its history through the refusing read, with the export and the calendar.
+                let (_, historyHold) = try await measure { await LandingInputs.readRefusingUnreadableShowTable(into: ctx) }
                 Self.say("x1 history read alone: " + historyHold.text)
             }
             // `TEST_RUNNER_MEASURE_4339_SAMPLE=<dir outside any checkout>`: the first run in this process at 1x is
@@ -318,8 +319,7 @@ final class LandingFirstHoldProbeTests {
                     let (said, pasteHold) = try await measure { () -> String in
                         let result = await LeadPasteLanding.landPastedLead(
                             events, today: EasternDate.today(Date()), now: Date(), landings: LandingSingleFlight(),
-                            loadExport: { DownbeatBridge.loadWithHealth(from: inputs.exportURL, now: Date()) },
-                            importedHistory: inputs.historyURL, into: ctx)
+                            exportURL: inputs.exportURL, importedHistory: inputs.historyURL, into: ctx)
                         switch result {
                         case .landed(let outcome):
                             return "landed, \(outcome.inserted) inserted, \(outcome.updated) updated"

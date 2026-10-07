@@ -902,7 +902,9 @@ final class Recipient {
         recipients.sorted { a, b in
             if a.sendOrderRank != b.sendOrderRank { return a.sendOrderRank < b.sendOrderRank }
             if a.canReceiveTheEmail != b.canReceiveTheEmail { return a.canReceiveTheEmail }
-            return a.id < b.id
+            // #4567: then the canonical tie-break, never `id` alone, which left two contacts on one address
+            // in the relationship's order and so which of them a separately sent show wrote to first.
+            return canonicallyPrecedes(a, b)
         }
     }
 
@@ -910,10 +912,14 @@ final class Recipient {
     // address-or-URL identity, then the store's identifier, because one address can sit on two contacts of
     // a show and `id` alone would leave those two in the relationship's order. Not the SEND order above,
     // which is a judgement about who is written to first; this is only a tie-break that never moves.
-    nonisolated static func inCanonicalOrder(_ recipients: [Recipient]) -> [Recipient] {
-        recipients.sorted { a, b in
-            a.id != b.id ? a.id < b.id : a.persistentModelID < b.persistentModelID
-        }
+    // #4567: generic over the contacts, so `SendGroup.peers` over a retained row's contacts reads it too.
+    nonisolated static func inCanonicalOrder<C: ContactFacts>(_ recipients: [C]) -> [C] {
+        recipients.sorted(by: canonicallyPrecedes)
+    }
+
+    // The tie-break itself, once, so the send order and the canonical order end on the same comparison.
+    nonisolated static func canonicallyPrecedes<C: ContactFacts>(_ a: C, _ b: C) -> Bool {
+        a.id != b.id ? a.id < b.id : a.persistentModelID < b.persistentModelID
     }
 
     var firstName: String { Salutation.firstName(name) }

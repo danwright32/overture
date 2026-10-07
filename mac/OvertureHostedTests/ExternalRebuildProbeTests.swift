@@ -3,6 +3,7 @@ import Foundation
 import AppKit
 import SwiftUI
 import SwiftData
+import Observation
 @testable import Overture
 
 // #3805: WHAT re-derives the Archive when no data changed.
@@ -249,12 +250,16 @@ struct ExternalRebuildProbeTests {
         let ctx = ModelContext(c)
         seed(ctx)
 
-        let view = RowsFromStore { (rows: [Prospect]) in ArchiveView(prospects: rows) }
+        // #4534: frozen, so a late evaluation past the render memo's window cannot be what this counts
+        // (`aRedrawPastTheMemoWindowDerivesOnlyOnTheWallClock` below shows it would), and unmounted before
+        // its window closes so no later test can wake it.
+        let clock = HostedPassCounting.frozenClock()
+        let view = RowsFromStore { (rows: [Prospect]) in ArchiveView(prospects: rows, clock: clock) }
             .modelContainer(c)
             .environment(ActionFeedback())
             .environment(DayOffOfferRequest())
-        let (window, _) = host(view)
-        defer { window.close() }
+        let (window, hosting) = host(HostedPassCounting.Mounted(content: view))
+        defer { HostedPassCounting.unmountAndClose(hosting, in: window) }
 
         // PROVE IT DREW, before anything is concluded from a quiet counter. Settling only requires one
         // 0.3s window with no rows, which a surface whose first pass has not STARTED satisfies instantly.
@@ -322,6 +327,119 @@ struct ExternalRebuildProbeTests {
                 + "other reason (#3876). Either direction does it, so this is one reading of a pair. "
                 + "The scope must be derived from its INPUTS, not once per body evaluation, because a "
                 + "body runs for reasons that are not data changes at all (L471, L383)."))
+    }
+
+    // #4534: a redraw with no data change, arriving AFTER the render memo's clock window, derives nothing
+    // on a frozen clock, and derives the whole store on the wall clock.
+    //
+    // WHY THIS AND NOT A WAIT IN THE TWO TESTS THE ISSUE NAMED. The first thing tried was #4516's recipe:
+    // wait past `ScopeMemo.staleAfterSeconds` in real time inside `aScrollBuildsNoCards` and
+    // `becomingKeyCostsNoWholeStorePass`, on the unchanged app. Both PASSED (2026-10-06, 4.2 s and 6.0 s),
+    // because neither a wheel turn nor a key change evaluates the Archive's body any more (#3437, #3876),
+    // and a memo that is never asked cannot derive. So the wait reproduced nothing there and was taken out
+    // rather than left as a two second cost proving nothing (L1). Both still hand the Archive a frozen
+    // clock, because an evaluation they do not schedule (a late SwiftData refetch) is exactly what a slow
+    // runner delivers past the window.
+    //
+    // What DOES evaluate the Archive with nothing changed is a redraw above it: RootView hands it fresh
+    // closures on every render, and a fresh closure is a changed input (#1930's "nothing this view
+    // reads", the shape `OneChangeDerivesTheQueueOnceTests.aRedrawWithNoDataChangeDerivesNothing` drives on
+    // the queue). So this drives that, after the window, in two arms built the same way:
+    //
+    //   WALL CLOCK   the app's own default. The redraw MUST derive the whole store. This is the slow
+    //                runner reproduced on every run, and it is the positive control: a zero on the arm
+    //                below cannot then mean the redraw never reached the memo (L159).
+    //   FROZEN       `HostedPassCounting.frozenClock()`. The same redraw must derive NOTHING, so the memo's
+    //                key held and only the window was ever deciding.
+    @Test func aRedrawPastTheMemoWindowDerivesOnlyOnTheWallClock() async throws {
+        guard !ScreenSession.isLocked else {
+            ScreenSession.reportUnmeasured(
+                "ExternalRebuildProbeTests.aRedrawPastTheMemoWindowDerivesOnlyOnTheWallClock")
+            return
+        }
+        let onTheWallClock = try await rowsAfterARedrawPastTheWindow(clock: Date.init)
+        let onAFrozenClock = try await rowsAfterARedrawPastTheWindow(clock: HostedPassCounting.frozenClock())
+        print("archive-redraw-past-window: wall clock \(onTheWallClock.rows) rows, frozen "
+              + "\(onAFrozenClock.rows) rows, of \(Self.seededRows) (#4534)")
+
+        #expect(onTheWallClock.settled && onAFrozenClock.settled,
+                "the Archive never went quiet before the redraw, so a reading below would be its own tail")
+        #expect(onTheWallClock.rows >= Self.seededRows, Comment(rawValue:
+            "a redraw past the memo's window derived \(onTheWallClock.rows) rows of \(Self.seededRows) on the "
+            + "wall clock, so this fixture does not reach the memo at all and the zero below proves nothing "
+            + "(L159)"))
+        #expect(onAFrozenClock.rows == 0, Comment(rawValue:
+            "a redraw past the memo's window with no data change derived \(onAFrozenClock.rows) rows of "
+            + "\(Self.seededRows) on a FROZEN clock, so ArchiveView is not judging its memo by the clock it "
+            + "was handed and every hosted count over it measures the runner's speed (#4534, #4516)"))
+    }
+
+    @Observable final class RedrawTick {
+        var value = 0
+    }
+
+    // The Archive under a parent that redraws on demand, handing it a fresh closure each time the way
+    // RootView does. The real type, never `AnyView`, for this file's reason above `host`.
+    private struct RedrawHarness: View {
+        let container: ModelContainer
+        let tick: RedrawTick
+        let clock: () -> Date
+        let feedback: ActionFeedback
+        let dayOffOffer: DayOffOfferRequest
+
+        var body: some View {
+            let n = tick.value
+            RowsFromStore { (rows: [Prospect]) in
+                ArchiveView(prospects: rows, onConnectGmail: { _ = n }, clock: clock)
+            }
+            .modelContainer(container)
+            .environment(feedback)
+            .environment(dayOffOffer)
+        }
+    }
+
+    // One arm: a fresh store and window, settled on the CONDITION of being quiet, one discarded redraw (the
+    // reason is at the line), settled again, held past the memo's window in real time (the one wait here
+    // that is about time on purpose, ended by the memo's own expiry rule rather than a duration), then the
+    // redraw that is measured.
+    private func rowsAfterARedrawPastTheWindow(clock: @escaping () -> Date) async throws
+        -> (rows: Int, settled: Bool) {
+        let c = try container()
+        seed(ModelContext(c))
+        let tick = RedrawTick()
+        let (window, hosting) = host(HostedPassCounting.Mounted(content: RedrawHarness(
+            container: c, tick: tick, clock: clock, feedback: ActionFeedback(),
+            dayOffOffer: DayOffOfferRequest())))
+        defer { HostedPassCounting.unmountAndClose(hosting, in: window) }
+
+        func settle() -> Bool {
+            let settleBy = Date().addingTimeInterval(30)
+            while Date() < settleBy {
+                hosting.layoutSubtreeIfNeeded()
+                hosting.displayIfNeeded()
+                if rowsProvokedBy({}, seconds: 0.3) == 0 { return true }
+            }
+            return false
+        }
+        func redraw() -> Int {
+            rowsProvokedBy {
+                tick.value += 1
+                hosting.layoutSubtreeIfNeeded()
+                hosting.displayIfNeeded()
+            }
+        }
+        // ONE REDRAW FIRST, discarded, and it is not ceremony. The memo's key carries the card keys the
+        // last frame drew, compared EXACTLY, so the first redraw after the list has drawn derives the whole
+        // store on any clock: the rows draw nothing new, so the set it hands the memo differs from the
+        // first frame's. Measured 2026-10-06, 120 of 120 rows on the frozen arm before this line existed.
+        // That is a defect of its own (the queue has the subset rule `cardKeysForMemo` for it and the
+        // Archive does not), recorded for an issue rather than fixed here. After this redraw the key holds
+        // still, so the redraw measured below differs from it only in WHEN it arrives.
+        let drew = settle()
+        _ = redraw()
+        let settled = drew && settle()
+        await HostedPassCounting.waitPastTheRenderMemoWindow(since: Date())
+        return (redraw(), settled)
     }
 
     // WHICH PART of the screen reacts to focus, so the safe fix can be aimed rather than guessed.

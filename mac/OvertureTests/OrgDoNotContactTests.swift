@@ -152,14 +152,14 @@ struct OrgDoNotContactTests {
         let feedback = ActionFeedback()
         let item = QueueItem(refused)
 
-        ProspectMutations.setOrgDoNotContact(item, true, prospects: try all(ctx),
+        ProspectMutations.setOrgDoNotContact(item, true, shows: try all(ctx),
                                              context: ctx, feedback: feedback)
 
         #expect(refused.orgDoNotContact)
         #expect(sibling.orgDoNotContact)          // the org's OTHER shows too, not just this one
         #expect(sibling.status == .dismissed)     // and out of the queue, not merely flagged
 
-        ProspectMutations.setOrgDoNotContact(item, false, prospects: try all(ctx),
+        ProspectMutations.setOrgDoNotContact(item, false, shows: try all(ctx),
                                              context: ctx, feedback: feedback)
 
         #expect(!refused.orgDoNotContact)

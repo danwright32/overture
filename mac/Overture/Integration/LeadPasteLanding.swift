@@ -14,7 +14,9 @@ import SwiftData
 //      anything pending is saved first, or the paste is refused by name before anything is read;
 //   2. the read phase OFF the main thread, through a context of its own: Downbeat's export (a file), the show
 //      table read ONCE for both the brand corpus and the history, and Dan's producer corrections. A read that
-//      fails is recorded on the outcome (`degradedReads`), never read as an empty store;
+//      fails is recorded on the outcome (`degradedReads`), never read as an empty store. #4558: through
+//      `LandingInputs.readWithBrandCorpus`, the one builder every landing reads its inputs through, which also
+//      builds the blocked calendar there now;
 //   3. the classify pass off the main thread (`ScoutClassify.offTheCallersActor`);
 //   4. the store, taken through `LandingSingleFlight.begin` at Dan's priority, after the last read-phase await
 //      (the 2026-09-29 token scope decision), so a paste waits at the FRONT of the queue for the landing in
@@ -33,25 +35,12 @@ enum LeadPasteLanding {
         case refused(String)
     }
 
-    // What the read phase hands back across the actor boundary: values only.
-    private struct ReadPhase: Sendable {
-        let clients: [DownbeatClient]
-        let bookings: [OvertureBooking]
-        let blockedDates: [String]
-        let health: DownbeatBridge.Health
-        let history: [HistoryRecord]
-        let corpus: ScoutService.CorpusRead
-    }
-
-    typealias ExportLoad = @Sendable () -> (clients: [DownbeatClient], bookings: [OvertureBooking],
-                                            blockedDates: [String], health: DownbeatBridge.Health)
-
     static func landPastedLead(
         _ events: [ExtractedEvent], today: String, now: Date,
         landings: LandingSingleFlight = .shared,
         readProspectTable: @escaping ScoutLandingStore.SendableRead = ScoutService.readProspectTable,
         readProducerOverrides: @escaping ScoutService.OverrideRead = ScoutService.readProducerOverrides,
-        loadExport: @escaping ExportLoad = { DownbeatBridge.loadWithHealth(now: Date()) },
+        exportURL: URL = DownbeatBridge.defaultURL,
         importedHistory: URL = LocalHistory.importedURL,
         saveEntry: (ModelContext) throws -> Void = { try $0.save() },
         saveSource: @escaping (ModelContext) throws -> Void = { try $0.save() },
@@ -67,11 +56,14 @@ enum LeadPasteLanding {
             return .refused(LeadIntake.recentEditsUnsaved(rows))
         }
         if readPhaseFlush == .saved { entryFlushSaves += 1 }
-        let read = await readOffTheMainThread(container: context.container, read: readProspectTable,
-                                              readOverrides: readProducerOverrides, loadExport: loadExport,
-                                              importedHistory: importedHistory)
+        // #4558: through `LandingInputs`, the one builder every landing reads its inputs through, by the read that
+        // builds the brand corpus from its one table read; this used to be a builder of its own. The export's
+        // `now` is the moment of the read, as it was, not the paste's `now`, which a test pins.
+        let read = await LandingInputs.readWithBrandCorpus(exportURL: exportURL, historyURL: importedHistory,
+                                                           readProspectTable: readProspectTable,
+                                                           readProducerOverrides: readProducerOverrides, into: context)
         let pass = await ScoutClassify.offTheCallersActor(
-            events: events, clients: read.clients, history: read.history, venueBrands: read.corpus.brands,
+            events: events, clients: read.inputs.clients, history: read.inputs.history, venueBrands: read.corpus.brands,
             sourceIds: [WatchedSource.manualId])
 
         let token: LandingSingleFlight.Token
@@ -103,12 +95,15 @@ enum LeadPasteLanding {
         run.entryFlushSaves = entryFlushSaves
         landing.noteSettled(run)
         let outcome = ScoutService.apply(
-            events: events, clients: read.clients, history: read.history,
-            // #901: the SAME calendar the scout uses, days off included.
-            blocked: ScoutService.blockedCalendar(export: (read.bookings, read.blockedDates, read.health),
-                                                  context: context),
+            events: events, clients: read.inputs.clients, history: read.inputs.history,
+            // #901: the SAME calendar the scout uses, days off included. #4558: built in the read phase, as every
+            // other landing builds it, rather than here under the token: it reads only Dan's days off, cancelled
+            // shoots and weekly rules, which no landing writes, so the token guards nothing it reads.
+            blocked: read.inputs.blocked,
             today: today, now: now, sourceIds: [WatchedSource.manualId],
-            preClassified: ScoutService.PreClassified(result: pass, degradedReads: read.corpus.degradedReads),
+            // The corpus's own reads first, then the history's, the order the paste has always recorded them in.
+            preClassified: ScoutService.PreClassified(result: pass,
+                                                      degradedReads: read.corpus.degradedReads + read.inputs.degradedReads),
             landing: landing, into: context)
         if !outcome.saveFailed {
             // A paste that added nothing because the store could not say whether its shows were new is a failed
@@ -141,36 +136,5 @@ enum LeadPasteLanding {
             _ = ScoutService.saveLanding(landing, into: context, save: saveClosing)
             return .refused(LeadIntake.saveFailedMessage)
         }
-    }
-
-    // The show table is read ONCE, for both the corpus and the history, through a context that never saves,
-    // so nothing it fetched crosses back. `Task.detached`, never a plain `Task`, which would inherit the main
-    // actor (the reason `ScoutClassify.offTheCallersActor` gives).
-    nonisolated private static func readOffTheMainThread(
-        container: ModelContainer, read: @escaping ScoutLandingStore.SendableRead,
-        readOverrides: @escaping ScoutService.OverrideRead, loadExport: @escaping ExportLoad,
-        importedHistory: URL
-    ) async -> ReadPhase {
-        await Task.detached(priority: .userInitiated) {
-            let export = loadExport()
-            let context = ModelContext(container)
-            let rows: Swift.Result<[Prospect], Error>
-            do { rows = .success(try read(context)) } catch { rows = .failure(error) }
-            let corpus = ScoutService.buildBrandCorpus(shows: { try rows.get() },
-                                                       overrides: { try readOverrides(context) })
-            // A table that could not be read is recorded under its own name, and the history is the imported
-            // record alone: thinner, never an invented empty store (L215).
-            var degraded = corpus.degradedReads
-            let existing: [Prospect]
-            switch rows {
-            case .success(let read): existing = read
-            case .failure:
-                existing = []
-                degraded.append(.repeatClientHistory)
-            }
-            let history = LocalHistory.forMatching(existing: existing, importedFrom: importedHistory)
-            return ReadPhase(clients: export.clients, bookings: export.bookings, blockedDates: export.blockedDates,
-                             health: export.health, history: history, corpus: (corpus.brands, degraded))
-        }.value
     }
 }

@@ -230,7 +230,7 @@ struct RunNightDropKeyCollisionTests {
         try ctx.save()
         let feedback = ActionFeedback()
 
-        ProspectMutations.dismissForReason(QueueItem(run), .tooSoon, prospects: [run], context: ctx,
+        ProspectMutations.dismissForReason(QueueItem(run), .tooSoon, shows: [run], context: ctx,
                                            feedback: feedback, offer: DayOffOfferRequest(), now: now)
 
         #expect(run.status != .dismissed, "the whole run was not archived")
@@ -260,7 +260,7 @@ struct RunNightDropKeyCollisionTests {
         let feedback = ActionFeedback()
 
         ProspectMutations.dismissAll([run.naturalKey, single.naturalKey], reason: .pitchingOtherShows,
-                                     dateLabel: "Oct 2", prospects: [run, single], context: ctx,
+                                     dateLabel: "Oct 2", shows: [run, single], context: ctx,
                                      feedback: feedback, now: now)
 
         #expect(single.status == .dismissed)

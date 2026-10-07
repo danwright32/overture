@@ -62,7 +62,7 @@ struct RedraftWithAITests {
         let feedback = ActionFeedback()
 
         ProspectMutations.draftReply("luigi", "alan@x.org",
-                                     prospects: try ctx.fetch(FetchDescriptor<Prospect>()),
+                                     shows: try ctx.fetch(FetchDescriptor<Prospect>()),
                                      context: ctx, feedback: feedback,
                                      start: { context, target in
                                          try ProspectMutations.launchReplyDrafter(
@@ -87,7 +87,7 @@ struct RedraftWithAITests {
         let r = showWithAIDraft(ctx)
 
         ProspectMutations.draftReply("luigi", "alan@x.org",
-                                     prospects: try ctx.fetch(FetchDescriptor<Prospect>()),
+                                     shows: try ctx.fetch(FetchDescriptor<Prospect>()),
                                      context: ctx, feedback: ActionFeedback(), start: { _, _ in })
 
         #expect(ReplyPanel.isDrafting(r), "a redraft under way drew no Drafting label (#4208)")
@@ -120,7 +120,7 @@ struct RedraftWithAITests {
         let ctx = ModelContext(try container())
         let r = showWithAIDraft(ctx)
         ProspectMutations.draftReply("luigi", "alan@x.org",
-                                     prospects: try ctx.fetch(FetchDescriptor<Prospect>()),
+                                     shows: try ctx.fetch(FetchDescriptor<Prospect>()),
                                      context: ctx, feedback: ActionFeedback(), start: { _, _ in })
         r.applyReplyDraftEdit("My own answer.")
 
@@ -140,7 +140,7 @@ struct RedraftWithAITests {
         let ctx = ModelContext(try container())
         let r = showWithAIDraft(ctx)
         ProspectMutations.draftReply("luigi", "alan@x.org",
-                                     prospects: try ctx.fetch(FetchDescriptor<Prospect>()),
+                                     shows: try ctx.fetch(FetchDescriptor<Prospect>()),
                                      context: ctx, feedback: ActionFeedback(), start: { _, _ in })
 
         ReplyClassifyImporter.ingest(ReplyClassifyResults(version: 3, generatedAt: "x", results: [
@@ -166,7 +166,7 @@ struct RedraftWithAITests {
         let feedback = ActionFeedback()
 
         ProspectMutations.draftReply("luigi", "alan@x.org",
-                                     prospects: try ctx.fetch(FetchDescriptor<Prospect>()),
+                                     shows: try ctx.fetch(FetchDescriptor<Prospect>()),
                                      context: ctx, feedback: feedback,
                                      start: { _, _ in throw refusal })
 

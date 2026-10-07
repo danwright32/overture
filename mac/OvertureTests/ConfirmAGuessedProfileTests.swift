@@ -67,7 +67,7 @@ struct ConfirmAGuessedProfileTests {
         let p = show(ctx)
 
         ProspectMutations.confirmGuessedProfile(QueueItem(p), "form:" + handle,
-                                                prospects: [p], context: ctx,
+                                                shows: [p], context: ctx,
                                                 feedback: ActionFeedback())
 
         #expect(p.socialRouteURLs == [handle])
@@ -82,7 +82,7 @@ struct ConfirmAGuessedProfileTests {
         let ctx = try context()
         let p = show(ctx)
         ProspectMutations.confirmGuessedProfile(QueueItem(p), "form:" + handle,
-                                                prospects: [p], context: ctx, feedback: ActionFeedback())
+                                                shows: [p], context: ctx, feedback: ActionFeedback())
 
         var c = PrepContact()
         c.name = "Wren Ashby"
@@ -113,7 +113,7 @@ struct ConfirmAGuessedProfileTests {
         #expect(before == [true])
 
         ProspectMutations.confirmGuessedProfile(QueueItem(p), "form:" + handle,
-                                                prospects: [p], context: ctx, feedback: ActionFeedback())
+                                                shows: [p], context: ctx, feedback: ActionFeedback())
         let after = QueueItem(p).displayedContactRoutes(now: Date()).map(\.isNameMatchOnly)
         #expect(after == [false])
     }

@@ -101,6 +101,15 @@ enum QueueEngineVerifier {
     static let ringCapacity = 4
     /// With no completed comparison for this long, the engine records `unverifiedTooLong` (D7).
     static let unverifiedTooLongSeconds: TimeInterval = 600
+    /// Re-verifications in a row after runs that reached no verdict, before the engine stops asking on its own.
+    static let maxConsecutiveRetries = 5
+
+    /// How long to wait before the `consecutive`th re-verification in a row after runs that reached no verdict:
+    /// the quiet moment, doubling each time, and nil past the cap (L704).
+    static func retryDelay(afterConsecutive consecutive: Int) -> TimeInterval? {
+        guard consecutive >= 1, consecutive <= maxConsecutiveRetries else { return nil }
+        return quietSeconds * Double(1 << (consecutive - 1))
+    }
 
     /// The verification itself, run on the verifier's thread. `ring` is read AFTER each read, so an output the
     /// engine published while the read ran can still be the one it is compared with.
@@ -426,5 +435,8 @@ struct QueueEngineVerifierCounts: Equatable, Sendable {
     /// Faulted rows recovery left alone because the main context held an unsaved edit on them, once per fault.
     var waitedForEdit = 0
     var unverifiedTooLong = 0
+    /// Times re-verification stopped after `QueueEngineVerifier.maxConsecutiveRetries` runs in a row reached no
+    /// verdict.
+    var retriesCapped = 0
     var lastMatchedAt: Date?
 }

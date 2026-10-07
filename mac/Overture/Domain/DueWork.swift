@@ -118,8 +118,12 @@ enum DueWork {
         // still unsettled whether the act ever replied; answering the confirm re-decides what the other
         // prompt should even say. Suppressed here, in the one place that decides what the sheet holds,
         // rather than in the view, so the number and the rows cannot disagree about it (L16).
+        //
+        // #4531: every rule below is keyed by `conversation`, the show AND its conversation, never by a
+        // contact's `id` alone. That `id` is an address or a form's URL, shared by every show it was pitched
+        // for, so a question on one show used to silence a different question on another.
         let toConfirm = ProposedConversation.dueRecipients(from: shows, contacts: contacts, now: now)
-        let confirmKeys = Set(toConfirm.map { $0.recipient.id })
+        let confirmKeys = Set(toConfirm.map { conversation($0.prospect, $0.recipient) })
         // #3890: two more of the same shape, each settled here for the same reason.
         //
         // A reply whose requested draft DIED is already listed, as the stalled draft with its own remedy,
@@ -130,23 +134,28 @@ enum DueWork {
         // the same reasoning as the confirm rule above: how a show ended is often exactly what the reply
         // is about, so it is asked once the conversation is dealt with rather than beside it.
         let stalled = StalledReplyDraft.dueRecipients(from: shows, contacts: contacts, now: now, runAlive: replyRunAlive)
-        let stalledConversations = Set(stalled.map { SendGroup.groupKey($0.recipient) })
+        let stalledConversations = Set(stalled.map { conversation($0.prospect, $0.recipient) })
         let replies = ReplyToAnswer.dueConversations(prospects: shows, contacts: contacts, inquiries: inquiries)
-            .filter { conversation in
-                guard case .show(_, let r) = conversation else { return true }
-                return !stalledConversations.contains(SendGroup.groupKey(r))
+            .filter { reply in
+                guard case .show(let p, let r) = reply else { return true }
+                return !stalledConversations.contains(conversation(p, r))
             }
-        let waitingConversations = Set(replies.compactMap { conversation -> String? in
-            guard case .show(let p, let r) = conversation else { return nil }
-            return "\(p.naturalKey)|\(SendGroup.groupKey(r))"
+        let waitingConversations = Set(replies.compactMap { reply -> String? in
+            guard case .show(let p, let r) = reply else { return nil }
+            return conversation(p, r)
         })
         return Due(afterTheShow: PostEventPrompt.dueRecipients(from: shows, contacts: contacts, now: now)
-                .filter { !confirmKeys.contains($0.recipient.id) }
-                .filter { !waitingConversations.contains("\($0.prospect.naturalKey)|\(SendGroup.groupKey($0.recipient))") },
+                .filter { !confirmKeys.contains(conversation($0.prospect, $0.recipient)) }
+                .filter { !waitingConversations.contains(conversation($0.prospect, $0.recipient)) },
              // Oldest pitch first, which is the order the sheet showed before this ordering moved here
-             // from its body: one place decides what the list holds AND what order it is in.
+             // from its body: one place decides what the list holds AND what order it is in. #4531: and
+             // two pitched at one instant by `showThenContact`, never the order the store handed them over.
              silent: FollowUp.dueRecipients(from: shows, contacts: contacts, now: now, config: followUp)
-                .sorted { ($0.recipient.sentAt ?? .distantPast) < ($1.recipient.sentAt ?? .distantPast) },
+                .sorted { a, b in
+                    let (sa, sb) = (a.recipient.sentAt ?? .distantPast, b.recipient.sentAt ?? .distantPast)
+                    if sa != sb { return sa < sb }
+                    return showThenContact(a.prospect, a.recipient, b.prospect, b.recipient)
+                },
              stalledReplyDrafts: stalled,
              // The SAME function the Reached out row is built from, never a second predicate that
              // happens to agree today (L16).
@@ -197,6 +206,28 @@ enum DueWork {
                           replyRunAlive: replyRunAlive, followUp: followUp).total,
             couldChangeAt: nextChange(prospects: prospects, now: now, replyRunAlive: replyRunAlive,
                                       followUp: followUp))
+    }
+}
+
+// #4531: the two things every list on the Follow-ups sheet needs and none of them had.
+extension DueWork {
+    // The tie break after whatever a list sorts by: the show's natural key, then the store's identifier for
+    // the show, then the contact's `id`, then the store's identifier for the contact. Each list runs over an
+    // unsorted whole-store read and over a relationship SwiftData hands back in any order (L343), so a tie
+    // left to arrival order reordered the sheet between launches on unchanged data (L419). The contact's
+    // `id` is not enough on its own: it is an address, and one show can hold two contacts on one address.
+    static func showThenContact<Row: ProspectFacts>(_ a: Row, _ ra: Row.Contact, _ b: Row, _ rb: Row.Contact) -> Bool {
+        if a.naturalKey != b.naturalKey { return a.naturalKey < b.naturalKey }
+        if a.persistentModelID != b.persistentModelID { return a.persistentModelID < b.persistentModelID }
+        if ra.id != rb.id { return ra.id < rb.id }
+        return ra.persistentModelID < rb.persistentModelID
+    }
+
+    // ONE conversation on ONE show: the show's natural key, which the store holds unique, and the send group
+    // the contact belongs to. The rules in `rows(from:)` that let one question yield to another for the same
+    // conversation all key on this, so a question on one show can never silence another show's.
+    static func conversation<Row: ProspectFacts>(_ p: Row, _ r: Row.Contact) -> String {
+        "\(p.naturalKey)|\(SendGroup.groupKey(r))"
     }
 }
 
