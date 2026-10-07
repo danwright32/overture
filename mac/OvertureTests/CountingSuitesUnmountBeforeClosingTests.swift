@@ -86,8 +86,12 @@ struct CountingSuitesUnmountBeforeClosingTests {
         counters(in: AppSourceWalk.files(under: RepoRoot.app).map { ($0.name, $0.text) })
     }
 
+    // A counter named as a WHOLE WORD, so `WorkTallyCostTests` or a `MarkerReadTallyish` is not a read of one.
     static func isCountingSuite(_ text: String, counters: Set<String>) -> Bool {
-        codeLines(text).contains { line in counters.contains { line.code.contains($0) } }
+        let patterns = counters.map { #"\b"# + NSRegularExpression.escapedPattern(for: $0) + #"\b"# }
+        return codeLines(text).contains { line in
+            patterns.contains { line.code.range(of: $0, options: .regularExpression) != nil }
+        }
     }
 
     // The lines of code calling `close()` with no arguments on anything. A `close(` WITH arguments is a
@@ -149,6 +153,9 @@ struct CountingSuitesUnmountBeforeClosingTests {
         #expect(Self.isCountingSuite(fixture, counters: ["SomeCounter"]))
         #expect(!Self.isCountingSuite("// SomeCounter in a comment\nlet s = \"SomeCounter\"",
                                       counters: ["SomeCounter"]))
+        // A longer identifier that merely CONTAINS a counter's name is not a read of it.
+        #expect(!Self.isCountingSuite("let n = SomeCounterCostTests.self", counters: ["SomeCounter"]))
+        #expect(Self.isCountingSuite("let n = Outer.SomeCounter.current", counters: ["SomeCounter"]))
     }
 
     // #4571: the counter derivation over a fixture, both shapes and the near misses each must not take.

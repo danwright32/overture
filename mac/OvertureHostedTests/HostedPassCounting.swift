@@ -40,8 +40,8 @@ enum HostedPassCounting {
     }
 
     // #4534: the same teardown for a harness hosted through `AnyView` when the caller holds only its
-    // WINDOW, which is all `Phase0cViewRig.host` hands back. Every `NSHostingView<AnyView>` directly in the
-    // window's content view is emptied before the window closes. A window holding none cannot be
+    // WINDOW, which is all `Phase0cViewRig.host` hands back. Every `NSHostingView<AnyView>` that IS the
+    // window's content view or sits directly in it is emptied before the window closes. A window holding none cannot be
     // unmounted from here, and that is RECORDED rather than closed quietly, because a quiet close is the
     // leftover this exists to prevent. Optional, because several suites keep the window in a variable a
     // failed build leaves nil, and a nil window has nothing in any graph.
