@@ -155,7 +155,7 @@ struct AMovedCardIsNeverAnimatedAcrossItsNeighboursTests {
         let revisionBefore = h.feedback.revision
         // The genre editor's Save, through the mutation it calls: one write, one acknowledgement.
         ProspectMutations.correctClassification(QueueItem(target), discipline: .notALivePerformance,
-                                                prospects: all, context: h.context, feedback: h.feedback)
+                                                shows: all, context: h.context, feedback: h.feedback)
         let derived = await settle(h.hosting)
 
         // POSITIVE CONTROLS FIRST. Each of these is a fixture where the defect could not have happened:

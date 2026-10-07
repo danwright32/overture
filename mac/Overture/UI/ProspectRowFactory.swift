@@ -9,17 +9,11 @@ import SwiftData
 @MainActor
 enum ProspectRowFactory {
     @ViewBuilder
-    // #3690: a PROVIDER, never an array. Handed an array, the caller has to derive it before the press:
-    // QueueView handed it `data.queueScope`, the render pass's own copy, which is model references frozen
-    // when the pass ran. A merge that replaces a row under its own derived key (four of them do) leaves
-    // the deleted object in that copy, and every one of the mutation closures below then writes to a row
-    // the store has thrown away. No crash, no refusal, and Dan's change is simply not there afterwards.
-    //
-    // The obvious fix, handing in the LIVE list, is the regression #3690 names: `QueueModel.queueScope` is
-    // a whole-store filter AND a stable sort, so it would run once per rendered row. A closure is
-    // evaluated once per PRESS, which is zero per row and live by construction.
+    // #3690: `shows` is read on a PRESS, never when a row is drawn, and never an array derived before the
+    // press (`ShowsInHand` carries the whole argument). Each closure below reads it once per press and
+    // hands that read to its action, which resolves the card through it by store identity (#4357 slice I2).
     // `now` is the render pass's instant (#4357 slice G1), no default for the reason `gmailConnected` has none.
-    static func row(_ item: QueueItem, today: String, now: Date, prospects: @escaping () -> [Prospect], context: ModelContext, feedback: ActionFeedback,
+    static func row(_ item: QueueItem, today: String, now: Date, shows: ShowsInHand, context: ModelContext, feedback: ActionFeedback,
                     dayOffOffer: DayOffOfferRequest,
                     // #1770: HANDED IN, never sourced here. This used to read GmailAuthManager.shared
                     // .isConnected, which opens and JSON-decodes the token file: one synchronous disk read
@@ -71,15 +65,15 @@ enum ProspectRowFactory {
             onKeep: {
                 // #4132: a Keep is silent again. #1819 offered to dismiss the night's other shows here, and
                 // Dan reversed it on 2026-09-21; clearing a night is the date heading's right-click only.
-                ProspectMutations.setStatus(item, .queued, nil, prospects: prospects(), context: context, feedback: feedback, undo: undoStack, undoLabel: "Keep")
+                ProspectMutations.setStatus(item, .queued, nil, shows: shows.onPress(), context: context, feedback: feedback, undo: undoStack, undoLabel: "Keep")
             },
-            onDismiss: { reason in ProspectMutations.dismissForReason(item, reason, prospects: prospects(), context: context, feedback: feedback, offer: dayOffOffer, undo: undoStack) },
-            onUnapprove: { ProspectMutations.setStatus(item, .drafted, nil, prospects: prospects(), context: context, feedback: feedback) },
+            onDismiss: { reason in ProspectMutations.dismissForReason(item, reason, shows: shows.onPress(), context: context, feedback: feedback, offer: dayOffOffer, undo: undoStack) },
+            onUnapprove: { ProspectMutations.setStatus(item, .drafted, nil, shows: shows.onPress(), context: context, feedback: feedback) },
             // #1824: the launch renders this show's listing page first, so it is awaited from a task rather
             // than blocking the click.
             onReprep: onReprep ?? { mode in
                 Task { @MainActor in
-                    await ProspectMutations.reprep(item, mode: mode, prospects: prospects(), context: context,
+                    await ProspectMutations.reprep(item, mode: mode, shows: shows.onPress(), context: context,
                                                    feedback: feedback)
                 }
             },
@@ -89,24 +83,24 @@ enum ProspectRowFactory {
             onPrepManually: { email, name, subject, body, sendsTogether in
                 ProspectMutations.prepManually(item, email: email, name: name, subject: subject,
                                                body: body, sendsTogether: sendsTogether,
-                                               prospects: prospects(), context: context,
+                                               shows: shows.onPress(), context: context,
                                                feedback: feedback)
             },
-            manualPrepPrefill: { ProspectMutations.manualPrepPrefill(item, prospects: prospects()) },
-            onSaveDraft: { subject, body in ProspectMutations.saveDraft(item, subject, body, prospects: prospects(), context: context, feedback: feedback) },
+            manualPrepPrefill: { ProspectMutations.manualPrepPrefill(item, shows: shows.onPress()) },
+            onSaveDraft: { subject, body in ProspectMutations.saveDraft(item, subject, body, shows: shows.onPress(), context: context, feedback: feedback) },
             onSetSendsTogether: { together in
                 ProspectMutations.setSendsTogether(item, together,
-                                                   prospects: prospects(), context: context, feedback: feedback)
+                                                   shows: shows.onPress(), context: context, feedback: feedback)
             },
-            onSetLostReason: { reason in ProspectMutations.setLostReason(item, reason, prospects: prospects(), context: context, feedback: feedback) },
+            onSetLostReason: { reason in ProspectMutations.setLostReason(item, reason, shows: shows.onPress(), context: context, feedback: feedback) },
             onSend: onSend,
-            onOverrideGreeting: { ProspectMutations.overrideGreeting(item, prospects: prospects(), context: context, feedback: feedback) },
-            onOverrideDraftLint: { ProspectMutations.overrideDraftLint(item, prospects: prospects(), context: context, feedback: feedback) },
+            onOverrideGreeting: { ProspectMutations.overrideGreeting(item, shows: shows.onPress(), context: context, feedback: feedback) },
+            onOverrideDraftLint: { ProspectMutations.overrideDraftLint(item, shows: shows.onPress(), context: context, feedback: feedback) },
             onPitchNightAfterAll: { night in
-                ProspectMutations.pitchNightAfterAll(item, night: night, prospects: prospects(),
+                ProspectMutations.pitchNightAfterAll(item, night: night, shows: shows.onPress(),
                                                      context: context, feedback: feedback)
             },
-            onDismissReply: { ProspectMutations.dismissReply(item, prospects: prospects(), context: context, feedback: feedback) },
+            onDismissReply: { ProspectMutations.dismissReply(item, shows: shows.onPress(), context: context, feedback: feedback) },
             // #1752: Dan says where this card's room is. The answer is stored against the ROOM, so it
             // reaches every show played there and every show that arrives there later, which is why it
             // goes through the same recorder the Sources sheet's list uses rather than writing this row.
@@ -115,29 +109,29 @@ enum ProspectRowFactory {
                                                  to: location, context: context, feedback: feedback)
             },
             onBeginFormPitch: { rid, formURL in
-                ProspectMutations.beginFormPitch(item, rid, formURL, prospects: prospects(), context: context, feedback: feedback)
+                ProspectMutations.beginFormPitch(item, rid, formURL, shows: shows.onPress(), context: context, feedback: feedback)
             },
             onRecordFormPitch: { rid in
-                ProspectMutations.recordFormPitch(item, rid, prospects: prospects(), context: context, feedback: feedback)
+                ProspectMutations.recordFormPitch(item, rid, shows: shows.onPress(), context: context, feedback: feedback)
             },
             onCancelFormPitch: { rid in
-                ProspectMutations.cancelFormPitch(item, rid, prospects: prospects(), context: context, feedback: feedback)
+                ProspectMutations.cancelFormPitch(item, rid, shows: shows.onPress(), context: context, feedback: feedback)
             },
             onMarkContact: { rid, resolution, bounced in
-                ProspectMutations.markContact(item, rid, resolution, bounced, prospects: prospects(), context: context, feedback: feedback)
+                ProspectMutations.markContact(item, rid, resolution, bounced, shows: shows.onPress(), context: context, feedback: feedback)
             },
             // #2395: an ending goes to the SHOW, through the one write every menu shares.
             onRecordOutcome: { outcome in
-                ProspectMutations.recordOutcome(item, outcome, prospects: prospects(),
+                ProspectMutations.recordOutcome(item, outcome, shows: shows.onPress(),
                                                 context: context, feedback: feedback, undo: undoStack)
             },
             onReopenOutcome: {
-                ProspectMutations.reopenOutcome(item, prospects: prospects(),
+                ProspectMutations.reopenOutcome(item, shows: shows.onPress(),
                                                 context: context, feedback: feedback)
             },
             onAddRecipient: { email, name in
                 ProspectMutations.addRecipientManually(item, email: email, name: name,
-                                                        prospects: prospects(), context: context, feedback: feedback)
+                                                        shows: shows.onPress(), context: context, feedback: feedback)
             },
             onRemoveRecipient: { rid in
                 let name = item.contacts.first(where: { $0.id == rid })?.displayName
@@ -147,7 +141,7 @@ enum ProspectRowFactory {
                     markAddressStruck(email)
                 }
                 ProspectMutations.removeRecipientManually(item, rid, name,
-                                                          prospects: prospects(), context: context, feedback: feedback)
+                                                          shows: shows.onPress(), context: context, feedback: feedback)
             },
             // #2392: an address struck at triage. A contact this show researched goes through the SAME
             // path the draft-review panel's Remove uses, so the two are one implementation; an inherited
@@ -160,47 +154,47 @@ enum ProspectRowFactory {
                 if let rid = address.recipientId {
                     let name = item.contacts.first(where: { $0.id == rid })?.displayName
                     ProspectMutations.removeRecipientManually(item, rid, name,
-                                                              prospects: prospects(), context: context,
+                                                              shows: shows.onPress(), context: context,
                                                               feedback: feedback)
                 } else {
                     ProspectMutations.removeInheritedAddress(item, email: address.email,
-                                                             prospects: prospects(), context: context,
+                                                             shows: shows.onPress(), context: context,
                                                              feedback: feedback)
                 }
             },
             // #2598: handed down so the address's own row answers it, which is what makes striking one
             // address redraw that address rather than the card.
             isAddressStruck: isAddressStruck,
-            onDismissContactReply: { rid in ProspectMutations.dismissContactReply(item, rid, prospects: prospects(), context: context, feedback: feedback) },
-            onDismissContactBounce: { rid in ProspectMutations.dismissContactBounce(item, rid, prospects: prospects(), context: context, feedback: feedback) },
-            onDismissVenueMatch: { rid in ProspectMutations.dismissVenueMatch(item, rid, prospects: prospects(), context: context, feedback: feedback) },
+            onDismissContactReply: { rid in ProspectMutations.dismissContactReply(item, rid, shows: shows.onPress(), context: context, feedback: feedback) },
+            onDismissContactBounce: { rid in ProspectMutations.dismissContactBounce(item, rid, shows: shows.onPress(), context: context, feedback: feedback) },
+            onDismissVenueMatch: { rid in ProspectMutations.dismissVenueMatch(item, rid, shows: shows.onPress(), context: context, feedback: feedback) },
             // #2937: wired here with the other per-contact answers, so the control on the route line
             // reaches the same mutation path every guard dismissal does.
-            onConfirmGuessedProfile: { rid in ProspectMutations.confirmGuessedProfile(item, rid, prospects: prospects(), context: context, feedback: feedback) },
-            onDismissPressContactMatch: { rid in ProspectMutations.dismissPressContactMatch(item, rid, prospects: prospects(), context: context, feedback: feedback) },
-            onDismissDuplicateContactMatch: { rid in ProspectMutations.dismissDuplicateContactMatch(item, rid, prospects: prospects(), context: context, feedback: feedback) },
-            onDismissConfidenceHeldDown: { rid in ProspectMutations.dismissConfidenceHeldDown(item, rid, prospects: prospects(), context: context, feedback: feedback) },
-            onDismissAddressInAnotherName: { rid in ProspectMutations.dismissAddressInAnotherName(item, rid, prospects: prospects(), context: context, feedback: feedback) },
-            onDraftReply: { rid in ProspectMutations.draftReply(item.id, rid, prospects: prospects(), context: context, feedback: feedback) },
+            onConfirmGuessedProfile: { rid in ProspectMutations.confirmGuessedProfile(item, rid, shows: shows.onPress(), context: context, feedback: feedback) },
+            onDismissPressContactMatch: { rid in ProspectMutations.dismissPressContactMatch(item, rid, shows: shows.onPress(), context: context, feedback: feedback) },
+            onDismissDuplicateContactMatch: { rid in ProspectMutations.dismissDuplicateContactMatch(item, rid, shows: shows.onPress(), context: context, feedback: feedback) },
+            onDismissConfidenceHeldDown: { rid in ProspectMutations.dismissConfidenceHeldDown(item, rid, shows: shows.onPress(), context: context, feedback: feedback) },
+            onDismissAddressInAnotherName: { rid in ProspectMutations.dismissAddressInAnotherName(item, rid, shows: shows.onPress(), context: context, feedback: feedback) },
+            onDraftReply: { rid in ProspectMutations.draftReply(item.id, rid, shows: shows.onPress(), context: context, feedback: feedback) },
             onSendReply: onSendReply,
-            onCopyReply: { rid in ProspectMutations.copyReply(item, rid, prospects: prospects(), context: context, feedback: feedback) },
+            onCopyReply: { rid in ProspectMutations.copyReply(item, rid, shows: shows.onPress(), context: context, feedback: feedback) },
             // #2869: the only place the reply card records an answer. A defaulted no-op here would draw a
             // live-looking button that does nothing, which is worse than no button (L109).
-            onConfirmCopiedReplySent: { rid in ProspectMutations.confirmCopiedReplySent(item, rid, prospects: prospects(), context: context, feedback: feedback) },
-            onEditReplyDraft: { rid, body in ProspectMutations.editReplyDraft(item, rid, body, prospects: prospects(), context: context, feedback: feedback) },
+            onConfirmCopiedReplySent: { rid in ProspectMutations.confirmCopiedReplySent(item, rid, shows: shows.onPress(), context: context, feedback: feedback) },
+            onEditReplyDraft: { rid, body in ProspectMutations.editReplyDraft(item, rid, body, shows: shows.onPress(), context: context, feedback: feedback) },
             // #1038: a run-level cancel (the reply-classify run drafts every queued reply in one pass), so
             // it takes no recipient id: it writes the sentinel the runner checks on its heartbeat.
             onCancelReplyDraft: { ReplyClassifyService.requestCancel() },
             onCorrectClassification: { d in
-                ProspectMutations.correctClassification(item, discipline: d, prospects: prospects(), context: context, feedback: feedback)
+                ProspectMutations.correctClassification(item, discipline: d, shows: shows.onPress(), context: context, feedback: feedback)
             },
-            onRename: { name in ProspectMutations.renameGroup(item, to: name, prospects: prospects(), context: context, feedback: feedback) },
-            onResetGroupName: { ProspectMutations.resetGroupName(item, prospects: prospects(), context: context, feedback: feedback) },
+            onRename: { name in ProspectMutations.renameGroup(item, to: name, shows: shows.onPress(), context: context, feedback: feedback) },
+            onResetGroupName: { ProspectMutations.resetGroupName(item, shows: shows.onPress(), context: context, feedback: feedback) },
             // #2267: mark it either way, so the request survives a run that dies before reaching this
             // show, and only THEN hand it to the caller to confirm and start. Marking first is what makes
             // the card show "researching" rather than snapping back to an unpressed control.
             onRequestRecheck: {
-                ProspectMutations.requestReachabilityRecheck(item, prospects: prospects(),
+                ProspectMutations.requestReachabilityRecheck(item, shows: shows.onPress(),
                                                              context: context, feedback: feedback)
                 onRecheckNow?(item)
             },
@@ -208,14 +202,14 @@ enum ProspectRowFactory {
             probeRunning: probeRunning,
             checkRunSince: checkRunSince,
             checkLookups: checkLookups,
-            onConfirmBooking: { ProspectMutations.confirmBooking(item, prospects: prospects(), context: context, feedback: feedback) },
-            onDismissBookingSuggestion: { ProspectMutations.dismissBookingSuggestion(item, prospects: prospects(), context: context, feedback: feedback) },
-            onRejectBooking: { ProspectMutations.rejectBooking(item, prospects: prospects(), context: context, feedback: feedback) },
-            onDismissAlreadyCoveredFlag: { ProspectMutations.dismissAlreadyCoveredFlag(item, prospects: prospects(), context: context, feedback: feedback) },
-            onClearConflict: { ProspectMutations.clearConflict(item, prospects: prospects(), context: context, feedback: feedback) },
-            onSetOrgDoNotContact: { on in ProspectMutations.setOrgDoNotContact(item, on, prospects: prospects(), context: context, feedback: feedback) },
-            onConfirmPerformerMatch: { ProspectMutations.confirmPerformerMatch(item, prospects: prospects(), context: context, feedback: feedback) },
-            onDismissPerformerMatch: { ProspectMutations.dismissPerformerMatch(item, prospects: prospects(), context: context, feedback: feedback) },
+            onConfirmBooking: { ProspectMutations.confirmBooking(item, shows: shows.onPress(), context: context, feedback: feedback) },
+            onDismissBookingSuggestion: { ProspectMutations.dismissBookingSuggestion(item, shows: shows.onPress(), context: context, feedback: feedback) },
+            onRejectBooking: { ProspectMutations.rejectBooking(item, shows: shows.onPress(), context: context, feedback: feedback) },
+            onDismissAlreadyCoveredFlag: { ProspectMutations.dismissAlreadyCoveredFlag(item, shows: shows.onPress(), context: context, feedback: feedback) },
+            onClearConflict: { ProspectMutations.clearConflict(item, shows: shows.onPress(), context: context, feedback: feedback) },
+            onSetOrgDoNotContact: { on in ProspectMutations.setOrgDoNotContact(item, on, shows: shows.onPress(), context: context, feedback: feedback) },
+            onConfirmPerformerMatch: { ProspectMutations.confirmPerformerMatch(item, shows: shows.onPress(), context: context, feedback: feedback) },
+            onDismissPerformerMatch: { ProspectMutations.dismissPerformerMatch(item, shows: shows.onPress(), context: context, feedback: feedback) },
             onRestore: onRestore,
             gmailConnected: gmailConnected,
             timingSurface: timingSurface,
@@ -251,7 +245,7 @@ enum ProspectRowFactory {
             framed.contextMenu {
                 Button(item.excludedFromVoiceLearning ? "Learn from this email again"
                                                       : "Don't learn from this email") {
-                    ProspectMutations.toggleVoiceLearning(item, prospects: prospects(), context: context, feedback: feedback)
+                    ProspectMutations.toggleVoiceLearning(item, shows: shows.onPress(), context: context, feedback: feedback)
                 }
             }
         } else {

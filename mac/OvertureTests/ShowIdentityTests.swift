@@ -45,7 +45,7 @@ struct ShowIdentityTests {
         -> ActionFeedback {
         let feedback = ActionFeedback()
         ProspectMutations.saveDraft(item, "The subject Dan typed", "The body Dan typed",
-                                    prospects: rows, context: ctx, feedback: feedback)
+                                    shows: rows, context: ctx, feedback: feedback)
         return feedback
     }
 
@@ -159,12 +159,36 @@ struct ShowIdentityTests {
         try ctx.save()
         let feedback = ActionFeedback()
 
-        let missing = ProspectMutations.model(forKey: "no-such-show", org: nil, in: [show], feedback: feedback)
-        let found = ProspectMutations.model(forKey: "show-1", org: nil, in: [show], feedback: ActionFeedback())
+        let missing = [show].show(forKey: "no-such-show", org: nil, feedback: feedback)
+        let found = [show].show(forKey: "show-1", org: nil, feedback: ActionFeedback())
 
         #expect(missing == nil)
         #expect(feedback.message == ShowIdentity.Refusal.gone.sentence(org: nil))
         #expect(found === show, "a key a live show holds did not resolve, so the refusal above proves nothing")
+    }
+
+    // #3690 through the row factory's handle: the rows are read when a press happens and never before, and
+    // each press reads them afresh, so a show deleted after the row was drawn is not there to be written.
+    // Building one reads nothing, which is what lets every drawn row carry one for free.
+    @Test func showsInHandReadsTheRowsOnThePressAndNeverBefore() throws {
+        let ctx = context()
+        let show = make(ctx, key: "show-1", org: "Ensemble Alpha")
+        try ctx.save()
+        var held = [show]
+        var reads = 0
+        let inHand = ShowsInHand { reads += 1; return held }
+        #expect(reads == 0, "building the handle read the rows, which a drawn row would pay for")
+
+        let item = QueueItem(show)
+        held = []
+        let feedback = ActionFeedback()
+        ProspectMutations.saveDraft(item, "A new subject", "A new body", shows: inHand.onPress(),
+                                    context: ctx, feedback: feedback)
+
+        #expect(reads == 1, "a press read the rows \(reads) times rather than once")
+        #expect(show.draftSubject == "The subject before the press",
+                "the press wrote to a row the handle no longer holds, so it was read before the press")
+        #expect(feedback.message == ShowIdentity.Refusal.gone.sentence(org: item.groupName))
     }
 
     // The refusals must not share a sentence, with an organisation named or without one (L11, L260).
