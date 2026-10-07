@@ -463,7 +463,6 @@ final class QueueEngineVerifierTriggerTests {
         #expect(engine.verifierCounts.matches == 1)
     }
 
-    // Always superseded, so no comparison ever reaches a verdict: at ten minutes that is recorded.
     // Saves landing during every read: each run is superseded, and the re-verifications back off (3, 6, 12, 24 and
     // 48 seconds) and stop after five in a row, with one record saying so, rather than reading the whole store
     // every three seconds for as long as the saves go on (L704, found by the lessons review). The next output's
@@ -500,6 +499,7 @@ final class QueueEngineVerifierTriggerTests {
         #expect(QueueEngineVerifier.retryDelay(afterConsecutive: QueueEngineVerifier.maxConsecutiveRetries + 1) == nil)
     }
 
+    // Always superseded, so no comparison ever reaches a verdict: at ten minutes that is recorded.
     @Test func tenMinutesWithNoVerdictIsRecorded() async throws {
         let store = try EngineStore(shows: 2, seed: 73)
         let turns = EngineTurns()
