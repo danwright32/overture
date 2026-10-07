@@ -35,25 +35,43 @@ enum LandingInputs {
         return (file.0, file.1)
     }
 
-    // Everything else a landing reads before it lands.
+    // Everything else a landing reads before it lands. A show table that cannot be read lands against the
+    // imported history alone, and says so in `degradedReads`.
     static func read(exportURL: URL = DownbeatBridge.defaultURL, historyURL: URL = LocalHistory.importedURL,
                      now: Date = Date(),
                      readProspectTable: @escaping ScoutLandingStore.SendableRead = ScoutService.readProspectTable,
                      into context: ModelContext) async -> Inputs {
-        let loaded = DownbeatBridge.loadWithHealth(from: exportURL, now: now)
         let history = await history(importedFrom: historyURL, readProspectTable: readProspectTable, into: context)
-        let records: [HistoryRecord]
-        var degraded: [ScoutService.StoreRead] = []
         switch history {
-        case .success(let read): records = read
+        case .success(let read):
+            return assemble(history: read, exportURL: exportURL, now: now, into: context)
         case .failure:
-            degraded.append(.repeatClientHistory)
-            records = LocalHistory.forMatching(existing: [], importedFrom: historyURL)
+            return assemble(history: LocalHistory.forMatching(existing: [], importedFrom: historyURL),
+                            degradedReads: [.repeatClientHistory], exportURL: exportURL, now: now, into: context)
         }
-        return Inputs(clients: loaded.clients, history: records,
+    }
+
+    // #4526: the same read for the idle landing recovery, which REFUSES when the show table cannot be read rather
+    // than landing against the imported history alone. A recovery replays a kept copy and retires it once it
+    // lands, so a copy landed matched against a store it never saw could not be landed again (L215); refusing
+    // keeps the copy for the next idle minute. The one deliberate difference from `read`, and the only one: the
+    // recovery used to build these inputs itself, with the table read on the main thread.
+    static func readRefusingUnreadableShowTable(
+        exportURL: URL = DownbeatBridge.defaultURL, historyURL: URL = LocalHistory.importedURL, now: Date = Date(),
+        readProspectTable: @escaping ScoutLandingStore.SendableRead = ScoutService.readProspectTable,
+        into context: ModelContext) async -> Swift.Result<Inputs, ShowTableUnreadable> {
+        await history(importedFrom: historyURL, readProspectTable: readProspectTable, into: context)
+            .map { assemble(history: $0, exportURL: exportURL, now: now, into: context) }
+    }
+
+    // The members under 10 ms (Downbeat's export and the blocked calendar), beside a history already read.
+    private static func assemble(history: [HistoryRecord], degradedReads: [ScoutService.StoreRead] = [],
+                                 exportURL: URL, now: Date, into context: ModelContext) -> Inputs {
+        let loaded = DownbeatBridge.loadWithHealth(from: exportURL, now: now)
+        return Inputs(clients: loaded.clients, history: history,
                       blocked: ScoutService.blockedCalendar(export: (loaded.bookings, loaded.blockedDates, loaded.health),
                                                             context: context),
-                      degradedReads: degraded)
+                      degradedReads: degradedReads)
     }
 
     // The show table could not be read, carried across the actor boundary as its description.

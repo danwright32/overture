@@ -203,7 +203,8 @@ final class LandingRecoveryTests {
 
     // THE FAILURE PATH. The show table cannot be read: the replay is refused, said with the interrupted
     // landing's own time, and nothing is spent. The journal is still pending and the kept copy is still there,
-    // so the next idle minute can try again (L215).
+    // so the next idle minute can try again (L215). #4526: the inputs come from `LandingInputs`, the one builder
+    // every landing path reads through, by its refusing read, so this drives that read with a table that throws.
     @Test func aReplayWhoseShowsCannotBeReadIsRefusedAndKeepsItsCopy() async throws {
         struct TableUnreadable: Error {}
         let c = try container()
@@ -214,9 +215,15 @@ final class LandingRecoveryTests {
         _ = try await interruptedIngest(["a", "b"], into: ctx, f)
         let waiting = try #require(try LandingRecovery.survey(journals: f.journals, pending: f.pending, in: ctx).first)
         #expect(waiting.finding == .replay)
+        let absentExport = URL(fileURLWithPath: "/dev/null/no-downbeat-export.json")
+        let absentHistory = URL(fileURLWithPath: "/dev/null/no-imported-history.json")
 
-        guard case .refused(let said) = LandingRecovery.showsForReplay(waiting, fetch: { throw TableUnreadable() })
-        else {
+        let refusal = await LandingRecovery.inputsForReplay(waiting) {
+            await LandingInputs.readRefusingUnreadableShowTable(
+                exportURL: absentExport, historyURL: absentHistory,
+                readProspectTable: { _ in throw TableUnreadable() }, into: ctx)
+        }
+        guard case .refused(let said) = refusal else {
             Issue.record("a show table that could not be read was handed on as a history")
             return
         }
@@ -230,22 +237,36 @@ final class LandingRecoveryTests {
         #expect(try f.pending.list().count == 1, "the kept copy was removed although nothing was replayed")
         #expect(try titles(c) == ["Recital a 0", "Recital a 1"])
 
-        // The positive control in the same fixture (L159): a table that reads is handed on as it is.
-        guard case .read(let shows) = LandingRecovery.showsForReplay(waiting, fetch: { try ModelContext(c).fetch(
-            FetchDescriptor<Prospect>()) }) else {
+        // The positive control in the same fixture (L159): a table that reads is handed on as the history built
+        // from it. One landed show is marked do not contact so the history holds a record only the table can
+        // supply, and an empty table read would differ.
+        let landed = try #require(try ctx.fetch(FetchDescriptor<Prospect>()).first { $0.groupName == "Recital a 0" })
+        landed.orgDoNotContact = true
+        try ctx.save()
+        let read = await LandingRecovery.inputsForReplay(waiting) {
+            await LandingInputs.readRefusingUnreadableShowTable(exportURL: absentExport, historyURL: absentHistory,
+                                                                into: ctx)
+        }
+        guard case .read(let inputs) = read else {
             Issue.record("a show table that reads was refused")
             return
         }
-        #expect(shows.map(\.groupName).filter { $0.hasPrefix("Recital") }.sorted() == ["Recital a 0", "Recital a 1"])
+        #expect(inputs.history.map(\.groupName) == ["Recital a 0"], Comment(rawValue: "\(inputs.history)"))
+        #expect(inputs.degradedReads.isEmpty)
     }
 
     // And the idle tick asks through that one door, so the refusal above is the one Dan meets (L135: inside the
-    // tick's own body, never anywhere in the file).
+    // tick's own body, never anywhere in the file). #4526: and it builds nothing of its own beside it, no table
+    // read, history, export read or blocked calendar, all of which `LandingInputs` builds for every landing.
     @Test func theIdleTickReadsTheReplayHistoryThroughTheRefusingRead() throws {
         let root = SourceGuardHelper.source("Overture/App/RootView.swift")
         let body = try #require(SourceGuardHelper.bodyOfFunction(named: "recoverAnInterruptedLandingIfIdle", in: root))
-        #expect(body.contains("LandingRecovery.showsForReplay("), Comment(rawValue: body))
-        #expect(!body.contains("try? context.fetch(FetchDescriptor<Prospect>())"), Comment(rawValue: body))
+        #expect(body.contains("LandingRecovery.inputsForReplay("), Comment(rawValue: body))
+        #expect(body.contains("LandingInputs.readRefusingUnreadableShowTable("), Comment(rawValue: body))
+        for inline in ["FetchDescriptor<Prospect>", "LocalHistory.forMatching", "DownbeatBridge.loadWithHealth",
+                       "ScoutService.blockedCalendar"] {
+            #expect(!body.contains(inline), Comment(rawValue: "the idle tick builds \(inline) itself"))
+        }
     }
 
     // A landing the recovery stopped trying is shown even when another landing is waiting beside it, and first,
