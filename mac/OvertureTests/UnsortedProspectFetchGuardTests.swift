@@ -186,6 +186,11 @@ enum UnsortedProspectFetchAudit {
         Entry(file: "QueueEngineVerifier.swift", scope: "read", reads: 1, kind: .orderFree, why: """
             A count of the table, compared with how many rows the whole read returned; no row is returned.
             """),
+        // #4358 slice E3: the launch fill's shortfall check reads identifiers into a SET it subtracts from.
+        Entry(file: "FactStore.swift", scope: "storedIdentifiers", reads: 1, kind: .orderFree, why: """
+            Identifiers only, made into a set and compared with the engine's members by set difference; no row \
+            is returned and no first match is taken.
+            """),
     ]
 
     private static let engineFacts = """

@@ -82,7 +82,8 @@ enum VerifierRig {
         let engine = QueueEngine(context: store.context, derivation: derivation, saves: saves, clock: clock.clock,
                                  events: QueueEngineSystemEvents(workspace: NotificationCenter(), system: NotificationCenter()),
                                  saveCenter: saveCenter, schedule: turns.schedule,
-                                 refused: { Issue.record("a generation \($1) was refused over \($0)") }, verifier: setup)
+                                 refused: { Issue.record("a generation \($1) was refused over \($0)") }, verifier: setup,
+                                 launch: QueueEngineLaunchSetup(reads: .inTurn))
         engine.start()
         turns.run()
         return engine
@@ -436,29 +437,40 @@ final class QueueEngineVerifierTriggerTests {
         let turns = EngineTurns()
         let clock = EngineTestClock()
         let engine = VerifierRig.engine(store, turns, clock: clock, setup: QueueEngineVerifierSetup())
+        // The launch fill's end forces the first verification (#4358 slice E3, D6), so quiet is measured from the
+        // next output after it.
+        await VerifierRig.finished(engine, beyond: 0, "the verification the launch fill forced")
+        engine.setViewInputs(QueueEngineViewInputs(focusedStage: .reachedOut))
+        turns.run()
         // The floor, the quiet timer and the ten minute timer.
         await waitUntil("the three timers are sleeping") { clock.waiting == 3 }
         clock.advance(by: 2.9)
         // The clock ends a due sleep inside `advance`, so a quiet timer that ended early is already gone from the
         // sleepers here, before its turn could run and start anything (seen to survive a check on `started` alone).
         #expect(clock.waiting == 3, "the quiet timer ended before three seconds")
-        #expect(engine.verifierCounts.started == 0, "the verifier started before three seconds of quiet")
+        #expect(engine.verifierCounts.started == 1, "the verifier started before three seconds of quiet")
         clock.advance(by: 0.1)
-        await VerifierRig.finished(engine, beyond: 0, "the verification after three quiet seconds")
-        #expect(engine.verifierCounts.started == 1 && engine.verifierCounts.matches == 1)
+        await VerifierRig.finished(engine, beyond: 1, "the verification after three quiet seconds")
+        #expect(engine.verifierCounts.started == 2 && engine.verifierCounts.matches == 2)
     }
 
     @Test func twentyOutputsStartAVerificationWhateverTheQuiet() async throws {
         let store = try EngineStore(shows: 2, seed: 72)
         let turns = EngineTurns()
         let engine = VerifierRig.engine(store, turns, setup: QueueEngineVerifierSetup())
-        for index in 1..<QueueEngineVerifier.forcedEveryGenerations {
+        // The launch fill's end forces the first verification (#4358 slice E3, D6), at the first output; twenty
+        // outputs are counted from there.
+        await VerifierRig.finished(engine, beyond: 0, "the verification the launch fill forced")
+        for index in 1...QueueEngineVerifier.forcedEveryGenerations {
             engine.setViewInputs(QueueEngineViewInputs(focusedStage: index.isMultiple(of: 2) ? .scout : .reachedOut))
             turns.run()
+            if index == QueueEngineVerifier.forcedEveryGenerations - 1 {
+                #expect(engine.verifierCounts.started == 1, "a verification started before the twentieth output")
+            }
         }
-        #expect(engine.verifierCounts.started == 1, "the twentieth output did not start a verification")
-        await VerifierRig.finished(engine, beyond: 0, "the forced verification")
-        #expect(engine.verifierCounts.matches == 1)
+        #expect(engine.verifierCounts.started == 2, "the twentieth output did not start a verification")
+        await VerifierRig.finished(engine, beyond: 1, "the forced verification")
+        #expect(engine.verifierCounts.matches == 2)
     }
 
     // Always superseded, so no comparison ever reaches a verdict: at ten minutes that is recorded.
