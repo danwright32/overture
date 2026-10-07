@@ -529,6 +529,16 @@ enum CardDivergenceLog {
         }
     }
 
+    // #4358 slice E2: a window's held count, handed back by `Cooldown.drainEnded`, written as a record of its
+    // (kind, source) carrying the count and no field. NOT through the cooldown: the window it belonged to has
+    // ended, and admitting it would open a new one and zero the very count it exists to carry (L710).
+    @discardableResult
+    static func appendDrained(_ held: Cooldown.Held, session: String, sequence: Int, at now: Date, to url: URL) -> Bool {
+        write(CardDivergenceRecord(session: session, sequence: sequence, at: now, fields: [], cardsBuilt: 0, stage: nil,
+                                   kind: held.kind, source: held.source, suppressedRepeats: held.suppressedRepeats),
+              to: url)
+    }
+
     private static func write(_ record: CardDivergenceRecord, to url: URL) -> Bool {
         guard let line = line(for: record) else { return false }
         return appending(line + "\n", to: url)

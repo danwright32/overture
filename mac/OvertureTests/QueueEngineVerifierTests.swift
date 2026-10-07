@@ -497,6 +497,37 @@ final class QueueEngineVerifierTriggerTests {
         #expect(!text.contains(show.naturalKey) && !text.contains(show.groupName), "the record names the show")
     }
 
+    // A burst then quiet: the second foreign save inside ten minutes is held back by the cooldown, and once the
+    // window ends the next turn writes its count rather than losing it (D8's drain, L710).
+    @Test func aBurstsHeldCountIsWrittenOnceItsWindowEnds() async throws {
+        let store = try EngineStore(shows: 3, seed: 78)
+        let turns = EngineTurns()
+        let clock = EngineTestClock()
+        let dir = try sandboxes.make(named: "engine-verifier-drain")
+        let log = QueueEngineVerifierLog(url: CardDivergenceLog.url(in: dir), defaults: ScratchDefaults.make("drain"))
+        let engine = VerifierRig.engine(store, turns, clock: clock,
+                                        setup: QueueEngineVerifierSetup(triggers: .byHand, log: log))
+        let ids = try store.shows().prefix(2).map(\.persistentModelID)
+        let container = store.container
+        for (index, id) in ids.enumerated() {
+            let failure: String? = await phase0OnThread("engine-verifier-burst") {
+                let other = ModelContext(container)
+                guard let row = other.model(for: id) as? Prospect else { return "the row was not found" }
+                row.fitReason = "burst \(index)"
+                return Phase0.saveFailure(other)
+            }
+            try Phase0.requireSaved(failure, step: "a foreign save in the burst")
+            await waitUntil("the foreign save asked for a turn") { !turns.queued.isEmpty }
+            turns.run()
+        }
+        let foreign = { CardDivergenceLog.read(at: log.url).records.filter { $0.kind == .foreignSave } }
+        #expect(foreign().map(\.suppressedRepeats) == [0], "the burst's second record was not held back")
+        clock.advance(by: 600)
+        engine.sourceFired("gmailConnected")
+        turns.run()
+        #expect(foreign().map(\.suppressedRepeats) == [0, 1], "the held count was not written once its window ended")
+    }
+
     @Test func everyVerifierKindHasTheCooldown() {
         for kind in [CardDivergenceRecord.Kind.factMismatch, .outputMismatch, .foreignSave, .healed, .healDidNotConverge,
                      .unverifiedTooLong, .verifierTimedOut, .verifierWedged] {

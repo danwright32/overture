@@ -593,6 +593,7 @@ final class QueueEngine<Value: Sendable> {
         turnScheduled = false
         counters.turns += 1
         let now = clock.now()
+        drainHeldRepeats(at: now)
         let saveCount = saves.value(for: container)
         let intook = intakeTurn(now: now)
         // Recovery runs after the intake, so a faulted row a save touched this turn is tried again at once.
@@ -1003,6 +1004,16 @@ final class QueueEngine<Value: Sendable> {
         verifierFindings.append(record)
         if verifierFindings.count > Self.findingsKept { verifierFindings.removeFirst() }
         if let log = verifierSetup.log { CardDivergenceLog.append(record, to: log.url, through: &cooldown) }
+    }
+
+    /// Writes every cooldown window that has ended still holding repeats, so a burst followed by quiet keeps its
+    /// count (D8's contract: the owner drains). Every turn, which the clock's floor makes at least once a minute.
+    private func drainHeldRepeats(at now: Date) {
+        guard let log = verifierSetup.log else { return }
+        for held in cooldown.drainEnded(at: now) {
+            findingSequence += 1
+            CardDivergenceLog.appendDrained(held, session: session, sequence: findingSequence, at: now, to: log.url)
+        }
     }
 
     /// One timer per job on the injected clock, replacing the last of its kind (L524).
