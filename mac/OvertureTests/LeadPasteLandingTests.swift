@@ -223,7 +223,11 @@ struct LeadPasteLandingTests {
             return
         }
         #expect(try count(container) == 2)
-        #expect(try runs(container).allSatisfy { $0.landedAt == nil }, "a stamp the store refused reached it")
+        // The record itself reached the store with the shows' save; only its stamp was refused.
+        let stored = try runs(container)
+        #expect(stored.count == 1, "the record went with the refused stamp: \(stored.count) rows")
+        #expect(stored.first?.landedAt == nil, "a stamp the store refused reached it")
+        #expect(stored.first?.entryFlushSaves == 0)
         #expect(try ScoutFailedSaveIsolationTests.holdsOnlyWhatTheStoreHolds(context, container),
                 "the refused stamp was left pending for a later save to carry")
     }
