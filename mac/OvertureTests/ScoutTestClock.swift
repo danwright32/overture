@@ -89,7 +89,9 @@ enum ScoutTestClock {
     // The instant is a parameter with no default, so the call site says which clock it is dated from. It is
     // reduced to its Eastern day first and stepped from noon there, in the app's own Eastern calendar, so the
     // answer is the same on every host and at every hour. `TestNightsAreEasternDaysTests` proves it inside
-    // the window that failed, and refuses the host calendar construction anywhere in the test tree.
+    // the window that failed, and refuses the chained host calendar step (a zone-less calendar built and
+    // stepped in one expression) anywhere in the test tree. A host calendar held in a variable and stepped
+    // later is NOT seen by that scan; every such variable in the tree today sets its zone.
     static func day(_ offset: Int, after instant: Date) -> String {
         day(EasternDate.dayString(from: instant), plus: offset)
     }

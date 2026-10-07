@@ -17,8 +17,9 @@ import Foundation
 // THE FIX. `ScoutTestClock.day(_:after:)`, one function both test targets compile, which reduces the instant
 // to its Eastern day and steps from noon there in `EasternDate.calendar`. The first half of this suite
 // proves it inside the hour that failed, against a calendar whose zone is set to UTC EXPLICITLY, so the
-// proof says the same thing on this Mac as on a runner (L504). The second half refuses the host calendar
-// construction anywhere in the test tree, so a thirty first copy cannot arrive (L30).
+// proof says the same thing on this Mac as on a runner (L504). The second half refuses the chained host
+// calendar step anywhere in the test tree, so a thirty first copy of that shape cannot arrive (L30); its
+// one blind spot is written beside the detector.
 @Suite("A test's nights are Eastern days, whatever zone the host is in (#4569)")
 struct TestNightsAreEasternDaysTests {
 
@@ -74,6 +75,12 @@ struct TestNightsAreEasternDaysTests {
     // Day arithmetic on a calendar whose zone is the HOST's. Matched with whitespace removed, so a chain
     // broken across lines is still one chain, and over CODE only (comments and string contents gone), so
     // prose quoting the construction, this file's included, is never an offender (L103).
+    //
+    // WHAT IT CANNOT SEE, stated so nobody reads more into a green run (L400): a calendar held in a
+    // variable and stepped later (`var cal = Calendar(identifier: .gregorian)` then `cal.date(byAdding:`).
+    // Whether that is a defect turns on whether a `timeZone` was set in between, which text matching cannot
+    // follow. Measured 2026-10-07: every such variable in the three test roots sets its zone (Eastern, UTC or
+    // FeedDates.defaultZone), so the gap holds no offender today.
     static let hostCalendarSteps = [
         "Calendar(identifier:.gregorian).date(byAdding:",
         "Calendar.current.date(byAdding:",
