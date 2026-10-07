@@ -16,9 +16,13 @@ enum SendGroup {
     }
 
     // #4357 slice E2: the same over any contacts, handed in, so a retained row answers it by the one body.
+    //
+    // #4567: in `Recipient.inCanonicalOrder`, the `id` and then the store's identifier. `id` is an address,
+    // and one group can hold two contacts on one address, which `id` alone left in the order the
+    // relationship handed them over in, so `ReplyIdentity.answering` could name either between launches.
     static func peers<C: ContactFacts>(of recipient: C, among contacts: [C]) -> [C] {
         guard let id = recipient.sendGroupId, !id.isEmpty else { return [recipient] }
-        return contacts.filter { $0.sendGroupId == id }.sorted { $0.id < $1.id }
+        return Recipient.inCanonicalOrder(contacts.filter { $0.sendGroupId == id })
     }
 
     // #2063: who Dan's REPLY reaches, which is a different question from who his original email reached.
@@ -53,8 +57,11 @@ enum SendGroup {
     // The one contact that stands for the group wherever a LIST would otherwise show it once per person.
     // Stable (lowest id) rather than "whoever is first in the relationship", because SwiftData's to-many
     // is unordered and a row that moves between launches reads as a different row.
+    //
+    // #4567: compared by the store's identifier, never `id`. Two contacts on one address share an `id`, so
+    // comparing that made BOTH of them the representative when their address sorted first.
     static func isRepresentative(_ recipient: Recipient, in prospect: Prospect) -> Bool {
-        peers(of: recipient, in: prospect).first?.id == recipient.id
+        peers(of: recipient, in: prospect).first?.persistentModelID == recipient.persistentModelID
     }
 
     // Which conversation a contact belongs to. Its send group when it has one, otherwise itself: a contact
