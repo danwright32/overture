@@ -120,6 +120,9 @@ targets:
       # RootView from the pure target the release-like build compiles, and compiled in here for the hosted
       # suites that already used it. One declaration in two targets, never a copy (L613).
       - path: OvertureTests/RootHarness.swift
+      # #4569: the shared fixture clock, so a hosted suite dates its nights in the Eastern calendar through
+      # the same function the pure suites use. It names EasternDate, so it cannot live in TestSupport.
+      - path: OvertureTests/ScoutTestClock.swift
     dependencies:
       - target: Overture
       - package: ViewInspector

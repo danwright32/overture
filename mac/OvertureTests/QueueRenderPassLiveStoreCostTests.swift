@@ -365,6 +365,14 @@ struct QueueRenderPassLiveStoreCostTests {
         let narrowed = medianSeconds { _ = makePass(cardKeys: viewport) }
         let narrowedSeconds = narrowed.median
 
+        // #4357 step 5: what a card store over FACTS would cost if THIS pass built it, which is the reason
+        // today's pass still hands the store its models. A store over facts needs a value for every row in
+        // scope, since any of them can be scrolled to, and the model pass has none retained, so it would
+        // extract every one on every pass. The engine (#4358) retains its facts and pays nothing for it.
+        let scopeRows = QueueRenderPass.Corpus(prospects).narrowed(QueueModel.queueScope).all
+        _ = scopeRows.map(RowFacts.extract)
+        let factsStore = medianSeconds { _ = scopeRows.map(RowFacts.extract) }
+
         // 6. THE FLOOR: the same pass with NO card at all.
         //
         // The number that decides what is worth building next, and the one no arm above can give. Every
@@ -628,6 +636,8 @@ struct QueueRenderPassLiveStoreCostTests {
             END TO END with the fetch \(ms(fetchSeconds + narrowedSeconds)) ms
             work units                \(narrowedWork.queueItems) cards, \(narrowedWork.sendGroupBuilds) send groups, \(narrowedWork.draftLintRuns) draft lint runs
             marginal cost per card    \(perCard) ms
+            a store over facts, built by this pass, extracting all \(scopeRows.count) rows in scope (#4357):
+                                      \(ms(factsStore.median)) ms   \(spread(factsStore))
 
           THE FLOOR, the same pass with NO card built, which narrowing cannot reach:
             the pass                  \(ms(floorSeconds)) ms   \(spread(floor))

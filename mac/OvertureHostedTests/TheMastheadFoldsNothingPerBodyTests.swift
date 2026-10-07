@@ -28,8 +28,7 @@ final class TheMastheadFoldsNothingPerBodyTests {
     private static let rows = 40
 
     private static func night(_ n: Int) -> String {
-        let day = Calendar(identifier: .gregorian).date(byAdding: .day, value: 20 + n, to: Date())!
-        return EasternDate.dayString(from: day)
+        ScoutTestClock.day(20 + n, after: Date())
     }
 
     // Invented names (L155). A row a check missed, so the offer the masthead gates is really answered

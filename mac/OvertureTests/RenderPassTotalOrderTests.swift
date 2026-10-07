@@ -319,7 +319,7 @@ final class RenderPassTotalOrderTests {
             return
         }
         #expect(keys.count == 3, "the merge survivor notice does not carry its three rows")
-        let reached = Set(scout.reachedOut.map { $0.prospect.naturalKey })
+        let reached = Set(scout.reachedOut.map { $0.show.naturalKey })
         #expect(reached == ["pitched pair", "pitched shared", "pitched replied", "pitched single"])
         #expect(try #require(scout.cards.alreadyBuilt("north a")).inheritedReachability != nil,
                 "the organisation answer reached no show, so the ledger orders nothing")

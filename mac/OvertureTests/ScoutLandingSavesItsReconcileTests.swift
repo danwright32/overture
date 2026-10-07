@@ -85,7 +85,7 @@ struct ScoutLandingSavesItsReconcileTests {
     }
 
     private static func night(_ n: Int) -> String {
-        EasternDate.dayString(from: Calendar(identifier: .gregorian).date(byAdding: .day, value: 20 + n, to: Date())!)
+        ScoutTestClock.day(20 + n, after: Date())
     }
 
     @Test func theNativeSweepSavesItsLastReconcileBeforeItReturns() async throws {

@@ -64,7 +64,7 @@ struct ScoutLandingsWaitTheirTurnTests {
     private func container() throws -> ModelContainer { try TestModelContainer.inMemory(AppSchema.models) }
 
     private static func night(_ n: Int) -> String {
-        EasternDate.dayString(from: Calendar(identifier: .gregorian).date(byAdding: .day, value: 20 + n, to: Date())!)
+        ScoutTestClock.day(20 + n, after: Date())
     }
 
     private static func events(_ label: String, count: Int = 3) -> [ExtractedEvent] {

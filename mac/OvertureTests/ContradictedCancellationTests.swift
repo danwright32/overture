@@ -153,8 +153,8 @@ struct ContradictedCancellationTests {
         let ctx = try memoryContext()
         // Dated relative to the run, never a literal, so the queue's own window cannot age this fixture
         // out from under it and turn a real red into a row that is simply not on screen (L130).
-        let opens = EasternDate.dayString(from: Date().addingTimeInterval(14 * 86400))
-        let closes = EasternDate.dayString(from: Date().addingTimeInterval(21 * 86400))
+        let opens = ScoutTestClock.day(14, after: Date())
+        let closes = ScoutTestClock.day(21, after: Date())
         row(ctx, key: "gone", title: "Marlise (A New Golden Age Musical)",
             venue: "The Players Theatre", opens: opens, runEnd: closes, missed: 13)
         row(ctx, key: "live", title: "Marlise (A New Golden Age)",

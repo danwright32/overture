@@ -51,7 +51,7 @@ final class DanEditsSetOlderReadingsAsideTests {
     }
 
     private func night(_ n: Int) -> String {
-        EasternDate.dayString(from: Calendar(identifier: .gregorian).date(byAdding: .day, value: 30 + n, to: started)!)
+        ScoutTestClock.day(30 + n, after: started)
     }
 
     @discardableResult
