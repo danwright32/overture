@@ -299,6 +299,34 @@ assert_contains "the batch says it put the file back from its own copy" "${OUT}"
 assert_equals "and the subject is restored" "${ORIGINAL}" "$(cat "${SUBJECT}")"
 assert_equals "and the lock is released" "no" "$([ -d "${OVERTURE_DIR_LOCK}" ] && echo yes || echo no)"
 
+# --- #4568: a scope written WITHOUT -only-testing: refuses the whole batch, once, before anything ------
+#
+# Measured 2026-10-07: the #4589 agent passed `OvertureTests/SomeSuite` bare to `--batch`, and the runner ran
+# the whole pure suite for 16 minutes on the shared lock before it was stopped. The scope is shared by every
+# entry, so it is refused ONCE for the batch, before an entry is checked or the lock is queued for.
+write_subject
+write_three_batch
+: > "${STUB_RECORD}"
+rm -rf "${OVERTURE_DIR_LOCK}"
+OUT="$(OVERTURE_MUTATE_DEFAULT_RUNNER="${STUB}" "${MUTATE}" --batch "${BATCH}" OvertureTests/SubjectTests 2>&1)"
+STATUS=$?
+assert_contains "a bare scope refuses the batch by its own name" "${OUT}" \
+  "BARE SCOPE - OvertureTests/SubjectTests was passed as a test scope without its -only-testing: prefix."
+assert_contains "naming the exact argument to write instead" "${OUT}" "  -only-testing:OvertureTests/SubjectTests"
+assert_equals "said once for the batch, not once per entry" "1" "$(grep -c '^BARE SCOPE - ' <<< "${OUT}")"
+assert_not_contains "before any entry is checked" "${OUT}" "batch: checking"
+assert_equals "the runner never started" "0" "$(grep -c . "${STUB_RECORD}")"
+assert_equals "the shared lock was never taken" "absent" "$([[ -e "${OVERTURE_DIR_LOCK}" ]] && echo present || echo absent)"
+assert_equals "it exits 2" "2" "${STATUS}"
+assert_equals "and the subject is exactly as it was" "${ORIGINAL}" "$(cat "${SUBJECT}")"
+
+# The same batch WITH the prefix runs, so the refusal above is about the shape and nothing else (L159).
+write_subject
+: > "${STUB_RECORD}"
+OUT="$(OVERTURE_MUTATE_DEFAULT_RUNNER="${STUB}" "${MUTATE}" --batch "${BATCH}" -only-testing:OvertureTests/SubjectTests 2>&1)"
+assert_not_contains "a prefixed scope is not refused" "${OUT}" "BARE SCOPE"
+assert_contains "and its entries are judged" "${OUT}" "1  CAUGHT"
+
 # --- the single form is untouched by any of this ----------------------------------------------------------
 write_subject
 OUT="$(OVERTURE_MUTATE_RUNNER="${STUB}" "${MUTATE}" --at 'static let answer' "${SUBJECT}" 's/"yes"/"caught"/' 2>&1)"

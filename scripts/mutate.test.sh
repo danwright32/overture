@@ -817,6 +817,41 @@ write_subject
 OUT="$(OVERTURE_MUTATE_RUNNER="${RED_RUNNER}" "${MUTATE}" "${SUBJECT}" 's/"yes"/"no"/' some/fixture.test.sh 2>&1)"
 assert_not_contains "a custom runner is handed a path without refusal" "${OUT}" "SCOPE NOT FOR THIS RUNNER"
 
+# --- #4568: a scope written WITHOUT -only-testing: is refused, naming the form to write ---------------
+#
+# Twice on 2026-10-07 `OvertureTests/SomeSuite` went to the Swift runner bare. xcodebuild read it as an
+# unknown build action, the runner called that a crash, and the whole pure suite ran on the shared lock.
+# The stand-in is the DEFAULT runner and goes red, so a refusal that broke would read CAUGHT here rather
+# than start a real build (L2).
+write_subject
+OUT="$(OVERTURE_MUTATE_DEFAULT_RUNNER="${RED_RUNNER}" "${MUTATE}" "${SUBJECT}" 's/"yes"/"no"/' \
+  OvertureTests/SubjectTests 2>&1)"
+STATUS=$?
+VERDICT="$(grep -E '^[A-Z][A-Z ]*[A-Z] - ' <<< "${OUT}" | head -1)"
+assert_equals "a bare Target/Suite is refused by its own name" \
+  "BARE SCOPE - OvertureTests/SubjectTests was passed as a test scope without its -only-testing: prefix." \
+  "${VERDICT}"
+assert_contains "naming the exact argument to write instead" "${OUT}" "  -only-testing:OvertureTests/SubjectTests"
+assert_not_contains "and is never reported as caught" "${OUT}" "CAUGHT"
+assert_equals "it exits 2, a refusal rather than a verdict" "2" "${STATUS}"
+assert_equals "and the file is untouched" 'struct Subject {
+    static let answer = "yes"
+}' "$(cat "${SUBJECT}")"
+
+# A single test, its trailing () included, is the same shape and the same refusal.
+write_subject
+OUT="$(OVERTURE_MUTATE_DEFAULT_RUNNER="${RED_RUNNER}" "${MUTATE}" "${SUBJECT}" 's/"yes"/"no"/' \
+  -only-testing:OvertureTests/OtherTests 'OvertureTests/SubjectTests/runsOnce()' 2>&1)"
+assert_contains "a bare Target/Suite/test() beside a real scope is refused too" "${OUT}" \
+  "BARE SCOPE - OvertureTests/SubjectTests/runsOnce() was passed"
+assert_contains "and the form named is that test's" "${OUT}" "-only-testing:OvertureTests/SubjectTests/runsOnce()"
+
+# A custom runner decides for itself what its arguments mean, as it does for a path above.
+write_subject
+OUT="$(OVERTURE_MUTATE_RUNNER="${RED_RUNNER}" "${MUTATE}" "${SUBJECT}" 's/"yes"/"no"/' OvertureTests/SubjectTests 2>&1)"
+assert_not_contains "a custom runner is handed a bare scope without refusal" "${OUT}" "BARE SCOPE"
+assert_contains "and judged as usual" "${OUT}" "CAUGHT"
+
 # --- the runner gave up on the shared lock: nothing ran, so never CAUGHT ------------------------------
 #
 # Seen 2026-09-18 in another lane's mutation: run-tests-locked.sh gave up waiting 1800s for the shared

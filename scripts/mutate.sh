@@ -31,6 +31,7 @@ set -uo pipefail
 #   LOG OVERWRITTEN   another run wrote to this run's log, so its verdict would be about theirs (#3984).
 #   SCOPE NOT FOR THIS RUNNER  a file was passed as a scope to the Swift runner, which cannot run it (#3923).
 #   STALLED           the runner's stall guard ended the run before any test went red (#4218).
+#   BARE SCOPE        a test scope was written without its -only-testing: prefix, so it was not one (#4568).
 #
 # The last three are the three ways a MALFORMED INSTRUCTION used to be reported as a verdict. Each was
 # measured: a build failure was folded into CAUGHT ("the compiler caught it"), which is true of a
@@ -102,7 +103,8 @@ guard.
   <file>              the file to break, relative to the repo root or absolute
   <perl-expression>   passed to `perl -0pi -e`, so it sees the whole file at once
   [test-scope ...]    optional, passed straight through to the test runner
-                      (e.g. -only-testing:OvertureTests/RunSlotTests)
+                      (e.g. -only-testing:OvertureTests/RunSlotTests). Always WITH the prefix: a bare
+                      OvertureTests/RunSlotTests is refused as BARE SCOPE (#4568)
 
   OVERTURE_MUTATE_LOG      where the run's full log is kept. By default every run gets a file of its
                            OWN under /tmp/overture-mutate-runs/ (#3984), so two mutations going at once
@@ -375,6 +377,27 @@ if [[ -z "${OVERTURE_MUTATE_RUNNER:-}" ]]; then
       exit 2
     fi
   done
+fi
+
+# #4568: a test scope written WITHOUT its `-only-testing:` prefix is refused, before the file is touched.
+#
+# Twice on 2026-10-07 `OvertureTests/SomeSuite` was passed bare, once here and once to `--batch`. xcodebuild
+# reads a bare word after `test` as a build action, stops on `Unknown build action`, the runner calls that a
+# crash, retries it, and then runs the WHOLE pure suite (about 24 minutes) on the shared test lock. The
+# shape is decided in mac/scripts/lib/test-scope-shape.sh, the same rule run-tests-locked.sh refuses by.
+# Only for the default Swift runner, as the refusal above: a custom runner decides what its arguments mean.
+# shellcheck source=../mac/scripts/lib/test-scope-shape.sh
+source "${REPO_ROOT}/mac/scripts/lib/test-scope-shape.sh"
+if [[ -z "${OVERTURE_MUTATE_RUNNER:-}" ]] && BARE_SCOPE="$(bare_test_scope "$@")"; then
+  echo "BARE SCOPE - ${BARE_SCOPE} was passed as a test scope without its -only-testing: prefix."
+  echo
+  echo "  Write it as:"
+  echo "  $(bare_test_scope_corrected "${BARE_SCOPE}")"
+  echo
+  echo "  Nothing was mutated and nothing was run. Handed to the Swift runner bare, xcodebuild reads it as a"
+  echo "  build action it does not know and fails, the runner reads that as a crash, and it then runs the"
+  echo "  WHOLE pure suite, about 24 minutes, holding the shared test lock everything on this Mac waits on."
+  exit 2
 fi
 
 # #3792: a target carrying UNCOMMITTED changes is refused, before the file is touched.
