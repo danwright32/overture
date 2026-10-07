@@ -408,6 +408,30 @@ final class QueueEngineRecoveryTests {
         #expect(engine.isFaulted(id) && engine.faults.entries[id]?.attempts == 0)
     }
 
+    // A foreign save that only DELETES is attributed like any other: its row goes, nothing is faulted, and the
+    // whole store is not read again (found by the lessons review, L173).
+    @Test func aDeleteOnlyForeignSaveIsNoFullRead() async throws {
+        let store = try EngineStore(shows: 3, seed: 66)
+        let turns = EngineTurns()
+        let engine = VerifierRig.engine(store, turns)
+        let fullReads = engine.counters.fullReads
+        let id = try #require(try store.shows().first).persistentModelID
+        let container = store.container
+        let failure: String? = await phase0OnThread("engine-verifier-foreign-delete") {
+            let other = ModelContext(container)
+            guard let row = other.model(for: id) as? Prospect else { return "the row was not found" }
+            other.delete(row)
+            return Phase0.saveFailure(other)
+        }
+        try Phase0.requireSaved(failure, step: "the foreign delete")
+        await waitUntil("the foreign delete asked for a turn") { !turns.queued.isEmpty }
+        turns.run()
+        #expect(engine.counters.foreignSaves.times == 1, "the foreign delete was not seen as one")
+        #expect(engine.counters.fullReads == fullReads, "a delete-only foreign save read every row again")
+        #expect(engine.facts.shows[id] == nil && !engine.isFaulted(id))
+        #expect(try engine.facts == store.freshFacts())
+    }
+
     @Test func aForeignSaveIsRecordedByTableAndHealedInItsOwnTurn() async throws {
         let store = try EngineStore(shows: 3, seed: 63)
         let turns = EngineTurns()
@@ -491,6 +515,17 @@ final class QueueEngineVerifierTriggerTests {
         await waitUntil("only the ten minute timer is left") { clock.waiting == 1 }
         clock.advance(by: 200)
         #expect(engine.verifierCounts.started == 6, "the verifier kept re-reading after the cap")
+        // A new output starts a new episode, whose retries back off from the start again (so a second stuck
+        // episode is capped and recorded in its turn, rather than going silent).
+        engine.setViewInputs(QueueEngineViewInputs(focusedStage: .reachedOut))
+        turns.run()
+        await waitUntil("the new output's quiet timer is sleeping") { clock.waiting == 3 }
+        clock.advance(by: QueueEngineVerifier.quietSeconds)
+        await waitUntil("the new output's run was superseded") { engine.verifierCounts.superseded == 7 }
+        await waitUntil("its first retry is sleeping") { clock.waiting == 3 }
+        clock.advance(by: QueueEngineVerifier.quietSeconds)
+        let retried = await waitUntil("the new episode's first retry") { engine.verifierCounts.started == 8 }
+        #expect(retried, "after a new output, the first superseded run was not retried")
     }
 
     @Test func theRetryScheduleDoublesAndEnds() {

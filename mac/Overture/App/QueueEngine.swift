@@ -190,7 +190,9 @@ final class QueueEngineIntake: @unchecked Sendable {
             $0.inserted.formUnion(inserted)
             $0.updated.formUnion(updated)
             $0.deleted.formUnion(deleted)
-            if foreign { $0.foreign.formUnion(inserted + updated) }
+            // Deletions too: a delete-only foreign save is still ATTRIBUTED, so it never falls to the full read
+            // (the turn resolves deleted rows away, and faults none of them).
+            if foreign { $0.foreign.formUnion(inserted + updated + deleted) }
         }
     }
 
@@ -881,6 +883,9 @@ final class QueueEngine<Value: Sendable> {
             return
         }
         guard verifierSetup.triggers == .automatic else { return }
+        // A new output starts a new episode: the store moved, so runs that could not say before say nothing about
+        // this one, and an episode that is stuck again is capped, and recorded, again (L710).
+        consecutiveRetries = 0
         if generation - verifiedAtGeneration >= QueueEngineVerifier.forcedEveryGenerations {
             startVerification()
         } else {
