@@ -96,7 +96,10 @@ struct FollowUpsListRendersTests {
     // the app is a harness measuring something else.
     private func sheet(_ container: ModelContainer) -> some View {
         RowsFromStore { (rows: [Prospect]) in
-            FollowUpsView(prospects: rows, inquiries: [], gmailConnectedOverride: true, replyRunAliveOverride: false)
+            // #4522: `now` reaches the sheet. It was declared above and handed to nothing, so "a show that
+            // has been and gone" was true only because the suite runs after 2026-06-10.
+            FollowUpsView(prospects: rows, inquiries: [], gmailConnectedOverride: true, replyRunAliveOverride: false,
+                          nowOverride: now)
         }
         .modelContainer(container)
         .environment(ActionFeedback())
