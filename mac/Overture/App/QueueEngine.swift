@@ -374,12 +374,21 @@ final class QueueEngine<Value> {
         scheduleTurn()
     }
 
-    /// Publishes `incoming` if it is newer than what is on screen; otherwise refuses it (plan v2 Phase 4
-    /// step 3). Every pass publishes through here, and so will the launch fill and the verifier's recovery.
-    func publish(_ incoming: QueueEngineOutput<Value>) {
+    /// Publishes `incoming` if it is newer than what is on screen, and arms the clock from it; otherwise refuses
+    /// it (plan v2 Phase 4 step 3) and changes nothing. Every pass publishes through here, and so will the launch
+    /// fill and the verifier's recovery. Returns whether it was applied, because only an applied output is a pass
+    /// (L78).
+    @discardableResult
+    func publish(_ incoming: QueueEngineOutput<Value>) -> Bool {
         switch QueueEngineGenerations.verdict(published: output?.generation, incoming: incoming.generation) {
-        case .apply: output = incoming
-        case .refuse(let published, let incoming): refused(published, incoming)
+        case .apply:
+            output = incoming
+            armDeadline(QueueEngineDeadline.next(now: incoming.now,
+                                                 termNextChange: derivation.nextChange(incoming.value)))
+            return true
+        case .refuse(let published, let incoming):
+            refused(published, incoming)
+            return false
         }
     }
 
@@ -410,17 +419,25 @@ final class QueueEngine<Value> {
         guard !reasons.isEmpty else { return }
         let value = derivation.derive(QueueEnginePassInput(facts: facts, viewInputs: viewInputs, now: now))
         generation += 1
-        if reasons == [.clockFloor], let previous = output {
+        let previous = output
+        guard publish(QueueEngineOutput(value: value, saveCount: saveCount, generation: generation, now: now,
+                                        reasons: reasons)) else {
+            // Refused: another caller put a newer output on screen first, so nothing on screen changed and this
+            // is no pass and no floor change (L78). The clock runs on from the output that IS on screen, so the
+            // floor is never left without a timer (L51).
+            if let onScreen = output {
+                armDeadline(QueueEngineDeadline.next(now: now, termNextChange: derivation.nextChange(onScreen.value)))
+            }
+            return
+        }
+        counters.passes += 1
+        if reasons == [.clockFloor], let previous {
             let fields = derivation.differingFields(previous.value, value)
             if !fields.isEmpty {
                 floorChanges.append(QueueEngineFloorChange(fields: fields, at: now, generation: generation))
                 if floorChanges.count > Self.floorChangesKept { floorChanges.removeFirst() }
             }
         }
-        publish(QueueEngineOutput(value: value, saveCount: saveCount, generation: generation, now: now,
-                                  reasons: reasons))
-        counters.passes += 1
-        armDeadline(QueueEngineDeadline.next(now: now, termNextChange: derivation.nextChange(value)))
     }
 
     // MARK: - Intake and the resolve step

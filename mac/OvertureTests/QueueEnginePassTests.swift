@@ -275,6 +275,37 @@ final class QueueEngineClockTests {
         #expect(rig.engine.floorChanges.isEmpty)
     }
 
+    // A turn whose output is REFUSED changed nothing on screen, so it is no pass and no floor change (L78). It is
+    // reachable: the launch fill and the verifier's recovery publish through the same door, and one that put the
+    // next generation on screen first makes the turn's own output an equal one. The clock keeps running, from
+    // the output still on screen, so the floor is never left without a timer (L51).
+    @Test func aRefusedOutputIsNoPassAndNoFloorChange() async throws {
+        let store = try EngineStore(shows: 2, seed: 47)
+        let turns = EngineTurns()
+        let clock = EngineTestClock()
+        let refusals = QueueEngineGateTests.Refusals()
+        let engine = EngineHarness.engine(store, EngineDerivations.counts(readsTheMinute: true), turns: turns,
+                                          clock: clock, refused: { refusals.list.append(($0, $1)) })
+        engine.start()
+        turns.run()
+        await waitUntil("the deadline's timer is sleeping") { clock.waiting == 1 }
+        let current = try #require(engine.output)
+        // Another caller publishes the next generation before the floor's turn.
+        engine.publish(QueueEngineOutput(value: current.value, saveCount: current.saveCount,
+                                         generation: current.generation + 1, now: current.now, reasons: [.first]))
+        let passes = engine.counters.passes
+        clock.advance(by: 60)
+        await waitUntil("the floor asked for a turn") { !turns.queued.isEmpty }
+        turns.run()
+        // The positive control: the turn's own output really was refused, so the rest measures something.
+        #expect(refusals.list.count == 1, "the turn's output was not refused, so this test measured nothing")
+        #expect(engine.counters.passes == passes, "a refused output was counted as a pass")
+        #expect(engine.floorChanges.isEmpty, "a refused output was recorded as the floor's change")
+        #expect(engine.output?.generation == current.generation + 1)
+        let rearmed = await waitUntil("the clock is armed again after the refusal") { clock.waiting == 1 }
+        #expect(rearmed, "a refused turn left the engine with no deadline, so the clock stopped")
+    }
+
     // A pass the floor shares with a real change is not the floor's doing, so it records nothing even when the
     // output moved.
     @Test func aFloorPassThatAlsoTookInAChangeIsNotTheFloorsCost() async throws {
