@@ -7,8 +7,9 @@ import SwiftData
 // was read out of the code rather than measured, so it is measured here before anything is changed (L1,
 // L177: make the environment print the fact before shipping a theory built from the symptom).
 //
-// `ProspectMutations.model(forKey:org:in:feedback:)` walks a caller-supplied array with
-// `first(where: { $0.naturalKey == naturalKey })`, which reads a property off EVERY element it passes.
+// The resolver walked a caller-supplied array with `first(where: { $0.naturalKey == naturalKey })`, which
+// reads a property off EVERY element it passes. Since #4357 slice I2 it is `ShowResolver.show(forKey:)`
+// over the array, which walks it the same way for the key's identity and again for the row.
 // `QueueView.swift:1565` supplies `data.queueScope`, captured when the render pass ran, and deletes run
 // on the main context throughout a session.
 @Suite("Resolving a press against a stale scope (#3690)")
@@ -51,8 +52,7 @@ struct PressTimeResolutionTests {
         try ctx.save()
 
         let feedback = ActionFeedback()
-        let found = ProspectMutations.model(forKey: "survivor-key", org: "Survivor Show",
-                                            in: capturedScope, feedback: feedback)
+        let found = capturedScope.show(forKey: "survivor-key", org: "Survivor Show", feedback: feedback)
 
         // WHAT THIS MEASURED, 2026-09-08: the walk SURVIVES. It passed the deleted row and resolved the
         // survivor, so the "reading a deleted model is a crash" premise that #3651, #3666 and #3690 were
@@ -84,7 +84,7 @@ struct PressTimeResolutionTests {
 // Dan asked for is simply not there afterwards. That is worse than a crash, which at least reports
 // itself (L12).
 //
-// THE RESOLVER IS NOT THE DEFECT. `ProspectMutations.model(forKey:org:in:feedback:)` answers correctly
+// THE RESOLVER IS NOT THE DEFECT. `ShowResolver.show(forKey:org:feedback:)` answers correctly
 // for whatever array it is handed, and seven of its callers genuinely need a collection rather than one
 // row (`dismissAll`, `bulkReprep`, `setOrgDoNotContact`, `manualPrepPrefill`). The defect is entirely
 // WHICH array the render path hands it, so the fix is at the call site and the guard belongs there too.
@@ -126,10 +126,9 @@ struct PressResolvesTheStoredRowTests {
         try ctx.save()
 
         let feedback = ActionFeedback()
-        let fromCapturedScope = ProspectMutations.model(forKey: key, org: nil,
-                                                        in: capturedScope, feedback: feedback)
+        let fromCapturedScope = capturedScope.show(forKey: key, org: nil, feedback: feedback)
         let live = try ctx.fetch(FetchDescriptor<Prospect>())
-        let fromTheStore = ProspectMutations.model(forKey: key, org: nil, in: live, feedback: feedback)
+        let fromTheStore = live.show(forKey: key, org: nil, feedback: feedback)
 
         #expect(fromTheStore?.groupName == survivor.groupName,
                 "resolving against the live store must reach the row the store actually holds")
@@ -150,13 +149,13 @@ struct RowControlsDoNotCaptureThePassScopeTests {
     /// The factory takes a PROVIDER, so the array is derived when a button is pressed rather than when a
     /// row is built. That is what makes it both live and free: `QueueModel.queueScope` is a whole-store
     /// filter AND a stable sort (`QueueView+Model.swift:1067`), so evaluating it per rendered row is the
-    /// regression #3690 says the obvious fix would be. A closure is evaluated per PRESS.
+    /// regression #3690 says the obvious fix would be. `ShowsInHand` is read per PRESS (#4357 slice I2).
     @Test func theRowFactoryTakesAProviderRatherThanAnArray() {
         let source = SourceGuardHelper.source("Overture/UI/ProspectRowFactory.swift")
         // Reduced to Bools BEFORE `#expect` sees them: an expectation renders its operands on failure,
         // and one of these is a whole file, which buries the message under it (L351, L148).
-        let takesAProvider = source.contains("prospects: @escaping () -> [Prospect]")
-        let stillTakesAnArray = source.contains("prospects: [Prospect],")
+        let takesAProvider = source.contains("shows: ShowsInHand,")
+        let stillTakesAnArray = source.contains(": [Prospect],")
         #expect(takesAProvider,
                 Comment(rawValue: "ProspectRowFactory.row does not take a scope PROVIDER. Handed an "
                         + "array, the caller must have derived it before the press, which is either "

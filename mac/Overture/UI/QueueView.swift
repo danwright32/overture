@@ -851,7 +851,7 @@ struct QueueView: View {
         }
         let offer = ProspectMutations.dismissAll(keys, reason: pending.reason, dateLabel: pending.dateLabel,
                                                  nightDate: pending.date,
-                                                 prospects: prospects, context: context, feedback: feedback,
+                                                 shows: prospects, context: context, feedback: feedback,
                                                  undo: undoStack)
         // Cleared after the exit plays, never before the rebuild lands: clearing early would drop the
         // snapshots while the real rows are still in the queue's answer, and the whole night would flash
@@ -1927,12 +1927,12 @@ struct QueueView: View {
                     checkRunSince: data.checkRunSince, checkLookups: data.checkLookups,
                     offeredEarlyAsAClient: offeredEarly, userExcludedTowns: towns.excluded,
                     allowedSeedTowns: towns.allowed)) { highlightedKey, sendingSince, replySince, isAddressStruck in
-                    // #3690: the LIVE list, in a closure, so it is derived on a press and never during a
+                    // #3690: the LIVE list, held by `ShowsInHand`, so it is derived on a press and never during a
                     // render. `prospects` here is the property at the top of this file whose own comment
                     // says it is "read from HERE only by the action handlers, which run on a press rather
                     // than during a render"; handing `data.queueScope` broke that rule, and handing the
                     // property directly would run its whole-store filter and sort once per rendered row.
-                    ProspectRowFactory.row(item, today: passDay, now: data.now, prospects: { prospects }, context: context, feedback: feedback,
+                    ProspectRowFactory.row(item, today: passDay, now: data.now, shows: ShowsInHand { prospects }, context: context, feedback: feedback,
                                           dayOffOffer: dayOffOffer,
                                           gmailConnected: data.gmailConnected,
                                           timingSurface: .queue,
@@ -1985,10 +1985,10 @@ struct QueueView: View {
         guardPrepClashes(item) {
             Task { @MainActor in
                 if let onLaunchPrep {
-                    await ProspectMutations.reprep(item, mode: mode, prospects: prospects, context: context,
+                    await ProspectMutations.reprep(item, mode: mode, shows: prospects, context: context,
                                                    feedback: feedback, startPrep: onLaunchPrep)
                 } else {
-                    await ProspectMutations.reprep(item, mode: mode, prospects: prospects, context: context,
+                    await ProspectMutations.reprep(item, mode: mode, shows: prospects, context: context,
                                                    feedback: feedback)
                 }
             }
@@ -2095,7 +2095,7 @@ struct QueueView: View {
             sendState.depart(snapshot.id, as: snapshot, because: .closedOut)
         }
         ProspectMutations.recordOutcome(snapshot, outcome,
-                                        prospects: prospects, context: context,
+                                        shows: prospects, context: context,
                                         feedback: feedback, undo: undoStack)
         // Cleared after the exit plays. Never before the rebuild lands: clearing early would drop the
         // snapshot while the real row is still in the queue's answer, and the row Dan just closed out
@@ -2136,7 +2136,7 @@ struct QueueView: View {
         // show that is already approved (a retry, or one approved before this change) it sends without
         // re-approving. The pair lives in ProspectMutations, not here, so it has a seam a test can reach.
         guard let confirmed = snapshot else { return }
-        ProspectMutations.approveAndSend(confirmed, prospects: prospects, context: context, feedback: feedback,
+        ProspectMutations.approveAndSend(confirmed, shows: prospects, context: context, feedback: feedback,
                                       selecting: selecting, together: together,
                                       markSending: { sendState.markSending($0) },
                                       clearSending: { sendState.clearSending($0) },
@@ -2287,14 +2287,14 @@ struct QueueView: View {
         // #2710: one branch now. The conversation track's only email was the closing note, which is gone,
         // so a row nudge is a follow-up and nothing else.
         ProspectMutations.sendFollowUp(pending.naturalKey, pending.recipientId,
-                                       prospects: prospects, context: context, feedback: feedback,
+                                       shows: prospects, context: context, feedback: feedback,
                                        body: body,
                                        markSending: { sendState.markSending($0) },
                                        clearSending: { sendState.clearSending($0) })
     }
 
     private func sendReply(_ item: QueueItem, _ recipientId: String) {
-        ProspectMutations.sendReply(item, recipientId, prospects: prospects, context: context, feedback: feedback,
+        ProspectMutations.sendReply(item, recipientId, shows: prospects, context: context, feedback: feedback,
                                     markSending: { sendState.markReplySending($0) },
                                     clearSending: { sendState.clearReplySending($0) },
                                     onNeedsReconnect: { showReconnect = true })

@@ -12,12 +12,12 @@ import Foundation
 // drawing rows joins the rule on its own (L96).
 @Suite("A queue row is handed the render pass's clock (#4357 slice G1)")
 struct RowReadsThePassClockTests {
-    /// The argument list of each `ProspectRowFactory.row(` call up to its `prospects:` argument, which is
+    /// The argument list of each `ProspectRowFactory.row(` call up to its `shows:` argument, which is
     /// where the clock arguments sit, in every app file that draws a row.
     static func clockArguments() -> [(file: String, arguments: String)] {
         AppSourceWalk.files(under: RepoRoot.app).flatMap { file -> [(file: String, arguments: String)] in
             file.text.components(separatedBy: "ProspectRowFactory.row(").dropFirst().compactMap { chunk in
-                guard let end = chunk.range(of: "prospects:") else { return nil }
+                guard let end = chunk.range(of: "shows:") else { return nil }
                 return (file.name, String(chunk[..<end.lowerBound]))
             }
         }

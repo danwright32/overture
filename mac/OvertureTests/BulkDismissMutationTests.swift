@@ -68,7 +68,7 @@ struct BulkDismissMutationTests {
                                      prospects: [a, b], context: ctx, feedback: ActionFeedback(), undo: stack)
 
         let entry = try #require(stack.takeTop())
-        let outcome = QueueUndo.apply(entry, resolving: { key in [a, b].first { $0.naturalKey == key } },
+        let outcome = QueueUndo.apply(entry, resolving: [a, b],
                                       in: ctx)
 
         #expect(outcome.restored == 2)
@@ -91,7 +91,7 @@ struct BulkDismissMutationTests {
         #expect(other.status == .dismissed)
 
         let entry = try #require(stack.takeTop())
-        QueueUndo.apply(entry, resolving: { key in [kept, other].first { $0.naturalKey == key } }, in: ctx)
+        QueueUndo.apply(entry, resolving: [kept, other], in: ctx)
 
         #expect(other.status == .new, "the dismissed show is back, untriaged")
         #expect(kept.status == .queued, "and the earlier Keep is still standing")

@@ -481,7 +481,7 @@ struct FollowUpsView: View {
                                  onLinkReply: LinkReplyFromAnotherThread.isOffered(r)
                                      ? { manualLinkTarget = ManualLinkTarget(prospect: p, recipient: r) }
                                      : nil) { outcome in
-                        ProspectMutations.recordOutcome(QueueItem(p), outcome, prospects: prospects,
+                        ProspectMutations.recordOutcome(QueueItem(p), outcome, shows: prospects,
                                                         context: context, feedback: feedback,
                                                         undo: undoStack)
                     }
@@ -577,7 +577,7 @@ struct FollowUpsView: View {
     // request is what takes this row out of the stalled list: it is no longer a dead run, it is a run
     // that has just started.
     private func draftAgain(prospect: Prospect, recipient: Recipient) {
-        ProspectMutations.draftReply(prospect.naturalKey, recipient.id, prospects: prospects,
+        ProspectMutations.draftReply(prospect.naturalKey, recipient.id, shows: prospects,
                                      context: context, feedback: feedback)
     }
 
@@ -628,7 +628,7 @@ struct FollowUpsView: View {
     // the button left clickable.
     private func performNudge(_ naturalKey: String, _ recipientId: String, body: String?) {
         pending = nil
-        ProspectMutations.sendFollowUp(naturalKey, recipientId, prospects: prospects, context: context, feedback: feedback,
+        ProspectMutations.sendFollowUp(naturalKey, recipientId, shows: prospects, context: context, feedback: feedback,
                                        body: body,
                                        markSending: { sending[$0] = Date() },
                                        clearSending: { sending[$0] = nil })

@@ -165,6 +165,126 @@ struct QueueUndoApplyTests {
         #expect(p.status == .queued)
     }
 
+    // MARK: - Across a merge (#4532)
+
+    // Cmd+Z used to find its show by natural key, and `naturalKey` is unique and REASSIGNED: a merge
+    // deletes the loser and hands its key to the survivor. Undoing an action recorded on the loser then
+    // found the SURVIVOR by that key, and when the survivor happened to sit where the action had left the
+    // loser, it was rewritten with the loser's prior state, with nothing said (L145, L75, L15). The entry
+    // now records the show's store identity, with the key as its witness, and resolves through the same
+    // rule every row press uses (`ShowIdentity`, #4538).
+    private func merged(_ ctx: ModelContext) throws -> (entry: QueueUndoEntry, loser: Prospect,
+                                                        survivor: Prospect) {
+        let loser = show(ctx, status: .queued)
+        let survivor = Prospect(naturalKey: "survivor-key", groupName: "The Survivor", discipline: "music",
+                                venue: "Weill Recital Hall", performanceDate: "2026-09-12",
+                                sourceListingURL: nil, priorRelationship: "none",
+                                production: "self", profile: "strong", coverage: "likely_uncovered",
+                                fitScore: 9, tier: "high", fitReason: "r", matchedClientName: nil,
+                                possibleMatchSource: nil, possibleMatchName: nil, status: .queued)
+        ctx.insert(survivor)
+        try ctx.save()
+
+        let priorStatus = loser.status
+        loser.markDismissed(reason: .notAFit)
+        let entry = QueueUndoEntry(recording: "Dismiss", on: loser, priorStatus: priorStatus,
+                                   priorShowOutcomeRaw: nil, priorShowOutcomeAt: nil, priorDismissedAt: nil,
+                                   priorConflictClearedKey: nil)
+        // The survivor sits EXACTLY where the action left the loser, so the entry's own precondition
+        // (`stillApplies`) cannot tell the two apart. Only the identity can.
+        survivor.markDismissed(reason: .notAFit)
+        try ctx.save()
+        return (entry, loser, survivor)
+    }
+
+    // The positive control in the same fixture (L159): before the merge, the very same entry resolves
+    // through the live rows and is undone. Without this, every refusal below could be a resolver that
+    // finds nothing at all.
+    @Test func anEntryResolvesThroughTheLiveRowsByIdentityBeforeAnyMerge() throws {
+        let ctx = ModelContext(try container())
+        let (entry, loser, survivor) = try merged(ctx)
+
+        let outcome = QueueUndo.apply(entry, resolving: [survivor, loser], in: ctx,
+                                      export: (bookings: [], blockedDates: [], health: .ok))
+
+        #expect(outcome.restored == 1, "an unmerged entry was not undone, so the refusal tests prove nothing")
+        #expect(outcome.refusals.isEmpty)
+        #expect(loser.status == .queued)
+        #expect(survivor.status == .dismissed, "undoing the loser's dismiss touched a different show")
+    }
+
+    @Test func undoingAnActionOnAMergedAwayShowLeavesTheSurvivorUntouched() throws {
+        let ctx = ModelContext(try container())
+        let (entry, loser, survivor) = try merged(ctx)
+        let loserKey = loser.naturalKey
+
+        // The merge: the loser goes, then the survivor adopts its key.
+        ctx.delete(loser)
+        try ctx.save()
+        survivor.naturalKey = loserKey
+        try ctx.save()
+
+        let outcome = QueueUndo.apply(entry, resolving: [survivor], in: ctx,
+                                      export: (bookings: [], blockedDates: [], health: .ok))
+
+        #expect(survivor.status == .dismissed,
+                Comment(rawValue: "Cmd+Z on a merged-away show's dismiss restored the SURVIVOR that adopted "
+                        + "its key. A key lookup finds exactly one row with nothing to report, so the undo "
+                        + "lands on a show Dan never acted on (#4532, L145, L75)."))
+        #expect(survivor.showOutcomeRaw == ShowOutcome.notAFit.rawValue)
+        #expect(!ctx.hasChanges, "the refused undo left an unsaved change behind")
+        #expect(outcome.restored == 0)
+        #expect(outcome.refusals == [.gone])
+        #expect(QueueUndo.nothingUndoneSentence(for: entry, outcome: outcome)
+                == ShowIdentity.Refusal.gone.undoSentence(org: "The Music Shop"))
+    }
+
+    // The survivor's OWN entry, after it adopted another key in the same merge. It is the same row, but
+    // not the show the action was taken on, so it is refused as moved rather than undone.
+    @Test func undoingAnActionOnAShowWhoseKeyMovedSinceIsRefusedAsMoved() throws {
+        let ctx = ModelContext(try container())
+        let (_, loser, survivor) = try merged(ctx)
+        let entry = QueueUndoEntry(recording: "Dismiss", on: survivor, priorStatus: .queued,
+                                   priorShowOutcomeRaw: nil, priorShowOutcomeAt: nil, priorDismissedAt: nil,
+                                   priorConflictClearedKey: nil)
+        let loserKey = loser.naturalKey
+        ctx.delete(loser)
+        try ctx.save()
+        survivor.naturalKey = loserKey
+        try ctx.save()
+
+        let outcome = QueueUndo.apply(entry, resolving: [survivor], in: ctx,
+                                      export: (bookings: [], blockedDates: [], health: .ok))
+
+        #expect(survivor.status == .dismissed, "an undo recorded under the survivor's old key was applied anyway")
+        #expect(outcome.refusals == [.reKeyed])
+        #expect(QueueUndo.nothingUndoneSentence(for: entry, outcome: outcome)
+                == ShowIdentity.Refusal.reKeyed.undoSentence(org: "The Survivor"))
+    }
+
+    // A row that simply moved on keeps its own sentence: the refusal sentences are for a row the identity
+    // could not find, and saying "merged" about a show a send moved on would be a different untruth.
+    @Test func aRowThatMovedOnStillSaysItMovedOn() throws {
+        let ctx = ModelContext(try container())
+        let (entry, loser, _) = try merged(ctx)
+        loser.clearDismissal(to: .contacted)
+
+        let outcome = QueueUndo.apply(entry, resolving: [loser], in: ctx,
+                                      export: (bookings: [], blockedDates: [], health: .ok))
+
+        #expect(outcome.refusals.isEmpty)
+        #expect(QueueUndo.nothingUndoneSentence(for: entry, outcome: outcome)
+                == ActionAck.undoSkipped(org: "The Music Shop"))
+    }
+
+    // Every cause has its own sentence, so a merged show and a show that was never saved cannot be told
+    // to Dan in the same words (L11, L260).
+    @Test func everyRefusalHasItsOwnUndoSentence() {
+        let sentences = ShowIdentity.Refusal.allCases.map { $0.undoSentence(org: "The Music Shop") }
+        #expect(Set(sentences).count == ShowIdentity.Refusal.allCases.count)
+        #expect(sentences.allSatisfy { $0.contains("The Music Shop") })
+    }
+
     // MARK: - One restore implementation (#1414's consolidation)
 
     // Archive's Restore button and Cmd+Z both go through DismissedProspects.restore now, so they cannot
