@@ -323,6 +323,22 @@ final class QueueEngineLaunchFillTests {
         #expect(LaunchRig.report(engine)?.shortfall == .unmeasured(.readFailed))
     }
 
+    // A row the fill missed whose admission fetch then fails is stored and not held, said so: never "admitted 0",
+    // which reads as the row deleted (L215, L11; found by the lessons review).
+    @Test func aShortfallWhoseAdmissionCannotBeReadIsUnadmittedNotDeleted() throws {
+        let store = try EngineStore(shows: 4, seed: 412)
+        let turns = EngineTurns()
+        let skipped = try #require(try store.shows().last).naturalKey
+        var setup = LaunchRig.inTurn()
+        // The keyset "misses" one show, as a row renamed below the cursor would be missed.
+        setup.fetchBatch = { descriptor, context in try context.fetch(descriptor).filter { $0.naturalKey != skipped } }
+        setup.admit = { _, _ in throw CocoaError(.fileReadUnknown) }
+        let engine = LaunchRig.engine(store, turns, launch: setup)
+        engine.start()
+        turns.run()
+        #expect(LaunchRig.report(engine)?.shortfall == .unadmitted(missing: 1, .readFailed))
+    }
+
     // A batch that cannot be read stops the fill as failed with the output still on screen; a retry resumes from
     // where it stopped, so no row is taken twice and none is missed.
     @Test func aBatchThatCannotBeReadFailsTheFillAndRetryResumesIt() throws {

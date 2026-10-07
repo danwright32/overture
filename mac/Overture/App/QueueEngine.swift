@@ -328,9 +328,23 @@ struct QueueEngineLaunchSetup {
     var identifiers: @Sendable (ModelContainer) throws -> Set<PersistentIdentifier> =
         QueueEngineLaunchFill.storedIdentifiers
     var fetchBatch: @MainActor (FetchDescriptor<Prospect>, ModelContext) throws -> [Prospect] = { try $1.fetch($0) }
+    /// The shortfall's admission: the missing rows, fetched by identifier.
+    var admit: @MainActor (Set<PersistentIdentifier>, ModelContext) throws
+        -> (shows: [Prospect], inquiries: [Inquiry]) = QueueEngineLaunchSetup.fetchMissing
     var batchSize = QueueEngineLaunchFill.batchSize
     /// A monotonic clock in seconds, which each batch is timed on. Only measured, never decided from.
     var uptime: @Sendable () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }
+
+    /// One fetch per model, each TYPED, and outside the generic engine: a loop over existential `PersistentModel`
+    /// values inside that generic class crashes the compiler's IR generation in the app target (Xcode 26, measured
+    /// in slice E2).
+    @MainActor static func fetchMissing(_ ids: Set<PersistentIdentifier>, _ context: ModelContext) throws
+        -> (shows: [Prospect], inquiries: [Inquiry]) {
+        let shows = ids.filter { FactStore.Table.holding($0.entityName) == .shows }
+        let inquiries = ids.filter { FactStore.Table.holding($0.entityName) == .inquiries }
+        return (try FactStore.Table.fetched(Prospect.self, Array(shows), in: context),
+                try FactStore.Table.fetched(Inquiry.self, Array(inquiries), in: context))
+    }
 }
 
 enum QueueEngineRecovery {
@@ -851,28 +865,27 @@ final class QueueEngine<Value: Sendable> {
             fillReport.shortfall = .unmeasured(why)
         case .success(let stored):
             let missing = stored.subtracting(showMembers.keys).subtracting(inquiryMembers.keys)
-            var admitted = 0
-            var resolution = QueueEngineResolution()
-            // One fetch per model, each TYPED: a loop over existential `PersistentModel` values inside this generic
-            // class crashes the compiler's IR generation in the app target (Xcode 26, measured in slice E2).
-            let shows = missing.filter { FactStore.Table.holding($0.entityName) == .shows }
-            let inquiries = missing.filter { FactStore.Table.holding($0.entityName) == .inquiries }
-            do {
-                for show in try FactStore.Table.fetched(Prospect.self, Array(shows), in: context) {
-                    admitted += 1
-                    if take(show, show.persistentModelID, into: &resolution) { fillChanged += 1 }
+            if missing.isEmpty {
+                fillReport.shortfall = .measured(missing: 0, admitted: 0)
+            } else {
+                do {
+                    let found = try launchSetup.admit(missing, context)
+                    var resolution = QueueEngineResolution()
+                    for show in found.shows where take(show, show.persistentModelID, into: &resolution) {
+                        fillChanged += 1
+                    }
+                    for inquiry in found.inquiries where take(inquiry, inquiry.persistentModelID) { fillChanged += 1 }
+                    resolveIdentities(resolution)
+                    // A missing row the fetch did not find was deleted since; one it found is admitted.
+                    fillReport.shortfall = .measured(missing: missing.count,
+                                                     admitted: found.shows.count + found.inquiries.count)
+                } catch {
+                    // A failed fetch is not a deletion (L215): the rows are stored and not held, said so. The
+                    // verifier's fresh read finds them, and recovery takes them from there.
+                    counters.unreadRows.record(at: now)
+                    fillReport.shortfall = .unadmitted(missing: missing.count, .readFailed)
                 }
-                for inquiry in try FactStore.Table.fetched(Inquiry.self, Array(inquiries), in: context) {
-                    admitted += 1
-                    if take(inquiry, inquiry.persistentModelID) { fillChanged += 1 }
-                }
-            } catch {
-                // Not admitted, and still counted as missing: the verifier's fresh read finds them stored and not
-                // held, and recovery takes them from there.
-                counters.unreadRows.record(at: now)
             }
-            resolveIdentities(resolution)
-            fillReport.shortfall = .measured(missing: missing.count, admitted: admitted)
         }
         fillStep = .done
         launch.fill = .done(fillReport)

@@ -470,6 +470,10 @@ enum QueueEngineShortfall: Equatable, Sendable {
     /// Rows the store holds that the fill did not reach, and how many of those one fetch then admitted (the rest
     /// were deleted since).
     case measured(missing: Int, admitted: Int)
+    /// Rows the store holds that the fill did not reach, and the one fetch that would have admitted them failed:
+    /// they are stored and not held, which is never read as deleted (L215, L11). The verifier's fresh read finds
+    /// them stored and not held, and recovery takes them from there.
+    case unadmitted(missing: Int, QueueEngineLaunchFailure)
     /// The identifier read could not be made, so whether the fill missed a row is not known. Never read as none
     /// (L215).
     case unmeasured(QueueEngineLaunchFailure)
